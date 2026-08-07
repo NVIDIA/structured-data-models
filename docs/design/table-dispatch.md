@@ -45,7 +45,6 @@ The dispatchers answer different questions: `StypeDispatch` selects columns by s
 
 `TableDispatch` may appear anywhere inside the feature tree, including `Sequential`, `Choice`, and `StypeDispatch`. Before fitting, `Recipe.bind` recursively specializes that tree into ordinary task and related processor trees:
 
-
 ```
 TableDispatch:
 routes:
@@ -92,80 +91,77 @@ y_out = recipe.target.fit_transform_ensemble(y)
   )
 ```
 
-
 Test
 
+### 1. Kernsemantik und unabhängiger Fit
 
-  ### 1. Kernsemantik und unabhängiger Fit
+test_table_dispatch_scopes_and_fits_related_tables_independently
 
-  test_table_dispatch_scopes_and_fits_related_tables_independently
+recipe = sp.Recipe(
+features=sp.TableDispatch(
+related=sp.StypeDispatch(numerical=sp.Standardize()),
+),
+)
 
-  recipe = sp.Recipe(
-      features=sp.TableDispatch(
-          related=sp.StypeDispatch(numerical=sp.Standardize()),
-      ),
-  )
+Über `_RecipeExecution._bind` / `.transform` mit Task-Tabelle sowie users und orders:
 
-  Über `_RecipeExecution._bind` / `.transform` mit Task-Tabelle sowie users und orders:
+- Task-Context und Task-Query bleiben unverändert.
+- Beide Related-Context-Tabellen werden standardisiert.
+- Related Queries verwenden den jeweils passenden Fit-Zustand.
+- users und orders bekommen unabhängig gefittete Processor-Kopien.
 
-  - Task-Context und Task-Query bleiben unverändert.
-  - Beide Related-Context-Tabellen werden standardisiert.
-  - Related Queries verwenden den jeweils passenden Fit-Zustand.
-  - users und orders bekommen unabhängig gefittete Processor-Kopien.
+Damit sind Related-only, fehlende Task-Route als Passthrough, mehrere Related Tables und
+zustandsbehaftete Verarbeitung abgedeckt.
 
-  Damit sind Related-only, fehlende Task-Route als Passthrough, mehrere Related Tables und
-  zustandsbehaftete Verarbeitung abgedeckt.
+### 2. Rekursive Komposition und Ensemble
 
-  ### 2. Rekursive Komposition und Ensemble
+test_nested_table_dispatch_routes_ensemble_members
 
-  test_nested_table_dispatch_routes_ensemble_members
+recipe = sp.Recipe(
+features=sp.StypeDispatch(
+numerical=sp.Choice(
+sp.Sequential(
+sp.TableDispatch(
+task=Add(10),
+related=Add(100),
+),
+),
+Add(1),
+selection="round_robin",
+),
+),
+)
 
-  recipe = sp.Recipe(
-      features=sp.StypeDispatch(
-          numerical=sp.Choice(
-              sp.Sequential(
-                  sp.TableDispatch(
-                      task=Add(10),
-                      related=Add(100),
-                  ),
-              ),
-              Add(1),
-              selection="round_robin",
-          ),
-      ),
-  )
+Mit zwei Ensemble-Mitgliedern prüfen:
 
-  Mit zwei Ensemble-Mitgliedern prüfen:
+member 0:
+task += 10
+related += 100
 
-  member 0:
-      task    += 10
-      related += 100
+member 1:
+task += 1
+related += 1
 
-  member 1:
-      task    += 1
-      related += 1
+Dieser eine Test validiert gemeinsam:
 
-  Dieser eine Test validiert gemeinsam:
+- TableDispatch unter Sequential;
+- TableDispatch unter Choice;
+- TableDispatch unter StypeDispatch;
+- beide nichtleeren Routen;
+- Ensemble-Ausführung;
+- rekursive Modulauflösung.
 
-  - TableDispatch unter Sequential;
-  - TableDispatch unter Choice;
-  - TableDispatch unter StypeDispatch;
-  - beide nichtleeren Routen;
-  - Ensemble-Ausführung;
-  - rekursive Modulauflösung.
+Kein Seed nötig, weil round_robin deterministisch ist.
 
-  Kein Seed nötig, weil round_robin deterministisch ist.
+### 3. Ungültige Platzierung
 
+test_recipe_rejects_table_dispatch_outside_features
 
-  ### 3.  Ungültige Platzierung
+@pytest.mark.parametrize("field", ["target", "output"])
+def test_recipe_rejects_table_dispatch_outside_features(field):
+with pytest.raises(ValueError, match="Recipe.features"):
+sp.Recipe(\*\*{field: sp.TableDispatch(related=sp.Identity())})
 
-  test_recipe_rejects_table_dispatch_outside_features
-
-  @pytest.mark.parametrize("field", ["target", "output"])
-  def test_recipe_rejects_table_dispatch_outside_features(field):
-      with pytest.raises(ValueError, match="Recipe.features"):
-          sp.Recipe(**{field: sp.TableDispatch(related=sp.Identity())})
-
-  TableDispatch() ohne konfigurierte Route würde ich dagegen nicht zwingend ablehnen: Nach
-  #568 darf auch TaskDispatch() leer sein, und AGENTS.md verlangt minimale Validierung. Ein
-  leerer Dispatcher kann konsistent als Identity funktionieren.
+TableDispatch() ohne konfigurierte Route würde ich dagegen nicht zwingend ablehnen: Nach
+#568 darf auch TaskDispatch() leer sein, und AGENTS.md verlangt minimale Validierung. Ein
+leerer Dispatcher kann konsistent als Identity funktionieren.
