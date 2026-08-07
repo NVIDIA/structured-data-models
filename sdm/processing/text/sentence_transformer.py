@@ -39,12 +39,10 @@ class SentenceTransformer(Processor):
         batch_size: int | None = None,
     ) -> None:
         super().__init__()
-        from sentence_transformers import (  # noqa: PLC0415
-            SentenceTransformer as _SentenceTransformer,
-        )
+        import sentence_transformers  # noqa: PLC0415
 
         self.batch_size = batch_size
-        model: Any = _SentenceTransformer(model_name)
+        model = sentence_transformers.SentenceTransformer(model_name)
         self._model = _ModuleReference(model)
         embedding_dim = model.get_embedding_dimension()
         assert isinstance(embedding_dim, int)
