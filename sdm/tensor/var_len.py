@@ -1387,6 +1387,11 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
                 f"Expected {tensor_cls.__name__!r} as element {i}, but got "
                 f"{tensor.__class__.__name__!r}"
             )
+        if tensor.dim() == 0:
+            raise RuntimeError(
+                f"zero-dimensional tensor (at position {i}) cannot be "
+                "concatenated"
+            )
 
     tensors = tuple(
         cast(VarLenTensor, tensor.contiguous()) for tensor in tensors
