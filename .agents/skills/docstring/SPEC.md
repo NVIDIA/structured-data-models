@@ -1,129 +1,148 @@
-# Public Docstring Standard Proposal
+# Vorschlag: Standard für öffentliche Docstrings
 
-Status: Proposed
+Status: Zur Diskussion
 
-This document proposes the public docstring standard for `sdm`. It is intentionally separate from `SKILL.md` while the rules are under review. Once accepted, the normative rules should be folded into the skill and backed by repository checks.
+Diese Spezifikation schlägt den Docstring-Standard für die öffentliche API von `sdm` vor. Sie bleibt während der Diskussion bewusst von `SKILL.md` getrennt. Nach der Freigabe sollen die akzeptierten Regeln in den Skill übernommen und durch Repository-Checks abgesichert werden.
 
-## Goals
+## Kernaussage
 
-- Keep public API documentation concise, accurate, and consistent.
-- Describe user-visible contracts without exposing incidental implementation details.
-- Make objective requirements enforceable before changes reach `main`.
-- Give human and agent contributors the same versioned source of guidance.
+Der Skill erklärt Menschen und Agenten, wie gute Docstrings geschrieben werden. Verbindliche CI-Checks stellen sicher, dass das prüfbare Ergebnis auf `main` dem Standard entspricht. Die Nutzung eines Skills allein ist keine ausreichende Garantie, weil sie nicht in jedem menschlichen, Editor- oder Agenten-Workflow zuverlässig beobachtbar ist.
 
-## Non-goals
+## Priorisierung nach Impact
 
-- Require a long docstring for every object.
-- Document private helpers or internal state.
-- Duplicate information already expressed precisely by type annotations.
-- Add defensive runtime validation merely to match a docstring.
-- Generate semantic descriptions from code or an LLM and treat them as authoritative.
+| Priorität | Bereich                                | Impact             | Warum dieser Bereich den größten Hebel hat                                                                                       |
+| --------- | -------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1         | Verbindliche Durchsetzung in CI        | Sehr hoch          | Verhindert neue Abweichungen in jedem zukünftigen PR und wirkt unabhängig davon, wer den Docstring geschrieben hat.              |
+| 2         | Vollständiger öffentlicher API-Vertrag | Sehr hoch          | Verhindert falsche oder unvollständige Dokumentation direkt an der Schnittstelle, die Nutzer tatsächlich aufrufen.               |
+| 3         | Tensor- und Processor-Semantik         | Hoch               | Shapes, Dtypes, Devices und Lifecycle sind die wahrscheinlichsten Quellen für trotz formal korrekter Docstrings falsche Nutzung. |
+| 4         | Ausführbare Beispiele                  | Hoch               | Erkennt Drift zwischen Dokumentation und Verhalten und zeigt gleichzeitig den kleinsten korrekten Nutzungspfad.                  |
+| 5         | Wiederverwendung und Generierung       | Mittel             | Reduziert Wiederholungen bei wachsender API, lohnt sich aber erst bei tatsächlich identischer Semantik.                          |
+| 6         | Markup und sprachliche Konsistenz      | Mittel bis niedrig | Verbessert Lesbarkeit und Rendering, verhindert aber seltener fachlich falsche Nutzung als die vorherigen Bereiche.              |
 
-## Normative language
+Die Reihenfolge beschreibt den erwarteten Nutzen für das Projekt, nicht die Implementierungsreihenfolge einzelner Zeilen.
 
-`MUST`, `SHOULD`, and `MAY` describe required, recommended, and optional behavior. Rules have stable identifiers so they can be discussed individually during review.
+## Impact 1: Verbindliche Durchsetzung in CI
 
-## Scope and ownership
+### Warum dieser Block zuerst kommt
 
-- **DOC-01 (MUST):** An object is part of the public API when it is exported through the documented `__all__` hierarchy. Public API and reference documentation SHOULD remain aligned.
-- **DOC-02 (MUST):** Every public class, function, and non-inherited public method has a docstring.
-- **DOC-03 (MUST):** Public constructor parameters are documented in the class docstring, not duplicated in `__init__`.
-- **DOC-04 (MUST):** An overriding method does not duplicate an inherited docstring when the inherited contract applies unchanged. Use a targeted `# noqa: D102` in that case. If the override changes public behavior, it MUST document the changed contract.
-- **DOC-05 (SHOULD):** Individual implementation modules do not have module docstrings. Package `__init__.py` files MAY have a short package summary.
+Diese Regeln haben den höchsten Impact, weil sie einmal implementiert für jede zukünftige Änderung gelten. Sie verhindern, dass der Standard von der freiwilligen Nutzung eines Skills oder von manueller Aufmerksamkeit im Review abhängt.
 
-## Content and structure
+- **ENF-01 (MUSS):** `AGENTS.md` weist Menschen und Agenten bei Änderungen an der öffentlichen API unter `sdm/` ausdrücklich an, vor der Arbeit `.agents/skills/docstring/SKILL.md` zu lesen.
+- **ENF-02 (MUSS):** Ruff läuft mit der bestehenden Google-Docstring-Konvention über alle Python-Dateien in der verpflichtenden Pull-Request-CI.
+- **ENF-03 (MUSS):** Ein Google-Style-Contract-Checker prüft ganz `sdm` und gleicht dokumentierte Argumente, Konstruktorparameter, Rückgabewerte, Generatorwerte und unterstützte Exceptions mit dem Code ab. `pydoclint` ist die vorgeschlagene allgemeine Implementierung.
+- **ENF-04 (MUSS):** Ein kleiner repository-eigener Checker prüft objektive SDM-Regeln, die allgemeine Linter nicht ausdrücken können. Dazu gehören mindestens die öffentliche `__all__`-Oberfläche und die Dokumentation von Konstruktorparametern im Klassendocstring.
+- **ENF-05 (MUSS):** Der Sphinx-HTML-Build behandelt Warnungen als Fehler, damit ungültiges Markup und nicht auflösbare Referenzen einen Merge blockieren.
+- **ENF-06 (MUSS):** Sphinx-Doctests laufen in der verpflichtenden Pull-Request-CI, damit ausführbare Beispiele nicht vom tatsächlichen Verhalten abweichen.
+- **ENF-07 (MUSS):** Branch Protection verlangt ENF-02 bis ENF-06 vor dem Merge nach `main`. Eine Prüfung erst nach dem Push auf `main` ist nicht ausreichend.
+- **ENF-08 (MUSS):** Nicht zuverlässig automatisierbare Regeln bleiben explizite Review-Punkte. Dazu gehören insbesondere überraschendes Verhalten, fachlich korrekte Shapes und die passende Paper-Referenz.
+- **ENF-09 (SOLLTE):** Wenn die Laufzeit es erlaubt, prüfen die Checks das gesamte Repository statt nur den Diff. Änderungen an Signaturen oder Exports können Docstrings außerhalb der bearbeiteten Zeilen ungültig machen.
 
-- **DOC-06 (MUST):** Begin with a concise, self-contained summary sentence. Function and method summaries use the imperative form, such as `Return the encoded table.` Class summaries state the class purpose directly and avoid phrases such as `This class ...`.
-- **DOC-07 (MUST):** Use an `Args:` section when the documented callable or constructor has public parameters. Document every public parameter and no parameters absent from the signature. Include `*args` and `**kwargs` when they are part of the public contract.
-- **DOC-08 (MUST):** Use `Returns:` when a return value is not completely described by the summary. Use `Yields:` for yielded values. Omit both for callables that only return `None`.
-- **DOC-09 (MUST):** Use `Raises:` only for exceptions that are part of the supported public contract. Do not document incidental downstream failures or exceptions caused solely by violating an already documented precondition.
-- **DOC-10 (SHOULD):** Add `Attributes:` for public fitted or learned state that users are expected to inspect. Do not document private caches or incidental state.
-- **DOC-11 (SHOULD):** Add `See Also:` when a closely related public API would help the user choose the correct operation. Each entry includes a short explanation of the relationship; do not add link-only lists.
-- **DOC-12 (SHOULD):** Add one minimal, deterministic example for a new top-level public processor or another API whose composition or lifecycle is not obvious. Do not add examples to every trivial method.
-- **DOC-13 (MUST):** Keep API docstrings focused on the reference contract. Extended tutorials, motivation, comparisons, and end-to-end workflows belong in narrative documentation.
+## Impact 2: Vollständiger öffentlicher API-Vertrag
 
-## Parameters, defaults, and types
+### Warum dieser Block den zweitgrößten Impact hat
 
-- **DOC-14 (MUST):** Describe parameter semantics rather than restating type annotations. Mention accepted dtype families, shapes, units, ranges, or supported values only when they affect correct use.
-- **DOC-15 (MUST):** Explain what `None`, sentinel values, and special literals mean. Do not merely repeat `default=None`.
-- **DOC-16 (MUST):** Document implicit caps, fallbacks, transformations, and side effects that can change results or surprise a caller.
-- **DOC-17 (MUST):** Documentation does not promise broader input support than the implementation provides and does not introduce runtime validation requirements that the public API does not need.
+Nutzer lesen Docstrings, um eine API ohne Kenntnis ihrer Implementierung korrekt aufzurufen. Fehlende Parameter, falsche Rückgabewerte oder versprochene Validierungen verursachen deshalb unmittelbar falsche Nutzung und erschweren spätere API-Änderungen.
 
-## Tensor and processor contracts
+### Umfang und Zuständigkeit
 
-- **DOC-18 (MUST):** Tensor parameters and returns include their relevant shape in double-backtick notation, for example `[..., S, C]`. Use a leading `...` for batch dimensions and spell out remaining dimension letters consistently.
-- **DOC-19 (MUST):** Document dtype and device behavior when an operation restricts, promotes, converts, or relocates data. Do not enumerate dtypes when the operation transparently preserves or accepts all supported dtypes.
-- **DOC-20 (MUST):** Stateful processors document whether `fit()` is required, which public state is learned, and whether a subsequent `fit()` replaces that state, whenever this is not fully defined by the base-class contract.
-- **DOC-21 (MUST):** Document user-visible handling of missing or non-finite values, stochastic behavior and generator control, column order or names, stypes, and schema changes when relevant to the processor.
-- **DOC-22 (MUST):** Input and output descriptions state whether container structure, dtype, device, shape, or semantic column type changes when that behavior is not obvious from the API.
+- **DOC-01 (MUSS):** Ein Objekt gehört zur öffentlichen API, wenn es über die dokumentierte `__all__`-Hierarchie exportiert wird. Öffentliche API und generierte API-Referenz SOLLTEN übereinstimmen.
+- **DOC-02 (MUSS):** Jede öffentliche Klasse, Funktion und nicht geerbte öffentliche Methode besitzt einen Docstring.
+- **DOC-03 (MUSS):** Öffentliche Konstruktorparameter werden im Klassendocstring dokumentiert und nicht in `__init__` dupliziert.
+- **DOC-04 (MUSS):** Eine überschreibende Methode dupliziert keinen geerbten Docstring, wenn dessen Vertrag unverändert gilt. In diesem Fall wird gezielt `# noqa: D102` verwendet. Ändert das Override öffentliches Verhalten, MUSS es den geänderten Vertrag dokumentieren.
+- **DOC-05 (SOLLTE):** Einzelne Implementierungsmodule erhalten keine Modul-Docstrings. `__init__.py`-Dateien DÜRFEN eine kurze Package-Zusammenfassung enthalten.
 
-## Markup, citations, and versions
+### Inhalt und Struktur
 
-- **DOC-23 (MUST):** Use `r"""..."""` for docstrings containing math, LaTeX, or backslashes.
-- **DOC-24 (MUST):** When an API implements functionality proposed in an academic paper, cite the paper in the first sentence using a stable paper URL where possible.
-- **DOC-25 (SHOULD):** Prefer resolvable Sphinx cross-references over plain literals for public internal and intersphinx-mapped external targets.
-- **DOC-26 (MUST):** Use `.. deprecated::`, `.. versionchanged::`, or `.. versionadded::` when the corresponding public lifecycle information must remain visible in the API reference.
-- **DOC-27 (MUST):** Use a targeted `# noqa: <code>` only when the rule is intentionally inapplicable. Broad or unexplained suppressions are not allowed.
+- **DOC-06 (MUSS):** Der Docstring beginnt mit einem kurzen, eigenständig verständlichen Satz. Funktionen und Methoden verwenden die imperative Form, zum Beispiel `Return the encoded table.` Klassen beschreiben ihren Zweck direkt und vermeiden Formulierungen wie `This class ...`.
+- **DOC-07 (MUSS):** Ein `Args:`-Abschnitt ist vorhanden, wenn der dokumentierte Callable oder Konstruktor öffentliche Parameter besitzt. Er dokumentiert jeden öffentlichen Parameter und keinen Parameter, der nicht in der Signatur vorkommt. `*args` und `**kwargs` werden dokumentiert, wenn sie Teil des öffentlichen Vertrags sind.
+- **DOC-08 (MUSS):** `Returns:` wird verwendet, wenn der Rückgabewert nicht vollständig aus der Summary hervorgeht. `Yields:` beschreibt erzeugte Werte. Callables, die ausschließlich `None` zurückgeben, benötigen keinen dieser Abschnitte.
+- **DOC-09 (MUSS):** `Raises:` dokumentiert ausschließlich Exceptions, die Teil des unterstützten öffentlichen Vertrags sind. Zufällige Downstream-Fehler und Exceptions, die ausschließlich durch die Verletzung einer bereits dokumentierten Vorbedingung entstehen, werden nicht dokumentiert.
+- **DOC-10 (SOLLTE):** `Attributes:` dokumentiert öffentlichen gefitteten oder gelernten Zustand, den Nutzer untersuchen sollen. Private Caches und zufälliger Implementierungszustand werden nicht dokumentiert.
+- **DOC-11 (SOLLTE):** `See Also:` wird verwendet, wenn eine eng verwandte öffentliche API bei der Auswahl der richtigen Operation hilft. Jeder Eintrag erklärt kurz die Beziehung; reine Linklisten sind nicht erlaubt.
+- **DOC-13 (MUSS):** API-Docstrings bleiben auf den Referenzvertrag beschränkt. Ausführliche Tutorials, Motivation, Vergleiche und End-to-End-Abläufe gehören in die narrative Dokumentation.
 
-## Example requirements
+### Parameter, Defaults und Typen
 
-An example required by DOC-12:
+- **DOC-14 (MUSS):** Parameterbeschreibungen erklären Semantik und wiederholen keine bereits präzise vorhandenen Type Hints. Akzeptierte Dtype-Familien, Shapes, Einheiten, Bereiche oder Werte werden nur erwähnt, wenn sie für die korrekte Nutzung relevant sind.
+- **DOC-15 (MUSS):** Die Bedeutung von `None`, Sentinel-Werten und besonderen Literalen wird erklärt. Eine reine Wiederholung von `default=None` ist nicht ausreichend.
+- **DOC-16 (MUSS):** Implizite Begrenzungen, Fallbacks, Transformationen und Side Effects, die Ergebnisse verändern oder Nutzer überraschen können, werden dokumentiert.
+- **DOC-17 (MUSS):** Die Dokumentation verspricht keine breitere Eingabeunterstützung als die Implementierung und erzeugt keine neuen Anforderungen an Runtime-Validierungen, die für den öffentlichen Vertrag nicht nötig sind.
 
-- **EX-01 (MUST):** Runs without network access and on CPU unless the documented feature specifically requires another environment.
-- **EX-02 (MUST):** Is deterministic or explicitly controls its randomness.
-- **EX-03 (MUST):** Shows public API usage rather than private setup or internal state.
-- **EX-04 (MUST):** Is executable by the documentation doctest build unless it is explicitly marked and justified as non-executable.
-- **EX-05 (SHOULD):** Demonstrates the smallest realistic input that makes the output contract clear.
+## Impact 3: Tensor- und Processor-Semantik
 
-## Generation strategy
+### Warum dieser Block besonders relevant für SDM ist
 
-- **GEN-01 (MUST):** Public contract descriptions are reviewed source text. Generated API pages may consume docstrings, signatures, type annotations, and autosummary metadata, but generated prose is not authoritative without review.
-- **GEN-02 (SHOULD):** Reusable parameter descriptions or templates are introduced only for semantics that are genuinely identical across multiple APIs.
-- **GEN-03 (MUST):** A generated description has one version-controlled source of truth and a consistency check covering signatures, defaults, and documented parameters.
-- **GEN-04 (MUST):** LLM or agent generation may assist authors, but successful generation or skill invocation is not a merge criterion. The resulting documentation must satisfy the same review and CI checks as human-written text.
+Allgemeine Docstring-Linter können einen formal vollständigen Docstring erkennen, aber nicht beurteilen, ob ein Processor vor `transform()` gefittet werden muss oder ob ein Tensor Dtype, Device, Shape oder Stype verändert. Genau diese Eigenschaften entscheiden in SDM häufig darüber, ob eine Verarbeitung korrekt ist.
 
-## Enforcement model
+- **DOC-18 (MUSS):** Tensorparameter und -rückgabewerte enthalten ihre relevante Shape in Double-Backtick-Notation, zum Beispiel `[..., S, C]`. Batchdimensionen beginnen mit `...`; alle übrigen Dimensionsbuchstaben werden konsistent ausgeschrieben.
+- **DOC-19 (MUSS):** Dtype- und Device-Verhalten wird dokumentiert, wenn eine Operation Daten einschränkt, promotet, konvertiert oder verschiebt. Dtypes werden nicht aufgezählt, wenn die Operation alle unterstützten Dtypes transparent akzeptiert oder erhält.
+- **DOC-20 (MUSS):** Stateful Processor dokumentieren, ob `fit()` erforderlich ist, welcher öffentliche Zustand gelernt wird und ob ein erneutes `fit()` diesen Zustand ersetzt, sofern dies nicht vollständig durch den Basisklassenvertrag definiert ist.
+- **DOC-21 (MUSS):** Relevantes Nutzerverhalten für Missing- oder Non-finite-Werte, stochastische Operationen und Generatorsteuerung, Spaltenreihenfolge oder -namen, Stypes und Schemaänderungen wird dokumentiert.
+- **DOC-22 (MUSS):** Eingabe- und Ausgabebeschreibungen erklären, ob sich Containerstruktur, Dtype, Device, Shape oder semantischer Spaltentyp verändern, wenn dieses Verhalten nicht offensichtlich ist.
 
-The skill explains how to write docstrings. CI defines the reproducible merge requirements. Skill invocation alone cannot guarantee conformance because it is not reliably observable for every human, editor, or agent workflow.
+## Impact 4: Ausführbare Beispiele
 
-- **ENF-01 (MUST):** `AGENTS.md` directs contributors and agents changing public API under `sdm/` to read `.agents/skills/docstring/SKILL.md` before acting.
-- **ENF-02 (MUST):** Ruff with the repository's Google docstring convention runs over all Python files in required pull-request CI.
-- **ENF-03 (MUST):** A Google-style contract checker runs over all of `sdm` and validates documented arguments, constructor parameters, returns, yields, and supported raises against code. `pydoclint` is the proposed general-purpose implementation.
-- **ENF-04 (MUST):** A small repository-owned checker validates SDM-specific objective rules that general-purpose linters cannot express, including the public `__all__` surface and class-level constructor documentation.
-- **ENF-05 (MUST):** Sphinx HTML builds with warnings treated as errors so malformed markup and unresolved references block a merge.
-- **ENF-06 (MUST):** Sphinx doctests run in required pull-request CI so executable examples cannot drift from behavior.
-- **ENF-07 (MUST):** The checks in ENF-02 through ENF-06 are required by branch protection before merging to `main`; running them only after a push to `main` is insufficient.
-- **ENF-08 (MUST):** Semantic requirements that cannot be checked reliably, such as whether a description captures surprising behavior or cites the correct paper, remain explicit review checklist items.
-- **ENF-09 (SHOULD):** Full-repository checks are preferred over diff-only checks when runtime permits, because signature and export changes can invalidate documentation outside the edited lines.
+### Warum Beispiele einen hohen, aber nicht den höchsten Impact haben
 
-## Adoption
+Ausführbare Beispiele prüfen Verhalten und Dokumentation gemeinsam und helfen Nutzern schneller als zusätzliche Prosa. Sie verursachen jedoch Pflege- und CI-Kosten. Deshalb sollen sie gezielt für neue Top-Level-APIs und nicht für jede triviale Methode verlangt werden.
 
-1. Review and agree on this proposal.
-2. Fold accepted rules into `SKILL.md` and add the explicit skill-routing rule to `AGENTS.md`.
-3. Run the proposed contract checks across `sdm` and classify existing findings.
-4. Fix the existing public API where practical. If immediate cleanup is too large, commit a temporary baseline that permits existing violations but rejects new or worsened violations.
-5. Add the checks to pre-commit where they are fast enough and to required pull-request CI in all cases.
-6. Remove any temporary baseline incrementally.
+- **DOC-12 (SOLLTE):** Ein neuer öffentlicher Top-Level-Processor oder eine API mit nicht offensichtlicher Komposition oder Lifecycle erhält ein minimales deterministisches Beispiel.
+- **EX-01 (MUSS):** Das Beispiel läuft ohne Netzwerkzugriff und auf CPU, sofern die dokumentierte Funktion nicht ausdrücklich eine andere Umgebung benötigt.
+- **EX-02 (MUSS):** Das Beispiel ist deterministisch oder kontrolliert seine Zufälligkeit explizit.
+- **EX-03 (MUSS):** Das Beispiel zeigt die öffentliche API und keine privaten Hilfskonstruktionen oder internen Zustände.
+- **EX-04 (MUSS):** Das Beispiel wird vom Sphinx-Doctest-Build ausgeführt, sofern es nicht ausdrücklich und begründet als nicht ausführbar markiert ist.
+- **EX-05 (SOLLTE):** Das kleinste realistische Beispiel macht den Ein- und Ausgabevertrag verständlich.
 
-## Review decisions
+## Impact 5: Wiederverwendung und Generierung
 
-The following decisions should be resolved before this proposal becomes normative:
+### Warum dieser Block erst später relevant wird
 
-1. Should DOC-12 require an example for every new top-level public processor, or only when a reviewer considers usage non-obvious?
-2. Should `__all__` be the sole definition of public API for DOC-01, or should inclusion in the generated API reference also be required?
-3. Should ENF-03 adopt `pydoclint`, or should all contract checks live in a repository-owned checker?
-4. Which `Raises:` checks should be enabled without encouraging defensive validation or making unsupported inputs part of the public contract?
-5. Can the current tree satisfy the new checks immediately, or is a temporary baseline required?
-6. Should DOC-19 require explicit dtype and device statements for every tensor operation, or only for restrictions and transformations as proposed?
+Generierung bietet den größten Nutzen bei vielen identischen Beschreibungen, wie in großen Model Zoos. Zu frühe Templates erzeugen dagegen zusätzliche Abstraktion und können Unterschiede zwischen Processors verdecken. Für SDM sollte deshalb zuerst Konsistenz gemessen und erst danach Wiederholung zentralisiert werden.
 
-## References and selection rationale
+- **GEN-01 (MUSS):** Beschreibungen öffentlicher Verträge sind reviewter Quelltext. Generierte API-Seiten DÜRFEN Docstrings, Signaturen, Type Hints und Autosummary-Metadaten verwenden; generierte Prosa ist ohne Review nicht maßgeblich.
+- **GEN-02 (SOLLTE):** Wiederverwendbare Parameterbeschreibungen oder Templates werden nur für nachweislich identische Semantik mehrerer APIs eingeführt.
+- **GEN-03 (MUSS):** Eine generierte Beschreibung besitzt genau eine versionierte Quelle und einen Konsistenzcheck für Signaturen, Defaults und dokumentierte Parameter.
+- **GEN-04 (MUSS):** LLMs oder Agenten DÜRFEN Autoren unterstützen. Die erfolgreiche Generierung oder Skill-Nutzung ist jedoch kein Merge-Kriterium; das Ergebnis durchläuft dieselben Reviews und CI-Checks wie manuell geschriebener Text.
 
-- [PEP 257](https://peps.python.org/pep-0257/) defines the Python-level structure and summary conventions on which other standards build.
-- [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html#s3.8.1-comments-in-doc-strings) matches the existing SDM `Args:`, `Returns:`, `Yields:`, and `Raises:` syntax.
-- [numpydoc validation](https://numpydoc.readthedocs.io/en/stable/validation.html) demonstrates versioned, configurable docstring validation in pre-commit and Sphinx.
-- [pandas documentation guidelines](https://pandas.pydata.org/docs/dev/development/contributing_documentation.html) demonstrate strict Sphinx validation and executable examples for a large public API.
-- [scikit-learn docstring guidelines](https://scikit-learn.org/stable/developers/contributing.html#guidelines-for-writing-docstrings) are relevant to SDM's estimator- and processor-like APIs, especially shapes, dtypes, defaults, fitted attributes, and examples.
-- [JAX doctest guidelines](https://github.com/jax-ml/jax/blob/main/docs/developer.md#doctests) demonstrate executable documentation for a modern tensor and accelerator library.
-- [PyTorch's docstring linter](https://github.com/pytorch/pytorch/blob/main/tools/linter/adapters/docstring_linter.py) demonstrates gradual enforcement through a grandfathered baseline in SDM's closest runtime ecosystem.
-- [Transformers auto-docstrings](https://github.com/huggingface/transformers/blob/main/docs/source/en/auto_docstring.md) demonstrate signature- and template-based generation for a large model and processor zoo, while also showing why generation is most useful for repeated semantics.
-- [`pydoclint`](https://jsh9.github.io/pydoclint/) supports Google-style signature, argument, return, yield, raise, constructor, and attribute consistency checks and can be adopted incrementally with a baseline.
+## Impact 6: Markup, Referenzen und sprachliche Konsistenz
+
+### Warum dieser Block nach den semantischen Regeln kommt
+
+Konsistentes Markup verbessert Lesbarkeit, Navigation und das gerenderte Ergebnis. Ein sprachlich perfekter Docstring kann trotzdem fachlich falsch sein, weshalb diese Regeln nicht vor den API- und Processor-Verträgen priorisiert werden sollten.
+
+- **DOC-23 (MUSS):** Docstrings mit Mathematik, LaTeX oder Backslashes verwenden `r"""..."""`.
+- **DOC-24 (MUSS):** Implementiert eine API eine in einem wissenschaftlichen Paper vorgeschlagene Methode, wird dieses Paper möglichst über eine stabile URL im ersten Satz zitiert.
+- **DOC-25 (SOLLTE):** Auflösbare Sphinx-Cross-References werden für öffentliche interne und über Intersphinx verfügbare externe Ziele gegenüber einfachen Literalen bevorzugt.
+- **DOC-26 (MUSS):** `.. deprecated::`, `.. versionchanged::` oder `.. versionadded::` werden verwendet, wenn die entsprechende Information zum öffentlichen API-Lifecycle dauerhaft in der Referenz sichtbar sein muss.
+- **DOC-27 (MUSS):** Ein gezieltes `# noqa: <code>` wird nur verwendet, wenn die konkrete Regel absichtlich nicht anwendbar ist. Breite oder unbegründete Suppressions sind nicht erlaubt.
+
+## Einführung nach erwartetem Nutzen
+
+1. Diesen Vorschlag reviewen und die offenen Entscheidungen klären.
+2. Akzeptierte Regeln in `SKILL.md` übernehmen und die explizite Skill-Routing-Regel in `AGENTS.md` ergänzen.
+3. Den vorgeschlagenen Contract-Checker über ganz `sdm` ausführen und bestehende Findings klassifizieren.
+4. Bestehende Verstöße an der öffentlichen API korrigieren, soweit dies mit überschaubarem Aufwand möglich ist.
+5. Falls die sofortige Bereinigung zu groß ist, vorübergehend eine Baseline einchecken, die bestehende Verstöße zulässt, aber neue oder verschlechterte Verstöße ablehnt.
+6. Die Checks in Pre-commit aufnehmen, wenn sie schnell genug sind, und in jedem Fall als verpflichtende Pull-Request-Checks konfigurieren.
+7. Eine vorübergehende Baseline schrittweise abbauen.
+
+## Offene Entscheidungen nach Impact
+
+1. **Sehr hoch:** Soll ENF-03 `pydoclint` verwenden oder sollen alle Contract-Checks in einem repository-eigenen Tool implementiert werden?
+2. **Sehr hoch:** Kann der aktuelle Stand die neuen Checks sofort erfüllen oder ist vorübergehend eine Baseline nötig?
+3. **Sehr hoch:** Soll `__all__` für DOC-01 allein die öffentliche API definieren oder muss ein Objekt zusätzlich in der generierten API-Referenz enthalten sein?
+4. **Hoch:** Welche `Raises:`-Checks können aktiviert werden, ohne defensive Runtime-Validierung zu fördern oder nicht unterstützte Eingaben zum öffentlichen Vertrag zu machen?
+5. **Hoch:** Soll DOC-12 für jeden neuen öffentlichen Top-Level-Processor gelten oder nur, wenn die Nutzung nach Einschätzung des Reviews nicht offensichtlich ist?
+6. **Hoch:** Soll DOC-19 Dtype- und Device-Aussagen für jede Tensoroperation verlangen oder wie vorgeschlagen nur für Einschränkungen und Transformationen?
+
+## Quellen und Auswahlbegründung
+
+- [PEP 257](https://peps.python.org/pep-0257/) definiert die grundlegende Python-Struktur und Summary-Konventionen, auf denen andere Standards aufbauen.
+- Der [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html#s3.8.1-comments-in-doc-strings) wurde ausgewählt, weil er zur bestehenden SDM-Syntax mit `Args:`, `Returns:`, `Yields:` und `Raises:` passt.
+- [numpydoc validation](https://numpydoc.readthedocs.io/en/stable/validation.html) zeigt, wie versionierte und konfigurierbare Docstring-Prüfungen in Pre-commit und Sphinx eingebunden werden.
+- Die [pandas-Dokumentationsrichtlinien](https://pandas.pydata.org/docs/dev/development/contributing_documentation.html) wurden wegen ihrer strikten Sphinx-Validierung und ausführbaren Beispiele für eine große öffentliche API ausgewählt.
+- Die [scikit-learn-Docstring-Richtlinien](https://scikit-learn.org/stable/developers/contributing.html#guidelines-for-writing-docstrings) sind wegen der SDM ähnlichen Estimator- und Processor-APIs besonders relevant, unter anderem für Shapes, Dtypes, Defaults, gefittete Attribute und Beispiele.
+- Die [JAX-Doctest-Richtlinien](https://github.com/jax-ml/jax/blob/main/docs/developer.md#doctests) zeigen ausführbare Dokumentation in einer modernen Tensor- und Accelerator-Library.
+- Der [PyTorch-Docstring-Linter](https://github.com/pytorch/pytorch/blob/main/tools/linter/adapters/docstring_linter.py) zeigt eine schrittweise Einführung über eine Grandfather-Baseline im technisch engsten Runtime-Ökosystem von SDM.
+- Die [Transformers-Auto-Docstrings](https://github.com/huggingface/transformers/blob/main/docs/source/en/auto_docstring.md) zeigen signatur- und templatebasierte Generierung in einem großen Model- und Processor-Zoo und machen sichtbar, dass diese Lösung vor allem bei vielfach wiederholter Semantik lohnt.
+- [`pydoclint`](https://jsh9.github.io/pydoclint/) unterstützt Google-Style-Prüfungen für Signaturen, Argumente, Rückgaben, Generatorwerte, Exceptions, Konstruktoren und Attribute sowie eine schrittweise Einführung über eine Baseline.
