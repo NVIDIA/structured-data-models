@@ -106,7 +106,7 @@ jobs:
           PY
 
       - name: Run tests
-        timeout-minutes: 20
+        timeout-minutes: 5
         env:
           FULL_TEST: ${{ (github.ref_name == 'main' || steps.ci-full-test-label.outputs.result == 'true') && '1' || '0' }}
         run: |
