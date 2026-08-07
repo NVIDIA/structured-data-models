@@ -1,38 +1,33 @@
 from __future__ import annotations
 
-import pyarrow as pa
 import torch
-from torch import Tensor
 
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import EmbedText
+from sdm.testing import withCUDA
 
 
-class _FakeEmbeddingModel(torch.nn.Module):
-    def forward(self, strings: pa.Array) -> Tensor:
-        return torch.ones(len(strings), 2)
-
-
-def test_forward() -> None:
+@withCUDA
+def test_forward(device: torch.device) -> None:
     table = TableTensor(
         columns={"text": ("title", "body")},
         text=StringTensor.from_list(
             [
                 ["a", "b"],
-                ["c", "d"],
-            ]
+                ["c", None],
+            ],
+            device=device,
         ),
     )
 
     output = EmbedText(
-        _FakeEmbeddingModel(),
-        embedding_dim=2,
-    )(table)
+        "sentence-transformers-testing/stsb-bert-tiny-safetensors"
+    ).to(device)(table)
 
-    assert output.columns[Stype.numerical] == (
-        "title_0",
-        "title_1",
-        "body_0",
-        "body_1",
+    assert output.columns[Stype.numerical] == tuple(
+        f"{column}_{index}"
+        for column in ("title", "body")
+        for index in range(128)
     )
-    assert torch.equal(output.numerical, torch.ones(2, 4))
+    assert output.numerical.shape == (2, 256)
+    assert output.numerical.device == device

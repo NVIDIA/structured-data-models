@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import torch
+from torch import Tensor
 
 from sdm.processing.base import Processor
 from sdm.stype import Stype
@@ -10,32 +11,23 @@ from sdm.tensor import StringTensor, TableTensor
 
 
 class _ModuleReference(torch.nn.Module):
-    """Preserve a module reference across deep copies."""
-
     def __init__(self, module: torch.nn.Module) -> None:
         super().__init__()
         self.module = module
 
-    def forward(self, *args: Any, **kwargs: Any) -> Any:
-        return self.module(*args, **kwargs)
-
-    def __deepcopy__(self, _memo: dict[int, Any]) -> _ModuleReference:
+    def __deepcopy__(self, memo: dict[int, Any]) -> _ModuleReference:
         return type(self)(self.module)
 
 
 class EmbedText(Processor):
-    r"""Embed text columns with a user-provided embedding model.
-
-    Each text column is embedded cell-by-cell through ``embedding_model``.
-    The model must return one embedding per text value as a
-    :class:`torch.Tensor` with shape ``[n, embedding_dim]``. Embedding
-    Embeddings are concatenated in column order into the numerical output.
+    r"""Embed text columns with a Sentence Transformers model.
 
     Args:
-        embedding_model: Pre-loaded model called on each flattened text column.
-            It must return a :class:`torch.Tensor` with shape
-            ``[n, embedding_dim]``.
-        embedding_dim: Width of each returned embedding.
+        model_name: Model name or local path passed to
+            :class:`sentence_transformers.sentence_transformer.model.SentenceTransformer`.
+        batch_size: Batch size passed to
+            :meth:`~sentence_transformers.sentence_transformer.model.SentenceTransformer.encode`.
+            If ``None``, use the model default.
     """
 
     requires_fit = False
@@ -43,56 +35,68 @@ class EmbedText(Processor):
 
     def __init__(
         self,
-        embedding_model: torch.nn.Module,
-        embedding_dim: int,
+        model_name: str,
+        *,
+        batch_size: int | None = None,
     ) -> None:
         super().__init__()
-        self._embedding_model = _ModuleReference(embedding_model)
-        self._embedding_dim: int = embedding_dim
+        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+
+        self.batch_size = batch_size
+        model: Any = SentenceTransformer(model_name)
+        self._model = _ModuleReference(model)
+        embedding_dim = model.get_embedding_dimension()
+        assert isinstance(embedding_dim, int)
+        self._embedding_dim = embedding_dim
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        device = table.device
-        dtype = torch.get_default_dtype()
-        col_names = table.columns[Stype.text]
+        columns = table.columns[Stype.text]
         batch_shape = table.text.shape[:-1]
-
-        out_col_names: list[str] = []
-        for col_name in col_names:
-            out_col_names.extend(
-                f"{col_name}_{i}" for i in range(self._embedding_dim)
-            )
-
-        numerical = torch.empty(
-            (*batch_shape, len(out_col_names)),
-            dtype=dtype,
-            device=device,
+        output_columns = tuple(
+            f"{column}_{index}"
+            for column in columns
+            for index in range(self._embedding_dim)
         )
-        if numerical.numel() != 0:
-            # FIXME: There're currently multiple issues:
-            # 1. Even though the same model gets applied to all columns, we run
-            #    it once per column.
-            # 2. The embedding_model currently must take in a dataframe and not
-            #    a Tensor.
-            for col_idx in range(len(col_names)):
-                col_tensor = cast(
-                    StringTensor,
-                    table.text[..., col_idx].reshape(-1),
-                )
-                strings = (
-                    col_tensor.to_cudf()
-                    if col_tensor.is_cuda
-                    else col_tensor.to_arrow()
-                )
-                block = self._embedding_model(strings)
-                embeddings = block.to(device=device, dtype=dtype).reshape(
+
+        if table.text.numel() == 0:
+            numerical = torch.empty(
+                (*batch_shape, len(output_columns)),
+                dtype=torch.get_default_dtype(),
+                device=table.device,
+            )
+        else:
+            text = cast(
+                StringTensor,
+                table.text.movedim(-1, 0).reshape(-1),
+            )
+            strings = [value or "" for value in text.tolist()]
+            encode_kwargs = {}
+            if self.batch_size is not None:
+                encode_kwargs["batch_size"] = self.batch_size
+            model = cast(Any, self._model.module)
+            embeddings = cast(
+                Tensor,
+                model.encode(
+                    strings,
+                    show_progress_bar=False,
+                    convert_to_tensor=True,
+                    device=str(table.device),
+                    **encode_kwargs,
+                ),
+            ).to(dtype=torch.get_default_dtype(), device=table.device)
+
+            # [num_columns, *batch_shape, embedding_dim]
+            numerical = (
+                embeddings.reshape(
+                    len(columns),
                     *batch_shape,
                     self._embedding_dim,
                 )
-                start_idx = col_idx * self._embedding_dim
-                end_idx = start_idx + self._embedding_dim
-                numerical[..., start_idx:end_idx] = embeddings
+                .movedim(0, -2)
+                .reshape(*batch_shape, len(output_columns))
+            )
 
         return TableTensor(
-            columns={Stype.numerical: tuple(out_col_names)},
+            columns={Stype.numerical: output_columns},
             numerical=numerical,
         )
