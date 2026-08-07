@@ -160,7 +160,7 @@ class Cache(MutableMapping[str, object], DeviceMixin):
     ) -> Self:
         r""":meta private:"""  # noqa: D415
 
-        def _to(value: object, device: torch.device | str | None) -> object:
+        def _to(value: object) -> object:
             if isinstance(value, Tensor):
                 return value.to(device, non_blocking=non_blocking)
             if isinstance(value, KVCacheEntry):
@@ -168,17 +168,14 @@ class Cache(MutableMapping[str, object], DeviceMixin):
             if isinstance(value, Cache):
                 return value.to(device, non_blocking=non_blocking)
             if isinstance(value, list):
-                return [_to(item, device=device) for item in value]
+                return [_to(item) for item in value]
             if isinstance(value, tuple):
-                return tuple(_to(item, device=device) for item in value)
+                return tuple(_to(item) for item in value)
             if isinstance(value, dict):
-                return {
-                    key: _to(item, device=device)
-                    for key, item in value.items()
-                }
+                return {key: _to(item) for key, item in value.items()}
             return value
 
-        out = self.__class__({k: _to(v, device) for k, v in self.items()})
+        out = self.__class__({k: _to(v) for k, v in self.items()})
         out._mode = self._mode
         return out
 
