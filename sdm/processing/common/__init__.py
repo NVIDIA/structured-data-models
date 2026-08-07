@@ -3,6 +3,7 @@
 from sdm.processing.common.identity import Identity
 from sdm.processing.common.callable import Callable
 from sdm.processing.common.sequential import Sequential
+from sdm.processing.common.drop import DropStypes
 from sdm.processing.common.stype import StypeDispatch
 from sdm.processing.common.task import TaskDispatch
 from sdm.processing.common.choice import Choice
@@ -14,6 +15,7 @@ __all__ = [
     "Identity",
     "Callable",
     "Sequential",
+    "DropStypes",
     "StypeDispatch",
     "TaskDispatch",
     "Choice",

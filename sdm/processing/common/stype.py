@@ -26,7 +26,6 @@ class StypeDispatch(Processor, InvertibleMixin):
     active route must be invertible. Tracking transformed ownership for routes
     that change semantic type or share an output semantic type is deferred.
     Passthrough columns are preserved.
-    ``remainder="drop"`` is not invertible.
 
     Args:
         numerical: Processor or stateless callable route for numerical
@@ -44,7 +43,8 @@ class StypeDispatch(Processor, InvertibleMixin):
             iterable is normalized to :class:`~sdm.processing.Sequential`.
         remainder: How to handle non-empty semantic types without a configured
             route. ``"passthrough"`` keeps them unchanged and is the default,
-            ``"drop"`` removes them, and ``"error"`` raises.
+            and ``"error"`` raises. Use :class:`DropStypes` to remove
+            semantic types explicitly.
     """
 
     @property
@@ -57,8 +57,6 @@ class StypeDispatch(Processor, InvertibleMixin):
         """Policy derived from remainder handling."""
         if self.remainder == "error":
             return "error"
-        if self.remainder == "drop":
-            return "opaque"
         return "preserve"
 
     def __init__(
@@ -69,9 +67,11 @@ class StypeDispatch(Processor, InvertibleMixin):
         datetime: object = None,
         id: object = None,
         text: object = None,
-        remainder: Literal["passthrough", "drop", "error"] = "passthrough",
+        remainder: Literal["passthrough", "error"] = "passthrough",
     ) -> None:
         super().__init__()
+        if remainder not in {"passthrough", "error"}:
+            raise ValueError("remainder must be 'passthrough' or 'error'.")
         self.processors = torch.nn.ModuleDict()
         for stype, processor in (
             (Stype.numerical, numerical),
@@ -97,8 +97,8 @@ class StypeDispatch(Processor, InvertibleMixin):
         raise ValueError(
             f"Found non-empty input columns for semantic types {names}, but "
             f"{self.__class__.__name__!r} has no route for them. Configure "
-            "a processor for each semantic type or set "
-            "remainder='passthrough' or remainder='drop'."
+            "a processor for each semantic type, set remainder='passthrough', "
+            "or compose with 'DropStypes'."
         )
 
     def _fit(
@@ -179,11 +179,6 @@ class StypeDispatch(Processor, InvertibleMixin):
         )
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        if self.remainder == "drop":
-            raise ValueError(
-                "'StypeDispatch' with remainder='drop' is not invertible"
-            )
-
         outputs: list[TableTensor] = []
         # TODO: Track transformed route ownership before supporting routes that
         # change stype or share an output stype.

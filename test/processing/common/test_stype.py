@@ -1,10 +1,14 @@
+from typing import Any, cast
+
 import pytest
 import torch
 
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
+    DropStypes,
     Identity,
     ImputeMean,
+    Sequential,
     ShuffleCategories,
     Standardize,
     StypeDispatch,
@@ -107,17 +111,9 @@ def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
         dispatch.inverse_transform(output)
 
 
-def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
-    table = _mixed_table()
-    dispatch = StypeDispatch(
-        numerical=Standardize(),
-        remainder="drop",
-    )
-
-    output = dispatch.fit_transform(table)
-
-    with pytest.raises(ValueError, match="remainder='drop'"):
-        dispatch.inverse_transform(output)
+def test_stype_dispatch_rejects_drop_remainder() -> None:
+    with pytest.raises(ValueError, match=r"passthrough.*error"):
+        StypeDispatch(remainder=cast(Any, "drop"))
 
 
 def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
@@ -137,32 +133,37 @@ def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
         processor.transform(table.select_stypes(Stype.numerical))
 
 
-def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
-    output = StypeDispatch(remainder="drop").fit_transform(_mixed_table())
+def test_drop_stypes_removes_configured_stypes() -> None:
+    output = DropStypes(Stype.numerical).fit_transform(_mixed_table())
 
-    assert output.size() == (2, 0)
-    assert output.columns == {
-        Stype.numerical: (),
-        Stype.categorical: (),
-        Stype.datetime: (),
-        Stype.text: (),
-        Stype.id: (),
-    }
+    assert output.columns[Stype.numerical] == ()
+    assert output.columns[Stype.categorical] == ("kind",)
+    assert torch.equal(
+        output.categorical.code, _mixed_table().categorical.code
+    )
+
+
+def test_drop_stypes_noops_without_matching_stypes() -> None:
+    table = _mixed_table()
+
+    assert DropStypes(Stype.id).fit_transform(table) is table
 
 
 def test_stype_dispatch_runs_iterable_routes() -> None:
     table = _mixed_table().replace_blocks(
         numerical=torch.tensor([[-3.0, 2.0], [1.0, 4.0]])
     )
-    dispatch = StypeDispatch(
-        numerical=[
-            lambda table: table.replace_blocks(
-                numerical=table.numerical.square()
-            ),
-            ImputeMean(),
-            Standardize(),
-        ],
-        remainder="drop",
+    dispatch = Sequential(
+        StypeDispatch(
+            numerical=[
+                lambda table: table.replace_blocks(
+                    numerical=table.numerical.square()
+                ),
+                ImputeMean(),
+                Standardize(),
+            ],
+        ),
+        DropStypes(Stype.categorical),
     )
     expected = Standardize().fit_transform(
         table.select_stypes(Stype.numerical).replace_blocks(
@@ -189,10 +190,7 @@ def test_stype_dispatch_routes_text() -> None:
 
 
 def test_stype_dispatch_uses_route_fitted_state() -> None:
-    dispatch = StypeDispatch(
-        numerical=Standardize(),
-        remainder="drop",
-    )
+    dispatch = StypeDispatch(numerical=Standardize())
 
     with pytest.raises(RuntimeError, match=r"StypeDispatch.*not fitted"):
         dispatch.transform(_mixed_table())
