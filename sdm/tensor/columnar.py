@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import functools
 import math
 from collections.abc import Callable, Sequence
@@ -303,8 +304,29 @@ class ColumnarTensor(Tensor):
             )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
-        args = (self._columns, tuple(self.size())[:-1], self.device)
+        args = (
+            self._columns,
+            tuple(self.size())[:-1],
+            self.device,
+            tuple(self.stride()),
+            self.storage_offset(),
+        )
         return (self.__class__, args)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> ColumnarTensor:
+        if id(self) in memo:
+            return memo[id(self)]
+
+        with torch.inference_mode(self.is_inference()):
+            out = self.__class__(
+                columns=copy.deepcopy(self._columns, memo),
+                size=self.size()[:-1],
+                device=self.device,
+                _stride=self.stride(),
+                _storage_offset=self.storage_offset(),
+            )
+        memo[id(self)] = out
+        return out
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
