@@ -37,10 +37,10 @@ processing
 :maxdepth: 1
 
 api/sdm
-api/tensor
-api/relational
-api/processing
-api/nn
 api/models
+api/nn
+api/processing
+api/relational
 api/evaluation
+api/tensor
 ```
