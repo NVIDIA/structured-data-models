@@ -603,16 +603,29 @@ def _contiguous(
 
 
 @ColumnarTensor.implements(aten.is_pinned.default)
-def _is_pinned(inp: ColumnarTensor) -> bool:
-    return all(column.is_pinned() for column in inp._columns)
+def _is_pinned(
+    inp: ColumnarTensor,
+    device: torch.device | None = None,
+) -> bool:
+    if device is None:
+        return all(column.is_pinned() for column in inp._columns)
+    return all(column.is_pinned(device=device) for column in inp._columns)
 
 
 @ColumnarTensor.implements(aten._pin_memory.default)
-def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
+def _pin_memory(
+    inp: ColumnarTensor,
+    device: torch.device | None = None,
+) -> ColumnarTensor:
+    if device is None:
+        columns = [column.pin_memory() for column in inp._columns]
+    else:
+        columns = [column.pin_memory(device=device) for column in inp._columns]
     return inp.__class__(
-        columns=[column.pin_memory() for column in inp._columns],
+        columns=columns,
         size=inp.size()[:-1],
         device=inp.device,
+        **_layout_kwargs(_layout(inp)),
     )
 
 
@@ -621,9 +634,9 @@ def _pin_memory_composite(
     inp: ColumnarTensor,
     device: torch.device | None = None,
 ) -> ColumnarTensor:
-    if _is_pinned(inp):
+    if _is_pinned(inp, device=device):
         return inp
-    return _pin_memory(inp)
+    return _pin_memory(inp, device=device)
 
 
 @ColumnarTensor.implements(aten.equal.default)
