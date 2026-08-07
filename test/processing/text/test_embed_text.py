@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import sys
 from types import ModuleType
 from typing import Any, ClassVar
@@ -13,12 +12,14 @@ from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import EmbedText
 
 
-class _FakeSentenceTransformer:
+class _FakeSentenceTransformer(torch.nn.Module):
     instances: ClassVar[list[_FakeSentenceTransformer]] = []
 
     def __init__(self, model_name: str) -> None:
+        super().__init__()
         self.model_name = model_name
         self.encode_kwargs: dict[str, Any] = {}
+        self.register_buffer("weight", torch.ones(1))
         self.instances.append(self)
 
     def get_embedding_dimension(self) -> int:
@@ -49,7 +50,7 @@ def test_forward() -> None:
         ),
     )
 
-    output = EmbedText("fake-model", batch_size=3)(table)
+    output = EmbedText("fake-model")(table)
 
     assert output.columns[Stype.numerical] == (
         "title_0",
@@ -70,16 +71,16 @@ def test_forward() -> None:
     assert model.model_name == "fake-model"
     assert model.strings == ["a", "c", "b", ""]
     assert model.encode_kwargs == {
-        "batch_size": 3,
         "show_progress_bar": False,
         "convert_to_tensor": True,
         "device": "cpu",
     }
 
 
-def test_deepcopy_shares_model() -> None:
+def test_to_moves_model() -> None:
     processor = EmbedText("fake-model")
 
-    copy.deepcopy(processor)
+    processor.to(dtype=torch.float64)
 
-    assert len(_FakeSentenceTransformer.instances) == 1
+    model = _FakeSentenceTransformer.instances[0]
+    assert model.weight.dtype == torch.float64

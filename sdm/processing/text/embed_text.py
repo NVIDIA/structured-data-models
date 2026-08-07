@@ -10,8 +10,9 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 
 
-class _ModuleReference:
+class _ModuleReference(torch.nn.Module):
     def __init__(self, model_name: str) -> None:
+        super().__init__()
         from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
         self.model: Any = SentenceTransformer(model_name)
@@ -26,13 +27,19 @@ class EmbedText(Processor):
     Args:
         model_name: Model name or local path passed to
             :class:`sentence_transformers.SentenceTransformer`.
-        batch_size: Number of text cells encoded in each model batch.
+        batch_size: Number of text cells encoded in each model batch. If
+            ``None``, use the model default.
     """
 
     requires_fit = False
     supported_stypes = frozenset({Stype.text})
 
-    def __init__(self, model_name: str, *, batch_size: int = 32) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        batch_size: int | None = None,
+    ) -> None:
         super().__init__()
         self.model_name = model_name
         self.batch_size = batch_size
@@ -62,14 +69,17 @@ class EmbedText(Processor):
                 table.text.movedim(-1, 0).reshape(-1),
             )
             strings = [value or "" for value in text.tolist()]
+            encode_kwargs = {}
+            if self.batch_size is not None:
+                encode_kwargs["batch_size"] = self.batch_size
             embeddings = cast(
                 Tensor,
                 self._model.model.encode(
                     strings,
-                    batch_size=self.batch_size,
                     show_progress_bar=False,
                     convert_to_tensor=True,
                     device=str(table.device),
+                    **encode_kwargs,
                 ),
             ).to(dtype=torch.get_default_dtype(), device=table.device)
 
