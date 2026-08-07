@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import functools
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
@@ -386,6 +387,18 @@ class CategoricalTensor(Tensor):
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._code, self._categories)
         return (self.__class__, args)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> CategoricalTensor:
+        if id(self) in memo:
+            return memo[id(self)]
+
+        with torch.inference_mode(self.is_inference()):
+            out = self.__class__(
+                code=copy.deepcopy(self._code, memo),
+                categories=copy.deepcopy(self._categories, memo),
+            )
+        memo[id(self)] = out
+        return out
 
     @classmethod
     def __torch_function__(
