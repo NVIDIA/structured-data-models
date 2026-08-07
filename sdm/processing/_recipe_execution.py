@@ -66,6 +66,10 @@ class _RecipeExecution:
         generator: torch.Generator | None,
     ) -> _RecipeExecution:
         """Bind a recipe to context data and return the execution state."""
+        # Each execution owns its fitted state. Copy the whole recipe so
+        # linked task resolvers and dispatchers stay connected.
+        recipe = copy.deepcopy(recipe)
+
         # Resolve task type first:
         y_ensemble = recipe.target.fit_transform_ensemble(
             EnsembleTable(y, num_members=num_members),

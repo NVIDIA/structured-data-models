@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -358,6 +359,78 @@ def test_related_table_validation() -> None:
     )
     with pytest.raises(ValueError, match="share the same schema"):
         model.predict(x_query, mismatched_query)
+
+
+_X_CONTEXT = torch.arange(16, dtype=torch.float).reshape(4, 4)
+_Y_CONTEXT = torch.arange(10, 50, 10, dtype=torch.float).unsqueeze(-1)
+_X_QUERY = torch.arange(100, 108, dtype=torch.float).reshape(2, 4)
+
+
+def _first_feature(table: TableTensor) -> TableTensor:
+    return TableTensor.from_tensor(
+        table.numerical[..., :1], columns=("prediction",)
+    )
+
+
+_FIRST_FEATURE = sp.Callable(_first_feature)
+
+
+@pytest.mark.parametrize(
+    ("recipe", "seed"),
+    [
+        (
+            sp.Recipe(
+                features=[sp.ShuffleColumns(method="random"), _FIRST_FEATURE]
+            ),
+            12,
+        ),
+        (sp.Recipe(target=sp.Choice(sp.Identity(), sp.Standardize())), 0),
+    ],
+    ids=("features", "target"),
+)
+def test_sequential_recipe_state(recipe: sp.Recipe, seed: int) -> None:
+    direct = _RecordingModel()(
+        _X_CONTEXT,
+        _Y_CONTEXT,
+        _X_QUERY,
+        recipe=copy.deepcopy(recipe),
+        num_estimators=3,
+        recipe_execution="sequential",
+        generator=torch.Generator().manual_seed(seed),
+    )
+    model = _RecordingModel()
+    model.fit(
+        _X_CONTEXT,
+        _Y_CONTEXT,
+        recipe=recipe,
+        num_estimators=3,
+        recipe_execution="sequential",
+        generator=torch.Generator().manual_seed(seed),
+    )
+    cached = model.predict(_X_QUERY)
+
+    assert direct.numerical.unique(dim=0).size(0) > 1
+    torch.testing.assert_close(cached.numerical, direct.numerical)
+
+
+def test_fitted_model_owns_task_dispatch_state() -> None:
+    recipe = sp.Recipe(output=sp.TaskDispatch(classification=sp.Softmax()))
+    model = _RecordingModel()
+    model.fit(
+        _X_CONTEXT,
+        torch.tensor([[0], [1], [0], [1]]),
+        recipe=recipe,
+    )
+
+    with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
+        recipe.output.transform(TableTensor.from_tensor(_X_QUERY))
+    recipe.target.fit(TableTensor.from_tensor(_Y_CONTEXT))
+    prediction = model.predict(_X_QUERY)
+
+    torch.testing.assert_close(
+        prediction.numerical.sum(dim=-1),
+        torch.ones_like(prediction.numerical[..., 0]),
+    )
 
 
 @pytest.mark.parametrize("cached", [False, True])
