@@ -1841,6 +1841,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     tensors = cast(Sequence[TableTensor], tensors)
 
     ref = tensors[0]
+    layout = aten.cat.default([_layout(tensor) for tensor in tensors], dim)
     if not _is_column_dim(ref, dim):
         tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
 
@@ -1873,6 +1874,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
         size=size[:-1] if size is not None else None,
         columns=cast(dict[StypeLike, tuple[str, ...]], columns),
         device=ref.device if len(blocks) == 0 else None,
+        **_layout_kwargs(layout),
         **blocks,
     )
 
