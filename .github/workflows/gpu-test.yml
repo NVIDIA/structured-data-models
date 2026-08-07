@@ -117,9 +117,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python examples/tabiclv2/quickstart.py
-          python examples/kumorfm/rel_bench.py \
-            --dataset=rel-f1 \
-            --task=driver-position
+          python examples/kumorfm/rel_bench.py --dataset=rel-f1 --task=driver-position
           python - <<'PY'
           import runpy
           import sys
