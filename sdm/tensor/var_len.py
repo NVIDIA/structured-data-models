@@ -383,6 +383,8 @@ class VarLenTensor(Tensor):
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
         tensor = cast(VarLenTensor, self.detach().contiguous().cpu())
+        if tensor.numel() == 0 and tensor.storage_offset() != 0:
+            tensor = cast(VarLenTensor, tensor.clone())
         array = to_arrow(tensor._data)
 
         return pa.Array.from_buffers(
@@ -515,6 +517,10 @@ class VarLenTensor(Tensor):
                 f"Can't access 'data_offset' for non-contiguous "
                 f"{self.__class__.__name__!r}"
             )
+
+        if self.numel() == 0:
+            offset = self._offset[:1]
+            return self._data[:0], offset - offset[0]
 
         start = int(self.storage_offset())
         offset = self._offset[start : start + self.numel() + 1]
@@ -813,7 +819,33 @@ def _to_dtype_layout(
             non_blocking=non_blocking,
         )
 
-    storage_offset = int(inp.storage_offset())
+    if inp.numel() == 0:
+        return inp.__class__._new_wrapper(
+            data=inp._data[:0].to(
+                device=device,
+                dtype=dtype,
+                non_blocking=non_blocking,
+                copy=copy,
+            ),
+            offset=inp._offset.new_zeros(1).to(
+                device=device,
+                non_blocking=non_blocking,
+            ),
+            valid=inp._valid[:0].to(
+                device=device,
+                non_blocking=non_blocking,
+                copy=copy,
+            )
+            if inp._valid is not None
+            else None,
+            size=inp.size(),
+            stride=inp.stride()
+            if memory_format == torch.preserve_format
+            else _contiguous_stride(inp.size()),
+            storage_offset=0,
+        )
+
+    storage_offset = inp._storage_offset
     span_len = _span_len(inp.size(), inp.stride())
     offset = inp._offset[storage_offset : storage_offset + span_len + 1]
     data = inp._data[offset[0] : offset[-1]].to(
