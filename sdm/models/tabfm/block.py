@@ -1,38 +1,17 @@
-# ruff: noqa: D101, D102
+# ruff: noqa: D101
 
 import math
 from typing import Any
 
 import torch
-import torch.nn.functional as F
-from torch import Tensor
-from torch.nn import Linear, RMSNorm, Sequential
+from torch.nn import RMSNorm, Sequential
 
-from sdm.nn import RotaryEmbedding, SoftplusScale, TransformerBlock
-
-
-class MLP(torch.nn.Module):
-    def __init__(
-        self,
-        channels: int,
-        hidden_channels: int,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
-        self.pre_norm = RMSNorm(channels, eps=1e-6, **factory_kwargs)
-        self.lin1 = Linear(channels, hidden_channels, **factory_kwargs)
-        self.gate = Linear(channels, hidden_channels, **factory_kwargs)
-        self.lin2 = Linear(hidden_channels, channels, **factory_kwargs)
-        self.post_norm = RMSNorm(channels, eps=1e-6, **factory_kwargs)
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.pre_norm(x)
-        x = F.silu(self.gate(x)) * self.lin1(x)
-        x = self.lin2(x)
-        return self.post_norm(x)
+from sdm.nn import (
+    RotaryEmbedding,
+    SoftplusScale,
+    SwiGLUFeedForward,
+    TransformerBlock,
+)
 
 
 class TabFMTransformerBlock(TransformerBlock):
@@ -66,7 +45,15 @@ class TabFMTransformerBlock(TransformerBlock):
         super().__init__(
             channels=channels,
             num_query_heads=num_heads,
-            mlp=MLP(channels, hidden_channels, **factory_kwargs),
+            mlp=Sequential(
+                RMSNorm(channels, eps=1e-6, **factory_kwargs),
+                SwiGLUFeedForward(
+                    channels=channels,
+                    feedforward_channels=hidden_channels,
+                    **factory_kwargs,
+                ),
+                RMSNorm(channels, eps=1e-6, **factory_kwargs),
+            ),
             query_norm=norm,
             key_value_norm=norm,
             post_attn_norm=RMSNorm(channels, eps=1e-6, **factory_kwargs),
