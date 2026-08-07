@@ -63,6 +63,8 @@ class ColumnarTensor(Tensor):
         columns: Sequence[Tensor],
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
+        _stride: Sequence[int | torch.SymInt] | None = None,
+        _storage_offset: int | torch.SymInt = 0,
     ) -> None:
         pass
 
@@ -71,6 +73,8 @@ class ColumnarTensor(Tensor):
         columns: Sequence[Tensor],
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
+        _stride: Sequence[int | torch.SymInt] | None = None,
+        _storage_offset: int | torch.SymInt = 0,
     ) -> Self:
         r"""Create a tensor wrapper."""
         # Avoid a circular import through `sdm.tensor`.
@@ -115,12 +119,20 @@ class ColumnarTensor(Tensor):
                 "Expected 'size' to be given for zero columnar data"
             )
 
+        layout: dict[str, Any] = {}
+        if _stride is not None:
+            layout = {
+                "strides": _stride,
+                "storage_offset": _storage_offset,
+            }
+
         out = Tensor._make_wrapper_subclass(
             cls,
             size=(*size, len(columns)),
             dtype=torch.uint8,  # NOTE Do not use.
             device=device,
             requires_grad=False,
+            **layout,
         )
 
         out._columns = columns
@@ -1103,6 +1115,22 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
 
 
 # Helpers #####################################################################
+
+
+def _layout(inp: Tensor) -> Tensor:
+    return aten.as_strided.default(
+        torch.empty(0, dtype=torch.uint8, device="meta"),
+        inp.size(),
+        inp.stride(),
+        inp.storage_offset(),
+    )
+
+
+def _layout_kwargs(layout: Tensor) -> dict[str, Any]:
+    return {
+        "_stride": layout.stride(),
+        "_storage_offset": layout.storage_offset(),
+    }
 
 
 def _normalize_dim(inp: Tensor, dim: int) -> int:
