@@ -1,0 +1,361 @@
+import pytest
+import torch
+
+from sdm import StringTensor, Stype, TableTensor
+from sdm.processing import TFIDF
+from sdm.tensor import EnsembleTable
+from sdm.testing import onlyCUDA
+
+
+def test_preserves_leading_dimensions() -> None:
+    table = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [
+                [["ab"], ["ac"]],
+                [["ab"], ["bc"]],
+            ]
+        )
+    )
+
+    output = TFIDF(ngram_range=(2, 2)).fit_transform(table)
+
+    assert output.numerical.shape[:-1] == (2, 2)
+
+
+def test_rows_are_l2_normalized() -> None:
+    table = TableTensor.from_tensor(
+        StringTensor.from_list([["short"], ["a much longer text cell"]])
+    )
+
+    output = TFIDF(ngram_range=(2, 3)).fit_transform(table)
+
+    assert torch.allclose(
+        output.numerical.norm(dim=1),
+        torch.ones(2),
+        atol=1e-6,
+    )
+
+
+def test_exact_values() -> None:
+    table = TableTensor.from_tensor(
+        StringTensor.from_list([["ab"], ["ab ac"], ["ac"]])
+    )
+    encoder = TFIDF(ngram_range=(2, 2))
+    output = encoder.fit_transform(table)
+
+    expected = torch.tensor(
+        [
+            [0.48133417, 0.61980538, 0.61980538, 0.0, 0.0],
+            [0.61335554, 0.39490346, 0.39490346, 0.39490346, 0.39490346],
+            [0.48133417, 0.0, 0.0, 0.61980538, 0.61980538],
+        ]
+    )
+
+    assert torch.allclose(output.numerical, expected, atol=1e-6)
+
+
+def test_ignores_unseen_ngrams() -> None:
+    train = TableTensor.from_tensor(
+        StringTensor.from_list([["aaa bbb"], ["aaa ccc"]])
+    )
+    query = TableTensor.from_tensor(
+        StringTensor.from_list([["zzz yyy"], ["aaa bbb"]])
+    )
+    encoder = TFIDF(ngram_range=(3, 3))
+    encoder.fit(train)
+
+    output = encoder.transform(query)
+
+    assert output.numerical[0].eq(0).all()
+    assert output.numerical[1].ne(0).any()
+
+
+def test_max_features_keeps_most_frequent_ngrams() -> None:
+    table = TableTensor.from_tensor(
+        StringTensor.from_list([["aa aa aa ab ab ac"]])
+    )
+    full = TFIDF(ngram_range=(2, 3)).fit_transform(table)
+    encoder = TFIDF(ngram_range=(2, 3), max_features=3).fit(table)
+    query = TableTensor.from_tensor(
+        StringTensor.from_list([["aa"], ["ab"], ["ac"], ["zz"]])
+    )
+    capped = encoder.transform(query)
+
+    assert full.numerical.size(-1) > 3
+    assert capped.numerical.size(-1) == 3
+    assert capped.numerical.count_nonzero(dim=-1).tolist() == [3, 1, 1, 0]
+
+
+def test_empty_string_yields_zero_width_output() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([[""]]))
+
+    output = TFIDF(ngram_range=(2, 2)).fit_transform(table)
+
+    assert output.numerical.shape == (1, 0)
+    assert output.columns[Stype.numerical] == ()
+
+
+def test_short_word_counts_once() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
+
+    output = TFIDF(ngram_range=(5, 5)).fit_transform(table)
+
+    assert output.numerical.shape == (1, 1)
+    assert torch.equal(output.numerical, torch.ones(1, 1))
+
+
+def test_can_preserve_case() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["CAT"], ["cat"]]))
+
+    lowercased = TFIDF(ngram_range=(3, 3)).fit_transform(table)
+    case_sensitive = TFIDF(
+        ngram_range=(3, 3),
+        lowercase=False,
+    ).fit_transform(table)
+
+    assert torch.equal(lowercased.numerical[0], lowercased.numerical[1])
+    assert not torch.equal(
+        case_sensitive.numerical[0],
+        case_sensitive.numerical[1],
+    )
+
+
+@pytest.mark.parametrize(
+    ("train", "query", "ngram_range", "max_features", "lowercase"),
+    [
+        pytest.param(
+            [["aa aa aa ab ab ac"], ["aa ab"], ["ac"]],
+            None,
+            (2, 3),
+            None,
+            True,
+            id="basic",
+        ),
+        pytest.param(
+            [["aa aa aa ab ab ac"], ["aa ab"], ["ac"]],
+            None,
+            (2, 3),
+            3,
+            True,
+            id="max-features",
+        ),
+        pytest.param(
+            [[""]],
+            None,
+            (2, 2),
+            None,
+            True,
+            id="empty-string",
+        ),
+        pytest.param(
+            [["a"]],
+            None,
+            (5, 5),
+            None,
+            True,
+            id="short-word",
+        ),
+        pytest.param(
+            [["aaa bbb"], ["aaa ccc"]],
+            [["zzz yyy"], ["aaa bbb"]],
+            (3, 3),
+            None,
+            True,
+            id="unseen-ngrams",
+        ),
+        pytest.param(
+            [["CAT"], ["cat"]],
+            None,
+            (3, 3),
+            None,
+            False,
+            id="case-sensitive",
+        ),
+        pytest.param(
+            [["hello world", "cat"], ["hello there", "dog"]],
+            None,
+            (2, 3),
+            None,
+            True,
+            id="multi-column",
+        ),
+    ],
+)
+@onlyCUDA
+def test_cuda_matches_cpu(
+    train: list[list[str]],
+    query: list[list[str]] | None,
+    ngram_range: tuple[int, int],
+    max_features: int | None,
+    lowercase: bool,
+) -> None:
+    pytest.importorskip("cudf")
+    pytest.importorskip("cupy")
+    pytest.importorskip("pylibcudf")
+
+    cpu_train = TableTensor.from_tensor(StringTensor.from_list(train))
+    cuda_train = TableTensor.from_tensor(
+        StringTensor.from_list(train, device="cuda")
+    )
+    cpu_encoder = TFIDF(
+        ngram_range=ngram_range,
+        max_features=max_features,
+        lowercase=lowercase,
+    )
+    cuda_encoder = TFIDF(
+        ngram_range=ngram_range,
+        max_features=max_features,
+        lowercase=lowercase,
+    )
+
+    if query is None:
+        expected = cpu_encoder.fit_transform(cpu_train)
+        output = cuda_encoder.fit_transform(cuda_train)
+    else:
+        cpu_encoder.fit(cpu_train)
+        cuda_encoder.fit(cuda_train)
+        expected = cpu_encoder.transform(
+            TableTensor.from_tensor(StringTensor.from_list(query))
+        )
+        output = cuda_encoder.transform(
+            TableTensor.from_tensor(
+                StringTensor.from_list(query, device="cuda")
+            )
+        )
+
+    assert output.numerical.is_cuda
+    assert output.numerical.shape == expected.numerical.shape
+    assert output.columns == expected.columns
+    actual_columns = sorted(
+        output.numerical.cpu().flatten(end_dim=-2).T.tolist()
+    )
+    expected_columns = sorted(
+        expected.numerical.flatten(end_dim=-2).T.tolist()
+    )
+    assert torch.allclose(
+        torch.tensor(actual_columns),
+        torch.tensor(expected_columns),
+        atol=1e-6,
+    )
+
+
+def test_failed_refit_preserves_previous_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    table = TableTensor.from_tensor(
+        StringTensor.from_list([["hello world"], ["hello there"]])
+    )
+    encoder = TFIDF(ngram_range=(2, 2))
+    expected = encoder.fit_transform(table)
+
+    def fail_bincount(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("refit failed")
+
+    monkeypatch.setattr(torch, "bincount", fail_bincount)
+
+    with pytest.raises(RuntimeError, match="refit failed"):
+        encoder.fit(table)
+
+    output = encoder.transform(table)
+    assert output.columns == expected.columns
+    assert torch.equal(output.numerical, expected.numerical)
+
+
+def test_refit_replaces_previous_state() -> None:
+    wide = TableTensor.from_tensor(
+        StringTensor.from_list([["hello world", "cat dog"]])
+    )
+    narrow = TableTensor.from_tensor(StringTensor.from_list([["hello world"]]))
+    encoder = TFIDF(ngram_range=(2, 2))
+    encoder.fit(wide)
+    expected = TFIDF(ngram_range=(2, 2)).fit_transform(narrow)
+
+    output = encoder.fit_transform(narrow)
+
+    assert output.columns == expected.columns
+    assert torch.equal(output.numerical, expected.numerical)
+
+
+def test_tfidf_keeps_vocabulary_per_member_table() -> None:
+    short = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
+    long = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
+    processor = TFIDF(ngram_range=(2, 2))
+    context = EnsembleTable.from_tables(
+        tables=(short, long),
+        member_table_ids=(0, 1, 0, 1),
+    )
+
+    output = processor.fit_transform_ensemble(context)
+
+    assert output.table(0).numerical.shape == (1, 2)
+    assert output.table(1).numerical.shape == (1, 4)
+    assert torch.equal(
+        output.table(0).numerical,
+        output.table(2).numerical,
+    )
+    assert torch.equal(
+        output.table(1).numerical,
+        output.table(3).numerical,
+    )
+
+    query = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
+    query_output = processor.transform_ensemble(
+        EnsembleTable(query, num_members=4)
+    )
+    assert query_output.table(0).numerical.shape == (1, 2)
+    assert query_output.table(1).numerical.shape == (1, 4)
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(query, num_members=3))
+
+
+def test_tfidf_fit_then_transform_matches_fit_transform() -> None:
+    first = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+    second = TableTensor.from_tensor(StringTensor.from_list([["world"]]))
+    ensemble_table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0, 1),
+    )
+    fitted = TFIDF(ngram_range=(2, 2))
+    combined = TFIDF(ngram_range=(2, 2))
+
+    fitted.fit_ensemble(ensemble_table)
+    actual = fitted.transform_ensemble(ensemble_table)
+    expected = combined.fit_transform_ensemble(ensemble_table)
+
+    for member_id in range(ensemble_table.num_members):
+        assert actual.table(member_id).equal(expected.table(member_id))
+
+
+def test_tfidf_refit_clears_ensemble_state() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+    ensemble_table = EnsembleTable(table, num_members=4)
+    processor = TFIDF(ngram_range=(2, 2))
+    expected = TFIDF(ngram_range=(2, 2)).fit_transform(table)
+
+    processor.fit_transform_ensemble(ensemble_table)
+    output = processor.fit_transform(table)
+
+    assert output.equal(expected)
+    assert processor.transform(table).equal(expected)
+
+
+def test_tfidf_failed_refit_preserves_ensemble_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+    ensemble_table = EnsembleTable(table, num_members=4)
+    processor = TFIDF(ngram_range=(2, 2))
+    processor.fit_ensemble(ensemble_table)
+    expected = processor.transform_ensemble(ensemble_table)
+
+    def fail_bincount(*_: object, **__: object) -> None:
+        raise RuntimeError("refit failed")
+
+    monkeypatch.setattr(torch, "bincount", fail_bincount)
+    with pytest.raises(RuntimeError, match="refit failed"):
+        processor.fit(table)
+
+    output = processor.transform_ensemble(ensemble_table)
+    for member_id in range(ensemble_table.num_members):
+        assert output.table(member_id).equal(expected.table(member_id))

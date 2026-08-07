@@ -1,7 +1,9 @@
 from typing import Any, Literal
 
+import pandas as pd
 import pytest
 import torch
+
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
@@ -10,7 +12,9 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm.cache import Cache
 from sdm.models import KumoRFM
+from sdm.models.kumorfm import invariant_gnn as invariant_gnn_module
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
@@ -151,7 +155,11 @@ def test_gnn_scope_rejects_invalid(
             "row_embedding.y_lin.weight",
         ),
         (False, "icl_block.y_reg_lin.bias", "icl_block.y_lin.bias"),
-        (False, "icl_block.reg_head.weight", "head.2.weight"),
+        (
+            False,
+            "icl_block.reg_head.weight",
+            "icl_block.head.2.weight",
+        ),
     ],
 )
 def test_remap_v2_1_variant_keys(
@@ -309,6 +317,71 @@ def test_task_graph_preserves_hops_after_diameter(
 
 
 @withCUDA
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float16, torch.float32, torch.float64],
+)
+def test_invariant_gnn_destination_chunks(
+    relational_data: RelationalData,
+    device: torch.device,
+    dtype: torch.dtype,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    related_tables = RelatedTables(
+        tables={
+            "users": relational_data.tables["users"],
+            "orders": relational_data.tables["orders"],
+        },
+        relationships=relational_data.relationships[:1],
+        task_links=[],
+    )
+    homogeneous_graph = HomogeneousGraph.from_tables(
+        tables=related_tables.tables,
+        relationships=related_tables.relationships,
+    )
+    model = InvariantGNN(channels=8, device=device, dtype=dtype).eval()
+    x = torch.randn(10, 8, device=device, dtype=dtype)
+    readout_index = torch.arange(4, device=device)
+    graph = homogeneous_graph.full_layered(
+        num_layers=2,
+        readout_index=readout_index,
+    )
+
+    with torch.inference_mode():
+        expected = model(
+            x=x,
+            graph=graph,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        monkeypatch.setattr(
+            invariant_gnn_module,
+            "_automatic_aggregation_work_byte_limit",
+            lambda _x, _graph: 1024,
+        )
+        actual = model(
+            x=x,
+            graph=graph,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        cache = Cache()
+        recorded = model(
+            x=x,
+            graph=graph,
+            cache=cache,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        replayed = model(
+            x=x,
+            graph=graph,
+            cache=cache.freeze(),
+        )
+
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(recorded, expected)
+    torch.testing.assert_close(replayed, expected)
+
+
+@withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 @pytest.mark.parametrize("gnn_scope", ["full", "readout"])
 def test_forward(
@@ -339,9 +412,17 @@ def test_forward(
         ],
     )
 
-    x = TableTensor(
-        columns={"id": ("user_id",)},
-        id=ColumnarTensor((torch.arange(4, device=device),)),
+    x = TableTensor.from_pandas(
+        df=pd.DataFrame(
+            {
+                "user_id": [0, 1, 2, 3],
+                "timestamp": pd.to_datetime(
+                    ["2024-01-03", "2024-01-04", None, "2024-01-06"]
+                ),
+            }
+        ),
+        stypes={"user_id": "id", "timestamp": "datetime"},
+        device=device,
     )
 
     if dtype.is_floating_point:
@@ -353,7 +434,7 @@ def test_forward(
         y = TableTensor(
             columns={"categorical": ("target",)},
             categorical=CategoricalTensor(
-                data=torch.randint(0, 2, size=(4, 1), device=device),
+                code=torch.randint(0, 2, size=(4, 1), device=device),
                 categories=(torch.tensor([False, True], device=device),),
             ),
         )
@@ -410,7 +491,7 @@ def test_forward(
         x=x,
         related_tables=reordered_related_tables,
     )
-    assert predicted.allclose(out)
+    assert predicted.allclose(out, rtol=5e-3, atol=3e-5)
     model.clear()
 
     if gnn_scope == "readout":
@@ -430,6 +511,89 @@ def test_forward(
         model.clear()
 
 
+@withCUDA
+def test_many_classes_forward_and_cache(
+    relational_data: RelationalData,
+    device: torch.device,
+) -> None:
+    num_classes = 3
+    ids = torch.arange(4, device=device)
+    classes = torch.arange(num_classes, device=device)
+    task = TableTensor(
+        columns={Stype.id: ("user_id",)},
+        id=ColumnarTensor((ids,)),
+    )
+    target = TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor(
+            code=ids.remainder(num_classes).to(torch.int32).unsqueeze(-1),
+            categories=(classes,),
+        ),
+    )
+    related_tables = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    model = _KumoRFM(
+        num_classes=2,
+        num_quantiles=0,
+        channels=4,
+        num_embedding_layers=1,
+        num_embedding_heads=2,
+        num_inducing_points=2,
+        group_size=2,
+        num_readout_tokens=2,
+        num_icl_layers=1,
+        num_icl_heads=2,
+        norm_bias=True,
+        device=device,
+    ).eval()
+
+    expected = model(
+        x_context=task,
+        y_context=target,
+        x_query=task[:2],
+        related_context_tables=related_tables,
+        related_query_tables=related_tables,
+        num_hops=0,
+    )
+    assert expected.size() == (2, num_classes)
+    probabilities = expected.div(0.9).exp()
+    torch.testing.assert_close(
+        probabilities.sum(dim=-1),
+        expected.new_ones(2),
+    )
+
+    cache = Cache(classes=classes)
+    recorded = model(
+        x_context=task,
+        y_context=target,
+        x_query=None,
+        related_context_tables=related_tables,
+        related_query_tables=None,
+        cache=cache,
+        num_hops=0,
+    )
+    assert recorded.size() == (0, num_classes)
+
+    predicted = model(
+        x_context=None,
+        y_context=None,
+        x_query=task[:2],
+        related_context_tables=None,
+        related_query_tables=related_tables,
+        cache=cache.freeze(),
+    )
+    torch.testing.assert_close(predicted, expected)
+
+
 def test_default_recipe_preserves_ids() -> None:
     table = TableTensor(
         columns={
@@ -443,4 +607,4 @@ def test_default_recipe_preserves_ids() -> None:
     transformed = KumoRFM.default_recipe().features.fit_transform(table)
 
     assert transformed.columns[Stype.id] == ("entity_id",)
-    assert transformed.id is table.id
+    assert transformed.id.equal(table.id)

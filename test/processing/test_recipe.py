@@ -1,7 +1,9 @@
 import torch
+
+import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
-from sdm.processing import InvertibleMixin, Recipe, Sequential, Standardize
+from sdm.processing import InvertibleMixin
 from sdm.testing import withCUDA
 
 
@@ -12,23 +14,21 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
 
 
 def test_recipe_normalizes_empty_roles_and_repr() -> None:
-    recipe = Recipe(features=[Standardize()], target=None, output=[])
+    recipe = sp.Recipe(features=[sp.Standardize()], target=None, output=[])
 
-    assert isinstance(recipe.features, Sequential)
-    assert isinstance(recipe.target, Sequential)
-    assert isinstance(recipe.output, Sequential)
+    assert isinstance(recipe.features, sp.Sequential)
+    assert isinstance(recipe.output, sp.Sequential)
     assert len(recipe.features) == 1
-    assert len(recipe.target) == 0
     assert len(recipe.output) == 0
     assert "features=Sequential" in repr(recipe)
-    assert "target=Sequential()" in repr(recipe)
+    assert "target=Identity()" in repr(recipe)
 
 
 def test_target_forward_then_inverse_round_trips() -> None:
-    recipe = Recipe(target=[Standardize()])
+    recipe = sp.Recipe(target=[sp.Standardize()])
     table = _table()
 
-    assert isinstance(recipe.target, Sequential)
+    assert isinstance(recipe.target, sp.Sequential)
     transformed = recipe.target.fit_transform(table)
     restored = recipe.target.inverse_transform(transformed)
 
@@ -37,7 +37,10 @@ def test_target_forward_then_inverse_round_trips() -> None:
 
 
 def test_recipe_roles_fit_transform_features_and_target() -> None:
-    recipe = Recipe(features=[Standardize()], target=[Standardize()])
+    recipe = sp.Recipe(
+        features=[sp.Standardize()],
+        target=[sp.Standardize()],
+    )
     features = _table()
     target = _table(torch.tensor([[10.0, 20.0], [30.0, 40.0]]))
 
@@ -57,7 +60,7 @@ def test_recipe_roles_fit_transform_features_and_target() -> None:
 
 
 def test_recipe_role_fit_accepts_table() -> None:
-    recipe = Recipe(features=[Standardize()])
+    recipe = sp.Recipe(features=[sp.Standardize()])
     features = _table()
 
     fitted = recipe.features.fit(features)
@@ -82,7 +85,7 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
         },
         numerical=torch.randn(8, 2, device=device),
         categorical=CategoricalTensor(
-            data=torch.tensor(
+            code=torch.tensor(
                 [[1], [3]], dtype=torch.int32, device=device
             ).repeat(4, 1),
             categories=(

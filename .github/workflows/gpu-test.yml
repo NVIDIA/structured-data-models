@@ -1,6 +1,7 @@
 name: GPU Test
 
 on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -61,10 +62,11 @@ jobs:
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
             --index-strategy=unsafe-best-match \
-            '.[test]' \
-            'cudf-cu13==26.6.0' \
+            --group=test \
+            . \
+            'cudf-cu13>=26.6' \
             'pandas<3' \
-            'pylibcugraph-cu13==26.6.0'
+            'pylibcugraph-cu13>=26.6'
           uv pip install \
             --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             pyg-lib
@@ -82,8 +84,6 @@ jobs:
           import torch
 
           assert torch.cuda.is_available(), "CUDA not available to torch"
-          assert version("cudf-cu13") == "26.6.0"
-          assert version("pylibcugraph-cu13") == "26.6.0"
           assert hasattr(pylibcugraph, "heterogeneous_uniform_neighbor_sample")
           assert hasattr(
               pylibcugraph,

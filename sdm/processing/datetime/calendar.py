@@ -4,9 +4,8 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import Stype
-from sdm.processing.base import Processor
-from sdm.tensor import TableTensor
+from sdm import NaT, Stype, TableTensor
+from sdm.processing import Processor
 
 US_PER_MINUTE = 60 * 1_000_000
 US_PER_HOUR = 60 * US_PER_MINUTE
@@ -43,7 +42,7 @@ class AddCalendarFields(Processor):
             return table
 
         datetime = table.datetime
-        na_mask = datetime == torch.iinfo(datetime.dtype).min
+        na_mask = datetime == NaT
 
         outs: list[Tensor] = []
         for field in self.fields:
@@ -71,8 +70,8 @@ class AddCalendarFields(Processor):
                         outs.append(day - 1)
             else:
                 raise ValueError(
-                    f"'{self.__class__.__name__}' received unsupported "
-                    f"field '{field}'"
+                    f"{self.__class__.__name__!r} received unsupported "
+                    f"field {field!r}"
                 )
 
         out = torch.stack(outs, dim=-1).to(table.numerical.dtype)
@@ -94,7 +93,7 @@ class AddCalendarFields(Processor):
 
     def __repr__(self, *, indent: int = 0) -> str:
         field_repr = "".join(
-            f"{' ' * (indent + 2)}'{field}',\n" for field in self.fields
+            f"{' ' * (indent + 2)}{field!r},\n" for field in self.fields
         )
         return (
             f"{' ' * indent}{self.__class__.__name__}([\n"

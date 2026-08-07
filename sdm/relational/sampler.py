@@ -1,10 +1,9 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, NamedTuple, cast
+from typing import Literal, NamedTuple, Self, cast
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import ColumnarTensor, Stype, TableTensor
 from sdm.relational import (
@@ -17,7 +16,6 @@ from sdm.relational.join import join_index
 from sdm.tensor.mixin import DeviceMixin
 
 EXAMPLE_ID = "__example__"
-TemporalStrategy = Literal["uniform", "last"]
 
 
 @dataclass(frozen=True)
@@ -30,16 +28,11 @@ class TemporalSamplingConfig:
     """
 
     time_columns: Mapping[str, str]
-    strategy: TemporalStrategy = "last"
+    strategy: Literal["uniform", "last"] = "last"
 
     def __post_init__(self) -> None:
         if len(self.time_columns) == 0:
             raise ValueError("Expected at least one time column")
-        if self.strategy not in ("uniform", "last"):
-            raise ValueError(
-                f"Expected temporal strategy to be 'uniform' or 'last' "
-                f"(got '{self.strategy}')"
-            )
 
 
 def _validate_time_columns(
@@ -51,8 +44,8 @@ def _validate_time_columns(
         if stype != Stype.datetime:
             raise ValueError(
                 f"Expected '{column_name}' in table '{table_name}' to "
-                f"have semantic type '{Stype.datetime.value}' "
-                f"(got '{stype.value}')"
+                f"have semantic type {str(Stype.datetime)!r} "
+                f"(got {str(stype)!r})"
             )
 
 
@@ -197,7 +190,7 @@ class RelationalSampler:
 
         if not task_table.is_cpu or not self.data.is_cpu:
             raise NotImplementedError(
-                f"'{self.__class__.__name__}' requires input data on CPU"
+                f"{self.__class__.__name__!r} requires input data on CPU"
             )
 
         # Resolve entity table node indices:
@@ -219,7 +212,7 @@ class RelationalSampler:
         if not task_index.equal(expected):
             raise ValueError(
                 f"Expected each task row to match exactly one row in "
-                f"'{task_link.table}'"
+                f"{task_link.table!r}"
             )
 
         if task_time_column is not None:
@@ -288,7 +281,7 @@ class RelationalSampler:
                 if stype != Stype.id:
                     raise ValueError(
                         f"Expected column '{column}' to have semantic type "
-                        f"'{Stype.id.value}' (got '{stype.value}')"
+                        f"{str(Stype.id)!r} (got {str(stype)!r})"
                     )
 
         if task_time_column is not None:
@@ -296,7 +289,7 @@ class RelationalSampler:
             if stype != Stype.datetime:
                 raise ValueError(
                     f"Expected task time column to have semantic type "
-                    f"'{Stype.datetime.value}' (got '{stype.value}')"
+                    f"{str(Stype.datetime)!r} (got {str(stype)!r})"
                 )
         return task_link
 

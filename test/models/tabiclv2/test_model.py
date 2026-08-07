@@ -1,11 +1,64 @@
 import pytest
 import torch
+
+from sdm import Recipe
+from sdm.cache import Cache
 from sdm.models import TabICLv2
+from sdm.models.tabiclv2 import row_embedding as row_embedding_module
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Recipe
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
+
+
+@withCUDA
+def test_row_embedding_automatic_batch_size_limit(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = RowEmbedding(
+        num_classes=2,
+        channels=8,
+        num_layers=2,
+        num_heads=2,
+        group_size=2,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+        device=device,
+    ).eval()
+    context = torch.randn(2, 4, 4, device=device)
+    query = torch.randn(2, 2, 4, device=device)
+    y = torch.randint(2, (2, 4), device=device)
+    chunk_kwargs = {} if device.type == "cuda" else {"batch_size_limit": 1}
+
+    with torch.inference_mode():
+        monkeypatch.setattr(
+            row_embedding_module,
+            "cuda_attention_memory_limit",
+            lambda _device: 1 << 60,
+        )
+        expected = model(torch.cat([context, query], dim=-2), y)[:, 4:]
+
+        monkeypatch.setattr(
+            row_embedding_module,
+            "cuda_attention_memory_limit",
+            lambda _device: 12 * 6 * 8 * 4,
+        )
+        actual = model(torch.cat([context, query], dim=-2), y, **chunk_kwargs)[
+            :, 4:
+        ]
+        cache = Cache()
+        model(context, y, cache=cache, **chunk_kwargs)
+        replayed = model(
+            query,
+            y[:, :0],
+            cache=cache.freeze(),
+            **chunk_kwargs,
+        )
+
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(replayed, expected)
 
 
 @withCUDA
@@ -62,9 +115,9 @@ def test_forward(
     model.fit(x_context, y_context)
     caches = model._caches
     assert caches is not None
-    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
+    assert all(cache.size() > 0 for cache in caches)
     assert model.predict(x_query).allclose(out)
-    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
+    assert all(cache.size() > 0 for cache in caches)
     model.clear()
 
 
@@ -165,21 +218,21 @@ def test_tabiclv2_hierarchical_log_probs(
         ) -> torch.Tensor:
             return x
 
-    class StubHierarchicalClassifier(torch.nn.Module):
+    class StubICLBlock(torch.nn.Module):
         temperature = 0.9
 
         def forward(
             self,
-            row_embeddings: torch.Tensor,
+            x: torch.Tensor,
             y: torch.Tensor,
             *,
-            num_classes: int,
-            predictor: object,
+            num_classes: int | None = None,
+            cache: object | None = None,
         ) -> torch.Tensor:
             assert num_classes == 3
-            test_size = row_embeddings.size(-2) - y.size(-1)
-            log_probs = row_embeddings.new_tensor([0.15, 0.45, 0.4]).log()
-            return log_probs.expand(test_size, -1)
+            test_size = x.size(-2) - y.size(-1)
+            log_probs = x.new_tensor([0.15, 0.45, 0.4]).log()
+            return log_probs.expand(test_size, -1).mul(self.temperature)
 
     model = _TabICLv2(
         num_classes=2,
@@ -195,11 +248,7 @@ def test_tabiclv2_hierarchical_log_probs(
         norm_bias=True,
     )
     monkeypatch.setattr(model, "row_embedding", IdentityRowEmbedding())
-    monkeypatch.setattr(
-        model,
-        "hierarchical_classifier",
-        StubHierarchicalClassifier(),
-    )
+    monkeypatch.setattr(model, "icl_block", StubICLBlock())
 
     y = torch.tensor([0, 1, 2])
     out = model(torch.randn(5, 4), y, num_classes=3)
@@ -210,7 +259,10 @@ def test_tabiclv2_hierarchical_log_probs(
 
 
 @withCUDA
-def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
+def test_tabiclv2_many_classes_forward_and_cache(
+    device: torch.device,
+) -> None:
+    torch.manual_seed(1)
     model = TabICLv2(pretrained=False, device=device)
     num_classes, test_size = 11, 2
     x_context = torch.randn(num_classes, 6, device=device)
@@ -221,6 +273,7 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
         device=device,
     ).unsqueeze(-1)
 
+    torch.manual_seed(1)
     out = model(x_context, y_context, x_query)
 
     assert out.size() == (test_size, num_classes)
@@ -229,6 +282,10 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
         probabilities.sum(dim=-1),
         torch.ones(test_size, device=device),
     )
+
+    torch.manual_seed(1)
+    model.fit(x_context, y_context)
+    assert model.predict(x_query).allclose(out)
 
 
 @onlyCUDA

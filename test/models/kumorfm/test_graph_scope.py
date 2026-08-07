@@ -2,11 +2,12 @@ import copy
 
 import pytest
 import torch
+from torch import Tensor
+
 from sdm.cache import Cache
 from sdm.models.kumorfm.graph import HomogeneousGraph, LayeredGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.testing import withCUDA
-from torch import Tensor
 
 
 def _graph(

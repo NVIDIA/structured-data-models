@@ -3,11 +3,10 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID, join_index
@@ -52,7 +51,7 @@ class Relationship:
             for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
-                        f"Column name '{column}' is reserved for internal "
+                        f"Column name {column!r} is reserved for internal "
                         f"row indexing"
                     )
 
@@ -109,30 +108,43 @@ class Relationship:
 class RelationalData(DeviceMixin):
     r"""Collection of named tables and join relationships.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import RelationalData, TableTensor
 
         data = RelationalData(
             tables={
-                "users": TableTensor.from_pandas(...),
-                "orders": TableTensor.from_pandas(...),
-                "items": TableTensor.from_pandas(...),
+                "users": TableTensor.from_columns(
+                    {"user_id": [0, 1]},
+                    stypes={"user_id": "id"},
+                ),
+                "orders": TableTensor.from_columns(
+                    {
+                        "user_id": [0, 1],
+                        "item_id": [10, 11],
+                    },
+                    stypes={
+                        "user_id": "id",
+                        "item_id": "id",
+                    },
+                ),
+                "items": TableTensor.from_columns(
+                    {"item_id": [10, 11]},
+                    stypes={"item_id": "id"},
+                ),
             },
             relationships=[
                 # Foreign key from orders to users:
-                dict(left_table="orders", left_column="user_id",
-                     right_table="users", right_column="user_id"),
+                dict(left_table="orders", left_column="user_id", right_table="users", right_column="user_id"),
                 # Foreign key from orders to items:
-                dict(left_table="orders", left_column="item_id",
-                     right_table="items", right_column="item_id"),
+                dict(left_table="orders", left_column="item_id", right_table="items", right_column="item_id"),
             ],
         )
 
     Args:
         tables: Tables keyed by table name.
         relationships: Join relationships among ``tables``.
-    """
+    """  # noqa: E501
 
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
@@ -168,16 +180,16 @@ class RelationalData(DeviceMixin):
             ):
                 if table not in self.tables:
                     raise ValueError(
-                        f"Expected '{table}' to be registered as a table"
+                        f"Expected {table!r} to be registered as a table"
                     )
 
                 for column in columns:
                     stype = self.tables[table].stype(column)
                     if stype != Stype.id:
                         raise ValueError(
-                            f"Expected column '{column}' in table '{table}' "
-                            f"to have semantic type '{Stype.id.value}' "
-                            f"(got '{stype.value}')"
+                            f"Expected column {column!r} in table {table!r} "
+                            f"to have semantic type {str(Stype.id)!r} "
+                            f"(got {str(stype)!r})"
                         )
 
     def to(self, device: torch.device | str | None) -> Self:
@@ -197,11 +209,11 @@ class RelationalData(DeviceMixin):
         if len(devices) == 0:
             raise RuntimeError(
                 f"Could not determine 'device' of empty "
-                f"'{self.__class__.__name__}'"
+                f"{self.__class__.__name__!r}"
             )
         if len(devices) > 1:
             raise RuntimeError(
-                f"Expected tables in '{self.__class__.__name__}' to be on "
+                f"Expected tables in {self.__class__.__name__!r} to be on "
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))
@@ -243,7 +255,7 @@ class RelationalData(DeviceMixin):
     ) -> RelationalSampler:
         r"""Create a device-appropriate sampler over this relational data.
 
-        .. code-block:: python
+        .. testcode::
 
             from sdm import (
                 RelationalData,
@@ -253,17 +265,32 @@ class RelationalData(DeviceMixin):
 
             data = RelationalData(
                 tables={
-                    "users": TableTensor.from_pandas(...),
-                    "orders": TableTensor.from_pandas(...),
-                    "items": TableTensor.from_pandas(...),
+                    "users": TableTensor.from_columns(
+                        {"user_id": [0, 1]},
+                        stypes={"user_id": "id"},
+                    ),
+                    "orders": TableTensor.from_columns(
+                        {
+                            "user_id": [0, 1],
+                            "item_id": [10, 11],
+                            "order_date": ["2026-01-01", "2026-01-02"],
+                        },
+                        stypes={
+                            "user_id": "id",
+                            "item_id": "id",
+                            "order_date": "datetime",
+                        },
+                    ),
+                    "items": TableTensor.from_columns(
+                        {"item_id": [10, 11]},
+                        stypes={"item_id": "id"},
+                    ),
                 },
                 relationships=[
                     # Foreign key from orders to users:
-                    dict(left_table="orders", left_column="user_id",
-                         right_table="users", right_column="user_id"),
+                    dict(left_table="orders", left_column="user_id", right_table="users", right_column="user_id"),
                     # Foreign key from orders to items:
-                    dict(left_table="orders", left_column="item_id",
-                         right_table="items", right_column="item_id"),
+                    dict(left_table="orders", left_column="item_id", right_table="items", right_column="item_id"),
                 ],
             )
 
@@ -279,7 +306,7 @@ class RelationalData(DeviceMixin):
                 constructor arguments. A row in a time-aware table can only
                 be sampled if its timestamp does not exceed the query
                 timestamp.
-        """
+        """  # noqa: E501
         from sdm.relational.sampler import (  # noqa: PLC0415
             TemporalSamplingConfig,
         )
@@ -334,7 +361,7 @@ class RelationalData(DeviceMixin):
                 label = f"{{{table_name}}}"
             else:
                 columns = [
-                    f"{column}: {stype.value}"
+                    f"{column}: {stype}"
                     for stype, columns in table._columns.items()
                     for column in columns
                 ]
@@ -386,7 +413,7 @@ class RelationalData(DeviceMixin):
                 table.size(-2),
                 table.size(-1),
                 ", ".join(
-                    stype.value
+                    str(stype)
                     for stype, tensor in table.items()
                     if tensor.size(-1) > 0
                 ),

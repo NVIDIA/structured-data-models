@@ -1,8 +1,8 @@
 from dataclasses import dataclass
+from typing import Self
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import RelatedTables, TableTensor
 from sdm.models.kumorfm.graph import HomogeneousGraph, LayeredGraph
@@ -72,7 +72,7 @@ class TaskGraph:  # noqa: D101
         ):
             raise ValueError(
                 f"Expected each task row to match exactly one distinct row in "
-                f"'{readout_table}'"
+                f"{readout_table!r}"
             )
 
         task_row = readout_index.new_full(

@@ -1,8 +1,10 @@
 from typing import Any, cast
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 import torch
+
 from sdm import (
     ColumnarTensor,
     RelationalData,
@@ -276,6 +278,36 @@ def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
 
 
 @onlyCUDA
+def test_cugraph_sampler_does_not_match_null_seed_to_zero() -> None:
+    _require_rapids()
+    data = RelationalData(
+        tables={
+            "users": _table(
+                {"user_id": [0, 1]},
+                {"user_id": Stype.id},
+            )
+        },
+        relationships=[],
+    )
+    task_table = TableTensor.from_arrow(
+        table=pa.table({"entity": pa.array([None], type=pa.int64())}),
+        stypes={"entity": Stype.id},
+        device="cuda",
+    )
+
+    with pytest.raises(ValueError, match="match exactly one row"):
+        data.sampler()(
+            task_table=task_table,
+            task_link={
+                "task_column": "entity",
+                "table": "users",
+                "table_column": "user_id",
+            },
+            num_neighbors=[0],
+        )
+
+
+@onlyCUDA
 def test_cugraph_sampler_invalidates_mutated_numeric_seed_lookup() -> None:
     _require_rapids()
     data = RelationalData(
@@ -398,7 +430,7 @@ def test_cugraph_temporal_sampler_uses_bounded_uniform_fanout(
         task_time_column="cutoff",
     )
 
-    assert fanouts == [[1, 1, 1, 1], [2, 2, 2, 2]]
+    assert fanouts == [[1, 0, 0, 0], [0, 2, 2, 0]]
 
 
 @onlyCUDA

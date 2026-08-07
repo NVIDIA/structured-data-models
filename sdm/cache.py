@@ -1,12 +1,11 @@
 """Cache primitives."""
 
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
-from enum import Enum
-from typing import NamedTuple
+from enum import StrEnum
+from typing import NamedTuple, Self
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm.tensor.mixin import DeviceMixin
 
@@ -46,7 +45,7 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
 class Cache(MutableMapping[str, object], DeviceMixin):
     r"""A mutable mapping of model cache values."""
 
-    class Mode(str, Enum):
+    class Mode(StrEnum):
         r"""The operating mode of a :class:`Cache`.
 
         A cache alternates between two phases: (1) recording key/value
@@ -189,11 +188,11 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         if len(devices) == 0:
             raise RuntimeError(
                 f"Could not determine 'device' of empty "
-                f"'{self.__class__.__name__}'"
+                f"{self.__class__.__name__!r}"
             )
         if len(devices) > 1:
             raise RuntimeError(
-                f"Expected tensors in '{self.__class__.__name__}' to be on "
+                f"Expected tensors in {self.__class__.__name__!r} to be on "
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))

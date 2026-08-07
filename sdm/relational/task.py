@@ -3,10 +3,9 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 import torch
-from typing_extensions import Self
 
 from sdm import TableTensor
 from sdm.relational import RelationalData, Relationship
@@ -52,7 +51,7 @@ class TaskLink:
             for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
-                        f"Column name '{column}' is reserved for internal "
+                        f"Column name {column!r} is reserved for internal "
                         f"row indexing"
                     )
 
@@ -148,28 +147,40 @@ class RelatedTables(DeviceMixin):
     The ``task_links`` describe how rows in the model input match to rows in
     the related tables.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import RelatedTables, TableTensor
 
         data = RelatedTables(
             tables={
-                "users": TableTensor.from_pandas(...),
-                "orders": TableTensor.from_pandas(...),
-                "items": TableTensor.from_pandas(...),
+                "users": TableTensor.from_columns(
+                    {"user_id": [0, 1]},
+                    stypes={"user_id": "id"},
+                ),
+                "orders": TableTensor.from_columns(
+                    {
+                        "user_id": [0, 1],
+                        "item_id": [10, 11],
+                    },
+                    stypes={
+                        "user_id": "id",
+                        "item_id": "id",
+                    },
+                ),
+                "items": TableTensor.from_columns(
+                    {"item_id": [10, 11]},
+                    stypes={"item_id": "id"},
+                ),
             },
             relationships=[
                 # Foreign key from orders to users:
-                dict(left_table="orders", left_column="user_id",
-                     right_table="users", right_column="user_id"),
+                dict(left_table="orders", left_column="user_id", right_table="users", right_column="user_id"),
                 # Foreign key from orders to items:
-                dict(left_table="orders", left_column="item_id",
-                     right_table="items", right_column="item_id"),
+                dict(left_table="orders", left_column="item_id", right_table="items", right_column="item_id"),
             ],
             task_links=[
                 # Foreign key in the task table to users:
-                dict(task_column="ENTITY", table="users",
-                     table_column="user_id")
+                dict(task_column="ENTITY", table="users", table_column="user_id")
             ],
         )
 
@@ -177,7 +188,7 @@ class RelatedTables(DeviceMixin):
         tables: Related tables keyed by table name.
         relationships: Join relationships among ``tables``.
         task_links: Links from task columns to related ``tables``.
-    """
+    """  # noqa: E501
 
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
@@ -228,11 +239,11 @@ class RelatedTables(DeviceMixin):
         if len(devices) == 0:
             raise RuntimeError(
                 f"Could not determine 'device' of empty "
-                f"'{self.__class__.__name__}'"
+                f"{self.__class__.__name__!r}"
             )
         if len(devices) > 1:
             raise RuntimeError(
-                f"Expected tables in '{self.__class__.__name__}' to be on "
+                f"Expected tables in {self.__class__.__name__!r} to be on "
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))
@@ -367,7 +378,7 @@ class RelatedTables(DeviceMixin):
                 table.size(-2),
                 table.size(-1),
                 ", ".join(
-                    stype.value
+                    str(stype)
                     for stype, tensor in table.items()
                     if tensor.size(-1) > 0
                 ),

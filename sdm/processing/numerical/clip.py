@@ -1,7 +1,5 @@
-from sdm.processing._utils import _as_float
-from sdm.processing.base import Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
 
 
 class Clip(Processor):
@@ -36,7 +34,7 @@ class Clip(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Clamp ``table`` to the configured interval."""
-        numerical = _as_float(table.numerical).clamp(
+        numerical = table.numerical.clamp(
             min=self.min_value,
             max=self.max_value,
         )

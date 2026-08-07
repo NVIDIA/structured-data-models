@@ -1,9 +1,9 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Self
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import Relationship, TableTensor
 from sdm.relational.join import join_index
