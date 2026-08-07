@@ -70,7 +70,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
                 stype = sdm.infer_stypes(
                     table.df[[column]].head(1000),
                     overrides={column: "id"} if column in id_columns else None,
-                    allow_text=True,
+                    with_text=True,
                 )[column]
             except TypeError:
                 print(f"{name}.{column}: skipped (unsupported type)")
