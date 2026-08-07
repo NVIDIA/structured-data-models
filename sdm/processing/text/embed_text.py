@@ -66,7 +66,10 @@ class EmbedText(Processor):
         else:
             text = cast(
                 StringTensor,
-                table.text.movedim(-1, 0).reshape(-1),
+                table.text.permute(
+                    -1,
+                    *range(table.text.ndim - 1),
+                ).reshape(-1),
             )
             strings = [value or "" for value in text.tolist()]
             encode_kwargs = {}
