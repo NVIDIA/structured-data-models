@@ -313,7 +313,7 @@ class ColumnarTensor(Tensor):
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
     ) -> bool:
-        return all(
+        return Tensor.is_contiguous(self, memory_format=memory_format) and all(
             column.is_contiguous(memory_format=memory_format)
             for column in self._columns
         )
@@ -535,6 +535,7 @@ def _contiguous(
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> ColumnarTensor:
+    layout = _layout(inp).contiguous(memory_format=memory_format)
     return inp.__class__(
         columns=[
             column.contiguous(memory_format=memory_format)
@@ -542,6 +543,7 @@ def _contiguous(
         ],
         size=inp.size()[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
