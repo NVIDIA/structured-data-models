@@ -1,13 +1,14 @@
 import pytest
 import torch
 
-import sdm.processing as sp
 from sdm import Stype, TableTensor
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
+    EnsembleProcessorAdapter,
     InvertibleMixin,
     Processor,
+    Standardize,
 )
 from sdm.tensor import EnsembleTable
 
@@ -183,7 +184,7 @@ def _two_group_ensemble_table() -> EnsembleTable:
 
 def test_adapter_fits_each_group_separately() -> None:
     ensemble_table = _two_group_ensemble_table()
-    processor = sp.EnsembleProcessorAdapter(sp.Standardize(with_std=False))
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
 
     processor.fit_ensemble(ensemble_table)
     output = processor.transform_ensemble(ensemble_table)
@@ -196,8 +197,8 @@ def test_adapter_fits_each_group_separately() -> None:
 
 def test_adapter_fit_transform_matches_fit_then_transform() -> None:
     ensemble_table = _two_group_ensemble_table()
-    processor = sp.EnsembleProcessorAdapter(sp.Standardize(with_std=False))
-    combined = sp.EnsembleProcessorAdapter(sp.Standardize(with_std=False))
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+    combined = EnsembleProcessorAdapter(Standardize(with_std=False))
 
     processor.fit_ensemble(ensemble_table)
     output = processor.transform_ensemble(ensemble_table)
@@ -209,7 +210,7 @@ def test_adapter_fit_transform_matches_fit_then_transform() -> None:
 
 def test_adapter_inverse_restores_input() -> None:
     ensemble_table = _two_group_ensemble_table()
-    processor = sp.EnsembleProcessorAdapter(sp.Standardize(with_std=False))
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
 
     output = processor.fit_transform_ensemble(ensemble_table)
     restored = processor.inverse_transform_ensemble(output)
@@ -220,7 +221,7 @@ def test_adapter_inverse_restores_input() -> None:
 
 def test_stateless_adapter_supports_transform_and_inverse() -> None:
     table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    processor = sp.EnsembleProcessorAdapter(_StatelessProcessor())
+    processor = EnsembleProcessorAdapter(_StatelessProcessor())
 
     transformed = processor.inverse_transform(table)
 
@@ -231,7 +232,7 @@ def test_stateless_adapter_supports_transform_and_inverse() -> None:
 
 def test_adapter_rejects_inverse_for_non_invertible_processor() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
-    processor = sp.EnsembleProcessorAdapter(
+    processor = EnsembleProcessorAdapter(
         Processor.as_processor(lambda value: value)
     )
 
