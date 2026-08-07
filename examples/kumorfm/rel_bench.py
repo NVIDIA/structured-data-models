@@ -3,6 +3,11 @@
 Without arguments, this runs every binary-classification and regression task
 in the public ``rel-*`` datasets except MIMIC-IV. Pass ``--dataset`` to run
 one dataset or both ``--dataset`` and ``--task`` to run one task.
+
+Examples:
+    python examples/kumorfm/rel_bench.py
+    python examples/kumorfm/rel_bench.py --dataset rel-f1
+    python examples/kumorfm/rel_bench.py --dataset rel-f1 --task driver-dnf
 """
 
 import argparse
@@ -16,7 +21,10 @@ import tqdm
 
 import sdm
 
-parser = argparse.ArgumentParser(description=__doc__)
+parser = argparse.ArgumentParser(
+    description=__doc__,
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+)
 parser.add_argument("--dataset", choices=relbench.datasets.get_dataset_names())
 parser.add_argument("--task")
 parser.add_argument("--context_size", type=int, default=10_000)
