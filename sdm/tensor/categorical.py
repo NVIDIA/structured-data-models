@@ -518,6 +518,13 @@ def _alias(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(aten.alias.default(inp._code), inp._categories)
 
 
+@CategoricalTensor.implements(aten.detach.default)
+@preserve_view_inference_mode
+def _detach(inp: CategoricalTensor) -> CategoricalTensor:
+    categories = tuple(category.detach() for category in inp._categories)
+    return inp.__class__(inp._code.detach(), categories)
+
+
 @CategoricalTensor.implements(aten.to.dtype_layout)
 def _to_dtype_layout(
     inp: CategoricalTensor,
