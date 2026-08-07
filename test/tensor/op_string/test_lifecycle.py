@@ -1,3 +1,6 @@
+import copy
+import io
+import pickle
 from typing import cast
 
 import pytest
@@ -110,3 +113,23 @@ def test_clone_and_to_copy_preserve_type_with_independent_storage() -> None:
         assert out._valid is not None
         assert tensor._valid is not None
         assert not _is_alias_of(out._valid, tensor._valid)
+
+
+def test_pickle_save_and_deepcopy_round_trip() -> None:
+    tensor = _tensor()
+    buffer = io.BytesIO()
+    torch.save(tensor, buffer)
+    buffer.seek(0)
+
+    outputs = (
+        copy.deepcopy(tensor),
+        pickle.loads(pickle.dumps(tensor)),
+        torch.load(buffer, weights_only=False),
+    )
+    for out in outputs:
+        assert isinstance(out, StringTensor)
+        assert out.tolist() == tensor.tolist()
+        assert out.size() == tensor.size()
+        assert out.stride() == tensor.stride()
+        assert out.dtype == tensor.dtype
+        assert not _is_alias_of(out._data, tensor._data)
