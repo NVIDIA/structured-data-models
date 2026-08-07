@@ -1,52 +1,71 @@
 :orphan:
 
-# Processor `operates_on_stypes` Spec
+# Processor Stype Semantics Spec
 
 ## User View
 
-Recipes should make passthrough explicit at the pipeline boundary, not on each processor. A user can write a feature recipe that transforms numerical columns while preserving identifiers:
+Users compose processors by operation: standardize numbers, embed text, route by stype, select columns, drop stypes, or reduce model outputs. A processor should only fail because the data is invalid for the operation it performs, not because the table carries extra blocks for downstream consumers.
+
+Example: `Standardize()` operates on numerical columns. If a feature table also contains identifiers, numerical columns are standardized and identifiers remain available afterwards. If the final feature table still contains a stype that the model cannot consume, the model boundary fails or warns there.
+
+The rule is: each processor declares which stypes it works on and what it promises to do with the other stypes.
+
+## Semantics
+
+The canonical processor field is:
 
 ```python
-recipe = Recipe(features=[Standardize()], feature_passthrough_stypes={Stype.id})
+operates_on_stypes: ClassVar[frozenset[Stype]]
 ```
 
-`Standardize` only declares that it operates on numerical columns. The recipe declares that feature identifiers may pass through unchanged. Unexpected feature stypes still fail early at the recipe/model boundary:
+It means: these are the stypes the processor reads, fits, transforms, converts, selects, drops, or reduces.
 
-- `numerical + id`: allowed, numerical is transformed, id is preserved.
-- `numerical + text`: rejected unless the recipe explicitly allows text passthrough or routes it.
-- `id` only: allowed as passthrough when the recipe allows id.
+Processors also declare their contract for active stypes outside `operates_on_stypes`:
 
-## Naming
+```python
+unoperated_stype_policy: ClassVar[
+    Literal["preserve", "error", "opaque"]
+] = "preserve"
+```
 
-Use `operates_on_stypes`, plural, replacing `supported_stypes`. The plural matches the current `supported_stypes` API and the value type (`frozenset[Stype]`). “Operates on” is more precise than “supports”: it describes which blocks a processor reads, fits, transforms, converts, or drops. It does not mean every other block is invalid.
+- `"preserve"`: the processor accepts non-operated blocks and returns them unchanged. This is the default.
+- `"error"`: non-operated blocks are invalid input. Use this when passthrough semantics are undefined, such as output reduction.
+- `"opaque"`: behavior is delegated to user code or dynamic child selection and cannot be summarized statically.
 
-## Implementation Details
+Dropping is an operation, not a policy. `DropStypes(Stype.text)` operates on `text`, returns no text columns, and preserves every other stype.
 
-`Processor` should use `operates_on_stypes` only for lifecycle gating: if no operated stype is active, `fit`, `transform`, and `fit_transform` are no-ops and do not require fitted state. The current `_check_supported_stypes` validation should move out of leaf processors and into recipe/model boundaries, where passthrough policy is known.
+## Ownership
 
-For fixed processors, `operates_on_stypes` can stay a class attribute. For configurable containers, expose it dynamically:
+`Processor` subclasses own the efficient implementation of their operation and any promised preservation. The base class owns only cheap, uniform lifecycle decisions:
 
-- `Sequential`: union of child `operates_on_stypes`; empty sequence operates on no stypes.
-- `Choice`: union of option `operates_on_stypes`.
-- `StypeDispatch`: configured route stypes for `remainder="passthrough"`/`"error"`; all stypes for `remainder="drop"` because unconfigured blocks are intentionally consumed by dropping.
-- `Callable`: all stypes, because the callable contract is opaque.
+- If no operated stype is active, `"preserve"` returns the input unchanged, `"error"` raises when active non-operated blocks exist, and `"opaque"` runs the implementation.
+- If operated stypes are active, `"error"` first rejects active non-operated blocks; otherwise the base class calls the implementation with the original table.
+- The base class does not split and recombine tables for `"preserve"`; that would add allocations and column concatenation. Preserve processors must keep foreign blocks themselves, usually with `table.replace_blocks(...)` or by concatenating only when their operation changes width or stype.
 
-Recipe validation should compute allowed input stypes as `features.operates_on_stypes | feature_passthrough_stypes`. PR350 currently hard-codes feature id passthrough by normalizing `Recipe.features` into `Sequential(..., passthrough_stypes={Stype.id})`; this can become an explicit recipe boundary option while preserving the default `{Stype.id}` if that remains the desired user behavior.
+This keeps performance predictable: ordinary block transforms reuse the original table structure, and schema-changing processors pay only for their own operation.
+
+Container metadata is derived from children: `Sequential` uses the union of child `operates_on_stypes` and escalates policy to `"opaque"` if any child is opaque, otherwise to `"error"` if any child errors, otherwise `"preserve"`. `Choice` is `"opaque"` because the fitted option decides behavior. `Callable` is also `"opaque"`.
+
+`StypeDispatch` should be only a router: configured route stypes are operated; unconfigured stypes are either preserved or rejected by `remainder="error"`.
 
 ## Processor Audit
 
-Most processors already preserve foreign blocks because they call `table.replace_blocks(...)`: numerical clipping/imputation/standardization/power/quantile transforms, categorical align/impute/shuffle, softmax, identity, and wrapper processors. `PCA` and `AddCalendarFields` also preserve foreign blocks by concatenating `table.drop_stypes(...)` or the original table with their output.
+Most processors already fit `"preserve"` efficiently because they call `table.replace_blocks(...)`: numerical clipping/imputation/standardization/power/quantile transforms, categorical align/impute/shuffle, softmax, identity, and wrappers. `PCA` and `AddCalendarFields` already preserve by concatenating non-operated blocks with their output.
 
-Processors that would drop foreign blocks if base validation is relaxed:
+Processors needing small updates before they can honestly declare `"preserve"`:
 
-- `ToNumerical`: returns a new numerical-only table. Easy fix: concatenate `table.drop_stypes({Stype.numerical, Stype.categorical})` with the converted numerical output.
-- `TfidfTextEmbed`: returns a new numerical-only table. Easy fix: concatenate `table.drop_stypes(Stype.text)` with the generated numerical output.
-- `ShuffleColumns`: rebuilds only the numerical block. Easy fix: return `torch.cat([table.drop_stypes(Stype.numerical), permuted_numerical_table], dim=-1)`.
-- `DropConstantColumns`: selects only kept numerical columns. Easy fix: select kept numerical columns plus every non-numerical input column.
-- `ReduceEstimators`: output-only reducer rebuilds numerical output after reducing an ensemble dimension. Keep strict boundary validation for output processors unless passthrough reduction semantics are explicitly defined.
+- `ToNumerical`: concatenate non-numerical/non-categorical blocks with the converted numerical output.
+- `TfidfTextEmbed`: concatenate non-text blocks with the generated numerical output.
+- `ShuffleColumns`: use `replace_blocks` or concatenate non-numerical blocks with the permuted numerical output.
+- `DropConstantColumns`: keep selected numerical columns plus every non-numerical input column.
+- `DropStypes`: new explicit schema-changing processor; it operates on the dropped stypes and preserves the rest.
 
-`SelectColumns`, `StypeDispatch(remainder="drop")`, and user `Callable` processors may intentionally drop columns; tests should treat them as explicit column-selection or opaque behavior, not automatic preservation.
+`ReduceEstimators` uses `"error"`: it reduces an ensemble dimension on numerical model outputs, and reduction semantics for ids, text, or categorical blocks are not defined.
 
 ## Tests
 
-Add processor contract tests that bypass recipe policy and assert foreign-block preservation for every built-in processor whose operation is not explicit selection/drop. Add recipe boundary tests for early rejection of unexpected stypes and allowed id passthrough. Add container tests for dynamic `operates_on_stypes` after `append`/`extend`, and for `StypeDispatch` route/drop/error semantics.
+Add contract tests for preservation on every built-in `"preserve"` processor, including width- and stype-changing processors. Add `"error"` tests for `ReduceEstimators`. Add container tests for dynamic `operates_on_stypes` and policy aggregation. Add model-boundary tests for fail/warn behavior when final feature stypes are unsupported. PR351, `rbendias/tabiclv2-recipe-id-passthrough`, must continue to pass and should be rebased or merged onto the current `rbendias/recipe-feature-id-passthrough` state.
+
+## Follow-up
+
+Create a separate PR that removes drop semantics from `StypeDispatch` and adds explicit `DropStypes`. Then schema removal is expressed as its own step, for example `Sequential(DropStypes(Stype.text), StypeDispatch(numerical=Standardize()))`.
