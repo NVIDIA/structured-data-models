@@ -146,6 +146,8 @@ class TableTensor(Tensor):
         text: StringTensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
+        _stride: Sequence[int | torch.SymInt] | None = None,
+        _storage_offset: int | torch.SymInt = 0,
     ) -> None:
         pass
 
@@ -159,6 +161,8 @@ class TableTensor(Tensor):
         text: StringTensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
+        _stride: Sequence[int | torch.SymInt] | None = None,
+        _storage_offset: int | torch.SymInt = 0,
     ) -> Self:
         r"""Create a tensor wrapper."""
         if size is not None and len(size) == 0:
@@ -258,12 +262,20 @@ class TableTensor(Tensor):
         if len(column_names) != len(column_to_loc):
             raise ValueError("Expected column names to be unique")
 
+        layout: dict[str, Any] = {}
+        if _stride is not None:
+            layout = {
+                "strides": _stride,
+                "storage_offset": _storage_offset,
+            }
+
         out = Tensor._make_wrapper_subclass(
             cls,
             size=(*size, len(column_names)),
             dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,
+            **layout,
         )
 
         out._numerical = numerical
@@ -1719,6 +1731,22 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
 
 
 # Helpers #####################################################################
+
+
+def _layout(inp: Tensor) -> Tensor:
+    return aten.as_strided.default(
+        torch.empty(0, dtype=torch.uint8, device="meta"),
+        inp.size(),
+        inp.stride(),
+        inp.storage_offset(),
+    )
+
+
+def _layout_kwargs(layout: Tensor) -> dict[str, Any]:
+    return {
+        "_stride": layout.stride(),
+        "_storage_offset": layout.storage_offset(),
+    }
 
 
 def _block_size_repr(size: Sequence[int]) -> str:
