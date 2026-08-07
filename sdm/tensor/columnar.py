@@ -608,10 +608,12 @@ def _view(inp: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
             f"{inp.size(-1)} {_columns} into shape {size}"
         )
 
+    layout = aten.view.default(_layout(inp), size)
     return inp.__class__(
         columns=[column.view(size[:-1]) for column in inp._columns],
         size=size[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
