@@ -1341,8 +1341,10 @@ def _unsqueeze(inp: TableTensor, dim: int) -> TableTensor:
             f"{inp.__class__.__name__!r}"
         )
 
+    layout = aten.unsqueeze.default(_layout(inp), dim)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1363,6 +1365,7 @@ def _expand(
             f"{inp.size(-1)} {_columns} to shape {size}"
         )
 
+    layout = aten.expand.default(_layout(inp), size, implicit=implicit)
     blocks = {
         stype: aten.expand.default(
             tensor,
@@ -1373,6 +1376,7 @@ def _expand(
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1392,8 +1396,10 @@ def _transpose(inp: TableTensor, dim0: int, dim1: int) -> TableTensor:
             f"{inp.__class__.__name__!r}"
         )
 
+    layout = aten.transpose.int(_layout(inp), dim0, dim1)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1410,8 +1416,10 @@ def _permute(inp: TableTensor, dims: Sequence[int]) -> TableTensor:
             f"Can't permute the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.permute.default(_layout(inp), dims)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
