@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import functools
 import math
 from collections.abc import Callable, Sequence
@@ -614,6 +615,21 @@ class VarLenTensor(Tensor):
             int(self.storage_offset()),
         )
         return (self.__class__, args)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> VarLenTensor:
+        if id(self) in memo:
+            return memo[id(self)]
+
+        out = self.__class__._new_wrapper(
+            data=copy.deepcopy(self._data, memo),
+            offset=copy.deepcopy(self._offset, memo),
+            valid=copy.deepcopy(self._valid, memo),
+            size=self.size(),
+            stride=self.stride(),
+            storage_offset=self._storage_offset,
+        )
+        memo[id(self)] = out
+        return out
 
     @classmethod
     def __torch_function__(
