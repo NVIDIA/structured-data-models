@@ -58,6 +58,7 @@ test = [
 ]
 doc = [
     "myst-parser",
+    "pandas",
     "shibuya",
     "sphinx",
     "sphinx-copybutton",
