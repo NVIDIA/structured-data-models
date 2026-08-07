@@ -403,6 +403,10 @@ def _to_dtype_layout(
     ):
         return inp
 
+    outer_layout = aten._to_copy.default(
+        _layout(inp),
+        memory_format=memory_format,
+    )
     return inp.__class__(
         columns=[
             aten.to.dtype_layout(
@@ -419,6 +423,7 @@ def _to_dtype_layout(
         ],
         size=inp.size()[:-1],
         device=device,
+        **_layout_kwargs(outer_layout),
     )
 
 
