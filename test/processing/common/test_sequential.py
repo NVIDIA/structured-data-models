@@ -5,19 +5,11 @@ from typing import Any, cast
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     StringTensor,
     TableTensor,
-)
-from sdm.processing import (
-    ImputeMean,
-    PowerTransform,
-    QuantileTransform,
-    Sequential,
-    ShuffleColumns,
-    Softmax,
-    Standardize,
 )
 from sdm.tensor import EnsembleTable
 
@@ -53,22 +45,22 @@ def _add_one(table: TableTensor) -> TableTensor:
 def test_empty_pipeline_returns_input_table() -> None:
     table = _table()
 
-    assert Sequential().transform(table).equal(table)
-    assert Sequential().fit_transform(table).equal(table)
-    assert Sequential().inverse_transform(table).equal(table)
+    assert sp.Sequential().transform(table).equal(table)
+    assert sp.Sequential().fit_transform(table).equal(table)
+    assert sp.Sequential().inverse_transform(table).equal(table)
 
 
 def test_pipeline_transforms_numerical() -> None:
     table = _table()
 
-    output = Sequential(Standardize()).fit_transform(table)
+    output = sp.Sequential(sp.Standardize()).fit_transform(table)
 
     assert not torch.equal(output.numerical, table.numerical)
 
 
 def test_pipeline_accepts_lambda() -> None:
     table = _table()
-    pipeline = Sequential(
+    pipeline = sp.Sequential(
         lambda table: table.replace_blocks(numerical=table.numerical.square())
     )
 
@@ -80,7 +72,7 @@ def test_pipeline_accepts_lambda() -> None:
 
 def test_pipeline_accepts_regular_callable() -> None:
     table = _table()
-    pipeline = Sequential(_add_one)
+    pipeline = sp.Sequential(_add_one)
 
     assert pipeline.fit(table) is pipeline
     restored = pickle.loads(pickle.dumps(pipeline))
@@ -97,11 +89,11 @@ def test_pipeline_mixes_processors_and_callables() -> None:
             [[1.0, 2.0], [2.0, 3.0], [4.0, 8.0]],
         )
     )
-    pipeline = Sequential(
+    pipeline = sp.Sequential(
         lambda table: table.replace_blocks(numerical=table.numerical.square()),
-        Standardize(),
+        sp.Standardize(),
     )
-    expected = Standardize().fit_transform(
+    expected = sp.Standardize().fit_transform(
         table.replace_blocks(numerical=table.numerical.square())
     )
 
@@ -113,9 +105,9 @@ def test_pipeline_mixes_processors_and_callables() -> None:
 
 def test_pipeline_accepts_nested_sequential_with_callable() -> None:
     table = _table()
-    pipeline = Sequential(
+    pipeline = sp.Sequential(
         lambda table: table.replace_blocks(numerical=table.numerical + 1),
-        Sequential(
+        sp.Sequential(
             lambda table: table.replace_blocks(numerical=table.numerical * 2)
         ),
     )
@@ -127,16 +119,16 @@ def test_pipeline_accepts_nested_sequential_with_callable() -> None:
 
 def test_pipeline_rejects_invalid_step() -> None:
     with pytest.raises(TypeError, match=r"Input must be"):
-        Sequential(cast(Any, object()))
+        sp.Sequential(cast(Any, object()))
 
 
 def test_pipeline_passes_generator_to_steps() -> None:
     table = _table(torch.arange(200.0).view(100, 2))
 
     def _fit_transform(seed: int) -> TableTensor:
-        return Sequential(
-            ShuffleColumns(method="random"),
-            QuantileTransform(n_quantiles=6, subsample=32),
+        return sp.Sequential(
+            sp.ShuffleColumns(method="random"),
+            sp.QuantileTransform(n_quantiles=6, subsample=32),
         ).fit_transform(
             table,
             generator=torch.Generator().manual_seed(seed),
@@ -149,34 +141,36 @@ def test_pipeline_passes_generator_to_steps() -> None:
 
 
 def test_repr() -> None:
-    assert repr(Sequential()) == "Sequential()"
-    assert repr(Sequential(Standardize(), PowerTransform())) == dedent("""\
+    assert repr(sp.Sequential()) == "Sequential()"
+    assert repr(
+        sp.Sequential(sp.Standardize(), sp.PowerTransform())
+    ) == dedent("""\
         Sequential(
           Standardize(),
           PowerTransform(),
         )""")
-    assert repr(Sequential(lambda table: table)) == dedent("""\
+    assert repr(sp.Sequential(lambda table: table)) == dedent("""\
         Sequential(
           Callable(<lambda>),
         )""")
 
 
 def test_pipeline_checks_fitted_state() -> None:
-    pipeline = Sequential(Softmax(), Standardize())
+    pipeline = sp.Sequential(sp.Softmax(), sp.Standardize())
 
     with pytest.raises(RuntimeError, match="'Sequential' is not fitted"):
         pipeline.transform(_table())
 
 
 def test_pipeline_rejects_unsupported_stype() -> None:
-    pipeline = Sequential(Standardize())
+    pipeline = sp.Sequential(sp.Standardize())
 
     with pytest.raises(ValueError, match="categorical"):
         pipeline.fit_transform(_mixed_table())
 
 
 def test_inverse_transform_rejects_non_invertible_step() -> None:
-    processor = Sequential(ImputeMean())
+    processor = sp.Sequential(sp.ImputeMean())
     transformed = processor.fit_transform(_table())
 
     with pytest.raises(AttributeError, match="inverse_transform"):
@@ -192,7 +186,7 @@ def test_inverse_transform_runs_steps_in_reverse_order() -> None:
         )
     )
 
-    pipeline = Sequential(PowerTransform(), Standardize())
+    pipeline = sp.Sequential(sp.PowerTransform(), sp.Standardize())
     transformed = pipeline.fit_transform(table)
     restored = pipeline.inverse_transform(transformed)
 
@@ -206,8 +200,8 @@ def test_sequential_ensemble_matches_member_execution() -> None:
         tables=(first, second),
         member_table_ids=(1, 0, 1),
     )
-    processor = Sequential(
-        Sequential(
+    processor = sp.Sequential(
+        sp.Sequential(
             lambda value: value.replace_blocks(
                 numerical=value.numerical.square()
             )
@@ -231,7 +225,7 @@ def test_empty_ensemble_pipeline_passes_through_members() -> None:
         tables=(first, second),
         member_table_ids=(1, 0, 1),
     )
-    processor = Sequential()
+    processor = sp.Sequential()
 
     for output in (
         processor.transform_ensemble(table),

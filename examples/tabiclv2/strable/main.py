@@ -5,7 +5,7 @@ import torch
 from huggingface_hub import hf_hub_download
 
 import sdm
-from sdm.processing import PCA, TFIDF, EmbedText, Sequential, StypeDispatch
+import sdm.processing as sp
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -67,13 +67,13 @@ model = sdm.models.TabICLv2(device=device)
 recipe = model.default_recipe()
 if args.text_processor != "none":
     if args.text_processor == "tfidf":
-        text_processor = TFIDF(ngram_range=(4, 6), max_features=256)
+        text_processor = sp.TFIDF(ngram_range=(4, 6), max_features=256)
     else:
-        text_processor = Sequential(
-            EmbedText("sentence-transformers/all-MiniLM-L6-v2"),
-            PCA(num_components=64),
+        text_processor = sp.Sequential(
+            sp.EmbedText("sentence-transformers/all-MiniLM-L6-v2"),
+            sp.PCA(num_components=64),
         )
-    recipe.features = StypeDispatch(text=text_processor) + recipe.features
+    recipe.features = sp.StypeDispatch(text=text_processor) + recipe.features
 
 with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
     model.fit(

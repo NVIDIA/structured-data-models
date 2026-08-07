@@ -3,13 +3,8 @@ from textwrap import dedent
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.processing import (
-    Identity,
-    Softmax,
-    Standardize,
-    TaskDispatch,
-)
 from sdm.tensor import EnsembleTable
 
 
@@ -35,7 +30,7 @@ def _numerical_table(
 
 
 def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
-    dispatch = TaskDispatch(classification=Softmax())
+    dispatch = sp.TaskDispatch(classification=sp.Softmax())
     output = _numerical_table(("a", "b"))
     description = dedent("""\
         TaskDispatch(
@@ -47,7 +42,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     assert dispatch.transform(output).equal(output)
     assert repr(dispatch) == description
 
-    restored = TaskDispatch(classification=Softmax())
+    restored = sp.TaskDispatch(classification=sp.Softmax())
     restored.load_state_dict(dispatch.state_dict())
     assert restored.transform(output).equal(output)
 
@@ -60,7 +55,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     )
     assert repr(dispatch) == description
 
-    restored = TaskDispatch(classification=Softmax())
+    restored = sp.TaskDispatch(classification=sp.Softmax())
     restored.load_state_dict(dispatch.state_dict())
 
     torch.testing.assert_close(
@@ -70,10 +65,10 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
 
 
 def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
-    assert len(TaskDispatch().processors) == 0
-    assert TaskDispatch(regression=Standardize()).requires_fit
+    assert len(sp.TaskDispatch().processors) == 0
+    assert sp.TaskDispatch(regression=sp.Standardize()).requires_fit
 
-    dispatch = TaskDispatch(regression=Identity())
+    dispatch = sp.TaskDispatch(regression=sp.Identity())
     output = _numerical_table()
 
     with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
@@ -89,7 +84,7 @@ def test_task_dispatch_routes_ensemble_members() -> None:
         tables=(first, second),
         member_table_ids=(1, 0, 1),
     )
-    dispatch = TaskDispatch(classification=Softmax())
+    dispatch = sp.TaskDispatch(classification=sp.Softmax())
     dispatch._task = "classification"
 
     output = dispatch.transform_ensemble(ensemble_table)
