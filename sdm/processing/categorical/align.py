@@ -29,6 +29,7 @@ class AlignCategories(EnsembleProcessor):
     Args:
         sort_by: How to order fitted categories.
             ``"code"`` keeps observed categories in original order.
+            ``"appearance"`` orders observed categories by first occurrence.
             ``"frequency"`` orders observed categories by descending frequency.
             ``"value"`` orders observed categories by ascending value.
         min_frequency: Minimum number of fitted observations required to
@@ -67,7 +68,7 @@ class AlignCategories(EnsembleProcessor):
 
     def __init__(
         self,
-        sort_by: Literal["code", "frequency", "value"] = "code",
+        sort_by: Literal["code", "appearance", "frequency", "value"] = "code",
         *,
         min_frequency: int = 1,
     ) -> None:
@@ -99,6 +100,17 @@ class AlignCategories(EnsembleProcessor):
         if self.sort_by == "frequency":
             order = counts.argsort(dim=1, descending=True, stable=True)
             ordered_categories = input_categories
+        elif self.sort_by == "appearance":
+            positions = torch.arange(
+                codes.size(1),
+                dtype=codes.dtype,
+                device=codes.device,
+            ).expand_as(codes)
+            positions = positions.masked_fill(~mask, codes.size(1))
+            first = codes.new_full(counts.size(), codes.size(1))
+            first.scatter_reduce_(1, indices, positions, reduce="amin")
+            order = first.argsort(dim=1, stable=True)
+            ordered_categories = input_categories
         elif self.sort_by == "value":
             if (
                 input_categories.is_cuda
@@ -128,7 +140,7 @@ class AlignCategories(EnsembleProcessor):
             selected_indices = order[batch_index, observed[batch_index]]
             if (
                 selected_indices.numel() == input_categories.numel()
-                and self.sort_by != "frequency"
+                and self.sort_by not in ("appearance", "frequency")
             ):
                 fitted_categories.append(ordered_categories)
             elif (
@@ -136,7 +148,14 @@ class AlignCategories(EnsembleProcessor):
                 and input_categories.is_cpu
             ):
                 # PyTorch CPU index_select is not implemented for these dtypes.
-                fitted_categories.append(input_categories[selected_indices])
+                fitted_categories.append(
+                    torch.stack(
+                        [
+                            input_categories[index]
+                            for index in selected_indices.tolist()
+                        ]
+                    )
+                )
             else:
                 fitted_categories.append(
                     input_categories.index_select(0, selected_indices)
