@@ -46,7 +46,7 @@ def test_unbind_overload() -> None:
     inp = cast(ColumnarTensor, base.transpose(0, 1))
     expected = aten.unbind.int(dense(base).transpose(0, 1), 0)
 
-    out = aten.unbind.int(inp, 0)
+    out = cast(list[ColumnarTensor], aten.unbind.int(inp, 0))
 
     assert isinstance(out, list)
     assert isinstance(inp.unbind(0), tuple)
@@ -60,11 +60,14 @@ def test_split_overloads() -> None:
     base = make_columnar()
     inp = cast(ColumnarTensor, base.transpose(0, 1))
     reference = dense(base).transpose(0, 1)
-    outputs = (
-        aten.split.Tensor(inp, 2, 0),
-        aten.split.sizes(inp, (1, 2), 0),
-        aten.split.default(inp, (1, 2), 0),
-        aten.split_with_sizes.default(inp, (1, 2), 0),
+    outputs = cast(
+        tuple[list[ColumnarTensor], ...],
+        (
+            aten.split.Tensor(inp, 2, 0),
+            aten.split.sizes(inp, (1, 2), 0),
+            aten.split.default(inp, (1, 2), 0),
+            aten.split_with_sizes.default(inp, (1, 2), 0),
+        ),
     )
     expected = (
         aten.split.Tensor(reference, 2, 0),
