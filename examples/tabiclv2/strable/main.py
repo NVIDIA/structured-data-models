@@ -67,10 +67,7 @@ model = sdm.models.TabICLv2(device=device)
 recipe = model.default_recipe()
 if args.text_processor != "none":
     if args.text_processor == "tfidf":
-        text_processor = TFIDF(
-            ngram_range=(4, 6),
-            max_features=256,
-        )
+        text_processor = TFIDF(ngram_range=(4, 6), max_features=256)
     else:
         text_processor = Sequential(
             EmbedText("sentence-transformers/all-MiniLM-L6-v2"),

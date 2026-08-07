@@ -2,82 +2,42 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Self, cast
+from typing import Literal
 
 import torch
 
-from sdm import RelatedTables, TableTensor
-from sdm.processing.base import Processor
-from sdm.processing.common.sequential import Sequential
-from sdm.processing.common.task import TaskDispatch
-from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
-from sdm.stype import Stype
+from sdm import Stype
+from sdm.processing import (
+    EnsembleInvertibleMixin,
+    EnsembleProcessor,
+    Identity,
+    Processor,
+    TaskDispatch,
+)
 from sdm.tensor import EnsembleTable
 
 
 class _TaskResolver(EnsembleProcessor, EnsembleInvertibleMixin):
-    """Resolve linked output dispatchers while fitting a recipe target.
-
-    The wrapped target processor is a registered child module. Output
-    dispatchers stay in a plain tuple so they remain registered only under
-    ``Recipe.output``.
-    """
+    """Resolve linked task dispatchers while fitting a recipe target."""
 
     supported_stypes = frozenset(Stype)
 
     def __init__(
         self,
-        processor: Processor,
+        processor: EnsembleProcessor,
         task_dispatchers: tuple[TaskDispatch, ...],
     ) -> None:
         super().__init__()
         self.processor = processor
         self._task_dispatchers = task_dispatchers
 
-    def fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> Self:
-        self.fit_transform(table, generator=generator)
-        return self
-
-    def fit_ensemble(
+    def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> Self:
-        self.fit_transform_ensemble(ensemble_table, generator=generator)
-        return self
-
-    def fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        self._check_supported_stypes(table)
-        self._fitted = False
-        for task_dispatcher in self._task_dispatchers:
-            task_dispatcher._reset()
-
-        succeeded = False
-        try:
-            target = self.processor.fit_transform(
-                table,
-                generator=generator,
-            )
-            for task_dispatcher in self._task_dispatchers:
-                task_dispatcher._resolve(target)
-            self._fitted = True
-            succeeded = True
-            return target
-        finally:
-            if not succeeded:
-                for task_dispatcher in self._task_dispatchers:
-                    task_dispatcher._reset()
+    ) -> None:
+        self._fit_transform_ensemble(ensemble_table, generator=generator)
 
     def _fit_transform_ensemble(
         self,
@@ -85,50 +45,59 @@ class _TaskResolver(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        self._fitted = False
-        for task_dispatcher in self._task_dispatchers:
-            task_dispatcher._reset()
 
-        succeeded = False
-        try:
-            target = cast(
-                EnsembleProcessor,
-                self.processor,
-            ).fit_transform_ensemble(
-                ensemble_table,
-                generator=generator,
+        ensemble_table = self.processor.fit_transform_ensemble(
+            ensemble_table, generator=generator
+        )
+
+        tasks: set[Literal["classification", "regression"]] = set()
+        for group in ensemble_table:
+            if group.size(-1) != 1:
+                raise ValueError(
+                    "Expected the transformed target to contain exactly one "
+                    f"column (got {group.size(-1)} columns)"
+                )
+            if group.numerical.size(-1) == 1:
+                tasks.add("regression")
+            elif group.categorical.size(-1) == 1:
+                tasks.add("classification")
+            else:
+                stypes = ", ".join(
+                    f"{str(stype)!r}" for stype in group.active_stypes
+                )
+                raise ValueError(
+                    "Expected the transformed target to contain exactly one "
+                    f"numerical or categorical column (got {stypes})"
+                )
+
+        if len(tasks) != 1:
+            raise ValueError(
+                "'Recipe.target' must resolve to a single task type across "
+                "ensemble members"
             )
-            resolved = target.table(0)
-            for task_dispatcher in self._task_dispatchers:
-                task_dispatcher._resolve(resolved)
-            self._fitted = True
-            succeeded = True
-            return target
-        finally:
-            if not succeeded:
-                for task_dispatcher in self._task_dispatchers:
-                    task_dispatcher._reset()
+
+        task = next(iter(tasks))
+        for task_dispatcher in self._task_dispatchers:
+            task_dispatcher._task = task
+
+        return ensemble_table
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        return cast(
-            EnsembleProcessor,
-            self.processor,
-        ).transform_ensemble(ensemble_table)
+        return self.processor.transform_ensemble(ensemble_table)
 
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        fn = getattr(self.processor, "inverse_transform_ensemble", None)
-        if not callable(fn):
+        if not isinstance(self.processor, EnsembleInvertibleMixin):
             raise AttributeError(
                 f"{self.processor.__class__.__name__!r} object has no "
                 "attribute 'inverse_transform_ensemble'"
             )
-        return fn(ensemble_table)
+        return self.processor.inverse_transform_ensemble(ensemble_table)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return self.processor.__repr__(indent=indent)
@@ -176,9 +145,9 @@ class Recipe:
             in this pipeline.
     """
 
-    features: Processor
-    target: Processor
-    output: Processor
+    features: EnsembleProcessor
+    target: EnsembleProcessor
+    output: EnsembleProcessor
 
     def __init__(
         self,
@@ -187,113 +156,30 @@ class Recipe:
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
 
-        features = self._as_sequential(features)
-        target = self._as_sequential(target)
-        output = self._as_sequential(output)
-
-        # TODO: Support TaskDispatch in features after defining task-aware
-        # feature fit ordering.
-        for role, processor in (
-            ("features", features),
-            ("target", target),
-        ):
-            if any(
-                isinstance(module, TaskDispatch)
-                for module in processor.modules()
-            ):
-                raise ValueError(
-                    f"'TaskDispatch' is only supported in 'Recipe.output' "
-                    f"(found in {role!r})."
-                )
-
-        # Common output steps can remain adjacent; nesting would require
-        # defining whether dispatchers in inactive branches are resolved.
-        task_dispatch_entries = tuple(
-            (path, module)
-            for path, module in output.named_modules(remove_duplicate=False)
-            if isinstance(module, TaskDispatch)
+        self.features = EnsembleProcessor.as_processor(
+            Identity() if features is None else features
         )
-        if isinstance(output, TaskDispatch):
-            direct_paths = {""}
-        elif isinstance(output, Sequential):
-            direct_paths = {
-                str(index)
-                for index, step in enumerate(output)
-                if isinstance(step, TaskDispatch)
-            }
-        else:
-            direct_paths = set()
-
-        nested_paths = tuple(
-            path
-            for path, _ in task_dispatch_entries
-            if path not in direct_paths
+        self.target = EnsembleProcessor.as_processor(
+            Identity() if target is None else target
         )
-        if len(nested_paths) > 0:
-            locations = ", ".join(repr(path) for path in nested_paths)
+        self.output = EnsembleProcessor.as_processor(
+            Identity() if output is None else output
+        )
+
+        if any(isinstance(m, TaskDispatch) for m in self.target.modules()):
             raise ValueError(
-                "'TaskDispatch' must be a direct step in 'Recipe.output'; "
-                f"nested task dispatch was found at {locations}."
+                "'TaskDispatch' is not supported in 'Recipe.target'"
             )
+        if self.output.requires_fit:
+            raise ValueError("'Recipe.output' should not require fitting")
 
         task_dispatchers = tuple(
-            module
-            for path, module in task_dispatch_entries
-            if path in direct_paths
+            m for m in self.features.modules() if isinstance(m, TaskDispatch)
+        ) + tuple(
+            m for m in self.output.modules() if isinstance(m, TaskDispatch)
         )
-
         if len(task_dispatchers) > 0:
-            target = _TaskResolver(
-                processor=target,
-                task_dispatchers=task_dispatchers,
-            )
-
-        object.__setattr__(self, "features", features)
-        object.__setattr__(self, "target", target)
-        object.__setattr__(self, "output", output)
-
-    def bind(
-        self,
-        *,
-        x_context: TableTensor,
-        y_context: TableTensor,
-        related_context_tables: RelatedTables | None = None,
-        num_members: int = 1,
-        generator: torch.Generator | None = None,
-    ) -> _RecipeExecution:
-        """Bind this recipe to context data and return an execution.
-
-        Fits ``features`` and ``target`` on the context and returns state for
-        query, inverse-target, and output transforms. The caller's recipe is
-        left unchanged.
-
-        Args:
-            x_context: Feature table for in-context examples.
-            y_context: Target table for in-context examples.
-            related_context_tables: Related context tables, or ``None``.
-            num_members: Number of ensemble members.
-            generator: Pseudorandom number generator for sampling.
-        """
-        return _RecipeExecution._bind(
-            recipe=self,
-            x_context=x_context,
-            y_context=y_context,
-            related_context_tables=related_context_tables,
-            num_members=num_members,
-            generator=generator,
-        )
-
-    @staticmethod
-    def _as_sequential(
-        processor: Processor | Iterable[Processor] | None,
-    ) -> Processor:
-        if processor is None:
-            return Sequential()
-        if not isinstance(processor, Processor):
-            return Sequential(*processor)
-        if not isinstance(processor, EnsembleProcessor):
-            return Sequential(processor)
-        return processor
+            self.target = _TaskResolver(self.target, task_dispatchers)
 
     def __repr__(self) -> str:
         return (
@@ -303,6 +189,3 @@ class Recipe:
             f"  output={self.output.__repr__(indent=2)[2:]},\n"
             ")"
         )
-
-
-from sdm.processing._recipe_execution import _RecipeExecution  # noqa: E402

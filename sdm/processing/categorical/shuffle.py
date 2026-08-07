@@ -3,9 +3,9 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, Stype
-from sdm.processing.ensemble import EnsembleProcessor
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm import CategoricalTensor, Stype, TableTensor
+from sdm.processing import EnsembleProcessor
+from sdm.tensor import EnsembleTable
 
 
 class _CategoryPermutations(torch.nn.Module):
@@ -83,14 +83,13 @@ class ShuffleCategories(EnsembleProcessor):
                 permutation = (
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes
-            elif self.method == "random":
+            else:
+                assert self.method == "random"
                 permutation = torch.randperm(
                     n_classes,
                     generator=generator,
                     device=device,
                 )
-            else:
-                raise AssertionError(f"Unexpected method {self.method!r}")
             permutations.append(permutation)
             offsets.append(offsets[-1] + n_classes)
 

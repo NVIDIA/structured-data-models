@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import torch
 
 from sdm import StringTensor, Stype, TableTensor
@@ -9,6 +10,8 @@ from sdm.testing import withCUDA
 
 @withCUDA
 def test_forward(device: torch.device) -> None:
+    pytest.importorskip("sentence_transformers")
+
     table = TableTensor(
         columns={"text": ("title", "body")},
         text=StringTensor.from_list(
