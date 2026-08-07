@@ -1270,20 +1270,37 @@ def _contiguous(
 
 
 @TableTensor.implements(aten.is_pinned.default)
-def _is_pinned(inp: TableTensor) -> bool:
+def _is_pinned(
+    inp: TableTensor,
+    device: torch.device | None = None,
+) -> bool:
+    def is_pinned(tensor: Tensor) -> bool:
+        if device is None:
+            return tensor.is_pinned()
+        return tensor.is_pinned(device=device)
+
     return all(
-        tensor.is_pinned() for _, tensor in inp.items() if tensor.numel() > 0
+        is_pinned(tensor) for _, tensor in inp.items() if tensor.numel() > 0
     )
 
 
 @TableTensor.implements(aten._pin_memory.default)
-def _pin_memory(inp: TableTensor) -> TableTensor:
+def _pin_memory(
+    inp: TableTensor,
+    device: torch.device | None = None,
+) -> TableTensor:
+    def pin_memory(tensor: Tensor) -> Tensor:
+        if device is None:
+            return tensor.pin_memory()
+        return tensor.pin_memory(device=device)
+
     blocks = {
-        stype: tensor.pin_memory() if tensor.numel() > 0 else tensor
+        stype: pin_memory(tensor) if tensor.numel() > 0 else tensor
         for stype, tensor in inp.items()
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(_layout(inp)),
         **blocks,
     )
 
@@ -1293,9 +1310,9 @@ def _pin_memory_composite(
     inp: TableTensor,
     device: torch.device | None = None,
 ) -> TableTensor:
-    if _is_pinned(inp):
+    if _is_pinned(inp, device=device):
         return inp
-    return _pin_memory(inp)
+    return _pin_memory(inp, device=device)
 
 
 @TableTensor.implements(aten.equal.default)
