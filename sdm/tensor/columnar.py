@@ -697,10 +697,12 @@ def _unsqueeze(inp: ColumnarTensor, dim: int) -> ColumnarTensor:
             f"{inp.__class__.__name__!r}"
         )
 
+    layout = aten.unsqueeze.default(_layout(inp), dim)
     return inp.__class__(
         columns=[column.unsqueeze(dim) for column in inp._columns],
         size=(*inp.size()[:dim], 1, *inp.size()[dim:-1]),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -730,6 +732,7 @@ def _expand(
 
     old_size = (*(1,) * (len(size) - inp.dim()), *inp.size())
 
+    layout = aten.expand.default(_layout(inp), size, implicit=implicit)
     return inp.__class__(
         columns=[
             aten.expand.default(
@@ -743,6 +746,7 @@ def _expand(
             old if new == -1 else new for old, new in zip(old_size, size)
         )[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -771,10 +775,12 @@ def _transpose(
     size = list(inp.size())
     size[dim0], size[dim1] = size[dim1], size[dim0]
 
+    layout = aten.transpose.int(_layout(inp), dim0, dim1)
     return inp.__class__(
         columns=columns,
         size=size[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -787,10 +793,12 @@ def _permute(inp: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
             f"Can't permute the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.permute.default(_layout(inp), dims)
     return inp.__class__(
         columns=[column.permute(dims[:-1]) for column in inp._columns],
         size=tuple(inp.size(dim) for dim in dims[:-1]),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
