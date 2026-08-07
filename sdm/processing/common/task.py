@@ -11,6 +11,10 @@ from sdm.tensor import EnsembleTable
 class TaskDispatch(EnsembleProcessor):
     """Apply separate processors based on the semantic type of the target.
 
+    Within a :class:`~sdm.processing.Recipe`, fitting the target selects the
+    classification or regression route. If no processor is configured for the
+    selected task, the input is returned unchanged.
+
     Args:
         classification: Processor selected for a categorical target.
         regression: Processor selected for a numerical target.

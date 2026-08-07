@@ -31,9 +31,10 @@ class DropConstantColumns(EnsembleProcessor):
         method: Filtering rule. ``"unique"`` uses distinct-value counts;
             ``"variance"`` uses sample standard deviation.
         threshold: With ``method="unique"``, columns with at most this many
-            unique values are removed. Must be positive.
+            unique values are removed. Must be positive. ``None`` uses ``1``.
         tolerance: With ``method="variance"``, columns with sample standard
-            deviation at most this value are removed.
+            deviation at most this value are removed. Must be non-negative.
+            ``None`` uses ``1e-6``.
     """
 
     supported_stypes = frozenset({Stype.numerical})
