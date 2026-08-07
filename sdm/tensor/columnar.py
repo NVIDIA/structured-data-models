@@ -359,10 +359,12 @@ class ColumnarTensor(Tensor):
 @ColumnarTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
 def _alias(inp: ColumnarTensor) -> ColumnarTensor:
+    layout = aten.alias.default(_layout(inp))
     return inp.__class__(
         columns=inp._columns,
         size=inp.size()[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -505,6 +507,21 @@ def _clone(
     memory_format: torch.memory_format | None = None,
 ) -> ColumnarTensor:
     return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
+
+
+@ColumnarTensor.implements(aten.detach.default)
+@preserve_view_inference_mode
+def _detach(inp: ColumnarTensor) -> ColumnarTensor:
+    columns = [
+        column.detach() if column.requires_grad else aten.alias.default(column)
+        for column in inp._columns
+    ]
+    return inp.__class__(
+        columns=columns,
+        size=inp.size()[:-1],
+        device=inp.device,
+        **_layout_kwargs(_layout(inp)),
+    )
 
 
 @ColumnarTensor.implements(aten.contiguous.default)
