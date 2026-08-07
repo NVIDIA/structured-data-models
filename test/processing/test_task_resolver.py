@@ -4,12 +4,11 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import CategoricalTensor, Recipe, StringTensor, TableTensor
 from sdm.processing import (
     Identity,
     InvertibleMixin,
     Processor,
-    Recipe,
     Softmax,
     Standardize,
     TaskDispatch,

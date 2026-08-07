@@ -51,7 +51,7 @@ transformations applied to features, targets, and outputs:
 import sdm
 import sdm.processing as sp
 
-recipe = sp.Recipe(
+recipe = sdm.Recipe(
     # First impute missing values, then standardize:
     features=[sp.ImputeMean(), sp.Standardize()],
 

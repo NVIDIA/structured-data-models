@@ -5,8 +5,7 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
-import sdm.processing as sp
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -140,7 +139,7 @@ class TabICLv2(ICLModel):
         self.eval()
 
     @classmethod
-    def default_recipe(cls) -> sp.Recipe:
+    def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
 

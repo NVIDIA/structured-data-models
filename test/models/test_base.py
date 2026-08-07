@@ -4,14 +4,13 @@ from typing import Any, ClassVar, cast
 import pytest
 import torch
 
-from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
+from sdm import ColumnarTensor, Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import (
     Choice,
     InvertibleMixin,
     Processor,
-    Recipe,
     ReduceEstimators,
     Standardize,
     StypeDispatch,

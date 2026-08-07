@@ -7,7 +7,7 @@ import torch
 from torch import Tensor
 
 import sdm.processing as sp
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.processing._recipe_execution import _RecipeExecution
@@ -67,7 +67,7 @@ class ICLModel(torch.nn.Module, ABC):
         related_context_tables: RelatedTables | None = None,
         related_query_tables: RelatedTables | None = None,
         *,
-        recipe: sp.Recipe | None = None,
+        recipe: Recipe | None = None,
         num_estimators: int = 1,
         recipe_execution: Literal["sequential", "vectorized"] = "vectorized",
         generator: torch.Generator | None = None,
@@ -199,7 +199,7 @@ class ICLModel(torch.nn.Module, ABC):
         y: Tensor | TableTensor,  # [..., R, 1]
         related_tables: RelatedTables | None = None,
         *,
-        recipe: sp.Recipe | None = None,
+        recipe: Recipe | None = None,
         num_estimators: int = 1,
         recipe_execution: Literal["sequential", "vectorized"] = "vectorized",
         generator: torch.Generator | None = None,
@@ -425,7 +425,7 @@ class ICLModel(torch.nn.Module, ABC):
 
     @classmethod
     @abstractmethod
-    def default_recipe(cls) -> sp.Recipe:
+    def default_recipe(cls) -> Recipe:
         r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################

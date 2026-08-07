@@ -7,3 +7,4 @@ sdm
 
    ~sdm.Stype
    ~sdm.infer_stypes
+   ~sdm.Recipe
