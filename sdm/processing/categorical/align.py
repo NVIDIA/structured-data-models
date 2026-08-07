@@ -31,6 +31,8 @@ class AlignCategories(EnsembleProcessor):
             ``"code"`` keeps observed categories in original order.
             ``"frequency"`` orders observed categories by descending frequency.
             ``"value"`` orders observed categories by ascending value.
+        min_frequency: Minimum number of fitted observations required to
+            retain a category. Rarer categories receive code ``-1``.
 
     >>> import pandas as pd
     >>> import sdm
@@ -66,9 +68,14 @@ class AlignCategories(EnsembleProcessor):
     def __init__(
         self,
         sort_by: Literal["code", "frequency", "value"] = "code",
+        *,
+        min_frequency: int = 1,
     ) -> None:
         super().__init__()
+        if min_frequency <= 0:
+            raise ValueError("min_frequency must be positive")
         self.sort_by = sort_by
+        self.min_frequency = min_frequency
         self._categories: tuple[tuple[Tensor, ...], ...] = ()
 
     def _fit_column(
@@ -114,7 +121,7 @@ class AlignCategories(EnsembleProcessor):
             ).expand(batch_size, -1)
             ordered_categories = input_categories
 
-        observed = counts.gather(1, order) > 0
+        observed = counts.gather(1, order) >= self.min_frequency
         # Only ragged vocabularies require per-batch materialization.
         fitted_categories = []
         for batch_index in range(batch_size):
@@ -501,10 +508,11 @@ class AlignCategories(EnsembleProcessor):
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
-        if self.sort_by == "code":
+        if self.sort_by == "code" and self.min_frequency == 1:
             return super().__repr__(indent=indent)
         return (
             f"{' ' * indent}{self.__class__.__name__}("
-            f"sort_by={self.sort_by!r}"
+            f"sort_by={self.sort_by!r}, "
+            f"min_frequency={self.min_frequency!r}"
             f")"
         )
