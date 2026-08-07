@@ -18,17 +18,46 @@ _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
 
 class AlignCategories(EnsembleProcessor):
-    """Align categorical columns to vocabularies observed during fitting.
+    """Align categorical columns to categories observed during fitting.
 
-    Fitting keeps the observed category values for each column. Transforming
-    remaps input codes by category value into those fitted vocabularies.
-    Missing values and unseen categories are encoded as ``-1``.
+    A categorical column stores each value as an integer code indexing an
+    ordered list of categories. Separately created tables can use different
+    codes for the same value. Fitting learns the category list for each column,
+    and transforming remaps another table to use it. Missing values and
+    categories not seen during fitting receive code ``-1``.
 
     Args:
-        sort_by: How to order fitted category vocabularies.
+        sort_by: How to order fitted categories.
             ``"code"`` keeps observed categories in original order.
             ``"frequency"`` orders observed categories by descending frequency.
             ``"value"`` orders observed categories by ascending value.
+
+    >>> import pandas as pd
+    >>> import sdm
+    >>> from sdm.processing import AlignCategories
+    >>> table1 = sdm.TableTensor.from_pandas(
+    ...     pd.DataFrame({"color": ["red", "blue", "red"]}),
+    ...     stypes={"color": "categorical"},
+    ... )
+    >>> table2 = sdm.TableTensor.from_pandas(
+    ...     pd.DataFrame({"color": ["blue", "green", None]}),
+    ...     stypes={"color": "categorical"},
+    ... )
+    >>> table1.categorical.categories[0].tolist()
+    ['red', 'blue']
+    >>> table2.categorical.categories[0].tolist()
+    ['blue', 'green']
+    >>> table2.categorical.code[:, 0].tolist()
+    [0, 1, -1]
+    >>> processor = AlignCategories().fit(table1)
+    >>> table2 = processor.transform(table2)
+    >>> table2.categorical.categories[0].tolist()
+    ['red', 'blue']
+    >>> table2.categorical.code[:, 0].tolist()
+    [1, -1, -1]
+
+    Here, ``"blue"`` changes from code ``0`` to ``1``, while unseen
+    ``"green"`` and the missing value use ``-1``.
     """
 
     supported_stypes = frozenset({Stype.categorical})
