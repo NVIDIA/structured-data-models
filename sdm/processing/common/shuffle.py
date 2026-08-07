@@ -3,9 +3,9 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import Stype
-from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.tensor import EnsembleTable
 
 
 class _ColumnPermutation(torch.nn.Module):

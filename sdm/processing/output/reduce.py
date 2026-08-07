@@ -3,9 +3,9 @@ from typing import Literal
 
 import torch
 
-from sdm.processing.ensemble import EnsembleProcessor
-from sdm.stype import Stype
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import EnsembleProcessor
+from sdm.tensor import EnsembleTable
 
 
 class ReduceEstimators(EnsembleProcessor):

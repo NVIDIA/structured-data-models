@@ -1,9 +1,8 @@
 import torch
 from torch import Tensor
 
-from sdm.processing.base import Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
 
 
 def _std(

@@ -3,11 +3,11 @@ from typing import Literal, cast
 import torch
 
 from sdm import Stype
-from sdm.processing.base import Processor
-from sdm.processing.ensemble import (
+from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
     EnsembleProcessorAdapter,
+    Processor,
 )
 from sdm.tensor import EnsembleTable
 
