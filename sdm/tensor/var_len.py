@@ -879,14 +879,14 @@ def _to_dtype_layout(
             copy=copy,
         )
 
-    return inp.__class__(
+    return inp.__class__._new_wrapper(
         data=data,
         offset=offset,
         valid=valid,
         size=inp.size(),
         stride=inp.stride()
         if memory_format == torch.preserve_format
-        else None,
+        else _contiguous_stride(inp.size()),
         storage_offset=0,
     )
 
