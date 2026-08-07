@@ -8,7 +8,8 @@ from sdm.tensor import TableTensor
 class Callable(Processor):
     """Adapt a stateless callable to the :class:`Processor` interface."""
 
-    supported_stypes = frozenset(Stype)
+    operates_on_stypes = frozenset(Stype)
+    unoperated_stype_policy = "opaque"
     requires_fit = False
 
     def __init__(self, function: Callable[[TableTensor], TableTensor]) -> None:

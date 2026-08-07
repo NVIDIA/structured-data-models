@@ -4,7 +4,11 @@ import torch
 from torch import Tensor
 
 from sdm import Stype
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import (
+    InvertibleMixin,
+    Processor,
+    UnoperatedStypePolicy,
+)
 from sdm.tensor import TableTensor
 
 
@@ -43,7 +47,19 @@ class StypeDispatch(Processor, InvertibleMixin):
             ``"drop"`` removes them, and ``"error"`` raises.
     """
 
-    supported_stypes = frozenset(Stype)
+    @property
+    def operates_on_stypes(self) -> frozenset[Stype]:
+        """Semantic types with configured routes."""
+        return frozenset(Stype(stype) for stype in self.processors)
+
+    @property
+    def unoperated_stype_policy(self) -> UnoperatedStypePolicy:
+        """Policy derived from remainder handling."""
+        if self.remainder == "error":
+            return "error"
+        if self.remainder == "drop":
+            return "opaque"
+        return "preserve"
 
     def __init__(
         self,

@@ -79,7 +79,7 @@ def test_pipeline_accepts_lambda() -> None:
     assert torch.equal(output.numerical, table.numerical.square())
 
 
-def test_passthrough_stypes_bypass_every_step() -> None:
+def test_pipeline_preserves_unoperated_stypes() -> None:
     table = TableTensor(
         columns={
             Stype.numerical: ("x",),
@@ -88,13 +88,11 @@ def test_passthrough_stypes_bypass_every_step() -> None:
         numerical=torch.tensor([[1.0], [2.0]]),
         id=ColumnarTensor((torch.tensor([10, 11]),)),
     )
-    pipeline = Sequential(
-        lambda table: table.drop_stypes(Stype.id),
-        passthrough_stypes=(Stype.id,),
-    )
+    pipeline = Sequential(Standardize())
 
     output = pipeline.fit_transform(table)
 
+    torch.testing.assert_close(output.numerical.mean(dim=0), torch.zeros(1))
     assert torch.equal(output.id, table.id)
 
 
@@ -189,11 +187,14 @@ def test_pipeline_checks_fitted_state() -> None:
         pipeline.transform(_table())
 
 
-def test_pipeline_rejects_unsupported_stype() -> None:
+def test_pipeline_preserves_unoperated_stype_after_transform() -> None:
     pipeline = Sequential(Standardize())
+    table = _mixed_table()
 
-    with pytest.raises(ValueError, match="categorical"):
-        pipeline.fit_transform(_mixed_table())
+    output = pipeline.fit_transform(table)
+
+    assert output.columns == table.columns
+    assert torch.equal(output.categorical.code, table.categorical.code)
 
 
 def test_inverse_transform_rejects_non_invertible_step() -> None:

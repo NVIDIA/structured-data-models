@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
 
 import torch
 from typing_extensions import Self
@@ -12,7 +12,8 @@ from sdm import Stype, TableTensor
 if TYPE_CHECKING:
     from sdm.processing import Sequential
 
-SupportedStypes: TypeAlias = frozenset[Stype]
+OperatesOnStypes: TypeAlias = frozenset[Stype]
+UnoperatedStypePolicy: TypeAlias = Literal["preserve", "error", "opaque"]
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -25,26 +26,41 @@ class Processor(torch.nn.Module, abc.ABC):
     the transformation via :meth:`transform`. Implementations preserve the row
     and batch dimensions. Batch dimensions are processed independently.
 
-    :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops for
-    supported stypes with empty blocks.
+    Processors declare the semantic column types they operate on via
+    :attr:`operates_on_stypes`. Active non-operated semantic types follow
+    :attr:`unoperated_stype_policy`.
     """
 
-    supported_stypes: ClassVar[SupportedStypes]
+    operates_on_stypes: OperatesOnStypes
+    unoperated_stype_policy: UnoperatedStypePolicy = "preserve"
     requires_fit: bool = True
 
     def __init__(self) -> None:
         super().__init__()
         self._fitted = False
 
-    def _check_supported_stypes(self, table: TableTensor) -> None:
-        supported_stypes = self.supported_stypes
-        for stype, columns in table.columns.items():
-            if stype not in supported_stypes and len(columns) > 0:
-                # TODO: Include all invalid columns in the error message
-                raise ValueError(
-                    f"{self.__class__.__name__!r} does not support "
-                    f"{stype.value!r} columns."
-                )
+    def _active_operated_stypes(self, table: TableTensor) -> frozenset[Stype]:
+        return table.active_stypes & self.operates_on_stypes
+
+    def _active_unoperated_stypes(
+        self, table: TableTensor
+    ) -> frozenset[Stype]:
+        return table.active_stypes - self.operates_on_stypes
+
+    def _check_unoperated_stypes(self, table: TableTensor) -> None:
+        if self.unoperated_stype_policy != "error":
+            return
+        for stype in self._active_unoperated_stypes(table):
+            raise ValueError(
+                f"{self.__class__.__name__!r} cannot preserve "
+                f"{stype.value!r} columns."
+            )
+
+    def _should_run(self, table: TableTensor) -> bool:
+        if self.unoperated_stype_policy == "opaque":
+            return True
+        self._check_unoperated_stypes(table)
+        return len(self._active_operated_stypes(table)) > 0
 
     @staticmethod
     def as_processor(processor: object) -> Processor:
@@ -110,8 +126,7 @@ class Processor(torch.nn.Module, abc.ABC):
             table: The table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        self._check_supported_stypes(table)
-        if len(table.active_stypes & self.supported_stypes) == 0:
+        if not self._should_run(table):
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
@@ -127,8 +142,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        self._check_supported_stypes(table)
-        if len(table.active_stypes & self.supported_stypes) == 0:
+        if not self._should_run(table):
             return table
         self._check_is_fitted()
         return self._transform(table)
@@ -152,8 +166,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        self._check_supported_stypes(table)
-        if len(table.active_stypes & self.supported_stypes) == 0:
+        if not self._should_run(table):
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:

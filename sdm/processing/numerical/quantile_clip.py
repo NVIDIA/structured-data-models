@@ -18,7 +18,7 @@ class ClipQuantiles(Processor):
             bound. Must satisfy ``0 <= q_low <= q_high <= 1``.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    operates_on_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

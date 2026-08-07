@@ -128,7 +128,9 @@ def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
         remainder="error",
     )
 
-    with pytest.raises(ValueError, match=r"non-empty.*categorical.*no route"):
+    with pytest.raises(
+        ValueError, match=r"StypeDispatch.*cannot preserve.*categorical"
+    ):
         dispatch.fit(table)
 
     with pytest.raises(RuntimeError, match=r"Standardize.*not fitted"):

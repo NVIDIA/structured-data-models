@@ -15,7 +15,7 @@ class SelectColumns(Processor):
             each semantic block.
     """
 
-    supported_stypes = frozenset(Stype)
+    operates_on_stypes = frozenset(Stype)
     requires_fit = False
 
     def __init__(

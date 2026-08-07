@@ -27,7 +27,7 @@ class ClipSigma(Processor):
             deviations from the mean mark the soft clipping bounds.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    operates_on_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
@@ -22,7 +22,7 @@ class ShuffleColumns(Processor, InvertibleMixin):
             with a drawn permutation.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    operates_on_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -75,7 +75,7 @@ class ShuffleColumns(Processor, InvertibleMixin):
         permutation: Tensor,
     ) -> TableTensor:
         indices = permutation.tolist()
-        return table.__class__(
+        out = table.__class__(
             columns={
                 Stype.numerical.value: tuple(
                     table.columns[Stype.numerical][index] for index in indices
@@ -83,3 +83,7 @@ class ShuffleColumns(Processor, InvertibleMixin):
             },
             numerical=table.numerical.index_select(-1, permutation),
         )
+        remainder = table.drop_stypes(Stype.numerical)
+        if remainder.size(-1) == 0:
+            return out
+        return cast(TableTensor, torch.cat((remainder, out), dim=-1))

@@ -90,7 +90,7 @@ class QuantileTransform(Processor, InvertibleMixin):
         output_distribution: Distribution to map the empirical quantiles to.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    operates_on_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

@@ -48,7 +48,7 @@ def test_invertible_processor_requires_fit_for_inverse_transform(
 
 
 class StatelessProcessor(Processor):
-    supported_stypes = frozenset({Stype.numerical})
+    operates_on_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -86,22 +86,31 @@ def _id_table() -> TableTensor:
     )
 
 
-def test_processor_rejects_unsupported_stype_on_forward_paths() -> None:
-    numerical = TableTensor.from_tensor(torch.ones(2, 1))
+def test_processor_preserves_unoperated_stypes_on_forward_paths() -> None:
     mixed = _mixed_table()
-    processor = Standardize().fit(numerical)
 
-    with pytest.raises(ValueError, match="categorical"):
-        Standardize().fit(mixed)
-    with pytest.raises(ValueError, match="categorical"):
-        processor.transform(mixed)
-    with pytest.raises(ValueError, match="categorical"):
-        processor(mixed)
+    transformed = Standardize().fit_transform(mixed)
+    processor = Standardize().fit(mixed)
+
+    for output in (transformed, processor.transform(mixed), processor(mixed)):
+        assert output.columns == mixed.columns
+        torch.testing.assert_close(
+            output.numerical.mean(dim=0),
+            torch.zeros(1),
+            atol=1e-6,
+            rtol=1e-6,
+        )
+        assert torch.equal(output.categorical.code, mixed.categorical.code)
 
 
-def test_processor_rejects_id_stype() -> None:
-    with pytest.raises(ValueError, match="id"):
-        Standardize().fit(_id_table())
+def test_processor_noops_when_only_unoperated_stypes_are_active() -> None:
+    table = _id_table()
+
+    processor = Standardize()
+
+    assert processor.fit(table) is processor
+    assert processor.fit_transform(table) is table
+    assert processor.transform(table) is table
 
 
 def test_processor_fit_transform_handles_empty_table() -> None:

@@ -24,7 +24,8 @@ class TaskDispatch(Processor):
             normalized to :class:`~sdm.processing.Sequential`.
     """
 
-    supported_stypes = frozenset(Stype)
+    operates_on_stypes = frozenset(Stype)
+    unoperated_stype_policy = "opaque"
     requires_fit = False
 
     def __init__(

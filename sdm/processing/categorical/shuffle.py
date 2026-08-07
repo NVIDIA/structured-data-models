@@ -25,7 +25,7 @@ class ShuffleCategories(Processor):
             a drawn permutation.
     """
 
-    supported_stypes = frozenset({Stype.categorical})
+    operates_on_stypes = frozenset({Stype.categorical})
 
     def __init__(
         self,

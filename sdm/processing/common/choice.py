@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import cast
 
 import torch
@@ -20,7 +21,17 @@ class Choice(Processor, InvertibleMixin):
             callable accepts and returns a :class:`~sdm.tensor.TableTensor`.
     """
 
-    supported_stypes = frozenset(Stype)
+    unoperated_stype_policy = "opaque"
+
+    @property
+    def operates_on_stypes(self) -> frozenset[Stype]:
+        """Semantic types operated on by at least one option."""
+        return frozenset().union(
+            *(
+                option.operates_on_stypes
+                for option in cast(Iterable[Processor], self.options)
+            )
+        )
 
     def __init__(
         self,

@@ -4,8 +4,9 @@ from typing import cast
 import torch
 from typing_extensions import Self
 
-from sdm import Stype, StypeLike, TableTensor
+from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.base import UnoperatedStypePolicy
 
 
 class Sequential(Processor, InvertibleMixin):
@@ -13,22 +14,27 @@ class Sequential(Processor, InvertibleMixin):
 
     Args:
         args: Sequence of :class:`Processor` instances or callables.
-        passthrough_stypes: Column types that bypass the sequence unchanged.
     """
 
-    supported_stypes = frozenset(Stype)
-
-    def __init__(
-        self,
-        *args: object,
-        passthrough_stypes: Iterable[StypeLike] = (),
-    ) -> None:
+    def __init__(self, *args: object) -> None:
         super().__init__()
-        self.passthrough_stypes = frozenset(
-            Stype(stype) for stype in passthrough_stypes
-        )
         self.extend(args)
         self.requires_fit = any(child.requires_fit for child in self)
+
+    @property
+    def operates_on_stypes(self) -> frozenset[Stype]:
+        """Semantic types operated on by at least one child processor."""
+        return frozenset().union(*(child.operates_on_stypes for child in self))
+
+    @property
+    def unoperated_stype_policy(self) -> UnoperatedStypePolicy:
+        """Policy derived from child processors."""
+        policies = [child.unoperated_stype_policy for child in self]
+        if "opaque" in policies:
+            return "opaque"
+        if "error" in policies:
+            return "error"
+        return "preserve"
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.
@@ -37,10 +43,7 @@ class Sequential(Processor, InvertibleMixin):
             processor: The processor to append.
         """
         processor = Processor.as_processor(processor)
-        if isinstance(processor, Sequential) and (
-            len(processor.passthrough_stypes) == 0
-            or processor.passthrough_stypes == self.passthrough_stypes
-        ):
+        if isinstance(processor, Sequential):
             for child in processor.children():
                 self.add_module(str(len(self)), child)
         else:
@@ -66,7 +69,7 @@ class Sequential(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        out, _ = self._detach_passthrough_stypes(table)
+        out = table
         for i, child in enumerate(self):
             if i < len(self) - 1:
                 out = child.fit_transform(out, generator=generator)
@@ -74,11 +77,9 @@ class Sequential(Processor, InvertibleMixin):
                 child.fit(out, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        out, passthrough = self._detach_passthrough_stypes(table)
+        out = table
         for child in self:
             out = child.transform(out)
-        if passthrough is not None:
-            out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
         return out
 
     def _fit_transform(
@@ -87,15 +88,13 @@ class Sequential(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        out, passthrough = self._detach_passthrough_stypes(table)
+        out = table
         for child in self:
             out = child.fit_transform(out, generator=generator)
-        if passthrough is not None:
-            out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
         return out
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        out, passthrough = self._detach_passthrough_stypes(table)
+        out = table
         for child in reversed(list(self)):
             fn = getattr(child, "inverse_transform", None)
             if not callable(fn):
@@ -104,21 +103,7 @@ class Sequential(Processor, InvertibleMixin):
                     f"'inverse_transform'"
                 )
             out = fn(out)
-        if passthrough is not None:
-            out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
         return out
-
-    def _detach_passthrough_stypes(
-        self,
-        table: TableTensor,
-    ) -> tuple[TableTensor, TableTensor | None]:
-        passthrough_stypes = self.passthrough_stypes & table.active_stypes
-        if not passthrough_stypes:
-            return table, None
-        return (
-            table.drop_stypes(passthrough_stypes),
-            table.select_stypes(passthrough_stypes),
-        )
 
     def __iter__(self) -> Iterator[Processor]:
         return cast(Iterator[Processor], self.children())
@@ -131,29 +116,11 @@ class Sequential(Processor, InvertibleMixin):
         return self
 
     def __repr__(self, *, indent: int = 0) -> str:
-        passthrough_repr = (
-            "["
-            + ", ".join(
-                repr(stype.value)
-                for stype in Stype
-                if stype in self.passthrough_stypes
-            )
-            + "]"
-        )
         if len(self) == 0:
-            if len(self.passthrough_stypes) > 0:
-                return (
-                    f"{' ' * indent}{self.__class__.__name__}("
-                    f"passthrough_stypes={passthrough_repr})"
-                )
             return super().__repr__(indent=indent)
         reprs = "".join(
             [f"{child.__repr__(indent=indent + 2)},\n" for child in self]
         )
-        if len(self.passthrough_stypes) > 0:
-            reprs += (
-                f"{' ' * (indent + 2)}passthrough_stypes={passthrough_repr},\n"
-            )
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n{reprs}{' ' * indent})"
         )

@@ -34,7 +34,7 @@ class DropConstantColumns(Processor):
             deviation at most this value are removed.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    operates_on_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -100,4 +100,11 @@ class DropConstantColumns(Processor):
         columns = table.columns[Stype.numerical]
         if self._columns_to_keep == columns:
             return table
-        return table.select_columns(self._columns_to_keep)
+        keep = [
+            column
+            for stype, columns in table.columns.items()
+            for column in (
+                self._columns_to_keep if stype == Stype.numerical else columns
+            )
+        ]
+        return table.select_columns(keep)

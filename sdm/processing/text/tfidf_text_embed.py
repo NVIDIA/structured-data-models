@@ -32,7 +32,7 @@ class TfidfTextEmbed(Processor):
         lowercase: If ``True``, lowercase text before tokenizing.
     """
 
-    supported_stypes = frozenset({Stype.text})
+    operates_on_stypes = frozenset({Stype.text})
 
     def __init__(
         self,
@@ -383,10 +383,14 @@ class TfidfTextEmbed(Processor):
                 f"{text_names[column]}_{i}" for i in range(vocab_size)
             )
 
-        return table.__class__(
+        out = table.__class__(
             columns={Stype.numerical: tuple(names)},
             numerical=numerical,
         )
+        remainder = table.drop_stypes(Stype.text)
+        if remainder.size(-1) == 0:
+            return out
+        return cast(TableTensor, torch.cat((remainder, out), dim=-1))
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (

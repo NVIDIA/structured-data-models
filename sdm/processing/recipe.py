@@ -19,7 +19,7 @@ class _TaskResolver(Processor, InvertibleMixin):
     ``Recipe.output``.
     """
 
-    supported_stypes = frozenset(Stype)
+    operates_on_stypes = frozenset(Stype)
 
     def __init__(
         self,
@@ -45,7 +45,6 @@ class _TaskResolver(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        self._check_supported_stypes(table)
         self._fitted = False
         for task_dispatcher in self._task_dispatchers:
             task_dispatcher._reset()
@@ -138,7 +137,6 @@ class Recipe:
             features = Sequential(*features)
         if not isinstance(features, Sequential):
             features = Sequential(features)
-        features.passthrough_stypes |= {Stype.id}
 
         if target is None:
             target = Sequential()

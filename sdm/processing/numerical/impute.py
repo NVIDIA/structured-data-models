@@ -15,7 +15,7 @@ class ImputeMean(Processor):
             undefined (e.g. all-NaN columns).
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    operates_on_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

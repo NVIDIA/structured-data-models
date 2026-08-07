@@ -22,7 +22,8 @@ class ReduceEstimators(Processor):
             ``"mean"`` is supported.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    operates_on_stypes = frozenset({Stype.numerical})
+    unoperated_stype_policy = "error"
     requires_fit = False
 
     def __init__(

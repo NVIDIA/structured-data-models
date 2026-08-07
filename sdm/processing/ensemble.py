@@ -9,7 +9,11 @@ from typing import cast
 import torch
 from typing_extensions import Self
 
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import (
+    InvertibleMixin,
+    Processor,
+    UnoperatedStypePolicy,
+)
 from sdm.stype import Stype
 from sdm.tensor import EnsembleTable, TableTensor
 
@@ -24,7 +28,7 @@ class EnsembleProcessor(Processor):
     :meth:`fit_ensemble` and applies the transformation via
     :meth:`transform_ensemble`. :meth:`fit_ensemble`,
     :meth:`transform_ensemble`, and :meth:`fit_transform_ensemble`
-    are no-ops for supported stypes with empty blocks.
+    follow the same stype policy as ordinary processors.
 
     As a :class:`~sdm.processing.base.Processor`, it also accepts a
     :class:`~sdm.tensor.TableTensor` and processes it as an ensemble
@@ -82,12 +86,7 @@ class EnsembleProcessor(Processor):
             ensemble_table: Ensemble table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        for group in ensemble_table:
-            self._check_supported_stypes(group)
-        if not any(
-            group.active_stypes & self.supported_stypes
-            for group in ensemble_table
-        ):
+        if not any(self._should_run(group) for group in ensemble_table):
             return self
         if self.requires_fit:
             self._fit_ensemble(ensemble_table, generator=generator)
@@ -106,12 +105,7 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for group in ensemble_table:
-            self._check_supported_stypes(group)
-        if not any(
-            group.active_stypes & self.supported_stypes
-            for group in ensemble_table
-        ):
+        if not any(self._should_run(group) for group in ensemble_table):
             return ensemble_table
         self._check_is_fitted()
         return self._transform_ensemble(ensemble_table)
@@ -131,12 +125,7 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for group in ensemble_table:
-            self._check_supported_stypes(group)
-        if not any(
-            group.active_stypes & self.supported_stypes
-            for group in ensemble_table
-        ):
+        if not any(self._should_run(group) for group in ensemble_table):
             return ensemble_table
         output = self._fit_transform_ensemble(
             ensemble_table,
@@ -195,7 +184,15 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         processor: Processor to fit separately for each ensemble table group.
     """
 
-    supported_stypes = frozenset[Stype](Stype)
+    @property
+    def operates_on_stypes(self) -> frozenset[Stype]:
+        """Semantic types operated on by the wrapped processor."""
+        return self.processor.operates_on_stypes
+
+    @property
+    def unoperated_stype_policy(self) -> UnoperatedStypePolicy:
+        """Policy delegated to the wrapped processor."""
+        return self.processor.unoperated_stype_policy
 
     def __init__(self, processor: Processor) -> None:
         super().__init__()
