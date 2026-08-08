@@ -47,7 +47,7 @@ class TableDispatch(EnsembleProcessor):
         if self._route is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved table route; "
-                "use it in 'Recipe.features' through model execution."
+                "use it in a 'Recipe' through model execution"
             )
         if self._route in self.processors:
             self.processors[self._route].fit_ensemble(
@@ -64,7 +64,7 @@ class TableDispatch(EnsembleProcessor):
         if self._route is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved table route; "
-                "use it in 'Recipe.features' through model execution."
+                "use it in a 'Recipe' through model execution"
             )
         if self._route not in self.processors:
             return ensemble_table
@@ -80,7 +80,7 @@ class TableDispatch(EnsembleProcessor):
         if self._route is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved table route; "
-                "use it in 'Recipe.features' through model execution."
+                "use it in a 'Recipe' through model execution"
             )
         if self._route not in self.processors:
             return ensemble_table
