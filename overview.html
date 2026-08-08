@@ -233,7 +233,8 @@ Semantic types (<a class="reference internal" href="api/generated/sdm.Stype.html
 </span></pre></div>
 </div>
 <p>Models then consume these tensor containers through a shared in-context learning interface.
-The same model object supports direct one-shot calls and cached fit/predict execution for efficient context reuse:</p>
+Available model implementations are listed in <a class="reference internal" href="api/models.html"><span class="doc std std-doc"><code class="docutils literal notranslate"><span class="pre">sdm.models</span></code></span></a>.
+Each model supports direct one-shot <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> calls and cached <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>/<a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.predict" title="sdm.models.ICLModel.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> execution for efficient context reuse:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">TabICLv2</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
 </span><span data-line="2">
 </span><span data-line="3"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
@@ -321,7 +322,7 @@ Models that support relational context, such as <a class="reference internal" hr
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=6b281319"></script>
+      <script src="_static/documentation_options.js?v=1b9c1b54"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
