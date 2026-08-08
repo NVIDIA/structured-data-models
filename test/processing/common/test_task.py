@@ -34,7 +34,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     output = _numerical_table(("a", "b"))
     description = dedent("""\
         TaskDispatch(
-          classification: Softmax(),
+          classification=Softmax(),
         )""")
     assert repr(dispatch) == description
 
