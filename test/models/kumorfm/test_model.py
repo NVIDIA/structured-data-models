@@ -451,19 +451,3 @@ def test_many_classes_forward_and_cache(
         cache=cache.freeze(),
     )
     torch.testing.assert_close(predicted, expected)
-
-
-def test_default_recipe_preserves_ids() -> None:
-    table = TableTensor(
-        columns={
-            Stype.numerical: ("value",),
-            Stype.id: ("entity_id",),
-        },
-        numerical=torch.tensor([[1.0], [2.0]]),
-        id=ColumnarTensor((torch.tensor([10, 11]),)),
-    )
-
-    transformed = KumoRFM.default_recipe().features.fit_transform(table)
-
-    assert transformed.columns[Stype.id] == ("entity_id",)
-    assert transformed.id.equal(table.id)

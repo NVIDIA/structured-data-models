@@ -217,3 +217,8 @@ class ShuffleCategories(EnsembleProcessor):
             categories=categories,
         )
         return table.replace_blocks(categorical=categorical)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}(method={self.method!r})"
+        )

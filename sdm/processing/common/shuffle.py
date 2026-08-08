@@ -155,3 +155,8 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             },
             numerical=table.numerical.index_select(-1, permutation),
         )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}(method={self.method!r})"
+        )
