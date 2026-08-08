@@ -22,7 +22,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
 
     Args:
         args: Candidate processors or stateless callables.
-        selection: How to select options. ``"random"`` samples uniformly;
+        method: How to select options. ``"random"`` samples uniformly;
             ``"round_robin"`` assigns options by ensemble member position and
             selects the first option for a single table.
     """
@@ -32,7 +32,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     def __init__(
         self,
         *args: object,
-        selection: Literal["random", "round_robin"] = "random",
+        method: Literal["random", "round_robin"] = "random",
     ) -> None:
         super().__init__()
         options = []
@@ -42,7 +42,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
                 option = EnsembleProcessorAdapter(option)
             options.append(option)
         self.options = torch.nn.ModuleList(options)
-        self.selection = selection
+        self.method = method
         self._option_ids: tuple[int, ...] = ()
 
     @property
@@ -71,13 +71,13 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> tuple[int, ...]:
-        if self.selection == "round_robin":
+        if self.method == "round_robin":
             return tuple(
                 member_id % len(self.options)
                 for member_id in range(ensemble_table.num_members)
             )
 
-        assert self.selection == "random"
+        assert self.method == "random"
         device = (
             next(iter(ensemble_table)).device
             if generator is None
@@ -200,8 +200,8 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             cast(Processor, option).__repr__(indent=indent + 2)
             for option in self.options
         )
-        if self.selection != "random":
-            inner += f",\n{' ' * (indent + 2)}selection={self.selection!r}"
+        if self.method != "random":
+            inner += f",\n{' ' * (indent + 2)}method={self.method!r}"
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n"
             f"{inner},\n"

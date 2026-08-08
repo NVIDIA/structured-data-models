@@ -34,7 +34,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     output = _numerical_table(("a", "b"))
     description = dedent("""\
         TaskDispatch(
-          classification: Softmax(),
+          classification=Softmax(),
         )""")
     assert repr(dispatch) == description
 
@@ -71,7 +71,7 @@ def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
     dispatch = sp.TaskDispatch(regression=sp.Identity())
     output = _numerical_table()
 
-    with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
+    with pytest.raises(RuntimeError, match="model execution"):
         dispatch.transform(output)
     dispatch._task = "classification"
     assert dispatch.transform(output).equal(output)

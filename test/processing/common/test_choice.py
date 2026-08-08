@@ -164,7 +164,7 @@ def test_choice_copies_draw_independently_at_fit() -> None:
 def test_choice_round_robin_routes_members() -> None:
     context = _table()
     query = context.replace_blocks(numerical=context.numerical + 100)
-    processor = sp.Choice(Add(0), Add(10), selection="round_robin")
+    processor = sp.Choice(Add(0), Add(10), method="round_robin")
 
     transformed = processor.fit_transform_ensemble(
         EnsembleTable(context, num_members=8)
@@ -189,12 +189,8 @@ def test_choice_round_robin_routes_members() -> None:
 
 def test_choice_fit_ensemble_fits_selected_options() -> None:
     table = EnsembleTable(_table(), num_members=4)
-    fitted = sp.Choice(
-        sp.Standardize(), sp.Identity(), selection="round_robin"
-    )
-    combined = sp.Choice(
-        sp.Standardize(), sp.Identity(), selection="round_robin"
-    )
+    fitted = sp.Choice(sp.Standardize(), sp.Identity(), method="round_robin")
+    combined = sp.Choice(sp.Standardize(), sp.Identity(), method="round_robin")
 
     fitted.fit_ensemble(table)
     transformed = fitted.transform_ensemble(table)
@@ -221,7 +217,7 @@ def test_choice_fits_options_on_selected_members() -> None:
     output = sp.Choice(
         AddFittedMemberCount(),
         AddFittedMemberCount(),
-        selection="round_robin",
+        method="round_robin",
     ).fit_transform_ensemble(table)
 
     for member_id, source in enumerate(tables):
@@ -237,10 +233,10 @@ def test_nested_choice_routes_selected_members_locally() -> None:
             Add(10),
             Add(20),
             Add(30),
-            selection="round_robin",
+            method="round_robin",
         ),
         Add(100),
-        selection="round_robin",
+        method="round_robin",
     )
 
     output = processor.fit_transform_ensemble(
@@ -259,14 +255,14 @@ def test_choice_round_robin_uses_first_option_for_single_table() -> None:
     output = sp.Choice(
         Add(1),
         Add(2),
-        selection="round_robin",
+        method="round_robin",
     ).fit_transform(_table())
 
     torch.testing.assert_close(output.numerical, _table().numerical + 1)
 
 
 def test_choice_ensemble_requires_matching_member_count() -> None:
-    processor = sp.Choice(Add(0), Add(1), selection="round_robin")
+    processor = sp.Choice(Add(0), Add(1), method="round_robin")
     processor.fit_transform_ensemble(EnsembleTable(_table(), num_members=8))
 
     with pytest.raises(RuntimeError, match="fitted with 8"):
