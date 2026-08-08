@@ -73,7 +73,7 @@ if args.text_processor != "none":
             sp.SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2"),
             sp.PCA(num_components=64),
         )
-    recipe.features = sp.StypeDispatch(text=text_processor) + recipe.features
+    recipe.prepend_features(sp.StypeDispatch(text=text_processor))
 
 with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
     model.fit(

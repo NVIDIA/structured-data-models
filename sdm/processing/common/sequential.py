@@ -22,8 +22,8 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
 
     def __init__(self, *args: object) -> None:
         super().__init__()
+        self.requires_fit = False
         self.extend(args)
-        self.requires_fit = any(child.requires_fit for child in self)
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.
@@ -38,6 +38,30 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         else:
             self.add_module(str(len(self)), processor)
 
+        self.requires_fit = any(child.requires_fit for child in self)
+        self._fitted = False
+        return self
+
+    def prepend(self, processor: object) -> Self:
+        r"""Prepend a processor or callable to this sequence.
+
+        Args:
+            processor: The processor to prepend.
+        """
+        processor = EnsembleProcessor.as_processor(processor)
+
+        if isinstance(processor, Sequential):
+            processors = tuple(processor.children())
+        else:
+            processors = (processor,)
+
+        processors = (*processors, *self.children())
+
+        self._modules.clear()
+        for child in processors:
+            self.add_module(str(len(self)), child)
+
+        self.requires_fit = any(child.requires_fit for child in self)
         self._fitted = False
         return self
 
