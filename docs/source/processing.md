@@ -30,18 +30,19 @@ Each model defines a default recipe that closely mimics pre- and postprocessing 
 Recipes are plain Python objects, so they can be inspected, copied and modified.
 This makes it easy to keep the default model contract while changing one part of the pipeline.
 For example, {py:class}`~sdm.models.TabICLv2` does not consume raw {py:attr}`~sdm.Stype.datetime` columns directly.
-To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, add a {py:attr}`~sdm.Stype.datetime` branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:
+To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, prepend a {py:attr}`~sdm.Stype.datetime` branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:
 
 ```python
 import sdm
 import sdm.processing as sp
 
-recipe = sdm.models.TabICLv2.default_recipe()
-recipe.features = sp.StypeDispatch(
-    datetime=sp.AddCalendarFields(
-        fields=("minute", "hour", "weekday", "day_of_month", "month"),
+recipe = sdm.models.TabICLv2.default_recipe().prepend_features(
+    sp.StypeDispatch(
+        datetime=sp.AddCalendarFields(
+            fields=("minute", "hour", "weekday", "day_of_month", "month"),
+        )
     )
-) + recipe.features
+)
 ```
 
 You can also define a recipe from scratch when you want full control over the
@@ -88,6 +89,12 @@ table = recipe.features.transform(table)
 
 ## Ensembling
 
+A model can run several ensemble members over the same task.
+Most preprocessing steps do not need to distinguish those members: imputing a mean, standardizing a column, or converting categories to numbers often produces the same transformed table for every estimator.
+Other steps intentionally create member-specific views to add variance to the input data, such as drawing a different column permutation, choosing a different numerical transform, or shuffling categorical values.
+
+The `structured-data-models` package takes advantage of this to avoid duplicating work: common transformations can run once over shared member groups, while only estimator-specific variations split the ensemble into a tree of member views as the {py:class}`~sdm.processing.recipe.Recipe` is applied.
+
 ```{figure} images/ensemble_light.svg
 :figclass: light-only
 :width: 100%
@@ -97,3 +104,19 @@ table = recipe.features.transform(table)
 :figclass: dark-only
 :width: 100%
 ```
+
+This shared-by-default, split-when-needed behavior is captured by {py:class}`~sdm.processing.ensemble.EnsembleProcessor`.
+An {py:class}`~sdm.processing.ensemble.EnsembleProcessor` is a regular {py:class}`~sdm.processing.base.Processor` that operates on an {py:class}`~sdm.tensor.EnsembleTable`, allowing a processing step to split ensemble members into separate groups when their transformed views diverge.
+This lets a {py:class}`~sdm.processing.recipe.Recipe` stay shared by default and branch only at steps that actually introduce member-specific behavior.
+
+The underlying {py:class}`~sdm.tensor.EnsembleTable` stores members by layout rather than by estimator.
+Members that see the same table share storage, while compatible member tables are stacked into one leading dimension of a single {py:class}`~sdm.tensor.TableTensor`.
+Regular processors can therefore operate on whole groups, leveraging PyTorch vectorization and GPU parallelism, and only fall back to separate groups when storage layout diverges.
+
+In short, a plain {py:class}`~sdm.processing.base.Processor` describes a transformation for one table or one group, and an {py:class}`~sdm.processing.ensemble.EnsembleProcessor` describes a transformation over the collection of estimator views.
+Most {py:class}`~sdm.processing.recipe.Recipe` steps therefore remain ordinary processors.
+
+For most users, ensemble processing is an internal (but cool) detail of model execution.
+Recipes can be composed from ordinary processors, and the {py:class}`~sdm.processing.recipe.Recipe` execution handles ensemble grouping, sharing, and branching when a model runs with multiple estimators.
+You only need to reason about {py:class}`~sdm.processing.ensemble.EnsembleProcessor` directly when writing a processor whose behavior can change table layout.
+Examples of those include {py:class}`~sdm.processing.common.Choice`, {py:class}`~sdm.processing.common.ShuffleColumns`, and {py:class}`~sdm.processing.categorical.ShuffleCategories`.

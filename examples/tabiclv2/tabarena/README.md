@@ -24,6 +24,12 @@ Run the benchmark:
 python examples/tabiclv2/tabarena/main.py
 ```
 
+Pass a dataset name to run only that TabArena dataset:
+
+```bash
+python examples/tabiclv2/tabarena/main.py --dataset blood-transfusion-service-center
+```
+
 Evaluate the results with:
 
 ```bash

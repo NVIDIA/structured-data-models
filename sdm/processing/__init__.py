@@ -12,12 +12,13 @@ from sdm.processing.common import (
     Sequential,
     StypeDispatch,
     TaskDispatch,
+    TableDispatch,
     Choice,
     ToNumerical,
     ShuffleColumns,
     SelectColumns,
 )
-from sdm.processing.text import TFIDF, EmbedText
+from sdm.processing.text import TFIDF, SentenceTransformer
 from sdm.processing.numerical import (
     Clip,
     ClipQuantiles,
@@ -49,12 +50,13 @@ __all__ = [
     "Sequential",
     "StypeDispatch",
     "TaskDispatch",
+    "TableDispatch",
     "Choice",
     "ToNumerical",
     "ShuffleColumns",
     "SelectColumns",
     "TFIDF",
-    "EmbedText",
+    "SentenceTransformer",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",

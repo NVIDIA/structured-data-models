@@ -1,9 +1,9 @@
+import pytest
 import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
-from sdm.processing import InvertibleMixin
 from sdm.testing import withCUDA
 
 
@@ -74,6 +74,11 @@ def test_recipe_role_fit_accepts_table() -> None:
     )
 
 
+def test_recipe_rejects_task_dispatch_in_target() -> None:
+    with pytest.raises(ValueError, match=r"not supported.*Recipe.target"):
+        sp.Recipe(target=sp.TaskDispatch(regression=sp.Identity()))
+
+
 @withCUDA
 def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     recipe = TabICLv2.default_recipe()
@@ -111,7 +116,7 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     assert torch.isfinite(model_features.numerical).all()
 
     assert model_target.numerical.device == device
-    assert isinstance(recipe.target, InvertibleMixin)
+    assert isinstance(recipe.target, sp.InvertibleMixin)
     restored = recipe.target.inverse_transform(model_target)
     torch.testing.assert_close(restored.numerical, target.numerical)
 

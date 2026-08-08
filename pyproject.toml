@@ -51,10 +51,14 @@ test = [
     "pytest",
     "pytest-cov",
     "pandas",
+    "cudf-cu13>=26.8; sys_platform == 'linux'",
+    "pyg-lib; sys_platform == 'linux'",
+    "pylibcugraph-cu13>=26.8; sys_platform == 'linux'",
     "sentence-transformers>=5.4",
 ]
 doc = [
     "myst-parser",
+    "pandas",
     "shibuya",
     "sphinx",
     "sphinx-copybutton",
@@ -74,6 +78,19 @@ fallback_version = "0.1.0.dev0"
 [tool.uv]
 package = true
 exclude-newer = "7 days"
+
+[tool.uv.exclude-newer-package]
+cudf-cu13 = false
+libcudf-cu13 = false
+libcugraph-cu13 = false
+libcuvs-cu13 = false
+libkvikio-cu13 = false
+libraft-cu13 = false
+librmm-cu13 = false
+pylibcudf-cu13 = false
+pylibcugraph-cu13 = false
+pylibraft-cu13 = false
+rmm-cu13 = false
 
 [tool.pytest.ini_options]
 addopts = [

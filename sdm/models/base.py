@@ -1,4 +1,5 @@
 import contextlib
+import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from typing import Any, ClassVar, Literal, cast
@@ -9,8 +10,7 @@ from torch import Tensor
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.processing import InvertibleMixin
-from sdm.processing._recipe_execution import _RecipeExecution
+from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
@@ -56,7 +56,7 @@ class ICLModel(torch.nn.Module, ABC):
         self._caches: list[Cache] | None = None
         # One execution for "vectorized" (spanning all estimators), or one
         # per estimator for "sequential".
-        self._recipe_executions: tuple[_RecipeExecution, ...] | None = None
+        self._recipe_executions: tuple[RecipeExecution, ...] | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -132,11 +132,11 @@ class ICLModel(torch.nn.Module, ABC):
             member_counts = (1,) * num_estimators
 
         outs: list[TableTensor] = []
-        execution: _RecipeExecution | None = None
+        execution: RecipeExecution | None = None
         for num_members in member_counts:
+            execution = RecipeExecution(copy.deepcopy(recipe))
             with torch.amp.autocast(x_query.device.type, enabled=False):
-                execution = _RecipeExecution._bind(
-                    recipe=recipe,
+                contexts = execution.fit_transform(
                     x=x_context,
                     y=y_context,
                     related_tables=related_context_tables,
@@ -149,7 +149,7 @@ class ICLModel(torch.nn.Module, ABC):
                 )
 
             member_outs: list[TableTensor] = []
-            for context, query in zip(execution.contexts, queries):
+            for context, query in zip(contexts, queries):
                 self._validate_context(
                     x=context.x,
                     y=context.y,
@@ -178,10 +178,7 @@ class ICLModel(torch.nn.Module, ABC):
                 member_outs.append(out)
 
             # Regression: invert target before stacking estimator outputs.
-            is_regression = execution.contexts[0].y.categorical.size(-1) == 0
-            if is_regression:
-                if not isinstance(execution.recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
+            if contexts[0].y.numerical.size(-1) > 0:
                 with torch.amp.autocast(x_query.device.type, enabled=False):
                     member_outs = list(
                         execution.inverse_transform_target(member_outs)
@@ -247,12 +244,12 @@ class ICLModel(torch.nn.Module, ABC):
             assert recipe_execution == "sequential"
             member_counts = (1,) * num_estimators
 
-        executions: list[_RecipeExecution] = []
         caches: list[Cache] = []
+        executions: list[RecipeExecution] = []
         for num_members in member_counts:
+            execution = RecipeExecution(copy.deepcopy(recipe))
             with torch.amp.autocast(x.device.type, enabled=False):
-                execution = _RecipeExecution._bind(
-                    recipe=recipe,
+                contexts = execution.fit_transform(
                     x=x,
                     y=y,
                     related_tables=related_tables,
@@ -261,7 +258,7 @@ class ICLModel(torch.nn.Module, ABC):
                 )
             executions.append(execution)
 
-            for context in execution.contexts:
+            for context in contexts:
                 self._validate_context(
                     x=context.x,
                     y=context.y,
@@ -346,7 +343,7 @@ class ICLModel(torch.nn.Module, ABC):
         assert self._recipe_executions is not None
 
         outs: list[TableTensor] = []
-        execution: _RecipeExecution | None = None
+        execution: RecipeExecution | None = None
         cache_index = 0
         for execution in self._recipe_executions:
             with torch.amp.autocast(x.device.type, enabled=False):
@@ -384,11 +381,8 @@ class ICLModel(torch.nn.Module, ABC):
                 out = cast(TableTensor, out.to(query.x.dtype))
                 member_outs.append(out)
 
-            # classes is None for regression (see fit()).
-            is_regression = self._caches[cache_index - 1]["classes"] is None
-            if is_regression:
-                if not isinstance(execution.recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
+            # Regression: invert target before stacking estimator outputs.
+            if self._caches[cache_index - 1]["classes"] is None:
                 with torch.amp.autocast(x.device.type, enabled=False):
                     member_outs = list(
                         execution.inverse_transform_target(member_outs)
@@ -396,7 +390,6 @@ class ICLModel(torch.nn.Module, ABC):
             outs.extend(member_outs)
 
         assert execution is not None
-        assert cache_index == len(self._caches)
         with torch.amp.autocast(x.device.type, enabled=False):
             return execution.transform_output(outs)
 

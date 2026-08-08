@@ -35,3 +35,11 @@ class Softmax(Processor):
             dim=-1,
         )
         return table.replace_blocks(numerical=numerical)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.temperature == 1.0:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"temperature={self.temperature})"
+        )
