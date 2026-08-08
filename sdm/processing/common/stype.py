@@ -222,12 +222,13 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     def __repr__(self, *, indent: int = 0) -> str:
         if len(self.processors) == 0:
             return super().__repr__(indent=indent)
+
         reprs = []
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
             processor_repr = processor.__repr__(indent=indent + 2)
             processor_repr = processor_repr[indent + 2 :]
-            reprs.append(f"{' ' * (indent + 2)}{stype}: {processor_repr}")
+            reprs.append(f"{' ' * (indent + 2)}{stype}={processor_repr}")
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n"
             + ",\n".join(reprs)

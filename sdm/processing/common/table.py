@@ -103,7 +103,7 @@ class TableDispatch(EnsembleProcessor):
             processor = cast(Processor, processor)
             processor_repr = processor.__repr__(indent=indent + 2)
             processor_repr = processor_repr[indent + 2 :]
-            reprs.append(f"{' ' * (indent + 2)}{route}: {processor_repr}")
+            reprs.append(f"{' ' * (indent + 2)}{route}={processor_repr}")
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n"
             + ",\n".join(reprs)

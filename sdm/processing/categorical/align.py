@@ -500,6 +500,8 @@ class AlignCategories(EnsembleProcessor):
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
+        if self.sort_by == "code":
+            return super().__repr__(indent=indent)
         return (
             f"{' ' * indent}{self.__class__.__name__}("
             f"sort_by={self.sort_by!r}"
