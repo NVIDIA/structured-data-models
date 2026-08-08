@@ -38,7 +38,7 @@ jobs:
             });
             return pull.labels.some(({ name }) => name === 'ci-full-test');
 
-  pytest-gpu:
+  pytest:
     needs: trigger
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
     timeout-minutes: 20
@@ -109,7 +109,7 @@ jobs:
         run: |
           pytest -m cuda -rs --durations=25
 
-  example-gpu:
+  example:
     needs: trigger
     if: needs.trigger.outputs.full_test == 'true'
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
