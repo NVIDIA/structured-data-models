@@ -8,10 +8,7 @@ import sdm.processing as sp
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
-from sdm.processing import (
-    InvertibleMixin,
-    Processor,
-)
+from sdm.processing import InvertibleMixin, Processor
 
 
 @dataclass
@@ -302,6 +299,26 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
     torch.testing.assert_close(
         model.calls[-1].related_query_tables.tables["users"].numerical,
         torch.tensor([[3.0]]),
+    )
+
+
+def test_task_dispatch() -> None:
+    model = _RecordingModel()
+    recipe = sp.Recipe(
+        features=sp.TaskDispatch(regression=sp.Standardize()),
+        output=sp.TaskDispatch(regression=sp.Identity()),
+    )
+
+    output = model(
+        x_context=torch.tensor([[0.0], [2.0]]),
+        y_context=torch.tensor([[0.0], [1.0]]),
+        x_query=torch.tensor([[3.0]]),
+        recipe=recipe,
+    )
+
+    torch.testing.assert_close(
+        output.numerical,
+        torch.tensor([[[2.0]]]),
     )
 
 

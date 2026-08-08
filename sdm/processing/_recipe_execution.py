@@ -70,6 +70,32 @@ class _RecipeExecution:
             generator=generator,
         )
 
+        task_dispatchers = tuple(
+            module
+            for processor in (recipe.features, recipe.output)
+            for module in processor.modules()
+            if isinstance(module, sp.TaskDispatch)
+        )
+        if len(task_dispatchers) > 0:
+            # Check total width because a target may contain multiple stypes.
+            if any(group.size(-1) != 1 for group in y_ensemble):
+                raise ValueError(
+                    "Expected the transformed target to contain exactly one "
+                    "column"
+                )
+
+            if all(group.numerical.size(-1) == 1 for group in y_ensemble):
+                task = "regression"
+            elif all(group.categorical.size(-1) == 1 for group in y_ensemble):
+                task = "classification"
+            else:
+                raise ValueError(
+                    "'Recipe.target' must resolve to a single task type"
+                )
+
+            for task_dispatcher in task_dispatchers:
+                task_dispatcher._task = task
+
         related_processors: Mapping[str, EnsembleProcessor] = {}
         related_ensembles: Mapping[str, EnsembleTable] = {}
         if related_tables is not None:

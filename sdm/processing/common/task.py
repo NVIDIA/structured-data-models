@@ -11,6 +11,8 @@ from sdm.tensor import EnsembleTable
 class TaskDispatch(EnsembleProcessor):
     """Apply separate processors based on the semantic type of the target.
 
+    :class:`TaskDispatch` is resolved only during model execution.
+
     Args:
         classification: Processor selected for a categorical target.
         regression: Processor selected for a numerical target.
@@ -48,8 +50,8 @@ class TaskDispatch(EnsembleProcessor):
     ) -> None:
         if self._task is None:
             raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; call "
-                "'recipe.target.fit()' before transforming model output."
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
             )
         if self._task in self.processors:
             self.processors[self._task].fit_ensemble(
@@ -65,8 +67,8 @@ class TaskDispatch(EnsembleProcessor):
     ) -> EnsembleTable:
         if self._task is None:
             raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; call "
-                "'recipe.target.fit()' before transforming model output."
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
             )
         if self._task not in self.processors:
             return ensemble_table
@@ -81,8 +83,8 @@ class TaskDispatch(EnsembleProcessor):
     ) -> EnsembleTable:
         if self._task is None:
             raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; call "
-                "'recipe.target.fit()' before transforming model output."
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
             )
         if self._task not in self.processors:
             return ensemble_table
