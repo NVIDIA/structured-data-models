@@ -7,11 +7,9 @@ from typing import cast
 
 import torch
 
+import sdm.processing as sp
 from sdm import Recipe, RelatedTables, TableTensor
-from sdm.processing import (
-    EnsembleInvertibleMixin,
-    EnsembleProcessor,
-)
+from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
 
@@ -78,11 +76,18 @@ class _RecipeExecution:
             related_processors = {}
             for name, table in related_tables.tables.items():
                 processor = copy.deepcopy(recipe.features)
+                for module in processor.modules():
+                    if isinstance(module, sp.TableDispatch):
+                        module._route = "related"
                 related_processors[name] = processor
                 related_ensembles[name] = processor.fit_transform_ensemble(
                     EnsembleTable(table, num_members=num_members),
                     generator=generator,
                 )
+
+        for module in recipe.features.modules():
+            if isinstance(module, sp.TableDispatch):
+                module._route = "task"
 
         x_ensemble = recipe.features.fit_transform_ensemble(
             EnsembleTable(x, num_members=num_members),
