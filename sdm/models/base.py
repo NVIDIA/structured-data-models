@@ -237,7 +237,7 @@ class ICLModel(torch.nn.Module, ABC):
             y = TableTensor.from_tensor(y)
 
         recipe = self.default_recipe() if recipe is None else recipe
-        pin_caches = x.device.type == "cuda" and num_estimators > 1
+        pin_cache = x.device.type == "cuda" and num_estimators > 1
 
         self.clear()
 
@@ -294,7 +294,7 @@ class ICLModel(torch.nn.Module, ABC):
                 )
                 if num_estimators > 1:
                     cache = cache.cpu()
-                    if pin_caches:
+                    if pin_cache:
                         cache = cache.pin_memory()
                 cache = cache.freeze()
                 caches.append(cache)

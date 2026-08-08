@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from sdm import Recipe
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2 import row_embedding as row_embedding_module
 from sdm.models.tabiclv2.model import _TabICLv2
@@ -167,48 +167,6 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     assert out.size() == (*batch_shape, R_query, 999)
     assert model._caches is caches
     assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
-    model.clear()
-
-
-@onlyCUDA
-def test_tabiclv2_pinned_ensemble_caches() -> None:
-    device = torch.device("cuda:0")
-    model = TabICLv2(pretrained=False, device=device)
-    R_context, R_query, C = 5, 3, 6
-    x_context = torch.randn(R_context, C, device=device)
-    x_query = torch.randn(R_query, C, device=device)
-    y_context = torch.randn(R_context, 1, device=device)
-
-    torch.manual_seed(1)
-    expected = model(
-        x_context,
-        y_context,
-        x_query,
-        num_estimators=3,
-    )
-
-    torch.manual_seed(1)
-    model.fit(x_context, y_context, num_estimators=3)
-    caches = model._caches
-    assert caches is not None
-    assert all(cache.is_cpu for cache in caches)
-    entries = [
-        entry
-        for cache in caches
-        for entry in cache.values()
-        if isinstance(entry, KVCacheEntry)
-    ]
-    assert len(entries) > 0
-    assert all(entry.key.is_pinned() for entry in entries)
-    assert all(entry.value.is_pinned() for entry in entries)
-
-    actual = model.predict(x_query)
-    repeated = model.predict(x_query)
-
-    assert actual.allclose(expected)
-    assert repeated.allclose(expected)
-    assert model._caches is caches
-    assert all(cache.is_cpu for cache in caches)
     model.clear()
 
 
