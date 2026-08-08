@@ -1,12 +1,15 @@
+import sdm
 import sdm.processing as sp
-from sdm.models.tabiclv2.recipe import default_recipe as tabiclv2_recipe
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
-    datetime_processor = sp.TableDispatch(
-        related=sp.StypeDispatch(
-            datetime=sp.AddCalendarFields(
-                fields=("minute", "hour", "weekday", "day_of_month", "month"),
+    # Add calendar features to related tables:
+    return sdm.models.TabICLv2.default_recipe().prepend_features(
+        sp.TableDispatch(
+            related=sp.StypeDispatch(
+                datetime=sp.AddCalendarFields(
+                    ("minute", "hour", "weekday", "day_of_month", "month"),
+                ),
             ),
-        ),
+        )
     )
