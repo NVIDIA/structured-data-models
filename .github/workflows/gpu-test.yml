@@ -19,6 +19,8 @@ jobs:
   pytest-gpu:
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
     timeout-minutes: 20
+    outputs:
+      full_test: ${{ steps.ci-full-test-label.outputs.result }}
 
     steps:
       - uses: actions/checkout@v7
@@ -99,3 +101,76 @@ jobs:
           FULL_TEST: ${{ (github.ref_name == 'main' || steps.ci-full-test-label.outputs.result == 'true') && '1' || '0' }}
         run: |
           pytest -m cuda -rs --durations=25
+
+  example-gpu:
+    needs: pytest-gpu
+    if: github.event_name == 'workflow_dispatch' || github.ref_name == 'main' || needs.pytest-gpu.outputs.full_test == 'true'
+    runs-on: linux-amd64-gpu-rtxpro6000-latest-1
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up proxy cache
+        uses: nv-gha-runners/setup-proxy-cache@main
+        continue-on-error: true
+
+      - name: Cache RelBench dataset
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: /home/runner/.cache/relbench
+          key: relbench-${{ runner.os }}-${{ runner.arch }}-rel-f1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          python-version: '3.12'
+          activate-environment: true
+
+      - name: Route uv through the proxy cache
+        run: |
+          if [ -n "${PIP_INDEX_URL:-}" ]; then
+            echo "UV_DEFAULT_INDEX=${PIP_INDEX_URL}" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Install package
+        run: |
+          RAPIDS_INDEX_URL="${NV_GHA_RUNNERS_PYPI_ANACONDA_CACHE_URL:-https://pypi.nvidia.com}"
+          uv pip install \
+            --torch-backend=cu130 \
+            --extra-index-url="${RAPIDS_INDEX_URL}" \
+            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
+            --index-strategy=unsafe-best-match \
+            . \
+            'autogluon.common@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common' \
+            'autogluon.core@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core' \
+            'autogluon.features@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=features' \
+            'autogluon.tabular@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=tabular' \
+            'bencheval@git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/bencheval' \
+            'cudf-cu13>=26.6,<26.8' \
+            'pandas<3' \
+            pyg-lib \
+            'pylibcugraph-cu13>=26.6,<26.8' \
+            relbench \
+            scikit-learn \
+            'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena' \
+            torchmetrics \
+            tqdm
+
+      - name: GPU sanity check
+        run: |
+          nvidia-smi
+          python -c 'import torch; assert torch.cuda.is_available(), "CUDA not available to torch"'
+
+      - name: Run examples
+        timeout-minutes: 10
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python examples/tabiclv2/quickstart.py
+          python examples/tabiclv2/strable/main.py --text-processor tfidf
+          python examples/kumorfm/rel_bench.py --dataset rel-f1 --task driver-position
+          python examples/tabiclv2/tabarena/main.py --dataset blood-transfusion-service-center
+          python examples/tabiclv2/tabarena/evaluate.py
