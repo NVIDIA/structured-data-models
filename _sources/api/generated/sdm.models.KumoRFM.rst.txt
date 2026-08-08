@@ -30,8 +30,8 @@ Default Recipe
    Recipe(
      features=Sequential(
        TableDispatch(
-         related: StypeDispatch(
-           datetime: AddCalendarFields([
+         related=StypeDispatch(
+           datetime=AddCalendarFields([
              'minute',
              'hour',
              'weekday',
@@ -41,39 +41,40 @@ Default Recipe
          ),
        ),
        StypeDispatch(
-         categorical: Sequential(
+         categorical=Sequential(
            AlignCategories(sort_by='value'),
            ToNumerical(),
          ),
        ),
        StypeDispatch(
-         numerical: Sequential(
+         numerical=Sequential(
            ImputeMean(),
            DropConstantColumns(),
            Standardize(),
-           Clip(min_value=-100.0, max_value=100.0),
+           Clip(-100.0, 100.0),
            Choice(
              Identity(),
              PowerTransform(),
+             method='round_robin',
            ),
-           ClipSigma(),
-           ShuffleColumns(),
+           ClipSigma(threshold=4.0),
+           ShuffleColumns(method='shift'),
          ),
        ),
      ),
      target=Sequential(
        StypeDispatch(
-         numerical: Standardize(),
-         categorical: Sequential(
-           AlignCategories(sort_by='code'),
-           ShuffleCategories(),
+         numerical=Standardize(),
+         categorical=Sequential(
+           AlignCategories(),
+           ShuffleCategories(method='shift'),
          ),
        ),
      ),
      output=Sequential(
        ReduceEstimators(method='mean'),
        TaskDispatch(
-         classification: Softmax(),
+         classification=Softmax(temperature=0.9),
        ),
      ),
    )
