@@ -6,14 +6,12 @@ from typing import Literal, Self
 
 import torch
 
+import sdm.processing as sp
 from sdm import Stype
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
-    Identity,
     Processor,
-    TableDispatch,
-    TaskDispatch,
 )
 from sdm.tensor import EnsembleTable
 
@@ -26,7 +24,7 @@ class _TaskResolver(EnsembleProcessor, EnsembleInvertibleMixin):
     def __init__(
         self,
         processor: EnsembleProcessor,
-        task_dispatchers: tuple[TaskDispatch, ...],
+        task_dispatchers: tuple[sp.TaskDispatch, ...],
     ) -> None:
         super().__init__()
         self.processor = processor
@@ -158,22 +156,24 @@ class Recipe:
     ) -> None:
 
         self.features = EnsembleProcessor.as_processor(
-            Identity() if features is None else features
+            sp.Identity() if features is None else features
         )
         self.target = EnsembleProcessor.as_processor(
-            Identity() if target is None else target
+            sp.Identity() if target is None else target
         )
         self.output = EnsembleProcessor.as_processor(
-            Identity() if output is None else output
+            sp.Identity() if output is None else output
         )
 
         self._validate_target()
         self._validate_output()
 
         task_dispatchers = tuple(
-            m for m in self.features.modules() if isinstance(m, TaskDispatch)
+            m
+            for m in self.features.modules()
+            if isinstance(m, sp.TaskDispatch)
         ) + tuple(
-            m for m in self.output.modules() if isinstance(m, TaskDispatch)
+            m for m in self.output.modules() if isinstance(m, sp.TaskDispatch)
         )
         if len(task_dispatchers) > 0:
             self.target = _TaskResolver(self.target, task_dispatchers)
@@ -213,12 +213,20 @@ class Recipe:
         return self
 
     def _validate_target(self) -> None:
-        if any(isinstance(m, TaskDispatch) for m in self.target.modules()):
+        if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
             raise ValueError(
                 "'TaskDispatch' is not supported in 'Recipe.target'"
             )
+        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+            raise ValueError(
+                "'TableDispatch' is not supported in 'Recipe.target'"
+            )
 
     def _validate_output(self) -> None:
+        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+            raise ValueError(
+                "'TableDispatch' is not supported in 'Recipe.output'"
+            )
         if self.output.requires_fit:
             raise ValueError("'Recipe.output' should not require fitting")
 
