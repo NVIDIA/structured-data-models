@@ -1,0 +1,8 @@
+﻿TableDispatch
+=============
+
+.. currentmodule:: sdm.processing.common
+
+.. autoclass:: TableDispatch
+   :members:
+   :show-inheritance:
