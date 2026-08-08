@@ -302,7 +302,7 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
     )
 
 
-def test_task_dispatch_resolves_during_recipe_execution() -> None:
+def test_task_dispatch() -> None:
     model = _RecordingModel()
     recipe = sp.Recipe(
         features=sp.TaskDispatch(regression=sp.Standardize()),
