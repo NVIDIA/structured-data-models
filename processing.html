@@ -281,6 +281,10 @@ transformations applied to features, targets, and outputs:</p>
 </section>
 <section id="ensembling">
 <h2>Ensembling<a class="headerlink" href="#ensembling" title="Link to this heading">#</a></h2>
+<p>A model can run several ensemble members over the same task.
+Most preprocessing steps do not need to distinguish those members: imputing a mean, standardizing a column, or converting categories to numbers often produces the same transformed table for every estimator.
+Other steps intentionally create member-specific views to add variance to the input data, such as drawing a different column permutation, choosing a different numerical transform, or shuffling categorical values.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">structured-data-models</span></code> package takes advantage of this to avoid duplicating work: common transformations can run once over shared member groups, while only estimator-specific variations split the ensemble into a tree of member views as the <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> is applied.</p>
 <figure class="light-only align-default">
 <a class="reference internal image-reference" href="_images/ensemble_light.svg"><img alt="_images/ensemble_light.svg" src="_images/ensemble_light.svg" style="width: 100%;" />
 </a>
@@ -289,6 +293,18 @@ transformations applied to features, targets, and outputs:</p>
 <a class="reference internal image-reference" href="_images/ensemble_dark.svg"><img alt="_images/ensemble_dark.svg" src="_images/ensemble_dark.svg" style="width: 100%;" />
 </a>
 </figure>
+<p>This shared-by-default, split-when-needed behavior is captured by <a class="reference internal" href="api/generated/sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>.
+An <a class="reference internal" href="api/generated/sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a> is a regular <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> that operates on an <a class="reference internal" href="api/generated/sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a>, allowing a processing step to split ensemble members into separate groups when their transformed views diverge.
+This lets a <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> stay shared by default and branch only at steps that actually introduce member-specific behavior.</p>
+<p>The underlying <a class="reference internal" href="api/generated/sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a> stores members by layout rather than by estimator.
+Members that see the same table share storage, while compatible member tables are stacked into one leading dimension of a single <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>.
+Regular processors can therefore operate on whole groups, leveraging PyTorch vectorization and GPU parallelism, and only fall back to separate groups when storage layout diverges.</p>
+<p>In short, a plain <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> describes a transformation for one table or one group, and an <a class="reference internal" href="api/generated/sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a> describes a transformation over the collection of estimator views.
+Most <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> steps therefore remain ordinary processors.</p>
+<p>For most users, ensemble processing is an internal (but cool) detail of model execution.
+Recipes can be composed from ordinary processors, and the <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> execution handles ensemble grouping, sharing, and branching when a model runs with multiple estimators.
+You only need to reason about <a class="reference internal" href="api/generated/sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a> directly when writing a processor whose behavior can change table layout.
+Examples of those include <a class="reference internal" href="api/generated/sdm.processing.common.Choice.html#sdm.processing.common.Choice" title="sdm.processing.common.Choice"><code class="xref py py-class docutils literal notranslate"><span class="pre">Choice</span></code></a>, <a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a>, and <a class="reference internal" href="api/generated/sdm.processing.categorical.ShuffleCategories.html#sdm.processing.categorical.ShuffleCategories" title="sdm.processing.categorical.ShuffleCategories"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleCategories</span></code></a>.</p>
 </section>
 </section>
 
@@ -316,7 +332,7 @@ transformations applied to features, targets, and outputs:</p>
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=74c177e3"></script>
+      <script src="_static/documentation_options.js?v=cf624d44"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
