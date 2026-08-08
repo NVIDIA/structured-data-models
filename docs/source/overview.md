@@ -1,4 +1,4 @@
-# Quick Tour
+# Overview
 
 `structured-data-models` is a GPU-native library of foundation models,
 tensor subclasses, and data processors for structured data.
@@ -12,8 +12,6 @@ In particular, this library provides:
 - [**Tensor semantics**](tensor): PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - [**Data processing**](processing): Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
-Together, these layers provide a common foundation for building, studying, and serving structured data models.
-
 ```{figure} images/pipeline_light.svg
 :figclass: light-only
 :width: 100%
@@ -23,6 +21,8 @@ Together, these layers provide a common foundation for building, studying, and s
 :figclass: dark-only
 :width: 100%
 ```
+
+Together, these layers provide a common foundation for building, studying, and serving structured data models.
 
 ## Quick Tour
 
