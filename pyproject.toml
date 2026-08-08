@@ -52,7 +52,7 @@ test = [
     "pytest-cov",
     "pandas",
     "cudf-cu13>=26.8; sys_platform == 'linux'",
-    "pyg-lib",
+    "pyg-lib; sys_platform == 'linux'",
     "pylibcugraph-cu13>=26.8; sys_platform == 'linux'",
     "sentence-transformers>=5.4",
 ]

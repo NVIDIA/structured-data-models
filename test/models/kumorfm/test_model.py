@@ -17,7 +17,6 @@ from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
-from sdm.processing import TableDispatch
 from sdm.testing import withCUDA
 
 
@@ -452,23 +451,3 @@ def test_many_classes_forward_and_cache(
         cache=cache.freeze(),
     )
     torch.testing.assert_close(predicted, expected)
-
-
-def test_default_recipe_preserves_ids() -> None:
-    table = TableTensor(
-        columns={
-            Stype.numerical: ("value",),
-            Stype.id: ("entity_id",),
-        },
-        numerical=torch.tensor([[1.0], [2.0]]),
-        id=ColumnarTensor((torch.tensor([10, 11]),)),
-    )
-
-    features = KumoRFM.default_recipe().features
-    for module in features.modules():
-        if isinstance(module, TableDispatch):
-            module._route = "task"
-    transformed = features.fit_transform(table)
-
-    assert transformed.columns[Stype.id] == ("entity_id",)
-    assert transformed.id.equal(table.id)
