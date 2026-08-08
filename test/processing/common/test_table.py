@@ -3,7 +3,7 @@ import torch
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.processing import Processor, TableDispatch
-from sdm.processing._recipe_execution import _RecipeExecution
+from sdm.processing.execution import RecipeExecution
 
 
 class _Add(Processor):
@@ -21,8 +21,9 @@ class _Add(Processor):
 def test_table_dispatch() -> None:
     x = TableTensor.from_tensor(torch.zeros(4, 1))
 
-    execution = _RecipeExecution._bind(
-        recipe=Recipe(features=TableDispatch(task=_Add(1), related=_Add(2))),
+    recipe = Recipe(features=TableDispatch(task=_Add(1), related=_Add(2)))
+    execution = RecipeExecution(recipe)
+    (context,) = execution.fit_transform(
         x=x,
         y=x,
         related_tables=RelatedTables(
@@ -33,8 +34,6 @@ def test_table_dispatch() -> None:
         num_members=1,
         generator=None,
     )
-
-    (context,) = execution.contexts
     assert context.x.numerical.equal(x.numerical + 1)
     assert context.related_tables is not None
     assert context.related_tables.tables["x"].numerical.equal(x.numerical + 2)
