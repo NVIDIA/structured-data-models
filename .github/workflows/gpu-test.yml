@@ -16,30 +16,37 @@ permissions:
   pull-requests: read
 
 jobs:
-  pytest-gpu:
-    runs-on: linux-amd64-gpu-rtxpro6000-latest-1
-    timeout-minutes: 20
+  gate:
+    runs-on: ubuntu-latest
     outputs:
-      full_test: ${{ steps.ci-full-test-label.outputs.result }}
+      full_test: ${{ steps.check.outputs.result }}
 
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
       - name: Check for ci-full-test label
-        id: ci-full-test-label
-        if: startsWith(github.ref_name, 'pull-request/')
+        id: check
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         with:
           result-encoding: string
           script: |
+            if (!context.ref.startsWith('refs/heads/pull-request/')) {
+              return true;
+            }
             const pullNumber = Number(context.ref.split('/').at(-1));
             const { data: pull } = await github.rest.pulls.get({
               ...context.repo,
               pull_number: pullNumber,
             });
             return pull.labels.some(({ name }) => name === 'ci-full-test');
+
+  pytest-gpu:
+    needs: gate
+    runs-on: linux-amd64-gpu-rtxpro6000-latest-1
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up proxy cache
         uses: nv-gha-runners/setup-proxy-cache@main
@@ -98,13 +105,13 @@ jobs:
 
       - name: Run tests
         env:
-          FULL_TEST: ${{ (github.ref_name == 'main' || steps.ci-full-test-label.outputs.result == 'true') && '1' || '0' }}
+          FULL_TEST: ${{ needs.gate.outputs.full_test == 'true' && '1' || '0' }}
         run: |
           pytest -m cuda -rs --durations=25
 
   example-gpu:
-    needs: pytest-gpu
-    if: github.event_name == 'workflow_dispatch' || github.ref_name == 'main' || needs.pytest-gpu.outputs.full_test == 'true'
+    needs: gate
+    if: needs.gate.outputs.full_test == 'true'
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
     timeout-minutes: 20
 
