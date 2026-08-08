@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en" data-accent-color="green" data-content_root="./">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Overview - Structured Data Models</title><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Table Semantics" href="tensor.html" /><link rel="prev" title="Installation" href="install.html" /><script>
+    function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
+    setColorMode(localStorage._theme||"auto");
+  </script><link rel="stylesheet" type="text/css" href="_static/pygments.css?v=e1a1ceaf" />
+    <link rel="stylesheet" type="text/css" href="_static/shibuya.css?v=2ceb65ce" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link media="print" rel="stylesheet" type="text/css" href="_static/print.css?v=20ff2c19" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=e511c7ca" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sy-f-text: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+  --sy-f-heading: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+}
+</style>
+    
+  <meta property="og:type" content="website"/><meta property="og:title" content="Overview"/>
+    <meta name="twitter:card" content="summary"/>
+  </head>
+<body><div class="sy-head">
+  <div class="sy-head-blur"></div>
+  <div class="sy-head-inner sy-container mx-auto">
+    <a class="sy-head-brand" href="index.html">
+      <img class="light-logo" src="_static/nvidia.svg" alt="Structured Data Models" height="28" loading="lazy" />
+      <img class="dark-logo" src="_static/nvidia.svg" alt="Structured Data Models" height="28" loading="lazy" />
+      <strong>Structured Data Models</strong>
+    </a>
+    <div class="sy-head-nav" id="head-nav">
+      <nav class="sy-head-links"></nav>
+      <div class="sy-head-extra flex items-center print:hidden"><form class="searchbox flex items-center" action="search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <kbd>/</kbd>
+</form><div class="sy-head-socials">
+  <a href="https://github.com/NVIDIA/structured-data-models" aria-label="GitHub">
+    <iconify-icon icon="simple-icons:github"></iconify-icon>
+  </a></div></div>
+    </div>
+    <div class="sy-head-actions flex items-center shrink-0 print:hidden"><button class="js-theme theme-switch flex items-center"
+data-aria-auto="Switch to light color mode"
+data-aria-light="Switch to dark color mode"
+data-aria-dark="Switch to auto color mode">
+<i class="i-lucide theme-icon"></i>
+</button><button class="md:hidden flex items-center js-menu" aria-label="Menu" type="button" aria-controls="head-nav" aria-expanded="false">
+        <div class="hamburger">
+          <span class="hamburger_1"></span>
+          <span class="hamburger_2"></span>
+          <span class="hamburger_3"></span>
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
+<div class="sy-page sy-container flex mx-auto">
+  <aside id="lside" class="sy-lside md:w-72 md:shrink-0 print:hidden">
+    <div class="sy-lside-inner md:sticky">
+      <div class="sy-scrollbar p-6">
+        <div class="globaltoc" data-expand-depth="0"><p class="caption" role="heading" aria-level="3"><span class="caption-text">Getting Started</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Overview</a></li>
+</ul>
+<p class="caption" role="heading" aria-level="3"><span class="caption-text">Guides</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tensor.html">Table Semantics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="icl.html">In-Context Learning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="processing.html">Data Processing</a></li>
+</ul>
+<p class="caption" role="heading" aria-level="3"><span class="caption-text">API</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/sdm.html">sdm</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.Stype.html">Stype</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.infer_stypes.html">infer_stypes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/tensor.html">sdm.tensor</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.VarLenTensor.html">VarLenTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.StringTensor.html">StringTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.NullableIntTensor.html">NullableIntTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.CategoricalTensor.html">CategoricalTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.ColumnarTensor.html">ColumnarTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html">TableTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.EnsembleTable.html">EnsembleTable</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/relational.html">sdm.relational</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.Relationship.html">Relationship</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.RelationalData.html">RelationalData</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.TaskLink.html">TaskLink</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.RelatedTables.html">RelatedTables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.RelationalSampler.html">RelationalSampler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.TemporalSamplingConfig.html">TemporalSamplingConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.CuGraphRelationalSampler.html">CuGraphRelationalSampler</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/processing.html">sdm.processing</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.base.Processor.html">Processor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.ensemble.EnsembleProcessor.html">EnsembleProcessor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.ensemble.EnsembleInvertibleMixin.html">EnsembleInvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.ensemble.EnsembleProcessorAdapter.html">EnsembleProcessorAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html">Recipe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Identity.html">Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Callable.html">Callable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Sequential.html">Sequential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.TableDispatch.html">TableDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Choice.html">Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.SelectColumns.html">SelectColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Clip.html">Clip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Standardize.html">Standardize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.PCA.html">PCA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.AlignCategories.html">AlignCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.ShuffleCategories.html">ShuffleCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.text.TFIDF.html">TFIDF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.text.SentenceTransformer.html">SentenceTransformer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.ReduceEstimators.html">ReduceEstimators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.Softmax.html">Softmax</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/nn.html">sdm.nn</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.QASSMax.html">QASSMax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.SDPA.html">SDPA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.RotaryEmbedding.html">RotaryEmbedding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.Attention.html">Attention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.TransformerBlock.html">TransformerBlock</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.InducedTransformerBlock.html">InducedTransformerBlock</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/models.html">sdm.models</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.ICLModel.html">ICLModel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.TabICLv2.html">TabICLv2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoRFM.html">KumoRFM</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/evaluation.html">sdm.evaluation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.evaluation.to_class_indices.html">to_class_indices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.evaluation.to_binary_class.html">to_binary_class</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </div>
+  </aside>
+  <div class="lside-overlay js-menu" role="button" aria-label="Close left sidebar" aria-controls="lside" aria-expanded="false"></div>
+  <aside id="rside" class="sy-rside pb-3 w-64 shrink-0 order-last">
+    <button class="rside-close js-menu xl:hidden" aria-label="Close Table of Contents" type="button" aria-controls="rside" aria-expanded="false">
+      <i class="i-lucide close"></i>
+    </button>
+    <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
+<li><a class="reference internal" href="#quick-tour">Quick Tour</a></li>
+</ul>
+</div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
+  </aside>
+  <div class="rside-overlay js-menu" role="button" aria-label="Close Table of Contents" aria-controls="rside" aria-expanded="false"></div>
+  <main class="sy-main w-full max-sm:max-w-full print:pt-6">
+<div class="sy-breadcrumbs" role="navigation">
+  <div class="sy-breadcrumbs-inner flex items-center">
+    <div class="md:hidden mr-3">
+      <button class="js-menu" aria-label="Menu" type="button" aria-controls="lside" aria-expanded="false">
+        <i class="i-lucide menu"></i>
+      </button>
+    </div>
+    <ol class="flex-1" itemscope itemtype="https://schema.org/BreadcrumbList"><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <a itemprop="item" href="index.html"><span itemprop="name">Structured Data Models</span></a>
+        <span>/</span>
+        <meta itemprop="position" content="1" />
+      </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <strong itemprop="name">Overview</strong>
+        <meta itemprop="position" content="2" />
+      </li></ol>
+    <div class="xl:hidden ml-1">
+      <button class="js-menu" aria-label="Show table of contents" type="button" aria-controls="rside"
+        aria-expanded="false">
+        <i class="i-lucide outdent"></i>
+      </button>
+    </div>
+  </div>
+</div><div class="flex flex-col break-words justify-between">
+      <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
+  <article class="yue" role="main">
+          <section id="overview">
+<h1>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">structured-data-models</span></code> is a GPU-native library of foundation models,
+tensor subclasses, and data processors for structured data.</p>
+<p>Foundation models via in-context learning are becoming a central direction for learning over structured data.
+A foundation model in this domain needs more than the neural network itself: typed data representation, flexible preprocessing pipelines, estimator ensembling, and caching.
+<code class="docutils literal notranslate"><span class="pre">structured-data-models</span></code> keeps these concerns explicit while moving the full modeling workflow into GPU-accelerated PyTorch.
+In particular, this library provides:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="icl.html"><span class="doc std std-doc"><strong>Models</strong></span></a>: Reference implementations of structured data foundation models such as the tabular <a class="reference internal" href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a> and relational <a class="reference internal" href="api/generated/sdm.models.KumoRFM.html#sdm.models.KumoRFM" title="sdm.models.KumoRFM"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoRFM</span></code></a>, built on a unified interface with room for future model families.</p></li>
+<li><p><a class="reference internal" href="tensor.html"><span class="doc std std-doc"><strong>Tensor semantics</strong></span></a>: PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.</p></li>
+<li><p><a class="reference internal" href="processing.html"><span class="doc std std-doc"><strong>Data processing</strong></span></a>: Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.</p></li>
+</ul>
+<figure class="light-only align-default">
+<a class="reference internal image-reference" href="_images/pipeline_light.svg"><img alt="_images/pipeline_light.svg" src="_images/pipeline_light.svg" style="width: 100%;" />
+</a>
+</figure>
+<figure class="dark-only align-default">
+<a class="reference internal image-reference" href="_images/pipeline_dark.svg"><img alt="_images/pipeline_dark.svg" src="_images/pipeline_dark.svg" style="width: 100%;" />
+</a>
+</figure>
+<p>Together, these layers provide a common foundation for building, studying, and serving structured data models.</p>
+<section id="quick-tour">
+<h2>Quick Tour<a class="headerlink" href="#quick-tour" title="Link to this heading">#</a></h2>
+<p>The typical workflow starts by converting a data frame into a <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>.
+Semantic types (<a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype" title="sdm.Stype"><code class="xref py py-class docutils literal notranslate"><span class="pre">Stype</span></code></a>) describe the role of each column, such that the model can distinguish numerical features from categorical, datetime, or text:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">sdm</span>
+</span><span data-line="2">
+</span><span data-line="3"><span class="n">table</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">TableTensor</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span>
+</span><span data-line="4">    <span class="n">df</span><span class="p">,</span>
+</span><span data-line="5">    <span class="n">stypes</span><span class="o">=</span><span class="n">sdm</span><span class="o">.</span><span class="n">infer_stypes</span><span class="p">(</span><span class="n">df</span><span class="p">),</span>
+</span><span data-line="6">    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+</span><span data-line="7"><span class="p">)</span>
+</span></pre></div>
+</div>
+<p>Models then consume these tensor containers through a shared in-context learning interface.
+The same model object supports direct one-shot calls and cached fit/predict execution for efficient context reuse:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">TabICLv2</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+</span><span data-line="2">
+</span><span data-line="3"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
+</span><span data-line="4">    <span class="n">x_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">),</span>
+</span><span data-line="5">    <span class="n">y_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">],</span>
+</span><span data-line="6">    <span class="n">x_query</span><span class="o">=</span><span class="n">table</span><span class="p">[</span><span class="mi">300</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">),</span>
+</span><span data-line="7">    <span class="n">num_estimators</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+</span><span data-line="8"><span class="p">)</span>
+</span><span data-line="9">
+</span><span data-line="10"><span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
+</span><span data-line="11">    <span class="n">x</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">),</span>
+</span><span data-line="12">    <span class="n">y</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">],</span>
+</span><span data-line="13">    <span class="n">num_estimators</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+</span><span data-line="14"><span class="p">)</span>
+</span><span data-line="15"><span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="mi">300</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">))</span>
+</span><span data-line="16"><span class="n">model</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+</span></pre></div>
+</div>
+<p>Preprocessing and postprocessing are defined by an explicit <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a>.
+A <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> denotes how features and targets are transformed before model execution, and how outputs are postprocessed afterwards, making model-specific data handling inspectable, extensible, and replaceable.
+The resulting <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> can be passed to the model’s <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> or <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a> calls:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+</span><span data-line="2">
+</span><span data-line="3"><span class="n">recipe</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">Recipe</span><span class="p">(</span>
+</span><span data-line="4">    <span class="n">features</span><span class="o">=</span><span class="p">[</span>
+</span><span data-line="5">        <span class="n">sp</span><span class="o">.</span><span class="n">StypeDispatch</span><span class="p">(</span>
+</span><span data-line="6">            <span class="n">numerical</span><span class="o">=</span><span class="p">[</span>
+</span><span data-line="7">                <span class="n">sp</span><span class="o">.</span><span class="n">ImputeMean</span><span class="p">(),</span>
+</span><span data-line="8">                <span class="n">sp</span><span class="o">.</span><span class="n">Standardize</span><span class="p">(),</span>
+</span><span data-line="9">            <span class="p">],</span>
+</span><span data-line="10">            <span class="n">categorical</span><span class="o">=</span><span class="p">[</span>
+</span><span data-line="11">                <span class="n">sp</span><span class="o">.</span><span class="n">AlignCategories</span><span class="p">(),</span>
+</span><span data-line="12">            <span class="p">],</span>
+</span><span data-line="13">        <span class="p">),</span>
+</span><span data-line="14">    <span class="p">],</span>
+</span><span data-line="15">    <span class="n">target</span><span class="o">=</span><span class="p">[</span>
+</span><span data-line="16">        <span class="n">sp</span><span class="o">.</span><span class="n">StypeDispatch</span><span class="p">(</span>
+</span><span data-line="17">            <span class="n">categorical</span><span class="o">=</span><span class="p">[</span>
+</span><span data-line="18">                <span class="n">sp</span><span class="o">.</span><span class="n">AlignCategories</span><span class="p">(),</span>
+</span><span data-line="19">                <span class="n">sp</span><span class="o">.</span><span class="n">ShuffleCategories</span><span class="p">(),</span>
+</span><span data-line="20">            <span class="p">],</span>
+</span><span data-line="21">            <span class="n">numerical</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">Standardize</span><span class="p">(),</span>
+</span><span data-line="22">        <span class="p">),</span>
+</span><span data-line="23">    <span class="p">],</span>
+</span><span data-line="24">    <span class="n">output</span><span class="o">=</span><span class="p">[</span>
+</span><span data-line="25">        <span class="n">sp</span><span class="o">.</span><span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">),</span>
+</span><span data-line="26">        <span class="n">sp</span><span class="o">.</span><span class="n">TaskDispatch</span><span class="p">(</span>
+</span><span data-line="27">            <span class="n">classification</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">Softmax</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mf">0.9</span><span class="p">),</span>
+</span><span data-line="28">        <span class="p">),</span>
+</span><span data-line="29">    <span class="p">],</span>
+</span><span data-line="30"><span class="p">)</span>
+</span><span data-line="31">
+</span><span data-line="32"><span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">recipe</span><span class="o">=</span><span class="n">recipe</span><span class="p">)</span>
+</span></pre></div>
+</div>
+<p>Recipes give foundation models a unified way to handle a wide range of semantic column types.
+For example, datetime columns can be expanded into calendar features, and text columns can be embedded via an LLM.
+These components are reusable across model families rather than tied to a single model implementation, and are designed for ensemble-aware, GPU-accelerated execution across the entire processing stack.</p>
+<p>For relational tasks, <a class="reference internal" href="api/generated/sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.RelatedTables"><code class="xref py py-class docutils literal notranslate"><span class="pre">RelatedTables</span></code></a> allows foundation models to attach to surrounding tables and relationships.
+Models that support relational context, such as <a class="reference internal" href="api/generated/sdm.models.KumoRFM.html#sdm.models.KumoRFM" title="sdm.models.KumoRFM"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoRFM</span></code></a>, can process these <a class="reference internal" href="api/generated/sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.RelatedTables"><code class="xref py py-class docutils literal notranslate"><span class="pre">RelatedTables</span></code></a> through the same <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>, <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.predict" title="sdm.models.ICLModel.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a>, <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a>, and <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> interfaces.</p>
+</section>
+</section>
+
+        </article><button class="back-to-top" type="button">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+  </svg>
+  <span>Back to top</span>
+</button><div class="navigation flex print:hidden"><div class="navigation-prev">
+    <a href="install.html">
+      <i class="i-lucide chevron-left"></i>
+      <div class="page-info">
+        <span>Previous</span><div class="title">Installation</div></div>
+    </a>
+  </div><div class="navigation-next">
+    <a href="tensor.html">
+      <div class="page-info">
+        <span>Next</span>
+        <div class="title">Table Semantics</div>
+      </div>
+      <i class="i-lucide chevron-right"></i>
+    </a>
+  </div></div></div>
+    </div>
+  </main>
+</div>
+
+      <script src="_static/documentation_options.js?v=6b281319"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=ccdb6887"></script>
+      <script src="_static/shibuya.js?v=50760d75"></script></body>
+</html>
