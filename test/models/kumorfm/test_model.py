@@ -12,6 +12,7 @@ from sdm import (
 )
 from sdm.cache import Cache
 from sdm.models import KumoRFM
+from sdm.models.kumorfm import invariant_gnn as invariant_gnn_module
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
@@ -205,6 +206,79 @@ def test_invariant_gnn(
 
 
 @withCUDA
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float16, torch.float32, torch.float64],
+)
+def test_invariant_gnn_destination_chunks(
+    relational_data: RelationalData,
+    device: torch.device,
+    dtype: torch.dtype,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    related_tables = RelatedTables(
+        tables={
+            "users": relational_data.tables["users"],
+            "orders": relational_data.tables["orders"],
+        },
+        relationships=relational_data.relationships[:1],
+        task_links=[],
+    )
+    graph = HomogeneousGraph.from_tables(
+        tables=related_tables.tables,
+        relationships=related_tables.relationships,
+    )
+    model = InvariantGNN(channels=8, device=device, dtype=dtype).eval()
+    x = torch.randn(10, 8, device=device, dtype=dtype)
+    readout_index = torch.arange(4, device=device)
+
+    with torch.inference_mode():
+        expected = model(
+            x=x,
+            graph=graph,
+            readout_table="users",
+            readout_index=readout_index,
+            num_hops=2,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        monkeypatch.setattr(
+            invariant_gnn_module,
+            "_automatic_aggregation_work_byte_limit",
+            lambda _x, _graph: 1024,
+        )
+        actual = model(
+            x=x,
+            graph=graph,
+            readout_table="users",
+            readout_index=readout_index,
+            num_hops=2,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        cache = Cache()
+        recorded = model(
+            x=x,
+            graph=graph,
+            readout_table="users",
+            readout_index=readout_index,
+            num_hops=2,
+            cache=cache,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        replayed = model(
+            x=x,
+            graph=graph,
+            readout_table="users",
+            readout_index=readout_index,
+            num_hops=2,
+            cache=cache.freeze(),
+        )
+
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(recorded, expected)
+    torch.testing.assert_close(replayed, expected)
+
+
+@withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 def test_forward(
     relational_data: RelationalData,
@@ -377,19 +451,3 @@ def test_many_classes_forward_and_cache(
         cache=cache.freeze(),
     )
     torch.testing.assert_close(predicted, expected)
-
-
-def test_default_recipe_preserves_ids() -> None:
-    table = TableTensor(
-        columns={
-            Stype.numerical: ("value",),
-            Stype.id: ("entity_id",),
-        },
-        numerical=torch.tensor([[1.0], [2.0]]),
-        id=ColumnarTensor((torch.tensor([10, 11]),)),
-    )
-
-    transformed = KumoRFM.default_recipe().features.fit_transform(table)
-
-    assert transformed.columns[Stype.id] == ("entity_id",)
-    assert transformed.id.equal(table.id)

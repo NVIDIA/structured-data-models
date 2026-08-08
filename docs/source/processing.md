@@ -30,43 +30,45 @@ Each model defines a default recipe that closely mimics pre- and postprocessing 
 Recipes are plain Python objects, so they can be inspected, copied and modified.
 This makes it easy to keep the default model contract while changing one part of the pipeline.
 For example, {py:class}`~sdm.models.TabICLv2` does not consume raw {py:attr}`~sdm.Stype.datetime` columns directly.
-To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, add a {py:attr}`~sdm.Stype.datetime` branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:
+To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, prepend a {py:attr}`~sdm.Stype.datetime` branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:
 
 ```python
-from sdm.models import TabICLv2
-from sdm.processing import AddCalendarFields, StypeDispatch
+import sdm
+import sdm.processing as sp
 
-recipe = TabICLv2.default_recipe()
-recipe.features = StypeDispatch(
-    datetime=AddCalendarFields(
-        fields=("minute", "hour", "weekday", "day_of_month", "month"),
+recipe = sdm.models.TabICLv2.default_recipe().prepend_features(
+    sp.StypeDispatch(
+        datetime=sp.AddCalendarFields(
+            fields=("minute", "hour", "weekday", "day_of_month", "month"),
+        )
     )
-) + recipe.features
+)
 ```
 
 You can also define a recipe from scratch when you want full control over the
 transformations applied to features, targets, and outputs:
 
 ```python
-from sdm.processing import *
+import sdm
+import sdm.processing as sp
 
-recipe = Recipe(
+recipe = sp.Recipe(
     # First impute missing values, then standardize:
-    features=[ImputeMean(), Standardize()],
+    features=[sp.ImputeMean(), sp.Standardize()],
 
-    target=StypeDispatch(
+    target=sp.StypeDispatch(
         # Align and shuffle classes for classification:
         categorical=[
-            AlignCategories(),
-            ShuffleCategories(),
+            sp.AlignCategories(),
+            sp.ShuffleCategories(),
         ],
         # Standardize the targets for regression:
-        numerical=Standardize(),
+        numerical=sp.Standardize(),
     ),
 
-    output=TaskDispatch(
+    output=sp.TaskDispatch(
         # Convert logits to probabilities for classification tasks:
-        classification=Softmax(temperature=0.9),
+        classification=sp.Softmax(temperature=0.9),
     ),
 )
 ```
@@ -74,7 +76,7 @@ recipe = Recipe(
 When a custom recipe is passed to an {py:class}`~sdm.models.ICLModel`, the model applies the feature, target, and output pipelines automatically at the appropriate points in its execution.
 
 ```python
-model = TabICLv2(device="cuda")
+model = sdm.models.TabICLv2(device="cuda")
 model(..., recipe=recipe)
 ```
 

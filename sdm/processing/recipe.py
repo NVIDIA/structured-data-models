@@ -2,13 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Self
 
-from sdm.processing import (
-    EnsembleProcessor,
-    Identity,
-    Processor,
-    TaskDispatch,
-)
+import sdm.processing as sp
+from sdm.processing import EnsembleProcessor, Processor
 
 
 @dataclass(init=False, repr=False)
@@ -62,18 +59,66 @@ class Recipe:
     ) -> None:
 
         self.features = EnsembleProcessor.as_processor(
-            Identity() if features is None else features
+            sp.Identity() if features is None else features
         )
         self.target = EnsembleProcessor.as_processor(
-            Identity() if target is None else target
+            sp.Identity() if target is None else target
         )
         self.output = EnsembleProcessor.as_processor(
-            Identity() if output is None else output
+            sp.Identity() if output is None else output
         )
 
-        if any(isinstance(m, TaskDispatch) for m in self.target.modules()):
+        self._validate_target()
+        self._validate_output()
+
+    def prepend_features(self, processor: object) -> Self:
+        """Prepend a processor to the feature pipeline."""
+        self.features = processor + self.features
+        return self
+
+    def append_features(self, processor: object) -> Self:
+        """Append a processor to the feature pipeline."""
+        self.features = self.features + processor
+        return self
+
+    def prepend_target(self, processor: object) -> Self:
+        """Prepend a processor to the target pipeline."""
+        self.target = processor + self.target
+        self._validate_target()
+        return self
+
+    def append_target(self, processor: object) -> Self:
+        """Append a processor to the target pipeline."""
+        self.target = self.target + processor
+        self._validate_target()
+        return self
+
+    def prepend_output(self, processor: object) -> Self:
+        """Prepend a processor to the output pipeline."""
+        self.output = processor + self.output
+        self._validate_output()
+        return self
+
+    def append_output(self, processor: object) -> Self:
+        """Append a processor to the output pipeline."""
+        self.output = self.output + processor
+        self._validate_output()
+        return self
+
+    def _validate_target(self) -> None:
+        if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
             raise ValueError(
                 "'TaskDispatch' is not supported in 'Recipe.target'"
+            )
+        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+            raise ValueError(
+                "'TableDispatch' is not supported in 'Recipe.target'"
+            )
+
+    def _validate_output(self) -> None:
+        if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
+            raise ValueError(
+                "'TableDispatch' is not supported in 'Recipe.output'"
             )
         if self.output.requires_fit:
             raise ValueError("'Recipe.output' should not require fitting")

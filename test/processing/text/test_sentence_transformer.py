@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from sdm import StringTensor, Stype, TableTensor
-from sdm.processing import EmbedText
+from sdm.processing import SentenceTransformer
 from sdm.testing import withCUDA
 
 
@@ -23,7 +23,7 @@ def test_forward(device: torch.device) -> None:
         ),
     )
 
-    output = EmbedText(
+    output = SentenceTransformer(
         "sentence-transformers-testing/stsb-bert-tiny-safetensors"
     ).to(device)(table)
 
