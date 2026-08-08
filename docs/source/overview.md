@@ -40,7 +40,8 @@ table = sdm.TableTensor.from_pandas(
 ```
 
 Models then consume these tensor containers through a shared in-context learning interface.
-The same model object supports direct one-shot calls and cached fit/predict execution for efficient context reuse:
+Available model implementations are listed in [`sdm.models`](api/models).
+Each model supports direct one-shot {py:meth}`~sdm.models.ICLModel.forward` calls and cached {py:meth}`~sdm.models.ICLModel.fit`/{py:meth}`~sdm.models.ICLModel.predict` execution for efficient context reuse:
 
 ```python
 model = sdm.models.TabICLv2(device="cuda")

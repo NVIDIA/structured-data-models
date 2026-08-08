@@ -1,16 +1,25 @@
+# ruff: noqa: D205
+
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
+import pyarrow.compute as pc
 import torch
 from torch import Tensor
 
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import Processor
 
+if TYPE_CHECKING:
+    import sentence_transformers
+
 
 class _ModuleReference(torch.nn.Module):
-    def __init__(self, module: torch.nn.Module) -> None:
+    def __init__(
+        self,
+        module: sentence_transformers.SentenceTransformer,
+    ) -> None:
         super().__init__()
         self.module = module
 
@@ -19,14 +28,21 @@ class _ModuleReference(torch.nn.Module):
 
 
 class SentenceTransformer(Processor):
-    r"""Transform text columns with a Sentence Transformers model.
+    r"""Transform text columns with a
+    :class:`sentence_transformers.SentenceTransformer
+    <sentence_transformers.sentence_transformer.model.SentenceTransformer>`
+    model.
 
     Args:
         model_name: Model name or local path passed to
-            :class:`sentence_transformers.sentence_transformer.model.SentenceTransformer`.
+            :class:`sentence_transformers.SentenceTransformer
+            <sentence_transformers.sentence_transformer.model.SentenceTransformer>`.
         batch_size: Batch size passed to
-            :meth:`~sentence_transformers.sentence_transformer.model.SentenceTransformer.encode`.
-            If ``None``, use the model default.
+            :meth:`sentence_transformers.SentenceTransformer.encode()
+            <sentence_transformers.sentence_transformer.model.SentenceTransformer.encode>`.
+            Adjusting the batch size can significantly improve processing
+            speed. The optimal value depends on your hardware, model size,
+            precision, and input length.
     """
 
     requires_fit = False
@@ -36,66 +52,61 @@ class SentenceTransformer(Processor):
         self,
         model_name: str,
         *,
-        batch_size: int | None = None,
+        batch_size: int = 32,
     ) -> None:
         super().__init__()
         import sentence_transformers  # noqa: PLC0415
 
         self.batch_size = batch_size
         model = sentence_transformers.SentenceTransformer(model_name)
-        self._model = _ModuleReference(model)
         embedding_dim = model.get_embedding_dimension()
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim
+        self._model = _ModuleReference(model)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         columns = table.columns[Stype.text]
         batch_shape = table.text.shape[:-1]
         output_columns = tuple(
-            f"{column}_{index}"
+            f"{column}__emb{i}"
             for column in columns
-            for index in range(self._embedding_dim)
+            for i in range(self._embedding_dim)
         )
 
         if table.text.numel() == 0:
             numerical = torch.empty(
                 (*batch_shape, len(output_columns)),
-                dtype=torch.get_default_dtype(),
+                dtype=table.dtype,
                 device=table.device,
             )
         else:
-            text = cast(
-                StringTensor,
-                table.text.movedim(-1, 0).reshape(-1),
+            text = cast(StringTensor, table.text.movedim(-1, 0).reshape(-1))
+            array = text.to_arrow()
+            if text.is_nullable:
+                array = pc.fill_null(array, "")
+            emb = self._model.module.encode(
+                array.to_pylist(),
+                show_progress_bar=False,
+                convert_to_tensor=True,
+                device=str(table.device),
+                batch_size=self.batch_size,
             )
-            strings = [value or "" for value in text.tolist()]
-            encode_kwargs = {}
-            if self.batch_size is not None:
-                encode_kwargs["batch_size"] = self.batch_size
-            model = cast(Any, self._model.module)
-            embeddings = cast(
-                Tensor,
-                model.encode(
-                    strings,
-                    show_progress_bar=False,
-                    convert_to_tensor=True,
-                    device=str(table.device),
-                    **encode_kwargs,
-                ),
-            ).to(dtype=torch.get_default_dtype(), device=table.device)
-
-            # [num_columns, *batch_shape, embedding_dim]
+            assert isinstance(emb, Tensor)
+            emb = emb.to(device=table.device, dtype=table.dtype)
             numerical = (
-                embeddings.reshape(
-                    len(columns),
-                    *batch_shape,
-                    self._embedding_dim,
-                )
+                emb.reshape(len(columns), *batch_shape, self._embedding_dim)
                 .movedim(0, -2)
                 .reshape(*batch_shape, len(output_columns))
             )
 
-        return TableTensor(
-            columns={Stype.numerical: output_columns},
-            numerical=numerical,
+        out = torch.cat(
+            [
+                table.drop_stypes(Stype.text),
+                TableTensor(
+                    columns={Stype.numerical: output_columns},
+                    numerical=numerical,
+                ),
+            ],
+            dim=-1,
         )
+        return cast(TableTensor, out)
