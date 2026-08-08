@@ -16,7 +16,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  gate:
+  trigger:
     runs-on: ubuntu-latest
     outputs:
       full_test: ${{ steps.check.outputs.result }}
@@ -39,7 +39,7 @@ jobs:
             return pull.labels.some(({ name }) => name === 'ci-full-test');
 
   pytest-gpu:
-    needs: gate
+    needs: trigger
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
     timeout-minutes: 20
 
@@ -105,13 +105,13 @@ jobs:
 
       - name: Run tests
         env:
-          FULL_TEST: ${{ needs.gate.outputs.full_test == 'true' && '1' || '0' }}
+          FULL_TEST: ${{ needs.trigger.outputs.full_test == 'true' && '1' || '0' }}
         run: |
           pytest -m cuda -rs --durations=25
 
   example-gpu:
-    needs: gate
-    if: needs.gate.outputs.full_test == 'true'
+    needs: trigger
+    if: needs.trigger.outputs.full_test == 'true'
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
     timeout-minutes: 20
 
