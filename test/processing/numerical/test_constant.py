@@ -36,10 +36,10 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
     table = TableTensor.from_tensor(
         torch.tensor(
             [
-                [1.0, 1.0, 1.0],
-                [1.0, 2.0, 3.0],
-                [1.0, 1.0, 2.0],
-                [1.0, 2.0, 3.0],
+                [1.0, -torch.inf, -torch.inf, torch.nan],
+                [1.0, torch.inf, 0.0, torch.nan],
+                [torch.nan, torch.nan, torch.inf, torch.nan],
+                [1.0, -torch.inf, torch.nan, torch.nan],
             ],
             device=device,
         ),
@@ -48,6 +48,53 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
     output = DropConstantColumns(threshold=2).fit_transform(table)
 
     assert output.columns[Stype.numerical] == ("2",)
+
+
+@withCUDA
+def test_unique_filter_ignores_missing_values_and_replays_selection(
+    device: torch.device,
+) -> None:
+    context = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [torch.nan, torch.nan, torch.nan],
+                [torch.nan, 4.0, 1.0],
+                [torch.nan, 4.0, 2.0],
+            ],
+            device=device,
+        ),
+        columns=("missing", "constant", "variable"),
+    )
+    query = TableTensor.from_tensor(
+        torch.tensor([[8.0, 9.0, 10.0]], device=device),
+        columns=context.columns[Stype.numerical],
+    )
+    processor = DropConstantColumns().fit(context)
+
+    context_output = processor.transform(context)
+    query_output = processor.transform(query)
+
+    assert context_output.columns[Stype.numerical] == ("variable",)
+    torch.testing.assert_close(
+        context_output.numerical,
+        context.numerical[:, 2:],
+        equal_nan=True,
+    )
+    assert torch.equal(query_output.numerical, query.numerical[:, 2:])
+
+
+@withCUDA
+def test_unique_filter_one_row_drops_only_all_missing(
+    device: torch.device,
+) -> None:
+    context = TableTensor.from_tensor(
+        torch.tensor([[torch.nan, 4.0]], device=device),
+        columns=("missing", "observed"),
+    )
+    output = DropConstantColumns().fit_transform(context)
+
+    assert output.columns[Stype.numerical] == ("observed",)
+    assert torch.equal(output.numerical, context.numerical[:, 1:])
 
 
 def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
