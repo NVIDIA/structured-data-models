@@ -55,6 +55,7 @@ def _optional_batch_chunk(
 def _attention_batch_shape(
     query: Tensor,
     key_value: Tensor | KVCacheEntry | None,
+    value: Tensor | None,
     seqused_key_value: Tensor | None,
     attn_mask: Tensor | None,
 ) -> torch.Size:
@@ -65,6 +66,8 @@ def _attention_batch_shape(
         batch_shapes.extend(
             [key_value.key.size()[:-3], key_value.value.size()[:-3]]
         )
+    if value is not None:
+        batch_shapes.append(value.size()[:-2])
     if seqused_key_value is not None:
         batch_shapes.append(seqused_key_value.size())
     if attn_mask is not None:
@@ -97,10 +100,13 @@ def _chunk_attention(
     rope: RotaryEmbedding | None,
     return_key_value: bool,
     batch_size_limit: int,
+    *,
+    value: Tensor | None = None,
 ) -> Tensor | tuple[Tensor, KVCacheEntry] | None:
     batch_shape = _attention_batch_shape(
         query=query,
         key_value=key_value,
+        value=value,
         seqused_key_value=seqused_key_value,
         attn_mask=attn_mask,
     )
@@ -121,6 +127,8 @@ def _chunk_attention(
         )
         if cache_batch_shape != batch_shape:
             return None
+        if value is not None and value.size()[:-2] != batch_shape:
+            return None
 
     query_size = query.size()[-2:]
     out: Tensor | None = None
@@ -130,19 +138,28 @@ def _chunk_attention(
     value_size: tuple[int, ...] | None = None
     for start in range(0, batch_size, batch_size_limit):
         end = min(start + batch_size_limit, batch_size)
-        chunk_result = forward(
-            query=_batch_chunk(query, batch_shape, 2, start, end),
-            key_value=_chunk_key_value(key_value, batch_shape, start, end),
-            seqused_key_value=_optional_batch_chunk(
+        forward_kwargs: dict[str, object] = {
+            "query": _batch_chunk(query, batch_shape, 2, start, end),
+            "key_value": _chunk_key_value(key_value, batch_shape, start, end),
+            "seqused_key_value": _optional_batch_chunk(
                 seqused_key_value, batch_shape, 0, start, end
             ),
-            attn_mask=_optional_batch_chunk(
-                attn_mask, batch_shape, 2, start, end
+            "attn_mask": _optional_batch_chunk(
+                attn_mask,
+                batch_shape,
+                2,
+                start,
+                end,
             ),
-            rope=rope,
-            return_key_value=return_key_value,
-            batch_size_limit=batch_size_limit,
-        )
+            "rope": rope,
+            "return_key_value": return_key_value,
+            "batch_size_limit": batch_size_limit,
+        }
+        if value is not None:
+            forward_kwargs["value"] = _batch_chunk(
+                value, batch_shape, 2, start, end
+            )
+        chunk_result = forward(**forward_kwargs)
         if return_key_value:
             assert isinstance(chunk_result, tuple)
             chunk, chunk_key_value = chunk_result
@@ -476,6 +493,10 @@ class Attention(torch.nn.Module):
     This module owns the query, key, value, and output projections.
     It performs self-attention when ``key_value`` is omitted and
     cross-attention when ``key_value`` is given.
+    Supplied transformation modules are registered as-is; ``device`` and
+    ``dtype`` apply only to modules constructed by this class.
+    Query and key transformations must preserve the headed tensor shape and
+    dtype.
 
     Args:
         channels: The number of input and output channels.
@@ -489,6 +510,17 @@ class Attention(torch.nn.Module):
         qassmax: Whether to scale queries with :class:`QASSMax`.
         device: The device.
         dtype: The dtype.
+        qkv_projection: Whether query, key, and value projections use one
+            packed linear layer or three separate linear layers.
+        query_transform: Transformation applied to projected query heads after
+            rotary embedding and before scaled dot-product attention.
+        key_transform: Transformation applied to newly projected key heads
+            after rotary embedding and before scaled dot-product attention.
+            Cached keys are already transformed and are not transformed again.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
+            ``None`` uses ``1 / sqrt(channels_per_head)``.
+        zero_init_output: Whether to initialize the output projection to zero.
     """
 
     def __init__(
@@ -499,6 +531,12 @@ class Attention(torch.nn.Module):
         qassmax: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        *,
+        qkv_projection: Literal["packed", "separate"] = "packed",
+        query_transform: torch.nn.Module | None = None,
+        key_transform: torch.nn.Module | None = None,
+        scale: float | None = None,
+        zero_init_output: bool = True,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -518,20 +556,37 @@ class Attention(torch.nn.Module):
         self.q_dim = num_query_heads * self.head_dim  # == channels
         self.kv_dim = num_key_value_heads * self.head_dim
 
-        self.qkv_lin = Linear(
-            channels, self.q_dim + 2 * self.kv_dim, **factory_kwargs
-        )
+        self.qkv_projection = qkv_projection
+        if qkv_projection == "packed":
+            self.qkv_lin = Linear(
+                in_features=channels,
+                out_features=self.q_dim + 2 * self.kv_dim,
+                **factory_kwargs,
+            )
+        elif qkv_projection == "separate":
+            self.q_proj = Linear(channels, self.q_dim, **factory_kwargs)
+            self.k_proj = Linear(channels, self.kv_dim, **factory_kwargs)
+            self.v_proj = Linear(channels, self.kv_dim, **factory_kwargs)
+        else:
+            raise AssertionError(
+                f"Unexpected QKV projection layout: {qkv_projection!r}"
+            )
+        self._packed_projection = qkv_projection == "packed"
         self.sdpa = SDPA(
             channels=self.head_dim,
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
             qassmax=qassmax,
+            scale=scale,
             **factory_kwargs,
         )
+        self.query_transform = query_transform
+        self.key_transform = key_transform
         self.out_lin = Linear(channels, channels, **factory_kwargs)
 
-        torch.nn.init.zeros_(self.out_lin.weight)
-        torch.nn.init.zeros_(self.out_lin.bias)
+        if zero_init_output:
+            torch.nn.init.zeros_(self.out_lin.weight)
+            torch.nn.init.zeros_(self.out_lin.bias)
 
     @overload
     def forward(
@@ -543,6 +598,7 @@ class Attention(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[False] = False,
+        value: Tensor | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor: ...
 
@@ -556,6 +612,7 @@ class Attention(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[True],
+        value: Tensor | None = None,
         batch_size_limit: int | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
@@ -569,6 +626,7 @@ class Attention(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: bool,
+        value: Tensor | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
@@ -581,6 +639,7 @@ class Attention(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         return_key_value: bool = False,
         *,
+        value: Tensor | None = None,  # [..., KV, C]
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -594,6 +653,8 @@ class Attention(torch.nn.Module):
                 :class:`~sdm.cache.KVCacheEntry`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
+                Cached keys have already received rotary embedding and the
+                configured key transformation.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
@@ -602,6 +663,9 @@ class Attention(torch.nn.Module):
                 projection.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
+            value: Optional value tensor with shape ``[..., KV, C]``. When
+                omitted, ``key_value`` supplies both keys and values. A
+                distinct value can only accompany a tensor ``key_value``.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
 
@@ -611,12 +675,16 @@ class Attention(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
+        if value is not None and not isinstance(key_value, Tensor):
+            raise ValueError("`value` requires `key_value` to be a tensor")
+
         batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
         if not self.training and not torch.compiler.is_compiling():
             chunked_result = _chunk_attention(
                 forward=self.forward,
                 query=query,
                 key_value=key_value,
+                value=value,
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
                 rope=rope,
@@ -626,10 +694,15 @@ class Attention(torch.nn.Module):
             if chunked_result is not None:
                 return chunked_result
 
+        packed_projection = self._packed_projection
+
         if isinstance(key_value, KVCacheEntry):
-            q_weight = self.qkv_lin.weight[: self.q_dim]
-            q_bias = self.qkv_lin.bias[: self.q_dim]
-            query = F.linear(query, q_weight, q_bias)
+            if packed_projection:
+                q_weight = self.qkv_lin.weight[: self.q_dim]
+                q_bias = self.qkv_lin.bias[: self.q_dim]
+                query = F.linear(query, q_weight, q_bias)
+            else:
+                query = self.q_proj(query)
             if (
                 key_value.key.dtype != query.dtype
                 or key_value.value.dtype != query.dtype
@@ -642,15 +715,43 @@ class Attention(torch.nn.Module):
             key = key_value.key
             value = key_value.value
         elif key_value is None:
-            query, key, value = self.qkv_lin(query).split(
-                [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
-            )
+            if packed_projection:
+                query, key, value = self.qkv_lin(query).split(
+                    [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
+                )
+            else:
+                source = query
+                query = self.q_proj(source)
+                key = self.k_proj(source)
+                value = self.v_proj(source)
         else:
-            sections = [self.q_dim, 2 * self.kv_dim]
-            q_weight, kv_weight = self.qkv_lin.weight.split(sections, dim=0)
-            q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
-            query = F.linear(query, q_weight, q_bias)
-            key, value = F.linear(key_value, kv_weight, kv_bias).chunk(2, -1)
+            if packed_projection:
+                if value is None:
+                    sections = [self.q_dim, 2 * self.kv_dim]
+                    q_weight, kv_weight = self.qkv_lin.weight.split(
+                        sections, dim=0
+                    )
+                    q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
+                    query = F.linear(query, q_weight, q_bias)
+                    key, value = F.linear(key_value, kv_weight, kv_bias).chunk(
+                        2, -1
+                    )
+                else:
+                    sections = [self.q_dim, self.kv_dim, self.kv_dim]
+                    q_weight, k_weight, v_weight = self.qkv_lin.weight.split(
+                        sections, dim=0
+                    )
+                    q_bias, k_bias, v_bias = self.qkv_lin.bias.split(
+                        sections, dim=0
+                    )
+                    query = F.linear(query, q_weight, q_bias)
+                    key = F.linear(key_value, k_weight, k_bias)
+                    value = F.linear(value, v_weight, v_bias)
+            else:
+                value_source = key_value if value is None else value
+                query = self.q_proj(query)
+                key = self.k_proj(key_value)
+                value = self.v_proj(value_source)
 
         # [..., S, C] -> [..., S, H, C // H], with separate query/kv heads.
         query = query.unflatten(-1, [self.num_query_heads, self.head_dim])
@@ -665,6 +766,13 @@ class Attention(torch.nn.Module):
             if not isinstance(key_value, KVCacheEntry):
                 key = rope(key)
             assert query.dtype == key.dtype == value.dtype
+
+        if self.query_transform is not None:
+            query = self.query_transform(query)
+        if self.key_transform is not None and not isinstance(
+            key_value, KVCacheEntry
+        ):
+            key = self.key_transform(key)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]

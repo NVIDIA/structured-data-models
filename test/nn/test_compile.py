@@ -8,9 +8,11 @@ from torch import Tensor
 from sdm.nn import (
     SDPA,
     Attention,
+    Float32RMSNorm,
     InducedTransformerBlock,
     QASSMax,
     RotaryEmbedding,
+    SoftplusScale,
     TransformerBlock,
 )
 from sdm.testing import withCUDA
@@ -191,6 +193,54 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
     expected = module(query=query, key_value=expected_kv)
     out = fullgraph(module)(query=query, key_value=kv)
     torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+def test_configured_attention_compile(device: torch.device) -> None:
+    module = Attention(
+        channels=8,
+        num_query_heads=2,
+        qkv_projection="separate",
+        query_transform=torch.nn.Sequential(
+            Float32RMSNorm(4, device=device),
+            SoftplusScale(4, multiplier=0.75, device=device),
+        ),
+        key_transform=Float32RMSNorm(4, device=device),
+        scale=1.0,
+        zero_init_output=False,
+        device=device,
+    )
+    query = torch.randn(2, 3, 8, device=device)
+    key = torch.randn(2, 5, 8, device=device)
+    value = torch.randn(2, 5, 8, device=device)
+    rope = RotaryEmbedding(
+        channels=4,
+        layout="interleaved",
+        device=device,
+    )
+
+    expected, expected_cache = module(
+        query=query,
+        key_value=key,
+        value=value,
+        rope=rope,
+        return_key_value=True,
+    )
+    output, cache = fullgraph(module)(
+        query=query,
+        key_value=key,
+        value=value,
+        rope=rope,
+        return_key_value=True,
+    )
+
+    torch.testing.assert_close(output, expected)
+    torch.testing.assert_close(cache.key, expected_cache.key)
+    torch.testing.assert_close(cache.value, expected_cache.value)
+
+    expected = module(query=query, key_value=expected_cache, rope=rope)
+    output = fullgraph(module)(query=query, key_value=cache, rope=rope)
+    torch.testing.assert_close(output, expected)
 
 
 @withCUDA

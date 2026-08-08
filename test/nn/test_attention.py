@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import cast
+from typing import Literal, cast
 from unittest.mock import patch
 
 import pytest
@@ -10,8 +10,10 @@ from torch import Tensor
 from sdm.nn import (
     SDPA,
     Attention,
+    Float32RMSNorm,
     QASSMax,
     RotaryEmbedding,
+    SoftplusScale,
     TransformerBlock,
 )
 from sdm.testing import withCUDA
@@ -35,6 +37,80 @@ def reference_sdpa(
         attn_mask=attn_mask.unsqueeze(-3) if attn_mask is not None else None,
         scale=scale,
     ).transpose(-3, -2)
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_float32_attention_transforms(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    norm = Float32RMSNorm(
+        channels=4,
+        eps=1e-6,
+        device=device,
+        dtype=dtype,
+    )
+    scale = SoftplusScale(
+        channels=4,
+        multiplier=1.75,
+        parameter_init=-0.25,
+        device=device,
+        dtype=dtype,
+    )
+    tensor = torch.tensor(
+        [[0.11, -1.7, 2.3, -0.04], [4.2, 0.31, -0.8, 1.1]],
+        device=device,
+        dtype=dtype,
+    )
+    with torch.no_grad():
+        norm.weight.copy_(tensor.new_tensor([0.7, 1.3, -0.2, 2.1]))
+        scale.weight.copy_(tensor.new_tensor([-0.4, 0.6, 0.2, -0.8]))
+
+    tensor_float = tensor.float()
+    variance = tensor_float.square().mean(dim=-1, keepdim=True)
+    expected_norm = (
+        tensor_float * (variance + norm.eps).rsqrt() * norm.weight.float()
+    ).to(dtype)
+    expected_scale = tensor * (
+        scale.multiplier * F.softplus(scale.weight.float())
+    ).to(dtype)
+
+    normalized = norm(tensor)
+    scaled = scale(tensor)
+    torch.testing.assert_close(normalized, expected_norm, rtol=0, atol=0)
+    torch.testing.assert_close(scaled, expected_scale, rtol=0, atol=0)
+    assert normalized.device == scaled.device == device
+
+
+@pytest.mark.parametrize(
+    "multiplier",
+    [0.0, -1.0, float("nan"), float("inf")],
+)
+def test_softplus_scale_rejects_invalid_multiplier(multiplier: float) -> None:
+    with pytest.raises(ValueError, match="'multiplier' must be positive"):
+        SoftplusScale(channels=4, multiplier=multiplier)
+
+
+def test_attention_configured_device_dtype_and_meta() -> None:
+    dtype = torch.bfloat16
+    query_transform = torch.nn.Sequential(
+        Float32RMSNorm(2, device="meta", dtype=dtype),
+        SoftplusScale(2, device="meta", dtype=dtype),
+    )
+    module = Attention(
+        channels=8,
+        num_query_heads=4,
+        qkv_projection="separate",
+        query_transform=query_transform,
+        key_transform=Float32RMSNorm(2, device="meta", dtype=dtype),
+        device="meta",
+        dtype=dtype,
+    )
+
+    assert module.query_transform is query_transform
+    assert all(parameter.is_meta for parameter in module.parameters())
+    assert all(parameter.dtype == dtype for parameter in module.parameters())
 
 
 @withCUDA
@@ -422,6 +498,194 @@ def test_sdpa_batch_size_limit_bypass(
     assert sdpa.call_args.kwargs["query"].size(0) == 5
 
 
+def test_attention_default_configuration() -> None:
+    rng_state = torch.random.get_rng_state()
+    module = Attention(
+        channels=8,
+        num_query_heads=4,
+        num_key_value_heads=2,
+    )
+    next_rng_state = torch.random.get_rng_state()
+    torch.random.set_rng_state(rng_state)
+    try:
+        explicit = Attention(
+            channels=8,
+            num_query_heads=4,
+            num_key_value_heads=2,
+            qkv_projection="packed",
+            query_transform=None,
+            key_transform=None,
+            scale=None,
+            zero_init_output=True,
+        )
+    finally:
+        torch.random.set_rng_state(next_rng_state)
+
+    torch.testing.assert_close(
+        module.state_dict(), explicit.state_dict(), rtol=0, atol=0
+    )
+    assert set(module.state_dict()) == {
+        "qkv_lin.weight",
+        "qkv_lin.bias",
+        "out_lin.weight",
+        "out_lin.bias",
+    }
+    query = torch.randn(2, 3, 8)
+    key_value = torch.randn(2, 5, 8)
+    torch.testing.assert_close(
+        module(query=query, key_value=key_value),
+        torch.zeros_like(query),
+    )
+
+    with torch.no_grad():
+        module.out_lin.weight.normal_()
+        module.out_lin.bias.normal_()
+        explicit.load_state_dict(module.state_dict())
+
+    torch.testing.assert_close(
+        module(query=query, key_value=key_value),
+        explicit(query=query, key_value=key_value),
+        rtol=0,
+        atol=0,
+    )
+
+
+def test_attention_separate_projection_matches_packed() -> None:
+    channels = 8
+    num_query_heads = 4
+    num_key_value_heads = 2
+    packed = Attention(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+        scale=0.7,
+        zero_init_output=False,
+        dtype=torch.float64,
+    )
+    separate = Attention(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+        scale=0.7,
+        zero_init_output=False,
+        qkv_projection="separate",
+        dtype=torch.float64,
+    )
+    with torch.no_grad():
+        q_weight, k_weight, v_weight = packed.qkv_lin.weight.split(
+            [packed.q_dim, packed.kv_dim, packed.kv_dim]
+        )
+        q_bias, k_bias, v_bias = packed.qkv_lin.bias.split(
+            [packed.q_dim, packed.kv_dim, packed.kv_dim]
+        )
+        separate.q_proj.weight.copy_(q_weight)
+        separate.q_proj.bias.copy_(q_bias)
+        separate.k_proj.weight.copy_(k_weight)
+        separate.k_proj.bias.copy_(k_bias)
+        separate.v_proj.weight.copy_(v_weight)
+        separate.v_proj.bias.copy_(v_bias)
+        separate.out_lin.load_state_dict(packed.out_lin.state_dict())
+
+    query = torch.randn(2, 3, channels, dtype=torch.float64)
+    key_value = torch.randn(2, 5, channels, dtype=torch.float64)
+    for source in (None, key_value):
+        expected = packed(query=query, key_value=source)
+        output = separate(query=query, key_value=source)
+        torch.testing.assert_close(output, expected)
+        assert torch.count_nonzero(output) > 0
+
+
+def test_attention_transforms_distinct_value_and_cache() -> None:
+    channels = 4
+    num_heads = 2
+    query_transform = torch.nn.Sequential(
+        Float32RMSNorm(2),
+        SoftplusScale(2, multiplier=1.5, parameter_init=0.2),
+    )
+    key_transform = SoftplusScale(
+        2,
+        multiplier=2.0,
+        parameter_init=-0.3,
+    )
+    module = Attention(
+        channels=channels,
+        num_query_heads=num_heads,
+        qkv_projection="separate",
+        query_transform=query_transform,
+        key_transform=key_transform,
+        scale=1.0,
+        zero_init_output=False,
+    ).eval()
+
+    query = torch.randn(2, 3, channels)
+    key = torch.randn(2, 5, channels)
+    value = torch.randn(2, 5, channels)
+    rope = RotaryEmbedding(channels=2, layout="interleaved")
+    output, cache = module(
+        query=query,
+        key_value=key,
+        value=value,
+        rope=rope,
+        return_key_value=True,
+        batch_size_limit=1,
+    )
+
+    projected_query = module.q_proj(query).unflatten(-1, (num_heads, 2))
+    projected_key = module.k_proj(key).unflatten(-1, (num_heads, 2))
+    projected_value = module.v_proj(value).unflatten(-1, (num_heads, 2))
+    projected_query = query_transform(rope(projected_query))
+    projected_key = key_transform(rope(projected_key))
+    expected = module.out_lin(
+        reference_sdpa(
+            query=projected_query,
+            key=projected_key,
+            value=projected_value,
+            scale=1.0,
+        ).flatten(-2)
+    )
+
+    torch.testing.assert_close(output, expected)
+    torch.testing.assert_close(cache.key, projected_key)
+    torch.testing.assert_close(cache.value, projected_value)
+    cached_output = module(
+        query=query,
+        key_value=cache,
+        rope=rope,
+        batch_size_limit=1,
+    )
+    torch.testing.assert_close(cached_output, output)
+
+
+@pytest.mark.parametrize("qkv_projection", ["packed", "separate"])
+def test_attention_distinct_value_broadcast_chunking(
+    qkv_projection: Literal["packed", "separate"],
+) -> None:
+    module = Attention(
+        channels=8,
+        num_query_heads=2,
+        qkv_projection=qkv_projection,
+    ).eval()
+    with torch.no_grad():
+        module.out_lin.weight.copy_(torch.eye(8))
+        module.out_lin.bias.zero_()
+    query = torch.randn(1, 1, 3, 8)
+    key = torch.randn(1, 3, 5, 8)
+    value = torch.randn(2, 1, 5, 8)
+
+    expected = module(query=query, key_value=key, value=value)
+    output = module(
+        query=query,
+        key_value=key,
+        value=value,
+        batch_size_limit=2,
+    )
+    implicit_value = module(query=query, key_value=key)
+
+    assert output.size() == (2, 3, 3, 8)
+    torch.testing.assert_close(output, expected)
+    assert not torch.allclose(output, implicit_value)
+
+
 @withCUDA
 @pytest.mark.parametrize(
     "num_key_value_heads",
@@ -690,6 +954,13 @@ def test_attention_errors() -> None:
 
     with pytest.raises(ValueError, match="must be divisible"):
         Attention(channels=5, num_query_heads=2)
+
+    with pytest.raises(ValueError, match="requires `key_value`"):
+        module(query=query, value=query)
+
+    _, cache = module(query=query, return_key_value=True)
+    with pytest.raises(ValueError, match="requires `key_value`"):
+        module(query=query, key_value=cache, value=query)
 
 
 def test_attention_batch_size_limit_propagation() -> None:
