@@ -1,4 +1,4 @@
-name: GPU Test
+name: Test GPU
 
 on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
