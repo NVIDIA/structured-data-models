@@ -9,7 +9,6 @@ A list of all available processors grouped by their domain and semantic type is 
 
 - A {py:class}`~sdm.processing.base.Processor` transforms a {py:class}`~sdm.tensor.TableTensor` and returns a new {py:class}`~sdm.tensor.TableTensor`.
 - A **stateful** {py:class}`~sdm.processing.base.Processor` learns state when you call {py:meth}`~sdm.processing.base.Processor.fit` (*e.g.*, {py:class}`~sdm.processing.numerical.Standardize` learns each column's mean and standard deviation); a **stateless** one does not (*e.g.*, {py:class}`~sdm.processing.output.Softmax`).
-- An {py:class}`~sdm.processing.ensemble.EnsembleProcessor` is a {py:class}`~sdm.processing.base.Processor` that transforms all members of an ensemble at once, which lets it treat them differently or change how many there are.
 
 A {py:class}`~sdm.processing.base.Processor` is fully composable:
 
@@ -90,12 +89,11 @@ table = recipe.features.transform(table)
 
 ## Ensembling
 
-A model can run several ensemble members over the same data, each of them seeing its own view of it: a different column order, a different set of categories, or a different imputation.
-An {py:class}`~sdm.tensor.EnsembleTable` holds the table of every member, and members whose tables are identical share one.
+A model can run several ensemble members over the same task.
+Most preprocessing steps do not need to distinguish those members: imputing a mean, standardizing a column, or converting categories to numbers often produces the same transformed table for every estimator.
+Other steps intentionally create member-specific views to add variance to the input data, such as drawing a different column permutation, choosing a different numerical transform, or shuffling categorical values.
 
-Most steps of such a pipeline are the same for every member and are plain processors.
-Reach for an {py:class}`~sdm.processing.ensemble.EnsembleProcessor` when a step has to tell members apart: when each member needs its own state (*e.g.*, a different column permutation per member), when members end up with tables that no longer share the same columns or shape (*e.g.*, dropping a different set of columns per member), or when the number of members changes (*e.g.*, reducing the outputs of all members into one).
-Since it is a {py:class}`~sdm.processing.base.Processor` itself, you can use it wherever a processor is expected, and it treats a single {py:class}`~sdm.tensor.TableTensor` as an ensemble with one member.
+The `structured-data-models` package takes advantage of this to avoid duplicating work: common transformations can run once over shared member groups, while only estimator-specific variations split the ensemble into a tree of member views as the {py:class}`~sdm.processing.recipe.Recipe` is applied.
 
 ```{figure} images/ensemble_light.svg
 :figclass: light-only
@@ -106,3 +104,19 @@ Since it is a {py:class}`~sdm.processing.base.Processor` itself, you can use it 
 :figclass: dark-only
 :width: 100%
 ```
+
+This shared-by-default, split-when-needed behavior is captured by {py:class}`~sdm.processing.ensemble.EnsembleProcessor`.
+An {py:class}`~sdm.processing.ensemble.EnsembleProcessor` is a regular {py:class}`~sdm.processing.base.Processor` that operates on an {py:class}`~sdm.tensor.EnsembleTable`, allowing a processing step to split ensemble members into separate groups when their transformed views diverge.
+This lets a {py:class}`~sdm.processing.recipe.Recipe` stay shared by default and branch only at steps that actually introduce member-specific behavior.
+
+The underlying {py:class}`~sdm.tensor.EnsembleTable` stores members by layout rather than by estimator.
+Members that see the same table share storage, while compatible member tables are stacked into one leading dimension of a single {py:class}`~sdm.tensor.TableTensor`.
+Regular processors can therefore operate on whole groups, leveraging PyTorch vectorization and GPU parallelism, and only fall back to separate groups when storage layout diverges.
+
+In short, a plain {py:class}`~sdm.processing.base.Processor` describes a transformation for one table or one group, and an {py:class}`~sdm.processing.ensemble.EnsembleProcessor` describes a transformation over the collection of estimator views.
+Most {py:class}`~sdm.processing.recipe.Recipe` steps therefore remain ordinary processors.
+
+For most users, ensemble processing is an internal (but cool) detail of model execution.
+Recipes can be composed from ordinary processors, and the {py:class}`~sdm.processing.recipe.Recipe` execution handles ensemble grouping, sharing, and branching when a model runs with multiple estimators.
+You only need to reason about {py:class}`~sdm.processing.ensemble.EnsembleProcessor` directly when writing a processor whose behavior can change table layout.
+Examples of those include {py:class}`~sdm.processing.common.Choice`, {py:class}`~sdm.processing.common.ShuffleColumns`, and {py:class}`~sdm.processing.categorical.ShuffleCategories`.
