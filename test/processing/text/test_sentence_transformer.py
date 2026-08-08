@@ -28,9 +28,7 @@ def test_forward(device: torch.device) -> None:
     ).to(device)(table)
 
     assert output.columns[Stype.numerical] == tuple(
-        f"{column}_{index}"
-        for column in ("title", "body")
-        for index in range(128)
+        f"{column}__emb{i}" for column in ("title", "body") for i in range(128)
     )
     assert output.numerical.shape == (2, 256)
     assert output.numerical.device == device

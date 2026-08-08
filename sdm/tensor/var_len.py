@@ -648,8 +648,7 @@ class VarLenTensor(Tensor):
                 for i in range(size[0])
             ]
 
-        tensor = cast(VarLenTensor, self.detach().cpu())
-        values = tensor.to_arrow().to_pylist()
+        values = self.to_arrow().to_pylist()
         return reshape(values, tuple(self.size()))
 
     @override
