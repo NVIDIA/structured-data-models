@@ -288,8 +288,10 @@ class ICLModel(torch.nn.Module, ABC):
                     generator=generator,
                     **kwargs,
                 )
-                if num_estimators > 1:
+                if x.device.type == "cuda" and num_estimators > 1:
                     cache = cache.cpu()
+                    cache = cache.pin_memory()
+
                 cache = cache.freeze()
                 caches.append(cache)
 
@@ -353,6 +355,7 @@ class ICLModel(torch.nn.Module, ABC):
             member_outs: list[TableTensor] = []
             for query in queries:
                 cache = self._caches[cache_index]
+                cache = cache.to(device=query.x.device, non_blocking=True)
                 cache_index += 1
 
                 self._validate_query(
@@ -371,7 +374,7 @@ class ICLModel(torch.nn.Module, ABC):
                     x_query=query.x,
                     related_context_tables=None,
                     related_query_tables=query.related_tables,
-                    cache=cache.to(query.x.device),
+                    cache=cache,
                     generator=None,
                     **cast(dict[str, Any], cache["kwargs"]),
                 )
