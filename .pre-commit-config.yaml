@@ -37,7 +37,10 @@ repos:
     hooks:
       - id: ty
         name: Type check Python
-        args: [--no-default-groups, --group=test]
+        args:
+          - --find-links=https://data.pyg.org/whl/torch-2.13.0+cpu.html
+          - --no-default-groups
+          - --group=test
 
   - repo: https://github.com/executablebooks/mdformat
     rev: 1.0.0

@@ -6,10 +6,10 @@ from typing import Any, ClassVar, Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.processing import InvertibleMixin, Recipe
+from sdm.processing import InvertibleMixin
 from sdm.processing._recipe_execution import _RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema

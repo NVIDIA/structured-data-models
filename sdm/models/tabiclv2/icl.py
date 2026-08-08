@@ -7,8 +7,12 @@ import torch
 from torch import Tensor
 from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
-from sdm.cache import Cache
+from sdm.cache import Cache, KVCacheEntry
 from sdm.nn import TransformerBlock
+from sdm.nn.memory import (
+    attention_batch_size_limit,
+    cuda_attention_memory_limit,
+)
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
 
@@ -30,6 +34,7 @@ class ICLBlock(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_classes = num_classes
+        self.num_heads = num_heads
         self.temperature = temperature
 
         self.y_emb: torch.nn.Module | None = None
@@ -119,15 +124,41 @@ class ICLBlock(torch.nn.Module):
 
             x[..., :R_train, :] += y_emb.to(x.dtype)
 
+        plan_attention = (
+            x.device.type == "cuda"
+            and not self.training
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+        )
+
+        icl_batch_size_limit = batch_size_limit
         for i, layer in enumerate(self.layers):
             key = f"{cache_prefix}.layer{i}"
-            result = layer(
-                query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
-                key_value=cache[key]
+            query = x[..., R_train:, :] if i == len(self.layers) - 1 else x
+            key_value = (
+                cast(KVCacheEntry, cache[key])
                 if cache is not None and cache.is_replaying
-                else x[..., :R_train, :],  # [..., R_train, D]
+                else x[..., :R_train, :]
+            )
+            if i == 0 or (
+                plan_attention and cache is not None and cache.is_recording
+            ):
+                icl_batch_size_limit = attention_batch_size_limit(
+                    requested_limit=batch_size_limit,
+                    query=query,
+                    key_value=key_value,
+                    attention_memory_limit=(
+                        cuda_attention_memory_limit(x.device)
+                        if plan_attention
+                        else None
+                    ),
+                    num_heads=self.num_heads,
+                )
+            result = layer(
+                query=query,
+                key_value=key_value,  # [..., R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
-                batch_size_limit=batch_size_limit,
+                batch_size_limit=icl_batch_size_limit,
             )
 
             if cache is not None and cache.is_recording:
