@@ -10,7 +10,6 @@ from torch import Tensor
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.processing import InvertibleMixin
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -180,8 +179,6 @@ class ICLModel(torch.nn.Module, ABC):
 
             # Regression: invert target before stacking estimator outputs.
             if contexts[0].y.numerical.size(-1) > 0:
-                if not isinstance(execution.recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
                 with torch.amp.autocast(x_query.device.type, enabled=False):
                     member_outs = list(
                         execution.inverse_transform_target(member_outs)
@@ -383,8 +380,6 @@ class ICLModel(torch.nn.Module, ABC):
 
             # Regression: invert target before stacking estimator outputs.
             if self._caches[cache_index - 1]["classes"] is None:
-                if not isinstance(execution.recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
                 with torch.amp.autocast(x.device.type, enabled=False):
                     member_outs = list(
                         execution.inverse_transform_target(member_outs)

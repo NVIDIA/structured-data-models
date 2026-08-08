@@ -203,7 +203,8 @@ class RecipeExecution:
         )
         table._locations = self._target_locations
 
-        assert isinstance(self.recipe.target, EnsembleInvertibleMixin)
+        if not isinstance(self.recipe.target, EnsembleInvertibleMixin):
+            raise RuntimeError("Target recipe is not invertible")
         table = self.recipe.target.inverse_transform_ensemble(table)
         return tuple(table.table(i) for i in range(table.num_members))
 
