@@ -3,9 +3,9 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import Stype
-from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.tensor import EnsembleTable
 
 
 class _ColumnPermutation(torch.nn.Module):
@@ -73,13 +73,13 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             return (
                 torch.arange(n_features, device=device) + offset
             ) % n_features
-        if self.method == "random":
-            return torch.randperm(
-                n_features,
-                generator=generator,
-                device=device,
-            )
-        raise AssertionError(f"Unexpected method {self.method!r}")
+
+        assert self.method == "random"
+        return torch.randperm(
+            n_features,
+            generator=generator,
+            device=device,
+        )
 
     def _fit_ensemble(
         self,
@@ -149,7 +149,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> TableTensor:
         return table.__class__(
             columns={
-                Stype.numerical.value: tuple(
+                Stype.numerical: tuple(
                     table.columns[Stype.numerical][index] for index in order
                 )
             },

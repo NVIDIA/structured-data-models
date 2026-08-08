@@ -236,5 +236,5 @@ def test_adapter_rejects_inverse_for_non_invertible_processor() -> None:
         Processor.as_processor(lambda value: value)
     )
 
-    with pytest.raises(TypeError, match="not invertible"):
+    with pytest.raises(AttributeError, match="inverse_transform"):
         processor.inverse_transform(table)

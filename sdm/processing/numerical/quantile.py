@@ -3,9 +3,8 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm.processing.base import InvertibleMixin, Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import InvertibleMixin, Processor
 
 BOUNDS_THRESH = 1e-7
 _MAX_NUM_COLS = 32

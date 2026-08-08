@@ -3,6 +3,7 @@ from collections.abc import Callable
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
@@ -10,15 +11,17 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import PCA, ClipQuantiles, Processor, Standardize
-from sdm.processing.base import InvertibleMixin
+from sdm.processing import (
+    InvertibleMixin,
+    Processor,
+)
 
 ProcessorFactory = Callable[[], Processor]
 
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [ClipQuantiles, Standardize],
+    [sp.ClipQuantiles, sp.Standardize],
 )
 def test_processor_requires_fit_for_transform(
     processor_factory: ProcessorFactory,
@@ -34,7 +37,7 @@ def test_processor_requires_fit_for_transform(
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [Standardize],
+    [sp.Standardize],
 )
 def test_invertible_processor_requires_fit_for_inverse_transform(
     processor_factory: ProcessorFactory,
@@ -89,10 +92,10 @@ def _id_table() -> TableTensor:
 def test_processor_rejects_unsupported_stype_on_forward_paths() -> None:
     numerical = TableTensor.from_tensor(torch.ones(2, 1))
     mixed = _mixed_table()
-    processor = Standardize().fit(numerical)
+    processor = sp.Standardize().fit(numerical)
 
     with pytest.raises(ValueError, match="categorical"):
-        Standardize().fit(mixed)
+        sp.Standardize().fit(mixed)
     with pytest.raises(ValueError, match="categorical"):
         processor.transform(mixed)
     with pytest.raises(ValueError, match="categorical"):
@@ -101,12 +104,12 @@ def test_processor_rejects_unsupported_stype_on_forward_paths() -> None:
 
 def test_processor_rejects_id_stype() -> None:
     with pytest.raises(ValueError, match="id"):
-        Standardize().fit(_id_table())
+        sp.Standardize().fit(_id_table())
 
 
 def test_processor_fit_transform_handles_empty_table() -> None:
     table = TableTensor.from_tensor(torch.empty(3, 0))
-    output = PCA(num_components=2).fit_transform(table)
+    output = sp.PCA(num_components=2).fit_transform(table)
 
     assert output.size() == table.size()
     assert output.schema == table.schema

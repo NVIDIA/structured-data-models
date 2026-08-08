@@ -1,18 +1,12 @@
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     StringTensor,
     Stype,
     TableTensor,
-)
-from sdm.processing import (
-    Identity,
-    ImputeMean,
-    ShuffleCategories,
-    Standardize,
-    StypeDispatch,
 )
 from sdm.tensor import EnsembleTable
 
@@ -33,7 +27,7 @@ def _mixed_table() -> TableTensor:
 
 def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
     table = _mixed_table()
-    dispatch = StypeDispatch(numerical=Standardize())
+    dispatch = sp.StypeDispatch(numerical=sp.Standardize())
 
     output = dispatch.fit_transform(table)
 
@@ -57,7 +51,7 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
 
 def test_stype_dispatch_accepts_callable_route() -> None:
     table = _mixed_table()
-    dispatch = StypeDispatch(
+    dispatch = sp.StypeDispatch(
         numerical=lambda table: table.replace_blocks(
             numerical=table.numerical.square()
         )
@@ -76,7 +70,7 @@ def test_stype_dispatch_accepts_callable_route() -> None:
         table.categorical.code,
     )
 
-    with pytest.raises(TypeError, match=r"'Callable' is not invertible"):
+    with pytest.raises(AttributeError, match="inverse_transform"):
         dispatch.inverse_transform(output)
 
 
@@ -89,12 +83,14 @@ def test_stype_dispatch_passes_generator_to_routes() -> None:
         ),
     )
 
-    first = StypeDispatch(categorical=ShuffleCategories(method="random"))
+    first = sp.StypeDispatch(categorical=sp.ShuffleCategories(method="random"))
     first_output = first.fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
-    second = StypeDispatch(categorical=ShuffleCategories(method="random"))
+    second = sp.StypeDispatch(
+        categorical=sp.ShuffleCategories(method="random")
+    )
     second_output = second.fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
@@ -105,18 +101,18 @@ def test_stype_dispatch_passes_generator_to_routes() -> None:
 
 def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
     table = _mixed_table()
-    dispatch = StypeDispatch(numerical=ImputeMean())
+    dispatch = sp.StypeDispatch(numerical=sp.ImputeMean())
 
     output = dispatch.fit_transform(table)
 
-    with pytest.raises(TypeError, match=r"'ImputeMean' is not invertible"):
+    with pytest.raises(AttributeError, match="inverse_transform"):
         dispatch.inverse_transform(output)
 
 
 def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
     table = _mixed_table()
-    dispatch = StypeDispatch(
-        numerical=Standardize(),
+    dispatch = sp.StypeDispatch(
+        numerical=sp.Standardize(),
         remainder="drop",
     )
 
@@ -128,8 +124,8 @@ def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
 
 def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
     table = _mixed_table()
-    dispatch = StypeDispatch(
-        numerical=Standardize(),
+    dispatch = sp.StypeDispatch(
+        numerical=sp.Standardize(),
         remainder="error",
     )
 
@@ -138,7 +134,7 @@ def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
 
 
 def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
-    output = StypeDispatch(remainder="drop").fit_transform(_mixed_table())
+    output = sp.StypeDispatch(remainder="drop").fit_transform(_mixed_table())
 
     assert output.size() == (2, 0)
     assert output.columns == {
@@ -154,17 +150,17 @@ def test_stype_dispatch_runs_iterable_routes() -> None:
     table = _mixed_table().replace_blocks(
         numerical=torch.tensor([[-3.0, 2.0], [1.0, 4.0]])
     )
-    dispatch = StypeDispatch(
+    dispatch = sp.StypeDispatch(
         numerical=[
             lambda table: table.replace_blocks(
                 numerical=table.numerical.square()
             ),
-            ImputeMean(),
-            Standardize(),
+            sp.ImputeMean(),
+            sp.Standardize(),
         ],
         remainder="drop",
     )
-    expected = Standardize().fit_transform(
+    expected = sp.Standardize().fit_transform(
         table.select_stypes(Stype.numerical).replace_blocks(
             numerical=table.numerical.square()
         )
@@ -180,7 +176,7 @@ def test_stype_dispatch_routes_text() -> None:
         columns={"text": ("review",)},
         text=StringTensor.from_list([["good"], ["bad"]]),
     )
-    dispatch = StypeDispatch(text=Identity())
+    dispatch = sp.StypeDispatch(text=sp.Identity())
 
     output = dispatch.fit_transform(table)
 
@@ -189,8 +185,8 @@ def test_stype_dispatch_routes_text() -> None:
 
 
 def test_stype_dispatch_uses_route_fitted_state() -> None:
-    dispatch = StypeDispatch(
-        numerical=Standardize(),
+    dispatch = sp.StypeDispatch(
+        numerical=sp.Standardize(),
         remainder="drop",
     )
 
@@ -214,7 +210,7 @@ def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
         tables=(first, second),
         member_table_ids=(1, 0, 1),
     )
-    processor = StypeDispatch(
+    processor = sp.StypeDispatch(
         numerical=lambda value: value.replace_blocks(
             numerical=value.numerical.square()
         )
@@ -241,8 +237,8 @@ def test_stype_dispatch_ensemble_fits_routes_per_group() -> None:
         tables=(first, second),
         member_table_ids=(0, 1, 0),
     )
-    processor = StypeDispatch(numerical=Standardize(with_std=False))
-    combined = StypeDispatch(numerical=Standardize(with_std=False))
+    processor = sp.StypeDispatch(numerical=sp.Standardize(with_std=False))
+    combined = sp.StypeDispatch(numerical=sp.Standardize(with_std=False))
 
     processor.fit_ensemble(table)
     transformed = processor.transform_ensemble(table)

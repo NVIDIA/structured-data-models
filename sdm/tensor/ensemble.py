@@ -6,8 +6,8 @@ from typing import Self, cast
 
 import torch
 
-from sdm.stype import Stype, StypeLike
-from sdm.tensor.table import TableTensor
+from sdm import Stype, StypeLike
+from sdm.tensor import TableTensor
 
 
 class EnsembleTable:

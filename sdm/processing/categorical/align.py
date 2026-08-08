@@ -3,32 +3,61 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm import Stype
-from sdm.processing.ensemble import EnsembleProcessor
-from sdm.relational.join import join_index
-from sdm.tensor import (
+from sdm import (
     CategoricalTensor,
     ColumnarTensor,
-    EnsembleTable,
     StringTensor,
+    Stype,
     TableTensor,
 )
+from sdm.processing import EnsembleProcessor
+from sdm.relational.join import join_index
+from sdm.tensor import EnsembleTable
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
 
 class AlignCategories(EnsembleProcessor):
-    """Align categorical columns to vocabularies observed during fitting.
+    """Align categorical columns to categories observed during fitting.
 
-    Fitting keeps the observed category values for each column. Transforming
-    remaps input codes by category value into those fitted vocabularies.
-    Missing values and unseen categories are encoded as ``-1``.
+    A categorical column stores each value as an integer code indexing an
+    ordered list of categories. Separately created tables can use different
+    codes for the same value. Fitting learns the category list for each column,
+    and transforming remaps another table to use it. Missing values and
+    categories not seen during fitting receive code ``-1``.
 
     Args:
-        sort_by: How to order fitted category vocabularies.
+        sort_by: How to order fitted categories.
             ``"code"`` keeps observed categories in original order.
             ``"frequency"`` orders observed categories by descending frequency.
             ``"value"`` orders observed categories by ascending value.
+
+    >>> import pandas as pd
+    >>> import sdm
+    >>> from sdm.processing import AlignCategories
+    >>> table1 = sdm.TableTensor.from_pandas(
+    ...     pd.DataFrame({"color": ["red", "blue", "red"]}),
+    ...     stypes={"color": "categorical"},
+    ... )
+    >>> table2 = sdm.TableTensor.from_pandas(
+    ...     pd.DataFrame({"color": ["blue", "green", None]}),
+    ...     stypes={"color": "categorical"},
+    ... )
+    >>> table1.categorical.categories[0].tolist()
+    ['red', 'blue']
+    >>> table2.categorical.categories[0].tolist()
+    ['blue', 'green']
+    >>> table2.categorical.code[:, 0].tolist()
+    [0, 1, -1]
+    >>> processor = AlignCategories().fit(table1)
+    >>> table2 = processor.transform(table2)
+    >>> table2.categorical.categories[0].tolist()
+    ['red', 'blue']
+    >>> table2.categorical.code[:, 0].tolist()
+    [1, -1, -1]
+
+    Here, ``"blue"`` changes from code ``0`` to ``1``, while unseen
+    ``"green"`` and the missing value use ``-1``.
     """
 
     supported_stypes = frozenset({Stype.categorical})
@@ -274,6 +303,66 @@ class AlignCategories(EnsembleProcessor):
         )
 
     @staticmethod
+    def _string_category_lookups(
+        input_categories: tuple[StringTensor, ...],
+        fitted_categories: tuple[Tensor, ...],
+        codes: Tensor,
+    ) -> tuple[Tensor, ...]:
+        if not input_categories:
+            return ()
+
+        # Pair IDs for each input category: (total_input_categories,).
+        left_pair = torch.cat(
+            [
+                codes.new_full((categories.numel(),), pair_index)
+                for pair_index, categories in enumerate(input_categories)
+            ]
+        )
+        # Pair IDs for each fitted category: (total_fitted_categories,).
+        right_pair = torch.cat(
+            [
+                codes.new_full((categories.numel(),), pair_index)
+                for pair_index, categories in enumerate(fitted_categories)
+            ]
+        )
+        left_index, right_index = join_index(
+            left_table=TableTensor(
+                columns={"id": ("pair", "value")},
+                id=ColumnarTensor(
+                    (left_pair, torch.cat(input_categories)),
+                ),
+            ),
+            right_table=TableTensor(
+                columns={"id": ("pair", "value")},
+                id=ColumnarTensor(
+                    (right_pair, torch.cat(fitted_categories)),
+                ),
+            ),
+            left_keys=["pair", "value"],
+            right_keys=["pair", "value"],
+            dtype=codes.dtype,
+        )
+        fitted_codes = torch.cat(
+            [
+                torch.arange(
+                    categories.numel(),
+                    dtype=codes.dtype,
+                    device=codes.device,
+                )
+                for categories in fitted_categories
+            ]
+        )
+        # Fitted code for each input category: (total_input_categories,).
+        lookup = codes.new_full(
+            (sum(categories.numel() for categories in input_categories),),
+            -1,
+        )
+        lookup[left_index] = fitted_codes[right_index]
+        return lookup.split(
+            [categories.numel() for categories in input_categories]
+        )
+
+    @staticmethod
     def _category_lookup(
         input_categories: Tensor,
         fitted_categories: Tensor,
@@ -283,42 +372,25 @@ class AlignCategories(EnsembleProcessor):
         if fitted_categories.numel() == 0:
             return lookup
 
-        if isinstance(input_categories, StringTensor):
-            # TODO Join once with a column-index composite key.
-            left_index, right_index = join_index(
-                left_table=TableTensor(
-                    columns={"id": ("id",)},
-                    id=ColumnarTensor((input_categories,)),
-                ),
-                right_table=TableTensor(
-                    columns={"id": ("id",)},
-                    id=ColumnarTensor((fitted_categories,)),
-                ),
-                left_keys=["id"],
-                right_keys=["id"],
-                dtype=codes.dtype,
-            )
-            lookup[left_index] = right_index
-        else:
-            comparable_categories = input_categories
-            sorted_categories = fitted_categories
-            if (
-                comparable_categories.dtype == torch.bool
-                or comparable_categories.dtype in _UNSIGNED_DTYPES
-            ):
-                comparable_categories = comparable_categories.to(torch.int64)
-                sorted_categories = sorted_categories.to(torch.int64)
+        comparable_categories = input_categories
+        sorted_categories = fitted_categories
+        if (
+            comparable_categories.dtype == torch.bool
+            or comparable_categories.dtype in _UNSIGNED_DTYPES
+        ):
+            comparable_categories = comparable_categories.to(torch.int64)
+            sorted_categories = sorted_categories.to(torch.int64)
 
-            sorted_categories, perm = sorted_categories.sort()
-            position = torch.searchsorted(
-                sorted_categories,
-                comparable_categories,
-            )
-            position = position.clamp(max=sorted_categories.numel() - 1)
-            match = sorted_categories[position] == comparable_categories
-            left_index = match.nonzero().view(-1)
-            right_index = perm[position[left_index]]
-            lookup[left_index] = right_index.to(codes.dtype)
+        sorted_categories, perm = sorted_categories.sort()
+        position = torch.searchsorted(
+            sorted_categories,
+            comparable_categories,
+        )
+        position = position.clamp(max=sorted_categories.numel() - 1)
+        match = sorted_categories[position] == comparable_categories
+        left_index = match.nonzero().view(-1)
+        right_index = perm[position[left_index]]
+        lookup[left_index] = right_index.to(codes.dtype)
         return lookup
 
     def _align_to_categories(
@@ -331,27 +403,82 @@ class AlignCategories(EnsembleProcessor):
         if single_table:
             codes = codes.unsqueeze(0)
         aligned_codes = torch.full_like(codes, -1)
+        lookups_by_column: list[dict[int, Tensor]] = [
+            {} for _ in table.categorical.categories
+        ]
+        string_requests: list[tuple[int, int, StringTensor, Tensor]] = []
         for column_index, input_categories in enumerate(
             table.categorical.categories
         ):
             if input_categories.numel() == 0:
                 continue
 
-            lookups = []
-            lookup_by_categories: dict[int, Tensor] = {}
+            lookup_by_categories = lookups_by_column[column_index]
+            pending_categories: set[int] = set()
             for batch_categories in fitted_categories:
                 column_categories = batch_categories[column_index]
                 identity = id(column_categories)
                 lookup = lookup_by_categories.get(identity)
-                if lookup is None:
-                    lookup = self._category_lookup(
-                        input_categories,
-                        column_categories,
-                        codes,
+                if lookup is not None or identity in pending_categories:
+                    continue
+                if column_categories.numel() == 0:
+                    lookup_by_categories[identity] = codes.new_full(
+                        (input_categories.numel(),),
+                        -1,
                     )
-                    lookup_by_categories[identity] = lookup
-                lookups.append(lookup)
+                    continue
+                if isinstance(input_categories, StringTensor) != isinstance(
+                    column_categories, StringTensor
+                ):
+                    raise NotImplementedError(
+                        "Cannot align string categories with non-string "
+                        "categories"
+                    )
+                if isinstance(input_categories, StringTensor):
+                    pending_categories.add(identity)
+                    string_requests.append(
+                        (
+                            column_index,
+                            identity,
+                            input_categories,
+                            column_categories,
+                        )
+                    )
+                    continue
+                lookup_by_categories[identity] = self._category_lookup(
+                    input_categories,
+                    column_categories,
+                    codes,
+                )
 
+        string_lookups = self._string_category_lookups(
+            input_categories=tuple(
+                input_categories
+                for _, _, input_categories, _ in string_requests
+            ),
+            fitted_categories=tuple(
+                fitted_categories
+                for _, _, _, fitted_categories in string_requests
+            ),
+            codes=codes,
+        )
+        for (column_index, identity, _, _), lookup in zip(
+            string_requests,
+            string_lookups,
+            strict=True,
+        ):
+            lookups_by_column[column_index][identity] = lookup
+
+        for column_index, input_categories in enumerate(
+            table.categorical.categories
+        ):
+            if input_categories.numel() == 0:
+                continue
+            lookup_by_categories = lookups_by_column[column_index]
+            lookups = [
+                lookup_by_categories[id(batch_categories[column_index])]
+                for batch_categories in fitted_categories
+            ]
             column_codes = codes[..., column_index]
             mask = column_codes >= 0
             lookup = torch.stack(lookups)

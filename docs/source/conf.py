@@ -52,6 +52,7 @@ intersphinx_mapping = {
     "pandas": ("https://pandas.pydata.org/docs", None),
     "pyarrow": ("https://arrow.apache.org/docs", None),
     "python": ("https://docs.python.org/3", None),
+    "sentence_transformers": ("https://sbert.net", None),
     "torch": ("https://docs.pytorch.org/docs/stable", None),
     "graphviz": ("https://graphviz.readthedocs.io/en/stable/", None),
     "typing_extensions": (

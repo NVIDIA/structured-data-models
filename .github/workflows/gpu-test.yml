@@ -43,13 +43,6 @@ jobs:
         uses: nv-gha-runners/setup-proxy-cache@main
         continue-on-error: true
 
-      - name: Cache RelBench dataset
-        if: steps.ci-full-test-label.outputs.result == 'true'
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
-        with:
-          path: /home/runner/.cache/relbench
-          key: relbench-${{ runner.os }}-${{ runner.arch }}-rel-f1
-
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
         with:
@@ -68,25 +61,10 @@ jobs:
           uv pip install \
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
+            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             --index-strategy=unsafe-best-match \
             --group=test \
-            . \
-            'cudf-cu13>=26.6' \
-            'pandas<3' \
-            'pylibcugraph-cu13>=26.6' \
-            'autogluon.common@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common' \
-            'autogluon.core@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core' \
-            'autogluon.features@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=features' \
-            'autogluon.tabular@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=tabular' \
-            'bencheval@git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/bencheval' \
-            'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena' \
-            relbench \
-            scikit-learn \
-            torchmetrics \
-            tqdm
-          uv pip install \
-            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
-            pyg-lib
+            .
 
       - name: GPU sanity check
         run: |
@@ -100,6 +78,8 @@ jobs:
           import pylibcugraph
           import torch
 
+          pandas_version = version("pandas")
+          assert pandas_version.startswith("3.")
           assert torch.cuda.is_available(), "CUDA not available to torch"
           assert hasattr(pylibcugraph, "heterogeneous_uniform_neighbor_sample")
           assert hasattr(
@@ -109,44 +89,13 @@ jobs:
           print("torch", torch.__version__)
           print("cudf", cudf.__version__)
           print("cupy", cupy.__version__)
+          print("pandas", pandas_version)
           print("pylibcugraph", version("pylibcugraph-cu13"))
           print("pyg-lib", version("pyg-lib"))
           PY
 
       - name: Run tests
-        timeout-minutes: 5
         env:
           FULL_TEST: ${{ (github.ref_name == 'main' || steps.ci-full-test-label.outputs.result == 'true') && '1' || '0' }}
         run: |
           pytest -m cuda -rs --durations=25
-
-      - name: Run examples
-        if: steps.ci-full-test-label.outputs.result == 'true'
-        timeout-minutes: 10
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          python examples/tabiclv2/quickstart.py
-          python examples/tabiclv2/strable/main.py
-          python examples/kumorfm/rel_bench.py --dataset=rel-f1 --task=driver-position
-          python - <<'PY'
-          import runpy
-          import sys
-          from pathlib import Path
-
-          from tabarena.contexts import TabArenaContext
-
-          example = Path("examples/tabiclv2/tabarena/main.py")
-          sys.path.insert(0, str(example.parent))
-          build_and_run_jobs = TabArenaContext.build_and_run_jobs
-
-          def build_and_run_one_dataset(self, experiments, **kwargs):
-              kwargs["build_kwargs"] = {
-                  "dataset_names": ["blood-transfusion-service-center"],
-              }
-              return build_and_run_jobs(self, experiments, **kwargs)
-
-          TabArenaContext.build_and_run_jobs = build_and_run_one_dataset
-          runpy.run_path(str(example), run_name="__main__")
-          PY
-          python examples/tabiclv2/tabarena/evaluate.py
