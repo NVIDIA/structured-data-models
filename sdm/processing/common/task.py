@@ -11,6 +11,8 @@ from sdm.tensor import EnsembleTable
 class TaskDispatch(EnsembleProcessor):
     """Apply separate processors based on the semantic type of the target.
 
+    :class:`TaskDispatch` is resolved only during model execution.
+
     Args:
         classification: Processor selected for a categorical target.
         regression: Processor selected for a numerical target.

@@ -76,7 +76,7 @@ class _RecipeExecution:
             for module in processor.modules()
             if isinstance(module, sp.TaskDispatch)
         )
-        if task_dispatchers:
+        if len(task_dispatchers) > 0:
             # Check total width because a target may contain multiple stypes.
             if any(group.size(-1) != 1 for group in y_ensemble):
                 raise ValueError(

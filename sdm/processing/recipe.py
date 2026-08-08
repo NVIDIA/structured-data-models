@@ -31,9 +31,7 @@ class Recipe:
     ``recipe.features.transform(table)`` or
     ``recipe.target.inverse_transform(prediction)``. Recipes do not infer each
     step's non-finite input contract; order steps so values are imputed before
-    processors that do not explicitly document non-finite support. A
-    :class:`~sdm.processing.TaskDispatch` in ``features`` or ``output`` is
-    selected from the transformed target during model execution.
+    processors that do not explicitly document non-finite support.
 
     Bind a recipe to context data with :meth:`bind` to obtain a reusable
     execution for query, inverse-target, and output transforms.
