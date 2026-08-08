@@ -30,7 +30,11 @@ jobs:
       - name: Install package
         run: |
           # `-e` for coverage report.
-          uv pip install --torch-backend=cpu --group=test -e .
+          uv pip install \
+            --torch-backend=cpu \
+            --find-links=https://data.pyg.org/whl/torch-2.13.0+cpu.html \
+            --group=test \
+            -e .
 
       - name: Run tests
         env:
