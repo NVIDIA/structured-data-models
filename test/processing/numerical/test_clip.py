@@ -30,7 +30,7 @@ def test_clip_clamps_fixed_bounds_and_preserves_metadata(
     assert actual.columns == table.columns
     assert actual.device == table.device
     assert repr(Clip(min_value=-100.0, max_value=100.0)) == (
-        "Clip(min_value=-100.0, max_value=100.0)"
+        "Clip(-100.0, 100.0)"
     )
 
 

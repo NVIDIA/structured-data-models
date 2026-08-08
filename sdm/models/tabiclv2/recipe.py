@@ -16,7 +16,11 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.DropConstantColumns(),
                     sp.Standardize(epsilon=1e-6),
                     sp.Clip(min_value=-100.0, max_value=100.0),
-                    sp.Choice(sp.Identity(), sp.PowerTransform()),
+                    sp.Choice(
+                        sp.Identity(),
+                        sp.PowerTransform(),
+                        method="round_robin",
+                    ),
                     sp.ClipSigma(threshold=4.0),
                     sp.ShuffleColumns(method="shift"),
                 ],
