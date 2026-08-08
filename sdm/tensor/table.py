@@ -6,12 +6,12 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
@@ -179,7 +179,7 @@ class TableTensor(Tensor):
 
             if stype == Stype.datetime and block.dtype != torch.int64:
                 raise ValueError(
-                    f"Expected {stype.value!r} block to have dtype "
+                    f"Expected {str(stype)!r} block to have dtype "
                     f"'{torch.int64}' (got '{block.dtype}')"
                 )
 
@@ -188,17 +188,17 @@ class TableTensor(Tensor):
 
             if block.dim() < 2:
                 raise ValueError(
-                    f"Expected {stype.value!r} block to be at least 2D "
+                    f"Expected {str(stype)!r} block to be at least 2D "
                     f"(got {block.dim()}D)"
                 )
             if size != block.size()[:-1]:
                 raise ValueError(
-                    f"Expected {stype.value!r} block size of "
+                    f"Expected {str(stype)!r} block size of "
                     f"{_block_size_repr(size)} (got {tuple(block.size())})"
                 )
             if device != block.device:
                 raise ValueError(
-                    f"Expected {stype.value!r} block to be on device "
+                    f"Expected {str(stype)!r} block to be on device "
                     f"'{device}' (got '{block.device}')"
                 )
 
@@ -248,7 +248,7 @@ class TableTensor(Tensor):
             if block.size(-1) != len(columns[stype]):
                 _columns = "column" if len(columns[stype]) == 1 else "columns"
                 raise ValueError(
-                    f"Expected {stype.value!r} block to hold "
+                    f"Expected {str(stype)!r} block to hold "
                     f"{len(columns[stype])} {_columns} (got {block.size(-1)})"
                 )
 
@@ -354,9 +354,14 @@ class TableTensor(Tensor):
 
             columns.extend(self._columns[stype])
 
-            if stype in (Stype.categorical, Stype.id):
-                tensor = cast(CategoricalTensor | ColumnarTensor, tensor)
+            if isinstance(tensor, CategoricalTensor | ColumnarTensor):
                 arrays.extend(tensor.to_arrow().itercolumns())
+            elif isinstance(tensor, StringTensor):
+                tensor = cast(
+                    StringTensor,
+                    tensor.movedim(-1, 0).contiguous().cpu(),
+                )
+                arrays.extend(cast(StringTensor, t).to_arrow() for t in tensor)
             elif stype == Stype.datetime:
                 tensor = tensor.movedim(-1, 0).contiguous().cpu()
                 array = tensor.numpy().reshape(tensor.size(0), -1)
@@ -520,17 +525,25 @@ class TableTensor(Tensor):
             if tensor.size(-1) == 0:
                 continue
 
-            if stype in (Stype.categorical, Stype.id):
-                tensor = cast(CategoricalTensor | ColumnarTensor, tensor)
+            if isinstance(tensor, CategoricalTensor | ColumnarTensor):
                 dfs.append(tensor.to_cudf(self._columns[stype]))
+            elif isinstance(tensor, StringTensor):
+                tensor = cast(StringTensor, tensor.movedim(-1, 0).contiguous())
+                df = cudf.DataFrame(
+                    {
+                        name: cast(StringTensor, column).to_cudf()
+                        for name, column in zip(self._columns[stype], tensor)
+                    }
+                )
+                dfs.append(df)
             elif stype == Stype.datetime:
                 tensor = tensor.movedim(-1, 0).contiguous()
                 df = cudf.DataFrame(
                     {
-                        name: to_cudf(data, mask).astype(
+                        name: to_cudf(column, mask).astype(
                             "datetime64[us]", copy=False
                         )
-                        for name, data, mask in zip(
+                        for name, column, mask in zip(
                             self._columns[stype],
                             tensor,
                             tensor != NaT,
@@ -540,13 +553,25 @@ class TableTensor(Tensor):
                 dfs.append(df)
             else:
                 tensor = tensor.detach().movedim(-1, 0).contiguous()
-                df = cudf.DataFrame(
-                    {
-                        name: to_cudf(t)
-                        for name, t in zip(self._columns[stype], tensor)
-                    }
+                valid = (
+                    tensor.isnan().logical_not_()
+                    if tensor.is_floating_point()
+                    else None
                 )
+                col_dict: dict[str, cudf.Series] = {}
+                for idx, (name, column) in enumerate(
+                    zip(self._columns[stype], tensor)
+                ):
+                    col_dict[name] = to_cudf(
+                        tensor=column,
+                        valid_mask=None if valid is None else valid[idx],
+                    )
+
+                df = cudf.DataFrame(col_dict)
                 dfs.append(df)
+
+        if len(dfs) == 1:
+            return dfs[0]
 
         return cudf.concat(dfs, axis=1)
 
@@ -901,7 +926,7 @@ class TableTensor(Tensor):
 
         stype_repr = [
             (
-                f"{' ' * (indent + 4)}{stype.value} ({tensor.size(-1):,}): "
+                f"{' ' * (indent + 4)}{stype} ({tensor.size(-1):,}): "
                 f"{_columns_repr(self._columns[stype])},"
             )
             for stype, tensor in self.items()
@@ -924,7 +949,7 @@ class TableTensor(Tensor):
 
         max_columns = 10
         rows = [
-            [column, stype.value]
+            [column, str(stype)]
             for stype, columns in self._columns.items()
             for column in columns
         ]
@@ -961,22 +986,38 @@ def _alias(inp: TableTensor) -> TableTensor:
     )
 
 
-@TableTensor.implements(aten._to_copy.default)
-def _to_copy(
+@TableTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
     inp: TableTensor,
     *,
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
     device: torch.device | str | None = None,
-    pin_memory: bool = False,
+    pin_memory: bool | None = None,  # Ignored by PyTorch.
     non_blocking: bool = False,
+    copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
-    device = inp.device if device is None else device
+
+    if (
+        not copy
+        and (dtype is None or dtype == inp.dtype)
+        and (device is None or torch.device(device) == inp.device)
+        and (layout is None or layout == inp.layout)
+        and (
+            memory_format is None
+            or memory_format == torch.preserve_format
+            or (
+                memory_format == torch.contiguous_format
+                and inp.is_contiguous()
+            )
+        )
+    ):
+        return inp
+
     blocks = {
-        stype: aten._to_copy.default(
+        stype: aten.to.dtype_layout(
             tensor,
-            device=device,
             dtype=dtype
             if (
                 stype not in (Stype.categorical,)
@@ -985,8 +1026,10 @@ def _to_copy(
             and stype not in (Stype.datetime, Stype.text, Stype.id)
             else None,
             layout=layout,
+            device=device,
             pin_memory=pin_memory,
             non_blocking=non_blocking,
+            copy=copy,
             memory_format=memory_format,
         )
         for stype, tensor in inp.items()
@@ -1005,12 +1048,72 @@ def _to_dtype(
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
-    if not copy and inp.dtype == dtype:
-        return inp
-    return _to_copy(
+    return _to_dtype_layout(
         inp,
         dtype=dtype,
         non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@TableTensor.implements(aten.to.device)
+def _to_device(
+    inp: TableTensor,
+    device: torch.device,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@TableTensor.implements(aten.to.other)
+def _to_other(
+    inp: TableTensor,
+    other: Tensor,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=other.dtype,
+        layout=other.layout,
+        device=other.device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@TableTensor.implements(aten._to_copy.default)
+def _to_copy(
+    inp: TableTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool = False,  # Ignored by PyTorch.
+    non_blocking: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        non_blocking=non_blocking,
+        copy=True,
         memory_format=memory_format,
     )
 
@@ -1021,7 +1124,7 @@ def _clone(
     *,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
-    return _to_copy(inp, memory_format=memory_format)
+    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
 
 
 @TableTensor.implements(aten.contiguous.default)
@@ -1057,6 +1160,16 @@ def _pin_memory(inp: TableTensor) -> TableTensor:
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
+
+
+@TableTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: TableTensor,
+    device: torch.device | None = None,
+) -> TableTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
 
 
 @TableTensor.implements(aten.equal.default)
@@ -1150,6 +1263,26 @@ def _view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
 @preserve_view_inference_mode
 def _unsafe_view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
     return _view(inp, size)
+
+
+@TableTensor.implements(aten.reshape.default)
+def _reshape(inp: TableTensor, size: Sequence[int]) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.reshape.default.decompose(inp, size),
+    )
+
+
+@TableTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: TableTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
 
 
 @TableTensor.implements(aten.squeeze.default)
@@ -1294,15 +1427,21 @@ def _slice(
     end: int | None = None,
     step: int = 1,
 ) -> TableTensor:
+    if _is_column_dim(inp, dim):
+        if (
+            (start is None or start == 0 or start <= -inp.size(-1))
+            and (end is None or end >= inp.size(dim))
+            and step == 1
+        ):
+            return _alias(inp)
+        raise RuntimeError(
+            f"Can't slice the column dimension of '{inp.__class__.__name__}'"
+        )
+
     blocks = {
         stype: aten.slice.Tensor(tensor, dim, start, end, step)
         for stype, tensor in inp.items()
     }
-
-    if dim % inp.dim() == inp.dim() - 1:
-        raise RuntimeError(
-            f"Can't slice the column dimension of {inp.__class__.__name__!r}"
-        )
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
@@ -1318,15 +1457,17 @@ def _narrow(
     start: int,
     length: int,
 ) -> TableTensor:
+    if _is_column_dim(inp, dim):
+        if (start == 0 or start == -inp.size(-1)) and length == inp.size(-1):
+            return _alias(inp)
+        raise RuntimeError(
+            f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
+        )
+
     blocks = {
         stype: tensor.narrow(dim, start, length)
         for stype, tensor in inp.items()
     }
-
-    if dim % inp.dim() == inp.dim() - 1:
-        raise RuntimeError(
-            f"Can't narrow the column dimension of {inp.__class__.__name__!r}"
-        )
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),

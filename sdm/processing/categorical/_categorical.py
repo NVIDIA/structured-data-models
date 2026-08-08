@@ -1,5 +1,4 @@
-from sdm import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
 
 
 def _check_categorical_codes(table: TableTensor) -> None:

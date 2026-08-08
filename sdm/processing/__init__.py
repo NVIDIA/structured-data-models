@@ -1,19 +1,24 @@
 """Processors for structured data tables."""
 
 from sdm.processing.base import Processor, InvertibleMixin
-from sdm.processing.ensemble import EnsembleProcessor, EnsembleInvertibleMixin
+from sdm.processing.ensemble import (
+    EnsembleProcessor,
+    EnsembleInvertibleMixin,
+    EnsembleProcessorAdapter,
+)
 from sdm.processing.common import (
     Identity,
     Callable,
     Sequential,
     StypeDispatch,
     TaskDispatch,
+    TableDispatch,
     Choice,
     ToNumerical,
     ShuffleColumns,
     SelectColumns,
 )
-from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
+from sdm.processing.text import TFIDF, SentenceTransformer
 from sdm.processing.numerical import (
     Clip,
     ClipQuantiles,
@@ -39,16 +44,19 @@ __all__ = [
     "InvertibleMixin",
     "EnsembleProcessor",
     "EnsembleInvertibleMixin",
+    "EnsembleProcessorAdapter",
     "Identity",
     "Callable",
     "Sequential",
     "StypeDispatch",
     "TaskDispatch",
+    "TableDispatch",
     "Choice",
     "ToNumerical",
     "ShuffleColumns",
     "SelectColumns",
-    "TfidfTextEmbed",
+    "TFIDF",
+    "SentenceTransformer",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",

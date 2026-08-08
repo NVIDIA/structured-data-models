@@ -10,7 +10,7 @@ from sdm.testing import onlyCUDA, withCUDA
 
 def test_from_list() -> None:
     tensor = StringTensor.from_list([["hi", "é"], ["", "abc"]])
-    assert repr(tensor) == "StringTensor(..., size=(2, 2))"
+    assert repr(tensor) == "StringTensor(size=(2, 2))"
     assert tensor.size() == (2, 2)
     assert tensor.stride() == (2, 1)
     assert tensor.dtype == torch.uint8
@@ -32,7 +32,7 @@ def test_from_list() -> None:
     assert tensor._offset.equal(torch.tensor([0, 2]))
 
     tensor = StringTensor.from_list(None)
-    assert repr(tensor) == "StringTensor(..., size=(), null_count=1)"
+    assert repr(tensor) == "StringTensor(size=(), null_count=1)"
     assert tensor.size() == ()
     assert tensor.valid is not None
     assert not bool(tensor.valid)

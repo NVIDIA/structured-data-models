@@ -3,13 +3,13 @@ from __future__ import annotations
 import functools
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm.tensor import StringTensor, VarLenTensor
 from sdm.tensor.io import (
@@ -194,22 +194,18 @@ class CategoricalTensor(Tensor):
                 f"(got {len(names)})"
             )
 
-        code_t = self._code.movedim(-1, 0).contiguous()
-
         arrays = []
-        for code, category, na_mask in zip(
-            code_t.cpu().unbind(0),
+        for code, category, mask in zip(
+            self.code.movedim(-1, 0).contiguous().cpu().unbind(0),
             self.categories,
-            (code_t < 0).cpu().unbind(0),
+            self.isfinite().movedim(-1, 0).contiguous().cpu().unbind(0),
         ):
-            indices = pa.array(
-                code.view(-1).numpy(),
-                mask=na_mask.view(-1).numpy(),
-            )
             arrays.append(
                 pa.DictionaryArray.from_arrays(
-                    indices=indices,
-                    dictionary=to_arrow(category),
+                    indices=to_arrow(code, mask),
+                    dictionary=category.to_arrow()
+                    if isinstance(category, StringTensor)
+                    else to_arrow(category),
                 )
             )
 
@@ -230,12 +226,20 @@ class CategoricalTensor(Tensor):
             dtype: The dtype.
             device: The device.
         """
+        import cudf
         from cudf.api.types import is_string_dtype
 
-        codes, categories = ser.factorize(
-            sort=False,
-            use_na_sentinel=True,
-        )
+        if isinstance(ser.dtype, cudf.CategoricalDtype):
+            code_dtype = "int64" if dtype == torch.int64 else "int32"
+            codes = ser.cat.codes.astype(code_dtype, copy=False).to_cupy(
+                na_value=-1
+            )
+            categories = ser.cat.categories
+        else:
+            codes, categories = ser.factorize(
+                sort=False,
+                use_na_sentinel=True,
+            )
         code = torch.from_dlpack(codes).unsqueeze(-1).to(device, dtype)
 
         if len(categories) == 0:
@@ -263,18 +267,18 @@ class CategoricalTensor(Tensor):
                 f"(got {len(names)})"
             )
 
-        code_t = self._code.movedim(-1, 0).contiguous()
-
         columns = {}
         for name, code, category, mask in zip(
             names,
-            code_t.unbind(0),
+            self.code.movedim(-1, 0).contiguous().unbind(0),
             self.categories,
-            (code_t >= 0).unbind(0),
+            self.isfinite().movedim(-1, 0).contiguous().unbind(0),
         ):
             columns[name] = cudf.CategoricalIndex.from_codes(
                 codes=to_cudf(code, mask)._column,
-                categories=to_cudf(category),
+                categories=category.to_cudf()
+                if isinstance(category, StringTensor)
+                else to_cudf(category),
                 ordered=False,
             )
 
@@ -396,10 +400,12 @@ class CategoricalTensor(Tensor):
                 for value, isna in zip(values, na_mask)
             ]
 
-        def decode_column(code: Tensor, category: Tensor) -> Any:
-            na_mask = code < 0
-            out = category[code.clamp(min=0)]
-            return apply_na_mask(out.tolist(), na_mask.tolist())
+        def decode_column(tensor: CategoricalTensor) -> Sequence[Any]:
+            out = tensor.categories[0][tensor.code.clamp(min=0).squeeze(-1)]
+            return apply_na_mask(
+                out.tolist(),
+                tensor.isnan().squeeze(-1).tolist(),
+            )
 
         def columns_to_rows(
             columns: Sequence[Any],
@@ -417,8 +423,8 @@ class CategoricalTensor(Tensor):
             ]
 
         columns = [
-            decode_column(self._code[..., i], category)
-            for i, category in enumerate(self._categories)
+            decode_column(cast(CategoricalTensor, column))
+            for column in self.split(1, dim=-1)
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
 
@@ -439,6 +445,119 @@ def _alias(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(aten.alias.default(inp._code), inp._categories)
 
 
+@CategoricalTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
+    inp: CategoricalTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool | None = None,  # Ignored by PyTorch.
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+
+    if (
+        not copy
+        and (dtype is None or dtype == inp.dtype)
+        and (device is None or torch.device(device) == inp.device)
+        and (layout is None or layout == inp.layout)
+        and (
+            memory_format is None
+            or memory_format == torch.preserve_format
+            or (
+                memory_format == torch.contiguous_format
+                and inp.is_contiguous()
+            )
+        )
+    ):
+        return inp
+
+    code = aten.to.dtype_layout(
+        inp._code,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+    if code.dtype not in inp.ALLOWED_DTYPES or code.layout != torch.strided:
+        return code
+
+    categories = tuple(
+        aten.to.dtype_layout(
+            category,
+            dtype=None,
+            layout=None,
+            device=device,
+            pin_memory=pin_memory,
+            non_blocking=non_blocking,
+            copy=copy,
+            memory_format=None,
+        )
+        for category in inp._categories
+    )
+    return inp.__class__(code, categories)
+
+
+@CategoricalTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: CategoricalTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@CategoricalTensor.implements(aten.to.device)
+def _to_device(
+    inp: CategoricalTensor,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@CategoricalTensor.implements(aten.to.other)
+def _to_other(
+    inp: CategoricalTensor,
+    other: Tensor,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=other.dtype,
+        layout=other.layout,
+        device=other.device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
 @CategoricalTensor.implements(aten._to_copy.default)
 def _to_copy(
     inp: CategoricalTensor,
@@ -446,36 +565,20 @@ def _to_copy(
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
     device: torch.device | str | None = None,
-    pin_memory: bool = False,
+    pin_memory: bool = False,  # Ignored by PyTorch.
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
-
-    code = aten._to_copy.default(
-        inp._code,
-        device=device,
+    return _to_dtype_layout(
+        inp,
         dtype=dtype,
         layout=layout,
+        device=device,
         pin_memory=pin_memory,
         non_blocking=non_blocking,
+        copy=True,
         memory_format=memory_format,
     )
-    if code.dtype not in inp.ALLOWED_DTYPES or code.layout != torch.strided:
-        return code
-
-    categories = tuple(
-        aten._to_copy.default(
-            category,
-            device=device,
-            dtype=None,
-            layout=None,
-            pin_memory=pin_memory,
-            non_blocking=non_blocking,
-            memory_format=None,
-        )
-        for category in inp._categories
-    )
-    return inp.__class__(code, categories)
 
 
 @CategoricalTensor.implements(aten.clone.default)
@@ -484,9 +587,7 @@ def _clone(
     *,
     memory_format: torch.memory_format | None = None,
 ) -> CategoricalTensor:
-    out = _to_copy(inp, memory_format=memory_format)
-    assert isinstance(out, CategoricalTensor)
-    return out
+    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
 
 
 @CategoricalTensor.implements(aten.contiguous.default)
@@ -499,9 +600,27 @@ def _contiguous(
     return inp.__class__(code, inp._categories)
 
 
+@CategoricalTensor.implements(aten.is_pinned.default)
+def _is_pinned(inp: CategoricalTensor) -> bool:
+    return inp._code.is_pinned() and all(
+        category.is_pinned() for category in inp._categories
+    )
+
+
 @CategoricalTensor.implements(aten._pin_memory.default)
 def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
-    return inp.__class__(inp._code.pin_memory(), inp._categories)
+    categories = tuple(category.pin_memory() for category in inp._categories)
+    return inp.__class__(inp._code.pin_memory(), categories)
+
+
+@CategoricalTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: CategoricalTensor,
+    device: torch.device | None = None,
+) -> CategoricalTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
 
 
 @CategoricalTensor.implements(aten.equal.default)
@@ -542,6 +661,20 @@ def _view(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:
 @preserve_view_inference_mode
 def _unsafe_view(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:
     return _maybe_wrap(inp, aten._unsafe_view(inp._code, size))
+
+
+@CategoricalTensor.implements(aten.reshape.default)
+def _reshape(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:
+    return aten.reshape.default.decompose(inp, size)
+
+
+@CategoricalTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: CategoricalTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> Tensor:
+    return aten.flatten.using_ints.decompose(inp, start_dim, end_dim)
 
 
 @CategoricalTensor.implements(aten.squeeze.default)

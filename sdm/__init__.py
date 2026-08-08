@@ -7,6 +7,7 @@ from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.tensor import (
     VarLenTensor,
     StringTensor,
+    NullableIntTensor,
     CategoricalTensor,
     ColumnarTensor,
     TableTensor,
@@ -18,6 +19,7 @@ from sdm.relational import (
     RelatedTables,
     TemporalSamplingConfig,
 )
+from sdm.processing import Recipe
 from sdm import evaluation, models
 
 try:
@@ -32,6 +34,7 @@ __all__ = [
     "infer_stypes",
     "VarLenTensor",
     "StringTensor",
+    "NullableIntTensor",
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
@@ -40,6 +43,7 @@ __all__ = [
     "TaskLink",
     "RelatedTables",
     "TemporalSamplingConfig",
+    "Recipe",
     "evaluation",
     "models",
     "__version__",

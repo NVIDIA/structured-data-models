@@ -5,16 +5,18 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sdm import NaT, Stype, TableTensor
-from sdm.relational.data import RelationalData
+from sdm import NaT, TableTensor
+from sdm.relational import (
+    RelationalData,
+    RelationalSampler,
+    TaskLink,
+    TemporalSamplingConfig,
+)
 from sdm.relational.join import join_index
 from sdm.relational.sampler import (
-    RelationalSampler,
     RelationalSamplerOutput,
-    TemporalSamplingConfig,
     _validate_time_columns,
 )
-from sdm.relational.task import TaskLink
 
 _INTEGER_DTYPES = {
     torch.uint8,
@@ -274,14 +276,11 @@ class CuGraphRelationalSampler(RelationalSampler):
         if len(task_link.task_columns) != 1:
             return None
 
-        task_value = self._id_column(
-            task_table,
-            task_link.task_columns[0],
-        )
-        table_value = self._id_column(
-            self.data.tables[task_link.table],
-            task_link.table_columns[0],
-        )
+        task_value = task_table[task_link.task_columns[0]].id[..., 0]
+        table_value = self.data.tables[task_link.table][
+            task_link.table_columns[0]
+        ].id[..., 0]
+
         # ColumnarTensor stores numeric IDs as plain tensors. String and
         # composite IDs continue through the general cuDF join below.
         if (
@@ -358,11 +357,6 @@ class CuGraphRelationalSampler(RelationalSampler):
             )
 
         return seed
-
-    @staticmethod
-    def _id_column(table: TableTensor, column: str) -> Tensor:
-        columns = dict(zip(table.columns[Stype.id], table.id.unbind(-1)))
-        return columns[column]
 
     def _sample_non_temporal(
         self,

@@ -3,13 +3,13 @@ from __future__ import annotations
 import importlib.util
 import math
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
 import torch
 from torch import Tensor
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm._warnings import warn_once
 from sdm.tensor import VarLenTensor
@@ -243,7 +243,7 @@ class StringTensor(VarLenTensor):
     @override
     def from_list(
         cls,
-        values: str | None | Sequence[Any],
+        values: str | Sequence[Any] | None,
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
@@ -337,8 +337,8 @@ class StringTensor(VarLenTensor):
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
         # TODO Support tensor content printing.
-        out = f"{self.__class__.__name__}(..."
-        out += f", size={tuple(self.size())}"
+        out = f"{self.__class__.__name__}("
+        out += f"size={tuple(self.size())}"
         if self.valid is not None:
             out += f", null_count={int((~self.valid).sum())}"
         if not self.is_cpu:

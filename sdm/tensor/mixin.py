@@ -1,7 +1,7 @@
 import abc
+from typing import Self
 
 import torch
-from typing_extensions import Self
 
 
 class DeviceMixin(abc.ABC):

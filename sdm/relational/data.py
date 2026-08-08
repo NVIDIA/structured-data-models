@@ -3,11 +3,10 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID, join_index
@@ -189,8 +188,8 @@ class RelationalData(DeviceMixin):
                     if stype != Stype.id:
                         raise ValueError(
                             f"Expected column {column!r} in table {table!r} "
-                            f"to have semantic type {Stype.id.value!r} "
-                            f"(got {stype.value!r})"
+                            f"to have semantic type {str(Stype.id)!r} "
+                            f"(got {str(stype)!r})"
                         )
 
     def to(self, device: torch.device | str | None) -> Self:
@@ -362,7 +361,7 @@ class RelationalData(DeviceMixin):
                 label = f"{{{table_name}}}"
             else:
                 columns = [
-                    f"{column}: {stype.value}"
+                    f"{column}: {stype}"
                     for stype, columns in table._columns.items()
                     for column in columns
                 ]
@@ -414,7 +413,7 @@ class RelationalData(DeviceMixin):
                 table.size(-2),
                 table.size(-1),
                 ", ".join(
-                    stype.value
+                    str(stype)
                     for stype, tensor in table.items()
                     if tensor.size(-1) > 0
                 ),

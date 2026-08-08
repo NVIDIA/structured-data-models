@@ -10,7 +10,7 @@ class SelectColumns(Processor):
 
     Args:
         max_columns: The maximum number of columns to keep.
-        mode: The column selection mode.
+        method: The column selection method.
             ``"first"`` keeps the first columns according to their order within
             each semantic block.
     """
@@ -21,14 +21,14 @@ class SelectColumns(Processor):
     def __init__(
         self,
         max_columns: int,
-        mode: Literal["first"] = "first",
+        method: Literal["first"] = "first",
     ) -> None:
         super().__init__()
         self.max_columns = max_columns
-        self.mode = mode
+        self.method = method
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        if self.mode == "first":
+        if self.method == "first":
             columns: Mapping[StypeLike, Sequence[str]] = {
                 stype: columns[: self.max_columns]
                 for stype, columns in table.columns.items()
