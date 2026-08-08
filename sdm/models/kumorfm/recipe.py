@@ -10,6 +10,3 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
         ),
     )
-    recipe = tabiclv2_recipe()
-    recipe.features = datetime_processor + recipe.features
-    return recipe

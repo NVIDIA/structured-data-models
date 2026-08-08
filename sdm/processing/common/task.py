@@ -25,7 +25,6 @@ class TaskDispatch(EnsembleProcessor):
         regression: object = None,
     ) -> None:
         super().__init__()
-        self.requires_fit = False
         self.processors: ModuleDict[EnsembleProcessor] = ModuleDict()
         for task, processor in (
             ("classification", classification),
@@ -34,10 +33,11 @@ class TaskDispatch(EnsembleProcessor):
             if processor is None:
                 continue
             processor = EnsembleProcessor.as_processor(processor)
-            if processor.requires_fit:
-                self.requires_fit = True
             self.processors[task] = processor
 
+        self.requires_fit = any(
+            processor.requires_fit for processor in self.processors.values()
+        )
         self._task: Literal["classification", "regression"] | None = None
 
     def _fit_ensemble(
@@ -100,6 +100,9 @@ class TaskDispatch(EnsembleProcessor):
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
+        if len(self.processors) == 0:
+            return super().__repr__(indent=indent)
+
         reprs = []
         for task, processor in self.processors.items():
             processor = cast(Processor, processor)

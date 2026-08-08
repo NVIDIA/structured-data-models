@@ -381,7 +381,7 @@ class TFIDF(EnsembleProcessor):
                         .cat.codes
                     )
                     codes = torch.from_dlpack(
-                        encoded.astype("int64").to_dlpack()
+                        encoded.astype("int64").to_cupy(na_value=-1)
                     ).to(device)
                 else:
                     codes = arrow_as_tensor(

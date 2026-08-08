@@ -5,10 +5,14 @@ import torch
 from huggingface_hub import hf_hub_download
 
 import sdm
-from sdm.processing import TFIDF, StypeDispatch
+import sdm.processing as sp
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--disable-text", action="store_true")
+parser.add_argument(
+    "--text-processor",
+    choices=("embed", "tfidf", "none"),
+    default="embed",
+)
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,7 +48,10 @@ exclude_cols = [
 arrow_table = pq.read_table(data_path).drop_columns(exclude_cols)
 table = sdm.TableTensor.from_arrow(
     table=arrow_table,
-    stypes=sdm.infer_stypes(arrow_table, with_text=not args.disable_text),
+    stypes=sdm.infer_stypes(
+        arrow_table,
+        with_text=args.text_processor != "none",
+    ),
     device=device,
 )
 target_name = "BT Easiness"
@@ -58,12 +65,15 @@ ground_truth = query[:, target_name].numerical.squeeze(-1)
 
 model = sdm.models.TabICLv2(device=device)
 recipe = model.default_recipe()
-recipe.features = (
-    StypeDispatch(
-        text=TFIDF(ngram_range=(4, 6), max_features=256),
-    )
-    + recipe.features
-)
+if args.text_processor != "none":
+    if args.text_processor == "tfidf":
+        text_processor = sp.TFIDF(ngram_range=(4, 6), max_features=256)
+    else:
+        text_processor = sp.Sequential(
+            sp.SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2"),
+            sp.PCA(num_components=64),
+        )
+    recipe.prepend_features(sp.StypeDispatch(text=text_processor))
 
 with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
     model.fit(

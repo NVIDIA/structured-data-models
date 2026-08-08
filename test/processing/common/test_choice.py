@@ -4,16 +4,12 @@ from typing import Any, cast
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import Stype, TableTensor
 from sdm.processing import (
-    Choice,
     EnsembleProcessor,
-    Identity,
-    ImputeMean,
     InvertibleMixin,
     Processor,
-    QuantileTransform,
-    Standardize,
 )
 from sdm.tensor import EnsembleTable
 
@@ -68,19 +64,19 @@ def _table() -> TableTensor:
 
 
 def test_choice_draws_at_fit() -> None:
-    choice = Choice(Identity(), Standardize())
+    choice = sp.Choice(sp.Identity(), sp.Standardize())
 
     with pytest.raises(RuntimeError, match="no selected option"):
         _ = choice.selected
 
     choice.fit(_table())
 
-    assert isinstance(choice.selected, Identity | Standardize)
+    assert isinstance(choice.selected, sp.Identity | sp.Standardize)
 
 
 def test_choice_accepts_callable_option() -> None:
     table = _table()
-    choice = Choice(
+    choice = sp.Choice(
         lambda table: table.replace_blocks(numerical=table.numerical.square())
     )
 
@@ -96,11 +92,11 @@ def test_choice_accepts_callable_option() -> None:
 
 def test_choice_rejects_invalid_option() -> None:
     with pytest.raises(TypeError, match=r"Input must be a"):
-        Choice(Identity(), cast(Any, object()))
+        sp.Choice(sp.Identity(), cast(Any, object()))
 
 
 def test_choice_delegates_fit_transform_and_inverse() -> None:
-    choice = Choice(Standardize())
+    choice = sp.Choice(sp.Standardize())
     table = _table()
 
     transformed = choice.fit_transform(table)
@@ -111,7 +107,7 @@ def test_choice_delegates_fit_transform_and_inverse() -> None:
 
 
 def test_choice_inverse_requires_invertible_selected() -> None:
-    choice = Choice(ImputeMean())
+    choice = sp.Choice(sp.ImputeMean())
     table = _table()
 
     choice.fit(table)
@@ -124,16 +120,16 @@ def test_choice_is_reproducible_with_generator() -> None:
     table = _table()
 
     # Seed 1 draws the second option, whose fit consumes the generator.
-    first = Choice(
-        Identity(),
-        QuantileTransform(n_quantiles=6, subsample=16),
+    first = sp.Choice(
+        sp.Identity(),
+        sp.QuantileTransform(n_quantiles=6, subsample=16),
     ).fit_transform(
         table,
         generator=torch.Generator().manual_seed(1),
     )
-    second = Choice(
-        Identity(),
-        QuantileTransform(n_quantiles=6, subsample=16),
+    second = sp.Choice(
+        sp.Identity(),
+        sp.QuantileTransform(n_quantiles=6, subsample=16),
     ).fit_transform(
         table,
         generator=torch.Generator().manual_seed(1),
@@ -144,16 +140,16 @@ def test_choice_is_reproducible_with_generator() -> None:
 
 
 def test_choice_repr_shows_all_options() -> None:
-    choice = Choice(Identity(), Standardize())
+    choice = sp.Choice(sp.Identity(), sp.Standardize())
 
     assert "Identity" in repr(choice)
     assert "Standardize" in repr(choice)
 
 
 def test_choice_copies_draw_independently_at_fit() -> None:
-    template = Choice(
-        Identity(),
-        QuantileTransform(output_distribution="normal"),
+    template = sp.Choice(
+        sp.Identity(),
+        sp.QuantileTransform(output_distribution="normal"),
     )
     copies = [copy.deepcopy(template) for _ in range(8)]
 
@@ -168,7 +164,7 @@ def test_choice_copies_draw_independently_at_fit() -> None:
 def test_choice_round_robin_routes_members() -> None:
     context = _table()
     query = context.replace_blocks(numerical=context.numerical + 100)
-    processor = Choice(Add(0), Add(10), selection="round_robin")
+    processor = sp.Choice(Add(0), Add(10), selection="round_robin")
 
     transformed = processor.fit_transform_ensemble(
         EnsembleTable(context, num_members=8)
@@ -193,8 +189,12 @@ def test_choice_round_robin_routes_members() -> None:
 
 def test_choice_fit_ensemble_fits_selected_options() -> None:
     table = EnsembleTable(_table(), num_members=4)
-    fitted = Choice(Standardize(), Identity(), selection="round_robin")
-    combined = Choice(Standardize(), Identity(), selection="round_robin")
+    fitted = sp.Choice(
+        sp.Standardize(), sp.Identity(), selection="round_robin"
+    )
+    combined = sp.Choice(
+        sp.Standardize(), sp.Identity(), selection="round_robin"
+    )
 
     fitted.fit_ensemble(table)
     transformed = fitted.transform_ensemble(table)
@@ -218,7 +218,7 @@ def test_choice_fits_options_on_selected_members() -> None:
         member_table_ids=tuple(range(4)),
     )
 
-    output = Choice(
+    output = sp.Choice(
         AddFittedMemberCount(),
         AddFittedMemberCount(),
         selection="round_robin",
@@ -232,8 +232,8 @@ def test_choice_fits_options_on_selected_members() -> None:
 
 
 def test_nested_choice_routes_selected_members_locally() -> None:
-    processor = Choice(
-        Choice(
+    processor = sp.Choice(
+        sp.Choice(
             Add(10),
             Add(20),
             Add(30),
@@ -256,7 +256,7 @@ def test_nested_choice_routes_selected_members_locally() -> None:
 
 
 def test_choice_round_robin_uses_first_option_for_single_table() -> None:
-    output = Choice(
+    output = sp.Choice(
         Add(1),
         Add(2),
         selection="round_robin",
@@ -266,7 +266,7 @@ def test_choice_round_robin_uses_first_option_for_single_table() -> None:
 
 
 def test_choice_ensemble_requires_matching_member_count() -> None:
-    processor = Choice(Add(0), Add(1), selection="round_robin")
+    processor = sp.Choice(Add(0), Add(1), selection="round_robin")
     processor.fit_transform_ensemble(EnsembleTable(_table(), num_members=8))
 
     with pytest.raises(RuntimeError, match="fitted with 8"):
