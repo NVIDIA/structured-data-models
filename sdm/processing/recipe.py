@@ -223,7 +223,7 @@ class Recipe:
             )
 
     def _validate_output(self) -> None:
-        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+        if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.output'"
             )
