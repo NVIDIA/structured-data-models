@@ -91,7 +91,6 @@ jobs:
             'pylibcugraph-cu13>=26.6,<26.8' \
             relbench \
             scikit-learn \
-            'sentence-transformers>=5.4' \
             'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena' \
             torchmetrics \
             tqdm
@@ -107,7 +106,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python examples/tabiclv2/quickstart.py
-          python examples/tabiclv2/strable/main.py
+          python examples/tabiclv2/strable/main.py --text-processor tfidf
           python examples/kumorfm/rel_bench.py --dataset rel-f1 --task driver-position
           python examples/tabiclv2/tabarena/main.py --dataset blood-transfusion-service-center
           python examples/tabiclv2/tabarena/evaluate.py
