@@ -234,11 +234,7 @@ steps are invertible, <code class="docutils literal notranslate"><span class="pr
 <code class="docutils literal notranslate"><span class="pre">recipe.features.transform(table)</span></code> or
 <code class="docutils literal notranslate"><span class="pre">recipe.target.inverse_transform(prediction)</span></code>. Recipes do not infer each
 step’s non-finite input contract; order steps so values are imputed before
-processors that do not explicitly document non-finite support. When
-<code class="docutils literal notranslate"><span class="pre">output</span></code> contains <code class="xref py py-class docutils literal notranslate"><span class="pre">TaskDispatch</span></code>, fitting
-<code class="docutils literal notranslate"><span class="pre">target</span></code> also selects its task-specific output route.</p>
-<p>Copy a task-aware recipe as a whole so its target remains connected to the
-output dispatchers.</p>
+processors that do not explicitly document non-finite support.</p>
 <p>Bind a recipe to context data with <code class="xref py py-meth docutils literal notranslate"><span class="pre">bind()</span></code> to obtain a reusable
 execution for query, inverse-target, and output transforms.</p>
 <dl class="field-list simple">
@@ -365,7 +361,7 @@ in this pipeline.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=cd0811ec"></script>
+      <script src="../../_static/documentation_options.js?v=9e271964"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
