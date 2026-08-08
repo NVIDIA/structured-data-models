@@ -130,8 +130,6 @@ class Recipe:
     processors that do not explicitly document non-finite support. When
     ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
     ``target`` also selects its task-specific output route.
-    ``TableDispatch`` is resolved only during model execution because a raw
-    feature table does not identify whether it is the task or a related table.
 
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.

@@ -11,15 +11,11 @@ from sdm.tensor import EnsembleTable
 class TableDispatch(EnsembleProcessor):
     """Apply separate feature processors to task and related tables.
 
-    A :class:`~sdm.processing.Recipe` selects the route before fitting its
-    feature pipeline. An omitted route passes its table through unchanged.
-    Each related table receives separately fitted processor state.
-
-    Configure ``TableDispatch`` only in ``Recipe.features``.
+    :class:`TableDispatch` is resolved only during model execution.
 
     Args:
         task: Processor used for the task table.
-        related: Processor used for every related table.
+        related: Processor used for related tables.
     """
 
     supported_stypes = frozenset(Stype)
