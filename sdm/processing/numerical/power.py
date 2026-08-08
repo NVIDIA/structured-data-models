@@ -145,6 +145,7 @@ class PowerTransform(Processor, InvertibleMixin):
         super().__init__()
         self.standardize = standardize
         self.register_buffer("lambdas", torch.empty(0))
+        self.register_buffer("min", torch.empty(0))
         self.register_buffer("max", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
         self.register_buffer("mean", torch.empty(0))
@@ -234,7 +235,7 @@ class PowerTransform(Processor, InvertibleMixin):
 
         var = numerical.var(dim=-2, correction=0, keepdim=True)
         mean = numerical.mean(dim=-2, keepdim=True)
-        self.max = numerical.max(dim=-2, keepdim=True).values
+        self.min, self.max = numerical.aminmax(dim=-2, keepdim=True)
         constant_features = _constant_feature_mask(var, mean, n_samples)
         self.lambdas = self._optimize_lambdas(numerical, constant_features)
 
@@ -256,6 +257,10 @@ class PowerTransform(Processor, InvertibleMixin):
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
         numerical = table.numerical
+        transformed = _yeojohnson_transform(numerical, self.lambdas)
+        retry = transformed.isinf().any(dim=(-2, -1), keepdim=True)
+        bounded = numerical.clamp(min=self.min, max=self.max)
+        numerical = torch.where(retry, bounded, numerical)
         transformed = _yeojohnson_transform(numerical, self.lambdas)
         numerical = (transformed - self.mean) / self.scale
         return table.replace_blocks(numerical=numerical)

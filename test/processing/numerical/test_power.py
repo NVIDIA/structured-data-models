@@ -199,3 +199,72 @@ def test_power_transform_fits_leading_batches_independently(
         rtol=2e-5,
         atol=2e-5,
     )
+
+
+@withCUDA
+def test_power_transform_retries_overflowing_query_batches(
+    device: torch.device,
+) -> None:
+    context = (
+        torch.tensor(
+            [0.0, 0.0, 0.0, 0.0, 0.01],
+            dtype=torch.float64,
+            device=device,
+        )
+        .view(1, 5, 1)
+        .expand(2, 5, 2)
+    )
+    query = torch.tensor(
+        [
+            [[-100.0, 100.0], [100.0, 100.0]],
+            [[100.0, 100.0], [torch.nan, 100.0]],
+        ],
+        dtype=torch.float64,
+        device=device,
+    )
+    processor = PowerTransform().fit(TableTensor.from_tensor(context))
+
+    actual = processor.transform(TableTensor.from_tensor(query)).numerical
+    # Frozen from Google's PreprocessingPipeline at b8a8b090 with
+    # scikit-learn==1.6.0.
+    expected = torch.tensor(
+        [
+            [[-0.5, 2.0], [2.0, 2.0]],
+            [
+                [2.02072403, 2.02072403],
+                [torch.nan, 2.02072403],
+            ],
+        ],
+        dtype=query.dtype,
+        device=device,
+    )
+
+    torch.testing.assert_close(actual, expected, equal_nan=True)
+    assert actual.device == device
+
+
+@withCUDA
+def test_power_transform_overflow_retry_has_finite_gradients(
+    device: torch.device,
+) -> None:
+    context = torch.tensor(
+        [[0.0], [0.0], [0.0], [0.0], [0.01]],
+        dtype=torch.float64,
+        device=device,
+    )
+    query = torch.tensor(
+        [[-100.0], [0.005]],
+        dtype=torch.float64,
+        device=device,
+        requires_grad=True,
+    )
+    processor = PowerTransform().fit(TableTensor.from_tensor(context))
+
+    output = processor.transform(TableTensor.from_tensor(query)).numerical
+    output.sum().backward()
+
+    assert query.grad is not None
+    assert torch.isfinite(output).all()
+    assert torch.isfinite(query.grad).all()
+    assert query.grad[0].equal(torch.zeros_like(query.grad[0]))
+    assert (query.grad[1] > 0).all()
