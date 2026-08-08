@@ -228,16 +228,17 @@ In particular:</p>
 <p>Recipes are plain Python objects, so they can be inspected, copied and modified.
 This makes it easy to keep the default model contract while changing one part of the pipeline.
 For example, <a class="reference internal" href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a> does not consume raw <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.datetime" title="sdm.Stype.datetime"><code class="xref py py-attr docutils literal notranslate"><span class="pre">datetime</span></code></a> columns directly.
-To support <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.datetime" title="sdm.Stype.datetime"><code class="xref py py-attr docutils literal notranslate"><span class="pre">datetime</span></code></a> inputs, you can, <em>e.g.</em>, add a <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.datetime" title="sdm.Stype.datetime"><code class="xref py py-attr docutils literal notranslate"><span class="pre">datetime</span></code></a> branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:</p>
+To support <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.datetime" title="sdm.Stype.datetime"><code class="xref py py-attr docutils literal notranslate"><span class="pre">datetime</span></code></a> inputs, you can, <em>e.g.</em>, prepend a <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.datetime" title="sdm.Stype.datetime"><code class="xref py py-attr docutils literal notranslate"><span class="pre">datetime</span></code></a> branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">sdm</span>
 </span><span data-line="2"><span class="kn">import</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
 </span><span data-line="3">
-</span><span data-line="4"><span class="n">recipe</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">TabICLv2</span><span class="o">.</span><span class="n">default_recipe</span><span class="p">()</span>
-</span><span data-line="5"><span class="n">recipe</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">StypeDispatch</span><span class="p">(</span>
-</span><span data-line="6">    <span class="n">datetime</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">AddCalendarFields</span><span class="p">(</span>
-</span><span data-line="7">        <span class="n">fields</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;minute&quot;</span><span class="p">,</span> <span class="s2">&quot;hour&quot;</span><span class="p">,</span> <span class="s2">&quot;weekday&quot;</span><span class="p">,</span> <span class="s2">&quot;day_of_month&quot;</span><span class="p">,</span> <span class="s2">&quot;month&quot;</span><span class="p">),</span>
-</span><span data-line="8">    <span class="p">)</span>
-</span><span data-line="9"><span class="p">)</span> <span class="o">+</span> <span class="n">recipe</span><span class="o">.</span><span class="n">features</span>
+</span><span data-line="4"><span class="n">recipe</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">TabICLv2</span><span class="o">.</span><span class="n">default_recipe</span><span class="p">()</span><span class="o">.</span><span class="n">prepend_features</span><span class="p">(</span>
+</span><span data-line="5">    <span class="n">sp</span><span class="o">.</span><span class="n">StypeDispatch</span><span class="p">(</span>
+</span><span data-line="6">        <span class="n">datetime</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">AddCalendarFields</span><span class="p">(</span>
+</span><span data-line="7">            <span class="n">fields</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;minute&quot;</span><span class="p">,</span> <span class="s2">&quot;hour&quot;</span><span class="p">,</span> <span class="s2">&quot;weekday&quot;</span><span class="p">,</span> <span class="s2">&quot;day_of_month&quot;</span><span class="p">,</span> <span class="s2">&quot;month&quot;</span><span class="p">),</span>
+</span><span data-line="8">        <span class="p">)</span>
+</span><span data-line="9">    <span class="p">)</span>
+</span><span data-line="10"><span class="p">)</span>
 </span></pre></div>
 </div>
 <p>You can also define a recipe from scratch when you want full control over the
@@ -314,7 +315,7 @@ transformations applied to features, targets, and outputs:</p>
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=b3401b8c"></script>
+      <script src="_static/documentation_options.js?v=287a3a37"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
