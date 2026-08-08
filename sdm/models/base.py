@@ -237,7 +237,6 @@ class ICLModel(torch.nn.Module, ABC):
             y = TableTensor.from_tensor(y)
 
         recipe = self.default_recipe() if recipe is None else recipe
-        pin_cache = x.device.type == "cuda" and num_estimators > 1
 
         self.clear()
 
@@ -292,10 +291,10 @@ class ICLModel(torch.nn.Module, ABC):
                     generator=generator,
                     **kwargs,
                 )
-                if num_estimators > 1:
+                if x.device.type == "cuda" and num_estimators > 1:
                     cache = cache.cpu()
-                    if pin_cache:
-                        cache = cache.pin_memory()
+                    cache = cache.pin_memory()
+
                 cache = cache.freeze()
                 caches.append(cache)
 
@@ -359,6 +358,7 @@ class ICLModel(torch.nn.Module, ABC):
             member_outs: list[TableTensor] = []
             for query in queries:
                 cache = self._caches[cache_index]
+                cache = cache.to(device=query.x.device, non_blocking=True)
                 cache_index += 1
 
                 self._validate_query(
@@ -377,7 +377,7 @@ class ICLModel(torch.nn.Module, ABC):
                     x_query=query.x,
                     related_context_tables=None,
                     related_query_tables=query.related_tables,
-                    cache=cache.to(query.x.device, non_blocking=True),
+                    cache=cache,
                     generator=None,
                     **cast(dict[str, Any], cache["kwargs"]),
                 )
