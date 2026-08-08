@@ -3,11 +3,11 @@ from typing import cast
 import torch
 
 from sdm.cache import Cache, KVCacheEntry
-from sdm.testing import onlyCUDA
+from sdm.testing import withCUDA
 
 
-@onlyCUDA
-def test_cache() -> None:
+@withCUDA
+def test_cache(device: torch.device) -> None:
     cache = Cache(foo="foo")
     assert len(cache) == 1
     cache["entry"] = KVCacheEntry(key=torch.randn(5), value=torch.randn(5))
@@ -15,9 +15,14 @@ def test_cache() -> None:
     cache = cache.cpu()
     assert cast(KVCacheEntry, cache["entry"]).key.is_cpu
     assert cast(KVCacheEntry, cache["entry"]).value.is_cpu
-    cache = cache.pin_memory()
-    assert cast(KVCacheEntry, cache["entry"]).key.is_pinned()
-    assert cast(KVCacheEntry, cache["entry"]).value.is_pinned()
+
+    if device.type == "cuda":
+        cache = cache.pin_memory()
+        assert cast(KVCacheEntry, cache["entry"]).key.is_pinned()
+        assert cast(KVCacheEntry, cache["entry"]).value.is_pinned()
+        cache = cache.to(device, non_blocking=True)
+        assert cast(KVCacheEntry, cache["entry"]).key.is_cuda
+        assert cast(KVCacheEntry, cache["entry"]).value.is_cuda
 
 
 def test_cache_size() -> None:
