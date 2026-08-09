@@ -50,10 +50,7 @@ class ICLModel(torch.nn.Module, ABC):
 
     def __init__(self) -> None:
         super().__init__()
-
-        # One cache per ensemble member.
-        self._caches: list[Cache] | None = None
-        self._recipe_execution: RecipeExecution | None = None
+        self._cache: Cache | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -213,14 +210,18 @@ class ICLModel(torch.nn.Module, ABC):
                 generator=generator,
             )
 
-        caches: list[Cache] = []
-        for context in contexts:
+        cache = Cache(
+            num_estimators=num_estimators,
+            recipe_execution=recipe_execution,
+            kwargs=kwargs,
+        )
+        for i, context in enumerate(contexts):
             self._validate_context(
                 x=context.x,
                 y=context.y,
                 related_tables=context.related_tables,
             )
-            cache = Cache(
+            estimator_cache = Cache(
                 x_schema=context.x.schema,
                 related_tables_schema=context.related_tables.schema
                 if context.related_tables is not None
@@ -230,7 +231,6 @@ class ICLModel(torch.nn.Module, ABC):
                     if context.y.categorical.size(-1) > 0
                     else None
                 ),
-                kwargs=kwargs,
             )
             self._forward(
                 x_context=context.x,
@@ -238,18 +238,15 @@ class ICLModel(torch.nn.Module, ABC):
                 x_query=None,
                 related_context_tables=context.related_tables,
                 related_query_tables=None,
-                cache=cache,
+                cache=estimator_cache,
                 generator=generator,
                 **kwargs,
             )
             if x.is_cuda and num_estimators > 1:
-                cache = cache.cpu()
-                cache = cache.pin_memory()
-            cache = cache.freeze()
-            caches.append(cache)
+                estimator_cache = estimator_cache.cpu().pin_memory()
+            cache[i] = estimator_cache
 
-        self._caches = caches
-        self._recipe_execution = recipe_execution
+        self._cache = cache.freeze()
 
     @_maybe_inference_mode()
     def predict(
@@ -275,33 +272,36 @@ class ICLModel(torch.nn.Module, ABC):
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
 
-        if self._caches is None or self._recipe_execution is None:
+        if self._cache is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} not yet fitted. Make sure to "
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
         if related_tables is not None:
-            if self._caches[0]["related_tables_schema"] is None:
+            if cast(Cache, self._cache[0])["related_tables_schema"] is None:
                 raise ValueError(
                     "Expected related tables to be provided together"
                 )
             related_tables = related_tables.select_tables(
                 tables=cast(
                     RelatedTablesSchema,
-                    self._caches[0]["related_tables_schema"],
+                    cast(Cache, self._cache[0])["related_tables_schema"],
                 ).tables,
             )
 
+        recipe_execution = cast(
+            RecipeExecution,
+            self._cache["recipe_execution"],
+        )
         with torch.amp.autocast(x.device.type, enabled=False):
-            queries = self._recipe_execution.transform(
-                x=x,
-                related_tables=related_tables,
-            )
+            queries = recipe_execution.transform(x, related_tables)
 
         outs: list[TableTensor] = []
-        for i, query in enumerate(queries):
-            cache = self._caches[i].to(query.x.device, non_blocking=True)
+        for i in range(cast(int, self._cache["num_estimators"])):
+            query = queries[i]
+            cache = cast(Cache, self._cache[i])
+            cache = cache.to(query.x.device, non_blocking=True)
 
             self._validate_query(
                 x_context=cast(TableSchema, cache["x_schema"]),
@@ -321,25 +321,22 @@ class ICLModel(torch.nn.Module, ABC):
                 related_query_tables=query.related_tables,
                 cache=cache,
                 generator=None,
-                **cast(dict[str, Any], cache["kwargs"]),
+                **cast(dict[str, Any], self._cache["kwargs"]),
             )
             out = cast(TableTensor, out.to(query.x.dtype))
             outs.append(out)
 
         # Regression: invert target before stacking estimator outputs.
-        if self._caches[0]["classes"] is None:
+        if cast(Cache, self._cache[0])["classes"] is None:
             with torch.amp.autocast(x.device.type, enabled=False):
-                outs = list(
-                    self._recipe_execution.inverse_transform_target(outs)
-                )
+                outs = list(recipe_execution.inverse_transform_target(outs))
 
         with torch.amp.autocast(x.device.type, enabled=False):
-            return self._recipe_execution.transform_output(outs)
+            return recipe_execution.transform_output(outs)
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
-        self._caches = None
-        self._recipe_execution = None
+        self._cache = None
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device

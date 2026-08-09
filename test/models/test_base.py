@@ -282,7 +282,7 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         recipe=_recipe(),
         num_estimators=2,
     )
-    assert model._caches is not None
+    assert model._cache is not None
 
     prediction = model.predict(x_query, related_query)
 
