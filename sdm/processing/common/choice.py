@@ -28,6 +28,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     """
 
     supported_stypes = frozenset(Stype)
+    requires_fit = True
 
     def __init__(
         self,

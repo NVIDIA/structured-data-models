@@ -50,6 +50,7 @@ class ShuffleCategories(EnsembleProcessor):
     """
 
     supported_stypes = frozenset({Stype.categorical})
+    requires_fit = True
 
     def __init__(
         self,

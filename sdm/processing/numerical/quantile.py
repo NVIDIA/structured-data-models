@@ -90,6 +90,7 @@ class QuantileTransform(Processor, InvertibleMixin):
     """
 
     supported_stypes = frozenset({Stype.numerical})
+    requires_fit = True
 
     _quantiles: Tensor
     _references: Tensor

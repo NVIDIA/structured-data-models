@@ -79,7 +79,7 @@ class EnsembleProcessor(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def _transform_ensemble(

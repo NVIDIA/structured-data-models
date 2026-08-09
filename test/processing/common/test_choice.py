@@ -31,6 +31,7 @@ class Add(Processor, InvertibleMixin):
 
 class AddFittedMemberCount(EnsembleProcessor):
     supported_stypes = frozenset(Stype)
+    requires_fit = True
 
     def __init__(self) -> None:
         super().__init__()
