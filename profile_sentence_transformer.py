@@ -2,8 +2,9 @@
 """Profile the full TabICLv2 + SentenceTransformer pipeline across STRABLE.
 
 Profiles fit + predict for 20 STRABLE datasets selected for variety in
-row count, text column count, and text length. Writes per-dataset timing
-and dataset characteristics to a CSV.
+row count, text column count, and text length. Runs each dataset twice:
+once without text processing (baseline) and once with SentenceTransformer.
+Writes per-dataset timing and dataset characteristics to a CSV.
 
 Usage:
     python profile_sentence_transformer.py
@@ -14,6 +15,7 @@ import argparse
 import csv
 import json
 import time
+import traceback
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -53,6 +55,7 @@ CSV_FIELDS = [
     "num_text_cols",
     "avg_text_length",
     "max_text_length",
+    "mode",
     "fit_time_s",
     "predict_time_s",
     "total_time_s",
@@ -113,7 +116,7 @@ for dataset_name in DATASETS:
     avg_len = pc.mean(all_lengths).as_py() or 0
     max_len = pc.max(all_lengths).as_py() or 0
 
-    row = {
+    base_row = {
         "dataset": dataset_name,
         "num_rows": len(arrow_table),
         "num_text_cols": len(text_cols),
@@ -121,97 +124,103 @@ for dataset_name in DATASETS:
         "max_text_length": max_len,
     }
 
-    print(f"  Rows: {row['num_rows']}")
-    print(f"  Text columns: {row['num_text_cols']} {text_cols}")
-    print(f"  Avg text length: {row['avg_text_length']} chars")
+    print(f"  Rows: {base_row['num_rows']}")
+    print(f"  Text columns: {base_row['num_text_cols']} {text_cols}")
+    print(f"  Avg text length: {base_row['avg_text_length']} chars")
 
-    try:
-        table = sdm.TableTensor.from_arrow(
-            table=arrow_table,
-            stypes=stypes,
-            device=device,
-        )
+    stypes_no_text = sdm.infer_stypes(arrow_table, with_text=False)
 
-        generator = torch.Generator(device=device).manual_seed(42)
-        num_rows = len(table)
-        perm = torch.randperm(num_rows, generator=generator, device=device)
-        context_size = int(0.8 * num_rows)
-        context = table[perm[:context_size]]
-        query = table[perm[context_size:]]
-        ground_truth = query[:, target_name].numerical.squeeze(-1)
+    for mode in ("none", "embed"):
+        row = {**base_row, "mode": mode}
+        print(f"\n  --- mode: {mode} ---")
 
-        model = sdm.models.TabICLv2(device=device)
-        recipe = model.default_recipe()
-        text_processor = sp.Sequential(
-            sp.SentenceTransformer(
-                "sentence-transformers/all-MiniLM-L6-v2",
-            ),
-            sp.PCA(num_components=64),
-        )
-        recipe.prepend_features(sp.StypeDispatch(text=text_processor))
-
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-
-        t0 = time.perf_counter()
-        with torch.amp.autocast(
-            device.type, torch.float16, enabled=table.is_cuda
-        ):
-            model.fit(
-                x=context.drop_columns(target_name),
-                y=context[:, target_name],
-                recipe=recipe,
-                generator=generator,
+        try:
+            use_text = mode == "embed"
+            table = sdm.TableTensor.from_arrow(
+                table=arrow_table,
+                stypes=stypes if use_text else stypes_no_text,
+                device=device,
             )
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-        t_fit = time.perf_counter() - t0
 
-        t0 = time.perf_counter()
-        with torch.amp.autocast(
-            device.type, torch.float16, enabled=table.is_cuda
-        ):
-            prediction = model.predict(
-                query.drop_columns(target_name),
-            ).numerical
-            prediction = prediction.mean(dim=-1)
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-        t_predict = time.perf_counter() - t0
+            generator = torch.Generator(device=device).manual_seed(42)
+            num_rows = len(table)
+            perm = torch.randperm(num_rows, generator=generator, device=device)
+            context_size = int(0.8 * num_rows)
+            context = table[perm[:context_size]]
+            query = table[perm[context_size:]]
+            ground_truth = query[:, target_name].numerical.squeeze(-1)
 
-        rmse = (prediction - ground_truth).pow(2).mean().sqrt().item()
-        mae = (prediction - ground_truth).abs().mean().item()
+            model = sdm.models.TabICLv2(device=device)
+            recipe = model.default_recipe()
+            if use_text:
+                text_processor = sp.Sequential(
+                    sp.SentenceTransformer(
+                        "sentence-transformers/all-MiniLM-L6-v2",
+                    ),
+                    sp.PCA(num_components=64),
+                )
+                recipe.prepend_features(sp.StypeDispatch(text=text_processor))
 
-        row.update(
-            {
-                "fit_time_s": round(t_fit, 3),
-                "predict_time_s": round(t_predict, 3),
-                "total_time_s": round(t_fit + t_predict, 3),
-                "rmse": round(rmse, 4),
-                "mae": round(mae, 4),
-            }
-        )
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
 
-        print(f"  Fit:     {row['fit_time_s']:.3f}s")
-        print(f"  Predict: {row['predict_time_s']:.3f}s")
-        print(f"  Total:   {row['total_time_s']:.3f}s")
-        print(f"  RMSE: {rmse:.4f}, MAE: {mae:.4f}")
+            t0 = time.perf_counter()
+            with torch.amp.autocast(
+                device.type, torch.float16, enabled=table.is_cuda
+            ):
+                model.fit(
+                    x=context.drop_columns(target_name),
+                    y=context[:, target_name],
+                    recipe=recipe,
+                    generator=generator,
+                )
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            t_fit = time.perf_counter() - t0
 
-    except Exception:
-        import traceback
+            t0 = time.perf_counter()
+            with torch.amp.autocast(
+                device.type, torch.float16, enabled=table.is_cuda
+            ):
+                prediction = model.predict(
+                    query.drop_columns(target_name),
+                ).numerical
+                prediction = prediction.mean(dim=-1)
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            t_predict = time.perf_counter() - t0
 
-        traceback.print_exc()
-        row.update(
-            {
-                "fit_time_s": None,
-                "predict_time_s": None,
-                "total_time_s": None,
-                "rmse": None,
-                "mae": None,
-            }
-        )
+            rmse = (prediction - ground_truth).pow(2).mean().sqrt().item()
+            mae = (prediction - ground_truth).abs().mean().item()
 
-    results.append(row)
+            row.update(
+                {
+                    "fit_time_s": round(t_fit, 3),
+                    "predict_time_s": round(t_predict, 3),
+                    "total_time_s": round(t_fit + t_predict, 3),
+                    "rmse": round(rmse, 4),
+                    "mae": round(mae, 4),
+                }
+            )
+
+            print(f"    Fit:     {row['fit_time_s']:.3f}s")
+            print(f"    Predict: {row['predict_time_s']:.3f}s")
+            print(f"    Total:   {row['total_time_s']:.3f}s")
+            print(f"    RMSE: {rmse:.4f}, MAE: {mae:.4f}")
+
+        except Exception:
+            traceback.print_exc()
+            row.update(
+                {
+                    "fit_time_s": None,
+                    "predict_time_s": None,
+                    "total_time_s": None,
+                    "rmse": None,
+                    "mae": None,
+                }
+            )
+
+        results.append(row)
 
 with open(args.output, "w", newline="") as f:
     writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
