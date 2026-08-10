@@ -6,3 +6,15 @@
 .. autoclass:: TableDispatch
    :members:
    :show-inheritance:
+   :exclude-members: supported_stypes, requires_fit
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Semantic Types**
+     - ``categorical``, ``datetime``, ``id``, ``numerical``, ``text``
+   * - **Requires Fitting**
+     - instance-specific

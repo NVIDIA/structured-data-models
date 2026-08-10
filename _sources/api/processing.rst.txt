@@ -12,7 +12,6 @@ Processor API
    ~sdm.processing.base.InvertibleMixin
    ~sdm.processing.ensemble.EnsembleProcessor
    ~sdm.processing.ensemble.EnsembleInvertibleMixin
-   ~sdm.processing.ensemble.EnsembleProcessorAdapter
    ~sdm.processing.recipe.Recipe
 
 Common Processors
@@ -20,6 +19,7 @@ Common Processors
 
 .. autosummary::
    :toctree: generated
+   :template: processor_class
    :nosignatures:
 
 {% for name in api_names("sdm.processing.common") %}
@@ -31,6 +31,7 @@ Numerical Processors
 
 .. autosummary::
    :toctree: generated
+   :template: processor_class
    :nosignatures:
 
 {% for name in api_names("sdm.processing.numerical") %}
@@ -42,6 +43,7 @@ Categorical Processors
 
 .. autosummary::
    :toctree: generated
+   :template: processor_class
    :nosignatures:
 
 {% for name in api_names("sdm.processing.categorical") %}
@@ -53,6 +55,7 @@ Text Processors
 
 .. autosummary::
    :toctree: generated
+   :template: processor_class
    :nosignatures:
 
 {% for name in api_names("sdm.processing.text") %}
@@ -64,6 +67,7 @@ Datetime Processors
 
 .. autosummary::
    :toctree: generated
+   :template: processor_class
    :nosignatures:
 
 {% for name in api_names("sdm.processing.datetime") %}
@@ -75,6 +79,7 @@ Post-Processors
 
 .. autosummary::
    :toctree: generated
+   :template: processor_class
    :nosignatures:
 
 {% for name in api_names("sdm.processing.output") %}

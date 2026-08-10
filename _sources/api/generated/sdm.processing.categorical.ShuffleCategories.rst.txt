@@ -6,3 +6,15 @@
 .. autoclass:: ShuffleCategories
    :members:
    :show-inheritance:
+   :exclude-members: supported_stypes, requires_fit
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Semantic Types**
+     - ``categorical``
+   * - **Requires Fitting**
+     - ✅

@@ -103,7 +103,6 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleProcessor.html">EnsembleProcessor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleInvertibleMixin.html">EnsembleInvertibleMixin</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleProcessorAdapter.html">EnsembleProcessorAdapter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html">Recipe</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Callable.html">Callable</a></li>
@@ -111,6 +110,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.TableDispatch.html">TableDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.EnsembleProcessorAdapter.html">EnsembleProcessorAdapter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Choice.html">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
@@ -222,10 +222,7 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleInvertibleMixin.html#sdm.processing.ensemble.EnsembleInvertibleMixin" title="sdm.processing.ensemble.EnsembleInvertibleMixin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnsembleInvertibleMixin</span></code></a></p></td>
 <td><p>Extend a <code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code> by an inverse transformation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleProcessorAdapter.html#sdm.processing.ensemble.EnsembleProcessorAdapter" title="sdm.processing.ensemble.EnsembleProcessorAdapter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnsembleProcessorAdapter</span></code></a></p></td>
-<td><p>Adapt an ordinary processor to ensemble-aware processing.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Recipe</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Recipe</span></code></a></p></td>
 <td><p>Processing contract around an external model boundary.</p></td>
 </tr>
 </tbody>
@@ -255,16 +252,19 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.TableDispatch.html#sdm.processing.common.TableDispatch" title="sdm.processing.common.TableDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TableDispatch</span></code></a></p></td>
 <td><p>Apply separate feature processors to task and related tables.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.Choice.html#sdm.processing.common.Choice" title="sdm.processing.common.Choice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Choice</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.EnsembleProcessorAdapter.html#sdm.processing.common.EnsembleProcessorAdapter" title="sdm.processing.common.EnsembleProcessorAdapter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnsembleProcessorAdapter</span></code></a></p></td>
+<td><p>Adapt an ordinary processor to ensemble-aware processing.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.Choice.html#sdm.processing.common.Choice" title="sdm.processing.common.Choice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Choice</span></code></a></p></td>
 <td><p>Route each table or ensemble member through one selected option.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html#sdm.processing.common.ToNumerical" title="sdm.processing.common.ToNumerical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToNumerical</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html#sdm.processing.common.ToNumerical" title="sdm.processing.common.ToNumerical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToNumerical</span></code></a></p></td>
 <td><p>Move categorical columns into the numerical block.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a></p></td>
 <td><p>Permute numerical feature columns and their names.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.SelectColumns.html#sdm.processing.common.SelectColumns" title="sdm.processing.common.SelectColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SelectColumns</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.SelectColumns.html#sdm.processing.common.SelectColumns" title="sdm.processing.common.SelectColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SelectColumns</span></code></a></p></td>
 <td><p>Select a subset of columns for each semantic type.</p></td>
 </tr>
 </tbody>
@@ -393,7 +393,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=991fe148"></script>
+      <script src="../_static/documentation_options.js?v=b1c7b290"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>

@@ -6,3 +6,15 @@
 .. autoclass:: TFIDF
    :members:
    :show-inheritance:
+   :exclude-members: supported_stypes, requires_fit
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Semantic Types**
+     - ``text``
+   * - **Requires Fitting**
+     - ✅

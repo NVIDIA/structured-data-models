@@ -6,3 +6,15 @@
 .. autoclass:: AddCalendarFields
    :members:
    :show-inheritance:
+   :exclude-members: supported_stypes, requires_fit
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Semantic Types**
+     - ``datetime``
+   * - **Requires Fitting**
+     - ❌

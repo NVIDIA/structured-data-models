@@ -1,9 +1,9 @@
-﻿Choice
-======
+﻿EnsembleProcessorAdapter
+========================
 
 .. currentmodule:: sdm.processing.common
 
-.. autoclass:: Choice
+.. autoclass:: EnsembleProcessorAdapter
    :members:
    :show-inheritance:
    :exclude-members: supported_stypes, requires_fit
@@ -15,6 +15,6 @@ Capabilities
 .. list-table::
 
    * - **Supported Semantic Types**
-     - ``categorical``, ``datetime``, ``id``, ``numerical``, ``text``
+     - instance-specific
    * - **Requires Fitting**
-     - ✅
+     - instance-specific

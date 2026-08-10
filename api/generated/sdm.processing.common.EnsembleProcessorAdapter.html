@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>EnsembleProcessorAdapter - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Recipe" href="sdm.processing.recipe.Recipe.html" /><link rel="prev" title="EnsembleInvertibleMixin" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>EnsembleProcessorAdapter - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Choice" href="sdm.processing.common.Choice.html" /><link rel="prev" title="TableDispatch" href="sdm.processing.common.TableDispatch.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -103,7 +103,6 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html">EnsembleProcessor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html">EnsembleInvertibleMixin</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">EnsembleProcessorAdapter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Callable.html">Callable</a></li>
@@ -111,6 +110,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.TableDispatch.html">TableDispatch</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">EnsembleProcessorAdapter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Choice.html">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
@@ -166,7 +166,8 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessorAdapter"><code class="docutils literal notranslate"><span class="pre">EnsembleProcessorAdapter</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.common.EnsembleProcessorAdapter"><code class="docutils literal notranslate"><span class="pre">EnsembleProcessorAdapter</span></code></a></li>
+<li><a class="reference internal" href="#capabilities">Capabilities</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -204,17 +205,17 @@ data-aria-dark="Switch to auto color mode">
           <section id="ensembleprocessoradapter">
 <h1>EnsembleProcessorAdapter<a class="headerlink" href="#ensembleprocessoradapter" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.ensemble.EnsembleProcessorAdapter">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.ensemble.</span></span><span class="sig-name descname"><span class="pre">EnsembleProcessorAdapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">processor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleProcessorAdapter" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="sdm.processing.common.EnsembleProcessorAdapter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.common.</span></span><span class="sig-name descname"><span class="pre">EnsembleProcessorAdapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">processor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.common.EnsembleProcessorAdapter" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>, <a class="reference internal" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html#sdm.processing.ensemble.EnsembleInvertibleMixin" title="sdm.processing.ensemble.EnsembleInvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleInvertibleMixin</span></code></a></p>
 <p>Adapt an ordinary processor to ensemble-aware processing.</p>
 <p>The adapter turns a <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> into an
-<a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>. It copies and fits the processor separately
+<code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code>. It copies and fits the processor separately
 for each group of compatible tables in an
 <a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a>.</p>
 <p>The wrapped processor must preserve row and leading dimensions as required
 by the <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> contract. A processor that
-changes the ensemble structure must implement <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>
+changes the ensemble structure must implement <code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code>
 directly. Inverse transformation requires the wrapped processor to
 implement <a class="reference internal" href="sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a>.</p>
 <dl class="field-list simple">
@@ -224,6 +225,21 @@ implement <a class="reference internal" href="sdm.processing.base.InvertibleMixi
 </dl>
 </dd></dl>
 
+<section id="capabilities">
+<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
+<div class="table-wrapper docutils container">
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><strong>Supported Semantic Types</strong></p></td>
+<td><p>instance-specific</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Requires Fitting</strong></p></td>
+<td><p>instance-specific</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 </section>
 
         </article><button class="back-to-top" type="button">
@@ -232,16 +248,16 @@ implement <a class="reference internal" href="sdm.processing.base.InvertibleMixi
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.ensemble.EnsembleInvertibleMixin.html">
+    <a href="sdm.processing.common.TableDispatch.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">EnsembleInvertibleMixin</div></div>
+        <span>Previous</span><div class="title">TableDispatch</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.recipe.Recipe.html">
+    <a href="sdm.processing.common.Choice.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">Recipe</div>
+        <div class="title">Choice</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -250,7 +266,7 @@ implement <a class="reference internal" href="sdm.processing.base.InvertibleMixi
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=991fe148"></script>
+      <script src="../../_static/documentation_options.js?v=b1c7b290"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
