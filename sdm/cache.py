@@ -1,12 +1,17 @@
 """Cache primitives."""
 
-from collections.abc import Iterable, Iterator, Mapping, MutableMapping
-from enum import Enum
-from typing import NamedTuple
+from collections.abc import (
+    Hashable,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+)
+from enum import StrEnum
+from typing import NamedTuple, Self
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm.tensor.mixin import DeviceMixin
 
@@ -24,11 +29,23 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Cached value projection tensor.
     """
 
-    def to(self, device: torch.device | str | None) -> Self:
+    def to(
+        self,
+        device: torch.device | str | None,
+        *,
+        non_blocking: bool = False,
+    ) -> Self:
         r""":meta private:"""  # noqa: D415
         return self.__class__(
-            key=self.key.to(device),
-            value=self.value.to(device),
+            key=self.key.to(device, non_blocking=non_blocking),
+            value=self.value.to(device, non_blocking=non_blocking),
+        )
+
+    def pin_memory(self) -> Self:
+        r"""Copy cached tensors into pinned CPU memory."""
+        return self.__class__(
+            key=self.key.pin_memory(),
+            value=self.value.pin_memory(),
         )
 
     @property
@@ -43,10 +60,10 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         return next(iter(devices))
 
 
-class Cache(MutableMapping[str, object], DeviceMixin):
+class Cache(MutableMapping[Hashable, object], DeviceMixin):
     r"""A mutable mapping of model cache values."""
 
-    class Mode(str, Enum):
+    class Mode(StrEnum):
         r"""The operating mode of a :class:`Cache`.
 
         A cache alternates between two phases: (1) recording key/value
@@ -64,11 +81,11 @@ class Cache(MutableMapping[str, object], DeviceMixin):
 
     def __init__(
         self,
-        *args: Mapping[str, object] | Iterable[tuple[str, object]],
+        *args: Mapping[Hashable, object] | Iterable[tuple[Hashable, object]],
         **kwargs: object,
     ) -> None:
         self._mode = Cache.Mode.record
-        self._items: dict[str, object] = dict(*args, **kwargs)
+        self._items: dict[Hashable, object] = dict(*args, **kwargs)
 
     @property
     def is_recording(self) -> bool:
@@ -115,24 +132,24 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         _freeze(self)
         return self
 
-    def __setitem__(self, key: str, value: object) -> None:
+    def __setitem__(self, key: Hashable, value: object) -> None:
         if not self.is_recording:
             raise RuntimeError(
                 "'__setitem__' requires the cache to be in 'record' mode"
             )
         self._items[key] = value
 
-    def __delitem__(self, key: str) -> None:
+    def __delitem__(self, key: Hashable) -> None:
         if not self.is_recording:
             raise RuntimeError(
                 "'__delitem__' requires the cache to be in 'record' mode"
             )
         del self._items[key]
 
-    def __getitem__(self, key: str) -> object:
+    def __getitem__(self, key: Hashable) -> object:
         return self._items[key]
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[Hashable]:
         return iter(self._items)
 
     def __len__(self) -> int:
@@ -141,30 +158,56 @@ class Cache(MutableMapping[str, object], DeviceMixin):
     def __repr__(self) -> str:
         return repr(self._items)
 
-    def to(self, device: torch.device | str | None) -> Self:
+    def to(
+        self,
+        device: torch.device | str | None,
+        *,
+        non_blocking: bool = False,
+    ) -> Self:
         r""":meta private:"""  # noqa: D415
 
-        def _to(value: object, device: torch.device | str | None) -> object:
+        def _to(value: object) -> object:
             if isinstance(value, Tensor):
-                return value.to(device)
+                return value.to(device, non_blocking=non_blocking)
             if isinstance(value, KVCacheEntry):
-                return value.to(device)
+                return value.to(device, non_blocking=non_blocking)
             if isinstance(value, Cache):
-                return value.to(device)
+                return value.to(device, non_blocking=non_blocking)
             if isinstance(value, list):
-                return [_to(item, device=device) for item in value]
+                return [_to(item) for item in value]
             if isinstance(value, tuple):
-                return tuple(_to(item, device=device) for item in value)
+                return tuple(_to(item) for item in value)
             if isinstance(value, dict):
-                return {
-                    key: _to(item, device=device)
-                    for key, item in value.items()
-                }
+                return {key: _to(item) for key, item in value.items()}
             return value
 
-        out = self.__class__({k: _to(v, device) for k, v in self.items()})
+        out = self.__class__({k: _to(v) for k, v in self.items()})
         out._mode = self._mode
         return out
+
+    def pin_memory(self) -> Self:
+        r"""Copy nested tensor data into pinned CPU memory."""
+
+        def _pin_memory(value: object) -> object:
+            if isinstance(value, Tensor):
+                return value.pin_memory()
+            if isinstance(value, KVCacheEntry):
+                return value.pin_memory()
+            if isinstance(value, Cache):
+                return value.pin_memory()
+            if isinstance(value, list):
+                return [_pin_memory(item) for item in value]
+            if isinstance(value, tuple):
+                return tuple(_pin_memory(item) for item in value)
+            if isinstance(value, dict):
+                return {key: _pin_memory(item) for key, item in value.items()}
+            return value
+
+        pinned = self.__class__(
+            {key: _pin_memory(value) for key, value in self.items()}
+        )
+        pinned._mode = self._mode
+        return pinned
 
     @property
     def device(self) -> torch.device:

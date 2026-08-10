@@ -72,14 +72,21 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - Do not re-validate established invariants in hot paths.
 - Use keyword arguments in multi-line calls.
 - Avoid `else` after `return`, `raise`, `break`, or `continue`.
+- When behavior is unchanged, prefer the faster clear formulation: fewer passes, allocations, and temporary collections.
 - Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
 - Operate on tensor containers directly; reserve `.as_tensor()` for when the raw data tensor is required.
 - Add short tensor shape comments for complex tensor operations.
-- Use established names.
 - Document public constructor parameters.
 - Docs, errors, and reprs should describe public operations, inputs, outputs, and values rather than incidental implementation details.
 - Keep code direct and use the narrowest practical scope. Introduce abstractions only when they encapsulate behavior or invariants, define a public interface, or serve established reuse.
 - In `__init__.py`, order imports and `__all__` in dependency order: base classes/mixins first, then concrete; never alphabetically.
+
+# Import Style
+
+- Prefer imports closest to the public root: use `from sdm import TableTensor` over deeper public paths such as `from sdm.tensor import TableTensor`.
+- For examples, prefer top-level package usage via `import sdm`; add `import sdm.processing as sp` when composing multiple processors.
+- In package code and tests, only use `import sdm.processing as sp` when a file uses multiple concrete processor implementations.
+- Keep processor base classes and mixins direct when they are used for subclassing or type checks, e.g. `from sdm.processing import Processor, InvertibleMixin`.
 
 # CUDA / GPU Performance
 
@@ -92,6 +99,9 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - Benchmark CUDA changes with synchronization-aware timing. Use CUDA events, `torch.profiler`, or explicit synchronization around measurements; plain wall-clock timing of asynchronous CUDA work is not sufficient.
 
 # Naming Policy
+
+- Use established names.
+- Use the shortest unambiguous name. Drop context already implied by the enclosing type or method, e.g. `_locations` on `EnsembleTable` over `_member_locations`, but prefer `ensemble_table` over `table` in `fit_ensemble` where `table` would be ambiguous.
 
 ## Processors
 

@@ -2,20 +2,16 @@ from __future__ import annotations
 
 import abc
 import copy
-from collections.abc import Iterable
 from itertools import repeat
-from typing import cast
+from typing import Self
 
 import torch
-from typing_extensions import Self
+from torch.nn import ModuleList
 
-from sdm.processing.base import (
-    InvertibleMixin,
-    Processor,
-    UnoperatedStypePolicy,
-)
-from sdm.stype import Stype
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.base import UnoperatedStypePolicy
+from sdm.tensor import EnsembleTable
 
 
 class EnsembleProcessor(Processor):
@@ -35,6 +31,20 @@ class EnsembleProcessor(Processor):
     with one member.
     """
 
+    @staticmethod
+    def as_processor(processor: object) -> EnsembleProcessor:
+        r"""Normalize a processor-like object to a :class:`EnsembleProcessor`.
+
+        Args:
+            processor: A processor-like object. An :class:`EnsembleProcessor`
+                is returned as-is, and any ordinary processor-like object is
+                adapted to ensemble processing.
+        """
+        processor = Processor.as_processor(processor)
+        if isinstance(processor, EnsembleProcessor):
+            return processor
+        return EnsembleProcessorAdapter(processor)
+
     def _fit(
         self,
         table: TableTensor,
@@ -50,6 +60,20 @@ class EnsembleProcessor(Processor):
         output = self._transform_ensemble(EnsembleTable(table, num_members=1))
         return output.table(0)
 
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        if not self.requires_fit:
+            return self._transform(table)
+        output = self._fit_transform_ensemble(
+            EnsembleTable(table, num_members=1),
+            generator=generator,
+        )
+        return output.table(0)
+
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
@@ -62,7 +86,8 @@ class EnsembleProcessor(Processor):
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
-    ) -> EnsembleTable: ...
+    ) -> EnsembleTable:
+        pass
 
     def _fit_transform_ensemble(
         self,
@@ -198,7 +223,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         super().__init__()
         self.processor = processor
         self.requires_fit = processor.requires_fit
-        self._group_processors = torch.nn.ModuleList()
+        self._group_processors: ModuleList[Processor] = ModuleList()
 
     def _fit_ensemble(
         self,
@@ -206,12 +231,14 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        processors = []
-        for group in ensemble_table:
-            processor = copy.deepcopy(self.processor)
+        self._group_processors = ModuleList()
+        for i, group in enumerate(ensemble_table):
+            if i == 0:
+                processor = self.processor
+            else:
+                processor = copy.deepcopy(self.processor)
             processor.fit(group, generator=generator)
-            processors.append(processor)
-        self._group_processors = torch.nn.ModuleList(processors)
+            self._group_processors.append(processor)
 
     def _fit_transform_ensemble(
         self,
@@ -222,31 +249,29 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         if not self.requires_fit:
             return self._transform_ensemble(ensemble_table)
 
-        processors = []
         outputs = []
-        for group in ensemble_table:
-            processor = copy.deepcopy(self.processor)
+        self._group_processors = ModuleList()
+        for i, group in enumerate(ensemble_table):
+            if i == 0:
+                processor = self.processor
+            else:
+                processor = copy.deepcopy(self.processor)
             outputs.append(processor.fit_transform(group, generator=generator))
-            processors.append(processor)
-        self._group_processors = torch.nn.ModuleList(processors)
+            self._group_processors.append(processor)
         return ensemble_table.replace_groups(outputs)
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        processors = (
-            cast(Iterable[Processor], self._group_processors)
-            if self.requires_fit
-            else repeat(self.processor, ensemble_table.num_groups)
-        )
+        if self.requires_fit:
+            processors = self._group_processors
+        else:
+            processors = repeat(self.processor, ensemble_table.num_groups)
+
         outputs = [
             processor.transform(group)
-            for group, processor in zip(
-                ensemble_table,
-                processors,
-                strict=True,
-            )
+            for group, processor in zip(ensemble_table, processors)
         ]
         return ensemble_table.replace_groups(outputs)
 
@@ -254,20 +279,17 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        processors = (
-            cast(Iterable[Processor], self._group_processors)
-            if self.requires_fit
-            else repeat(self.processor, ensemble_table.num_groups)
-        )
+        if self.requires_fit:
+            processors = self._group_processors
+        else:
+            processors = repeat(self.processor, ensemble_table.num_groups)
+
         outputs = []
-        for group, processor in zip(
-            ensemble_table,
-            processors,
-            strict=True,
-        ):
+        for group, processor in zip(ensemble_table, processors):
             if not isinstance(processor, InvertibleMixin):
-                raise TypeError(
-                    f"{processor.__class__.__name__!r} is not invertible."
+                raise AttributeError(
+                    f"{self.processor.__class__.__name__!r} object has no "
+                    "attribute 'inverse_transform'"
                 )
             outputs.append(processor.inverse_transform(group))
         return ensemble_table.replace_groups(outputs)

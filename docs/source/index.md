@@ -21,6 +21,7 @@ A GPU-native library of foundation models, tensor subclasses, and data processor
 :maxdepth: 1
 
 install
+overview
 ```
 
 ```{toctree}
@@ -30,6 +31,7 @@ install
 tensor
 icl
 processing
+processing-operates-on-stypes-spec
 ```
 
 ```{toctree}

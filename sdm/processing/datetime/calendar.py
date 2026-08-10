@@ -4,9 +4,8 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import NaT, Stype
-from sdm.processing.base import Processor
-from sdm.tensor import TableTensor
+from sdm import NaT, Stype, TableTensor
+from sdm.processing import Processor
 
 US_PER_MINUTE = 60 * 1_000_000
 US_PER_HOUR = 60 * US_PER_MINUTE

@@ -1,9 +1,8 @@
 import torch
 from torch import Tensor
 
-from sdm.processing.base import Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
 
 
 def _std(
@@ -98,3 +97,9 @@ class ClipSigma(Processor):
         clipped = torch.maximum(-log_abs + self.lower_bound, numerical)
         numerical = torch.minimum(log_abs + self.upper_bound, clipped)
         return table.replace_blocks(numerical=numerical)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"threshold={self.threshold})"
+        )

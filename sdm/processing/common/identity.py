@@ -1,6 +1,5 @@
-from sdm.processing.base import InvertibleMixin, Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import InvertibleMixin, Processor
 
 
 class Identity(Processor, InvertibleMixin):

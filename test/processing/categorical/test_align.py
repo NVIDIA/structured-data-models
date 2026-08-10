@@ -6,6 +6,7 @@ import torch
 
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import AlignCategories
+from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 
@@ -15,11 +16,12 @@ def _table(
     categories: tuple[tuple[str, ...], ...],
     columns: tuple[str, ...] = ("kind", "segment"),
     device: torch.device | str | None = None,
+    dtype: torch.dtype = torch.int32,
 ) -> TableTensor:
     return TableTensor(
         columns={"categorical": columns},
         categorical=CategoricalTensor(
-            code=torch.tensor(values, dtype=torch.int32, device=device),
+            code=torch.tensor(values, dtype=dtype, device=device),
             categories=tuple(
                 StringTensor.from_list(category, device=device)
                 for category in categories
@@ -56,6 +58,41 @@ def test_align_categories_remaps_independent_vocabularies(
     assert output.categorical.categories[0].tolist() == ["red", "blue"]
     assert output.categorical.categories[1].tolist() == ["x", "y"]
     assert output.categorical.device == device
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+def test_align_categories_keeps_string_vocabularies_column_local(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    context = _table(
+        [[0, 0], [1, 1]],
+        categories=(("shared", "left"), ("right", "shared")),
+        device=device,
+        dtype=dtype,
+    )
+    query = _table(
+        [[0, 0], [1, 1], [2, 2], [-1, -1]],
+        categories=(
+            ("shared", "right", "left"),
+            ("shared", "left", "right"),
+        ),
+        device=device,
+        dtype=dtype,
+    )
+
+    output = AlignCategories().fit(context).transform(query)
+
+    assert output.categorical.code.dtype == dtype
+    assert torch.equal(
+        output.categorical.code,
+        torch.tensor(
+            [[0, 1], [-1, -1], [1, 0], [-1, -1]],
+            dtype=dtype,
+            device=device,
+        ),
+    )
 
 
 def test_align_categories_removes_query_only_joint_vocabulary() -> None:
@@ -361,3 +398,55 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
 
     with pytest.raises(NotImplementedError):
         processor.transform(query)
+
+
+@withCUDA
+def test_align_categories_ensemble_matches_member_fits(
+    device: torch.device,
+) -> None:
+    first_context = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    second_context = _table(
+        [[1], [2]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    member_table_ids = (1, 0, 1, 0, 0, 1, 1, 0)
+    context = EnsembleTable.from_tables(
+        tables=(first_context, second_context),
+        member_table_ids=member_table_ids,
+    )
+    query = _table(
+        [[0], [1], [2]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    query_ensemble = EnsembleTable.from_tables(
+        tables=(query, query),
+        member_table_ids=member_table_ids,
+    )
+    combined = AlignCategories()
+    fitted = AlignCategories().fit_ensemble(context)
+
+    context_output = combined.fit_transform_ensemble(context)
+    query_output = combined.transform_ensemble(query_ensemble)
+    fitted_query_output = fitted.transform_ensemble(query_ensemble)
+    references = [
+        AlignCategories().fit(first_context),
+        AlignCategories().fit(second_context),
+    ]
+    context_tables = (first_context, second_context)
+    for member_id, table_id in enumerate(member_table_ids):
+        reference = references[table_id]
+        assert context_output.table(member_id).equal(
+            reference.transform(context_tables[table_id])
+        )
+        expected_query = reference.transform(query)
+        assert query_output.table(member_id).equal(expected_query)
+        assert fitted_query_output.table(member_id).equal(expected_query)

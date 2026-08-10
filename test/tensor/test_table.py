@@ -669,6 +669,8 @@ def test_slicing_ops() -> None:
     assert out.numerical.size() == (2, 3, 2, 2)
     assert out.categorical.size() == (2, 3, 2, 1)
 
+    with pytest.raises(RuntimeError, match="Can't slice"):
+        _ = torch.ops.aten.slice.Tensor(tensor, -1, 0, 1, 1)
     with pytest.raises(RuntimeError, match="Can't select"):
         _ = tensor.select(-1, 0)
     with pytest.raises(RuntimeError, match="Can't select"):
@@ -974,14 +976,21 @@ def test_pin_memory() -> None:
 @onlyCUDA
 def test_pin_memory_cuda() -> None:
     tensor = TableTensor(
-        columns={"numerical": ["age", "income"]},
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
         numerical=torch.randn(2, 2),
+        categorical=CategoricalTensor(
+            code=torch.randint(0, 2, (2, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
     )
 
     out = cast(TableTensor, tensor.pin_memory())
     assert out.is_pinned()
     assert out.numerical.is_pinned()
-    assert out.categorical is tensor.categorical
+    assert out.categorical.is_pinned()
     assert out.datetime is tensor.datetime
     assert out.id is tensor.id
 
@@ -1164,8 +1173,8 @@ def test_cudf() -> None:
     cudf = pytest.importorskip("cudf")
 
     data = {
-        "age": [0.0, 1.0, 2.0, 3.0],
-        "income": [10.0, 11.0, 12.0, 13.0],
+        "age": [0.0, 1.0, None, 3.0],
+        "income": [10.0, None, 12.0, 13.0],
         "country": ["US", "CA", "", "US"],
         "time": [
             datetime(2024, 1, 1, 0, 0),
@@ -1190,16 +1199,19 @@ def test_cudf() -> None:
     )
 
     assert tensor.size() == (4, 6)
-    assert tensor.numerical.equal(
+    assert tensor.numerical.allclose(
         torch.tensor(
             [
                 [0.0, 10.0],
-                [1.0, 11.0],
-                [2.0, 12.0],
+                [1.0, float("nan")],
+                [float("nan"), 12.0],
                 [3.0, 13.0],
             ],
             device=tensor.device,
-        )
+        ),
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
     assert tensor.categorical.code.equal(
         torch.tensor([[0], [1], [2], [0]], device=tensor.device)

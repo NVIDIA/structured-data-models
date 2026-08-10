@@ -1,12 +1,64 @@
 import pytest
 import torch
 
+from sdm import Recipe
+from sdm.cache import Cache
 from sdm.models import TabICLv2
+from sdm.models.tabiclv2 import row_embedding as row_embedding_module
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Recipe
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
+
+
+@withCUDA
+def test_row_embedding_automatic_batch_size_limit(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = RowEmbedding(
+        num_classes=2,
+        channels=8,
+        num_layers=2,
+        num_heads=2,
+        group_size=2,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+        device=device,
+    ).eval()
+    context = torch.randn(2, 4, 4, device=device)
+    query = torch.randn(2, 2, 4, device=device)
+    y = torch.randint(2, (2, 4), device=device)
+    chunk_kwargs = {} if device.type == "cuda" else {"batch_size_limit": 1}
+
+    with torch.inference_mode():
+        monkeypatch.setattr(
+            row_embedding_module,
+            "cuda_attention_memory_limit",
+            lambda _device: 1 << 60,
+        )
+        expected = model(torch.cat([context, query], dim=-2), y)[:, 4:]
+
+        monkeypatch.setattr(
+            row_embedding_module,
+            "cuda_attention_memory_limit",
+            lambda _device: 12 * 6 * 8 * 4,
+        )
+        actual = model(torch.cat([context, query], dim=-2), y, **chunk_kwargs)[
+            :, 4:
+        ]
+        cache = Cache()
+        model(context, y, cache=cache, **chunk_kwargs)
+        replayed = model(
+            query,
+            y[:, :0],
+            cache=cache.freeze(),
+            **chunk_kwargs,
+        )
+
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(replayed, expected)
 
 
 @withCUDA
@@ -61,11 +113,9 @@ def test_forward(
 
     torch.manual_seed(1)
     model.fit(x_context, y_context)
-    caches = model._caches
-    assert caches is not None
-    assert all(cache.size() > 0 for cache in caches)
+    assert model._cache is not None
+    assert model._cache.size() > 0
     assert model.predict(x_query).allclose(out)
-    assert all(cache.size() > 0 for cache in caches)
     model.clear()
 
 
@@ -106,15 +156,14 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     assert out.size() == (*batch_shape, R_query, 999)
 
     model.fit(x_context, y_context, num_estimators=3)
-    caches = model._caches
-    assert caches is not None
-    assert len(caches) == 3
-    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
+    assert model._cache is not None
+    assert 0 in model._cache
+    assert 1 in model._cache
+    assert model._cache.size() > 0
+    assert model._cache.is_cpu
 
     out = model.predict(x_query)
     assert out.size() == (*batch_shape, R_query, 999)
-    assert model._caches is caches
-    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
     model.clear()
 
 

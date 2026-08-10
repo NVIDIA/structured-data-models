@@ -14,5 +14,5 @@ def test_select_first_columns() -> None:
         datetime=torch.arange(6, dtype=torch.int64).view(2, 3),
     )
 
-    out = SelectColumns(max_columns=2, mode="first").transform(table)
+    out = SelectColumns(max_columns=2, method="first").transform(table)
     assert out.equal(table.select_columns(("x0", "x1", "d0", "d1")))

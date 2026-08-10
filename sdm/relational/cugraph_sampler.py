@@ -6,15 +6,17 @@ import torch
 from torch import Tensor
 
 from sdm import NaT, TableTensor
-from sdm.relational.data import RelationalData
+from sdm.relational import (
+    RelationalData,
+    RelationalSampler,
+    TaskLink,
+    TemporalSamplingConfig,
+)
 from sdm.relational.join import join_index
 from sdm.relational.sampler import (
-    RelationalSampler,
     RelationalSamplerOutput,
-    TemporalSamplingConfig,
     _validate_time_columns,
 )
-from sdm.relational.task import TaskLink
 
 _INTEGER_DTYPES = {
     torch.uint8,

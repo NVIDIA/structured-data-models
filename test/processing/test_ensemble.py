@@ -27,6 +27,21 @@ class IdentityEnsembleProcessor(EnsembleProcessor):
         return ensemble_table
 
 
+class FusedEnsembleProcessor(IdentityEnsembleProcessor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.used_fused_transform = False
+
+    def _fit_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        self.used_fused_transform = True
+        return ensemble_table
+
+
 class InvertibleIdentityEnsembleProcessor(
     IdentityEnsembleProcessor,
     EnsembleInvertibleMixin,
@@ -126,6 +141,14 @@ def test_ensemble_processor_supports_table_tensor_lifecycle() -> None:
     assert processor(table).equal(table)
 
 
+def test_ensemble_processor_uses_fused_table_tensor_lifecycle() -> None:
+    table = TableTensor.from_tensor(torch.ones(2, 1))
+    processor = FusedEnsembleProcessor()
+
+    assert processor.fit_transform(table).equal(table)
+    assert processor.used_fused_transform
+
+
 def test_ensemble_processor_passthrough_for_empty_supported_blocks() -> None:
     empty_ensemble_table = EnsembleTable(
         TableTensor.from_tensor(torch.empty(2, 0)),
@@ -217,5 +240,5 @@ def test_adapter_rejects_inverse_for_non_invertible_processor() -> None:
         Processor.as_processor(lambda value: value)
     )
 
-    with pytest.raises(TypeError, match="not invertible"):
+    with pytest.raises(AttributeError, match="inverse_transform"):
         processor.inverse_transform(table)

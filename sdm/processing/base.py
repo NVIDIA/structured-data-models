@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal, Self, TypeAlias
 
 import torch
-from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 
@@ -53,7 +52,7 @@ class Processor(torch.nn.Module, abc.ABC):
         for stype in self._active_unoperated_stypes(table):
             raise ValueError(
                 f"{self.__class__.__name__!r} cannot preserve "
-                f"{stype.value!r} columns."
+                f"{str(stype)!r} columns."
             )
 
     def _should_run(self, table: TableTensor) -> bool:

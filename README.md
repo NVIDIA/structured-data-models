@@ -8,7 +8,7 @@
 
 <h1 align="center">Structured Data Models
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-brightgreen.svg?style=flat&color=76B900)](https://www.python.org/downloads)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-brightgreen.svg?style=flat&color=76B900)](https://www.python.org/downloads)
 [![License: Apache 2.0](https://img.shields.io/badge/license-apache%202.0-brightgreen.svg?style=flat&color=76B900)](https://opensource.org/licenses/Apache-2.0)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat&color=76B900)](CONTRIBUTING.md)
 [![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat&color=76B900)](https://musical-invention-2y4yjlw.pages.github.io)
@@ -17,13 +17,13 @@
 
 **A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
 
-- **Models**: Reference implementations of structured data foundation models such as [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and [`KumoRFM`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRFM), built on a unified interface with room for future model families.
-- **Tensor-native**: PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
-- **Data processing**: Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
+- **Models:** Reference implementations of structured data foundation models such as the tabular [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and relational [`KumoRFM`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRFM), built on a unified interface with room for future model families.
+- **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
+- **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
 ## Installation
 
-The `structured-data-models` package is available from Python 3.10 and PyTorch 2.5 onwards.
+The `structured-data-models` package is available from Python 3.11 and PyTorch 2.5 onwards.
 Install via:
 
 ```bash
@@ -79,3 +79,5 @@ model.fit(
 model.predict(table[300:].drop_columns("target"))
 model.clear()
 ```
+
+More examples are listed under [`examples/`](examples), grouped by model architecture.
