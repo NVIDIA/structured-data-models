@@ -109,37 +109,18 @@ def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
         dispatch.inverse_transform(output)
 
 
-def test_drop_stypes_removes_configured_stypes() -> None:
-    output = sp.DropStypes(Stype.numerical).fit_transform(_mixed_table())
-
-    assert output.columns[Stype.numerical] == ()
-    assert output.columns[Stype.categorical] == ("kind",)
-    assert torch.equal(
-        output.categorical.code, _mixed_table().categorical.code
-    )
-
-
-def test_drop_stypes_noops_without_matching_stypes() -> None:
-    table = _mixed_table()
-
-    assert sp.DropStypes(Stype.id).fit_transform(table) is table
-
-
 def test_stype_dispatch_runs_iterable_routes() -> None:
     table = _mixed_table().replace_blocks(
         numerical=torch.tensor([[-3.0, 2.0], [1.0, 4.0]])
     )
-    dispatch = sp.Sequential(
-        sp.StypeDispatch(
-            numerical=[
-                lambda table: table.replace_blocks(
-                    numerical=table.numerical.square()
-                ),
-                sp.ImputeMean(),
-                sp.Standardize(),
-            ],
-        ),
-        sp.DropStypes(Stype.categorical),
+    dispatch = sp.StypeDispatch(
+        numerical=[
+            lambda table: table.replace_blocks(
+                numerical=table.numerical.square()
+            ),
+            sp.ImputeMean(),
+            sp.Standardize(),
+        ],
     )
     expected = sp.Standardize().fit_transform(
         table.select_stypes(Stype.numerical).replace_blocks(
@@ -149,7 +130,9 @@ def test_stype_dispatch_runs_iterable_routes() -> None:
 
     output = dispatch.fit_transform(table)
 
+    assert output.columns == table.columns
     torch.testing.assert_close(output.numerical, expected.numerical)
+    assert output.categorical.equal(table.categorical)
 
 
 def test_stype_dispatch_routes_text() -> None:
