@@ -43,14 +43,14 @@ class Processor(torch.nn.Module, abc.ABC):
         super().__init__()
         self._fitted = False
 
-    def _applies_to(self, table: TableTensor) -> bool:
-        if self.unoperated_stype_policy == "error":
-            for stype in table.active_stypes - self.operates_on_stypes:
-                raise ValueError(
-                    f"{self.__class__.__name__!r} cannot preserve "
-                    f"{str(stype)!r} columns."
-                )
-        return len(table.active_stypes & self.operates_on_stypes) > 0
+    def _validate_stypes(self, table: TableTensor) -> None:
+        if self.unoperated_stype_policy != "error":
+            return
+        for stype in table.active_stypes - self.operates_on_stypes:
+            raise ValueError(
+                f"{self.__class__.__name__!r} cannot preserve "
+                f"{str(stype)!r} columns."
+            )
 
     @staticmethod
     def as_processor(processor: object) -> Processor:
@@ -116,7 +116,8 @@ class Processor(torch.nn.Module, abc.ABC):
             table: The table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        if not self._applies_to(table):
+        self._validate_stypes(table)
+        if not table.active_stypes & self.operates_on_stypes:
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
@@ -132,7 +133,8 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not self._applies_to(table):
+        self._validate_stypes(table)
+        if not table.active_stypes & self.operates_on_stypes:
             return table
         self._check_is_fitted()
         return self._transform(table)
@@ -156,7 +158,8 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not self._applies_to(table):
+        self._validate_stypes(table)
+        if not table.active_stypes & self.operates_on_stypes:
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:
