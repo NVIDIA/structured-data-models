@@ -1,9 +1,9 @@
 # ruff: noqa: T201
-"""Profile SentenceTransformer tokenization vs forward pass separately.
+"""Profile the full TabICLv2 + SentenceTransformer pipeline.
 
-Based on the STRABLE clear-corpus example. Breaks down the embed step
-into tokenization (CPU string processing) and model forward pass
-(PyTorch ops), and profiles each independently.
+Based on the STRABLE clear-corpus example. Wraps fit + predict in
+torch.profiler to produce a Chrome trace showing where time is spent
+across the full pipeline (SentenceTransformer, PCA, TabICLv2).
 
 Usage:
     python profile_embed_breakdown.py
@@ -11,20 +11,19 @@ Usage:
 """
 
 import argparse
-import time
 
 import pyarrow.parquet as pq
 import torch
 from huggingface_hub import hf_hub_download
-from sentence_transformers import SentenceTransformer as STModel
 
 import sdm
+import sdm.processing as sp
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--output",
     default="profile_embed_trace.json",
-    help="Output path for the Chrome trace (default: profile_embed_trace.json).",
+    help="Output path for the Chrome trace.",
 )
 args = parser.parse_args()
 
@@ -66,110 +65,66 @@ num_rows = len(table)
 perm = torch.randperm(num_rows, generator=generator, device=device)
 context_size = int(0.8 * num_rows)
 context = table[perm[:context_size]]
+query = table[perm[context_size:]]
+ground_truth = query[:, target_name].numerical.squeeze(-1)
 
-# Extract text cells as a flat list of strings (same as SentenceTransformer
-# processor does internally).
-context_x = context.drop_columns(target_name)
-stypes = sdm.infer_stypes(arrow_table, with_text=True)
-text_cols = [col for col, s in stypes.items() if s == sdm.Stype.text]
-texts = []
-for col in text_cols:
-    col_idx = list(context_x.columns[sdm.Stype.text]).index(col)
-    arr = context_x.text[..., col_idx].reshape(-1).to_arrow().to_pylist()
-    texts.extend(s if s is not None else "" for s in arr)
+model = sdm.models.TabICLv2(device=device)
+recipe = model.default_recipe()
+text_processor = sp.Sequential(
+    sp.SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2"),
+    sp.PCA(num_components=64),
+)
+recipe.prepend_features(sp.StypeDispatch(text=text_processor))
 
-print(f"Total text cells: {len(texts)}")
-print(f"Text columns: {text_cols}")
-print(f"Device: {device}")
-
-# Load the model and tokenizer.
-st_model = STModel("sentence-transformers/all-MiniLM-L6-v2")
-st_model = st_model.to(device)
-tokenizer = st_model.tokenizer
-
-# --- Profile tokenization + forward pass together ---
-if torch.cuda.is_available():
-    torch.cuda.synchronize()
-
-with torch.profiler.profile(
-    activities=[
-        torch.profiler.ProfilerActivity.CPU,
-        *(
-            [torch.profiler.ProfilerActivity.CUDA]
-            if torch.cuda.is_available()
-            else []
-        ),
-    ],
-    record_shapes=True,
-    with_stack=True,
-) as prof:
-    # Step 1: tokenization (pure CPU, shows as one block in the trace)
-    t0 = time.perf_counter()
-    encoded = tokenizer(
-        texts,
-        padding=True,
-        truncation=True,
-        max_length=st_model.max_seq_length,
-        return_tensors="pt",
+with (
+    torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            *(
+                [torch.profiler.ProfilerActivity.CUDA]
+                if torch.cuda.is_available()
+                else []
+            ),
+        ],
+        record_shapes=True,
+        with_stack=True,
+    ) as prof,
+    torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda),
+):
+    model.fit(
+        x=context.drop_columns(target_name),
+        y=context[:, target_name],
+        recipe=recipe,
+        generator=generator,
     )
-    t_tokenize = time.perf_counter() - t0
-
-    # Step 2: forward pass (PyTorch ops, broken down in the trace)
-    encoded = {k: v.to(device) for k, v in encoded.items()}
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
-    with torch.no_grad():
-        t0 = time.perf_counter()
-        output = st_model(encoded)
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-        t_forward = time.perf_counter() - t0
+    prediction = model.predict(query.drop_columns(target_name)).numerical
+    prediction = prediction.mean(dim=-1)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
 
 prof.export_chrome_trace(args.output)
 
-print(f"\nTokenization: {t_tokenize:.3f}s")
-print(f"  Input IDs shape: {encoded['input_ids'].shape}")
-print(f"Forward pass: {t_forward:.3f}s")
-print(f"  Embedding shape: {output['sentence_embedding'].shape}")
+rmse = (prediction - ground_truth).pow(2).mean().sqrt()
+mae = (prediction - ground_truth).abs().mean()
+print(f"RMSE: {rmse:.3f}, MAE: {mae:.3f}")
 
-# --- Step 3: For comparison, time the full .encode() call ---
-if torch.cuda.is_available():
-    torch.cuda.synchronize()
-
-t0 = time.perf_counter()
-emb = st_model.encode(
-    texts,
-    show_progress_bar=False,
-    convert_to_tensor=True,
-    device=str(device),
-    batch_size=32,
-)
-if torch.cuda.is_available():
-    torch.cuda.synchronize()
-t_encode = time.perf_counter() - t0
-
-print(f"\nFull .encode(): {t_encode:.3f}s")
-print(
-    f"  Tokenization:  {t_tokenize:.3f}s ({t_tokenize / t_encode * 100:.1f}%)"
-)
-print(f"  Forward pass:  {t_forward:.3f}s ({t_forward / t_encode * 100:.1f}%)")
-print(f"  Overhead:      {t_encode - t_tokenize - t_forward:.3f}s")
-
-print("\n--- Forward pass ops (top 20) ---")
+print("\n--- CPU time (top 30 ops) ---")
 print(
     prof.key_averages().table(
         sort_by="cpu_time_total",
-        row_limit=20,
+        row_limit=30,
     )
 )
 
 if torch.cuda.is_available():
-    print("\n--- Forward pass CUDA ops (top 20) ---")
+    print("\n--- CUDA time (top 30 ops) ---")
     print(
         prof.key_averages().table(
             sort_by="cuda_time_total",
-            row_limit=20,
+            row_limit=30,
         )
     )
 
