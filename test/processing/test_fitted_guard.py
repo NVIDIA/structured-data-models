@@ -58,6 +58,10 @@ class StatelessProcessor(Processor):
         return table.replace_blocks(numerical=table.numerical + 1)
 
 
+class RejectingProcessor(StatelessProcessor):
+    unoperated_stype_policy = "error"
+
+
 class StatefulProcessor(Processor):
     operates_on_stypes = frozenset({Stype.numerical})
     requires_fit = True
@@ -133,6 +137,14 @@ def test_processor_noops_when_only_unoperated_stypes_are_active() -> None:
     assert processor.transform(table) is table
     with pytest.raises(RuntimeError, match="not fitted"):
         processor.transform(numerical)
+
+
+def test_processor_rejects_unoperated_stypes_when_policy_errors() -> None:
+    processor = RejectingProcessor()
+
+    for table in (_mixed_table(), _id_table()):
+        with pytest.raises(ValueError, match="cannot preserve"):
+            processor.fit_transform(table)
 
 
 def test_processor_fit_transform_handles_empty_table() -> None:

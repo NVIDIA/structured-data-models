@@ -98,6 +98,15 @@ class EnsembleProcessor(Processor):
             self._fit_ensemble(ensemble_table, generator=generator)
         return self._transform_ensemble(ensemble_table)
 
+    def _applies_to_ensemble(self, ensemble_table: EnsembleTable) -> bool:
+        if self.unoperated_stype_policy == "preserve":
+            return any(self._applies_to(group) for group in ensemble_table)
+
+        applies = False
+        for group in ensemble_table:
+            applies = self._applies_to(group) or applies
+        return applies
+
     def fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
@@ -110,7 +119,7 @@ class EnsembleProcessor(Processor):
             ensemble_table: Ensemble table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        if not any(self._should_run(group) for group in ensemble_table):
+        if not self._applies_to_ensemble(ensemble_table):
             return self
         if self.requires_fit:
             self._fit_ensemble(ensemble_table, generator=generator)
@@ -129,7 +138,7 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        if not any(self._should_run(group) for group in ensemble_table):
+        if not self._applies_to_ensemble(ensemble_table):
             return ensemble_table
         self._check_is_fitted()
         return self._transform_ensemble(ensemble_table)
@@ -149,7 +158,7 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        if not any(self._should_run(group) for group in ensemble_table):
+        if not self._applies_to_ensemble(ensemble_table):
             return ensemble_table
         output = self._fit_transform_ensemble(
             ensemble_table,

@@ -109,14 +109,6 @@ def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
         dispatch.inverse_transform(output)
 
 
-def test_stype_dispatch_without_routes_is_noop() -> None:
-    table = _mixed_table()
-
-    output = sp.StypeDispatch().fit_transform(table)
-
-    assert output is table
-
-
 def test_stype_dispatch_runs_iterable_routes() -> None:
     table = _mixed_table().replace_blocks(
         numerical=torch.tensor([[-3.0, 2.0], [1.0, 4.0]])

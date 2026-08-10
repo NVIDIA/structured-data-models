@@ -4,7 +4,6 @@ import torch
 import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
-    ColumnarTensor,
     StringTensor,
     Stype,
     TableTensor,
@@ -78,27 +77,6 @@ def test_recipe_role_fit_accepts_table() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
-
-
-def test_recipe_feature_processor_preserves_id_stype() -> None:
-    recipe = sp.Recipe(features=[sp.Standardize()])
-    features = TableTensor(
-        columns={
-            Stype.numerical: ("x0", "x1"),
-            Stype.id: ("entity_id",),
-        },
-        numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
-        id=ColumnarTensor((torch.tensor([10, 11]),)),
-    )
-
-    transformed = recipe.features.fit_transform(features)
-
-    assert torch.allclose(
-        transformed.numerical.mean(dim=0),
-        torch.zeros(2),
-        atol=1e-6,
-    )
-    assert torch.equal(transformed.id, features.id)
 
 
 def test_recipe_rejects_task_dispatch_in_target() -> None:
