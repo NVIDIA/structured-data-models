@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any, cast
 
 import pyarrow.compute as pc
@@ -80,23 +81,63 @@ class SentenceTransformer(Processor):
                 device=table.device,
             )
         else:
+            t0 = time.perf_counter()
+
             text = cast(StringTensor, table.text.movedim(-1, 0).reshape(-1))
+
+            t_reshape = time.perf_counter() - t0
+            t0 = time.perf_counter()
+
             array = text.to_arrow()
+
+            t_to_arrow = time.perf_counter() - t0
+            t0 = time.perf_counter()
+
             if text.is_nullable:
                 array = pc.fill_null(array, "")
+
+            pylist = array.to_pylist()
+
+            t_to_pylist = time.perf_counter() - t0
+            t0 = time.perf_counter()
+
             emb = self._model.module.encode(
-                array.to_pylist(),
+                pylist,
                 show_progress_bar=False,
                 convert_to_tensor=True,
                 device=str(table.device),
                 batch_size=self.batch_size,
             )
+
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            t_encode = time.perf_counter() - t0
+            t0 = time.perf_counter()
+
             assert isinstance(emb, Tensor)
             emb = emb.to(device=table.device, dtype=table.dtype)
+
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            t_to_device = time.perf_counter() - t0
+            t0 = time.perf_counter()
+
             numerical = (
                 emb.reshape(len(columns), *batch_shape, self._embedding_dim)
                 .movedim(0, -2)
                 .reshape(*batch_shape, len(output_columns))
+            )
+
+            t_reshape_out = time.perf_counter() - t0
+            print(  # noqa: T201
+                f"\n[SentenceTransformer._transform] "
+                f"n_strings={len(pylist)}\n"
+                f"  reshape input:  {t_reshape:.4f}s\n"
+                f"  to_arrow:       {t_to_arrow:.4f}s\n"
+                f"  to_pylist:      {t_to_pylist:.4f}s\n"
+                f"  encode:         {t_encode:.4f}s\n"
+                f"  to device/dtype:{t_to_device:.4f}s\n"
+                f"  reshape output: {t_reshape_out:.4f}s"
             )
 
         out = torch.cat(
