@@ -2,12 +2,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import (
-    CategoricalTensor,
-    StringTensor,
-    Stype,
-    TableTensor,
-)
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.testing import withCUDA
 
