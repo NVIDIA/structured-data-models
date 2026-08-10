@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, NamedTuple, Self, cast
 
@@ -62,24 +62,15 @@ class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
         related_tables: The related tables for the task table.
     """
 
-    def to(self, device: torch.device | str | None) -> Self:
-        r""":meta private:"""  # noqa: D415
-        return self.__class__(
-            task_table=cast(TableTensor, self.task_table.to(device)),
-            related_tables=self.related_tables.to(device),
-        )
+    def _tensors(self) -> Iterator[Tensor]:
+        yield self.task_table
+        yield from self.related_tables._tensors()
 
-    @property
-    def device(self) -> torch.device:
-        r""":meta private:"""  # noqa: D415
-        devices = list({self.task_table.device, self.related_tables.device})
-        if len(devices) > 1:
-            raise RuntimeError(
-                f"Expected 'task_table' and 'related_tables' to be on the "
-                f"same device (got '{self.task_table.device}' and "
-                f"'{self.related_tables.device}')"
-            )
-        return next(iter(devices))
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return self.__class__(
+            task_table=cast(TableTensor, fn(self.task_table)),
+            related_tables=self.related_tables._apply_tensor(fn),
+        )
 
 
 class RelationalSampler:
