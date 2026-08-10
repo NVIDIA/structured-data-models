@@ -49,18 +49,23 @@ DATASETS = [
     "michelin-ratings",
 ]
 
+TASK_OVERRIDES = {
+    "tobacco-problem": "classification",
+}
+
 CSV_FIELDS = [
     "dataset",
     "num_rows",
     "num_text_cols",
     "avg_text_length",
     "max_text_length",
+    "task",
     "mode",
     "fit_time_s",
     "predict_time_s",
     "total_time_s",
-    "rmse",
-    "mae",
+    "metric_name",
+    "metric_value",
 ]
 
 parser = argparse.ArgumentParser()
@@ -88,6 +93,12 @@ for dataset_name in DATASETS:
         with open(config_path) as f:
             config = json.load(f)
         target_name = config["target_name"]
+        task = TASK_OVERRIDES.get(
+            dataset_name,
+            "classification"
+            if "classification" in config.get("task", "")
+            else "regression",
+        )
 
         data_path = hf_hub_download(
             repo_id="inria-soda/STRABLE-benchmark",
@@ -122,6 +133,7 @@ for dataset_name in DATASETS:
         "num_text_cols": len(text_cols),
         "avg_text_length": round(avg_len),
         "max_text_length": max_len,
+        "task": task,
     }
 
     print(f"  Rows: {base_row['num_rows']}")
@@ -148,7 +160,12 @@ for dataset_name in DATASETS:
             context_size = int(0.8 * num_rows)
             context = table[perm[:context_size]]
             query = table[perm[context_size:]]
-            ground_truth = query[:, target_name].numerical.squeeze(-1)
+            if task == "regression":
+                ground_truth = query[:, target_name].numerical.squeeze(-1)
+            else:
+                ground_truth = query[:, target_name].categorical.code.squeeze(
+                    -1
+                )
 
             model = sdm.models.TabICLv2(device=device)
             recipe = model.default_recipe()
@@ -184,29 +201,38 @@ for dataset_name in DATASETS:
             ):
                 prediction = model.predict(
                     query.drop_columns(target_name),
-                ).numerical
-                prediction = prediction.mean(dim=-1)
+                )
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             t_predict = time.perf_counter() - t0
 
-            rmse = (prediction - ground_truth).pow(2).mean().sqrt().item()
-            mae = (prediction - ground_truth).abs().mean().item()
+            if task == "regression":
+                prediction = prediction.numerical.mean(dim=-1)
+                metric_name = "rmse"
+                metric_value = (
+                    (prediction - ground_truth).pow(2).mean().sqrt().item()
+                )
+            else:
+                prediction = prediction.categorical.code.squeeze(-1)
+                metric_name = "accuracy"
+                metric_value = (
+                    (prediction == ground_truth).float().mean().item()
+                )
 
             row.update(
                 {
                     "fit_time_s": round(t_fit, 3),
                     "predict_time_s": round(t_predict, 3),
                     "total_time_s": round(t_fit + t_predict, 3),
-                    "rmse": round(rmse, 4),
-                    "mae": round(mae, 4),
+                    "metric_name": metric_name,
+                    "metric_value": round(metric_value, 4),
                 }
             )
 
             print(f"    Fit:     {row['fit_time_s']:.3f}s")
             print(f"    Predict: {row['predict_time_s']:.3f}s")
             print(f"    Total:   {row['total_time_s']:.3f}s")
-            print(f"    RMSE: {rmse:.4f}, MAE: {mae:.4f}")
+            print(f"    {metric_name}: {metric_value:.4f}")
 
         except Exception:
             traceback.print_exc()
@@ -215,8 +241,8 @@ for dataset_name in DATASETS:
                     "fit_time_s": None,
                     "predict_time_s": None,
                     "total_time_s": None,
-                    "rmse": None,
-                    "mae": None,
+                    "metric_name": None,
+                    "metric_value": None,
                 }
             )
 
