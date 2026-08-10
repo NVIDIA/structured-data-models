@@ -93,30 +93,20 @@ with (
     ) as prof,
     torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda),
 ):
-    with torch.profiler.record_function("SentenceTransformer.fit_transform"):
-        context_embedded = st.fit_transform(context_x)
+    with torch.profiler.record_function("preprocess.fit_transform"):
+        context_out = dispatch.fit_transform(context_x)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
-    with torch.profiler.record_function("SentenceTransformer.transform"):
-        query_embedded = st.transform(query_x)
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-
-    with torch.profiler.record_function("PCA.fit_transform"):
-        context_pca = pca.fit_transform(context_embedded)
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-
-    with torch.profiler.record_function("PCA.transform"):
-        query_pca = pca.transform(query_embedded)
+    with torch.profiler.record_function("preprocess.transform"):
+        query_out = dispatch.transform(query_x)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
 prof.export_chrome_trace(args.output)
 
-print(f"Context embedded shape: {context_embedded.numerical.shape}")
-print(f"Query PCA shape: {query_pca.numerical.shape}")
+print(f"Context shape: {context_out.numerical.shape}")
+print(f"Query shape: {query_out.numerical.shape}")
 
 print("\n--- CPU time (top 30 ops) ---")
 print(
