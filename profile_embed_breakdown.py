@@ -87,7 +87,6 @@ with (
             ),
         ],
         record_shapes=True,
-        with_stack=True,
     ) as prof,
     torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda),
 ):
