@@ -1,10 +1,14 @@
-"""Cache primitives."""
-
-from collections.abc import Iterable, Iterator, Mapping, MutableMapping
+from collections.abc import (
+    Callable,
+    Hashable,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+)
 from enum import StrEnum
 from typing import NamedTuple, Self
 
-import torch
 from torch import Tensor
 
 from sdm.tensor.mixin import DeviceMixin
@@ -23,38 +27,15 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Cached value projection tensor.
     """
 
-    def to(
-        self,
-        device: torch.device | str | None,
-        *,
-        non_blocking: bool = False,
-    ) -> Self:
-        r""":meta private:"""  # noqa: D415
-        return self.__class__(
-            key=self.key.to(device, non_blocking=non_blocking),
-            value=self.value.to(device, non_blocking=non_blocking),
-        )
+    def _tensors(self) -> Iterator[Tensor]:
+        yield self.key
+        yield self.value
 
-    def pin_memory(self) -> Self:
-        r"""Copy cached tensors into pinned CPU memory."""
-        return self.__class__(
-            key=self.key.pin_memory(),
-            value=self.value.pin_memory(),
-        )
-
-    @property
-    def device(self) -> torch.device:
-        r""":meta private:"""  # noqa: D415
-        devices = {self.key.device, self.value.device}
-        if len(devices) > 1:
-            raise RuntimeError(
-                f"Expected key and value cache tensors to be on the same "
-                f"device (got '{self.key.device}' and '{self.value.device}')"
-            )
-        return next(iter(devices))
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return self.__class__(key=fn(self.key), value=fn(self.value))
 
 
-class Cache(MutableMapping[str, object], DeviceMixin):
+class Cache(MutableMapping[Hashable, object], DeviceMixin):
     r"""A mutable mapping of model cache values."""
 
     class Mode(StrEnum):
@@ -75,11 +56,11 @@ class Cache(MutableMapping[str, object], DeviceMixin):
 
     def __init__(
         self,
-        *args: Mapping[str, object] | Iterable[tuple[str, object]],
+        *args: Mapping[Hashable, object] | Iterable[tuple[Hashable, object]],
         **kwargs: object,
     ) -> None:
         self._mode = Cache.Mode.record
-        self._items: dict[str, object] = dict(*args, **kwargs)
+        self._items: dict[Hashable, object] = dict(*args, **kwargs)
 
     @property
     def is_recording(self) -> bool:
@@ -92,21 +73,11 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         return self._mode == Cache.Mode.replay
 
     def size(self) -> int:
-        r"""The size in bytes of key/value entries in supported containers."""
-
-        def _size(value: object) -> int:
-            if isinstance(value, KVCacheEntry):
-                return (
-                    value.key.numel() * value.key.element_size()
-                    + value.value.numel() * value.value.element_size()
-                )
-            if isinstance(value, list | tuple):
-                return sum(_size(item) for item in value)
-            if isinstance(value, dict | Cache):
-                return sum(_size(item) for item in value.values())
-            return 0
-
-        return _size(self)
+        r"""The size in bytes of tensor data stored in this cache."""
+        return sum(
+            tensor.numel() * tensor.element_size()
+            for tensor in self._tensors()
+        )
 
     def freeze(self) -> Self:
         r"""Freeze the cache to replay mode."""
@@ -119,31 +90,31 @@ class Cache(MutableMapping[str, object], DeviceMixin):
             elif isinstance(value, list | tuple):
                 for item in value:
                     _freeze(item)
-            elif isinstance(value, dict):
+            elif isinstance(value, Mapping):
                 for item in value.values():
                     _freeze(item)
 
         _freeze(self)
         return self
 
-    def __setitem__(self, key: str, value: object) -> None:
+    def __setitem__(self, key: Hashable, value: object) -> None:
         if not self.is_recording:
             raise RuntimeError(
                 "'__setitem__' requires the cache to be in 'record' mode"
             )
         self._items[key] = value
 
-    def __delitem__(self, key: str) -> None:
+    def __delitem__(self, key: Hashable) -> None:
         if not self.is_recording:
             raise RuntimeError(
                 "'__delitem__' requires the cache to be in 'record' mode"
             )
         del self._items[key]
 
-    def __getitem__(self, key: str) -> object:
+    def __getitem__(self, key: Hashable) -> object:
         return self._items[key]
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[Hashable]:
         return iter(self._items)
 
     def __len__(self) -> int:
@@ -152,85 +123,38 @@ class Cache(MutableMapping[str, object], DeviceMixin):
     def __repr__(self) -> str:
         return repr(self._items)
 
-    def to(
-        self,
-        device: torch.device | str | None,
-        *,
-        non_blocking: bool = False,
-    ) -> Self:
-        r""":meta private:"""  # noqa: D415
-
-        def _to(value: object) -> object:
+    def _tensors(self) -> Iterator[Tensor]:
+        def _iter_tensors(value: object) -> Iterator[Tensor]:
             if isinstance(value, Tensor):
-                return value.to(device, non_blocking=non_blocking)
-            if isinstance(value, KVCacheEntry):
-                return value.to(device, non_blocking=non_blocking)
-            if isinstance(value, Cache):
-                return value.to(device, non_blocking=non_blocking)
+                yield value
+            elif isinstance(value, DeviceMixin):
+                yield from value._tensors()
+            elif isinstance(value, list | tuple):
+                for item in value:
+                    yield from _iter_tensors(item)
+            elif isinstance(value, Mapping):
+                for item in value.values():
+                    yield from _iter_tensors(item)
+
+        for value in self.values():
+            yield from _iter_tensors(value)
+
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        def _apply(value: object) -> object:
+            if isinstance(value, Tensor):
+                return fn(value)
+            if isinstance(value, DeviceMixin):
+                return value._apply_tensor(fn)
             if isinstance(value, list):
-                return [_to(item) for item in value]
+                return [_apply(item) for item in value]
             if isinstance(value, tuple):
-                return tuple(_to(item) for item in value)
-            if isinstance(value, dict):
-                return {key: _to(item) for key, item in value.items()}
+                return tuple(_apply(item) for item in value)
+            if isinstance(value, Mapping):
+                return {key: _apply(item) for key, item in value.items()}
             return value
 
-        out = self.__class__({k: _to(v) for k, v in self.items()})
+        out = self.__class__(
+            {key: _apply(value) for key, value in self.items()}
+        )
         out._mode = self._mode
         return out
-
-    def pin_memory(self) -> Self:
-        r"""Copy nested tensor data into pinned CPU memory."""
-
-        def _pin_memory(value: object) -> object:
-            if isinstance(value, Tensor):
-                return value.pin_memory()
-            if isinstance(value, KVCacheEntry):
-                return value.pin_memory()
-            if isinstance(value, Cache):
-                return value.pin_memory()
-            if isinstance(value, list):
-                return [_pin_memory(item) for item in value]
-            if isinstance(value, tuple):
-                return tuple(_pin_memory(item) for item in value)
-            if isinstance(value, dict):
-                return {key: _pin_memory(item) for key, item in value.items()}
-            return value
-
-        pinned = self.__class__(
-            {key: _pin_memory(value) for key, value in self.items()}
-        )
-        pinned._mode = self._mode
-        return pinned
-
-    @property
-    def device(self) -> torch.device:
-        r""":meta private:"""  # noqa: D415
-
-        def _devices(value: object) -> set[torch.device]:
-            if isinstance(value, Tensor | KVCacheEntry | Cache):
-                return {value.device}
-            if isinstance(value, list | tuple):
-                return {device for item in value for device in _devices(item)}
-            if isinstance(value, dict):
-                return {
-                    device
-                    for item in value.values()
-                    for device in _devices(item)
-                }
-            return set()
-
-        devices = {
-            device for item in self.values() for device in _devices(item)
-        }
-        if len(devices) == 0:
-            raise RuntimeError(
-                f"Could not determine 'device' of empty "
-                f"{self.__class__.__name__!r}"
-            )
-        if len(devices) > 1:
-            raise RuntimeError(
-                f"Expected tensors in {self.__class__.__name__!r} to be on "
-                f"the same device (got {list(devices)})"
-            )
-        return next(iter(devices))

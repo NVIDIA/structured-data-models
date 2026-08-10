@@ -2,7 +2,7 @@ import contextlib
 import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
@@ -51,12 +51,7 @@ class ICLModel(torch.nn.Module, ABC):
 
     def __init__(self) -> None:
         super().__init__()
-
-        # One cache per ensemble member.
-        self._caches: list[Cache] | None = None
-        # One execution for "vectorized" (spanning all estimators), or one
-        # per estimator for "sequential".
-        self._recipe_executions: tuple[RecipeExecution, ...] | None = None
+        self._cache: Cache | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -69,7 +64,6 @@ class ICLModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
-        recipe_execution: Literal["sequential", "vectorized"] = "vectorized",
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # Recipe-defined output shape.
@@ -87,12 +81,6 @@ class ICLModel(torch.nn.Module, ABC):
             related_query_tables: Related context for query examples.
             recipe: The recipe for pre- and post-processing.
             num_estimators: The number of estimators ``E`` for ensembling.
-            recipe_execution: How to run the recipe across estimators.
-                ``"sequential"`` processes one estimator at a time (less
-                memory). ``"vectorized"`` processes all estimators in one
-                batched pass (faster, more GPU memory; fall back to
-                ``"sequential"`` on out-of-memory errors). The model
-                itself always runs once per estimator either way.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
@@ -122,72 +110,57 @@ class ICLModel(torch.nn.Module, ABC):
                 tables=related_context_tables.tables
             )
 
-        recipe = self.default_recipe() if recipe is None else recipe
-
-        # Bind chunks: vectorized -> (E,), sequential -> (1,) * E
-        if recipe_execution == "vectorized":
-            member_counts = (num_estimators,)
-        else:
-            assert recipe_execution == "sequential"
-            member_counts = (1,) * num_estimators
+        recipe_execution = RecipeExecution(
+            self.default_recipe() if recipe is None else copy.deepcopy(recipe)
+        )
+        with torch.amp.autocast(x_query.device.type, enabled=False):
+            contexts = recipe_execution.fit_transform(
+                x=x_context,
+                y=y_context,
+                related_tables=related_context_tables,
+                num_members=num_estimators,
+                generator=generator,
+            )
+            queries = recipe_execution.transform(
+                x=x_query,
+                related_tables=related_query_tables,
+            )
 
         outs: list[TableTensor] = []
-        execution: RecipeExecution | None = None
-        for num_members in member_counts:
-            execution = RecipeExecution(copy.deepcopy(recipe))
+        for context, query in zip(contexts, queries):
+            self._validate_context(
+                x=context.x,
+                y=context.y,
+                related_tables=context.related_tables,
+            )
+            self._validate_query(
+                x_context=context.x.schema,
+                x_query=query.x,
+                related_context_tables=context.related_tables.schema
+                if context.related_tables is not None
+                else None,
+                related_query_tables=query.related_tables,
+            )
+            out = self._forward(
+                x_context=context.x,
+                y_context=context.y,
+                x_query=query.x,
+                related_context_tables=context.related_tables,
+                related_query_tables=query.related_tables,
+                cache=None,
+                generator=generator,
+                **kwargs,
+            )
+            out = cast(TableTensor, out.to(query.x.dtype))
+            outs.append(out)
+
+        # Regression: invert target before stacking estimator outputs.
+        if contexts[0].y.numerical.size(-1) > 0:
             with torch.amp.autocast(x_query.device.type, enabled=False):
-                contexts = execution.fit_transform(
-                    x=x_context,
-                    y=y_context,
-                    related_tables=related_context_tables,
-                    num_members=num_members,
-                    generator=generator,
-                )
-                queries = execution.transform(
-                    x=x_query,
-                    related_tables=related_query_tables,
-                )
+                outs = list(recipe_execution.inverse_transform_target(outs))
 
-            member_outs: list[TableTensor] = []
-            for context, query in zip(contexts, queries):
-                self._validate_context(
-                    x=context.x,
-                    y=context.y,
-                    related_tables=context.related_tables,
-                )
-                self._validate_query(
-                    x_context=context.x.schema,
-                    x_query=query.x,
-                    related_context_tables=context.related_tables.schema
-                    if context.related_tables is not None
-                    else None,
-                    related_query_tables=query.related_tables,
-                )
-
-                out = self._forward(
-                    x_context=context.x,
-                    y_context=context.y,
-                    x_query=query.x,
-                    related_context_tables=context.related_tables,
-                    related_query_tables=query.related_tables,
-                    cache=None,
-                    generator=generator,
-                    **kwargs,
-                )
-                out = cast(TableTensor, out.to(query.x.dtype))
-                member_outs.append(out)
-
-            # Regression: invert target before stacking estimator outputs.
-            if contexts[0].y.numerical.size(-1) > 0:
-                with torch.amp.autocast(x_query.device.type, enabled=False):
-                    member_outs = list(
-                        execution.inverse_transform_target(member_outs)
-                    )
-            outs.extend(member_outs)
-
-        assert execution is not None
         with torch.amp.autocast(x_query.device.type, enabled=False):
-            return execution.transform_output(outs)
+            return recipe_execution.transform_output(outs)
 
     @_maybe_inference_mode()
     def fit(
@@ -198,7 +171,6 @@ class ICLModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
-        recipe_execution: Literal["sequential", "vectorized"] = "vectorized",
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> None:
@@ -216,12 +188,6 @@ class ICLModel(torch.nn.Module, ABC):
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
-            recipe_execution: How to run the recipe across estimators.
-                ``"sequential"`` processes one estimator at a time (less
-                memory). ``"vectorized"`` processes all estimators in one
-                batched pass (faster, more GPU memory; fall back to
-                ``"sequential"`` on out-of-memory errors). The model
-                itself always runs once per estimator either way.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
@@ -233,70 +199,57 @@ class ICLModel(torch.nn.Module, ABC):
         if not isinstance(y, TableTensor):
             y = TableTensor.from_tensor(y)
 
-        recipe = self.default_recipe() if recipe is None else recipe
-
         self.clear()
 
-        # Bind chunks: vectorized -> (E,), sequential -> (1,) * E
-        if recipe_execution == "vectorized":
-            member_counts = (num_estimators,)
-        else:
-            assert recipe_execution == "sequential"
-            member_counts = (1,) * num_estimators
+        recipe_execution = RecipeExecution(
+            self.default_recipe() if recipe is None else copy.deepcopy(recipe)
+        )
+        with torch.amp.autocast(x.device.type, enabled=False):
+            contexts = recipe_execution.fit_transform(
+                x=x,
+                y=y,
+                related_tables=related_tables,
+                num_members=num_estimators,
+                generator=generator,
+            )
 
-        caches: list[Cache] = []
-        executions: list[RecipeExecution] = []
-        for num_members in member_counts:
-            execution = RecipeExecution(copy.deepcopy(recipe))
-            with torch.amp.autocast(x.device.type, enabled=False):
-                contexts = execution.fit_transform(
-                    x=x,
-                    y=y,
-                    related_tables=related_tables,
-                    num_members=num_members,
-                    generator=generator,
-                )
-            executions.append(execution)
+        cache = Cache(
+            num_estimators=num_estimators,
+            recipe_execution=recipe_execution,
+            kwargs=kwargs,
+        )
+        for i, context in enumerate(contexts):
+            self._validate_context(
+                x=context.x,
+                y=context.y,
+                related_tables=context.related_tables,
+            )
+            estimator_cache = Cache(
+                x_schema=context.x.schema,
+                related_tables_schema=context.related_tables.schema
+                if context.related_tables is not None
+                else None,
+                classes=(
+                    context.y.categorical.categories[0]
+                    if context.y.categorical.size(-1) > 0
+                    else None
+                ),
+            )
+            self._forward(
+                x_context=context.x,
+                y_context=context.y,
+                x_query=None,
+                related_context_tables=context.related_tables,
+                related_query_tables=None,
+                cache=estimator_cache,
+                generator=generator,
+                **kwargs,
+            )
+            if x.is_cuda and num_estimators > 1:
+                estimator_cache = estimator_cache.cpu().pin_memory()
+            cache[i] = estimator_cache
 
-            for context in contexts:
-                self._validate_context(
-                    x=context.x,
-                    y=context.y,
-                    related_tables=context.related_tables,
-                )
-
-                cache = Cache(
-                    x_schema=context.x.schema,
-                    related_tables_schema=context.related_tables.schema
-                    if context.related_tables is not None
-                    else None,
-                    classes=(
-                        context.y.categorical.categories[0]
-                        if context.y.categorical.size(-1) > 0
-                        else None
-                    ),
-                    kwargs=kwargs,
-                )
-
-                self._forward(
-                    x_context=context.x,
-                    y_context=context.y,
-                    x_query=None,
-                    related_context_tables=context.related_tables,
-                    related_query_tables=None,
-                    cache=cache,
-                    generator=generator,
-                    **kwargs,
-                )
-                if x.device.type == "cuda" and num_estimators > 1:
-                    cache = cache.cpu()
-                    cache = cache.pin_memory()
-
-                cache = cache.freeze()
-                caches.append(cache)
-
-        self._caches = caches
-        self._recipe_executions = tuple(executions)
+        self._cache = cache.freeze()
 
     @_maybe_inference_mode()
     def predict(
@@ -322,81 +275,71 @@ class ICLModel(torch.nn.Module, ABC):
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
 
-        if self._caches is None:
+        if self._cache is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} not yet fitted. Make sure to "
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
         if related_tables is not None:
-            if self._caches[0]["related_tables_schema"] is None:
+            if cast(Cache, self._cache[0])["related_tables_schema"] is None:
                 raise ValueError(
                     "Expected related tables to be provided together"
                 )
             related_tables = related_tables.select_tables(
                 tables=cast(
                     RelatedTablesSchema,
-                    self._caches[0]["related_tables_schema"],
+                    cast(Cache, self._cache[0])["related_tables_schema"],
                 ).tables,
             )
 
-        assert self._recipe_executions is not None
+        recipe_execution = cast(
+            RecipeExecution,
+            self._cache["recipe_execution"],
+        )
+        with torch.amp.autocast(x.device.type, enabled=False):
+            queries = recipe_execution.transform(x, related_tables)
 
         outs: list[TableTensor] = []
-        execution: RecipeExecution | None = None
-        cache_index = 0
-        for execution in self._recipe_executions:
+        for i in range(cast(int, self._cache["num_estimators"])):
+            query = queries[i]
+            cache = cast(Cache, self._cache[i])
+            cache = cache.to(query.x.device, non_blocking=True)
+
+            self._validate_query(
+                x_context=cast(TableSchema, cache["x_schema"]),
+                x_query=query.x,
+                related_context_tables=cast(
+                    RelatedTablesSchema,
+                    cache["related_tables_schema"],
+                ),
+                related_query_tables=query.related_tables,
+            )
+
+            out = self._forward(
+                x_context=None,
+                y_context=None,
+                x_query=query.x,
+                related_context_tables=None,
+                related_query_tables=query.related_tables,
+                cache=cache,
+                generator=None,
+                **cast(dict[str, Any], self._cache["kwargs"]),
+            )
+            out = cast(TableTensor, out.to(query.x.dtype))
+            outs.append(out)
+
+        # Regression: invert target before stacking estimator outputs.
+        if cast(Cache, self._cache[0])["classes"] is None:
             with torch.amp.autocast(x.device.type, enabled=False):
-                queries = execution.transform(
-                    x=x,
-                    related_tables=related_tables,
-                )
+                outs = list(recipe_execution.inverse_transform_target(outs))
 
-            member_outs: list[TableTensor] = []
-            for query in queries:
-                cache = self._caches[cache_index]
-                cache = cache.to(device=query.x.device, non_blocking=True)
-                cache_index += 1
-
-                self._validate_query(
-                    x_context=cast(TableSchema, cache["x_schema"]),
-                    x_query=query.x,
-                    related_context_tables=cast(
-                        RelatedTablesSchema,
-                        cache["related_tables_schema"],
-                    ),
-                    related_query_tables=query.related_tables,
-                )
-
-                out = self._forward(
-                    x_context=None,
-                    y_context=None,
-                    x_query=query.x,
-                    related_context_tables=None,
-                    related_query_tables=query.related_tables,
-                    cache=cache,
-                    generator=None,
-                    **cast(dict[str, Any], cache["kwargs"]),
-                )
-                out = cast(TableTensor, out.to(query.x.dtype))
-                member_outs.append(out)
-
-            # Regression: invert target before stacking estimator outputs.
-            if self._caches[cache_index - 1]["classes"] is None:
-                with torch.amp.autocast(x.device.type, enabled=False):
-                    member_outs = list(
-                        execution.inverse_transform_target(member_outs)
-                    )
-            outs.extend(member_outs)
-
-        assert execution is not None
         with torch.amp.autocast(x.device.type, enabled=False):
-            return execution.transform_output(outs)
+            return recipe_execution.transform_output(outs)
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
-        self._caches = None
-        self._recipe_executions = None
+        self._cache = None
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device

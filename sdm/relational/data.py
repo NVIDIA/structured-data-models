@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
 from typing import TYPE_CHECKING, Any, Self, cast
@@ -192,31 +192,17 @@ class RelationalData(DeviceMixin):
                             f"(got {str(stype)!r})"
                         )
 
-    def to(self, device: torch.device | str | None) -> Self:
-        r""":meta private:"""  # noqa: D415
+    def _tensors(self) -> Iterator[Tensor]:
+        yield from self.tables.values()
+
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
         return self.__class__(
             tables={
-                table_name: cast(TableTensor, table.to(device))
-                for table_name, table in self.tables.items()
+                name: cast(TableTensor, fn(table))
+                for name, table in self.tables.items()
             },
             relationships=self.relationships,
         )
-
-    @property
-    def device(self) -> torch.device:
-        r""":meta private:"""  # noqa: D415
-        devices = {table.device for table in self.tables.values()}
-        if len(devices) == 0:
-            raise RuntimeError(
-                f"Could not determine 'device' of empty "
-                f"{self.__class__.__name__!r}"
-            )
-        if len(devices) > 1:
-            raise RuntimeError(
-                f"Expected tables in {self.__class__.__name__!r} to be on "
-                f"the same device (got {list(devices)})"
-            )
-        return next(iter(devices))
 
     def edge_indices(
         self,
