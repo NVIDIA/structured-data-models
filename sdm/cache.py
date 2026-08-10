@@ -1,6 +1,12 @@
 """Cache primitives."""
 
-from collections.abc import Iterable, Iterator, Mapping, MutableMapping
+from collections.abc import (
+    Hashable,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+)
 from enum import StrEnum
 from typing import NamedTuple, Self
 
@@ -54,7 +60,7 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         return next(iter(devices))
 
 
-class Cache(MutableMapping[str, object], DeviceMixin):
+class Cache(MutableMapping[Hashable, object], DeviceMixin):
     r"""A mutable mapping of model cache values."""
 
     class Mode(StrEnum):
@@ -75,11 +81,11 @@ class Cache(MutableMapping[str, object], DeviceMixin):
 
     def __init__(
         self,
-        *args: Mapping[str, object] | Iterable[tuple[str, object]],
+        *args: Mapping[Hashable, object] | Iterable[tuple[Hashable, object]],
         **kwargs: object,
     ) -> None:
         self._mode = Cache.Mode.record
-        self._items: dict[str, object] = dict(*args, **kwargs)
+        self._items: dict[Hashable, object] = dict(*args, **kwargs)
 
     @property
     def is_recording(self) -> bool:
@@ -126,24 +132,24 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         _freeze(self)
         return self
 
-    def __setitem__(self, key: str, value: object) -> None:
+    def __setitem__(self, key: Hashable, value: object) -> None:
         if not self.is_recording:
             raise RuntimeError(
                 "'__setitem__' requires the cache to be in 'record' mode"
             )
         self._items[key] = value
 
-    def __delitem__(self, key: str) -> None:
+    def __delitem__(self, key: Hashable) -> None:
         if not self.is_recording:
             raise RuntimeError(
                 "'__delitem__' requires the cache to be in 'record' mode"
             )
         del self._items[key]
 
-    def __getitem__(self, key: str) -> object:
+    def __getitem__(self, key: Hashable) -> object:
         return self._items[key]
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[Hashable]:
         return iter(self._items)
 
     def __len__(self) -> int:
