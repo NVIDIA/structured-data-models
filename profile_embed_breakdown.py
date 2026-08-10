@@ -1,9 +1,9 @@
 # ruff: noqa: T201
-"""Profile the full TabICLv2 + SentenceTransformer pipeline.
+"""Profile SentenceTransformer + PCA preprocessing only.
 
-Based on the STRABLE clear-corpus example. Wraps fit + predict in
-torch.profiler to produce a Chrome trace showing where time is spent
-across the full pipeline (SentenceTransformer, PCA, TabICLv2).
+Based on the STRABLE clear-corpus example. Profiles only the text
+preprocessing step (SentenceTransformer + PCA), excluding TabICLv2,
+to produce a smaller, focused Chrome trace.
 
 Usage:
     python profile_embed_breakdown.py
@@ -66,15 +66,19 @@ perm = torch.randperm(num_rows, generator=generator, device=device)
 context_size = int(0.8 * num_rows)
 context = table[perm[:context_size]]
 query = table[perm[context_size:]]
-ground_truth = query[:, target_name].numerical.squeeze(-1)
 
-model = sdm.models.TabICLv2(device=device)
-recipe = model.default_recipe()
-text_processor = sp.Sequential(
-    sp.SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2"),
-    sp.PCA(num_components=64),
+context_x = context.drop_columns(target_name)
+query_x = query.drop_columns(target_name)
+
+st = sp.SentenceTransformer(
+    "sentence-transformers/all-MiniLM-L6-v2",
 )
-recipe.prepend_features(sp.StypeDispatch(text=text_processor))
+pca = sp.PCA(num_components=64)
+text_processor = sp.Sequential(st, pca)
+dispatch = sp.StypeDispatch(text=text_processor)
+
+if torch.cuda.is_available():
+    torch.cuda.synchronize()
 
 with (
     torch.profiler.profile(
@@ -86,29 +90,33 @@ with (
                 else []
             ),
         ],
-        record_shapes=True,
     ) as prof,
     torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda),
 ):
-    model.fit(
-        x=context.drop_columns(target_name),
-        y=context[:, target_name],
-        recipe=recipe,
-        generator=generator,
-    )
+    with torch.profiler.record_function("SentenceTransformer.fit_transform"):
+        context_embedded = st.fit_transform(context_x)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
-    prediction = model.predict(query.drop_columns(target_name)).numerical
-    prediction = prediction.mean(dim=-1)
+    with torch.profiler.record_function("SentenceTransformer.transform"):
+        query_embedded = st.transform(query_x)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+    with torch.profiler.record_function("PCA.fit_transform"):
+        context_pca = pca.fit_transform(context_embedded)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+    with torch.profiler.record_function("PCA.transform"):
+        query_pca = pca.transform(query_embedded)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
 prof.export_chrome_trace(args.output)
 
-rmse = (prediction - ground_truth).pow(2).mean().sqrt()
-mae = (prediction - ground_truth).abs().mean()
-print(f"RMSE: {rmse:.3f}, MAE: {mae:.3f}")
+print(f"Context embedded shape: {context_embedded.numerical.shape}")
+print(f"Query PCA shape: {query_pca.numerical.shape}")
 
 print("\n--- CPU time (top 30 ops) ---")
 print(
