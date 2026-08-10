@@ -20,7 +20,7 @@ from sdm.relational import (
     TemporalSamplingConfig,
 )
 from sdm.processing import Recipe
-from sdm import evaluation, models
+from sdm import evaluation, explain, models
 
 try:
     __version__ = version("structured-data-models")
@@ -45,6 +45,7 @@ __all__ = [
     "TemporalSamplingConfig",
     "Recipe",
     "evaluation",
+    "explain",
     "models",
     "__version__",
 ]
