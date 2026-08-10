@@ -176,7 +176,6 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.cache.Cache.is_replaying"><code class="docutils literal notranslate"><span class="pre">Cache.is_replaying</span></code></a></li>
 <li><a class="reference internal" href="#sdm.cache.Cache.size"><code class="docutils literal notranslate"><span class="pre">Cache.size()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.cache.Cache.freeze"><code class="docutils literal notranslate"><span class="pre">Cache.freeze()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.cache.Cache.pin_memory"><code class="docutils literal notranslate"><span class="pre">Cache.pin_memory()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -260,7 +259,7 @@ Possible values are:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.cache.Cache.size">
 <span class="sig-name descname"><span class="pre">size</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#sdm.cache.Cache.size" title="Link to this definition">#</a></dt>
-<dd><p>The size in bytes of key/value entries in supported containers.</p>
+<dd><p>The size in bytes of tensor data stored in this cache.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a></p>
@@ -272,17 +271,6 @@ Possible values are:</p>
 <dt class="sig sig-object py" id="sdm.cache.Cache.freeze">
 <span class="sig-name descname"><span class="pre">freeze</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.cache.Cache.freeze" title="Link to this definition">#</a></dt>
 <dd><p>Freeze the cache to replay mode.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><em>Self</em></a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.cache.Cache.pin_memory">
-<span class="sig-name descname"><span class="pre">pin_memory</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.cache.Cache.pin_memory" title="Link to this definition">#</a></dt>
-<dd><p>Copy nested tensor data into pinned CPU memory.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><em>Self</em></a></p>
@@ -304,7 +292,7 @@ Possible values are:</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=73f96091"></script>
+      <script src="../../_static/documentation_options.js?v=991fe148"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
