@@ -58,6 +58,26 @@ class StatelessProcessor(Processor):
         return table.replace_blocks(numerical=table.numerical + 1)
 
 
+class RejectingProcessor(StatelessProcessor):
+    unoperated_stype_policy = "error"
+
+
+class StatefulProcessor(Processor):
+    operates_on_stypes = frozenset({Stype.numerical})
+    requires_fit = True
+
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        pass
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical + 1)
+
+
 def test_stateless_processor_runs_without_fit() -> None:
     processor = StatelessProcessor()
     inp = torch.ones(2, 2)
@@ -108,12 +128,23 @@ def test_processor_preserves_unoperated_stypes_on_forward_paths() -> None:
 
 def test_processor_noops_when_only_unoperated_stypes_are_active() -> None:
     table = _id_table()
+    numerical = TableTensor.from_tensor(torch.ones(2, 1))
 
-    processor = sp.Standardize()
+    processor = StatefulProcessor()
 
     assert processor.fit(table) is processor
     assert processor.fit_transform(table) is table
     assert processor.transform(table) is table
+    with pytest.raises(RuntimeError, match="not fitted"):
+        processor.transform(numerical)
+
+
+def test_processor_rejects_unoperated_stypes_when_policy_errors() -> None:
+    processor = RejectingProcessor()
+
+    for table in (_mixed_table(), _id_table()):
+        with pytest.raises(ValueError, match="cannot preserve"):
+            processor.fit_transform(table)
 
 
 def test_processor_fit_transform_handles_empty_table() -> None:

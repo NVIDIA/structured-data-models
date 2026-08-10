@@ -136,6 +136,7 @@ class PowerTransform(Processor, InvertibleMixin):
     """
 
     operates_on_stypes = frozenset({Stype.numerical})
+    requires_fit = True
 
     def __init__(
         self,

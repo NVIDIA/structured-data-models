@@ -2,13 +2,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import (
-    CategoricalTensor,
-    ColumnarTensor,
-    StringTensor,
-    Stype,
-    TableTensor,
-)
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.testing import withCUDA
 
@@ -67,14 +61,7 @@ def test_recipe_roles_fit_transform_features_and_target() -> None:
 
 def test_recipe_role_fit_accepts_table() -> None:
     recipe = sp.Recipe(features=[sp.Standardize()])
-    features = TableTensor(
-        columns={
-            Stype.numerical: ("x0", "x1"),
-            Stype.id: ("entity_id",),
-        },
-        numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
-        id=ColumnarTensor((torch.tensor([10, 11]),)),
-    )
+    features = _table()
 
     fitted = recipe.features.fit(features)
     transformed = recipe.features.transform(features)
@@ -85,7 +72,6 @@ def test_recipe_role_fit_accepts_table() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
-    assert torch.equal(transformed.id, features.id)
 
 
 def test_recipe_rejects_task_dispatch_in_target() -> None:

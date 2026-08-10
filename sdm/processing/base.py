@@ -9,7 +9,7 @@ import torch
 from sdm import Stype, TableTensor
 
 OperatesOnStypes: TypeAlias = frozenset[Stype]
-UnoperatedStypePolicy: TypeAlias = Literal["preserve", "error", "opaque"]
+UnoperatedStypePolicy: TypeAlias = Literal["preserve", "error"]
 
 if TYPE_CHECKING:
     from sdm.processing import Sequential
@@ -25,41 +25,32 @@ class Processor(torch.nn.Module, abc.ABC):
     the transformation via :meth:`transform`. Implementations preserve the row
     and batch dimensions. Batch dimensions are processed independently.
 
-    Processors declare the semantic column types they operate on via
-    :attr:`operates_on_stypes`. Active non-operated semantic types follow
-    :attr:`unoperated_stype_policy`.
+    :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops when
+    no active column has a stype from :attr:`operates_on_stypes`. Other active
+    stypes are preserved by default.
     """
 
+    #: Semantic types read or changed by this processor.
     operates_on_stypes: OperatesOnStypes
+
+    #: Whether active stypes outside :attr:`operates_on_stypes` are allowed.
     unoperated_stype_policy: UnoperatedStypePolicy = "preserve"
-    requires_fit: bool = True
+
+    #: Whether this processor requires fitting.
+    requires_fit: bool
 
     def __init__(self) -> None:
         super().__init__()
         self._fitted = False
 
-    def _active_operated_stypes(self, table: TableTensor) -> frozenset[Stype]:
-        return table.active_stypes & self.operates_on_stypes
-
-    def _active_unoperated_stypes(
-        self, table: TableTensor
-    ) -> frozenset[Stype]:
-        return table.active_stypes - self.operates_on_stypes
-
-    def _check_unoperated_stypes(self, table: TableTensor) -> None:
+    def _validate_stypes(self, table: TableTensor) -> None:
         if self.unoperated_stype_policy != "error":
             return
-        for stype in self._active_unoperated_stypes(table):
+        for stype in table.active_stypes - self.operates_on_stypes:
             raise ValueError(
                 f"{self.__class__.__name__!r} cannot preserve "
                 f"{str(stype)!r} columns."
             )
-
-    def _should_run(self, table: TableTensor) -> bool:
-        if self.unoperated_stype_policy == "opaque":
-            return True
-        self._check_unoperated_stypes(table)
-        return len(self._active_operated_stypes(table)) > 0
 
     @staticmethod
     def as_processor(processor: object) -> Processor:
@@ -125,7 +116,8 @@ class Processor(torch.nn.Module, abc.ABC):
             table: The table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        if not self._should_run(table):
+        self._validate_stypes(table)
+        if not table.active_stypes & self.operates_on_stypes:
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
@@ -141,7 +133,8 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not self._should_run(table):
+        self._validate_stypes(table)
+        if not table.active_stypes & self.operates_on_stypes:
             return table
         self._check_is_fitted()
         return self._transform(table)
@@ -165,7 +158,8 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not self._should_run(table):
+        self._validate_stypes(table)
+        if not table.active_stypes & self.operates_on_stypes:
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:

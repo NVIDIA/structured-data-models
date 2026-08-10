@@ -14,6 +14,7 @@ class PCA(Processor):
     """
 
     operates_on_stypes = frozenset({Stype.numerical})
+    requires_fit = True
 
     def __init__(self, *, num_components: int) -> None:
         super().__init__()

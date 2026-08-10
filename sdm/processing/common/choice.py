@@ -1,15 +1,9 @@
-from collections.abc import Iterable
-from typing import Literal, cast
+from typing import Literal
 
 import torch
 from torch.nn import ModuleList
 
-from sdm import Stype
-from sdm.processing import (
-    EnsembleInvertibleMixin,
-    EnsembleProcessor,
-    Processor,
-)
+from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
 
@@ -28,17 +22,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             selects the first option for a single table.
     """
 
-    unoperated_stype_policy = "opaque"
-
-    @property
-    def operates_on_stypes(self) -> frozenset[Stype]:
-        """Semantic types operated on by at least one option."""
-        return frozenset().union(
-            *(
-                option.operates_on_stypes
-                for option in cast(Iterable[Processor], self.options)
-            )
-        )
+    requires_fit = True
 
     def __init__(
         self,
@@ -50,6 +34,9 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         for arg in args:
             options.append(EnsembleProcessor.as_processor(arg))
         self.options: ModuleList[EnsembleProcessor] = ModuleList(options)
+        self.operates_on_stypes = frozenset().union(
+            *(option.operates_on_stypes for option in self.options)
+        )
         self.method = method
         self._option_ids: tuple[int, ...] = ()
 

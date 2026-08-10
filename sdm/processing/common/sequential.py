@@ -19,25 +19,21 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         args: Sequence of :class:`Processor` instances or callables.
     """
 
-    @property
-    def operates_on_stypes(self) -> frozenset[Stype]:
-        """Semantic types operated on by at least one child processor."""
-        return frozenset().union(*(child.operates_on_stypes for child in self))
-
-    @property
-    def unoperated_stype_policy(self) -> UnoperatedStypePolicy:
-        """Policy derived from child processors."""
-        policies = [child.unoperated_stype_policy for child in self]
-        if "opaque" in policies:
-            return "opaque"
-        if "error" in policies:
-            return "error"
-        return "preserve"
-
     def __init__(self, *args: object) -> None:
         super().__init__()
         self.requires_fit = False
+        self.operates_on_stypes = frozenset[Stype]()
+        self.unoperated_stype_policy: UnoperatedStypePolicy = "preserve"
         self.extend(args)
+
+    def _refresh_contract(self) -> None:
+        self.operates_on_stypes = frozenset().union(
+            *(child.operates_on_stypes for child in self)
+        )
+        if any(child.unoperated_stype_policy == "error" for child in self):
+            self.unoperated_stype_policy = "error"
+        else:
+            self.unoperated_stype_policy = "preserve"
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.
@@ -53,6 +49,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), processor)
 
         self.requires_fit = any(child.requires_fit for child in self)
+        self._refresh_contract()
         self._fitted = False
         return self
 
@@ -76,6 +73,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), child)
 
         self.requires_fit = any(child.requires_fit for child in self)
+        self._refresh_contract()
         self._fitted = False
         return self
 

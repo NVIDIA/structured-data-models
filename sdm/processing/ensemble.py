@@ -20,7 +20,8 @@ class EnsembleProcessor(Processor):
     :meth:`fit_ensemble` and applies the transformation via
     :meth:`transform_ensemble`. :meth:`fit_ensemble`,
     :meth:`transform_ensemble`, and :meth:`fit_transform_ensemble`
-    follow the same stype policy as ordinary processors.
+    are no-ops when no ensemble group has an active column with a stype from
+    :attr:`~sdm.processing.base.Processor.operates_on_stypes`.
 
     As a :class:`~sdm.processing.base.Processor`, it also accepts a
     :class:`~sdm.tensor.TableTensor` and processes it as an ensemble
@@ -97,6 +98,13 @@ class EnsembleProcessor(Processor):
             self._fit_ensemble(ensemble_table, generator=generator)
         return self._transform_ensemble(ensemble_table)
 
+    def _validate_ensemble_stypes(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> None:
+        for group in ensemble_table:
+            self._validate_stypes(group)
+
     def fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
@@ -109,7 +117,11 @@ class EnsembleProcessor(Processor):
             ensemble_table: Ensemble table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        if not any(self._should_run(group) for group in ensemble_table):
+        self._validate_ensemble_stypes(ensemble_table)
+        if not any(
+            group.active_stypes & self.operates_on_stypes
+            for group in ensemble_table
+        ):
             return self
         if self.requires_fit:
             self._fit_ensemble(ensemble_table, generator=generator)
@@ -128,7 +140,11 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        if not any(self._should_run(group) for group in ensemble_table):
+        self._validate_ensemble_stypes(ensemble_table)
+        if not any(
+            group.active_stypes & self.operates_on_stypes
+            for group in ensemble_table
+        ):
             return ensemble_table
         self._check_is_fitted()
         return self._transform_ensemble(ensemble_table)
@@ -148,7 +164,11 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        if not any(self._should_run(group) for group in ensemble_table):
+        self._validate_ensemble_stypes(ensemble_table)
+        if not any(
+            group.active_stypes & self.operates_on_stypes
+            for group in ensemble_table
+        ):
             return ensemble_table
         output = self._fit_transform_ensemble(
             ensemble_table,

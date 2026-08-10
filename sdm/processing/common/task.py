@@ -19,7 +19,6 @@ class TaskDispatch(EnsembleProcessor):
     """
 
     operates_on_stypes = frozenset(Stype)
-    unoperated_stype_policy = "opaque"
 
     def __init__(
         self,
