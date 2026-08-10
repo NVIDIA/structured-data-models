@@ -37,7 +37,7 @@ class Processor(torch.nn.Module, abc.ABC):
     unoperated_stype_policy: UnoperatedStypePolicy = "preserve"
 
     #: Whether this processor requires fitting.
-    requires_fit: bool = True
+    requires_fit: bool
 
     def __init__(self) -> None:
         super().__init__()

@@ -22,6 +22,8 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             selects the first option for a single table.
     """
 
+    requires_fit = True
+
     def __init__(
         self,
         *args: object,

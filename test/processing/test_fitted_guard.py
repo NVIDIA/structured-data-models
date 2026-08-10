@@ -60,6 +60,7 @@ class StatelessProcessor(Processor):
 
 class StatefulProcessor(Processor):
     operates_on_stypes = frozenset({Stype.numerical})
+    requires_fit = True
 
     def _fit(
         self,

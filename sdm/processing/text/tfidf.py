@@ -48,6 +48,7 @@ class TFIDF(EnsembleProcessor):
     """
 
     operates_on_stypes = frozenset({Stype.text})
+    requires_fit = True
 
     def __init__(
         self,

@@ -19,6 +19,7 @@ from sdm.tensor import EnsembleTable
 # and is therefore left to those processors as well.
 class IdentityEnsembleProcessor(EnsembleProcessor):
     operates_on_stypes = frozenset({Stype.numerical})
+    requires_fit = True
 
     def _fit_ensemble(
         self,
