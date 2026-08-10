@@ -29,7 +29,7 @@ class Processor(torch.nn.Module, abc.ABC):
     """
 
     supported_stypes: ClassVar[SupportedStypes]
-    requires_fit: bool = True
+    requires_fit: bool
 
     def __init__(self) -> None:
         super().__init__()
@@ -81,7 +81,7 @@ class Processor(torch.nn.Module, abc.ABC):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def _transform(self, table: TableTensor) -> TableTensor:
