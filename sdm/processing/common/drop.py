@@ -3,7 +3,7 @@ from sdm.processing.base import Processor
 
 
 class DropStypes(Processor):
-    r"""Remove columns with configured semantic types.
+    r"""Remove all columns for specific semantic types.
 
     Args:
         stypes: Semantic column types to remove. All other semantic types are
