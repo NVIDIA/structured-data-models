@@ -1,4 +1,5 @@
 import contextlib
+import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from typing import Any, ClassVar, cast
@@ -109,8 +110,9 @@ class ICLModel(torch.nn.Module, ABC):
                 tables=related_context_tables.tables
             )
 
-        recipe = self.default_recipe() if recipe is None else recipe
-        recipe_execution = RecipeExecution(recipe)
+        recipe_execution = RecipeExecution(
+            self.default_recipe() if recipe is None else copy.deepcopy(recipe)
+        )
         with torch.amp.autocast(x_query.device.type, enabled=False):
             contexts = recipe_execution.fit_transform(
                 x=x_context,
@@ -199,8 +201,9 @@ class ICLModel(torch.nn.Module, ABC):
 
         self.clear()
 
-        recipe = self.default_recipe() if recipe is None else recipe
-        recipe_execution = RecipeExecution(recipe)
+        recipe_execution = RecipeExecution(
+            self.default_recipe() if recipe is None else copy.deepcopy(recipe)
+        )
         with torch.amp.autocast(x.device.type, enabled=False):
             contexts = recipe_execution.fit_transform(
                 x=x,
