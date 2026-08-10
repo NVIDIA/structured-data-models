@@ -197,8 +197,10 @@ for dataset_name in DATASETS:
         print(f"  Total:   {row['total_time_s']:.3f}s")
         print(f"  RMSE: {rmse:.4f}, MAE: {mae:.4f}")
 
-    except Exception as e:
-        print(f"  Error: {e}")
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
         row.update(
             {
                 "fit_time_s": None,
