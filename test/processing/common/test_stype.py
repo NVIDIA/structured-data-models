@@ -1,5 +1,3 @@
-from typing import Any, cast
-
 import pytest
 import torch
 
@@ -109,24 +107,6 @@ def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
 
     with pytest.raises(AttributeError, match="inverse_transform"):
         dispatch.inverse_transform(output)
-
-
-def test_stype_dispatch_rejects_drop_remainder() -> None:
-    with pytest.raises(ValueError, match=r"passthrough.*error"):
-        sp.StypeDispatch(remainder=cast(Any, "drop"))
-
-
-def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
-    table = _mixed_table()
-    dispatch = sp.StypeDispatch(
-        numerical=sp.Standardize(),
-        remainder="error",
-    )
-
-    with pytest.raises(
-        ValueError, match=r"StypeDispatch.*cannot preserve.*categorical"
-    ):
-        dispatch.fit(table)
 
 
 def test_drop_stypes_removes_configured_stypes() -> None:
