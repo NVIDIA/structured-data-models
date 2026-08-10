@@ -71,7 +71,7 @@ class DeviceMixin(abc.ABC):
         devices = {tensor.device for tensor in self._tensors()}
         if len(devices) == 0:
             raise RuntimeError(
-                f"Could not determine 'device' of empty "
+                f"Could not determine 'is_cpu' of empty "
                 f"{self.__class__.__name__!r}"
             )
         return all(device.type == "cpu" for device in devices)
@@ -82,7 +82,7 @@ class DeviceMixin(abc.ABC):
         devices = {tensor.device for tensor in self._tensors()}
         if len(devices) == 0:
             raise RuntimeError(
-                f"Could not determine 'device' of empty "
+                f"Could not determine 'is_cuda' of empty "
                 f"{self.__class__.__name__!r}"
             )
         return all(device.type == "cuda" for device in devices)
@@ -93,7 +93,13 @@ class DeviceMixin(abc.ABC):
 
     def is_pinned(self) -> bool:
         r"""Returns ``True`` if data resides in pinned memory."""
-        return all(tensor.is_pinned() for tensor in self._tensors())
+        tensors = tuple(tensor for tensor in self._tensors())
+        if len(tensors) == 0:
+            raise RuntimeError(
+                f"Could not determine 'in_pinned' of empty "
+                f"{self.__class__.__name__!r}"
+            )
+        return all(tensor.is_pinned() for tensor in tensors)
 
     @abc.abstractmethod
     def _tensors(self) -> Iterator[Tensor]:
