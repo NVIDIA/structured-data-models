@@ -16,7 +16,7 @@ Capabilities
 
 .. list-table::
 
-   * - **Supported Processed Feature Semantic Types**
+   * - **Supported Input Semantic Types**
      - {% for stype in cls.supported_feature_stypes | sort(attribute="value") -%}
          ``{{ stype }}``{{ ", " if not loop.last }}
        {%- endfor %}
