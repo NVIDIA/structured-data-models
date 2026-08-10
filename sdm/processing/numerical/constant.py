@@ -36,7 +36,7 @@ class DropConstantColumns(EnsembleProcessor):
             deviation at most this value are removed.
     """
 
-    operates_on_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     def __init__(

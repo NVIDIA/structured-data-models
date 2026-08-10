@@ -72,7 +72,7 @@ def test_pipeline_accepts_lambda() -> None:
     assert torch.equal(output.numerical, table.numerical.square())
 
 
-def test_pipeline_preserves_unoperated_stypes() -> None:
+def test_pipeline_preserves_unhandled_stypes() -> None:
     table = TableTensor(
         columns={
             Stype.numerical: ("x",),
@@ -181,7 +181,7 @@ def test_pipeline_checks_fitted_state() -> None:
         pipeline.transform(_table())
 
 
-def test_pipeline_preserves_unoperated_stype_after_transform() -> None:
+def test_pipeline_preserves_unhandled_stype_after_transform() -> None:
     pipeline = sp.Sequential(sp.Standardize())
     table = _mixed_table()
 

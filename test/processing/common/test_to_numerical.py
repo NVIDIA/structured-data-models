@@ -56,7 +56,7 @@ def test_to_numerical_is_identity_for_already_numerical_table() -> None:
     assert ToNumerical().transform(table) is table
 
 
-def test_to_numerical_preserves_unoperated_stype() -> None:
+def test_to_numerical_preserves_unhandled_stype() -> None:
     table = TableTensor(
         columns={
             "numerical": ("x",),

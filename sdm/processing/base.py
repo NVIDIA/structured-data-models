@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Literal, Self, TypeAlias
+from typing import TYPE_CHECKING, Self
 
 import torch
 
 from sdm import Stype, TableTensor
-
-OperatesOnStypes: TypeAlias = frozenset[Stype]
-UnoperatedStypePolicy: TypeAlias = Literal["preserve", "error"]
 
 if TYPE_CHECKING:
     from sdm.processing import Sequential
@@ -26,15 +23,12 @@ class Processor(torch.nn.Module, abc.ABC):
     and batch dimensions. Batch dimensions are processed independently.
 
     :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops when
-    no active column has a stype from :attr:`operates_on_stypes`. Other active
+    no active column has a stype from :attr:`handles_stypes`. Other active
     stypes are preserved by default.
     """
 
     #: Semantic types read or changed by this processor.
-    operates_on_stypes: OperatesOnStypes
-
-    #: Whether active stypes outside :attr:`operates_on_stypes` are allowed.
-    unoperated_stype_policy: UnoperatedStypePolicy = "preserve"
+    handles_stypes: frozenset[Stype]
 
     #: Whether this processor requires fitting.
     requires_fit: bool
@@ -42,15 +36,6 @@ class Processor(torch.nn.Module, abc.ABC):
     def __init__(self) -> None:
         super().__init__()
         self._fitted = False
-
-    def _validate_stypes(self, table: TableTensor) -> None:
-        if self.unoperated_stype_policy != "error":
-            return
-        for stype in table.active_stypes - self.operates_on_stypes:
-            raise ValueError(
-                f"{self.__class__.__name__!r} cannot preserve "
-                f"{str(stype)!r} columns."
-            )
 
     @staticmethod
     def as_processor(processor: object) -> Processor:
@@ -116,8 +101,7 @@ class Processor(torch.nn.Module, abc.ABC):
             table: The table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        self._validate_stypes(table)
-        if not table.active_stypes & self.operates_on_stypes:
+        if not table.active_stypes & self.handles_stypes:
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
@@ -133,8 +117,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        self._validate_stypes(table)
-        if not table.active_stypes & self.operates_on_stypes:
+        if not table.active_stypes & self.handles_stypes:
             return table
         self._check_is_fitted()
         return self._transform(table)
@@ -158,8 +141,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        self._validate_stypes(table)
-        if not table.active_stypes & self.operates_on_stypes:
+        if not table.active_stypes & self.handles_stypes:
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:

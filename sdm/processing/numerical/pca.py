@@ -13,7 +13,7 @@ class PCA(Processor):
         num_components: Number of principal components to keep.
     """
 
-    operates_on_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     def __init__(self, *, num_components: int) -> None:

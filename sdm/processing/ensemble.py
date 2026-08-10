@@ -21,7 +21,7 @@ class EnsembleProcessor(Processor):
     :meth:`transform_ensemble`. :meth:`fit_ensemble`,
     :meth:`transform_ensemble`, and :meth:`fit_transform_ensemble`
     are no-ops when no ensemble group has an active column with a stype from
-    :attr:`~sdm.processing.base.Processor.operates_on_stypes`.
+    :attr:`~sdm.processing.base.Processor.handles_stypes`.
 
     As a :class:`~sdm.processing.base.Processor`, it also accepts a
     :class:`~sdm.tensor.TableTensor` and processes it as an ensemble
@@ -98,13 +98,6 @@ class EnsembleProcessor(Processor):
             self._fit_ensemble(ensemble_table, generator=generator)
         return self._transform_ensemble(ensemble_table)
 
-    def _validate_ensemble_stypes(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> None:
-        for group in ensemble_table:
-            self._validate_stypes(group)
-
     def fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
@@ -117,9 +110,8 @@ class EnsembleProcessor(Processor):
             ensemble_table: Ensemble table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        self._validate_ensemble_stypes(ensemble_table)
         if not any(
-            group.active_stypes & self.operates_on_stypes
+            group.active_stypes & self.handles_stypes
             for group in ensemble_table
         ):
             return self
@@ -140,9 +132,8 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        self._validate_ensemble_stypes(ensemble_table)
         if not any(
-            group.active_stypes & self.operates_on_stypes
+            group.active_stypes & self.handles_stypes
             for group in ensemble_table
         ):
             return ensemble_table
@@ -164,9 +155,8 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        self._validate_ensemble_stypes(ensemble_table)
         if not any(
-            group.active_stypes & self.operates_on_stypes
+            group.active_stypes & self.handles_stypes
             for group in ensemble_table
         ):
             return ensemble_table

@@ -18,7 +18,14 @@ class TaskDispatch(EnsembleProcessor):
         regression: Processor selected for a numerical target.
     """
 
-    operates_on_stypes = frozenset(Stype)
+    @property
+    def handles_stypes(self) -> frozenset[Stype]:
+        """Semantic types handled by configured task processors."""
+        return frozenset(
+            stype
+            for processor in self.processors.values()
+            for stype in processor.handles_stypes
+        )
 
     def __init__(
         self,

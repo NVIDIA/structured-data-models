@@ -69,7 +69,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             processor = EnsembleProcessor.as_processor(processor)
             self.processors[str(stype)] = processor
 
-        self.operates_on_stypes = frozenset(
+        self.handles_stypes = frozenset(
             Stype(stype) for stype in self.processors
         )
         self.requires_fit = any(

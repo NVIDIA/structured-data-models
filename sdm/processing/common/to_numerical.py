@@ -16,12 +16,12 @@ class ToNumerical(Processor):
     numerical-only models can consume both original numerical and categorical
     features. Missing categorical values remain ``-1``.
 
-    Non-operated semantic types are preserved unchanged.
+    Unhandled semantic types are preserved unchanged.
 
     """
 
     requires_fit = False
-    operates_on_stypes = frozenset({Stype.numerical, Stype.categorical})
+    handles_stypes = frozenset({Stype.numerical, Stype.categorical})
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Return ``table`` with categorical columns moved to ``numerical``."""
@@ -48,7 +48,10 @@ class ToNumerical(Processor):
             columns={Stype.numerical: columns},
             numerical=numerical,
         )
-        remainder = table.drop_stypes((Stype.numerical, Stype.categorical))
-        if remainder.size(-1) == 0:
-            return out
-        return cast(TableTensor, torch.cat((remainder, out), dim=-1))
+        return cast(
+            TableTensor,
+            torch.cat(
+                (table.drop_stypes((Stype.numerical, Stype.categorical)), out),
+                dim=-1,
+            ),
+        )

@@ -11,7 +11,6 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
 )
-from sdm.processing.base import UnoperatedStypePolicy
 from sdm.tensor import EnsembleTable
 
 
@@ -34,14 +33,9 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     """
 
     @property
-    def operates_on_stypes(self) -> frozenset[Stype]:
-        """Semantic types operated on by the wrapped processor."""
-        return self.processor.operates_on_stypes
-
-    @property
-    def unoperated_stype_policy(self) -> UnoperatedStypePolicy:
-        """Policy delegated to the wrapped processor."""
-        return self.processor.unoperated_stype_policy
+    def handles_stypes(self) -> frozenset[Stype]:
+        """Semantic types handled by the wrapped processor."""
+        return self.processor.handles_stypes
 
     def __init__(self, processor: Processor) -> None:
         super().__init__()

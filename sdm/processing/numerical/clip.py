@@ -15,7 +15,7 @@ class Clip(Processor):
         max_value: Inclusive upper bound for every numerical value.
     """
 
-    operates_on_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def __init__(

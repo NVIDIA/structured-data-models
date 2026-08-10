@@ -18,7 +18,14 @@ class TableDispatch(EnsembleProcessor):
         related: Processor used for related tables.
     """
 
-    operates_on_stypes = frozenset(Stype)
+    @property
+    def handles_stypes(self) -> frozenset[Stype]:
+        """Semantic types handled by configured table-route processors."""
+        return frozenset(
+            stype
+            for processor in self.processors.values()
+            for stype in processor.handles_stypes
+        )
 
     def __init__(
         self,
