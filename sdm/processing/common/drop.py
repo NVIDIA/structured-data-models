@@ -22,7 +22,6 @@ class DropStypes(Processor):
         return self._stypes
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        """Drop configured semantic types from ``table``."""
         return table.drop_stypes(self._stypes)
 
     def __repr__(self, *, indent: int = 0) -> str:
