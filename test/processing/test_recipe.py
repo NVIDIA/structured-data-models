@@ -67,6 +67,21 @@ def test_recipe_roles_fit_transform_features_and_target() -> None:
 
 def test_recipe_role_fit_accepts_table() -> None:
     recipe = sp.Recipe(features=[sp.Standardize()])
+    features = _table()
+
+    fitted = recipe.features.fit(features)
+    transformed = recipe.features.transform(features)
+
+    assert fitted is recipe.features
+    assert torch.allclose(
+        transformed.numerical.mean(dim=0),
+        torch.zeros(2),
+        atol=1e-6,
+    )
+
+
+def test_recipe_feature_processor_preserves_id_stype() -> None:
+    recipe = sp.Recipe(features=[sp.Standardize()])
     features = TableTensor(
         columns={
             Stype.numerical: ("x0", "x1"),
@@ -76,10 +91,8 @@ def test_recipe_role_fit_accepts_table() -> None:
         id=ColumnarTensor((torch.tensor([10, 11]),)),
     )
 
-    fitted = recipe.features.fit(features)
-    transformed = recipe.features.transform(features)
+    transformed = recipe.features.fit_transform(features)
 
-    assert fitted is recipe.features
     assert torch.allclose(
         transformed.numerical.mean(dim=0),
         torch.zeros(2),

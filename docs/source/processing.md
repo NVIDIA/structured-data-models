@@ -16,8 +16,6 @@ A {py:class}`~sdm.processing.base.Processor` is fully composable:
 - A {py:class}`~sdm.processing.common.StypeDispatch` processor applies a processor per [semantic type](api/generated/sdm.Stype).
 - A {py:class}`~sdm.processing.common.TaskDispatch` processor applies a processor per task (*e.g.*, classification or regression).
 
-Processors operate on semantic column types explicitly. Each processor declares the semantic types it reads or changes through {py:attr}`~sdm.processing.base.Processor.operates_on_stypes`. Other active semantic types are governed by {py:attr}`~sdm.processing.base.Processor.unoperated_stype_policy`: most processors preserve them unchanged, dispatch processors may reject them when configured with `remainder="error"`, and opaque processors such as plain callables own their full input/output contract. For example, {py:class}`~sdm.processing.numerical.Standardize` operates on numerical columns and preserves identifier columns; if the final processed feature table still contains a semantic type unsupported by the model, the model boundary validates that separately through its supported feature semantic types.
-
 Processors let you define powerful recipes that manage the full pre-processing pipeline of input features and targets, as well as post-processing pipelines of model outputs.
 In particular:
 

@@ -31,7 +31,6 @@ overview
 tensor
 icl
 processing
-processing-operates-on-stypes-spec
 ```
 
 ```{toctree}
