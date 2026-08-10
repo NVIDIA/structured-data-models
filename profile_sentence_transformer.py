@@ -106,6 +106,8 @@ for dataset_name in DATASETS:
         continue
 
     stypes = sdm.infer_stypes(arrow_table, with_text=True)
+    if stypes.get(target_name) == sdm.Stype.numerical:
+        task = "regression"
     text_cols = [
         col for col, stype in stypes.items() if stype == sdm.Stype.text
     ]
