@@ -1,6 +1,5 @@
-from sdm.processing.base import Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
 
 
 class Clip(Processor):
@@ -21,7 +20,6 @@ class Clip(Processor):
 
     def __init__(
         self,
-        *,
         min_value: float,
         max_value: float,
     ) -> None:
@@ -44,5 +42,5 @@ class Clip(Processor):
     def __repr__(self, *, indent: int = 0) -> str:
         return (
             f"{' ' * indent}{self.__class__.__name__}("
-            f"min_value={self.min_value}, max_value={self.max_value})"
+            f"{self.min_value}, {self.max_value})"
         )

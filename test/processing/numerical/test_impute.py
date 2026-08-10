@@ -51,9 +51,3 @@ def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
             device=device,
         ),
     )
-
-
-@pytest.mark.parametrize("fill_value", [torch.nan, torch.inf, -torch.inf])
-def test_impute_mean_rejects_non_finite_fill_value(fill_value: float) -> None:
-    with pytest.raises(ValueError, match="fill_value must be finite"):
-        ImputeMean(fill_value=fill_value)

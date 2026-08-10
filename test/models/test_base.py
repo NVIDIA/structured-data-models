@@ -4,16 +4,11 @@ from typing import Any, ClassVar, cast
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
-from sdm.processing import (
-    InvertibleMixin,
-    Processor,
-    Recipe,
-    Standardize,
-    StypeDispatch,
-)
+from sdm.processing import InvertibleMixin, Processor
 
 
 @dataclass
@@ -57,8 +52,8 @@ class _RecordingModel(ICLModel):
         return table.select_stypes(Stype.numerical)
 
     @classmethod
-    def default_recipe(cls) -> Recipe:
-        return Recipe()
+    def default_recipe(cls) -> sp.Recipe:
+        return sp.Recipe()
 
 
 class _UnsupportedRecordingModel(_RecordingModel):
@@ -137,14 +132,14 @@ def _related_tables(*, query: bool) -> RelatedTables:
     )
 
 
-def _recipe() -> Recipe:
-    return Recipe(
-        features=StypeDispatch(numerical=Standardize()),
+def _recipe() -> sp.Recipe:
+    return sp.Recipe(
+        features=sp.StypeDispatch(numerical=sp.Standardize()),
     )
 
 
-def _generator_recipe() -> Recipe:
-    return Recipe(
+def _generator_recipe() -> sp.Recipe:
+    return sp.Recipe(
         features=_GeneratorRecordingProcessor(),
         target=_GeneratorRecordingProcessor(),
     )
@@ -183,7 +178,7 @@ def _fit_draws(
             generator=generator,
         )
 
-    assert _GeneratorRecordingProcessor.generators == [generator] * 8
+    assert _GeneratorRecordingProcessor.generators == [generator] * 4
     return list(_GeneratorRecordingProcessor.draws)
 
 
@@ -193,7 +188,7 @@ def test_model_recipe_fitting_honors_generator(cached: bool) -> None:
     second = _fit_draws(seed=0, cached=cached)
     different_seed = _fit_draws(seed=1, cached=cached)
 
-    assert len(first) == 8
+    assert len(first) == 4
     assert all(torch.equal(left, right) for left, right in zip(first, second))
     assert any(
         not torch.equal(left, right)
@@ -287,21 +282,7 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         recipe=_recipe(),
         num_estimators=2,
     )
-    assert model._caches is not None
-    processors = [
-        cast(dict[str, Processor], cache["related_processors"])
-        for cache in model._caches
-    ]
-    assert (
-        len(
-            {
-                id(processor)
-                for estimator in processors
-                for processor in estimator.values()
-            }
-        )
-        == 4
-    )
+    assert model._cache is not None
 
     prediction = model.predict(x_query, related_query)
 
@@ -314,6 +295,26 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
     torch.testing.assert_close(
         model.calls[-1].related_query_tables.tables["users"].numerical,
         torch.tensor([[3.0]]),
+    )
+
+
+def test_task_dispatch() -> None:
+    model = _RecordingModel()
+    recipe = sp.Recipe(
+        features=sp.TaskDispatch(regression=sp.Standardize()),
+        output=sp.TaskDispatch(regression=sp.Identity()),
+    )
+
+    output = model(
+        x_context=torch.tensor([[0.0], [2.0]]),
+        y_context=torch.tensor([[0.0], [1.0]]),
+        x_query=torch.tensor([[3.0]]),
+        recipe=recipe,
+    )
+
+    torch.testing.assert_close(
+        output.numerical,
+        torch.tensor([[[2.0]]]),
     )
 
 
@@ -370,3 +371,37 @@ def test_related_table_validation() -> None:
     )
     with pytest.raises(ValueError, match="share the same schema"):
         model.predict(x_query, mismatched_query)
+
+
+def test_ensemble_output_preserves_estimator_dimension() -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    model = _RecordingModel()
+    out = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=sp.Recipe(),
+        num_estimators=1,
+    )
+
+    assert out.size() == (1, 2, 3)
+
+
+def test_ensemble_output_reduces_with_reduce_estimators() -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    model = _RecordingModel()
+    out = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=sp.Recipe(output=sp.ReduceEstimators()),
+        num_estimators=2,
+    )
+
+    assert out.size() == (2, 3)

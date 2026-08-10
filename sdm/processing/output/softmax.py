@@ -1,10 +1,7 @@
-import math
-
 import torch
 
-from sdm.processing.base import Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
 
 
 class Softmax(Processor):
@@ -27,8 +24,8 @@ class Softmax(Processor):
         temperature: float = 1.0,
     ) -> None:
         super().__init__()
-        if not math.isfinite(temperature) or temperature <= 0:
-            raise ValueError("temperature must be finite and positive.")
+        if temperature <= 0:
+            raise ValueError("temperature must be positive.")
         self.temperature = temperature
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -38,3 +35,11 @@ class Softmax(Processor):
             dim=-1,
         )
         return table.replace_blocks(numerical=numerical)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.temperature == 1.0:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"temperature={self.temperature})"
+        )

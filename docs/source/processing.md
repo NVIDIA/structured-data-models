@@ -16,6 +16,8 @@ A {py:class}`~sdm.processing.base.Processor` is fully composable:
 - A {py:class}`~sdm.processing.common.StypeDispatch` processor applies a processor per [semantic type](api/generated/sdm.Stype).
 - A {py:class}`~sdm.processing.common.TaskDispatch` processor applies a processor per task (*e.g.*, classification or regression).
 
+Processors operate on semantic column types explicitly. Each processor declares the semantic types it reads or changes through {py:attr}`~sdm.processing.base.Processor.operates_on_stypes`. Other active semantic types are governed by {py:attr}`~sdm.processing.base.Processor.unoperated_stype_policy`: most processors preserve them unchanged, dispatch processors may reject them when configured with `remainder="error"`, and opaque processors such as plain callables own their full input/output contract. For example, {py:class}`~sdm.processing.numerical.Standardize` operates on numerical columns and preserves identifier columns; if the final processed feature table still contains a semantic type unsupported by the model, the model boundary validates that separately through its supported feature semantic types.
+
 Processors let you define powerful recipes that manage the full pre-processing pipeline of input features and targets, as well as post-processing pipelines of model outputs.
 In particular:
 
@@ -30,43 +32,45 @@ Each model defines a default recipe that closely mimics pre- and postprocessing 
 Recipes are plain Python objects, so they can be inspected, copied and modified.
 This makes it easy to keep the default model contract while changing one part of the pipeline.
 For example, {py:class}`~sdm.models.TabICLv2` does not consume raw {py:attr}`~sdm.Stype.datetime` columns directly.
-To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, add a {py:attr}`~sdm.Stype.datetime` branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:
+To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, prepend a {py:attr}`~sdm.Stype.datetime` branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:
 
 ```python
-from sdm.models import TabICLv2
-from sdm.processing import AddCalendarFields, StypeDispatch
+import sdm
+import sdm.processing as sp
 
-recipe = TabICLv2.default_recipe()
-recipe.features = StypeDispatch(
-    datetime=AddCalendarFields(
-        fields=("minute", "hour", "weekday", "day_of_month", "month"),
+recipe = sdm.models.TabICLv2.default_recipe().prepend_features(
+    sp.StypeDispatch(
+        datetime=sp.AddCalendarFields(
+            fields=("minute", "hour", "weekday", "day_of_month", "month"),
+        )
     )
-) + recipe.features
+)
 ```
 
 You can also define a recipe from scratch when you want full control over the
 transformations applied to features, targets, and outputs:
 
 ```python
-from sdm.processing import *
+import sdm
+import sdm.processing as sp
 
-recipe = Recipe(
+recipe = sp.Recipe(
     # First impute missing values, then standardize:
-    features=[ImputeMean(), Standardize()],
+    features=[sp.ImputeMean(), sp.Standardize()],
 
-    target=StypeDispatch(
+    target=sp.StypeDispatch(
         # Align and shuffle classes for classification:
         categorical=[
-            AlignCategories(),
-            ShuffleCategories(),
+            sp.AlignCategories(),
+            sp.ShuffleCategories(),
         ],
         # Standardize the targets for regression:
-        numerical=Standardize(),
+        numerical=sp.Standardize(),
     ),
 
-    output=TaskDispatch(
+    output=sp.TaskDispatch(
         # Convert logits to probabilities for classification tasks:
-        classification=Softmax(temperature=0.9),
+        classification=sp.Softmax(temperature=0.9),
     ),
 )
 ```
@@ -74,7 +78,7 @@ recipe = Recipe(
 When a custom recipe is passed to an {py:class}`~sdm.models.ICLModel`, the model applies the feature, target, and output pipelines automatically at the appropriate points in its execution.
 
 ```python
-model = TabICLv2(device="cuda")
+model = sdm.models.TabICLv2(device="cuda")
 model(..., recipe=recipe)
 ```
 
@@ -87,6 +91,12 @@ table = recipe.features.transform(table)
 
 ## Ensembling
 
+A model can run several ensemble members over the same task.
+Most preprocessing steps do not need to distinguish those members: imputing a mean, standardizing a column, or converting categories to numbers often produces the same transformed table for every estimator.
+Other steps intentionally create member-specific views to add variance to the input data, such as drawing a different column permutation, choosing a different numerical transform, or shuffling categorical values.
+
+The `structured-data-models` package takes advantage of this to avoid duplicating work: common transformations can run once over shared member groups, while only estimator-specific variations split the ensemble into a tree of member views as the {py:class}`~sdm.processing.recipe.Recipe` is applied.
+
 ```{figure} images/ensemble_light.svg
 :figclass: light-only
 :width: 100%
@@ -96,3 +106,19 @@ table = recipe.features.transform(table)
 :figclass: dark-only
 :width: 100%
 ```
+
+This shared-by-default, split-when-needed behavior is captured by {py:class}`~sdm.processing.ensemble.EnsembleProcessor`.
+An {py:class}`~sdm.processing.ensemble.EnsembleProcessor` is a regular {py:class}`~sdm.processing.base.Processor` that operates on an {py:class}`~sdm.tensor.EnsembleTable`, allowing a processing step to split ensemble members into separate groups when their transformed views diverge.
+This lets a {py:class}`~sdm.processing.recipe.Recipe` stay shared by default and branch only at steps that actually introduce member-specific behavior.
+
+The underlying {py:class}`~sdm.tensor.EnsembleTable` stores members by layout rather than by estimator.
+Members that see the same table share storage, while compatible member tables are stacked into one leading dimension of a single {py:class}`~sdm.tensor.TableTensor`.
+Regular processors can therefore operate on whole groups, leveraging PyTorch vectorization and GPU parallelism, and only fall back to separate groups when storage layout diverges.
+
+In short, a plain {py:class}`~sdm.processing.base.Processor` describes a transformation for one table or one group, and an {py:class}`~sdm.processing.ensemble.EnsembleProcessor` describes a transformation over the collection of estimator views.
+Most {py:class}`~sdm.processing.recipe.Recipe` steps therefore remain ordinary processors.
+
+For most users, ensemble processing is an internal (but cool) detail of model execution.
+Recipes can be composed from ordinary processors, and the {py:class}`~sdm.processing.recipe.Recipe` execution handles ensemble grouping, sharing, and branching when a model runs with multiple estimators.
+You only need to reason about {py:class}`~sdm.processing.ensemble.EnsembleProcessor` directly when writing a processor whose behavior can change table layout.
+Examples of those include {py:class}`~sdm.processing.common.Choice`, {py:class}`~sdm.processing.common.ShuffleColumns`, and {py:class}`~sdm.processing.categorical.ShuffleCategories`.

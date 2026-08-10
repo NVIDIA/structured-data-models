@@ -1,10 +1,9 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, NamedTuple, cast
+from typing import Literal, NamedTuple, Self, cast
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import ColumnarTensor, Stype, TableTensor
 from sdm.relational import (
@@ -34,11 +33,6 @@ class TemporalSamplingConfig:
     def __post_init__(self) -> None:
         if len(self.time_columns) == 0:
             raise ValueError("Expected at least one time column")
-        if self.strategy not in ("uniform", "last"):
-            raise ValueError(
-                f"Expected temporal strategy to be 'uniform' or 'last' "
-                f"(got '{self.strategy}')"
-            )
 
 
 def _validate_time_columns(
@@ -50,8 +44,8 @@ def _validate_time_columns(
         if stype != Stype.datetime:
             raise ValueError(
                 f"Expected '{column_name}' in table '{table_name}' to "
-                f"have semantic type '{Stype.datetime.value}' "
-                f"(got '{stype.value}')"
+                f"have semantic type {str(Stype.datetime)!r} "
+                f"(got {str(stype)!r})"
             )
 
 
@@ -68,24 +62,15 @@ class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
         related_tables: The related tables for the task table.
     """
 
-    def to(self, device: torch.device | str | None) -> Self:
-        r""":meta private:"""  # noqa: D415
-        return self.__class__(
-            task_table=cast(TableTensor, self.task_table.to(device)),
-            related_tables=self.related_tables.to(device),
-        )
+    def _tensors(self) -> Iterator[Tensor]:
+        yield self.task_table
+        yield from self.related_tables._tensors()
 
-    @property
-    def device(self) -> torch.device:
-        r""":meta private:"""  # noqa: D415
-        devices = list({self.task_table.device, self.related_tables.device})
-        if len(devices) > 1:
-            raise RuntimeError(
-                f"Expected 'task_table' and 'related_tables' to be on the "
-                f"same device (got '{self.task_table.device}' and "
-                f"'{self.related_tables.device}')"
-            )
-        return next(iter(devices))
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return self.__class__(
+            task_table=cast(TableTensor, fn(self.task_table)),
+            related_tables=self.related_tables._apply_tensor(fn),
+        )
 
 
 class RelationalSampler:
@@ -287,7 +272,7 @@ class RelationalSampler:
                 if stype != Stype.id:
                     raise ValueError(
                         f"Expected column '{column}' to have semantic type "
-                        f"'{Stype.id.value}' (got '{stype.value}')"
+                        f"{str(Stype.id)!r} (got {str(stype)!r})"
                     )
 
         if task_time_column is not None:
@@ -295,7 +280,7 @@ class RelationalSampler:
             if stype != Stype.datetime:
                 raise ValueError(
                     f"Expected task time column to have semantic type "
-                    f"'{Stype.datetime.value}' (got '{stype.value}')"
+                    f"{str(Stype.datetime)!r} (got {str(stype)!r})"
                 )
         return task_link
 

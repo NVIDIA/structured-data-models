@@ -1,9 +1,8 @@
 import torch
 
-from sdm import CategoricalTensor, Stype
-from sdm.processing.base import Processor
+from sdm import CategoricalTensor, Stype, TableTensor
+from sdm.processing import Processor
 from sdm.processing.categorical._categorical import _check_categorical_codes
-from sdm.tensor import TableTensor
 
 
 class ImputeMode(Processor):

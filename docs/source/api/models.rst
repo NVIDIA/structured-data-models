@@ -30,7 +30,7 @@ Model API
 
 .. autosummary::
    :toctree: generated
-   :template: model_cls
+   :template: model_class
    :nosignatures:
 
 {% for name in api_names("sdm.models") %}

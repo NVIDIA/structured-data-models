@@ -1,9 +1,8 @@
 import torch
 
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm import Stype, TableTensor
+from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _constant_feature_mask
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
 
 
 class Standardize(Processor, InvertibleMixin):

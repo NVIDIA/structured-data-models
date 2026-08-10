@@ -4,12 +4,12 @@ import functools
 import math
 from collections.abc import Callable, Sequence
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm.tensor import NullableIntTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
@@ -511,6 +511,16 @@ def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
     )
 
 
+@ColumnarTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: ColumnarTensor,
+    device: torch.device | None = None,
+) -> ColumnarTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
+
+
 @ColumnarTensor.implements(aten.equal.default)
 def _equal(inp: ColumnarTensor, other: Tensor) -> bool:
     if inp.__class__ is not other.__class__:
@@ -598,6 +608,26 @@ def _unsafe_view(
     size: Sequence[int],
 ) -> ColumnarTensor:
     return _view(inp, size)
+
+
+@ColumnarTensor.implements(aten.reshape.default)
+def _reshape(inp: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
+    return cast(
+        ColumnarTensor,
+        aten.reshape.default.decompose(inp, size),
+    )
+
+
+@ColumnarTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: ColumnarTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> ColumnarTensor:
+    return cast(
+        ColumnarTensor,
+        aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
 
 
 @ColumnarTensor.implements(aten.squeeze.default)

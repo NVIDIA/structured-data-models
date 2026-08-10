@@ -3,10 +3,9 @@ import math
 import torch
 from torch import Tensor
 
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm import Stype, TableTensor
+from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _constant_feature_mask
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
 
 # Keep GPU execution batched; adaptive per-column stopping would resynchronize.
 # For float32 overflow-safe bounds, 44 golden steps reaches ~1.48e-8.

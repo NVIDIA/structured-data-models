@@ -3,13 +3,9 @@ from textwrap import dedent
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.processing import (
-    Identity,
-    Softmax,
-    Standardize,
-    TaskDispatch,
-)
+from sdm.tensor import EnsembleTable
 
 
 def _categorical_target() -> TableTensor:
@@ -34,25 +30,23 @@ def _numerical_table(
 
 
 def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
-    dispatch = TaskDispatch(
-        classification=Softmax(),
-        regression=[Identity()],
-    )
+    dispatch = sp.TaskDispatch(classification=sp.Softmax())
     output = _numerical_table(("a", "b"))
     description = dedent("""\
         TaskDispatch(
-          classification: Softmax(),
-          regression: Sequential(
-            Identity(),
-          ),
+          classification=Softmax(),
         )""")
     assert repr(dispatch) == description
 
-    dispatch._resolve(_numerical_table())
-    assert dispatch.transform(output) is output
+    dispatch._task = "regression"
+    assert dispatch.transform(output).equal(output)
     assert repr(dispatch) == description
 
-    dispatch._resolve(_categorical_target())
+    restored = sp.TaskDispatch(classification=sp.Softmax())
+    restored.load_state_dict(dispatch.state_dict())
+    assert restored.transform(output).equal(output)
+
+    dispatch._task = "classification"
     transformed = dispatch.transform(output)
 
     assert torch.allclose(
@@ -61,10 +55,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     )
     assert repr(dispatch) == description
 
-    restored = TaskDispatch(
-        classification=Softmax(),
-        regression=[Identity()],
-    )
+    restored = sp.TaskDispatch(classification=sp.Softmax())
     restored.load_state_dict(dispatch.state_dict())
 
     torch.testing.assert_close(
@@ -74,18 +65,34 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
 
 
 def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
-    with pytest.raises(ValueError, match="at least one route"):
-        TaskDispatch()
+    assert len(sp.TaskDispatch().processors) == 0
+    assert sp.TaskDispatch(regression=sp.Standardize()).requires_fit
 
-    with pytest.raises(ValueError, match=r"regression.*requires fit"):
-        TaskDispatch(regression=Standardize())
-
-    dispatch = TaskDispatch(regression=Identity())
+    dispatch = sp.TaskDispatch(regression=sp.Identity())
     output = _numerical_table()
 
-    with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
+    with pytest.raises(RuntimeError, match="model execution"):
         dispatch.transform(output)
-    with pytest.raises(ValueError, match="no 'classification' route"):
-        dispatch._resolve(_categorical_target())
-    with pytest.raises(ValueError, match=r"exactly one.*got 2"):
-        dispatch._resolve(_numerical_table(("y0", "y1")))
+    dispatch._task = "classification"
+    assert dispatch.transform(output).equal(output)
+
+
+def test_task_dispatch_routes_ensemble_members() -> None:
+    first = _numerical_table(("a", "b"))
+    second = _numerical_table(("c", "d"))
+    ensemble_table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
+    )
+    dispatch = sp.TaskDispatch(classification=sp.Softmax())
+    dispatch._task = "classification"
+
+    output = dispatch.transform_ensemble(ensemble_table)
+
+    for member_id, source in enumerate((second, first, second)):
+        result = output.table(member_id)
+        assert result.columns == source.columns
+        torch.testing.assert_close(
+            result.numerical,
+            source.numerical.softmax(dim=-1),
+        )

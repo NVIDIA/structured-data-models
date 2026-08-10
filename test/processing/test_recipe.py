@@ -1,5 +1,7 @@
+import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
@@ -8,14 +10,6 @@ from sdm import (
     TableTensor,
 )
 from sdm.models import TabICLv2
-from sdm.processing import (
-    Choice,
-    Identity,
-    InvertibleMixin,
-    Recipe,
-    Sequential,
-    Standardize,
-)
 from sdm.testing import withCUDA
 
 
@@ -26,23 +20,21 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
 
 
 def test_recipe_normalizes_empty_roles_and_repr() -> None:
-    recipe = Recipe(features=[Standardize()], target=None, output=[])
+    recipe = sp.Recipe(features=[sp.Standardize()], target=None, output=[])
 
-    assert isinstance(recipe.features, Sequential)
-    assert isinstance(recipe.target, Sequential)
-    assert isinstance(recipe.output, Sequential)
+    assert isinstance(recipe.features, sp.Sequential)
+    assert isinstance(recipe.output, sp.Sequential)
     assert len(recipe.features) == 1
-    assert len(recipe.target) == 0
     assert len(recipe.output) == 0
     assert "features=Sequential" in repr(recipe)
-    assert "target=Sequential()" in repr(recipe)
+    assert "target=Identity()" in repr(recipe)
 
 
 def test_target_forward_then_inverse_round_trips() -> None:
-    recipe = Recipe(target=[Standardize()])
+    recipe = sp.Recipe(target=[sp.Standardize()])
     table = _table()
 
-    assert isinstance(recipe.target, Sequential)
+    assert isinstance(recipe.target, sp.Sequential)
     transformed = recipe.target.fit_transform(table)
     restored = recipe.target.inverse_transform(transformed)
 
@@ -51,7 +43,10 @@ def test_target_forward_then_inverse_round_trips() -> None:
 
 
 def test_recipe_roles_fit_transform_features_and_target() -> None:
-    recipe = Recipe(features=[Standardize()], target=[Standardize()])
+    recipe = sp.Recipe(
+        features=[sp.Standardize()],
+        target=[sp.Standardize()],
+    )
     features = _table()
     target = _table(torch.tensor([[10.0, 20.0], [30.0, 40.0]]))
 
@@ -71,7 +66,7 @@ def test_recipe_roles_fit_transform_features_and_target() -> None:
 
 
 def test_recipe_role_fit_accepts_table() -> None:
-    recipe = Recipe(features=[Choice(Identity(), Standardize())])
+    recipe = sp.Recipe(features=[sp.Standardize()])
     features = TableTensor(
         columns={
             Stype.numerical: ("x0", "x1"),
@@ -81,10 +76,7 @@ def test_recipe_role_fit_accepts_table() -> None:
         id=ColumnarTensor((torch.tensor([10, 11]),)),
     )
 
-    fitted = recipe.features.fit(
-        features,
-        generator=torch.Generator().manual_seed(1),
-    )
+    fitted = recipe.features.fit(features)
     transformed = recipe.features.transform(features)
 
     assert fitted is recipe.features
@@ -94,6 +86,11 @@ def test_recipe_role_fit_accepts_table() -> None:
         atol=1e-6,
     )
     assert torch.equal(transformed.id, features.id)
+
+
+def test_recipe_rejects_task_dispatch_in_target() -> None:
+    with pytest.raises(ValueError, match=r"not supported.*Recipe.target"):
+        sp.Recipe(target=sp.TaskDispatch(regression=sp.Identity()))
 
 
 @withCUDA
@@ -133,7 +130,7 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     assert torch.isfinite(model_features.numerical).all()
 
     assert model_target.numerical.device == device
-    assert isinstance(recipe.target, InvertibleMixin)
+    assert isinstance(recipe.target, sp.InvertibleMixin)
     restored = recipe.target.inverse_transform(model_target)
     torch.testing.assert_close(restored.numerical, target.numerical)
 

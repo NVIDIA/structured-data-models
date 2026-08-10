@@ -1,8 +1,7 @@
 import torch
 
-from sdm.processing.base import Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
 
 
 class ClipQuantiles(Processor):
@@ -27,10 +26,8 @@ class ClipQuantiles(Processor):
         q_high: float = 1.0,
     ) -> None:
         super().__init__()
-        if not 0 <= q_low <= q_high <= 1:
-            raise ValueError(
-                "q_low and q_high must satisfy 0 <= q_low <= q_high <= 1."
-            )
+        if q_low > q_high:
+            raise ValueError("q_low and q_high must satisfy q_low <= q_high.")
         self.q_low = q_low
         self.q_high = q_high
         self.register_buffer("lower_bound", torch.empty(0))

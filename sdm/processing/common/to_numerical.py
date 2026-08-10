@@ -2,9 +2,8 @@ from typing import cast
 
 import torch
 
-from sdm import Stype
-from sdm.processing.base import Processor
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
 
 
 class ToNumerical(Processor):
