@@ -1,14 +1,10 @@
-from typing import Literal, cast
+from typing import Literal
 
 import torch
+from torch.nn import ModuleList
 
 from sdm import Stype
-from sdm.processing import (
-    EnsembleInvertibleMixin,
-    EnsembleProcessor,
-    EnsembleProcessorAdapter,
-    Processor,
-)
+from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
 
@@ -38,33 +34,10 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         super().__init__()
         options = []
         for arg in args:
-            option = Processor.as_processor(arg)
-            if not isinstance(option, EnsembleProcessor):
-                option = EnsembleProcessorAdapter(option)
-            options.append(option)
-        self.options = torch.nn.ModuleList(options)
+            options.append(EnsembleProcessor.as_processor(arg))
+        self.options: ModuleList[EnsembleProcessor] = ModuleList(options)
         self.method = method
         self._option_ids: tuple[int, ...] = ()
-
-    @property
-    def selected(self) -> Processor:
-        """The drawn option."""
-        if len(self._option_ids) == 0:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} has no selected option; "
-                "call 'fit()' before."
-            )
-        if len(self._option_ids) > 1:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} has multiple selected options."
-            )
-
-        option = cast(Processor, self.options[self._option_ids[0]])
-        if not isinstance(option, EnsembleProcessorAdapter):
-            return option
-        if len(option._group_processors) == 0:
-            return option.processor
-        return cast(Processor, option._group_processors[0])
 
     def _draw_option_ids(
         self,
@@ -138,8 +111,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             generator=generator,
         )
         for option_id, table in self._tables_by_option(ensemble_table).items():
-            processor = cast(EnsembleProcessor, self.options[option_id])
-            processor.fit_ensemble(table, generator=generator)
+            self.options[option_id].fit_ensemble(table, generator=generator)
 
     def _fit_transform_ensemble(
         self,
@@ -152,10 +124,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             generator=generator,
         )
         outputs = {
-            option_id: cast(
-                EnsembleProcessor,
-                self.options[option_id],
-            ).fit_transform_ensemble(
+            option_id: self.options[option_id].fit_transform_ensemble(
                 table,
                 generator=generator,
             )
@@ -171,10 +140,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         self._check_num_members(ensemble_table)
         outputs = {
-            option_id: cast(
-                EnsembleProcessor,
-                self.options[option_id],
-            ).transform_ensemble(table)
+            option_id: self.options[option_id].transform_ensemble(table)
             for option_id, table in self._tables_by_option(
                 ensemble_table
             ).items()
@@ -188,7 +154,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         self._check_num_members(ensemble_table)
         outputs = {}
         for option_id, table in self._tables_by_option(ensemble_table).items():
-            processor = cast(EnsembleProcessor, self.options[option_id])
+            processor = self.options[option_id]
             if not isinstance(processor, EnsembleInvertibleMixin):
                 raise TypeError(
                     f"{processor.__class__.__name__!r} is not invertible."
@@ -198,8 +164,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
 
     def __repr__(self, *, indent: int = 0) -> str:
         inner = ",\n".join(
-            cast(Processor, option).__repr__(indent=indent + 2)
-            for option in self.options
+            option.__repr__(indent=indent + 2) for option in self.options
         )
         if self.method != "random":
             inner += f",\n{' ' * (indent + 2)}method={self.method!r}"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, ClassVar, Self, TypeAlias
+from typing import TYPE_CHECKING, Self
 
 import torch
 
@@ -10,8 +10,6 @@ from sdm import Stype, TableTensor
 
 if TYPE_CHECKING:
     from sdm.processing import Sequential
-
-SupportedStypes: TypeAlias = frozenset[Stype]
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -28,7 +26,10 @@ class Processor(torch.nn.Module, abc.ABC):
     supported stypes with empty blocks.
     """
 
-    supported_stypes: ClassVar[SupportedStypes]
+    #: Semantic types supported for input columns in this processor.
+    supported_stypes: frozenset[Stype]
+
+    #: Whether this processor requires fitting.
     requires_fit: bool
 
     def __init__(self) -> None:

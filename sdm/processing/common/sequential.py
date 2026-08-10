@@ -18,12 +18,17 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         args: Sequence of :class:`Processor` instances or callables.
     """
 
-    supported_stypes = frozenset(Stype)
-
     def __init__(self, *args: object) -> None:
         super().__init__()
         self.requires_fit = False
         self.extend(args)
+
+    @property
+    def supported_stypes(self) -> frozenset[Stype]:
+        r""":meta private:"""  # noqa: D415
+        if len(self) == 0:
+            return frozenset(Stype)
+        return next(iter(self)).supported_stypes
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.

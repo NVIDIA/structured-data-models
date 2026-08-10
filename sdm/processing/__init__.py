@@ -4,7 +4,6 @@ from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.ensemble import (
     EnsembleProcessor,
     EnsembleInvertibleMixin,
-    EnsembleProcessorAdapter,
 )
 from sdm.processing.common import (
     Identity,
@@ -13,6 +12,7 @@ from sdm.processing.common import (
     StypeDispatch,
     TaskDispatch,
     TableDispatch,
+    EnsembleProcessorAdapter,
     Choice,
     ToNumerical,
     ShuffleColumns,
@@ -42,7 +42,6 @@ from sdm.processing.recipe import Recipe
 __all__ = [
     "Processor",
     "InvertibleMixin",
-    "EnsembleProcessor",
     "EnsembleInvertibleMixin",
     "EnsembleProcessorAdapter",
     "Identity",
@@ -51,6 +50,7 @@ __all__ = [
     "StypeDispatch",
     "TaskDispatch",
     "TableDispatch",
+    "EnsembleProcessor",
     "Choice",
     "ToNumerical",
     "ShuffleColumns",

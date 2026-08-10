@@ -1,12 +1,12 @@
 from typing import Literal, cast
 
 import torch
+from torch.nn import ModuleDict
 
 from sdm import Stype
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
-    EnsembleProcessorAdapter,
     Processor,
 )
 from sdm.tensor import EnsembleTable
@@ -63,7 +63,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
-        self.processors = torch.nn.ModuleDict()
+        self.processors: ModuleDict[EnsembleProcessor] = ModuleDict()
         for stype, processor in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
@@ -73,9 +73,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         ):
             if processor is None:
                 continue
-            processor = Processor.as_processor(processor)
-            if not isinstance(processor, EnsembleProcessor):
-                processor = EnsembleProcessorAdapter(processor)
+            processor = EnsembleProcessor.as_processor(processor)
             self.processors[str(stype)] = processor
 
         self.remainder = remainder
@@ -127,8 +125,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         self._check_remainder(ensemble_table)
         self._active_routes = self._find_active_routes(ensemble_table)
         for stype in self._active_routes:
-            processor = cast(EnsembleProcessor, self.processors[stype])
-            processor.fit_ensemble(
+            self.processors[stype].fit_ensemble(
                 ensemble_table.select_stypes(stype),
                 generator=generator,
             )
@@ -142,10 +139,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         self._check_remainder(ensemble_table)
         self._active_routes = self._find_active_routes(ensemble_table)
         outputs = [
-            cast(
-                EnsembleProcessor,
-                self.processors[stype],
-            ).fit_transform_ensemble(
+            self.processors[stype].fit_transform_ensemble(
                 ensemble_table.select_stypes(stype),
                 generator=generator,
             )
@@ -168,10 +162,9 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             active_routes = self._find_active_routes(ensemble_table)
             self._active_routes = active_routes
         outputs = [
-            cast(
-                EnsembleProcessor,
-                self.processors[stype],
-            ).transform_ensemble(ensemble_table.select_stypes(stype))
+            self.processors[stype].transform_ensemble(
+                ensemble_table.select_stypes(stype)
+            )
             for stype in active_routes
         ]
         if self.remainder == "passthrough":
@@ -197,14 +190,17 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
 
         outputs = []
         for stype in active_routes:
-            processor = cast(EnsembleProcessor, self.processors[stype])
-            inverse = getattr(processor, "inverse_transform_ensemble", None)
-            if not callable(inverse):
+            processor = self.processors[stype]
+            if not isinstance(processor, EnsembleInvertibleMixin):
                 raise TypeError(
-                    f"Route {stype!r} processor "
-                    f"{processor.__class__.__name__!r} is not invertible"
+                    f"{processor.__class__.__name__!r} is not invertible."
                 )
-            outputs.append(inverse(ensemble_table.select_stypes(stype)))
+            # TODO This is wrong. A processor may not map to same stype back!
+            outputs.append(
+                processor.inverse_transform_ensemble(
+                    ensemble_table.select_stypes(stype)
+                )
+            )
 
         outputs.append(self._remainder_ensemble(ensemble_table))
         return EnsembleTable.concatenate_columns(outputs)
