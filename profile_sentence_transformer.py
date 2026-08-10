@@ -27,7 +27,7 @@ import sdm
 import sdm.processing as sp
 
 DATASETS = [
-    "tobacco-problem",
+    "beer-ratings",
     "hospitals",
     "schools",
     "drug-shortages",
@@ -48,10 +48,6 @@ DATASETS = [
     "medicines",
     "michelin-ratings",
 ]
-
-TASK_OVERRIDES = {
-    "tobacco-problem": "classification",
-}
 
 CSV_FIELDS = [
     "dataset",
@@ -93,11 +89,10 @@ for dataset_name in DATASETS:
         with open(config_path) as f:
             config = json.load(f)
         target_name = config["target_name"]
-        task = TASK_OVERRIDES.get(
-            dataset_name,
+        task = (
             "classification"
             if "classification" in config.get("task", "")
-            else "regression",
+            else "regression"
         )
 
         data_path = hf_hub_download(
@@ -213,7 +208,7 @@ for dataset_name in DATASETS:
                     (prediction - ground_truth).pow(2).mean().sqrt().item()
                 )
             else:
-                prediction = prediction.categorical.code.squeeze(-1)
+                prediction = prediction.numerical.argmax(dim=-1)
                 metric_name = "accuracy"
                 metric_value = (
                     (prediction == ground_truth).float().mean().item()
