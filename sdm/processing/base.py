@@ -8,11 +8,11 @@ import torch
 
 from sdm import Stype, TableTensor
 
-if TYPE_CHECKING:
-    from sdm.processing import Sequential
-
 OperatesOnStypes: TypeAlias = frozenset[Stype]
 UnoperatedStypePolicy: TypeAlias = Literal["preserve", "error", "opaque"]
+
+if TYPE_CHECKING:
+    from sdm.processing import Sequential
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -97,7 +97,7 @@ class Processor(torch.nn.Module, abc.ABC):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def _transform(self, table: TableTensor) -> TableTensor:

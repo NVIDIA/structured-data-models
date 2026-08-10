@@ -20,6 +20,14 @@ from sdm.tensor import EnsembleTable
 class IdentityEnsembleProcessor(EnsembleProcessor):
     operates_on_stypes = frozenset({Stype.numerical})
 
+    def _fit_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        pass
+
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
