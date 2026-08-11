@@ -535,9 +535,7 @@ class Attention(torch.nn.Module):
         self.kv_dim = num_key_value_heads * self.head_dim
 
         self.qkv_lin = Linear(
-            in_features=channels,
-            out_features=self.q_dim + 2 * self.kv_dim,
-            **factory_kwargs,
+            channels, self.q_dim + 2 * self.kv_dim, **factory_kwargs
         )
         self.sdpa = SDPA(
             channels=self.head_dim,
