@@ -15,6 +15,38 @@ class _StubInnerModel(torch.nn.Module):
         super().__init__()
 
 
+def _patch_flash_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    active: str | None = None,
+) -> dict[str, str | None]:
+    state = {"active": active}
+    monkeypatch.setattr(
+        torch_attention,
+        "activate_flash_attention_impl",
+        lambda impl: state.update(active=impl),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        torch_attention,
+        "list_flash_attention_impls",
+        lambda: ["FA3"],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        torch_attention,
+        "current_flash_attention_impl",
+        lambda: state["active"],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        torch_attention,
+        "restore_flash_attention_impl",
+        lambda: state.update(active=None),
+        raising=False,
+    )
+    return state
+
+
 @pytest.fixture(
     params=[
         (TabICLv2, tabiclv2_module, "_TabICLv2"),
@@ -34,31 +66,37 @@ def test_model_selects_flash_attention_impl(
     monkeypatch: pytest.MonkeyPatch,
     model_cls: Callable[..., torch.nn.Module],
 ) -> None:
-    active: dict[str, str | None] = {"impl": "FA3"}
-    monkeypatch.setattr(
-        torch_attention,
-        "current_flash_attention_impl",
-        lambda: active["impl"],
-        raising=False,
-    )
-    monkeypatch.setattr(
-        torch_attention,
-        "restore_flash_attention_impl",
-        lambda: active.update(impl=None),
-        raising=False,
-    )
+    state = _patch_flash_provider(monkeypatch, active="FA3")
+
+    model_cls(pretrained=False, flash_attention_impl="FA2")
+    assert state["active"] is None
+
+    model_cls(pretrained=False, flash_attention_impl="FA3")
+    assert state["active"] == "FA3"
     monkeypatch.setattr(
         torch_attention,
         "activate_flash_attention_impl",
-        lambda impl: active.update(impl=impl),
-        raising=False,
+        lambda impl: pytest.fail("provider was reactivated"),
     )
 
-    model_cls(pretrained=False, flash_attention_impl="FA2")
-    assert active["impl"] is None
-
     model_cls(pretrained=False, flash_attention_impl="FA3")
-    assert active["impl"] == "FA3"
+    assert state["active"] == "FA3"
+
+    state["active"] = "FA4"
+    with pytest.raises(RuntimeError, match=r"FA4.*active"):
+        model_cls(pretrained=False, flash_attention_impl="FA3")
+    assert state["active"] == "FA4"
+
+    state["active"] = None
+    monkeypatch.setattr(
+        torch_attention,
+        "list_flash_attention_impls",
+        list,
+    )
+
+    with pytest.raises(ValueError, match="not registered"):
+        model_cls(pretrained=False, flash_attention_impl="FA3")
+    assert state["active"] is None
 
 
 def test_model_forces_flash_attention(
@@ -66,12 +104,7 @@ def test_model_forces_flash_attention(
     model_cls: Callable[..., torch.nn.Module],
 ) -> None:
     enabled: dict[str, bool] = {}
-    monkeypatch.setattr(
-        torch_attention,
-        "activate_flash_attention_impl",
-        lambda impl: None,
-        raising=False,
-    )
+    _patch_flash_provider(monkeypatch)
     for backend in ("flash", "cudnn", "mem_efficient", "math"):
         monkeypatch.setattr(
             torch.backends.cuda,

@@ -22,13 +22,29 @@ def _configure_flash_attention(
 ) -> None:
     if impl == "FA2":
         current = getattr(torch_attn, "current_flash_attention_impl", None)
+        restore = getattr(torch_attn, "restore_flash_attention_impl", None)
         if current is not None and current() is not None:
-            torch_attn.restore_flash_attention_impl()
+            if restore is None:
+                raise RuntimeError("PyTorch cannot restore Flash Attention 2")
+            restore()
     elif impl == "FA3":
         activate = getattr(torch_attn, "activate_flash_attention_impl", None)
-        if activate is None:
+        available = getattr(torch_attn, "list_flash_attention_impls", None)
+        current = getattr(torch_attn, "current_flash_attention_impl", None)
+        if activate is None or available is None or current is None:
             raise RuntimeError(
                 "Flash Attention 3 requires PyTorch's provider registry"
+            )
+        active = current()
+        if active == "FA3":
+            return
+        if active is not None:
+            raise RuntimeError(
+                f"Cannot activate FA3 while {active!r} is active"
+            )
+        if "FA3" not in available():
+            raise ValueError(
+                "Flash Attention 3 is not registered with PyTorch"
             )
         activate("FA3")
     elif impl is not None:
