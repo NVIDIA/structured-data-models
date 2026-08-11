@@ -1,4 +1,3 @@
-import pytest
 import torch
 
 from sdm import (
@@ -57,14 +56,21 @@ def test_to_numerical_is_identity_for_already_numerical_table() -> None:
     assert ToNumerical().transform(table) is table
 
 
-def test_to_numerical_rejects_unsupported_stype() -> None:
+def test_to_numerical_preserves_unhandled_stype() -> None:
     table = TableTensor(
-        columns={"id": ("row_id",)},
+        columns={
+            "numerical": ("x",),
+            "id": ("row_id",),
+        },
+        numerical=torch.tensor([[1.0], [2.0]]),
         id=ColumnarTensor((torch.arange(2),)),
     )
 
-    with pytest.raises(ValueError, match="id"):
-        ToNumerical().transform(table)
+    output = ToNumerical().transform(table)
+
+    assert output.columns[Stype.numerical] == ("x",)
+    assert output.columns[Stype.id] == ("row_id",)
+    assert torch.equal(output.id, table.id)
 
 
 def test_to_numerical_converts_categorical_only_table() -> None:

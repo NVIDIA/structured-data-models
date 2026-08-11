@@ -18,7 +18,7 @@ from sdm.tensor import EnsembleTable
 # Generator forwarding is only observable through a stochastic transformation
 # and is therefore left to those processors as well.
 class IdentityEnsembleProcessor(EnsembleProcessor):
-    supported_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     def _fit_ensemble(
@@ -63,7 +63,7 @@ class InvertibleIdentityEnsembleProcessor(
 
 
 class _StatelessProcessor(Processor, InvertibleMixin):
-    supported_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -126,12 +126,14 @@ def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
     assert processor.inverse_transform(table).equal(table)
 
 
-def test_ensemble_processor_rejects_unsupported_stype() -> None:
+def test_ensemble_processor_noops() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1, dtype=torch.int64))
     ensemble_table = EnsembleTable(table, num_members=2)
+    processor = IdentityEnsembleProcessor()
 
-    with pytest.raises(ValueError, match="categorical"):
-        IdentityEnsembleProcessor().fit_transform_ensemble(ensemble_table)
+    assert processor.fit_ensemble(ensemble_table) is processor
+    assert processor.fit_transform_ensemble(ensemble_table) is ensemble_table
+    assert processor.transform_ensemble(ensemble_table) is ensemble_table
 
 
 def test_ensemble_processor_supports_table_tensor_lifecycle() -> None:

@@ -36,7 +36,7 @@ class DropConstantColumns(EnsembleProcessor):
             deviation at most this value are removed.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     def __init__(
@@ -94,10 +94,22 @@ class DropConstantColumns(EnsembleProcessor):
         table: TableTensor,
         kept_indices: tuple[int, ...],
     ) -> TableTensor:
-        columns = table.columns[Stype.numerical]
-        if len(kept_indices) == len(columns):
+        numerical_columns = table.columns[Stype.numerical]
+        if len(kept_indices) == len(numerical_columns):
             return table
-        return table.select_columns(columns[index] for index in kept_indices)
+        kept_numerical_columns = tuple(
+            numerical_columns[index] for index in kept_indices
+        )
+        columns = [
+            column
+            for stype, stype_columns in table.columns.items()
+            for column in (
+                kept_numerical_columns
+                if stype == Stype.numerical
+                else stype_columns
+            )
+        ]
+        return table.select_columns(columns)
 
     def _fit(
         self,

@@ -15,7 +15,7 @@ from sdm.tensor import EnsembleTable
 
 class Add(Processor, InvertibleMixin):
     requires_fit = False
-    supported_stypes = frozenset(Stype)
+    handles_stypes = frozenset(Stype)
 
     def __init__(self, value: float) -> None:
         super().__init__()
@@ -29,7 +29,7 @@ class Add(Processor, InvertibleMixin):
 
 
 class AddFittedMemberCount(EnsembleProcessor):
-    supported_stypes = frozenset(Stype)
+    handles_stypes = frozenset(Stype)
     requires_fit = True
 
     def __init__(self) -> None:

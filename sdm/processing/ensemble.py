@@ -20,7 +20,8 @@ class EnsembleProcessor(Processor):
     :meth:`fit_ensemble` and applies the transformation via
     :meth:`transform_ensemble`. :meth:`fit_ensemble`,
     :meth:`transform_ensemble`, and :meth:`fit_transform_ensemble`
-    are no-ops for supported stypes with empty blocks.
+    are no-ops for stypes outside of
+    :attr:`~sdm.processing.base.Processor.handles_stypes`.
 
     As a :class:`~sdm.processing.base.Processor`, it also accepts a
     :class:`~sdm.tensor.TableTensor` and processes it as an ensemble
@@ -109,10 +110,8 @@ class EnsembleProcessor(Processor):
             ensemble_table: Ensemble table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        for group in ensemble_table:
-            self._check_supported_stypes(group)
         if not any(
-            group.active_stypes & self.supported_stypes
+            group.active_stypes & self.handles_stypes
             for group in ensemble_table
         ):
             return self
@@ -133,10 +132,8 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for group in ensemble_table:
-            self._check_supported_stypes(group)
         if not any(
-            group.active_stypes & self.supported_stypes
+            group.active_stypes & self.handles_stypes
             for group in ensemble_table
         ):
             return ensemble_table
@@ -158,10 +155,8 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for group in ensemble_table:
-            self._check_supported_stypes(group)
         if not any(
-            group.active_stypes & self.supported_stypes
+            group.active_stypes & self.handles_stypes
             for group in ensemble_table
         ):
             return ensemble_table
