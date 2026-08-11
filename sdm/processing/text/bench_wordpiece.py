@@ -62,6 +62,16 @@ processor = sp.SentenceTransformer(
 )
 processor = processor.to(device)
 
+model = processor._model.module
+print(f"tokenizer.model_max_length: {model.tokenizer.model_max_length}")
+print(f"model.max_seq_length: {model.max_seq_length}")
+if processor._word_piece_tokenizer is not None:
+    print(
+        "_word_piece_tokenizer.max_length: "
+        f"{processor._word_piece_tokenizer.max_length}"
+    )
+print()
+
 has_gpu_tokenizer = processor._word_piece_tokenizer is not None
 if not has_gpu_tokenizer:
     print("WARNING: GPU WordPiece tokenizer not available, cannot compare.")
