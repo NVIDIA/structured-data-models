@@ -1,8 +1,68 @@
+import pytest
 import torch
 
 from sdm import TableTensor
 from sdm.processing import PowerTransform
-from sdm.testing import withCUDA
+from sdm.processing.numerical import power as power_module
+from sdm.testing import onlyCUDA, withCUDA
+
+
+def test_power_transform_uses_module_lambda_optimizer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fixed_optimizer(
+        inp: torch.Tensor,
+        constant_features: torch.Tensor,
+    ) -> torch.Tensor:
+        return torch.full_like(constant_features, 0.5, dtype=inp.dtype)
+
+    monkeypatch.setattr(power_module, "_optimize_lambdas", fixed_optimizer)
+    inp = torch.arange(12, dtype=torch.float32).view(6, 2)
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
+
+    assert torch.equal(processor.lambdas, torch.full((1, 2), 0.5))
+
+
+@onlyCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_power_transform_accepts_caller_compiled_optimizer(
+    dtype: torch.dtype,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inp = torch.randn((2, 17, 3), device="cuda", dtype=dtype)
+    table = TableTensor.from_tensor(inp)
+
+    with torch.inference_mode():
+        eager = PowerTransform().fit_transform(table).numerical
+        compiled_optimizer = torch.compile(
+            power_module._optimize_lambdas,
+            fullgraph=True,
+        )
+        monkeypatch.setattr(
+            power_module,
+            "_optimize_lambdas",
+            compiled_optimizer,
+        )
+        compiled = PowerTransform().fit_transform(table).numerical
+
+    assert compiled.shape == inp.shape
+    assert torch.isfinite(compiled).all()
+    torch.testing.assert_close(compiled, eager, atol=1e-3, rtol=1e-3)
+
+
+def test_power_transform_lambda_optimizer_remains_overridable() -> None:
+    class FixedLambdaPowerTransform(PowerTransform):
+        def _optimize_lambdas(
+            self,
+            inp: torch.Tensor,
+            constant_features: torch.Tensor,
+        ) -> torch.Tensor:
+            return torch.ones_like(constant_features, dtype=inp.dtype)
+
+    inp = torch.arange(12, dtype=torch.float32).view(6, 2)
+    processor = FixedLambdaPowerTransform().fit(TableTensor.from_tensor(inp))
+
+    assert torch.equal(processor.lambdas, torch.ones((1, 2)))
 
 
 @withCUDA
