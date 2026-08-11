@@ -5,7 +5,7 @@ import re
 import warnings
 from collections.abc import Callable, Hashable, Iterable, Mapping
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -101,7 +101,7 @@ def infer_stypes(
     overrides = overrides or {}
 
     fn: Callable[[str, object, Policy, Policy], Stype | None] | None = None
-    columns: Iterable[tuple[Hashable, Any]] | None = None
+    columns: Iterable[tuple[Hashable, object]] | None = None
     if isinstance(table, pa.Table):
         fn = _infer_arrow_stype
         columns = zip(table.column_names, table.columns)
