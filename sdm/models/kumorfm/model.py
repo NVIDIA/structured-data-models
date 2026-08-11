@@ -1,6 +1,6 @@
 # ruff: noqa: D205
 from collections.abc import Sequence
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -124,11 +124,8 @@ class KumoRFM(ICLModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
-        flash_attention_impl: Registered implementation to activate in
-            PyTorch's Flash backend slot. For example, ``"FA3"`` activates
-            Flash Attention 3. Activation is process-wide. If ``None``, the
-            active implementation is left unchanged. A different
-            implementation reported as active raises an error.
+        flash_attention_impl: Flash Attention implementation to use. ``None``
+            leaves PyTorch's active implementation unchanged.
         force_flash_attention: Whether to use only PyTorch's Flash backend.
             This process-wide setting persists until changed through PyTorch.
     """
@@ -151,7 +148,7 @@ class KumoRFM(ICLModel):
         pretrained: bool = True,
         device: torch.device | str | None = None,
         *,
-        flash_attention_impl: str | None = None,
+        flash_attention_impl: Literal["FA2", "FA3"] | None = None,
         force_flash_attention: bool = False,
     ) -> None:
         super().__init__()

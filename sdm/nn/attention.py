@@ -292,11 +292,6 @@ class SDPA(torch.nn.Module):
     batch chunking, :class:`QASSMax`-based temperature-scaling, and padding
     support for key/value pairs.
 
-    Backend selection is delegated to PyTorch. Public SDM models can activate
-    a registered Flash Attention implementation and optionally require the
-    Flash backend. Direct uses of this module inherit the caller's PyTorch
-    attention configuration.
-
     Args:
         channels: The number of channels per attention head.
         num_query_heads: The number of query attention heads.
