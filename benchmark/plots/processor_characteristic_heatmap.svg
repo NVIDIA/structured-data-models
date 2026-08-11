@@ -1,680 +1,548 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="2163" height="850" viewBox="0 0 2163 850">
+<svg xmlns="http://www.w3.org/2000/svg" width="1753" height="930" viewBox="0 0 1753 930">
 <rect width="100%" height="100%" fill="white"/>
 <style>text{font-family:Arial,sans-serif;fill:#222}.label{font-size:11px}.title{font-size:18px;font-weight:bold}.legend{font-size:12px}</style>
-<text x="12" y="24" class="title">Processor input-characteristic impact</text>
-<text x="12" y="44" class="legend">red = strong, yellow = moderate, grey = negligible, white = irrelevant/not measured</text>
-<text x="216.0" y="142" class="label" text-anchor="start" transform="rotate(-55 216.0 142)">cardinality</text>
-<text x="298.0" y="142" class="label" text-anchor="start" transform="rotate(-55 298.0 142)">categorical_columns</text>
-<text x="380.0" y="142" class="label" text-anchor="start" transform="rotate(-55 380.0 142)">category_type</text>
-<text x="462.0" y="142" class="label" text-anchor="start" transform="rotate(-55 462.0 142)">code_dtype</text>
-<text x="544.0" y="142" class="label" text-anchor="start" transform="rotate(-55 544.0 142)">columns</text>
-<text x="626.0" y="142" class="label" text-anchor="start" transform="rotate(-55 626.0 142)">components</text>
-<text x="708.0" y="142" class="label" text-anchor="start" transform="rotate(-55 708.0 142)">constant_ratio</text>
-<text x="790.0" y="142" class="label" text-anchor="start" transform="rotate(-55 790.0 142)">dtype</text>
-<text x="872.0" y="142" class="label" text-anchor="start" transform="rotate(-55 872.0 142)">embedding_dim</text>
-<text x="954.0" y="142" class="label" text-anchor="start" transform="rotate(-55 954.0 142)">estimators</text>
-<text x="1036.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1036.0 142)">field_count</text>
-<text x="1118.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1118.0 142)">missing_ratio</text>
-<text x="1200.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1200.0 142)">numerical_columns</text>
-<text x="1282.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1282.0 142)">options</text>
-<text x="1364.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1364.0 142)">outlier_ratio</text>
-<text x="1446.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1446.0 142)">output_width</text>
-<text x="1528.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1528.0 142)">routes</text>
-<text x="1610.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1610.0 142)">rows</text>
-<text x="1692.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1692.0 142)">selected_fraction</text>
-<text x="1774.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1774.0 142)">steps</text>
-<text x="1856.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1856.0 142)">text_columns</text>
-<text x="1938.0" y="142" class="label" text-anchor="start" transform="rotate(-55 1938.0 142)">text_length</text>
-<text x="2020.0" y="142" class="label" text-anchor="start" transform="rotate(-55 2020.0 142)">unseen_ratio</text>
-<text x="2102.0" y="142" class="label" text-anchor="start" transform="rotate(-55 2102.0 142)">vocabulary</text>
-<text x="8" y="167" class="label">AddCalendarFields</text>
-<rect x="175" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: cardinality: irrelevant</title></rect>
-<rect x="257" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: category_type: irrelevant</title></rect>
-<rect x="421" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: code_dtype: irrelevant</title></rect>
-<rect x="503" y="150" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AddCalendarFields: columns: strong</title></rect>
-<rect x="585" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: components: irrelevant</title></rect>
-<rect x="667" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: dtype: irrelevant</title></rect>
-<rect x="831" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: estimators: irrelevant</title></rect>
-<rect x="995" y="150" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AddCalendarFields: field_count: strong</title></rect>
-<rect x="1077" y="150" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AddCalendarFields: missing_ratio: negligible</title></rect>
-<rect x="1159" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: options: irrelevant</title></rect>
-<rect x="1323" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: output_width: irrelevant</title></rect>
-<rect x="1487" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: routes: irrelevant</title></rect>
-<rect x="1569" y="150" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AddCalendarFields: rows: strong</title></rect>
-<rect x="1651" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: steps: irrelevant</title></rect>
-<rect x="1815" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: text_columns: irrelevant</title></rect>
-<rect x="1897" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: text_length: irrelevant</title></rect>
-<rect x="1979" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="150" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: vocabulary: irrelevant</title></rect>
-<text x="8" y="192" class="label">AlignCategories</text>
-<rect x="175" y="175" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AlignCategories: cardinality: strong</title></rect>
-<rect x="257" y="175" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AlignCategories: categorical_columns: strong</title></rect>
-<rect x="339" y="175" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: category_type: negligible</title></rect>
-<rect x="421" y="175" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: code_dtype: negligible</title></rect>
-<rect x="503" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: columns: irrelevant</title></rect>
-<rect x="585" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: components: irrelevant</title></rect>
-<rect x="667" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: dtype: irrelevant</title></rect>
-<rect x="831" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="175" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: estimators: negligible</title></rect>
-<rect x="995" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: field_count: irrelevant</title></rect>
-<rect x="1077" y="175" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: missing_ratio: negligible</title></rect>
-<rect x="1159" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: options: irrelevant</title></rect>
-<rect x="1323" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: output_width: irrelevant</title></rect>
-<rect x="1487" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: routes: irrelevant</title></rect>
-<rect x="1569" y="175" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AlignCategories: rows: strong</title></rect>
-<rect x="1651" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: steps: irrelevant</title></rect>
-<rect x="1815" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: text_columns: irrelevant</title></rect>
-<rect x="1897" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: text_length: irrelevant</title></rect>
-<rect x="1979" y="175" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>AlignCategories: unseen_ratio: moderate</title></rect>
-<rect x="2061" y="175" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: vocabulary: irrelevant</title></rect>
-<text x="8" y="217" class="label">Callable</text>
-<rect x="175" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: cardinality: irrelevant</title></rect>
-<rect x="257" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: category_type: irrelevant</title></rect>
-<rect x="421" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: code_dtype: irrelevant</title></rect>
-<rect x="503" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: columns: irrelevant</title></rect>
-<rect x="585" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: components: irrelevant</title></rect>
-<rect x="667" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: dtype: irrelevant</title></rect>
-<rect x="831" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: estimators: irrelevant</title></rect>
-<rect x="995" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: field_count: irrelevant</title></rect>
-<rect x="1077" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: options: irrelevant</title></rect>
-<rect x="1323" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: output_width: irrelevant</title></rect>
-<rect x="1487" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: routes: irrelevant</title></rect>
-<rect x="1569" y="200" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Callable: rows: negligible</title></rect>
-<rect x="1651" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: steps: irrelevant</title></rect>
-<rect x="1815" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: text_columns: irrelevant</title></rect>
-<rect x="1897" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: text_length: irrelevant</title></rect>
-<rect x="1979" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="200" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: vocabulary: irrelevant</title></rect>
-<text x="8" y="242" class="label">Choice</text>
-<rect x="175" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: cardinality: irrelevant</title></rect>
-<rect x="257" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: category_type: irrelevant</title></rect>
-<rect x="421" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: code_dtype: irrelevant</title></rect>
-<rect x="503" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: columns: irrelevant</title></rect>
-<rect x="585" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: components: irrelevant</title></rect>
-<rect x="667" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: dtype: irrelevant</title></rect>
-<rect x="831" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="225" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Choice: estimators: strong</title></rect>
-<rect x="995" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: field_count: irrelevant</title></rect>
-<rect x="1077" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="225" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Choice: options: strong</title></rect>
-<rect x="1323" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: output_width: irrelevant</title></rect>
-<rect x="1487" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: routes: irrelevant</title></rect>
-<rect x="1569" y="225" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>Choice: rows: moderate</title></rect>
-<rect x="1651" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: steps: irrelevant</title></rect>
-<rect x="1815" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: text_columns: irrelevant</title></rect>
-<rect x="1897" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: text_length: irrelevant</title></rect>
-<rect x="1979" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="225" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: vocabulary: irrelevant</title></rect>
-<text x="8" y="267" class="label">Clip</text>
-<rect x="175" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: cardinality: irrelevant</title></rect>
-<rect x="257" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: category_type: irrelevant</title></rect>
-<rect x="421" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: code_dtype: irrelevant</title></rect>
-<rect x="503" y="250" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>Clip: columns: moderate</title></rect>
-<rect x="585" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: components: irrelevant</title></rect>
-<rect x="667" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="250" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Clip: dtype: negligible</title></rect>
-<rect x="831" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: estimators: irrelevant</title></rect>
-<rect x="995" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: field_count: irrelevant</title></rect>
-<rect x="1077" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: options: irrelevant</title></rect>
-<rect x="1323" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: output_width: irrelevant</title></rect>
-<rect x="1487" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: routes: irrelevant</title></rect>
-<rect x="1569" y="250" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Clip: rows: negligible</title></rect>
-<rect x="1651" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: steps: irrelevant</title></rect>
-<rect x="1815" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: text_columns: irrelevant</title></rect>
-<rect x="1897" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: text_length: irrelevant</title></rect>
-<rect x="1979" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="250" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: vocabulary: irrelevant</title></rect>
-<text x="8" y="292" class="label">ClipQuantiles</text>
-<rect x="175" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: cardinality: irrelevant</title></rect>
-<rect x="257" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: category_type: irrelevant</title></rect>
-<rect x="421" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: code_dtype: irrelevant</title></rect>
-<rect x="503" y="275" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ClipQuantiles: columns: strong</title></rect>
-<rect x="585" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: components: irrelevant</title></rect>
-<rect x="667" y="275" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ClipQuantiles: constant_ratio: strong</title></rect>
-<rect x="749" y="275" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ClipQuantiles: dtype: negligible</title></rect>
-<rect x="831" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: estimators: irrelevant</title></rect>
-<rect x="995" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: field_count: irrelevant</title></rect>
-<rect x="1077" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: options: irrelevant</title></rect>
-<rect x="1323" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: output_width: irrelevant</title></rect>
-<rect x="1487" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: routes: irrelevant</title></rect>
-<rect x="1569" y="275" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ClipQuantiles: rows: strong</title></rect>
-<rect x="1651" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: steps: irrelevant</title></rect>
-<rect x="1815" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: text_columns: irrelevant</title></rect>
-<rect x="1897" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: text_length: irrelevant</title></rect>
-<rect x="1979" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="275" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: vocabulary: irrelevant</title></rect>
-<text x="8" y="317" class="label">ClipSigma</text>
-<rect x="175" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: cardinality: irrelevant</title></rect>
-<rect x="257" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: category_type: irrelevant</title></rect>
-<rect x="421" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: code_dtype: irrelevant</title></rect>
-<rect x="503" y="300" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ClipSigma: columns: strong</title></rect>
-<rect x="585" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: components: irrelevant</title></rect>
-<rect x="667" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="300" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ClipSigma: dtype: moderate</title></rect>
-<rect x="831" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: estimators: irrelevant</title></rect>
-<rect x="995" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: field_count: irrelevant</title></rect>
-<rect x="1077" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: options: irrelevant</title></rect>
-<rect x="1323" y="300" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ClipSigma: outlier_ratio: negligible</title></rect>
-<rect x="1405" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: output_width: irrelevant</title></rect>
-<rect x="1487" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: routes: irrelevant</title></rect>
-<rect x="1569" y="300" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ClipSigma: rows: strong</title></rect>
-<rect x="1651" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: steps: irrelevant</title></rect>
-<rect x="1815" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: text_columns: irrelevant</title></rect>
-<rect x="1897" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: text_length: irrelevant</title></rect>
-<rect x="1979" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="300" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: vocabulary: irrelevant</title></rect>
-<text x="8" y="342" class="label">DropConstantColumns</text>
-<rect x="175" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: cardinality: irrelevant</title></rect>
-<rect x="257" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: category_type: irrelevant</title></rect>
-<rect x="421" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: code_dtype: irrelevant</title></rect>
-<rect x="503" y="325" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>DropConstantColumns: columns: strong</title></rect>
-<rect x="585" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: components: irrelevant</title></rect>
-<rect x="667" y="325" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>DropConstantColumns: constant_ratio: negligible</title></rect>
-<rect x="749" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: dtype: irrelevant</title></rect>
-<rect x="831" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="325" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>DropConstantColumns: estimators: strong</title></rect>
-<rect x="995" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: field_count: irrelevant</title></rect>
-<rect x="1077" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: options: irrelevant</title></rect>
-<rect x="1323" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: output_width: irrelevant</title></rect>
-<rect x="1487" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: routes: irrelevant</title></rect>
-<rect x="1569" y="325" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>DropConstantColumns: rows: strong</title></rect>
-<rect x="1651" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: steps: irrelevant</title></rect>
-<rect x="1815" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: text_columns: irrelevant</title></rect>
-<rect x="1897" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: text_length: irrelevant</title></rect>
-<rect x="1979" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="325" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: vocabulary: irrelevant</title></rect>
-<text x="8" y="367" class="label">EmbedText</text>
-<rect x="175" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: cardinality: irrelevant</title></rect>
-<rect x="257" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: category_type: irrelevant</title></rect>
-<rect x="421" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: code_dtype: irrelevant</title></rect>
-<rect x="503" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: columns: irrelevant</title></rect>
-<rect x="585" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: components: irrelevant</title></rect>
-<rect x="667" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: dtype: irrelevant</title></rect>
-<rect x="831" y="350" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>EmbedText: embedding_dim: strong</title></rect>
-<rect x="913" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: estimators: irrelevant</title></rect>
-<rect x="995" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: field_count: irrelevant</title></rect>
-<rect x="1077" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: options: irrelevant</title></rect>
-<rect x="1323" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: output_width: irrelevant</title></rect>
-<rect x="1487" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: routes: irrelevant</title></rect>
-<rect x="1569" y="350" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>EmbedText: rows: strong</title></rect>
-<rect x="1651" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: steps: irrelevant</title></rect>
-<rect x="1815" y="350" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>EmbedText: text_columns: strong</title></rect>
-<rect x="1897" y="350" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>EmbedText: text_length: negligible</title></rect>
-<rect x="1979" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="350" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: vocabulary: irrelevant</title></rect>
-<text x="8" y="392" class="label">Identity</text>
-<rect x="175" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: cardinality: irrelevant</title></rect>
-<rect x="257" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: category_type: irrelevant</title></rect>
-<rect x="421" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: code_dtype: irrelevant</title></rect>
-<rect x="503" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: columns: irrelevant</title></rect>
-<rect x="585" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: components: irrelevant</title></rect>
-<rect x="667" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: dtype: irrelevant</title></rect>
-<rect x="831" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: estimators: irrelevant</title></rect>
-<rect x="995" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: field_count: irrelevant</title></rect>
-<rect x="1077" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: options: irrelevant</title></rect>
-<rect x="1323" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: output_width: irrelevant</title></rect>
-<rect x="1487" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: routes: irrelevant</title></rect>
-<rect x="1569" y="375" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Identity: rows: negligible</title></rect>
-<rect x="1651" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: steps: irrelevant</title></rect>
-<rect x="1815" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: text_columns: irrelevant</title></rect>
-<rect x="1897" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: text_length: irrelevant</title></rect>
-<rect x="1979" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="375" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: vocabulary: irrelevant</title></rect>
-<text x="8" y="417" class="label">ImputeMean</text>
-<rect x="175" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: cardinality: irrelevant</title></rect>
-<rect x="257" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: category_type: irrelevant</title></rect>
-<rect x="421" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: code_dtype: irrelevant</title></rect>
-<rect x="503" y="400" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ImputeMean: columns: strong</title></rect>
-<rect x="585" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: components: irrelevant</title></rect>
-<rect x="667" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="400" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMean: dtype: negligible</title></rect>
-<rect x="831" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: estimators: irrelevant</title></rect>
-<rect x="995" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: field_count: irrelevant</title></rect>
-<rect x="1077" y="400" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMean: missing_ratio: negligible</title></rect>
-<rect x="1159" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: options: irrelevant</title></rect>
-<rect x="1323" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: output_width: irrelevant</title></rect>
-<rect x="1487" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: routes: irrelevant</title></rect>
-<rect x="1569" y="400" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ImputeMean: rows: strong</title></rect>
-<rect x="1651" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: steps: irrelevant</title></rect>
-<rect x="1815" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: text_columns: irrelevant</title></rect>
-<rect x="1897" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: text_length: irrelevant</title></rect>
-<rect x="1979" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="400" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: vocabulary: irrelevant</title></rect>
-<text x="8" y="442" class="label">ImputeMode</text>
-<rect x="175" y="425" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMode: cardinality: negligible</title></rect>
-<rect x="257" y="425" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ImputeMode: categorical_columns: strong</title></rect>
-<rect x="339" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: category_type: irrelevant</title></rect>
-<rect x="421" y="425" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMode: code_dtype: negligible</title></rect>
-<rect x="503" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: columns: irrelevant</title></rect>
-<rect x="585" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: components: irrelevant</title></rect>
-<rect x="667" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: dtype: irrelevant</title></rect>
-<rect x="831" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: estimators: irrelevant</title></rect>
-<rect x="995" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: field_count: irrelevant</title></rect>
-<rect x="1077" y="425" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMode: missing_ratio: negligible</title></rect>
-<rect x="1159" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: options: irrelevant</title></rect>
-<rect x="1323" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: output_width: irrelevant</title></rect>
-<rect x="1487" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: routes: irrelevant</title></rect>
-<rect x="1569" y="425" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ImputeMode: rows: strong</title></rect>
-<rect x="1651" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: steps: irrelevant</title></rect>
-<rect x="1815" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: text_columns: irrelevant</title></rect>
-<rect x="1897" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: text_length: irrelevant</title></rect>
-<rect x="1979" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="425" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: vocabulary: irrelevant</title></rect>
-<text x="8" y="467" class="label">PCA</text>
-<rect x="175" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: cardinality: irrelevant</title></rect>
-<rect x="257" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: category_type: irrelevant</title></rect>
-<rect x="421" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: code_dtype: irrelevant</title></rect>
-<rect x="503" y="450" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>PCA: columns: strong</title></rect>
-<rect x="585" y="450" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>PCA: components: negligible</title></rect>
-<rect x="667" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="450" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>PCA: dtype: strong</title></rect>
-<rect x="831" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: estimators: irrelevant</title></rect>
-<rect x="995" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: field_count: irrelevant</title></rect>
-<rect x="1077" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: options: irrelevant</title></rect>
-<rect x="1323" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: output_width: irrelevant</title></rect>
-<rect x="1487" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: routes: irrelevant</title></rect>
-<rect x="1569" y="450" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>PCA: rows: strong</title></rect>
-<rect x="1651" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: steps: irrelevant</title></rect>
-<rect x="1815" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: text_columns: irrelevant</title></rect>
-<rect x="1897" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: text_length: irrelevant</title></rect>
-<rect x="1979" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="450" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: vocabulary: irrelevant</title></rect>
-<text x="8" y="492" class="label">PowerTransform</text>
-<rect x="175" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: cardinality: irrelevant</title></rect>
-<rect x="257" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: category_type: irrelevant</title></rect>
-<rect x="421" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: code_dtype: irrelevant</title></rect>
-<rect x="503" y="475" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>PowerTransform: columns: strong</title></rect>
-<rect x="585" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: components: irrelevant</title></rect>
-<rect x="667" y="475" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>PowerTransform: constant_ratio: moderate</title></rect>
-<rect x="749" y="475" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>PowerTransform: dtype: strong</title></rect>
-<rect x="831" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: estimators: irrelevant</title></rect>
-<rect x="995" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: field_count: irrelevant</title></rect>
-<rect x="1077" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: options: irrelevant</title></rect>
-<rect x="1323" y="475" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>PowerTransform: outlier_ratio: negligible</title></rect>
-<rect x="1405" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: output_width: irrelevant</title></rect>
-<rect x="1487" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: routes: irrelevant</title></rect>
-<rect x="1569" y="475" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>PowerTransform: rows: strong</title></rect>
-<rect x="1651" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: steps: irrelevant</title></rect>
-<rect x="1815" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: text_columns: irrelevant</title></rect>
-<rect x="1897" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: text_length: irrelevant</title></rect>
-<rect x="1979" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="475" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: vocabulary: irrelevant</title></rect>
-<text x="8" y="517" class="label">QuantileTransform</text>
-<rect x="175" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: cardinality: irrelevant</title></rect>
-<rect x="257" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: category_type: irrelevant</title></rect>
-<rect x="421" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: code_dtype: irrelevant</title></rect>
-<rect x="503" y="500" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>QuantileTransform: columns: strong</title></rect>
-<rect x="585" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: components: irrelevant</title></rect>
-<rect x="667" y="500" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>QuantileTransform: constant_ratio: strong</title></rect>
-<rect x="749" y="500" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>QuantileTransform: dtype: negligible</title></rect>
-<rect x="831" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: estimators: irrelevant</title></rect>
-<rect x="995" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: field_count: irrelevant</title></rect>
-<rect x="1077" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: options: irrelevant</title></rect>
-<rect x="1323" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: output_width: irrelevant</title></rect>
-<rect x="1487" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: routes: irrelevant</title></rect>
-<rect x="1569" y="500" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>QuantileTransform: rows: strong</title></rect>
-<rect x="1651" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: steps: irrelevant</title></rect>
-<rect x="1815" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: text_columns: irrelevant</title></rect>
-<rect x="1897" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: text_length: irrelevant</title></rect>
-<rect x="1979" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="500" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: vocabulary: irrelevant</title></rect>
-<text x="8" y="542" class="label">ReduceEstimators</text>
-<rect x="175" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: cardinality: irrelevant</title></rect>
-<rect x="257" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: category_type: irrelevant</title></rect>
-<rect x="421" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: code_dtype: irrelevant</title></rect>
-<rect x="503" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: columns: irrelevant</title></rect>
-<rect x="585" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: components: irrelevant</title></rect>
-<rect x="667" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="525" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ReduceEstimators: dtype: moderate</title></rect>
-<rect x="831" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="525" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ReduceEstimators: estimators: negligible</title></rect>
-<rect x="995" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: field_count: irrelevant</title></rect>
-<rect x="1077" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: options: irrelevant</title></rect>
-<rect x="1323" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="525" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ReduceEstimators: output_width: strong</title></rect>
-<rect x="1487" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: routes: irrelevant</title></rect>
-<rect x="1569" y="525" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ReduceEstimators: rows: strong</title></rect>
-<rect x="1651" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: steps: irrelevant</title></rect>
-<rect x="1815" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: text_columns: irrelevant</title></rect>
-<rect x="1897" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: text_length: irrelevant</title></rect>
-<rect x="1979" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="525" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: vocabulary: irrelevant</title></rect>
-<text x="8" y="567" class="label">SelectColumns</text>
-<rect x="175" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: cardinality: irrelevant</title></rect>
-<rect x="257" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: category_type: irrelevant</title></rect>
-<rect x="421" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: code_dtype: irrelevant</title></rect>
-<rect x="503" y="550" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>SelectColumns: columns: moderate</title></rect>
-<rect x="585" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: components: irrelevant</title></rect>
-<rect x="667" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: dtype: irrelevant</title></rect>
-<rect x="831" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: estimators: irrelevant</title></rect>
-<rect x="995" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: field_count: irrelevant</title></rect>
-<rect x="1077" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: options: irrelevant</title></rect>
-<rect x="1323" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: output_width: irrelevant</title></rect>
-<rect x="1487" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: routes: irrelevant</title></rect>
-<rect x="1569" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: rows: irrelevant</title></rect>
-<rect x="1651" y="550" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>SelectColumns: selected_fraction: negligible</title></rect>
-<rect x="1733" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: steps: irrelevant</title></rect>
-<rect x="1815" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: text_columns: irrelevant</title></rect>
-<rect x="1897" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: text_length: irrelevant</title></rect>
-<rect x="1979" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="550" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: vocabulary: irrelevant</title></rect>
-<text x="8" y="592" class="label">Sequential</text>
-<rect x="175" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: cardinality: irrelevant</title></rect>
-<rect x="257" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: category_type: irrelevant</title></rect>
-<rect x="421" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: code_dtype: irrelevant</title></rect>
-<rect x="503" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: columns: irrelevant</title></rect>
-<rect x="585" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: components: irrelevant</title></rect>
-<rect x="667" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: dtype: irrelevant</title></rect>
-<rect x="831" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="575" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Sequential: estimators: negligible</title></rect>
-<rect x="995" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: field_count: irrelevant</title></rect>
-<rect x="1077" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: options: irrelevant</title></rect>
-<rect x="1323" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: output_width: irrelevant</title></rect>
-<rect x="1487" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: routes: irrelevant</title></rect>
-<rect x="1569" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: rows: irrelevant</title></rect>
-<rect x="1651" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="575" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Sequential: steps: strong</title></rect>
-<rect x="1815" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: text_columns: irrelevant</title></rect>
-<rect x="1897" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: text_length: irrelevant</title></rect>
-<rect x="1979" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="575" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: vocabulary: irrelevant</title></rect>
-<text x="8" y="617" class="label">ShuffleCategories</text>
-<rect x="175" y="600" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleCategories: cardinality: strong</title></rect>
-<rect x="257" y="600" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleCategories: categorical_columns: strong</title></rect>
-<rect x="339" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: category_type: irrelevant</title></rect>
-<rect x="421" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: code_dtype: irrelevant</title></rect>
-<rect x="503" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: columns: irrelevant</title></rect>
-<rect x="585" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: components: irrelevant</title></rect>
-<rect x="667" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: dtype: irrelevant</title></rect>
-<rect x="831" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="600" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleCategories: estimators: strong</title></rect>
-<rect x="995" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: field_count: irrelevant</title></rect>
-<rect x="1077" y="600" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ShuffleCategories: missing_ratio: moderate</title></rect>
-<rect x="1159" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: options: irrelevant</title></rect>
-<rect x="1323" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: output_width: irrelevant</title></rect>
-<rect x="1487" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: routes: irrelevant</title></rect>
-<rect x="1569" y="600" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleCategories: rows: strong</title></rect>
-<rect x="1651" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: steps: irrelevant</title></rect>
-<rect x="1815" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: text_columns: irrelevant</title></rect>
-<rect x="1897" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: text_length: irrelevant</title></rect>
-<rect x="1979" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="600" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: vocabulary: irrelevant</title></rect>
-<text x="8" y="642" class="label">ShuffleColumns</text>
-<rect x="175" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: cardinality: irrelevant</title></rect>
-<rect x="257" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: category_type: irrelevant</title></rect>
-<rect x="421" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: code_dtype: irrelevant</title></rect>
-<rect x="503" y="625" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleColumns: columns: strong</title></rect>
-<rect x="585" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: components: irrelevant</title></rect>
-<rect x="667" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="625" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ShuffleColumns: dtype: moderate</title></rect>
-<rect x="831" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="625" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleColumns: estimators: strong</title></rect>
-<rect x="995" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: field_count: irrelevant</title></rect>
-<rect x="1077" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: options: irrelevant</title></rect>
-<rect x="1323" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: output_width: irrelevant</title></rect>
-<rect x="1487" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: routes: irrelevant</title></rect>
-<rect x="1569" y="625" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleColumns: rows: strong</title></rect>
-<rect x="1651" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: steps: irrelevant</title></rect>
-<rect x="1815" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: text_columns: irrelevant</title></rect>
-<rect x="1897" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: text_length: irrelevant</title></rect>
-<rect x="1979" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="625" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: vocabulary: irrelevant</title></rect>
-<text x="8" y="667" class="label">Softmax</text>
-<rect x="175" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: cardinality: irrelevant</title></rect>
-<rect x="257" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: category_type: irrelevant</title></rect>
-<rect x="421" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: code_dtype: irrelevant</title></rect>
-<rect x="503" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: columns: irrelevant</title></rect>
-<rect x="585" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: components: irrelevant</title></rect>
-<rect x="667" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="650" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Softmax: dtype: strong</title></rect>
-<rect x="831" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="650" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Softmax: estimators: strong</title></rect>
-<rect x="995" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: field_count: irrelevant</title></rect>
-<rect x="1077" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: options: irrelevant</title></rect>
-<rect x="1323" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="650" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Softmax: output_width: strong</title></rect>
-<rect x="1487" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: routes: irrelevant</title></rect>
-<rect x="1569" y="650" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Softmax: rows: strong</title></rect>
-<rect x="1651" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: steps: irrelevant</title></rect>
-<rect x="1815" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: text_columns: irrelevant</title></rect>
-<rect x="1897" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: text_length: irrelevant</title></rect>
-<rect x="1979" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="650" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: vocabulary: irrelevant</title></rect>
-<text x="8" y="692" class="label">Standardize</text>
-<rect x="175" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: cardinality: irrelevant</title></rect>
-<rect x="257" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: category_type: irrelevant</title></rect>
-<rect x="421" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: code_dtype: irrelevant</title></rect>
-<rect x="503" y="675" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Standardize: columns: strong</title></rect>
-<rect x="585" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: components: irrelevant</title></rect>
-<rect x="667" y="675" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Standardize: constant_ratio: negligible</title></rect>
-<rect x="749" y="675" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Standardize: dtype: negligible</title></rect>
-<rect x="831" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: estimators: irrelevant</title></rect>
-<rect x="995" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: field_count: irrelevant</title></rect>
-<rect x="1077" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: options: irrelevant</title></rect>
-<rect x="1323" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: output_width: irrelevant</title></rect>
-<rect x="1487" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: routes: irrelevant</title></rect>
-<rect x="1569" y="675" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Standardize: rows: strong</title></rect>
-<rect x="1651" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: steps: irrelevant</title></rect>
-<rect x="1815" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: text_columns: irrelevant</title></rect>
-<rect x="1897" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: text_length: irrelevant</title></rect>
-<rect x="1979" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="675" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: vocabulary: irrelevant</title></rect>
-<text x="8" y="717" class="label">StypeDispatch</text>
-<rect x="175" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: cardinality: irrelevant</title></rect>
-<rect x="257" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: category_type: irrelevant</title></rect>
-<rect x="421" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: code_dtype: irrelevant</title></rect>
-<rect x="503" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: columns: irrelevant</title></rect>
-<rect x="585" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: components: irrelevant</title></rect>
-<rect x="667" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: dtype: irrelevant</title></rect>
-<rect x="831" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="700" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>StypeDispatch: estimators: negligible</title></rect>
-<rect x="995" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: field_count: irrelevant</title></rect>
-<rect x="1077" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: options: irrelevant</title></rect>
-<rect x="1323" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: output_width: irrelevant</title></rect>
-<rect x="1487" y="700" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>StypeDispatch: routes: moderate</title></rect>
-<rect x="1569" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: rows: irrelevant</title></rect>
-<rect x="1651" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: steps: irrelevant</title></rect>
-<rect x="1815" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: text_columns: irrelevant</title></rect>
-<rect x="1897" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: text_length: irrelevant</title></rect>
-<rect x="1979" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="700" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: vocabulary: irrelevant</title></rect>
-<text x="8" y="742" class="label">TFIDF</text>
-<rect x="175" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: cardinality: irrelevant</title></rect>
-<rect x="257" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: category_type: irrelevant</title></rect>
-<rect x="421" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: code_dtype: irrelevant</title></rect>
-<rect x="503" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: columns: irrelevant</title></rect>
-<rect x="585" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: components: irrelevant</title></rect>
-<rect x="667" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: dtype: irrelevant</title></rect>
-<rect x="831" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="725" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>TFIDF: estimators: negligible</title></rect>
-<rect x="995" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: field_count: irrelevant</title></rect>
-<rect x="1077" y="725" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>TFIDF: missing_ratio: strong</title></rect>
-<rect x="1159" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: options: irrelevant</title></rect>
-<rect x="1323" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: output_width: irrelevant</title></rect>
-<rect x="1487" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: routes: irrelevant</title></rect>
-<rect x="1569" y="725" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>TFIDF: rows: strong</title></rect>
-<rect x="1651" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: steps: irrelevant</title></rect>
-<rect x="1815" y="725" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>TFIDF: text_columns: strong</title></rect>
-<rect x="1897" y="725" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>TFIDF: text_length: strong</title></rect>
-<rect x="1979" y="725" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="725" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>TFIDF: vocabulary: negligible</title></rect>
-<text x="8" y="767" class="label">TaskDispatch</text>
-<rect x="175" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: cardinality: irrelevant</title></rect>
-<rect x="257" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: categorical_columns: irrelevant</title></rect>
-<rect x="339" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: category_type: irrelevant</title></rect>
-<rect x="421" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: code_dtype: irrelevant</title></rect>
-<rect x="503" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: columns: irrelevant</title></rect>
-<rect x="585" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: components: irrelevant</title></rect>
-<rect x="667" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: dtype: irrelevant</title></rect>
-<rect x="831" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="750" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>TaskDispatch: estimators: negligible</title></rect>
-<rect x="995" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: field_count: irrelevant</title></rect>
-<rect x="1077" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: numerical_columns: irrelevant</title></rect>
-<rect x="1241" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: options: irrelevant</title></rect>
-<rect x="1323" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: output_width: irrelevant</title></rect>
-<rect x="1487" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: routes: irrelevant</title></rect>
-<rect x="1569" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: rows: irrelevant</title></rect>
-<rect x="1651" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: steps: irrelevant</title></rect>
-<rect x="1815" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: text_columns: irrelevant</title></rect>
-<rect x="1897" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: text_length: irrelevant</title></rect>
-<rect x="1979" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="750" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: vocabulary: irrelevant</title></rect>
-<text x="8" y="792" class="label">ToNumerical</text>
-<rect x="175" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: cardinality: irrelevant</title></rect>
-<rect x="257" y="775" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ToNumerical: categorical_columns: negligible</title></rect>
-<rect x="339" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: category_type: irrelevant</title></rect>
-<rect x="421" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: code_dtype: irrelevant</title></rect>
-<rect x="503" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: columns: irrelevant</title></rect>
-<rect x="585" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: components: irrelevant</title></rect>
-<rect x="667" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: constant_ratio: irrelevant</title></rect>
-<rect x="749" y="775" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ToNumerical: dtype: negligible</title></rect>
-<rect x="831" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: embedding_dim: irrelevant</title></rect>
-<rect x="913" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: estimators: irrelevant</title></rect>
-<rect x="995" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: field_count: irrelevant</title></rect>
-<rect x="1077" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: missing_ratio: irrelevant</title></rect>
-<rect x="1159" y="775" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ToNumerical: numerical_columns: moderate</title></rect>
-<rect x="1241" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: options: irrelevant</title></rect>
-<rect x="1323" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: outlier_ratio: irrelevant</title></rect>
-<rect x="1405" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: output_width: irrelevant</title></rect>
-<rect x="1487" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: routes: irrelevant</title></rect>
-<rect x="1569" y="775" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ToNumerical: rows: strong</title></rect>
-<rect x="1651" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: selected_fraction: irrelevant</title></rect>
-<rect x="1733" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: steps: irrelevant</title></rect>
-<rect x="1815" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: text_columns: irrelevant</title></rect>
-<rect x="1897" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: text_length: irrelevant</title></rect>
-<rect x="1979" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: unseen_ratio: irrelevant</title></rect>
-<rect x="2061" y="775" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: vocabulary: irrelevant</title></rect>
+<text x="12" y="24" class="title">GPU Processor runtime sensitivity by input characteristic</text>
+<text x="12" y="48" class="legend">Red (strong): slowest median is ≥2x fastest, or ≥1.25x with Δ ≥1 ms.</text>
+<text x="12" y="68" class="legend">Grey (negligible): Δ ≤ max(15% of fastest median, 0.03 ms).</text>
+<text x="12" y="88" class="legend">Yellow (moderate): between strong and negligible. White: irrelevant or not measured on GPU.</text>
+<text x="12" y="108" class="legend">Color measures runtime sensitivity, not optimization priority.</text>
+<text x="216.0" y="222" class="label" text-anchor="start" transform="rotate(-55 216.0 222)">cardinality</text>
+<text x="298.0" y="222" class="label" text-anchor="start" transform="rotate(-55 298.0 222)">categorical_columns</text>
+<text x="380.0" y="222" class="label" text-anchor="start" transform="rotate(-55 380.0 222)">code_dtype</text>
+<text x="462.0" y="222" class="label" text-anchor="start" transform="rotate(-55 462.0 222)">columns</text>
+<text x="544.0" y="222" class="label" text-anchor="start" transform="rotate(-55 544.0 222)">components</text>
+<text x="626.0" y="222" class="label" text-anchor="start" transform="rotate(-55 626.0 222)">constant_ratio</text>
+<text x="708.0" y="222" class="label" text-anchor="start" transform="rotate(-55 708.0 222)">dtype</text>
+<text x="790.0" y="222" class="label" text-anchor="start" transform="rotate(-55 790.0 222)">estimators</text>
+<text x="872.0" y="222" class="label" text-anchor="start" transform="rotate(-55 872.0 222)">field_count</text>
+<text x="954.0" y="222" class="label" text-anchor="start" transform="rotate(-55 954.0 222)">missing_ratio</text>
+<text x="1036.0" y="222" class="label" text-anchor="start" transform="rotate(-55 1036.0 222)">numerical_columns</text>
+<text x="1118.0" y="222" class="label" text-anchor="start" transform="rotate(-55 1118.0 222)">options</text>
+<text x="1200.0" y="222" class="label" text-anchor="start" transform="rotate(-55 1200.0 222)">outlier_ratio</text>
+<text x="1282.0" y="222" class="label" text-anchor="start" transform="rotate(-55 1282.0 222)">output_width</text>
+<text x="1364.0" y="222" class="label" text-anchor="start" transform="rotate(-55 1364.0 222)">routes</text>
+<text x="1446.0" y="222" class="label" text-anchor="start" transform="rotate(-55 1446.0 222)">rows</text>
+<text x="1528.0" y="222" class="label" text-anchor="start" transform="rotate(-55 1528.0 222)">selected_fraction</text>
+<text x="1610.0" y="222" class="label" text-anchor="start" transform="rotate(-55 1610.0 222)">steps</text>
+<text x="1692.0" y="222" class="label" text-anchor="start" transform="rotate(-55 1692.0 222)">unseen_ratio</text>
+<text x="8" y="247" class="label">AddCalendarFields</text>
+<rect x="175" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="230" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AddCalendarFields: columns: strong on GPU</title></rect>
+<rect x="503" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="230" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AddCalendarFields: field_count: strong on GPU</title></rect>
+<rect x="913" y="230" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AddCalendarFields: missing_ratio: negligible on GPU</title></rect>
+<rect x="995" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="230" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AddCalendarFields: rows: strong on GPU</title></rect>
+<rect x="1487" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="230" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AddCalendarFields: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="272" class="label">AlignCategories</text>
+<rect x="175" y="255" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: cardinality: negligible on GPU</title></rect>
+<rect x="257" y="255" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>AlignCategories: categorical_columns: strong on GPU</title></rect>
+<rect x="339" y="255" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: code_dtype: negligible on GPU</title></rect>
+<rect x="421" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="255" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: estimators: negligible on GPU</title></rect>
+<rect x="831" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="255" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: missing_ratio: negligible on GPU</title></rect>
+<rect x="995" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="255" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: rows: negligible on GPU</title></rect>
+<rect x="1487" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="255" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>AlignCategories: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="255" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>AlignCategories: unseen_ratio: negligible on GPU</title></rect>
+<text x="8" y="297" class="label">Callable</text>
+<rect x="175" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="280" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Callable: rows: negligible on GPU</title></rect>
+<rect x="1487" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="280" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Callable: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="322" class="label">Choice</text>
+<rect x="175" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="305" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Choice: estimators: strong on GPU</title></rect>
+<rect x="831" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="305" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Choice: options: strong on GPU</title></rect>
+<rect x="1159" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="305" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Choice: rows: negligible on GPU</title></rect>
+<rect x="1487" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="305" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Choice: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="347" class="label">Clip</text>
+<rect x="175" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="330" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>Clip: columns: moderate on GPU</title></rect>
+<rect x="503" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="330" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Clip: dtype: negligible on GPU</title></rect>
+<rect x="749" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="330" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Clip: rows: negligible on GPU</title></rect>
+<rect x="1487" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="330" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Clip: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="372" class="label">ClipQuantiles</text>
+<rect x="175" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="355" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ClipQuantiles: columns: moderate on GPU</title></rect>
+<rect x="503" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="355" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ClipQuantiles: constant_ratio: moderate on GPU</title></rect>
+<rect x="667" y="355" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ClipQuantiles: dtype: negligible on GPU</title></rect>
+<rect x="749" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="355" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ClipQuantiles: rows: moderate on GPU</title></rect>
+<rect x="1487" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="355" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipQuantiles: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="397" class="label">ClipSigma</text>
+<rect x="175" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="380" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ClipSigma: columns: negligible on GPU</title></rect>
+<rect x="503" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="380" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ClipSigma: dtype: negligible on GPU</title></rect>
+<rect x="749" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="380" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ClipSigma: outlier_ratio: negligible on GPU</title></rect>
+<rect x="1241" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="380" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ClipSigma: rows: negligible on GPU</title></rect>
+<rect x="1487" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="380" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ClipSigma: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="422" class="label">DropConstantColumns</text>
+<rect x="175" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="405" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>DropConstantColumns: columns: negligible on GPU</title></rect>
+<rect x="503" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="405" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>DropConstantColumns: constant_ratio: negligible on GPU</title></rect>
+<rect x="667" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="405" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>DropConstantColumns: estimators: strong on GPU</title></rect>
+<rect x="831" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="405" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>DropConstantColumns: rows: negligible on GPU</title></rect>
+<rect x="1487" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="405" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>DropConstantColumns: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="447" class="label">EmbedText</text>
+<rect x="175" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: rows: irrelevant/not measured on GPU</title></rect>
+<rect x="1487" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="430" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>EmbedText: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="472" class="label">Identity</text>
+<rect x="175" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="455" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Identity: rows: negligible on GPU</title></rect>
+<rect x="1487" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="455" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Identity: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="497" class="label">ImputeMean</text>
+<rect x="175" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="480" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ImputeMean: columns: moderate on GPU</title></rect>
+<rect x="503" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="480" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMean: dtype: negligible on GPU</title></rect>
+<rect x="749" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="480" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMean: missing_ratio: negligible on GPU</title></rect>
+<rect x="995" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="480" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMean: rows: negligible on GPU</title></rect>
+<rect x="1487" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="480" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMean: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="522" class="label">ImputeMode</text>
+<rect x="175" y="505" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMode: cardinality: negligible on GPU</title></rect>
+<rect x="257" y="505" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ImputeMode: categorical_columns: strong on GPU</title></rect>
+<rect x="339" y="505" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMode: code_dtype: negligible on GPU</title></rect>
+<rect x="421" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="505" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMode: missing_ratio: negligible on GPU</title></rect>
+<rect x="995" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="505" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ImputeMode: rows: negligible on GPU</title></rect>
+<rect x="1487" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="505" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ImputeMode: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="547" class="label">PCA</text>
+<rect x="175" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="530" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>PCA: columns: strong on GPU</title></rect>
+<rect x="503" y="530" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>PCA: components: negligible on GPU</title></rect>
+<rect x="585" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="530" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>PCA: dtype: strong on GPU</title></rect>
+<rect x="749" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="530" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>PCA: rows: strong on GPU</title></rect>
+<rect x="1487" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="530" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PCA: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="572" class="label">PowerTransform</text>
+<rect x="175" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="555" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>PowerTransform: columns: negligible on GPU</title></rect>
+<rect x="503" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="555" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>PowerTransform: constant_ratio: negligible on GPU</title></rect>
+<rect x="667" y="555" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>PowerTransform: dtype: negligible on GPU</title></rect>
+<rect x="749" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="555" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>PowerTransform: outlier_ratio: negligible on GPU</title></rect>
+<rect x="1241" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="555" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>PowerTransform: rows: negligible on GPU</title></rect>
+<rect x="1487" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="555" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>PowerTransform: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="597" class="label">QuantileTransform</text>
+<rect x="175" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="580" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>QuantileTransform: columns: strong on GPU</title></rect>
+<rect x="503" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="580" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>QuantileTransform: constant_ratio: negligible on GPU</title></rect>
+<rect x="667" y="580" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>QuantileTransform: dtype: negligible on GPU</title></rect>
+<rect x="749" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="580" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>QuantileTransform: rows: moderate on GPU</title></rect>
+<rect x="1487" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="580" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>QuantileTransform: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="622" class="label">ReduceEstimators</text>
+<rect x="175" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="605" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ReduceEstimators: dtype: negligible on GPU</title></rect>
+<rect x="749" y="605" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ReduceEstimators: estimators: negligible on GPU</title></rect>
+<rect x="831" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="605" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ReduceEstimators: output_width: strong on GPU</title></rect>
+<rect x="1323" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="605" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ReduceEstimators: rows: moderate on GPU</title></rect>
+<rect x="1487" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="605" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ReduceEstimators: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="647" class="label">SelectColumns</text>
+<rect x="175" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="630" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>SelectColumns: columns: moderate on GPU</title></rect>
+<rect x="503" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: rows: irrelevant/not measured on GPU</title></rect>
+<rect x="1487" y="630" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>SelectColumns: selected_fraction: negligible on GPU</title></rect>
+<rect x="1569" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="630" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>SelectColumns: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="672" class="label">Sequential</text>
+<rect x="175" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="655" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Sequential: estimators: negligible on GPU</title></rect>
+<rect x="831" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: rows: irrelevant/not measured on GPU</title></rect>
+<rect x="1487" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="655" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Sequential: steps: strong on GPU</title></rect>
+<rect x="1651" y="655" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Sequential: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="697" class="label">ShuffleCategories</text>
+<rect x="175" y="680" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleCategories: cardinality: strong on GPU</title></rect>
+<rect x="257" y="680" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleCategories: categorical_columns: strong on GPU</title></rect>
+<rect x="339" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="680" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleCategories: estimators: strong on GPU</title></rect>
+<rect x="831" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="680" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ShuffleCategories: missing_ratio: negligible on GPU</title></rect>
+<rect x="995" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="680" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ShuffleCategories: rows: negligible on GPU</title></rect>
+<rect x="1487" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="680" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleCategories: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="722" class="label">ShuffleColumns</text>
+<rect x="175" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="705" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ShuffleColumns: columns: moderate on GPU</title></rect>
+<rect x="503" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="705" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ShuffleColumns: dtype: negligible on GPU</title></rect>
+<rect x="749" y="705" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>ShuffleColumns: estimators: strong on GPU</title></rect>
+<rect x="831" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="705" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ShuffleColumns: rows: negligible on GPU</title></rect>
+<rect x="1487" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="705" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ShuffleColumns: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="747" class="label">Softmax</text>
+<rect x="175" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="730" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Softmax: dtype: strong on GPU</title></rect>
+<rect x="749" y="730" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>Softmax: estimators: moderate on GPU</title></rect>
+<rect x="831" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="730" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Softmax: output_width: strong on GPU</title></rect>
+<rect x="1323" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="730" width="80" height="23" fill="#d9534f" stroke="#ddd"><title>Softmax: rows: strong on GPU</title></rect>
+<rect x="1487" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="730" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Softmax: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="772" class="label">Standardize</text>
+<rect x="175" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="755" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>Standardize: columns: moderate on GPU</title></rect>
+<rect x="503" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="755" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Standardize: constant_ratio: negligible on GPU</title></rect>
+<rect x="667" y="755" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Standardize: dtype: negligible on GPU</title></rect>
+<rect x="749" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="755" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>Standardize: rows: negligible on GPU</title></rect>
+<rect x="1487" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="755" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>Standardize: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="797" class="label">StypeDispatch</text>
+<rect x="175" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="780" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>StypeDispatch: estimators: negligible on GPU</title></rect>
+<rect x="831" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="780" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>StypeDispatch: routes: moderate on GPU</title></rect>
+<rect x="1405" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: rows: irrelevant/not measured on GPU</title></rect>
+<rect x="1487" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="780" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>StypeDispatch: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="822" class="label">TFIDF</text>
+<rect x="175" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: rows: irrelevant/not measured on GPU</title></rect>
+<rect x="1487" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="805" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TFIDF: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="847" class="label">TaskDispatch</text>
+<rect x="175" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: categorical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="339" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="749" y="830" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>TaskDispatch: estimators: negligible on GPU</title></rect>
+<rect x="831" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: numerical_columns: irrelevant/not measured on GPU</title></rect>
+<rect x="1077" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: rows: irrelevant/not measured on GPU</title></rect>
+<rect x="1487" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="830" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>TaskDispatch: unseen_ratio: irrelevant/not measured on GPU</title></rect>
+<text x="8" y="872" class="label">ToNumerical</text>
+<rect x="175" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: cardinality: irrelevant/not measured on GPU</title></rect>
+<rect x="257" y="855" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ToNumerical: categorical_columns: negligible on GPU</title></rect>
+<rect x="339" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: code_dtype: irrelevant/not measured on GPU</title></rect>
+<rect x="421" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: columns: irrelevant/not measured on GPU</title></rect>
+<rect x="503" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: components: irrelevant/not measured on GPU</title></rect>
+<rect x="585" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: constant_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="667" y="855" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ToNumerical: dtype: negligible on GPU</title></rect>
+<rect x="749" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: estimators: irrelevant/not measured on GPU</title></rect>
+<rect x="831" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: field_count: irrelevant/not measured on GPU</title></rect>
+<rect x="913" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: missing_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="995" y="855" width="80" height="23" fill="#f0c84b" stroke="#ddd"><title>ToNumerical: numerical_columns: moderate on GPU</title></rect>
+<rect x="1077" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: options: irrelevant/not measured on GPU</title></rect>
+<rect x="1159" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: outlier_ratio: irrelevant/not measured on GPU</title></rect>
+<rect x="1241" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: output_width: irrelevant/not measured on GPU</title></rect>
+<rect x="1323" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: routes: irrelevant/not measured on GPU</title></rect>
+<rect x="1405" y="855" width="80" height="23" fill="#f2f2f2" stroke="#ddd"><title>ToNumerical: rows: negligible on GPU</title></rect>
+<rect x="1487" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: selected_fraction: irrelevant/not measured on GPU</title></rect>
+<rect x="1569" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: steps: irrelevant/not measured on GPU</title></rect>
+<rect x="1651" y="855" width="80" height="23" fill="#ffffff" stroke="#ddd"><title>ToNumerical: unseen_ratio: irrelevant/not measured on GPU</title></rect>
 </svg>

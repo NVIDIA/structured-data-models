@@ -1,0 +1,2396 @@
+{
+  "generated_at": "2026-08-07T09:53:07Z",
+  "profiler": {
+    "name": "NVIDIA Nsight Systems",
+    "version": "2026.1.3.425-261338342291v0",
+    "trace": [
+      "cuda",
+      "nvtx"
+    ],
+    "cpu_sampling": false,
+    "context_switch_tracing": false,
+    "symbol_resolution": false,
+    "warmups": 3,
+    "iterations": 10,
+    "filtering": "Nsight statistics filtered to the outer per-Processor NVTX range",
+    "caution": "Nsight instrumentation materially increases wall time; use the unprofiled baseline for latency and the trace for call counts and attribution."
+  },
+  "hardware": {
+    "gpu": "NVIDIA L4",
+    "total_memory_bytes": 23659151360,
+    "compute_capability": "8.9",
+    "torch": "2.13.0+cu130",
+    "cuda": "13.0"
+  },
+  "scenarios": {
+    "align_categories": {
+      "processor": "AlignCategories",
+      "operation": "fit_transform",
+      "parameters": {
+        "rows": 10000,
+        "categorical_columns": 32,
+        "cardinality": 1024
+      },
+      "iterations": 10,
+      "unprofiled_baseline": {
+        "median_ms": 10.939632542431355,
+        "p95_ms": 11.251385044306517,
+        "minimum_ms": 10.764218866825104,
+        "cuda_event_median_ms": 10.922975540161133,
+        "cuda_enqueue_median_ms": 10.897901840507984,
+        "cuda_sync_wait_median_ms": 0.016120262444019318,
+        "peak_cuda_bytes": 11617280,
+        "repetitions": 15
+      },
+      "profiled_timing": {
+        "wall_median_ms": 19.524983130395412,
+        "wall_p95_ms": 27.84625105559826,
+        "cuda_event_median_ms": 19.498896598815918,
+        "peak_cuda_bytes": 3392512,
+        "peak_cuda_delta_bytes": 1849856,
+        "wall_samples_ms": [
+          27.05913782119751,
+          18.531681038439274,
+          19.16713174432516,
+          23.08085933327675,
+          28.490252792835236,
+          19.882834516465664,
+          18.789525143802166,
+          18.448817543685436,
+          18.47940031439066,
+          23.8699521869421
+        ],
+        "cuda_event_samples_ms": [
+          27.030559539794922,
+          18.505088806152344,
+          19.141088485717773,
+          23.05401611328125,
+          28.45599937438965,
+          19.856704711914062,
+          18.762176513671875,
+          18.423328399658203,
+          18.454816818237305,
+          23.83363151550293
+        ]
+      },
+      "instrumentation_overhead_ratio": 1.7847933241508993,
+      "nsight": {
+        "nvtx_total_ms": 216.443062,
+        "nvtx_per_iteration_ms": 21.6443062,
+        "cuda_api_total_time_ms": 64.380633,
+        "cuda_api_total_calls": 16848,
+        "cuda_api_calls_per_iteration": 1684.8,
+        "kernel_total_time_ms": 17.913497,
+        "kernel_time_per_iteration_ms": 1.7913497,
+        "kernel_instances_total": 8050,
+        "kernel_instances_per_iteration": 805,
+        "selected_cuda_apis": [
+          {
+            "name": "cudaLaunchKernel",
+            "calls_total": 8050,
+            "calls_per_iteration": 805,
+            "total_time_ms": 56.823873,
+            "time_per_iteration_ms": 5.6823873,
+            "api_time_percent": 88.3
+          },
+          {
+            "name": "cudaMemcpyAsync",
+            "calls_total": 320,
+            "calls_per_iteration": 32,
+            "total_time_ms": 2.923686,
+            "time_per_iteration_ms": 0.2923686,
+            "api_time_percent": 4.5
+          },
+          {
+            "name": "cudaStreamSynchronize",
+            "calls_total": 320,
+            "calls_per_iteration": 32,
+            "total_time_ms": 1.88484,
+            "time_per_iteration_ms": 0.188484,
+            "api_time_percent": 2.9
+          }
+        ],
+        "top_gpu_kernels": [
+          {
+            "Time (%)": 15.5,
+            "Total Time (ns)": 2776824,
+            "Instances": 640,
+            "Avg (ns)": 4338.8,
+            "Med (ns)": 4384.0,
+            "Min (ns)": 4095,
+            "Max (ns)": 4480,
+            "StdDev (ns)": 91.8,
+            "Name": "void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatter_gather_internal_kernel<(bool)0, at::native::OpaqueType<(int)4>, long>::operator ()<at::native::TensorAssign>(at::TensorIterator &, long, long, long, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 8.9,
+            "Total Time (ns)": 1603101,
+            "Instances": 640,
+            "Avg (ns)": 2504.8,
+            "Med (ns)": 2496.0,
+            "Min (ns)": 2464,
+            "Max (ns)": 2560,
+            "StdDev (ns)": 21.3,
+            "Name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(int) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)"
+          },
+          {
+            "Time (%)": 8.4,
+            "Total Time (ns)": 1513082,
+            "Instances": 320,
+            "Avg (ns)": 4728.4,
+            "Med (ns)": 4736.0,
+            "Min (ns)": 4671,
+            "Max (ns)": 4800,
+            "StdDev (ns)": 25.1,
+            "Name": "void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatter_gather_internal_kernel<(bool)1, int, long>::operator ()<at::native::ReduceAdd>(at::TensorIterator &, long, long, long, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 8.0,
+            "Total Time (ns)": 1439323,
+            "Instances": 320,
+            "Avg (ns)": 4497.9,
+            "Med (ns)": 4512.0,
+            "Min (ns)": 4448,
+            "Max (ns)": 4544,
+            "StdDev (ns)": 19.0,
+            "Name": "void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatter_gather_internal_kernel<(bool)1, at::native::OpaqueType<(int)4>, long>::operator ()<at::native::TensorAssign>(at::TensorIterator &, long, long, long, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 7.4,
+            "Total Time (ns)": 1328191,
+            "Instances": 1290,
+            "Avg (ns)": 1029.6,
+            "Med (ns)": 1024.0,
+            "Min (ns)": 992,
+            "Max (ns)": 1952,
+            "StdDev (ns)": 78.5,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<int>, std::array<char *, (unsigned long)1>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 7.3,
+            "Total Time (ns)": 1308954,
+            "Instances": 320,
+            "Avg (ns)": 4090.5,
+            "Med (ns)": 4096.0,
+            "Min (ns)": 4032,
+            "Max (ns)": 4160,
+            "StdDev (ns)": 21.8,
+            "Name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+          },
+          {
+            "Time (%)": 7.0,
+            "Total Time (ns)": 1246080,
+            "Instances": 640,
+            "Avg (ns)": 1947.0,
+            "Med (ns)": 1952.0,
+            "Min (ns)": 1888,
+            "Max (ns)": 1984,
+            "StdDev (ns)": 21.7,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::<unnamed>::where_kernel_impl(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(bool, unsigned int, unsigned int) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 4.4,
+            "Total Time (ns)": 795581,
+            "Instances": 320,
+            "Avg (ns)": 2486.2,
+            "Med (ns)": 2496.0,
+            "Min (ns)": 2463,
+            "Max (ns)": 2528,
+            "StdDev (ns)": 15.4,
+            "Name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)"
+          },
+          {
+            "Time (%)": 4.4,
+            "Total Time (ns)": 789728,
+            "Instances": 320,
+            "Avg (ns)": 2467.9,
+            "Med (ns)": 2464.0,
+            "Min (ns)": 2432,
+            "Max (ns)": 2496,
+            "StdDev (ns)": 15.4,
+            "Name": "void at_cuda_detail::cub::detail::select::DeviceSelectSweepKernel<at_cuda_detail::cub::detail::select::policy_hub<long, bool, int, (bool)0, (at_cuda_detail::cub::SelectImpl)0>::Policy1000, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::counting_iterator<long, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::transform_iterator<at::native::<unnamed>::NonZeroOp<bool>, const bool *, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, long *, int *, at_cuda_detail::cub::ScanTileState<int, (bool)1>, at_cuda_detail::cub::NullType, at_cuda_detail::cub::NullType, int, at_cuda_detail::cub::detail::select::streaming_context_t<long, (bool)1>, (at_cuda_detail::cub::SelectImpl)0>(T2, T3, T4, T5, T6, T7, T8, T9, int, T10, at_cuda_detail::cub::detail::vsmem_t)"
+          },
+          {
+            "Time (%)": 4.0,
+            "Total Time (ns)": 712320,
+            "Instances": 320,
+            "Avg (ns)": 2226.0,
+            "Med (ns)": 2240.0,
+            "Min (ns)": 2176,
+            "Max (ns)": 2272,
+            "StdDev (ns)": 16.5,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<void at::native::compare_scalar_kernel<int>(at::TensorIteratorBase &, at::native::<unnamed>::OpType, T1)::[lambda(int) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          }
+        ],
+        "gpu_memory_operations_by_time": [
+          {
+            "Time (%)": 100.0,
+            "Total Time (ns)": 323678,
+            "Count": 320,
+            "Avg (ns)": 1011.5,
+            "Med (ns)": 992.0,
+            "Min (ns)": 960,
+            "Max (ns)": 1312,
+            "StdDev (ns)": 42.4,
+            "Operation": "[CUDA memcpy Device-to-Host]"
+          }
+        ],
+        "gpu_memory_operations_by_size": [
+          {
+            "Total (MB)": 0.001,
+            "Count": 320,
+            "Avg (MB)": 0.000,
+            "Med (MB)": 0.000,
+            "Min (MB)": 0.000,
+            "Max (MB)": 0.000,
+            "StdDev (MB)": 0.000,
+            "Operation": "[CUDA memcpy Device-to-Host]"
+          }
+        ],
+        "cuda_api_summary": [
+          {
+            "Time (%)": 88.3,
+            "Total Time (ns)": 56823873,
+            "Num Calls": 8050,
+            "Avg (ns)": 7058.9,
+            "Med (ns)": 5860.0,
+            "Min (ns)": 3700,
+            "Max (ns)": 3038042,
+            "StdDev (ns)": 33992.9,
+            "Name": "cudaLaunchKernel"
+          },
+          {
+            "Time (%)": 4.5,
+            "Total Time (ns)": 2923686,
+            "Num Calls": 320,
+            "Avg (ns)": 9136.5,
+            "Med (ns)": 8570.0,
+            "Min (ns)": 7670,
+            "Max (ns)": 34561,
+            "StdDev (ns)": 2226.0,
+            "Name": "cudaMemcpyAsync"
+          },
+          {
+            "Time (%)": 3.8,
+            "Total Time (ns)": 2426356,
+            "Num Calls": 8050,
+            "Avg (ns)": 301.4,
+            "Med (ns)": 270.0,
+            "Min (ns)": 120,
+            "Max (ns)": 19061,
+            "StdDev (ns)": 321.8,
+            "Name": "cuKernelGetName"
+          },
+          {
+            "Time (%)": 2.9,
+            "Total Time (ns)": 1884840,
+            "Num Calls": 320,
+            "Avg (ns)": 5890.1,
+            "Med (ns)": 5591.0,
+            "Min (ns)": 4510,
+            "Max (ns)": 35721,
+            "StdDev (ns)": 2569.3,
+            "Name": "cudaStreamSynchronize"
+          },
+          {
+            "Time (%)": 0.2,
+            "Total Time (ns)": 109063,
+            "Num Calls": 20,
+            "Avg (ns)": 5453.1,
+            "Med (ns)": 4960.0,
+            "Min (ns)": 3260,
+            "Max (ns)": 16130,
+            "StdDev (ns)": 2873.8,
+            "Name": "cudaEventRecordWithFlags"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 73304,
+            "Num Calls": 20,
+            "Avg (ns)": 3665.2,
+            "Med (ns)": 3005.0,
+            "Min (ns)": 1251,
+            "Max (ns)": 17491,
+            "StdDev (ns)": 3700.4,
+            "Name": "cudaEventCreateWithFlags"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 66961,
+            "Num Calls": 10,
+            "Avg (ns)": 6696.1,
+            "Med (ns)": 6195.0,
+            "Min (ns)": 5690,
+            "Max (ns)": 8510,
+            "StdDev (ns)": 1017.0,
+            "Name": "cudaDeviceSynchronize"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 31421,
+            "Num Calls": 20,
+            "Avg (ns)": 1571.0,
+            "Med (ns)": 1595.0,
+            "Min (ns)": 680,
+            "Max (ns)": 3110,
+            "StdDev (ns)": 803.1,
+            "Name": "cudaEventQuery"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 22170,
+            "Num Calls": 18,
+            "Avg (ns)": 1231.7,
+            "Med (ns)": 1370.0,
+            "Min (ns)": 450,
+            "Max (ns)": 2840,
+            "StdDev (ns)": 675.2,
+            "Name": "cudaEventDestroy"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 18959,
+            "Num Calls": 20,
+            "Avg (ns)": 948.0,
+            "Med (ns)": 825.0,
+            "Min (ns)": 480,
+            "Max (ns)": 2850,
+            "StdDev (ns)": 540.4,
+            "Name": "cudaStreamIsCapturing"
+          }
+        ],
+        "gpu_kernel_summary": [
+          {
+            "Time (%)": 15.5,
+            "Total Time (ns)": 2776824,
+            "Instances": 640,
+            "Avg (ns)": 4338.8,
+            "Med (ns)": 4384.0,
+            "Min (ns)": 4095,
+            "Max (ns)": 4480,
+            "StdDev (ns)": 91.8,
+            "Name": "void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatter_gather_internal_kernel<(bool)0, at::native::OpaqueType<(int)4>, long>::operator ()<at::native::TensorAssign>(at::TensorIterator &, long, long, long, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 8.9,
+            "Total Time (ns)": 1603101,
+            "Instances": 640,
+            "Avg (ns)": 2504.8,
+            "Med (ns)": 2496.0,
+            "Min (ns)": 2464,
+            "Max (ns)": 2560,
+            "StdDev (ns)": 21.3,
+            "Name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(int) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)"
+          },
+          {
+            "Time (%)": 8.4,
+            "Total Time (ns)": 1513082,
+            "Instances": 320,
+            "Avg (ns)": 4728.4,
+            "Med (ns)": 4736.0,
+            "Min (ns)": 4671,
+            "Max (ns)": 4800,
+            "StdDev (ns)": 25.1,
+            "Name": "void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatter_gather_internal_kernel<(bool)1, int, long>::operator ()<at::native::ReduceAdd>(at::TensorIterator &, long, long, long, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 8.0,
+            "Total Time (ns)": 1439323,
+            "Instances": 320,
+            "Avg (ns)": 4497.9,
+            "Med (ns)": 4512.0,
+            "Min (ns)": 4448,
+            "Max (ns)": 4544,
+            "StdDev (ns)": 19.0,
+            "Name": "void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatter_gather_internal_kernel<(bool)1, at::native::OpaqueType<(int)4>, long>::operator ()<at::native::TensorAssign>(at::TensorIterator &, long, long, long, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 7.4,
+            "Total Time (ns)": 1328191,
+            "Instances": 1290,
+            "Avg (ns)": 1029.6,
+            "Med (ns)": 1024.0,
+            "Min (ns)": 992,
+            "Max (ns)": 1952,
+            "StdDev (ns)": 78.5,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<int>, std::array<char *, (unsigned long)1>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 7.3,
+            "Total Time (ns)": 1308954,
+            "Instances": 320,
+            "Avg (ns)": 4090.5,
+            "Med (ns)": 4096.0,
+            "Min (ns)": 4032,
+            "Max (ns)": 4160,
+            "StdDev (ns)": 21.8,
+            "Name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+          },
+          {
+            "Time (%)": 7.0,
+            "Total Time (ns)": 1246080,
+            "Instances": 640,
+            "Avg (ns)": 1947.0,
+            "Med (ns)": 1952.0,
+            "Min (ns)": 1888,
+            "Max (ns)": 1984,
+            "StdDev (ns)": 21.7,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::<unnamed>::where_kernel_impl(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(bool, unsigned int, unsigned int) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 4.4,
+            "Total Time (ns)": 795581,
+            "Instances": 320,
+            "Avg (ns)": 2486.2,
+            "Med (ns)": 2496.0,
+            "Min (ns)": 2463,
+            "Max (ns)": 2528,
+            "StdDev (ns)": 15.4,
+            "Name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)"
+          },
+          {
+            "Time (%)": 4.4,
+            "Total Time (ns)": 789728,
+            "Instances": 320,
+            "Avg (ns)": 2467.9,
+            "Med (ns)": 2464.0,
+            "Min (ns)": 2432,
+            "Max (ns)": 2496,
+            "StdDev (ns)": 15.4,
+            "Name": "void at_cuda_detail::cub::detail::select::DeviceSelectSweepKernel<at_cuda_detail::cub::detail::select::policy_hub<long, bool, int, (bool)0, (at_cuda_detail::cub::SelectImpl)0>::Policy1000, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::counting_iterator<long, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::transform_iterator<at::native::<unnamed>::NonZeroOp<bool>, const bool *, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, long *, int *, at_cuda_detail::cub::ScanTileState<int, (bool)1>, at_cuda_detail::cub::NullType, at_cuda_detail::cub::NullType, int, at_cuda_detail::cub::detail::select::streaming_context_t<long, (bool)1>, (at_cuda_detail::cub::SelectImpl)0>(T2, T3, T4, T5, T6, T7, T8, T9, int, T10, at_cuda_detail::cub::detail::vsmem_t)"
+          },
+          {
+            "Time (%)": 4.0,
+            "Total Time (ns)": 712320,
+            "Instances": 320,
+            "Avg (ns)": 2226.0,
+            "Med (ns)": 2240.0,
+            "Min (ns)": 2176,
+            "Max (ns)": 2272,
+            "StdDev (ns)": 16.5,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<void at::native::compare_scalar_kernel<int>(at::TensorIteratorBase &, at::native::<unnamed>::OpType, T1)::[lambda(int) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 3.7,
+            "Total Time (ns)": 658688,
+            "Instances": 320,
+            "Avg (ns)": 2058.4,
+            "Med (ns)": 2048.0,
+            "Min (ns)": 2016,
+            "Max (ns)": 2112,
+            "StdDev (ns)": 17.2,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(int) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 3.4,
+            "Total Time (ns)": 614141,
+            "Instances": 320,
+            "Avg (ns)": 1919.2,
+            "Med (ns)": 1920.0,
+            "Min (ns)": 1887,
+            "Max (ns)": 1952,
+            "StdDev (ns)": 12.9,
+            "Name": "void at_cuda_detail::cub::detail::reduce::DeviceReduceSingleTileKernel<at_cuda_detail::cub::detail::reduce::policy_hub<int, unsigned long long, cuda::std::__4::plus<void>>::Policy1000, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::transform_iterator<at::native::<unnamed>::NonZeroOp<bool>, const bool *, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, int *, unsigned long long, cuda::std::__4::plus<void>, int, int, cuda::std::__4::__identity>(T2, T3, T4, T5, T6, T8)"
+          },
+          {
+            "Time (%)": 3.3,
+            "Total Time (ns)": 598432,
+            "Instances": 320,
+            "Avg (ns)": 1870.1,
+            "Med (ns)": 1856.0,
+            "Min (ns)": 1824,
+            "Max (ns)": 1920,
+            "StdDev (ns)": 16.3,
+            "Name": "void at_cuda_detail::cub::detail::scan::DeviceScanKernel<at_cuda_detail::cub::detail::scan::policy_hub<int, int, int, unsigned int, std::plus<int>>::Policy1000, const int *, int *, at_cuda_detail::cub::ScanTileState<int, (bool)1>, std::plus<int>, at_cuda_detail::cub::NullType, unsigned int, int, (bool)0, at_cuda_detail::cub::NullType>(T2, T3, T4, int, T5, T6, T7)"
+          },
+          {
+            "Time (%)": 3.2,
+            "Total Time (ns)": 572479,
+            "Instances": 320,
+            "Avg (ns)": 1789.0,
+            "Med (ns)": 1792.0,
+            "Min (ns)": 1759,
+            "Max (ns)": 1824,
+            "StdDev (ns)": 12.1,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::<unnamed>::launch_clamp_scalar(at::TensorIteratorBase &, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(int) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 2.3,
+            "Total Time (ns)": 413248,
+            "Instances": 320,
+            "Avg (ns)": 1291.4,
+            "Med (ns)": 1280.0,
+            "Min (ns)": 1280,
+            "Max (ns)": 1312,
+            "StdDev (ns)": 15.3,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, void at::native::compare_scalar_kernel<int>(at::TensorIteratorBase &, at::native::<unnamed>::OpType, T1)::[lambda(int) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 2.2,
+            "Total Time (ns)": 397023,
+            "Instances": 320,
+            "Avg (ns)": 1240.7,
+            "Med (ns)": 1248.0,
+            "Min (ns)": 1216,
+            "Max (ns)": 1280,
+            "StdDev (ns)": 13.7,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctorOnSelf_add<int>, std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 1.8,
+            "Total Time (ns)": 321504,
+            "Instances": 320,
+            "Avg (ns)": 1004.7,
+            "Med (ns)": 992.0,
+            "Min (ns)": 992,
+            "Max (ns)": 1024,
+            "StdDev (ns)": 15.7,
+            "Name": "void <unnamed>::elementwise_kernel_with_index<int, at::native::arange_cuda_out(const c10::Scalar &, const c10::Scalar &, const c10::Scalar &, at::Tensor &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)]>(T1, T2, function_traits<T2>::result_type *)"
+          },
+          {
+            "Time (%)": 1.8,
+            "Total Time (ns)": 321375,
+            "Instances": 320,
+            "Avg (ns)": 1004.3,
+            "Med (ns)": 992.0,
+            "Min (ns)": 991,
+            "Max (ns)": 1024,
+            "StdDev (ns)": 15.6,
+            "Name": "void at_cuda_detail::cub::detail::scan::DeviceScanInitKernel<at_cuda_detail::cub::ScanTileState<int, (bool)1>>(T1, int)"
+          },
+          {
+            "Time (%)": 1.8,
+            "Total Time (ns)": 320576,
+            "Instances": 320,
+            "Avg (ns)": 1001.8,
+            "Med (ns)": 992.0,
+            "Min (ns)": 992,
+            "Max (ns)": 1024,
+            "StdDev (ns)": 14.8,
+            "Name": "void at_cuda_detail::cub::detail::scan::DeviceCompactInitKernel<at_cuda_detail::cub::ScanTileState<int, (bool)1>, int *>(T1, int, T2)"
+          },
+          {
+            "Time (%)": 1.0,
+            "Total Time (ns)": 182847,
+            "Instances": 40,
+            "Avg (ns)": 4571.2,
+            "Med (ns)": 4576.0,
+            "Min (ns)": 4512,
+            "Max (ns)": 4640,
+            "StdDev (ns)": 35.9,
+            "Name": "void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatter_gather_internal_kernel<(bool)0, at::native::OpaqueType<(int)8>, long>::operator ()<at::native::TensorAssign>(at::TensorIterator &, long, long, long, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          }
+        ],
+        "nvtx_summary": [
+          {
+            "Time (%)": 48.1,
+            "Total Time (ns)": 216443062,
+            "Instances": 1,
+            "Avg (ns)": 216443062.0,
+            "Med (ns)": 216443062.0,
+            "Min (ns)": 216443062,
+            "Max (ns)": 216443062,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":align_categories"
+          },
+          {
+            "Time (%)": 6.3,
+            "Total Time (ns)": 28517673,
+            "Instances": 1,
+            "Avg (ns)": 28517673.0,
+            "Med (ns)": 28517673.0,
+            "Min (ns)": 28517673,
+            "Max (ns)": 28517673,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_4"
+          },
+          {
+            "Time (%)": 6.0,
+            "Total Time (ns)": 27147389,
+            "Instances": 1,
+            "Avg (ns)": 27147389.0,
+            "Med (ns)": 27147389.0,
+            "Min (ns)": 27147389,
+            "Max (ns)": 27147389,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_0"
+          },
+          {
+            "Time (%)": 5.3,
+            "Total Time (ns)": 23894193,
+            "Instances": 1,
+            "Avg (ns)": 23894193.0,
+            "Med (ns)": 23894193.0,
+            "Min (ns)": 23894193,
+            "Max (ns)": 23894193,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_9"
+          },
+          {
+            "Time (%)": 5.1,
+            "Total Time (ns)": 23106730,
+            "Instances": 1,
+            "Avg (ns)": 23106730.0,
+            "Med (ns)": 23106730.0,
+            "Min (ns)": 23106730,
+            "Max (ns)": 23106730,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_3"
+          },
+          {
+            "Time (%)": 4.4,
+            "Total Time (ns)": 19912654,
+            "Instances": 1,
+            "Avg (ns)": 19912654.0,
+            "Med (ns)": 19912654.0,
+            "Min (ns)": 19912654,
+            "Max (ns)": 19912654,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_5"
+          },
+          {
+            "Time (%)": 4.3,
+            "Total Time (ns)": 19192882,
+            "Instances": 1,
+            "Avg (ns)": 19192882.0,
+            "Med (ns)": 19192882.0,
+            "Min (ns)": 19192882,
+            "Max (ns)": 19192882,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_2"
+          },
+          {
+            "Time (%)": 4.2,
+            "Total Time (ns)": 18814895,
+            "Instances": 1,
+            "Avg (ns)": 18814895.0,
+            "Med (ns)": 18814895.0,
+            "Min (ns)": 18814895,
+            "Max (ns)": 18814895,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_6"
+          },
+          {
+            "Time (%)": 4.1,
+            "Total Time (ns)": 18561281,
+            "Instances": 1,
+            "Avg (ns)": 18561281.0,
+            "Med (ns)": 18561281.0,
+            "Min (ns)": 18561281,
+            "Max (ns)": 18561281,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_1"
+          },
+          {
+            "Time (%)": 4.1,
+            "Total Time (ns)": 18505180,
+            "Instances": 1,
+            "Avg (ns)": 18505180.0,
+            "Med (ns)": 18505180.0,
+            "Min (ns)": 18505180,
+            "Max (ns)": 18505180,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_8"
+          },
+          {
+            "Time (%)": 4.1,
+            "Total Time (ns)": 18473590,
+            "Instances": 1,
+            "Avg (ns)": 18473590.0,
+            "Med (ns)": 18473590.0,
+            "Min (ns)": 18473590,
+            "Max (ns)": 18473590,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_7"
+          },
+          {
+            "Time (%)": 1.5,
+            "Total Time (ns)": 6799694,
+            "Instances": 320,
+            "Avg (ns)": 21249.0,
+            "Med (ns)": 17720.5,
+            "Min (ns)": 16340,
+            "Max (ns)": 51831,
+            "StdDev (ns)": 6455.3,
+            "Style": "PushPop",
+            "Range": ":cub::DeviceScan::InclusiveScan"
+          },
+          {
+            "Time (%)": 1.5,
+            "Total Time (ns)": 6548961,
+            "Instances": 320,
+            "Avg (ns)": 20465.5,
+            "Med (ns)": 15985.0,
+            "Min (ns)": 14831,
+            "Max (ns)": 191663,
+            "StdDev (ns)": 13742.2,
+            "Style": "PushPop",
+            "Range": ":cub::DeviceSelect::Flagged"
+          },
+          {
+            "Time (%)": 0.9,
+            "Total Time (ns)": 3957641,
+            "Instances": 320,
+            "Avg (ns)": 12367.6,
+            "Med (ns)": 10740.0,
+            "Min (ns)": 9650,
+            "Max (ns)": 31940,
+            "StdDev (ns)": 3405.0,
+            "Style": "PushPop",
+            "Range": ":cub::DeviceReduce::Sum"
+          }
+        ]
+      },
+      "diagnosis": "805 kernel launches and 32 device-to-host copies plus stream synchronizations per call; only about 1.79 ms of kernels versus a 10.94 ms unprofiled median confirms per-column dynamic indexing and orchestration dominate.",
+      "recommended_direction": "Batch count/search/gather across columns and avoid dynamic boolean-index materialization that synchronizes once per column."
+    },
+    "power_transform": {
+      "processor": "PowerTransform",
+      "operation": "fit_transform",
+      "parameters": {
+        "rows": 50000,
+        "columns": 32,
+        "dtype": "float32"
+      },
+      "iterations": 10,
+      "unprofiled_baseline": {
+        "median_ms": 21.075857803225517,
+        "p95_ms": 21.918894723057747,
+        "minimum_ms": 20.284073427319527,
+        "cuda_event_median_ms": 21.058719635009766,
+        "cuda_enqueue_median_ms": 21.03234827518463,
+        "cuda_sync_wait_median_ms": 0.016069971024990082,
+        "peak_cuda_bytes": 45411328,
+        "repetitions": 15
+      },
+      "profiled_timing": {
+        "wall_median_ms": 42.72138373926282,
+        "wall_p95_ms": 56.20994656346738,
+        "cuda_event_median_ms": 42.68244743347168,
+        "peak_cuda_bytes": 44834304,
+        "peak_cuda_delta_bytes": 38433792,
+        "wall_samples_ms": [
+          54.407499730587006,
+          48.075550235807896,
+          43.08738466352224,
+          42.355382815003395,
+          41.48629680275917,
+          45.125629752874374,
+          41.54555778950453,
+          39.37097080051899,
+          57.68467579036951,
+          42.30954125523567
+        ],
+        "cuda_event_samples_ms": [
+          54.37286376953125,
+          48.022560119628906,
+          43.05526351928711,
+          42.30963134765625,
+          41.44512176513672,
+          45.089054107666016,
+          41.50950241088867,
+          39.342559814453125,
+          57.638526916503906,
+          42.27964782714844
+        ]
+      },
+      "instrumentation_overhead_ratio": 2.0270294162226032,
+      "nsight": {
+        "nvtx_total_ms": 456.355203,
+        "nvtx_per_iteration_ms": 45.635520299999996,
+        "cuda_api_total_time_ms": 149.827757,
+        "cuda_api_total_calls": 43918,
+        "cuda_api_calls_per_iteration": 4391.8,
+        "kernel_total_time_ms": 87.974446,
+        "kernel_time_per_iteration_ms": 8.7974446,
+        "kernel_instances_total": 21630,
+        "kernel_instances_per_iteration": 2163,
+        "selected_cuda_apis": [
+          {
+            "name": "cudaLaunchKernel",
+            "calls_total": 21630,
+            "calls_per_iteration": 2163,
+            "total_time_ms": 139.386482,
+            "time_per_iteration_ms": 13.9386482,
+            "api_time_percent": 93.0
+          },
+          {
+            "name": "cudaMemsetAsync",
+            "calls_total": 550,
+            "calls_per_iteration": 55,
+            "total_time_ms": 3.609114,
+            "time_per_iteration_ms": 0.36091140000000005,
+            "api_time_percent": 2.4
+          }
+        ],
+        "top_gpu_kernels": [
+          {
+            "Time (%)": 15.5,
+            "Total Time (ns)": 13594155,
+            "Instances": 970,
+            "Avg (ns)": 14014.6,
+            "Med (ns)": 14144.0,
+            "Min (ns)": 12672,
+            "Max (ns)": 15744,
+            "StdDev (ns)": 681.1,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::binary_internal::DivFunctor<float>>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 14.2,
+            "Total Time (ns)": 12475267,
+            "Instances": 480,
+            "Avg (ns)": 25990.1,
+            "Med (ns)": 25952.0,
+            "Min (ns)": 25440,
+            "Max (ns)": 26912,
+            "StdDev (ns)": 223.8,
+            "Name": "void at::native::reduce_kernel<(int)128, (int)4, at::native::ReduceOp<float, at::native::WelfordOps<float, float, int, cuda::std::__4::pair<float, float>>, unsigned int, float, (int)2, (int)2>>(T3)"
+          },
+          {
+            "Time (%)": 11.2,
+            "Total Time (ns)": 9818601,
+            "Instances": 4130,
+            "Avg (ns)": 2377.4,
+            "Med (ns)": 1312.0,
+            "Min (ns)": 1280,
+            "Max (ns)": 11200,
+            "StdDev (ns)": 2895.3,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::where_kernel_impl(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(bool, unsigned int, unsigned int) (instance 1)], std::array<char *, (unsigned long)4>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 11.1,
+            "Total Time (ns)": 9763814,
+            "Instances": 960,
+            "Avg (ns)": 10170.6,
+            "Med (ns)": 9984.0,
+            "Min (ns)": 9600,
+            "Max (ns)": 11616,
+            "StdDev (ns)": 368.7,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::<unnamed>::where_kernel_impl(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(bool, unsigned int, unsigned int) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 10.4,
+            "Total Time (ns)": 9174499,
+            "Instances": 960,
+            "Avg (ns)": 9556.8,
+            "Med (ns)": 9408.0,
+            "Min (ns)": 8992,
+            "Max (ns)": 10688,
+            "StdDev (ns)": 341.5,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 8.5,
+            "Total Time (ns)": 7487595,
+            "Instances": 960,
+            "Avg (ns)": 7799.6,
+            "Med (ns)": 7712.0,
+            "Min (ns)": 7424,
+            "Max (ns)": 9024,
+            "StdDev (ns)": 236.4,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::expm1_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 8.4,
+            "Total Time (ns)": 7429065,
+            "Instances": 1010,
+            "Avg (ns)": 7355.5,
+            "Med (ns)": 7392.0,
+            "Min (ns)": 1152,
+            "Max (ns)": 8128,
+            "StdDev (ns)": 639.9,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::neg_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 2)]::operator ()() const::[lambda() (instance 7)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 4.8,
+            "Total Time (ns)": 4190005,
+            "Instances": 1940,
+            "Avg (ns)": 2159.8,
+            "Med (ns)": 1248.0,
+            "Min (ns)": 1215,
+            "Max (ns)": 5728,
+            "StdDev (ns)": 1524.2,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, void at::native::compare_scalar_kernel<float>(at::TensorIteratorBase &, at::native::<unnamed>::OpType, T1)::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 3.0,
+            "Total Time (ns)": 2660028,
+            "Instances": 2290,
+            "Avg (ns)": 1161.6,
+            "Med (ns)": 1152.0,
+            "Min (ns)": 1120,
+            "Max (ns)": 1216,
+            "StdDev (ns)": 16.8,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctor_add<float>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 2.0,
+            "Total Time (ns)": 1739615,
+            "Instances": 1460,
+            "Avg (ns)": 1191.5,
+            "Med (ns)": 1184.0,
+            "Min (ns)": 1152,
+            "Max (ns)": 1248,
+            "StdDev (ns)": 20.9,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          }
+        ],
+        "gpu_memory_operations_by_time": [
+          {
+            "Time (%)": 100.0,
+            "Total Time (ns)": 195616,
+            "Count": 550,
+            "Avg (ns)": 355.7,
+            "Med (ns)": 352.0,
+            "Min (ns)": 320,
+            "Max (ns)": 384,
+            "StdDev (ns)": 13.1,
+            "Operation": "[CUDA memset]"
+          }
+        ],
+        "gpu_memory_operations_by_size": [
+          {
+            "Total (MB)": 0.002,
+            "Count": 550,
+            "Avg (MB)": 0.000,
+            "Med (MB)": 0.000,
+            "Min (MB)": 0.000,
+            "Max (MB)": 0.000,
+            "StdDev (MB)": 0.000,
+            "Operation": "[CUDA memset]"
+          }
+        ],
+        "cuda_api_summary": [
+          {
+            "Time (%)": 93.0,
+            "Total Time (ns)": 139386482,
+            "Num Calls": 21630,
+            "Avg (ns)": 6444.1,
+            "Med (ns)": 5260.0,
+            "Min (ns)": 3830,
+            "Max (ns)": 1639538,
+            "StdDev (ns)": 12600.1,
+            "Name": "cudaLaunchKernel"
+          },
+          {
+            "Time (%)": 4.3,
+            "Total Time (ns)": 6423647,
+            "Num Calls": 21630,
+            "Avg (ns)": 297.0,
+            "Med (ns)": 250.0,
+            "Min (ns)": 160,
+            "Max (ns)": 23760,
+            "StdDev (ns)": 413.1,
+            "Name": "cuKernelGetName"
+          },
+          {
+            "Time (%)": 2.4,
+            "Total Time (ns)": 3609114,
+            "Num Calls": 550,
+            "Avg (ns)": 6562.0,
+            "Med (ns)": 5680.0,
+            "Min (ns)": 3360,
+            "Max (ns)": 73051,
+            "StdDev (ns)": 4181.9,
+            "Name": "cudaMemsetAsync"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 133663,
+            "Num Calls": 20,
+            "Avg (ns)": 6683.1,
+            "Med (ns)": 5360.0,
+            "Min (ns)": 3670,
+            "Max (ns)": 21000,
+            "StdDev (ns)": 3813.1,
+            "Name": "cudaEventRecordWithFlags"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 108720,
+            "Num Calls": 10,
+            "Avg (ns)": 10872.0,
+            "Med (ns)": 10840.0,
+            "Min (ns)": 7290,
+            "Max (ns)": 14360,
+            "StdDev (ns)": 2285.9,
+            "Name": "cudaDeviceSynchronize"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 77481,
+            "Num Calls": 20,
+            "Avg (ns)": 3874.1,
+            "Med (ns)": 2705.0,
+            "Min (ns)": 1330,
+            "Max (ns)": 22750,
+            "StdDev (ns)": 4627.2,
+            "Name": "cudaEventCreateWithFlags"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 41839,
+            "Num Calls": 20,
+            "Avg (ns)": 2091.9,
+            "Med (ns)": 1810.0,
+            "Min (ns)": 730,
+            "Max (ns)": 4870,
+            "StdDev (ns)": 1299.5,
+            "Name": "cudaEventQuery"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 23480,
+            "Num Calls": 20,
+            "Avg (ns)": 1174.0,
+            "Med (ns)": 975.0,
+            "Min (ns)": 550,
+            "Max (ns)": 4111,
+            "StdDev (ns)": 802.3,
+            "Name": "cudaStreamIsCapturing"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 23331,
+            "Num Calls": 18,
+            "Avg (ns)": 1296.2,
+            "Med (ns)": 1190.0,
+            "Min (ns)": 410,
+            "Max (ns)": 2560,
+            "StdDev (ns)": 748.4,
+            "Name": "cudaEventDestroy"
+          }
+        ],
+        "gpu_kernel_summary": [
+          {
+            "Time (%)": 15.5,
+            "Total Time (ns)": 13594155,
+            "Instances": 970,
+            "Avg (ns)": 14014.6,
+            "Med (ns)": 14144.0,
+            "Min (ns)": 12672,
+            "Max (ns)": 15744,
+            "StdDev (ns)": 681.1,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::binary_internal::DivFunctor<float>>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 14.2,
+            "Total Time (ns)": 12475267,
+            "Instances": 480,
+            "Avg (ns)": 25990.1,
+            "Med (ns)": 25952.0,
+            "Min (ns)": 25440,
+            "Max (ns)": 26912,
+            "StdDev (ns)": 223.8,
+            "Name": "void at::native::reduce_kernel<(int)128, (int)4, at::native::ReduceOp<float, at::native::WelfordOps<float, float, int, cuda::std::__4::pair<float, float>>, unsigned int, float, (int)2, (int)2>>(T3)"
+          },
+          {
+            "Time (%)": 11.2,
+            "Total Time (ns)": 9818601,
+            "Instances": 4130,
+            "Avg (ns)": 2377.4,
+            "Med (ns)": 1312.0,
+            "Min (ns)": 1280,
+            "Max (ns)": 11200,
+            "StdDev (ns)": 2895.3,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::where_kernel_impl(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(bool, unsigned int, unsigned int) (instance 1)], std::array<char *, (unsigned long)4>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 11.1,
+            "Total Time (ns)": 9763814,
+            "Instances": 960,
+            "Avg (ns)": 10170.6,
+            "Med (ns)": 9984.0,
+            "Min (ns)": 9600,
+            "Max (ns)": 11616,
+            "StdDev (ns)": 368.7,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::<unnamed>::where_kernel_impl(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(bool, unsigned int, unsigned int) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 10.4,
+            "Total Time (ns)": 9174499,
+            "Instances": 960,
+            "Avg (ns)": 9556.8,
+            "Med (ns)": 9408.0,
+            "Min (ns)": 8992,
+            "Max (ns)": 10688,
+            "StdDev (ns)": 341.5,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 8.5,
+            "Total Time (ns)": 7487595,
+            "Instances": 960,
+            "Avg (ns)": 7799.6,
+            "Med (ns)": 7712.0,
+            "Min (ns)": 7424,
+            "Max (ns)": 9024,
+            "StdDev (ns)": 236.4,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::expm1_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 8.4,
+            "Total Time (ns)": 7429065,
+            "Instances": 1010,
+            "Avg (ns)": 7355.5,
+            "Med (ns)": 7392.0,
+            "Min (ns)": 1152,
+            "Max (ns)": 8128,
+            "StdDev (ns)": 639.9,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::neg_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 2)]::operator ()() const::[lambda() (instance 7)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 4.8,
+            "Total Time (ns)": 4190005,
+            "Instances": 1940,
+            "Avg (ns)": 2159.8,
+            "Med (ns)": 1248.0,
+            "Min (ns)": 1215,
+            "Max (ns)": 5728,
+            "StdDev (ns)": 1524.2,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, void at::native::compare_scalar_kernel<float>(at::TensorIteratorBase &, at::native::<unnamed>::OpType, T1)::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 3.0,
+            "Total Time (ns)": 2660028,
+            "Instances": 2290,
+            "Avg (ns)": 1161.6,
+            "Med (ns)": 1152.0,
+            "Min (ns)": 1120,
+            "Max (ns)": 1216,
+            "StdDev (ns)": 16.8,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctor_add<float>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 2.0,
+            "Total Time (ns)": 1739615,
+            "Instances": 1460,
+            "Avg (ns)": 1191.5,
+            "Med (ns)": 1184.0,
+            "Min (ns)": 1152,
+            "Max (ns)": 1248,
+            "StdDev (ns)": 20.9,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 2.0,
+            "Total Time (ns)": 1719037,
+            "Instances": 1430,
+            "Avg (ns)": 1202.1,
+            "Med (ns)": 1152.0,
+            "Min (ns)": 1120,
+            "Max (ns)": 8064,
+            "StdDev (ns)": 527.1,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::AbsFunctor<float>, std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.7,
+            "Total Time (ns)": 647774,
+            "Instances": 460,
+            "Avg (ns)": 1408.2,
+            "Med (ns)": 1408.0,
+            "Min (ns)": 1376,
+            "Max (ns)": 1504,
+            "StdDev (ns)": 22.5,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::log_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 2)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.7,
+            "Total Time (ns)": 640512,
+            "Instances": 460,
+            "Avg (ns)": 1392.4,
+            "Med (ns)": 1408.0,
+            "Min (ns)": 1376,
+            "Max (ns)": 1408,
+            "StdDev (ns)": 16.0,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::CompareFunctor<float>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.7,
+            "Total Time (ns)": 618879,
+            "Instances": 520,
+            "Avg (ns)": 1190.2,
+            "Med (ns)": 1184.0,
+            "Min (ns)": 1120,
+            "Max (ns)": 1312,
+            "StdDev (ns)": 28.8,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctorOnOther_add<float>, std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.7,
+            "Total Time (ns)": 613087,
+            "Instances": 460,
+            "Avg (ns)": 1332.8,
+            "Med (ns)": 1344.0,
+            "Min (ns)": 1312,
+            "Max (ns)": 1344,
+            "StdDev (ns)": 15.3,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseAndFunctor<bool>>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.7,
+            "Total Time (ns)": 613052,
+            "Instances": 460,
+            "Avg (ns)": 1332.7,
+            "Med (ns)": 1344.0,
+            "Min (ns)": 1312,
+            "Max (ns)": 1376,
+            "StdDev (ns)": 15.4,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<bool, bool, bool, at::native::binary_internal::MulFunctor<bool>>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.7,
+            "Total Time (ns)": 584512,
+            "Instances": 480,
+            "Avg (ns)": 1217.7,
+            "Med (ns)": 1216.0,
+            "Min (ns)": 1184,
+            "Max (ns)": 1248,
+            "StdDev (ns)": 14.4,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<float, float, bool, at::native::<unnamed>::CompareEqFunctor<float>>, std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.6,
+            "Total Time (ns)": 555487,
+            "Instances": 460,
+            "Avg (ns)": 1207.6,
+            "Med (ns)": 1216.0,
+            "Min (ns)": 1183,
+            "Max (ns)": 1216,
+            "StdDev (ns)": 14.1,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<float, float, bool, at::native::<unnamed>::CompareEqFunctor<float>>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.6,
+            "Total Time (ns)": 544031,
+            "Instances": 460,
+            "Avg (ns)": 1182.7,
+            "Med (ns)": 1184.0,
+            "Min (ns)": 1120,
+            "Max (ns)": 1216,
+            "StdDev (ns)": 14.2,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.6,
+            "Total Time (ns)": 541119,
+            "Instances": 460,
+            "Avg (ns)": 1176.3,
+            "Med (ns)": 1184.0,
+            "Min (ns)": 1152,
+            "Max (ns)": 1216,
+            "StdDev (ns)": 14.5,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctorOnSelf_add<float>, std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.6,
+            "Total Time (ns)": 524832,
+            "Instances": 500,
+            "Avg (ns)": 1049.7,
+            "Med (ns)": 1056.0,
+            "Min (ns)": 992,
+            "Max (ns)": 1056,
+            "StdDev (ns)": 13.5,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<float>, std::array<char *, (unsigned long)1>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.5,
+            "Total Time (ns)": 481216,
+            "Instances": 70,
+            "Avg (ns)": 6874.5,
+            "Med (ns)": 7680.0,
+            "Min (ns)": 1440,
+            "Max (ns)": 8320,
+            "StdDev (ns)": 2239.2,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::log1p_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.5,
+            "Total Time (ns)": 455327,
+            "Instances": 60,
+            "Avg (ns)": 7588.8,
+            "Med (ns)": 7520.0,
+            "Min (ns)": 7264,
+            "Max (ns)": 8384,
+            "StdDev (ns)": 277.8,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::launch_clamp_scalar(at::TensorIteratorBase &, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 7)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.4,
+            "Total Time (ns)": 350016,
+            "Instances": 20,
+            "Avg (ns)": 17500.8,
+            "Med (ns)": 17504.0,
+            "Min (ns)": 17120,
+            "Max (ns)": 17888,
+            "StdDev (ns)": 188.3,
+            "Name": "void at::native::reduce_kernel<(int)128, (int)4, at::native::ReduceOp<float, at::native::MaxOps<float>, unsigned int, float, (int)4, (int)4>>(T3)"
+          },
+          {
+            "Time (%)": 0.2,
+            "Total Time (ns)": 210943,
+            "Instances": 20,
+            "Avg (ns)": 10547.1,
+            "Med (ns)": 10368.0,
+            "Min (ns)": 10240,
+            "Max (ns)": 11232,
+            "StdDev (ns)": 324.2,
+            "Name": "void at::native::reduce_kernel<(int)128, (int)4, at::native::ReduceOp<float, at::native::MeanOps<float, float, float, float>, unsigned int, float, (int)4, (int)4>>(T3)"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 110364,
+            "Instances": 10,
+            "Avg (ns)": 11036.4,
+            "Med (ns)": 10463.5,
+            "Min (ns)": 10303,
+            "Max (ns)": 13056,
+            "StdDev (ns)": 1091.2,
+            "Name": "void at::native::reduce_kernel<(int)128, (int)4, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator ()(at::TensorIterator &)::[lambda(float, float) (instance 1)]>, unsigned int, float, (int)4, (int)4>>(T3)"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 98335,
+            "Instances": 10,
+            "Avg (ns)": 9833.5,
+            "Med (ns)": 9824.0,
+            "Min (ns)": 9664,
+            "Max (ns)": 9952,
+            "StdDev (ns)": 101.1,
+            "Name": "void at::native::reduce_kernel<(int)128, (int)4, at::native::ReduceOp<bool, at::native::func_wrapper_t<bool, at::native::and_kernel_cuda(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 12)]::operator ()() const::[lambda(bool, bool) (instance 1)]>, unsigned int, bool, (int)4, (int)4>>(T3)"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 93119,
+            "Instances": 10,
+            "Avg (ns)": 9311.9,
+            "Med (ns)": 9279.5,
+            "Min (ns)": 9088,
+            "Max (ns)": 9568,
+            "StdDev (ns)": 144.7,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<float>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 92960,
+            "Instances": 10,
+            "Avg (ns)": 9296.0,
+            "Med (ns)": 9216.0,
+            "Min (ns)": 9056,
+            "Max (ns)": 10016,
+            "StdDev (ns)": 276.2,
+            "Name": "void at::native::reduce_kernel<(int)128, (int)4, at::native::ReduceOp<bool, at::native::func_wrapper_t<bool, at::native::or_kernel_cuda(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 12)]::operator ()() const::[lambda(bool, bool) (instance 1)]>, unsigned int, bool, (int)4, (int)4>>(T3)"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 43488,
+            "Instances": 30,
+            "Avg (ns)": 1449.6,
+            "Med (ns)": 1472.0,
+            "Min (ns)": 1376,
+            "Max (ns)": 1504,
+            "StdDev (ns)": 35.8,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::reciprocal_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 25856,
+            "Instances": 20,
+            "Avg (ns)": 1292.8,
+            "Med (ns)": 1280.0,
+            "Min (ns)": 1280,
+            "Max (ns)": 1312,
+            "StdDev (ns)": 16.1,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::masked_fill_kernel(at::TensorIterator &, const c10::Scalar &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 7)]::operator ()() const::[lambda(float, bool) (instance 1)], std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 23488,
+            "Instances": 20,
+            "Avg (ns)": 1174.4,
+            "Med (ns)": 1184.0,
+            "Min (ns)": 1152,
+            "Max (ns)": 1184,
+            "StdDev (ns)": 15.0,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, void at::native::<unnamed>::pow_tensor_scalar_kernel_impl<float, float>(at::TensorIteratorBase &, T2)::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 14656,
+            "Instances": 10,
+            "Avg (ns)": 1465.6,
+            "Med (ns)": 1472.0,
+            "Min (ns)": 1440,
+            "Max (ns)": 1472,
+            "StdDev (ns)": 13.5,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::sqrt_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 2)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 13856,
+            "Instances": 10,
+            "Avg (ns)": 1385.6,
+            "Med (ns)": 1376.0,
+            "Min (ns)": 1376,
+            "Max (ns)": 1408,
+            "StdDev (ns)": 15.5,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<float, float, float, at::native::minimum_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 2)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float, float) (instance 1)]>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 13824,
+            "Instances": 10,
+            "Avg (ns)": 1382.4,
+            "Med (ns)": 1376.0,
+            "Min (ns)": 1376,
+            "Max (ns)": 1408,
+            "StdDev (ns)": 13.5,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<float, float, float, at::native::maximum_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 2)]::operator ()() const::[lambda() (instance 2)]::operator ()() const::[lambda(float, float) (instance 1)]>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 12032,
+            "Instances": 10,
+            "Avg (ns)": 1203.2,
+            "Med (ns)": 1216.0,
+            "Min (ns)": 1184,
+            "Max (ns)": 1216,
+            "StdDev (ns)": 16.5,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::BUnaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          }
+        ],
+        "nvtx_summary": [
+          {
+            "Time (%)": 50.0,
+            "Total Time (ns)": 456355203,
+            "Instances": 1,
+            "Avg (ns)": 456355203.0,
+            "Med (ns)": 456355203.0,
+            "Min (ns)": 456355203,
+            "Max (ns)": 456355203,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":power_transform"
+          },
+          {
+            "Time (%)": 6.3,
+            "Total Time (ns)": 57716717,
+            "Instances": 1,
+            "Avg (ns)": 57716717.0,
+            "Med (ns)": 57716717.0,
+            "Min (ns)": 57716717,
+            "Max (ns)": 57716717,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_8"
+          },
+          {
+            "Time (%)": 6.0,
+            "Total Time (ns)": 54528442,
+            "Instances": 1,
+            "Avg (ns)": 54528442.0,
+            "Med (ns)": 54528442.0,
+            "Min (ns)": 54528442,
+            "Max (ns)": 54528442,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_0"
+          },
+          {
+            "Time (%)": 5.3,
+            "Total Time (ns)": 48123431,
+            "Instances": 1,
+            "Avg (ns)": 48123431.0,
+            "Med (ns)": 48123431.0,
+            "Min (ns)": 48123431,
+            "Max (ns)": 48123431,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_1"
+          },
+          {
+            "Time (%)": 5.0,
+            "Total Time (ns)": 45160650,
+            "Instances": 1,
+            "Avg (ns)": 45160650.0,
+            "Med (ns)": 45160650.0,
+            "Min (ns)": 45160650,
+            "Max (ns)": 45160650,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_5"
+          },
+          {
+            "Time (%)": 4.7,
+            "Total Time (ns)": 43124135,
+            "Instances": 1,
+            "Avg (ns)": 43124135.0,
+            "Med (ns)": 43124135.0,
+            "Min (ns)": 43124135,
+            "Max (ns)": 43124135,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_2"
+          },
+          {
+            "Time (%)": 4.6,
+            "Total Time (ns)": 42384202,
+            "Instances": 1,
+            "Avg (ns)": 42384202.0,
+            "Med (ns)": 42384202.0,
+            "Min (ns)": 42384202,
+            "Max (ns)": 42384202,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_3"
+          },
+          {
+            "Time (%)": 4.6,
+            "Total Time (ns)": 42337771,
+            "Instances": 1,
+            "Avg (ns)": 42337771.0,
+            "Med (ns)": 42337771.0,
+            "Min (ns)": 42337771,
+            "Max (ns)": 42337771,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_9"
+          },
+          {
+            "Time (%)": 4.6,
+            "Total Time (ns)": 41574608,
+            "Instances": 1,
+            "Avg (ns)": 41574608.0,
+            "Med (ns)": 41574608.0,
+            "Min (ns)": 41574608,
+            "Max (ns)": 41574608,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_6"
+          },
+          {
+            "Time (%)": 4.6,
+            "Total Time (ns)": 41525237,
+            "Instances": 1,
+            "Avg (ns)": 41525237.0,
+            "Med (ns)": 41525237.0,
+            "Min (ns)": 41525237,
+            "Max (ns)": 41525237,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_4"
+          },
+          {
+            "Time (%)": 4.3,
+            "Total Time (ns)": 39398280,
+            "Instances": 1,
+            "Avg (ns)": 39398280.0,
+            "Med (ns)": 39398280.0,
+            "Min (ns)": 39398280,
+            "Max (ns)": 39398280,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_7"
+          }
+        ]
+      },
+      "diagnosis": "2163 kernel launches per call, with about 8.80 ms of kernels versus a 21.08 ms unprofiled median; the fixed 44-step Yeo-Johnson search emits many small elementwise and reduction kernels.",
+      "recommended_direction": "Compile or fuse the fixed search body, cache the compiled path, and keep an eager fallback."
+    },
+    "shuffle_categories": {
+      "processor": "ShuffleCategories",
+      "operation": "fit_transform_ensemble",
+      "parameters": {
+        "rows": 10000,
+        "categorical_columns": 32,
+        "cardinality": 1024,
+        "estimators": 8
+      },
+      "iterations": 10,
+      "unprofiled_baseline": {
+        "median_ms": 87.14025933295488,
+        "p95_ms": 92.14470526203512,
+        "minimum_ms": 86.32697351276875,
+        "cuda_event_median_ms": 87.12297821044922,
+        "cuda_enqueue_median_ms": 87.08841819316149,
+        "cuda_sync_wait_median_ms": 0.017239712178707123,
+        "peak_cuda_bytes": 26063360,
+        "repetitions": 15
+      },
+      "profiled_timing": {
+        "wall_median_ms": 161.2498606555164,
+        "wall_p95_ms": 180.12483441270885,
+        "cuda_event_median_ms": 161.21562957763672,
+        "peak_cuda_bytes": 35414528,
+        "peak_cuda_delta_bytes": 33871872,
+        "wall_samples_ms": [
+          169.60297897458076,
+          161.8129750713706,
+          157.379899173975,
+          163.23563922196627,
+          160.68674623966217,
+          165.35399667918682,
+          188.7336252257228,
+          155.68523854017258,
+          157.242096029222,
+          158.2043720409274
+        ],
+        "cuda_event_samples_ms": [
+          169.57334899902344,
+          161.7783660888672,
+          157.3441925048828,
+          163.1998748779297,
+          160.65289306640625,
+          165.3157501220703,
+          188.70098876953125,
+          155.63938903808594,
+          157.212646484375,
+          158.17184448242188
+        ]
+      },
+      "instrumentation_overhead_ratio": 1.850463401071548,
+      "nsight": {
+        "nvtx_total_ms": 1641.119778,
+        "nvtx_per_iteration_ms": 164.1119778,
+        "cuda_api_total_time_ms": 523.530746,
+        "cuda_api_total_calls": 147166,
+        "cuda_api_calls_per_iteration": 14716.6,
+        "kernel_total_time_ms": 205.39966,
+        "kernel_time_per_iteration_ms": 20.539966,
+        "kernel_instances_total": 59040,
+        "kernel_instances_per_iteration": 5904,
+        "selected_cuda_apis": [
+          {
+            "name": "cudaLaunchKernel",
+            "calls_total": 59040,
+            "calls_per_iteration": 5904,
+            "total_time_ms": 363.188397,
+            "time_per_iteration_ms": 36.318839700000005,
+            "api_time_percent": 69.4
+          },
+          {
+            "name": "cudaMemcpyAsync",
+            "calls_total": 13120,
+            "calls_per_iteration": 1312,
+            "total_time_ms": 108.298907,
+            "time_per_iteration_ms": 10.8298907,
+            "api_time_percent": 20.7
+          },
+          {
+            "name": "cudaStreamSynchronize",
+            "calls_total": 5360,
+            "calls_per_iteration": 536,
+            "total_time_ms": 29.717018,
+            "time_per_iteration_ms": 2.9717018,
+            "api_time_percent": 5.7
+          }
+        ],
+        "top_gpu_kernels": [
+          {
+            "Time (%)": 33.2,
+            "Total Time (ns)": 68220908,
+            "Instances": 2560,
+            "Avg (ns)": 26648.8,
+            "Med (ns)": 26656.0,
+            "Min (ns)": 26559,
+            "Max (ns)": 26752,
+            "StdDev (ns)": 36.0,
+            "Name": "void at::native::radixSortKVInPlace<(int)-2, (int)-1, (int)32, (int)32, long, long, unsigned int>(at::cuda::detail::TensorInfo<T5, T7>, T7, T7, T7, at::cuda::detail::TensorInfo<T6, T7>, T7, bool)"
+          },
+          {
+            "Time (%)": 10.4,
+            "Total Time (ns)": 21370309,
+            "Instances": 5120,
+            "Avg (ns)": 4173.9,
+            "Med (ns)": 4160.0,
+            "Min (ns)": 4127,
+            "Max (ns)": 4256,
+            "StdDev (ns)": 21.8,
+            "Name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+          },
+          {
+            "Time (%)": 10.3,
+            "Total Time (ns)": 21167908,
+            "Instances": 2560,
+            "Avg (ns)": 8268.7,
+            "Med (ns)": 8256.0,
+            "Min (ns)": 8224,
+            "Max (ns)": 8352,
+            "StdDev (ns)": 20.7,
+            "Name": "void at_cuda_detail::cub::detail::radix_sort::DeviceRadixSortSingleTileKernel<at_cuda_detail::cub::detail::radix::policy_hub<int, at::cuda::cub::detail::OpaqueType<(int)8>, unsigned long long>::Policy1000, (at_cuda_detail::cub::SortOrder)0, int, at::cuda::cub::detail::OpaqueType<(int)8>, unsigned long long, at_cuda_detail::cub::detail::identity_decomposer_t>(const T3 *, T3 *, const T4 *, T4 *, T5, int, int, T6)"
+          },
+          {
+            "Time (%)": 6.4,
+            "Total Time (ns)": 13173924,
+            "Instances": 5120,
+            "Avg (ns)": 2573.0,
+            "Med (ns)": 2560.0,
+            "Min (ns)": 2464,
+            "Max (ns)": 2752,
+            "StdDev (ns)": 41.7,
+            "Name": "void at_cuda_detail::cub::detail::select::DeviceSelectSweepKernel<at_cuda_detail::cub::detail::select::policy_hub<long, bool, int, (bool)0, (at_cuda_detail::cub::SelectImpl)0>::Policy1000, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::counting_iterator<long, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::transform_iterator<at::native::<unnamed>::NonZeroOp<bool>, const bool *, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, long *, int *, at_cuda_detail::cub::ScanTileState<int, (bool)1>, at_cuda_detail::cub::NullType, at_cuda_detail::cub::NullType, int, at_cuda_detail::cub::detail::select::streaming_context_t<long, (bool)1>, (at_cuda_detail::cub::SelectImpl)0>(T2, T3, T4, T5, T6, T7, T8, T9, int, T10, at_cuda_detail::cub::detail::vsmem_t)"
+          },
+          {
+            "Time (%)": 5.4,
+            "Total Time (ns)": 11120951,
+            "Instances": 5120,
+            "Avg (ns)": 2172.1,
+            "Med (ns)": 2176.0,
+            "Min (ns)": 2112,
+            "Max (ns)": 2240,
+            "StdDev (ns)": 19.1,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 11)]::operator ()() const::[lambda(bool) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 5.2,
+            "Total Time (ns)": 10670629,
+            "Instances": 2560,
+            "Avg (ns)": 4168.2,
+            "Med (ns)": 4160.0,
+            "Min (ns)": 4096,
+            "Max (ns)": 4256,
+            "StdDev (ns)": 23.6,
+            "Name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_put_kernel_impl<at::native::OpaqueType<(int)4>>(at::TensorIterator &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+          },
+          {
+            "Time (%)": 5.1,
+            "Total Time (ns)": 10439683,
+            "Instances": 2560,
+            "Avg (ns)": 4078.0,
+            "Med (ns)": 4064.0,
+            "Min (ns)": 4032,
+            "Max (ns)": 4128,
+            "StdDev (ns)": 18.9,
+            "Name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)4>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+          },
+          {
+            "Time (%)": 4.9,
+            "Total Time (ns)": 10048205,
+            "Instances": 5120,
+            "Avg (ns)": 1962.5,
+            "Med (ns)": 1952.0,
+            "Min (ns)": 1919,
+            "Max (ns)": 2176,
+            "StdDev (ns)": 23.7,
+            "Name": "void at_cuda_detail::cub::detail::reduce::DeviceReduceKernel<at_cuda_detail::cub::detail::reduce::policy_hub<int, unsigned long long, cuda::std::__4::plus<void>>::Policy1000, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::transform_iterator<at::native::<unnamed>::NonZeroOp<bool>, const bool *, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, unsigned long long, cuda::std::__4::plus<void>, int, cuda::std::__4::__identity>(T2, T5 *, T3, at_cuda_detail::cub::GridEvenShare<T3>, T4, T6)"
+          },
+          {
+            "Time (%)": 3.5,
+            "Total Time (ns)": 7170093,
+            "Instances": 5120,
+            "Avg (ns)": 1400.4,
+            "Med (ns)": 1408.0,
+            "Min (ns)": 1375,
+            "Max (ns)": 1632,
+            "StdDev (ns)": 16.2,
+            "Name": "void at_cuda_detail::cub::detail::reduce::DeviceReduceSingleTileKernel<at_cuda_detail::cub::detail::reduce::policy_hub<int, unsigned long long, cuda::std::__4::plus<void>>::Policy1000, int *, int *, int, cuda::std::__4::plus<void>, int, int, cuda::std::__4::__identity>(T2, T3, T4, T5, T6, T8)"
+          },
+          {
+            "Time (%)": 3.1,
+            "Total Time (ns)": 6365206,
+            "Instances": 2560,
+            "Avg (ns)": 2486.4,
+            "Med (ns)": 2496.0,
+            "Min (ns)": 2463,
+            "Max (ns)": 2528,
+            "StdDev (ns)": 16.0,
+            "Name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)"
+          }
+        ],
+        "gpu_memory_operations_by_time": [
+          {
+            "Time (%)": 56.5,
+            "Total Time (ns)": 9020203,
+            "Count": 7760,
+            "Avg (ns)": 1162.4,
+            "Med (ns)": 1120.0,
+            "Min (ns)": 1087,
+            "Max (ns)": 26720,
+            "StdDev (ns)": 459.0,
+            "Operation": "[CUDA memcpy Device-to-Device]"
+          },
+          {
+            "Time (%)": 43.3,
+            "Total Time (ns)": 6906024,
+            "Count": 5280,
+            "Avg (ns)": 1308.0,
+            "Med (ns)": 992.0,
+            "Min (ns)": 959,
+            "Max (ns)": 20864,
+            "StdDev (ns)": 2385.6,
+            "Operation": "[CUDA memcpy Device-to-Host]"
+          },
+          {
+            "Time (%)": 0.2,
+            "Total Time (ns)": 29440,
+            "Count": 80,
+            "Avg (ns)": 368.0,
+            "Med (ns)": 368.0,
+            "Min (ns)": 352,
+            "Max (ns)": 384,
+            "StdDev (ns)": 16.1,
+            "Operation": "[CUDA memcpy Host-to-Device]"
+          }
+        ],
+        "gpu_memory_operations_by_size": [
+          {
+            "Total (MB)": 165.315,
+            "Count": 7760,
+            "Avg (MB)": 0.021,
+            "Med (MB)": 0.008,
+            "Min (MB)": 0.008,
+            "Max (MB)": 1.280,
+            "StdDev (MB)": 0.128,
+            "Operation": "[CUDA memcpy Device-to-Device]"
+          },
+          {
+            "Total (MB)": 21.013,
+            "Count": 5280,
+            "Avg (MB)": 0.004,
+            "Med (MB)": 0.000,
+            "Min (MB)": 0.000,
+            "Max (MB)": 0.262,
+            "StdDev (MB)": 0.032,
+            "Operation": "[CUDA memcpy Device-to-Host]"
+          },
+          {
+            "Total (MB)": 0.021,
+            "Count": 80,
+            "Avg (MB)": 0.000,
+            "Med (MB)": 0.000,
+            "Min (MB)": 0.000,
+            "Max (MB)": 0.000,
+            "StdDev (MB)": 0.000,
+            "Operation": "[CUDA memcpy Host-to-Device]"
+          }
+        ],
+        "cuda_api_summary": [
+          {
+            "Time (%)": 69.4,
+            "Total Time (ns)": 363188397,
+            "Num Calls": 59040,
+            "Avg (ns)": 6151.6,
+            "Med (ns)": 5500.0,
+            "Min (ns)": 3620,
+            "Max (ns)": 2038536,
+            "StdDev (ns)": 9843.3,
+            "Name": "cudaLaunchKernel"
+          },
+          {
+            "Time (%)": 20.7,
+            "Total Time (ns)": 108298907,
+            "Num Calls": 13120,
+            "Avg (ns)": 8254.5,
+            "Med (ns)": 7320.0,
+            "Min (ns)": 4300,
+            "Max (ns)": 78441,
+            "StdDev (ns)": 4771.3,
+            "Name": "cudaMemcpyAsync"
+          },
+          {
+            "Time (%)": 5.7,
+            "Total Time (ns)": 29717018,
+            "Num Calls": 5360,
+            "Avg (ns)": 5544.2,
+            "Med (ns)": 5390.0,
+            "Min (ns)": 2730,
+            "Max (ns)": 33261,
+            "StdDev (ns)": 1784.3,
+            "Name": "cudaStreamSynchronize"
+          },
+          {
+            "Time (%)": 2.9,
+            "Total Time (ns)": 15183741,
+            "Num Calls": 59040,
+            "Avg (ns)": 257.2,
+            "Med (ns)": 230.0,
+            "Min (ns)": 120,
+            "Max (ns)": 32981,
+            "StdDev (ns)": 382.4,
+            "Name": "cuKernelGetName"
+          },
+          {
+            "Time (%)": 0.8,
+            "Total Time (ns)": 4429166,
+            "Num Calls": 10240,
+            "Avg (ns)": 432.5,
+            "Med (ns)": 400.0,
+            "Min (ns)": 251,
+            "Max (ns)": 21801,
+            "StdDev (ns)": 304.1,
+            "Name": "cudaStreamGetCaptureInfo"
+          },
+          {
+            "Time (%)": 0.4,
+            "Total Time (ns)": 1880782,
+            "Num Calls": 9,
+            "Avg (ns)": 208975.8,
+            "Med (ns)": 205493.0,
+            "Min (ns)": 196143,
+            "Max (ns)": 228524,
+            "StdDev (ns)": 11205.4,
+            "Name": "cudaMalloc"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 352844,
+            "Num Calls": 269,
+            "Avg (ns)": 1311.7,
+            "Med (ns)": 1260.0,
+            "Min (ns)": 550,
+            "Max (ns)": 3240,
+            "StdDev (ns)": 456.3,
+            "Name": "cudaStreamIsCapturing"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 169502,
+            "Num Calls": 20,
+            "Avg (ns)": 8475.1,
+            "Med (ns)": 5110.0,
+            "Min (ns)": 2340,
+            "Max (ns)": 19620,
+            "StdDev (ns)": 4917.3,
+            "Name": "cudaEventCreateWithFlags"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 156111,
+            "Num Calls": 20,
+            "Avg (ns)": 7805.6,
+            "Med (ns)": 8415.0,
+            "Min (ns)": 3910,
+            "Max (ns)": 16220,
+            "StdDev (ns)": 3219.7,
+            "Name": "cudaEventRecordWithFlags"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 85350,
+            "Num Calls": 10,
+            "Avg (ns)": 8535.0,
+            "Med (ns)": 8295.0,
+            "Min (ns)": 7700,
+            "Max (ns)": 10520,
+            "StdDev (ns)": 798.5,
+            "Name": "cudaDeviceSynchronize"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 39869,
+            "Num Calls": 20,
+            "Avg (ns)": 1993.5,
+            "Med (ns)": 1889.5,
+            "Min (ns)": 670,
+            "Max (ns)": 3670,
+            "StdDev (ns)": 1239.1,
+            "Name": "cudaEventQuery"
+          },
+          {
+            "Time (%)": 0.0,
+            "Total Time (ns)": 29059,
+            "Num Calls": 18,
+            "Avg (ns)": 1614.4,
+            "Med (ns)": 1495.0,
+            "Min (ns)": 500,
+            "Max (ns)": 3720,
+            "StdDev (ns)": 1054.4,
+            "Name": "cudaEventDestroy"
+          }
+        ],
+        "gpu_kernel_summary": [
+          {
+            "Time (%)": 33.2,
+            "Total Time (ns)": 68220908,
+            "Instances": 2560,
+            "Avg (ns)": 26648.8,
+            "Med (ns)": 26656.0,
+            "Min (ns)": 26559,
+            "Max (ns)": 26752,
+            "StdDev (ns)": 36.0,
+            "Name": "void at::native::radixSortKVInPlace<(int)-2, (int)-1, (int)32, (int)32, long, long, unsigned int>(at::cuda::detail::TensorInfo<T5, T7>, T7, T7, T7, at::cuda::detail::TensorInfo<T6, T7>, T7, bool)"
+          },
+          {
+            "Time (%)": 10.4,
+            "Total Time (ns)": 21370309,
+            "Instances": 5120,
+            "Avg (ns)": 4173.9,
+            "Med (ns)": 4160.0,
+            "Min (ns)": 4127,
+            "Max (ns)": 4256,
+            "StdDev (ns)": 21.8,
+            "Name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+          },
+          {
+            "Time (%)": 10.3,
+            "Total Time (ns)": 21167908,
+            "Instances": 2560,
+            "Avg (ns)": 8268.7,
+            "Med (ns)": 8256.0,
+            "Min (ns)": 8224,
+            "Max (ns)": 8352,
+            "StdDev (ns)": 20.7,
+            "Name": "void at_cuda_detail::cub::detail::radix_sort::DeviceRadixSortSingleTileKernel<at_cuda_detail::cub::detail::radix::policy_hub<int, at::cuda::cub::detail::OpaqueType<(int)8>, unsigned long long>::Policy1000, (at_cuda_detail::cub::SortOrder)0, int, at::cuda::cub::detail::OpaqueType<(int)8>, unsigned long long, at_cuda_detail::cub::detail::identity_decomposer_t>(const T3 *, T3 *, const T4 *, T4 *, T5, int, int, T6)"
+          },
+          {
+            "Time (%)": 6.4,
+            "Total Time (ns)": 13173924,
+            "Instances": 5120,
+            "Avg (ns)": 2573.0,
+            "Med (ns)": 2560.0,
+            "Min (ns)": 2464,
+            "Max (ns)": 2752,
+            "StdDev (ns)": 41.7,
+            "Name": "void at_cuda_detail::cub::detail::select::DeviceSelectSweepKernel<at_cuda_detail::cub::detail::select::policy_hub<long, bool, int, (bool)0, (at_cuda_detail::cub::SelectImpl)0>::Policy1000, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::counting_iterator<long, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::transform_iterator<at::native::<unnamed>::NonZeroOp<bool>, const bool *, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, long *, int *, at_cuda_detail::cub::ScanTileState<int, (bool)1>, at_cuda_detail::cub::NullType, at_cuda_detail::cub::NullType, int, at_cuda_detail::cub::detail::select::streaming_context_t<long, (bool)1>, (at_cuda_detail::cub::SelectImpl)0>(T2, T3, T4, T5, T6, T7, T8, T9, int, T10, at_cuda_detail::cub::detail::vsmem_t)"
+          },
+          {
+            "Time (%)": 5.4,
+            "Total Time (ns)": 11120951,
+            "Instances": 5120,
+            "Avg (ns)": 2172.1,
+            "Med (ns)": 2176.0,
+            "Min (ns)": 2112,
+            "Max (ns)": 2240,
+            "StdDev (ns)": 19.1,
+            "Name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 11)]::operator ()() const::[lambda(bool) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+          },
+          {
+            "Time (%)": 5.2,
+            "Total Time (ns)": 10670629,
+            "Instances": 2560,
+            "Avg (ns)": 4168.2,
+            "Med (ns)": 4160.0,
+            "Min (ns)": 4096,
+            "Max (ns)": 4256,
+            "StdDev (ns)": 23.6,
+            "Name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_put_kernel_impl<at::native::OpaqueType<(int)4>>(at::TensorIterator &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+          },
+          {
+            "Time (%)": 5.1,
+            "Total Time (ns)": 10439683,
+            "Instances": 2560,
+            "Avg (ns)": 4078.0,
+            "Med (ns)": 4064.0,
+            "Min (ns)": 4032,
+            "Max (ns)": 4128,
+            "StdDev (ns)": 18.9,
+            "Name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)4>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+          },
+          {
+            "Time (%)": 4.9,
+            "Total Time (ns)": 10048205,
+            "Instances": 5120,
+            "Avg (ns)": 1962.5,
+            "Med (ns)": 1952.0,
+            "Min (ns)": 1919,
+            "Max (ns)": 2176,
+            "StdDev (ns)": 23.7,
+            "Name": "void at_cuda_detail::cub::detail::reduce::DeviceReduceKernel<at_cuda_detail::cub::detail::reduce::policy_hub<int, unsigned long long, cuda::std::__4::plus<void>>::Policy1000, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::transform_iterator<at::native::<unnamed>::NonZeroOp<bool>, const bool *, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default, thrust::THRUST_300001_SM_750_800_860_900_1000_1200_NS::use_default>, unsigned long long, cuda::std::__4::plus<void>, int, cuda::std::__4::__identity>(T2, T5 *, T3, at_cuda_detail::cub::GridEvenShare<T3>, T4, T6)"
+          },
+          {
+            "Time (%)": 3.5,
+            "Total Time (ns)": 7170093,
+            "Instances": 5120,
+            "Avg (ns)": 1400.4,
+            "Med (ns)": 1408.0,
+            "Min (ns)": 1375,
+            "Max (ns)": 1632,
+            "StdDev (ns)": 16.2,
+            "Name": "void at_cuda_detail::cub::detail::reduce::DeviceReduceSingleTileKernel<at_cuda_detail::cub::detail::reduce::policy_hub<int, unsigned long long, cuda::std::__4::plus<void>>::Policy1000, int *, int *, int, cuda::std::__4::plus<void>, int, int, cuda::std::__4::__identity>(T2, T3, T4, T5, T6, T8)"
+          },
+          {
+            "Time (%)": 3.1,
+            "Total Time (ns)": 6365206,
+            "Instances": 2560,
+            "Avg (ns)": 2486.4,
+            "Med (ns)": 2496.0,
+            "Min (ns)": 2463,
+            "Max (ns)": 2528,
+            "StdDev (ns)": 16.0,
+            "Name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)"
+          },
+          {
+            "Time (%)": 2.5,
+            "Total Time (ns)": 5142409,
+            "Instances": 5120,
+            "Avg (ns)": 1004.4,
+            "Med (ns)": 992.0,
+            "Min (ns)": 960,
+            "Max (ns)": 1056,
+            "StdDev (ns)": 15.7,
+            "Name": "void <unnamed>::elementwise_kernel_with_index<int, at::native::arange_cuda_out(const c10::Scalar &, const c10::Scalar &, const c10::Scalar &, at::Tensor &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)]>(T1, T2, function_traits<T2>::result_type *)"
+          },
+          {
+            "Time (%)": 2.5,
+            "Total Time (ns)": 5139407,
+            "Instances": 2560,
+            "Avg (ns)": 2007.6,
+            "Med (ns)": 2016.0,
+            "Min (ns)": 1952,
+            "Max (ns)": 2048,
+            "StdDev (ns)": 16.6,
+            "Name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(int) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)"
+          },
+          {
+            "Time (%)": 2.5,
+            "Total Time (ns)": 5053074,
+            "Instances": 5120,
+            "Avg (ns)": 986.9,
+            "Med (ns)": 992.0,
+            "Min (ns)": 959,
+            "Max (ns)": 1024,
+            "StdDev (ns)": 20.7,
+            "Name": "void at_cuda_detail::cub::detail::scan::DeviceCompactInitKernel<at_cuda_detail::cub::ScanTileState<int, (bool)1>, int *>(T1, int, T2)"
+          },
+          {
+            "Time (%)": 2.2,
+            "Total Time (ns)": 4485008,
+            "Instances": 2560,
+            "Avg (ns)": 1752.0,
+            "Med (ns)": 1760.0,
+            "Min (ns)": 1727,
+            "Max (ns)": 1824,
+            "StdDev (ns)": 14.6,
+            "Name": "void at::native::<unnamed>::distribution_elementwise_grid_stride_kernel<unsigned long, (int)2, void at::native::templates::cuda::random_from_to_kernel<at::CUDAGeneratorImpl *>(at::TensorIteratorBase &, unsigned long, long, T1)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(curandStatePhilox4_32_10 *) (instance 1)], void at::native::<unnamed>::distribution_nullary_kernel<int, unsigned long, ulonglong2, at::CUDAGeneratorImpl *, void at::native::templates::cuda::random_from_to_kernel<at::CUDAGeneratorImpl *>(at::TensorIteratorBase &, unsigned long, long, T1)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(curandStatePhilox4_32_10 *) (instance 1)], void at::native::templates::cuda::random_from_to_kernel<at::CUDAGeneratorImpl *>(at::TensorIteratorBase &, unsigned long, long, T1)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(unsigned long) (instance 1)]>(at::TensorIteratorBase &, T4, const T5 &, T6)::[lambda(int, unsigned long) (instance 1)]>(long, at::PhiloxCudaState, T3, T4)"
+          },
+          {
+            "Time (%)": 1.4,
+            "Total Time (ns)": 2942578,
+            "Instances": 2560,
+            "Avg (ns)": 1149.4,
+            "Med (ns)": 1120.0,
+            "Min (ns)": 1088,
+            "Max (ns)": 1728,
+            "StdDev (ns)": 113.0,
+            "Name": "void <unnamed>::randperm_handle_duplicate_keys_kernel<int, at::native::<unnamed>::OpaqueType<(int)8>>(T1 *, T2 *, T1, int, at::PhiloxCudaState)"
+          },
+          {
+            "Time (%)": 1.3,
+            "Total Time (ns)": 2596571,
+            "Instances": 2560,
+            "Avg (ns)": 1014.3,
+            "Med (ns)": 1024.0,
+            "Min (ns)": 991,
+            "Max (ns)": 1056,
+            "StdDev (ns)": 15.0,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)2, at::native::FillFunctor<long>, std::array<char *, (unsigned long)1>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 161694,
+            "Instances": 80,
+            "Avg (ns)": 2021.2,
+            "Med (ns)": 2016.0,
+            "Min (ns)": 1984,
+            "Max (ns)": 2048,
+            "StdDev (ns)": 14.8,
+            "Name": "void at::native::vectorized_elementwise_kernel<(int)4, void at::native::compare_scalar_kernel<int>(at::TensorIteratorBase &, at::native::<unnamed>::OpType, T1)::[lambda(int) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+          },
+          {
+            "Time (%)": 0.1,
+            "Total Time (ns)": 131103,
+            "Instances": 80,
+            "Avg (ns)": 1638.8,
+            "Med (ns)": 1632.0,
+            "Min (ns)": 1600,
+            "Max (ns)": 1760,
+            "StdDev (ns)": 35.2,
+            "Name": "void at::native::<unnamed>::CatArrayBatchedCopy_vectorized<at::native::<unnamed>::OpaqueType<(unsigned int)8>, unsigned int, (int)1, (int)128, (int)1, (int)16, (int)2>(char *, at::native::<unnamed>::CatArrInputTensorMetadata<T1, T2, T4, T5>, at::native::<unnamed>::TensorSizeStride<T2, (unsigned int)4>, int, T2)"
+          }
+        ],
+        "nvtx_summary": [
+          {
+            "Time (%)": 47.0,
+            "Total Time (ns)": 1641119778,
+            "Instances": 1,
+            "Avg (ns)": 1641119778.0,
+            "Med (ns)": 1641119778.0,
+            "Min (ns)": 1641119778,
+            "Max (ns)": 1641119778,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":shuffle_categories"
+          },
+          {
+            "Time (%)": 5.4,
+            "Total Time (ns)": 188783192,
+            "Instances": 1,
+            "Avg (ns)": 188783192.0,
+            "Med (ns)": 188783192.0,
+            "Min (ns)": 188783192,
+            "Max (ns)": 188783192,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_6"
+          },
+          {
+            "Time (%)": 4.9,
+            "Total Time (ns)": 169689353,
+            "Instances": 1,
+            "Avg (ns)": 169689353.0,
+            "Med (ns)": 169689353.0,
+            "Min (ns)": 169689353,
+            "Max (ns)": 169689353,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_0"
+          },
+          {
+            "Time (%)": 4.7,
+            "Total Time (ns)": 165394809,
+            "Instances": 1,
+            "Avg (ns)": 165394809.0,
+            "Med (ns)": 165394809.0,
+            "Min (ns)": 165394809,
+            "Max (ns)": 165394809,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_5"
+          },
+          {
+            "Time (%)": 4.7,
+            "Total Time (ns)": 163280723,
+            "Instances": 1,
+            "Avg (ns)": 163280723.0,
+            "Med (ns)": 163280723.0,
+            "Min (ns)": 163280723,
+            "Max (ns)": 163280723,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_3"
+          },
+          {
+            "Time (%)": 4.6,
+            "Total Time (ns)": 161854088,
+            "Instances": 1,
+            "Avg (ns)": 161854088.0,
+            "Med (ns)": 161854088.0,
+            "Min (ns)": 161854088,
+            "Max (ns)": 161854088,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_1"
+          },
+          {
+            "Time (%)": 4.6,
+            "Total Time (ns)": 160726818,
+            "Instances": 1,
+            "Avg (ns)": 160726818.0,
+            "Med (ns)": 160726818.0,
+            "Min (ns)": 160726818,
+            "Max (ns)": 160726818,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_4"
+          },
+          {
+            "Time (%)": 4.5,
+            "Total Time (ns)": 158249176,
+            "Instances": 1,
+            "Avg (ns)": 158249176.0,
+            "Med (ns)": 158249176.0,
+            "Min (ns)": 158249176,
+            "Max (ns)": 158249176,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_9"
+          },
+          {
+            "Time (%)": 4.5,
+            "Total Time (ns)": 157423262,
+            "Instances": 1,
+            "Avg (ns)": 157423262.0,
+            "Med (ns)": 157423262.0,
+            "Min (ns)": 157423262,
+            "Max (ns)": 157423262,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_2"
+          },
+          {
+            "Time (%)": 4.5,
+            "Total Time (ns)": 157305790,
+            "Instances": 1,
+            "Avg (ns)": 157305790.0,
+            "Med (ns)": 157305790.0,
+            "Min (ns)": 157305790,
+            "Max (ns)": 157305790,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_8"
+          },
+          {
+            "Time (%)": 4.5,
+            "Total Time (ns)": 155729603,
+            "Instances": 1,
+            "Avg (ns)": 155729603.0,
+            "Med (ns)": 155729603.0,
+            "Min (ns)": 155729603,
+            "Max (ns)": 155729603,
+            "StdDev (ns)": 0.0,
+            "Style": "PushPop",
+            "Range": ":iteration_7"
+          },
+          {
+            "Time (%)": 2.7,
+            "Total Time (ns)": 95718993,
+            "Instances": 5120,
+            "Avg (ns)": 18695.1,
+            "Med (ns)": 16325.5,
+            "Min (ns)": 15020,
+            "Max (ns)": 155623,
+            "StdDev (ns)": 5991.9,
+            "Style": "PushPop",
+            "Range": ":cub::DeviceReduce::Sum"
+          },
+          {
+            "Time (%)": 2.6,
+            "Total Time (ns)": 91046338,
+            "Instances": 5120,
+            "Avg (ns)": 17782.5,
+            "Med (ns)": 15600.5,
+            "Min (ns)": 14061,
+            "Max (ns)": 66611,
+            "StdDev (ns)": 5378.2,
+            "Style": "PushPop",
+            "Range": ":cub::DeviceSelect::Flagged"
+          },
+          {
+            "Time (%)": 0.6,
+            "Total Time (ns)": 22158333,
+            "Instances": 2560,
+            "Avg (ns)": 8655.6,
+            "Med (ns)": 7550.0,
+            "Min (ns)": 6720,
+            "Max (ns)": 37750,
+            "StdDev (ns)": 3164.4,
+            "Style": "PushPop",
+            "Range": ":cub::DeviceRadixSort"
+          }
+        ]
+      },
+      "diagnosis": "5904 kernel launches, 1312 asynchronous copies, and 536 stream synchronizations per call. Exactly 256 radix sorts per call match 8 estimators times 32 columns; masked indexing and per-column category materialization add 528 device-to-host copies.",
+      "recommended_direction": "First cache inverse permutations to remove repeated argsort, then flatten estimator/column metadata and batch masked remapping, gather, and category updates."
+    }
+  },
+  "raw_traces": {
+    "location": "/tmp/sdm-pr421-nsys",
+    "committed": false,
+    "sizes_bytes": {
+      "align_categories": 842932,
+      "power_transform": 1919179,
+      "shuffle_categories": 6446618
+    }
+  }
+}

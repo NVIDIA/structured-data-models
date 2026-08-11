@@ -1168,24 +1168,22 @@ def _svg_escape(value: Any) -> str:
 
 
 def _write_heatmap(payload: dict[str, Any], destination: Path) -> None:
-    axes = sorted(
-        {
-            result["axis"]
-            for result in payload["sweeps"]
-            if result["status"] == "completed"
-        }
-    )
+    device = "cuda"
+    completed = [
+        result
+        for result in payload["sweeps"]
+        if result["status"] == "completed" and result["device"] == device
+    ]
+    axes = sorted({result["axis"] for result in completed})
     processors = sorted(PROCESSOR_META)
     cell_width = 82
     cell_height = 25
     left = 175
-    top = 150
+    top = 230
     width = left + cell_width * len(axes) + 20
     height = top + cell_height * len(processors) + 50
     impact: dict[tuple[str, str], str] = {}
-    for result in payload["sweeps"]:
-        if result["status"] != "completed":
-            continue
+    for result in completed:
         key = (result["processor"], result["axis"])
         current = impact.get(key, "")
         if _impact_rank(result["impact"]) > _impact_rank(current):
@@ -1200,8 +1198,11 @@ def _write_heatmap(payload: dict[str, Any], destination: Path) -> None:
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="white"/>',
         "<style>text{font-family:Arial,sans-serif;fill:#222}.label{font-size:11px}.title{font-size:18px;font-weight:bold}.legend{font-size:12px}</style>",
-        '<text x="12" y="24" class="title">Processor input-characteristic impact</text>',
-        '<text x="12" y="44" class="legend">red = strong, yellow = moderate, grey = negligible, white = irrelevant/not measured</text>',
+        '<text x="12" y="24" class="title">GPU Processor runtime sensitivity by input characteristic</text>',
+        '<text x="12" y="48" class="legend">Red (strong): slowest median is ≥2x fastest, or ≥1.25x with Δ ≥1 ms.</text>',
+        '<text x="12" y="68" class="legend">Grey (negligible): Δ ≤ max(15% of fastest median, 0.03 ms).</text>',
+        '<text x="12" y="88" class="legend">Yellow (moderate): between strong and negligible. White: irrelevant or not measured on GPU.</text>',
+        '<text x="12" y="108" class="legend">Color measures runtime sensitivity, not optimization priority.</text>',
     ]
     for column, axis in enumerate(axes):
         x = left + column * cell_width + cell_width / 2
@@ -1217,10 +1218,10 @@ def _write_heatmap(payload: dict[str, Any], destination: Path) -> None:
             x = left + column * cell_width
             value = impact.get((processor, axis), "")
             lines.append(
-                f'<rect x="{x}" y="{y}" width="{cell_width - 2}" height="{cell_height - 2}" fill="{colors[value]}" stroke="#ddd"><title>{processor}: {axis}: {value or "irrelevant"}</title></rect>'
+                f'<rect x="{x}" y="{y}" width="{cell_width - 2}" height="{cell_height - 2}" fill="{colors[value]}" stroke="#ddd"><title>{processor}: {axis}: {value or "irrelevant/not measured"} on GPU</title></rect>'
             )
     lines.append("</svg>")
-    destination.write_text("\n".join(lines))
+    destination.write_text("\n".join(lines) + "\n")
 
 
 def _write_scaling(payload: dict[str, Any], destination: Path) -> None:

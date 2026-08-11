@@ -75,6 +75,45 @@ Representative hotspot timings are:
 |    5 | Batch categorical fit/lookup columns      | `AlignCategories` reached 10.94 ms and `ImputeMode` 7.98 ms on GPU at 32 columns; enqueue was 99.6%/99.5%                                                          | Flatten column/cardinality metadata and issue batched count/search/gather operations                                |                                                 30–50%, about 3–5 ms and 2–4 ms respectively |
 |    6 | Tune quantile chunks only after the above | `QuantileTransform` reached 152.76 ms CPU and 2.99 ms GPU at 128 columns; GPU enqueue was 98.4%                                                                    | Compile or coarsen the per-feature-chunk search/interpolation path without changing quantiles                       |                                      20–40%, about 0.6–1.2 ms in the isolated GPU worst case |
 
+### Nsight Systems validation
+
+The three highest-priority GPU orchestration hypotheses were profiled on the
+same NVIDIA L4 with Nsight Systems 2026.1.3. Each trace contains three warmups
+followed by ten NVTX-marked calls; statistics below are filtered to the outer
+Processor range. Nsight increased wall time by 1.78–2.03×, so unprofiled
+latencies remain authoritative while profiler call counts and attribution are
+used for diagnosis.
+
+| Processor / scenario                        | Unprofiled median | Kernels / call | Summed kernel time / call | CUDA launches / call | Async copies / call | Stream syncs / call |
+| ------------------------------------------- | ----------------: | -------------: | ------------------------: | -------------------: | ------------------: | ------------------: |
+| `AlignCategories`, 10k × 32, K=1,024        |          10.94 ms |            805 |                   1.79 ms |                  805 |                  32 |                  32 |
+| `PowerTransform`, 50k × 32, float32         |          21.08 ms |          2,163 |                   8.80 ms |                2,163 |                   0 |                   0 |
+| `ShuffleCategories`, 10k × 32, K=1,024, E=8 |          87.14 ms |          5,904 |                  20.54 ms |                5,904 |               1,312 |                 536 |
+
+The traces confirm:
+
+- `AlignCategories` is dominated by per-column orchestration. Its 32
+  device-to-host copies and stream synchronizations match the 32 dynamic
+  boolean-indexed vocabulary materializations. Batching columns and avoiding
+  dynamic-shape indexing is the relevant optimization.
+- `PowerTransform` emits 2,163 kernels for one call. The fixed 44-step search
+  expands into repeated small elementwise and reduction kernels, validating
+  compile/fusion rather than a data-movement optimization.
+- `ShuffleCategories` has the largest avoidable chain. Each call contains 256
+  logical radix sorts (8 estimators × 32 columns), represented by 256 instances
+  of each radix-sort kernel, plus 528 device-to-host copies. Cache inverse
+  permutations first to remove repeated `argsort`; then batch masked remapping
+  and category gathers across estimators and columns.
+
+The consolidated raw summary includes the complete CUDA API and kernel tables,
+memory-operation tables, profiled samples, and matching unprofiled baselines in
+[`results/processor_gpu_profiles.json`](results/processor_gpu_profiles.json).
+The reproducible capture target is
+[`profile_processor_hotspots.py`](profile_processor_hotspots.py). Binary
+`.nsys-rep` traces are not committed. Nsight Systems validates call topology
+and timing attribution but does not provide the hardware counters or SM metrics
+that would require Nsight Compute.
+
 The highest GPU allocations were `Softmax` at 476.9 MiB (8 × 10k × 512),
 `AddCalendarFields` at 218.8 MiB (50k × 32), and `ReduceEstimators` at
 184.4 MiB (8 × 10k × 512). These are shape-driven tensor footprints, not
@@ -115,50 +154,48 @@ ceiling at the measured worst case.
 | `ReduceEstimators`    | Numerical output; width strongest, rows moderate; estimator count flat for direct stacked reduction; 5.63 / 0.79 ms                              | Memory bandwidth and output allocation                                   | High / low-medium                   | Less than 2 ms CPU / 0.2 ms GPU; optimize only for very wide outputs                                   | `E=1/8/16`, `R=10k/50k`, `W=2/32/512`                              |
 | `Softmax`             | Numerical output; width and rows have thresholds, estimators linear; 115.45 / 2.89 ms at `W=512`                                                 | Compute/memory bandwidth; temporary temperature division                 | High / medium only for wide outputs | Special-case temperature 1 may save 20–40% (23–46 ms CPU worst case); typical small-class gain is tiny | `E=8`, `R=10k/50k`, `W=2/8/32/512`, float32/64                     |
 
-## Impact heatmap
+## GPU impact heatmap
 
-`🔴` means a strong relative effect, `🟡` a moderate effect, and `⚪` a
-practically negligible effect. A sweep is negligible when the difference
-between its fastest and slowest median is at most `max(15% of the fastest median, 0.20 ms CPU / 0.03 ms GPU)`. A non-negligible sweep is strong when the
-slowest median is at least 2× the fastest, or at least 1.25× the fastest with an
-absolute difference of at least 10 ms CPU / 1 ms GPU. All remaining effects are
-moderate. Blank cells are irrelevant to that Processor. This table takes the
-maximum impact observed on CPU or GPU; it measures sensitivity, not
-optimization priority.
+This heatmap uses only completed CUDA sweeps. `🔴` means the slowest median is
+at least 2× the fastest, or at least 1.25× the fastest with an absolute
+difference of at least 1 ms. `⚪` means the difference is at most
+`max(15% of the fastest median, 0.03 ms)`. `🟡` covers effects between those
+thresholds. Blank cells are irrelevant to that Processor or were not measured
+on GPU. Color measures runtime sensitivity, not optimization priority.
 
 | Processor           | Rows | Columns | Value mix | Cardinality | Dtype | Estimators | Output width | Text size | Config count |
 | ------------------- | :--: | :-----: | :-------: | :---------: | :---: | :--------: | :----------: | :-------: | :----------: |
 | AddCalendarFields   |  🔴  |   🔴    |    ⚪     |             |       |            |              |           |      🔴      |
-| AlignCategories     |  🔴  |   🔴    |    ⚪     |     🔴      |  ⚪   |     ⚪     |              |           |              |
+| AlignCategories     |  ⚪  |   🔴    |    ⚪     |     ⚪      |  ⚪   |     ⚪     |              |           |              |
 | Callable            |  ⚪  |         |           |             |       |            |              |           |              |
-| Choice              |  🟡  |         |           |             |       |     🔴     |              |           |      🔴      |
+| Choice              |  ⚪  |         |           |             |       |     🔴     |              |           |      🔴      |
 | Clip                |  ⚪  |   🟡    |           |             |  ⚪   |            |              |           |              |
-| ClipQuantiles       |  🔴  |   🔴    |    🔴     |             |  ⚪   |            |              |           |              |
-| ClipSigma           |  🔴  |   🔴    |    ⚪     |             |  🟡   |            |              |           |              |
-| DropConstantColumns |  🔴  |   🔴    |    ⚪     |             |       |     🔴     |              |           |              |
-| EmbedText           |  🔴  |   🔴    |           |             |       |            |              |    🔴     |              |
+| ClipQuantiles       |  🟡  |   🟡    |    🟡     |             |  ⚪   |            |              |           |              |
+| ClipSigma           |  ⚪  |   ⚪    |    ⚪     |             |  ⚪   |            |              |           |              |
+| DropConstantColumns |  ⚪  |   ⚪    |    ⚪     |             |       |     🔴     |              |           |              |
+| EmbedText           |      |         |           |             |       |            |              |           |              |
 | Identity            |  ⚪  |         |           |             |       |            |              |           |              |
-| ImputeMean          |  🔴  |   🔴    |    ⚪     |             |  ⚪   |            |              |           |              |
-| ImputeMode          |  🔴  |   🔴    |    ⚪     |     ⚪      |  ⚪   |            |              |           |              |
+| ImputeMean          |  ⚪  |   🟡    |    ⚪     |             |  ⚪   |            |              |           |              |
+| ImputeMode          |  ⚪  |   🔴    |    ⚪     |     ⚪      |  ⚪   |            |              |           |              |
 | PCA                 |  🔴  |   🔴    |           |             |  🔴   |            |              |           |      ⚪      |
-| PowerTransform      |  🔴  |   🔴    |    🟡     |             |  🔴   |            |              |           |              |
-| QuantileTransform   |  🔴  |   🔴    |    🔴     |             |  ⚪   |            |              |           |              |
-| ReduceEstimators    |  🔴  |         |           |             |  🟡   |     ⚪     |      🔴      |           |              |
+| PowerTransform      |  ⚪  |   ⚪    |    ⚪     |             |  ⚪   |            |              |           |              |
+| QuantileTransform   |  🟡  |   🔴    |    ⚪     |             |  ⚪   |            |              |           |              |
+| ReduceEstimators    |  🟡  |         |           |             |  ⚪   |     ⚪     |      🔴      |           |              |
 | SelectColumns       |      |   🟡    |           |             |       |            |              |           |      ⚪      |
 | Sequential          |      |         |           |             |       |     ⚪     |              |           |      🔴      |
-| ShuffleCategories   |  🔴  |   🔴    |    🟡     |     🔴      |       |     🔴     |              |           |              |
-| ShuffleColumns      |  🔴  |   🔴    |           |             |  🟡   |     🔴     |              |           |              |
-| Softmax             |  🔴  |         |           |             |  🔴   |     🔴     |      🔴      |           |              |
-| Standardize         |  🔴  |   🔴    |    ⚪     |             |  ⚪   |            |              |           |              |
+| ShuffleCategories   |  ⚪  |   🔴    |    ⚪     |     🔴      |       |     🔴     |              |           |              |
+| ShuffleColumns      |  ⚪  |   🟡    |           |             |  ⚪   |     🔴     |              |           |              |
+| Softmax             |  🔴  |         |           |             |  🔴   |     🟡     |      🔴      |           |              |
+| Standardize         |  ⚪  |   🟡    |    ⚪     |             |  ⚪   |            |              |           |              |
 | StypeDispatch       |      |         |           |             |       |     ⚪     |              |           |      🟡      |
-| TFIDF               |  🔴  |   🔴    |    🔴     |             |       |     ⚪     |              |    🔴     |              |
+| TFIDF               |      |         |           |             |       |            |              |           |              |
 | TaskDispatch        |      |         |           |             |       |     ⚪     |              |           |              |
-| ToNumerical         |  🔴  |   🟡    |           |             |  ⚪   |            |              |           |              |
+| ToNumerical         |  ⚪  |   🟡    |           |             |  ⚪   |            |              |           |              |
 
-The full per-axis heatmap and the six largest numeric scaling effects per
-device are also available as SVGs:
+The full GPU-only per-axis heatmap and the six largest numeric scaling effects
+per device are also available as SVGs:
 
-![Full Processor characteristic heatmap](plots/processor_characteristic_heatmap.svg)
+![GPU Processor characteristic heatmap](plots/processor_characteristic_heatmap.svg)
 
 ![Largest CPU and GPU scaling effects](plots/processor_scaling.svg)
 
@@ -199,3 +236,5 @@ those would materially perturb the short Processor calls.
 - CPU allocation/bandwidth classifications are implementation-informed rather
   than hardware-counter measurements. GPU peak allocation and enqueue/sync
   decomposition are recorded for every measured point.
+- Nsight Systems traces are API/kernel timelines, not Nsight Compute
+  hardware-counter profiles.
