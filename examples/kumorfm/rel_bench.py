@@ -67,28 +67,17 @@ def run_task(dataset_name: str, task_name: str) -> None:
     db = task.dataset.get_db(upto_test_timestamp=False)
     tables = {}
     for name, table in db.table_dict.items():
-        id_columns = {
-            table.pkey_col,
-            *table.fkey_col_to_pkey_table,
-        }
-        stypes = {}
-        for column in table.df:
-            try:
-                stype = sdm.infer_stypes(
-                    table.df[[column]].head(1000),
-                    overrides={column: "id"} if column in id_columns else None,
-                    with_text=True,
-                )[column]
-            except TypeError:
-                print(f"{name}.{column}: skipped (unsupported type)")
-                continue
-            if stype == sdm.Stype.text:
-                print(f"{name}.{column}: skipped (text)")
-                continue
-            stypes[column] = stype
         tables[name] = sdm.TableTensor.from_pandas(
-            df=table.df[list(stypes)],
-            stypes=stypes,
+            df=table.df,
+            stypes=sdm.infer_stypes(
+                table.df.head(10_000),
+                overrides={
+                    cast(str, table.pkey_col): "id",
+                    **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
+                },
+                text="drop",
+                unsupported="drop",
+            ),
         )
 
     data = sdm.RelationalData(
