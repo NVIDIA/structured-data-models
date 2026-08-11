@@ -43,3 +43,13 @@ def test_clone_layout() -> None:
     )
     assert not clone.is_contiguous()
     assert clone.unbind(-1)[0].data_ptr() != inp.unbind(-1)[0].data_ptr()
+
+
+def test_empty_clone_preserves_device() -> None:
+    inp = ColumnarTensor((), size=(2, 3), device="meta")
+
+    clone = inp.clone()
+
+    assert type(clone) is ColumnarTensor
+    assert clone.size() == inp.size()
+    assert clone.device == inp.device
