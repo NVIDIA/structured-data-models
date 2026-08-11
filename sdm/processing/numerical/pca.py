@@ -16,7 +16,7 @@ class PCA(Processor):
     supported_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
-    def __init__(self, *, num_components: int) -> None:
+    def __init__(self, num_components: int) -> None:
         super().__init__()
         self.num_components = num_components
         self.register_buffer("mean", torch.empty(0))
