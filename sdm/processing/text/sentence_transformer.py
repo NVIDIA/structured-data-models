@@ -168,17 +168,36 @@ class SentenceTransformer(Processor):
         device = text.device
         num_strings = text.numel()
 
+        _t: list[tuple[str, float]] = []
+
+        def _sync_ms() -> float:
+            torch.cuda.synchronize()
+            import time  # noqa: PLC0415
+
+            return time.perf_counter()
+
+        t0 = _sync_ms()
+
         text_series = text.to_cudf()
         if text.is_nullable:
             text_series = text_series.fillna("")
 
+        t1 = _sync_ms()
+        _t.append(("to_cudf + fillna", t1 - t0))
+
         normalized = tokenizer.normalizer.normalize(text_series)
         token_lists = tokenizer.wpt.tokenize(normalized)
+
+        t2 = _sync_ms()
+        _t.append(("normalize + tokenize", t2 - t1))
 
         flat_values = torch.from_dlpack(token_lists.list.leaves.to_cupy())
         raw_lengths = torch.from_dlpack(token_lists.list.len().to_cupy()).to(
             torch.long
         )
+
+        t3 = _sync_ms()
+        _t.append(("extract flat values + lengths", t3 - t2))
 
         # Source offsets into the flat token buffer
         offsets = torch.zeros(num_strings + 1, device=device, dtype=torch.long)
@@ -214,6 +233,9 @@ class SentenceTransformer(Processor):
         )
         attention_mask = (input_ids != tokenizer.pad_id).to(torch.long)
 
+        t4 = _sync_ms()
+        _t.append(("scatter + pad", t4 - t3))
+
         embeddings = torch.empty(
             num_strings,
             self._embedding_dim,
@@ -232,4 +254,15 @@ class SentenceTransformer(Processor):
                 embeddings[batch_start:batch_end] = features[
                     "sentence_embedding"
                 ]
+
+        t5 = _sync_ms()
+        _t.append(("forward pass", t5 - t4))
+
+        total_s = sum(s for _, s in _t)
+        print(f"\n[_encode_gpu] num_strings={num_strings}")  # noqa: T201
+        for label, s in _t:
+            print(  # noqa: T201
+                f"  {label:30s} {s:8.4f}s  {s / total_s * 100:5.1f}%"
+            )
+        print(f"  {'total':30s} {total_s:8.4f}s")  # noqa: T201
         return embeddings

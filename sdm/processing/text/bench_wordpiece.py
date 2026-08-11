@@ -91,9 +91,24 @@ def benchmark(label: str, num_warmup: int = 2, num_runs: int = 5) -> None:
 
 
 if has_gpu_tokenizer:
-    benchmark("GPU WordPiece tokenization")
+    # Accuracy check: compare embeddings from both paths
+    emb_gpu = processor.transform(table_x)
 
     saved = processor._word_piece_tokenizer
+    processor._word_piece_tokenizer = None
+    emb_cpu = processor.transform(table_x)
+    processor._word_piece_tokenizer = saved
+
+    max_diff = (emb_gpu.numerical - emb_cpu.numerical).abs().max().item()
+    mean_diff = (emb_gpu.numerical - emb_cpu.numerical).abs().mean().item()
+    print("Embedding accuracy (GPU vs CPU):")
+    print(f"  max abs diff:  {max_diff:.6f}")
+    print(f"  mean abs diff: {mean_diff:.6f}")
+    print()
+
+    # Benchmarks
+    benchmark("GPU WordPiece tokenization")
+
     processor._word_piece_tokenizer = None
     benchmark("CPU fallback (model.encode)")
     processor._word_piece_tokenizer = saved
