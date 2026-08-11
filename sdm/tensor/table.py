@@ -1402,6 +1402,30 @@ def _permute(inp: TableTensor, dims: Sequence[int]) -> TableTensor:
     )
 
 
+@TableTensor.implements(aten.movedim.int)
+def _movedim_int(
+    inp: TableTensor,
+    source: int,
+    destination: int,
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.movedim.int.decompose(inp, source, destination),
+    )
+
+
+@TableTensor.implements(aten.movedim.intlist)
+def _movedim_intlist(
+    inp: TableTensor,
+    source: Sequence[int],
+    destination: Sequence[int],
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.movedim.intlist.decompose(inp, source, destination),
+    )
+
+
 @TableTensor.implements(aten.select.int)
 @preserve_view_inference_mode
 def _select(inp: TableTensor, dim: int, index: int) -> TableTensor:
