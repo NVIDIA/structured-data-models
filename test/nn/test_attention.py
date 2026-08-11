@@ -514,7 +514,6 @@ def test_attention_default_configuration() -> None:
             query_transform=None,
             key_transform=None,
             scale=None,
-            zero_init_output=True,
         )
     finally:
         torch.random.set_rng_state(next_rng_state)
@@ -566,7 +565,6 @@ def test_attention_transforms_and_cache() -> None:
         query_transform=query_transform,
         key_transform=key_transform,
         scale=1.0,
-        zero_init_output=False,
     ).eval()
     with torch.no_grad():
         module.qkv_lin.weight.copy_(torch.eye(channels).repeat(3, 1))

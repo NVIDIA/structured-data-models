@@ -501,7 +501,6 @@ class Attention(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
-        zero_init_output: Whether to initialize the output projection to zero.
     """
 
     def __init__(
@@ -516,7 +515,6 @@ class Attention(torch.nn.Module):
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
         scale: float | None = None,
-        zero_init_output: bool = True,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -553,9 +551,8 @@ class Attention(torch.nn.Module):
         self.key_transform = key_transform
         self.out_lin = Linear(channels, channels, **factory_kwargs)
 
-        if zero_init_output:
-            torch.nn.init.zeros_(self.out_lin.weight)
-            torch.nn.init.zeros_(self.out_lin.bias)
+        torch.nn.init.zeros_(self.out_lin.weight)
+        torch.nn.init.zeros_(self.out_lin.bias)
 
     @overload
     def forward(

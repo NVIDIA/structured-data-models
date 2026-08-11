@@ -206,9 +206,10 @@ def test_configured_attention_compile(device: torch.device) -> None:
         ),
         key_transform=Float32RMSNorm(4, device=device),
         scale=1.0,
-        zero_init_output=False,
         device=device,
     )
+    with torch.no_grad():
+        module.out_lin.weight.copy_(torch.eye(8, device=device))
     query = torch.randn(2, 3, 8, device=device)
     key_value = torch.randn(2, 5, 8, device=device)
     rope = RotaryEmbedding(
