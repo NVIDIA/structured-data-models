@@ -100,7 +100,7 @@ def infer_stypes(
     """
     overrides = overrides or {}
 
-    fn: Callable[[str, Any, Policy, Policy], Stype | None] | None = None
+    fn: Callable[[str, object, Policy, Policy], Stype | None] | None = None
     columns: Iterable[tuple[Hashable, Any]] | None = None
     if isinstance(table, pa.Table):
         fn = _infer_arrow_stype
@@ -163,11 +163,11 @@ def infer_stypes(
 
 def _infer_arrow_stype(
     name: str,
-    array: pa.Array | pa.ChunkedArray,
+    array: object,
     text: Policy,
     id: Policy,
 ) -> Stype | None:
-
+    assert isinstance(array, pa.Array | pa.ChunkedArray)
     dtype = array.type
 
     if (
@@ -204,7 +204,7 @@ def _infer_arrow_stype(
 
 def _infer_pandas_stype(
     name: str,
-    column: pd.Series,
+    ser: object,
     text: Policy,
     id: Policy,
 ) -> Stype | None:
@@ -219,11 +219,12 @@ def _infer_pandas_stype(
         is_string_dtype,
     )
 
-    dtype = column.dtype
+    assert isinstance(ser, pa.Array | pa.ChunkedArray)
+    dtype = ser.dtype
 
     is_string = is_string_dtype(dtype)
     if is_object_dtype(dtype):
-        is_string = infer_dtype(column, skipna=True) == "string"
+        is_string = infer_dtype(ser, skipna=True) == "string"
 
     if (
         id != "off"
@@ -239,9 +240,7 @@ def _infer_pandas_stype(
         return Stype.categorical
 
     if is_string:
-        if text != "off" and _is_arrow_text(
-            pa.array(column, from_pandas=True)
-        ):
+        if text != "off" and _is_arrow_text(pa.array(ser, from_pandas=True)):
             return None if text == "drop" else Stype.text
         return Stype.categorical
 
@@ -253,7 +252,7 @@ def _infer_pandas_stype(
 
 def _infer_cudf_stype(
     name: str,
-    column: cudf.Series,
+    ser: object,
     text: Policy,
     id: Policy,
 ) -> Stype | None:
@@ -267,7 +266,8 @@ def _infer_cudf_stype(
         is_string_dtype,
     )
 
-    dtype = column.dtype
+    assert isinstance(ser, cudf.Series)
+    dtype = ser.dtype
 
     if (
         id != "off"
@@ -287,7 +287,7 @@ def _infer_cudf_stype(
         return Stype.categorical
 
     if is_string_dtype(dtype):
-        if text != "off" and _is_cudf_text(column):
+        if text != "off" and _is_cudf_text(ser):
             return None if text == "drop" else Stype.text
         return Stype.categorical
 
@@ -328,15 +328,15 @@ def _is_arrow_text(array: pa.Array | pa.ChunkedArray) -> bool:
     return avg_words >= _TEXT_MIN_AVERAGE_WORD_COUNT
 
 
-def _is_cudf_text(column: cudf.Series) -> bool:
-    if (num_values := column.count()) == 0:
+def _is_cudf_text(ser: cudf.Series) -> bool:
+    if (num_values := ser.count()) == 0:
         return False
 
-    if (num_unique := column.nunique(dropna=True)) < _TEXT_MIN_UNIQUE_VALUES:
+    if (num_unique := ser.nunique(dropna=True)) < _TEXT_MIN_UNIQUE_VALUES:
         return False
     if num_unique / num_values <= _TEXT_MIN_UNIQUE_RATIO:
         return False
 
-    unique = column.dropna().unique()
+    unique = ser.dropna().unique()
     avg_words = unique.str.token_count().mean()
     return avg_words >= _TEXT_MIN_AVERAGE_WORD_COUNT
