@@ -200,7 +200,6 @@ def test_configured_attention_compile(device: torch.device) -> None:
     module = Attention(
         channels=8,
         num_query_heads=2,
-        qkv_projection="separate",
         query_transform=torch.nn.Sequential(
             Float32RMSNorm(4, device=device),
             SoftplusScale(4, multiplier=0.75, device=device),
@@ -211,8 +210,7 @@ def test_configured_attention_compile(device: torch.device) -> None:
         device=device,
     )
     query = torch.randn(2, 3, 8, device=device)
-    key = torch.randn(2, 5, 8, device=device)
-    value = torch.randn(2, 5, 8, device=device)
+    key_value = torch.randn(2, 5, 8, device=device)
     rope = RotaryEmbedding(
         channels=4,
         layout="interleaved",
@@ -221,15 +219,13 @@ def test_configured_attention_compile(device: torch.device) -> None:
 
     expected, expected_cache = module(
         query=query,
-        key_value=key,
-        value=value,
+        key_value=key_value,
         rope=rope,
         return_key_value=True,
     )
     output, cache = fullgraph(module)(
         query=query,
-        key_value=key,
-        value=value,
+        key_value=key_value,
         rope=rope,
         return_key_value=True,
     )

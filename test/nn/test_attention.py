@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Literal, cast
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -101,7 +101,6 @@ def test_attention_configured_device_dtype_and_meta() -> None:
     module = Attention(
         channels=8,
         num_query_heads=4,
-        qkv_projection="separate",
         query_transform=query_transform,
         key_transform=Float32RMSNorm(2, device="meta", dtype=dtype),
         device="meta",
@@ -512,7 +511,6 @@ def test_attention_default_configuration() -> None:
             channels=8,
             num_query_heads=4,
             num_key_value_heads=2,
-            qkv_projection="packed",
             query_transform=None,
             key_transform=None,
             scale=None,
@@ -550,52 +548,7 @@ def test_attention_default_configuration() -> None:
     )
 
 
-def test_attention_separate_projection_matches_packed() -> None:
-    channels = 8
-    num_query_heads = 4
-    num_key_value_heads = 2
-    packed = Attention(
-        channels=channels,
-        num_query_heads=num_query_heads,
-        num_key_value_heads=num_key_value_heads,
-        scale=0.7,
-        zero_init_output=False,
-        dtype=torch.float64,
-    )
-    separate = Attention(
-        channels=channels,
-        num_query_heads=num_query_heads,
-        num_key_value_heads=num_key_value_heads,
-        scale=0.7,
-        zero_init_output=False,
-        qkv_projection="separate",
-        dtype=torch.float64,
-    )
-    with torch.no_grad():
-        q_weight, k_weight, v_weight = packed.qkv_lin.weight.split(
-            [packed.q_dim, packed.kv_dim, packed.kv_dim]
-        )
-        q_bias, k_bias, v_bias = packed.qkv_lin.bias.split(
-            [packed.q_dim, packed.kv_dim, packed.kv_dim]
-        )
-        separate.q_proj.weight.copy_(q_weight)
-        separate.q_proj.bias.copy_(q_bias)
-        separate.k_proj.weight.copy_(k_weight)
-        separate.k_proj.bias.copy_(k_bias)
-        separate.v_proj.weight.copy_(v_weight)
-        separate.v_proj.bias.copy_(v_bias)
-        separate.out_lin.load_state_dict(packed.out_lin.state_dict())
-
-    query = torch.randn(2, 3, channels, dtype=torch.float64)
-    key_value = torch.randn(2, 5, channels, dtype=torch.float64)
-    for source in (None, key_value):
-        expected = packed(query=query, key_value=source)
-        output = separate(query=query, key_value=source)
-        torch.testing.assert_close(output, expected)
-        assert torch.count_nonzero(output) > 0
-
-
-def test_attention_transforms_distinct_value_and_cache() -> None:
+def test_attention_transforms_and_cache() -> None:
     channels = 4
     num_heads = 2
     query_transform = torch.nn.Sequential(
@@ -610,39 +563,39 @@ def test_attention_transforms_distinct_value_and_cache() -> None:
     module = Attention(
         channels=channels,
         num_query_heads=num_heads,
-        qkv_projection="separate",
         query_transform=query_transform,
         key_transform=key_transform,
         scale=1.0,
         zero_init_output=False,
     ).eval()
+    with torch.no_grad():
+        module.qkv_lin.weight.copy_(torch.eye(channels).repeat(3, 1))
+        module.qkv_lin.bias.zero_()
+        module.out_lin.weight.copy_(torch.eye(channels))
+        module.out_lin.bias.zero_()
 
     query = torch.randn(2, 3, channels)
-    key = torch.randn(2, 5, channels)
-    value = torch.randn(2, 5, channels)
+    key_value = torch.randn(2, 5, channels)
     rope = RotaryEmbedding(channels=2, layout="interleaved")
     output, cache = module(
         query=query,
-        key_value=key,
-        value=value,
+        key_value=key_value,
         rope=rope,
         return_key_value=True,
         batch_size_limit=1,
     )
 
-    projected_query = module.q_proj(query).unflatten(-1, (num_heads, 2))
-    projected_key = module.k_proj(key).unflatten(-1, (num_heads, 2))
-    projected_value = module.v_proj(value).unflatten(-1, (num_heads, 2))
+    projected_query = query.unflatten(-1, (num_heads, 2))
+    projected_key = key_value.unflatten(-1, (num_heads, 2))
+    projected_value = key_value.unflatten(-1, (num_heads, 2))
     projected_query = query_transform(rope(projected_query))
     projected_key = key_transform(rope(projected_key))
-    expected = module.out_lin(
-        reference_sdpa(
-            query=projected_query,
-            key=projected_key,
-            value=projected_value,
-            scale=1.0,
-        ).flatten(-2)
-    )
+    expected = reference_sdpa(
+        query=projected_query,
+        key=projected_key,
+        value=projected_value,
+        scale=1.0,
+    ).flatten(-2)
 
     torch.testing.assert_close(output, expected)
     torch.testing.assert_close(cache.key, projected_key)
@@ -654,36 +607,6 @@ def test_attention_transforms_distinct_value_and_cache() -> None:
         batch_size_limit=1,
     )
     torch.testing.assert_close(cached_output, output)
-
-
-@pytest.mark.parametrize("qkv_projection", ["packed", "separate"])
-def test_attention_distinct_value_broadcast_chunking(
-    qkv_projection: Literal["packed", "separate"],
-) -> None:
-    module = Attention(
-        channels=8,
-        num_query_heads=2,
-        qkv_projection=qkv_projection,
-    ).eval()
-    with torch.no_grad():
-        module.out_lin.weight.copy_(torch.eye(8))
-        module.out_lin.bias.zero_()
-    query = torch.randn(1, 1, 3, 8)
-    key = torch.randn(1, 3, 5, 8)
-    value = torch.randn(2, 1, 5, 8)
-
-    expected = module(query=query, key_value=key, value=value)
-    output = module(
-        query=query,
-        key_value=key,
-        value=value,
-        batch_size_limit=2,
-    )
-    implicit_value = module(query=query, key_value=key)
-
-    assert output.size() == (2, 3, 3, 8)
-    torch.testing.assert_close(output, expected)
-    assert not torch.allclose(output, implicit_value)
 
 
 @withCUDA
@@ -954,13 +877,6 @@ def test_attention_errors() -> None:
 
     with pytest.raises(ValueError, match="must be divisible"):
         Attention(channels=5, num_query_heads=2)
-
-    with pytest.raises(ValueError, match="requires `key_value`"):
-        module(query=query, value=query)
-
-    _, cache = module(query=query, return_key_value=True)
-    with pytest.raises(ValueError, match="requires `key_value`"):
-        module(query=query, key_value=cache, value=query)
 
 
 def test_attention_batch_size_limit_propagation() -> None:
