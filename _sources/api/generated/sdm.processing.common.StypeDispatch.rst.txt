@@ -6,7 +6,7 @@
 .. autoclass:: StypeDispatch
    :members:
    :show-inheritance:
-   :exclude-members: supported_stypes, requires_fit
+   :exclude-members: handles_stypes, requires_fit
 
 
 Capabilities
@@ -14,7 +14,7 @@ Capabilities
 
 .. list-table::
 
-   * - **Supported Semantic Types**
-     - ``categorical``, ``datetime``, ``id``, ``numerical``, ``text``
+   * - **Handled Semantic Types**
+     - instance-specific
    * - **Requires Fitting**
      - instance-specific

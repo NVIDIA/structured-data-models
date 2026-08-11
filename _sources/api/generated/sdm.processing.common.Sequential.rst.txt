@@ -6,7 +6,7 @@
 .. autoclass:: Sequential
    :members:
    :show-inheritance:
-   :exclude-members: supported_stypes, requires_fit
+   :exclude-members: handles_stypes, requires_fit
 
 
 Capabilities
@@ -14,7 +14,7 @@ Capabilities
 
 .. list-table::
 
-   * - **Supported Semantic Types**
+   * - **Handled Semantic Types**
      - instance-specific
    * - **Requires Fitting**
      - instance-specific

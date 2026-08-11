@@ -167,7 +167,7 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.processing.base.Processor"><code class="docutils literal notranslate"><span class="pre">Processor</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.processing.base.Processor.supported_stypes"><code class="docutils literal notranslate"><span class="pre">Processor.supported_stypes</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.base.Processor.handles_stypes"><code class="docutils literal notranslate"><span class="pre">Processor.handles_stypes</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.requires_fit"><code class="docutils literal notranslate"><span class="pre">Processor.requires_fit</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.as_processor"><code class="docutils literal notranslate"><span class="pre">Processor.as_processor()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.fit"><code class="docutils literal notranslate"><span class="pre">Processor.fit()</span></code></a></li>
@@ -224,13 +224,13 @@ A <a class="reference internal" href="#sdm.processing.base.Processor" title="sdm
 the transformation via <a class="reference internal" href="#sdm.processing.base.Processor.transform" title="sdm.processing.base.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>. Implementations preserve the row
 and batch dimensions. Batch dimensions are processed independently.</p>
 <p><a class="reference internal" href="#sdm.processing.base.Processor.fit" title="sdm.processing.base.Processor.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>, <a class="reference internal" href="#sdm.processing.base.Processor.transform" title="sdm.processing.base.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>, and <a class="reference internal" href="#sdm.processing.base.Processor.fit_transform" title="sdm.processing.base.Processor.fit_transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit_transform()</span></code></a> are no-ops for
-supported stypes with empty blocks.</p>
+stypes outside of <a class="reference internal" href="#sdm.processing.base.Processor.handles_stypes" title="sdm.processing.base.Processor.handles_stypes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">handles_stypes</span></code></a>.</p>
 <dl class="field-list simple">
 </dl>
 <dl class="py attribute">
-<dt class="sig sig-object py" id="sdm.processing.base.Processor.supported_stypes">
-<span class="sig-name descname"><span class="pre">supported_stypes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#sdm.processing.base.Processor.supported_stypes" title="Link to this definition">#</a></dt>
-<dd><p>Semantic types supported for input columns in this processor.</p>
+<dt class="sig sig-object py" id="sdm.processing.base.Processor.handles_stypes">
+<span class="sig-name descname"><span class="pre">handles_stypes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#sdm.processing.base.Processor.handles_stypes" title="Link to this definition">#</a></dt>
+<dd><p>Semantic types this processor operates on.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -352,7 +352,7 @@ and a sequence of processor-like objects is normalized to
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=f02fb072"></script>
+      <script src="../../_static/documentation_options.js?v=0448976f"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
