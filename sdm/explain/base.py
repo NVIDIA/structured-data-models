@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from typing import Any, Generic, TypeVar, final
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, final
 
-from sdm import TableTensor
+import torch
+from torch import Tensor
+
+from sdm import Recipe, RelatedTables, TableTensor
+
+if TYPE_CHECKING:
+    from sdm.models import ICLModel
 
 _ResultT = TypeVar("_ResultT", covariant=True)
 
@@ -23,40 +28,74 @@ class Explainer(ABC, Generic[_ResultT]):  # noqa: D101
         return self._result
 
     @final
-    def explain(
+    def explain_forward(  # noqa: D102
         self,
-        operation: Callable[..., TableTensor],
-        prediction: TableTensor,
+        model: ICLModel,
         /,
-        *args: Any,
+        x_context: Tensor | TableTensor,
+        y_context: Tensor | TableTensor,
+        x_query: Tensor | TableTensor,
+        related_context_tables: RelatedTables | None = None,
+        related_query_tables: RelatedTables | None = None,
+        *,
+        recipe: Recipe | None = None,
+        num_estimators: int = 1,
+        generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> TableTensor:
-        """Explain a model operation and return its prediction.
-
-        Args:
-            operation: Model operation that produced ``prediction``.
-            prediction: Prediction returned by ``operation``.
-            *args: Positional arguments passed to ``operation``.
-            **kwargs: Keyword arguments passed to ``operation``.
-
-        Returns:
-            ``prediction`` unchanged.
-        """
         self._result = None
-        self._result = self._explain(
-            operation,
-            prediction,
-            *args,
+        prediction, self._result = self._explain_forward(
+            model,
+            x_context,
+            y_context,
+            x_query,
+            related_context_tables,
+            related_query_tables,
+            recipe=recipe,
+            num_estimators=num_estimators,
+            generator=generator,
             **kwargs,
         )
         return prediction
 
-    @abstractmethod
-    def _explain(
+    @final
+    def explain_predict(  # noqa: D102
         self,
-        operation: Callable[..., TableTensor],
-        prediction: TableTensor,
+        model: ICLModel,
         /,
-        *args: Any,
+        x: Tensor | TableTensor,
+        related_tables: RelatedTables | None = None,
+    ) -> TableTensor:
+        self._result = None
+        prediction, self._result = self._explain_predict(
+            model,
+            x,
+            related_tables,
+        )
+        return prediction
+
+    @abstractmethod
+    def _explain_forward(
+        self,
+        model: ICLModel,
+        /,
+        x_context: Tensor | TableTensor,
+        y_context: Tensor | TableTensor,
+        x_query: Tensor | TableTensor,
+        related_context_tables: RelatedTables | None = None,
+        related_query_tables: RelatedTables | None = None,
+        *,
+        recipe: Recipe | None = None,
+        num_estimators: int = 1,
+        generator: torch.Generator | None = None,
         **kwargs: Any,
-    ) -> _ResultT: ...
+    ) -> tuple[TableTensor, _ResultT]: ...
+
+    @abstractmethod
+    def _explain_predict(
+        self,
+        model: ICLModel,
+        /,
+        x: Tensor | TableTensor,
+        related_tables: RelatedTables | None = None,
+    ) -> tuple[TableTensor, _ResultT]: ...
