@@ -21,6 +21,7 @@ class ImputeMode(Processor):
     """
 
     supported_stypes = frozenset({Stype.categorical})
+    requires_fit = True
 
     def __init__(self) -> None:
         super().__init__()

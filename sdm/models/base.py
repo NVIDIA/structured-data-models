@@ -40,7 +40,7 @@ class ICLModel(torch.nn.Module, ABC):
     key/value caching, and ensembling.
     """
 
-    #: Semantic types supported for input feature columns in this model.
+    #: Semantic types supported for input columns in this model.
     supported_feature_stypes: ClassVar[frozenset[Stype]]
 
     #: Semantic types supported for target columns in this model.

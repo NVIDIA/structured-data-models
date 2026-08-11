@@ -19,6 +19,15 @@ from sdm.tensor import EnsembleTable
 # and is therefore left to those processors as well.
 class IdentityEnsembleProcessor(EnsembleProcessor):
     supported_stypes = frozenset({Stype.numerical})
+    requires_fit = True
+
+    def _fit_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        pass
 
     def _transform_ensemble(
         self,

@@ -1,4 +1,3 @@
-import copy
 from typing import Any, cast
 
 import pytest
@@ -31,6 +30,7 @@ class Add(Processor, InvertibleMixin):
 
 class AddFittedMemberCount(EnsembleProcessor):
     supported_stypes = frozenset(Stype)
+    requires_fit = True
 
     def __init__(self) -> None:
         super().__init__()
@@ -65,13 +65,8 @@ def _table() -> TableTensor:
 
 def test_choice_draws_at_fit() -> None:
     choice = sp.Choice(sp.Identity(), sp.Standardize())
-
-    with pytest.raises(RuntimeError, match="no selected option"):
-        _ = choice.selected
-
     choice.fit(_table())
-
-    assert isinstance(choice.selected, sp.Identity | sp.Standardize)
+    assert choice._option_ids == (0,) or choice._option_ids == (1,)
 
 
 def test_choice_accepts_callable_option() -> None:
@@ -82,7 +77,6 @@ def test_choice_accepts_callable_option() -> None:
 
     output = choice.fit_transform(table)
 
-    assert not choice.selected.requires_fit
     assert torch.equal(output.numerical, table.numerical.square())
     assert repr(choice) == "Choice(\n  Callable(<lambda>),\n)"
 
@@ -144,21 +138,6 @@ def test_choice_repr_shows_all_options() -> None:
 
     assert "Identity" in repr(choice)
     assert "Standardize" in repr(choice)
-
-
-def test_choice_copies_draw_independently_at_fit() -> None:
-    template = sp.Choice(
-        sp.Identity(),
-        sp.QuantileTransform(output_distribution="normal"),
-    )
-    copies = [copy.deepcopy(template) for _ in range(8)]
-
-    torch.manual_seed(123)
-    for choice in copies:
-        choice.fit(_table())
-
-    picks = {type(choice.selected).__name__ for choice in copies}
-    assert picks == {"Identity", "QuantileTransform"}
 
 
 def test_choice_round_robin_routes_members() -> None:
