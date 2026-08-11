@@ -4,6 +4,7 @@ from itertools import repeat
 import torch
 from torch.nn import ModuleList
 
+from sdm import Stype
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
@@ -35,9 +36,13 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         super().__init__()
         self.processor = processor
         self.requires_fit = processor.requires_fit
-        self.supported_stypes = processor.supported_stypes
 
         self._group_processors: ModuleList[Processor] = ModuleList()
+
+    @property
+    def handles_stypes(self) -> frozenset[Stype]:
+        r""":meta private:"""  # noqa: D415
+        return self.processor.handles_stypes
 
     def _fit_ensemble(
         self,

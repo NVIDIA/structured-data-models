@@ -63,7 +63,7 @@ class _UnsupportedRecordingModel(_RecordingModel):
 
 
 class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
-    supported_stypes = frozenset(Stype)
+    handles_stypes = frozenset(Stype)
     requires_fit = True
     generators: ClassVar[list[torch.Generator | None]] = []
     draws: ClassVar[list[torch.Tensor]] = []
