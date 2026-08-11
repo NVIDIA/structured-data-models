@@ -135,8 +135,20 @@ if has_gpu_tokenizer:
 
     # NaN check
     emb_gpu = processor.transform(table_x)
-    num_nan = emb_gpu.numerical.isnan().sum().item()
-    print(f"NaN in GPU embeddings: {num_nan} / {emb_gpu.numerical.numel()}")
+    num_nan_gpu = emb_gpu.numerical.isnan().sum().item()
+
+    saved = processor._word_piece_tokenizer
+    processor._word_piece_tokenizer = None
+    emb_cpu = processor.transform(table_x)
+    processor._word_piece_tokenizer = saved
+
+    num_nan_cpu = emb_cpu.numerical.isnan().sum().item()
+    print(
+        f"NaN in GPU embeddings: {num_nan_gpu} / {emb_gpu.numerical.numel()}"
+    )
+    print(
+        f"NaN in CPU embeddings: {num_nan_cpu} / {emb_cpu.numerical.numel()}"
+    )
     print()
 
     # Benchmarks
