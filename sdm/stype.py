@@ -219,7 +219,7 @@ def _infer_pandas_stype(
         is_string_dtype,
     )
 
-    assert isinstance(ser, pa.Array | pa.ChunkedArray)
+    assert isinstance(ser, pd.Series)
     dtype = ser.dtype
 
     is_string = is_string_dtype(dtype)
