@@ -133,6 +133,12 @@ if has_gpu_tokenizer:
         print(f"    match: {match}")
     print()
 
+    # NaN check
+    emb_gpu = processor.transform(table_x)
+    num_nan = emb_gpu.numerical.isnan().sum().item()
+    print(f"NaN in GPU embeddings: {num_nan} / {emb_gpu.numerical.numel()}")
+    print()
+
     # Benchmarks
     benchmark("GPU WordPiece tokenization")
 
