@@ -283,6 +283,8 @@ class SentenceTransformer(Processor):
                     "sentence_embedding"
                 ]
 
+        # NOTE: ignore this just for benchmarking.
+        # it will be removed in this end.
         t6 = _sync_ms()
         _t.append(("forward pass", t6 - t5))
 
