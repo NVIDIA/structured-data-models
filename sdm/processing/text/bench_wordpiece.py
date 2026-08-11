@@ -101,24 +101,42 @@ def benchmark(label: str, num_warmup: int = 2, num_runs: int = 5) -> None:
 
 
 if has_gpu_tokenizer:
-    # Accuracy check: compare embeddings from both paths
-    emb_gpu = processor.transform(table_x)
+    # Token ID comparison: tokenize a few strings with both paths
 
-    saved = processor._word_piece_tokenizer
-    processor._word_piece_tokenizer = None
-    emb_cpu = processor.transform(table_x)
-    processor._word_piece_tokenizer = saved
+    from sdm import StringTensor
 
-    max_diff = (emb_gpu.numerical - emb_cpu.numerical).abs().max().item()
-    mean_diff = (emb_gpu.numerical - emb_cpu.numerical).abs().mean().item()
-    print("Embedding accuracy (GPU vs CPU):")
-    print(f"  max abs diff:  {max_diff:.6f}")
-    print(f"  mean abs diff: {mean_diff:.6f}")
+    sample_texts = [
+        "Hello world",
+        "The quick brown fox jumps.",
+        "Machine learning is great!",
+    ]
+    sample_tensor = StringTensor.from_list(sample_texts, device=device)
+
+    # GPU tokenization
+    wpt = processor._word_piece_tokenizer
+    text_series = sample_tensor.to_cudf()
+    normalized = wpt.normalizer.normalize(text_series)
+    gpu_tokens = wpt.wpt.tokenize(normalized)
+
+    # CPU tokenization (HuggingFace)
+    hf_tokenizer = processor._model.module.tokenizer
+
+    print("Token ID comparison (GPU cuDF vs CPU HuggingFace):")
+    for i, text in enumerate(sample_texts):
+        gpu_ids = gpu_tokens.iloc[i]
+        cpu_result = hf_tokenizer(text, add_special_tokens=False)
+        cpu_ids = cpu_result["input_ids"]
+        match = list(gpu_ids) == cpu_ids
+        print(f"  '{text}'")
+        print(f"    GPU: {list(gpu_ids)}")
+        print(f"    CPU: {cpu_ids}")
+        print(f"    match: {match}")
     print()
 
     # Benchmarks
     benchmark("GPU WordPiece tokenization")
 
+    saved = processor._word_piece_tokenizer
     processor._word_piece_tokenizer = None
     benchmark("CPU fallback (model.encode)")
     processor._word_piece_tokenizer = saved
