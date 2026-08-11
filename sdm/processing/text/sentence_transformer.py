@@ -236,6 +236,27 @@ class SentenceTransformer(Processor):
         t4 = _sync_ms()
         _t.append(("scatter + pad", t4 - t3))
 
+        # Sort by length so batches have similar-length sequences
+        sort_idx = lengths.argsort()
+        sorted_input_ids = input_ids[sort_idx]
+        sorted_attention_mask = attention_mask[sort_idx]
+        sorted_lengths = lengths[sort_idx]
+
+        # Precompute per-batch max lengths in one sync
+        batch_ends = (
+            torch.arange(
+                self.batch_size,
+                num_strings + self.batch_size,
+                self.batch_size,
+                device=device,
+            ).clamp(max=num_strings)
+            - 1
+        )
+        batch_max_lengths = (sorted_lengths[batch_ends] + 2).tolist()
+
+        t5 = _sync_ms()
+        _t.append(("sort + precompute batch lengths", t5 - t4))
+
         embeddings = torch.empty(
             num_strings,
             self._embedding_dim,
@@ -243,31 +264,33 @@ class SentenceTransformer(Processor):
             dtype=torch.float,
         )
         with torch.inference_mode():
-            for batch_start in range(0, num_strings, self.batch_size):
+            for i, batch_start in enumerate(
+                range(0, num_strings, self.batch_size)
+            ):
                 batch_end = min(batch_start + self.batch_size, num_strings)
-                batch_seq_len = int(lengths[batch_start:batch_end].max()) + 2
+                batch_seq_len = batch_max_lengths[i]
                 features: dict[str, Tensor] = {
-                    "input_ids": input_ids[
+                    "input_ids": sorted_input_ids[
                         batch_start:batch_end, :batch_seq_len
                     ],
-                    "attention_mask": attention_mask[
+                    "attention_mask": sorted_attention_mask[
                         batch_start:batch_end, :batch_seq_len
                     ],
                 }
                 for module in self._model.module:
                     features = module(features)
-                embeddings[batch_start:batch_end] = features[
+                embeddings[sort_idx[batch_start:batch_end]] = features[
                     "sentence_embedding"
                 ]
 
-        t5 = _sync_ms()
-        _t.append(("forward pass", t5 - t4))
+        t6 = _sync_ms()
+        _t.append(("forward pass", t6 - t5))
 
-        total_s = sum(s for _, s in _t)
+        elapsed = sum(s for _, s in _t)
         print(f"\n[_encode_gpu] num_strings={num_strings}")  # noqa: T201
         for label, s in _t:
             print(  # noqa: T201
-                f"  {label:30s} {s:8.4f}s  {s / total_s * 100:5.1f}%"
+                f"  {label:30s} {s:8.4f}s  {s / elapsed * 100:5.1f}%"
             )
-        print(f"  {'total':30s} {total_s:8.4f}s")  # noqa: T201
+        print(f"  {'total':30s} {elapsed:8.4f}s")  # noqa: T201
         return embeddings
