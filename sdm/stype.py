@@ -5,7 +5,7 @@ import re
 import warnings
 from collections.abc import Callable, Hashable, Iterable, Mapping
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -127,7 +127,7 @@ def infer_stypes(
     stypes = {}
     unsupported_columns: list[str] = []
     for name, column in columns:
-        name = cast(str, name)
+        assert isinstance(name, str)
         if name in overrides:
             stypes[name] = Stype(overrides[name])
             continue
