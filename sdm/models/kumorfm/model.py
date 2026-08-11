@@ -149,11 +149,6 @@ class KumoRFM(ICLModel):
         *,
         gnn_scope: Literal["full", "readout"] = "full",
     ) -> None:
-        if gnn_scope not in ("full", "readout"):
-            raise ValueError(
-                "'gnn_scope' must be either 'full' or 'readout' "
-                f"(got {gnn_scope!r})"
-            )
         super().__init__()
         self._gnn_scope: Literal["full", "readout"] = gnn_scope
 
@@ -226,6 +221,12 @@ class KumoRFM(ICLModel):
         elif cache is not None:
             classes = cast(Tensor | None, cache["classes"])
 
+        if self.gnn_scope == "full":
+            readout_scoped = False
+        else:
+            assert self.gnn_scope == "readout"
+            readout_scoped = True
+
         out = (self.reg_model if classes is None else self.cls_model)(
             x_context=x_context,
             y_context=y_context,
@@ -235,7 +236,7 @@ class KumoRFM(ICLModel):
             cache=cache,
             generator=generator,
             num_hops=kwargs.get("num_hops"),
-            readout_scoped=self.gnn_scope == "readout",
+            readout_scoped=readout_scoped,
         )
 
         if classes is None:

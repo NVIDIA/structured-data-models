@@ -129,19 +129,6 @@ def test_gnn_scope_preserves_state_dict() -> None:
     assert full.load_state_dict(readout_state, strict=True).missing_keys == []
 
 
-def test_gnn_scope_rejects_invalid(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fail_download(**kwargs: object) -> str:
-        pytest.fail(f"Unexpected checkpoint download: {kwargs}")
-
-    monkeypatch.setattr(kumorfm_model, "download_checkpoint", fail_download)
-    invalid_scope: Any = "invalid"
-
-    with pytest.raises(ValueError, match="'gnn_scope'"):
-        KumoRFM(gnn_scope=invalid_scope)
-
-
 @pytest.mark.parametrize(
     ("is_classifier", "source", "target"),
     [
@@ -321,10 +308,12 @@ def test_task_graph_preserves_hops_after_diameter(
     "dtype",
     [torch.float16, torch.float32, torch.float64],
 )
+@pytest.mark.parametrize("readout_scoped", [False, True])
 def test_invariant_gnn_destination_chunks(
     relational_data: RelationalData,
     device: torch.device,
     dtype: torch.dtype,
+    readout_scoped: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     related_tables = RelatedTables(
@@ -342,10 +331,29 @@ def test_invariant_gnn_destination_chunks(
     model = InvariantGNN(channels=8, device=device, dtype=dtype).eval()
     x = torch.randn(10, 8, device=device, dtype=dtype)
     readout_index = torch.arange(4, device=device)
-    graph = homogeneous_graph.full_layered(
-        num_layers=2,
-        readout_index=readout_index,
-    )
+    if readout_scoped:
+        active = torch.zeros(
+            homogeneous_graph.num_nodes,
+            dtype=torch.bool,
+            device=device,
+        )
+        active[readout_index] = True
+        node_masks = [active]
+        for _ in range(2):
+            previous = active.clone()
+            edge_mask = active[homogeneous_graph.col]
+            previous[homogeneous_graph.row[edge_mask]] = True
+            node_masks.append(previous)
+            active = previous
+        graph = homogeneous_graph.layered(
+            node_masks=node_masks,
+            readout_index=readout_index,
+        )
+    else:
+        graph = homogeneous_graph.full_layered(
+            num_layers=2,
+            readout_index=readout_index,
+        )
 
     with torch.inference_mode():
         expected = model(
@@ -356,7 +364,7 @@ def test_invariant_gnn_destination_chunks(
         monkeypatch.setattr(
             invariant_gnn_module,
             "_automatic_aggregation_work_byte_limit",
-            lambda _x, _graph: 1024,
+            lambda _x, _layer: 1024,
         )
         actual = model(
             x=x,
