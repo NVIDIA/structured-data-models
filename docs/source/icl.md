@@ -136,20 +136,22 @@ Activation replaces the implementation in PyTorch’s Flash backend slot; it doe
 PyTorch still selects a compatible backend, such as Flash or cuDNN, for each attention call.
 Fallback is compatibility-based rather than performance-based: PyTorch does not benchmark every compatible backend at runtime.
 
-Applications that have benchmarked their complete workload can use {py:func}`torch.nn.attention.sdpa_kernel` to require the active Flash implementation around a controlled execution:
+Applications that have benchmarked their complete workload can require the active Flash implementation:
 
 ```python
-from torch.nn.attention import SDPBackend, sdpa_kernel
-
-with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-    out = model(...)
+model = TabICLv2(
+    device="cuda",
+    flash_attention_impl="FA3",
+    force_flash_attention=True,
+)
+out = model(...)
 ```
 
 Provider activation is process-wide, including attention calls made outside SDM.
 Construct models before compiling them or starting concurrent work in the process.
 When PyTorch reports an active provider, requesting it again is a no-op and requesting a different provider raises instead of silently replacing it, so restore the current provider through PyTorch before switching.
-SDM leaves the provider active until it is explicitly restored or replaced through PyTorch, or until the process exits.
-PyTorch backend-routing contexts are also process-wide and must not overlap attention execution across threads.
+SDM leaves the provider and forced routing active until explicitly changed through PyTorch, or until the process exits.
+Multiple models using the same configuration are safe; models requiring different configurations should run in separate processes.
 A requested provider must be registered by the installed PyTorch release and have its runtime package installed.
 
 ## Relational Context

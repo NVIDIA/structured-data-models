@@ -31,6 +31,45 @@ class _FlashProviderRegistry:
         return self.active
 
 
+class _SDPBackendRouting:
+    def __init__(self) -> None:
+        self.flash = True
+        self.cudnn = True
+        self.mem_efficient = True
+        self.math = True
+
+    @property
+    def state(self) -> tuple[bool, bool, bool, bool]:
+        return self.flash, self.cudnn, self.mem_efficient, self.math
+
+
+def _patch_sdp_backend_routing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> _SDPBackendRouting:
+    routing = _SDPBackendRouting()
+    monkeypatch.setattr(
+        torch.backends.cuda,
+        "enable_flash_sdp",
+        lambda enabled: setattr(routing, "flash", enabled),
+    )
+    monkeypatch.setattr(
+        torch.backends.cuda,
+        "enable_cudnn_sdp",
+        lambda enabled: setattr(routing, "cudnn", enabled),
+    )
+    monkeypatch.setattr(
+        torch.backends.cuda,
+        "enable_mem_efficient_sdp",
+        lambda enabled: setattr(routing, "mem_efficient", enabled),
+    )
+    monkeypatch.setattr(
+        torch.backends.cuda,
+        "enable_math_sdp",
+        lambda enabled: setattr(routing, "math", enabled),
+    )
+    return routing
+
+
 def _patch_flash_provider_registry(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -61,6 +100,8 @@ def _patch_flash_provider_registry(
 def _make_tabiclv2(
     monkeypatch: pytest.MonkeyPatch,
     impl: str,
+    *,
+    force: bool = False,
 ) -> TabICLv2:
     monkeypatch.setattr(
         tabiclv2_module,
@@ -70,6 +111,7 @@ def _make_tabiclv2(
     return TabICLv2(
         pretrained=False,
         flash_attention_impl=impl,
+        force_flash_attention=force,
     )
 
 
@@ -81,33 +123,49 @@ def _make_tabiclv2(
     ],
 )
 @pytest.mark.parametrize(
-    ("flash_attention_impl", "expected"),
-    [(None, []), ("FA3", ["FA3"])],
+    (
+        "flash_attention_impl",
+        "force_flash_attention",
+        "expected_activations",
+        "expected_routing",
+    ),
+    [
+        (None, False, [], (True, True, True, True)),
+        ("FA3", False, ["FA3"], (True, True, True, True)),
+        (None, True, [], (True, False, False, False)),
+        ("FA3", True, ["FA3"], (True, False, False, False)),
+    ],
 )
-def test_model_configures_flash_attention_impl(
+def test_model_configures_flash_attention(
     monkeypatch: pytest.MonkeyPatch,
     model_cls: Callable[..., torch.nn.Module],
     model_module: object,
     inner_model_name: str,
     flash_attention_impl: str | None,
-    expected: list[str],
+    force_flash_attention: bool,
+    expected_activations: list[str],
+    expected_routing: tuple[bool, bool, bool, bool],
 ) -> None:
     registry = _patch_flash_provider_registry(monkeypatch)
+    routing = _patch_sdp_backend_routing(monkeypatch)
     monkeypatch.setattr(model_module, inner_model_name, _StubInnerModel)
 
     model = model_cls(
         pretrained=False,
         flash_attention_impl=flash_attention_impl,
+        force_flash_attention=force_flash_attention,
     )
 
     assert not model.training
-    assert registry.activations == expected
+    assert registry.activations == expected_activations
+    assert routing.state == expected_routing
 
 
 def test_model_does_not_activate_after_failed_initialization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     registry = _patch_flash_provider_registry(monkeypatch)
+    routing = _patch_sdp_backend_routing(monkeypatch)
 
     class _FailingInnerModel(torch.nn.Module):
         def __init__(self, **kwargs: object) -> None:
@@ -119,9 +177,14 @@ def test_model_does_not_activate_after_failed_initialization(
         _FailingInnerModel,
     )
     with pytest.raises(RuntimeError, match="initialization failed"):
-        TabICLv2(pretrained=False, flash_attention_impl="FA3")
+        TabICLv2(
+            pretrained=False,
+            flash_attention_impl="FA3",
+            force_flash_attention=True,
+        )
 
     assert registry.activations == []
+    assert routing.state == (True, True, True, True)
 
 
 def test_activate_flash_attention_impl(
@@ -203,3 +266,29 @@ def test_activate_flash_attention_impl_requires_provider_registry(
 
     with pytest.raises(RuntimeError, match="provider registry"):
         _make_tabiclv2(monkeypatch, "FA3")
+
+
+def test_force_flash_attention_does_not_require_provider_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delattr(
+        torch_attention,
+        "activate_flash_attention_impl",
+        raising=False,
+    )
+    monkeypatch.delattr(
+        torch_attention,
+        "list_flash_attention_impls",
+        raising=False,
+    )
+    monkeypatch.delattr(
+        torch_attention,
+        "current_flash_attention_impl",
+        raising=False,
+    )
+    routing = _patch_sdp_backend_routing(monkeypatch)
+    monkeypatch.setattr(tabiclv2_module, "_TabICLv2", _StubInnerModel)
+
+    TabICLv2(pretrained=False, force_flash_attention=True)
+
+    assert routing.state == (True, False, False, False)
