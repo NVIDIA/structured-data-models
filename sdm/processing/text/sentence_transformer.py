@@ -205,7 +205,6 @@ class SentenceTransformer(Processor):
 
         lengths = raw_lengths.clamp(max=tokenizer.max_length - 2)
         seq_len = int(lengths.max()) + 2  # [CLS] + tokens + [SEP]
-        print(f"  seq_len: {seq_len}")
 
         input_ids = torch.full(
             (num_strings, seq_len),
@@ -246,9 +245,14 @@ class SentenceTransformer(Processor):
         with torch.inference_mode():
             for batch_start in range(0, num_strings, self.batch_size):
                 batch_end = min(batch_start + self.batch_size, num_strings)
+                batch_seq_len = int(lengths[batch_start:batch_end].max()) + 2
                 features: dict[str, Tensor] = {
-                    "input_ids": input_ids[batch_start:batch_end],
-                    "attention_mask": attention_mask[batch_start:batch_end],
+                    "input_ids": input_ids[
+                        batch_start:batch_end, :batch_seq_len
+                    ],
+                    "attention_mask": attention_mask[
+                        batch_start:batch_end, :batch_seq_len
+                    ],
                 }
                 for module in self._model.module:
                     features = module(features)
