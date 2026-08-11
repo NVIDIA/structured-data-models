@@ -3,9 +3,9 @@ from __future__ import annotations
 import importlib.util
 import re
 import warnings
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Hashable, Iterable, Mapping
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -53,8 +53,8 @@ def infer_stypes(
     table: pa.Table | pd.DataFrame | cudf.DataFrame,
     overrides: Mapping[str, StypeLike] | None = None,
     *,
-    text: Policy = "off",
-    id: Policy = "off",
+    text: Literal["off", "infer", "drop"] = "off",
+    id: Literal["off", "infer", "drop"] = "off",
     unsupported: Literal["error", "warn", "drop"] = "error",
 ) -> dict[str, StypeLike]:
     r"""Infer semantic types from raw data statistics.
@@ -101,17 +101,17 @@ def infer_stypes(
     overrides = overrides or {}
 
     fn: Callable[[str, Any, Policy, Policy], Stype | None] | None = None
-    columns: Iterable[tuple[str, Any]] | None = None
+    columns: Iterable[tuple[Hashable, Any]] | None = None
     if isinstance(table, pa.Table):
         fn = _infer_arrow_stype
         columns = zip(table.column_names, table.columns)
-    elif importlib.util.find_spec("pandas") is not None:
+    if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
             fn = _infer_pandas_stype
             columns = table.items()
-    elif importlib.util.find_spec("cudf") is not None:
+    if importlib.util.find_spec("cudf") is not None:
         import cudf
 
         if isinstance(table, cudf.DataFrame):
@@ -127,6 +127,7 @@ def infer_stypes(
     stypes = {}
     unsupported_columns: list[str] = []
     for name, column in columns:
+        name = cast(str, name)
         if name in overrides:
             stypes[name] = Stype(overrides[name])
             continue
