@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+import importlib.util
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 import pyarrow.compute as pc
 import torch
@@ -13,6 +14,55 @@ from sdm.processing import Processor
 
 if TYPE_CHECKING:
     import sentence_transformers
+    from cudf.core.character_normalizer import CharacterNormalizer
+    from cudf.core.wordpiece_tokenize import WordPieceVocabulary
+
+
+class _WordPieceTokenizer(NamedTuple):
+    wpt: WordPieceVocabulary
+    normalizer: CharacterNormalizer
+    cls_id: int
+    sep_id: int
+    pad_id: int
+    max_length: int
+
+
+def _build_wp_tokenizer(
+    model: sentence_transformers.SentenceTransformer,
+) -> _WordPieceTokenizer | None:
+    if not torch.cuda.is_available():
+        return None
+    if importlib.util.find_spec("cudf") is None:
+        return None
+
+    from transformers import PreTrainedTokenizerFast  # noqa: PLC0415
+
+    tokenizer = model.tokenizer
+    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+        return None
+    if tokenizer.backend_tokenizer.model.__class__.__name__ != "WordPiece":
+        return None
+
+    import cudf
+    from cudf.core.character_normalizer import (
+        CharacterNormalizer,
+    )
+    from cudf.core.wordpiece_tokenize import (
+        WordPieceVocabulary,
+    )
+
+    vocab_tokens = tokenizer.convert_ids_to_tokens(range(tokenizer.vocab_size))
+    return _WordPieceTokenizer(
+        wpt=WordPieceVocabulary(cudf.Series(vocab_tokens)),
+        normalizer=CharacterNormalizer(
+            do_lower=tokenizer.do_lower_case,
+            special_tokens=cudf.Series(tokenizer.all_special_tokens),
+        ),
+        cls_id=tokenizer.cls_token_id,
+        sep_id=tokenizer.sep_token_id,
+        pad_id=tokenizer.pad_token_id,
+        max_length=tokenizer.model_max_length,
+    )
 
 
 class _ModuleReference(torch.nn.Module):
@@ -37,12 +87,9 @@ class SentenceTransformer(Processor):
         model_name: Model name or local path passed to
             :class:`sentence_transformers.SentenceTransformer
             <sentence_transformers.sentence_transformer.model.SentenceTransformer>`.
-        batch_size: Batch size passed to
-            :meth:`sentence_transformers.SentenceTransformer.encode()
-            <sentence_transformers.sentence_transformer.model.SentenceTransformer.encode>`.
-            Adjusting the batch size can significantly improve processing
-            speed. The optimal value depends on your hardware, model size,
-            precision, and input length.
+        batch_size: Batch size for the forward pass. Adjusting the batch size
+            can significantly improve processing speed. The optimal value
+            depends on your hardware, model size, precision, and input length.
     """
 
     requires_fit = False
@@ -63,6 +110,7 @@ class SentenceTransformer(Processor):
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim
         self._model = _ModuleReference(model)
+        self._word_piece_tokenizer = _build_wp_tokenizer(model)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         columns = table.columns[Stype.text]
@@ -81,17 +129,20 @@ class SentenceTransformer(Processor):
             )
         else:
             text = cast(StringTensor, table.text.movedim(-1, 0).reshape(-1))
-            array = text.to_arrow()
-            if text.is_nullable:
-                array = pc.fill_null(array, "")
-            emb = self._model.module.encode(
-                array.to_pylist(),
-                show_progress_bar=False,
-                convert_to_tensor=True,
-                device=str(table.device),
-                batch_size=self.batch_size,
-            )
-            assert isinstance(emb, Tensor)
+            if self._word_piece_tokenizer is not None:
+                emb = self._encode_gpu(text)
+            else:
+                array = text.to_arrow()
+                if text.is_nullable:
+                    array = pc.fill_null(array, "")
+                emb = self._model.module.encode(
+                    array.to_pylist(),
+                    show_progress_bar=False,
+                    convert_to_tensor=True,
+                    device=str(table.device),
+                    batch_size=self.batch_size,
+                )
+                assert isinstance(emb, Tensor)
             emb = emb.to(device=table.device, dtype=table.dtype)
             numerical = (
                 emb.reshape(len(columns), *batch_shape, self._embedding_dim)
@@ -110,3 +161,75 @@ class SentenceTransformer(Processor):
             dim=-1,
         )
         return cast(TableTensor, out)
+
+    def _encode_gpu(self, text: StringTensor) -> Tensor:
+        tokenizer = self._word_piece_tokenizer
+        assert tokenizer is not None
+        device = text.device
+        num_strings = text.numel()
+
+        text_series = text.to_cudf()
+        if text.is_nullable:
+            text_series = text_series.fillna("")
+
+        normalized = tokenizer.normalizer.normalize(text_series)
+        token_lists = tokenizer.wpt.tokenize(normalized)
+
+        flat_values = torch.from_dlpack(token_lists.list.leaves.to_cupy())
+        raw_lengths = torch.from_dlpack(token_lists.list.len().to_cupy()).to(
+            torch.long
+        )
+
+        # Source offsets into the flat token buffer
+        offsets = torch.zeros(num_strings + 1, device=device, dtype=torch.long)
+        torch.cumsum(raw_lengths, dim=0, out=offsets[1:])
+
+        lengths = raw_lengths.clamp(max=tokenizer.max_length - 2)
+        seq_len = int(lengths.max()) + 2  # [CLS] + tokens + [SEP]
+
+        input_ids = torch.full(
+            (num_strings, seq_len),
+            tokenizer.pad_id,
+            device=device,
+            dtype=torch.long,
+        )
+        input_ids[:, 0] = tokenizer.cls_id
+
+        # Scatter truncated token IDs into positions 1..lengths[i]+1
+        row_idx = torch.arange(num_strings, device=device).repeat_interleave(
+            lengths
+        )
+        total = row_idx.shape[0]
+        starts = lengths.cumsum(0) - lengths
+        within_row = torch.arange(
+            total, device=device
+        ) - starts.repeat_interleave(lengths)
+        src_idx = within_row + offsets[:-1].repeat_interleave(lengths)
+        input_ids[row_idx, within_row + 1] = flat_values[src_idx].to(
+            torch.long
+        )
+
+        input_ids[torch.arange(num_strings, device=device), lengths + 1] = (
+            tokenizer.sep_id
+        )
+        attention_mask = (input_ids != tokenizer.pad_id).to(torch.long)
+
+        embeddings = torch.empty(
+            num_strings,
+            self._embedding_dim,
+            device=device,
+            dtype=torch.float,
+        )
+        with torch.inference_mode():
+            for batch_start in range(0, num_strings, self.batch_size):
+                batch_end = min(batch_start + self.batch_size, num_strings)
+                features: dict[str, Tensor] = {
+                    "input_ids": input_ids[batch_start:batch_end],
+                    "attention_mask": attention_mask[batch_start:batch_end],
+                }
+                for module in self._model.module:
+                    features = module(features)
+                embeddings[batch_start:batch_end] = features[
+                    "sentence_embedding"
+                ]
+        return embeddings
