@@ -785,6 +785,30 @@ def _permute(inp: NullableIntTensor, dims: Sequence[int]) -> NullableIntTensor:
     return _apply(inp, lambda x: aten.permute.default(x, dims))
 
 
+@NullableIntTensor.implements(aten.movedim.int)
+def _movedim_int(
+    inp: NullableIntTensor,
+    source: int,
+    destination: int,
+) -> NullableIntTensor:
+    return cast(
+        NullableIntTensor,
+        aten.movedim.int.decompose(inp, source, destination),
+    )
+
+
+@NullableIntTensor.implements(aten.movedim.intlist)
+def _movedim_intlist(
+    inp: NullableIntTensor,
+    source: Sequence[int],
+    destination: Sequence[int],
+) -> NullableIntTensor:
+    return cast(
+        NullableIntTensor,
+        aten.movedim.intlist.decompose(inp, source, destination),
+    )
+
+
 @NullableIntTensor.implements(aten.select.int)
 @preserve_view_inference_mode
 def _select(inp: NullableIntTensor, dim: int, index: int) -> NullableIntTensor:

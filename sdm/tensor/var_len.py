@@ -1126,6 +1126,30 @@ def _permute(inp: VarLenTensor, dims: Sequence[int]) -> VarLenTensor:
     return _from_layout_view(inp, view)
 
 
+@VarLenTensor.implements(aten.movedim.int)
+def _movedim_int(
+    inp: VarLenTensor,
+    source: int,
+    destination: int,
+) -> VarLenTensor:
+    return cast(
+        VarLenTensor,
+        aten.movedim.int.decompose(inp, source, destination),
+    )
+
+
+@VarLenTensor.implements(aten.movedim.intlist)
+def _movedim_intlist(
+    inp: VarLenTensor,
+    source: Sequence[int],
+    destination: Sequence[int],
+) -> VarLenTensor:
+    return cast(
+        VarLenTensor,
+        aten.movedim.intlist.decompose(inp, source, destination),
+    )
+
+
 @VarLenTensor.implements(aten.select.int)
 @preserve_view_inference_mode
 def _select(inp: VarLenTensor, dim: int, index: int) -> VarLenTensor:
