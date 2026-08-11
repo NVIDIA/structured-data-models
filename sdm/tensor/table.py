@@ -390,7 +390,9 @@ class TableTensor(Tensor):
             device: The device.
         """
         return cls.from_arrow(
-            table=pa.Table.from_pandas(df, preserve_index=False),
+            table=pa.Table.from_pandas(
+                df[stypes.keys()], preserve_index=False
+            ),
             stypes=stypes,
             device=device,
         )
@@ -1397,6 +1399,30 @@ def _permute(inp: TableTensor, dims: Sequence[int]) -> TableTensor:
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
+    )
+
+
+@TableTensor.implements(aten.movedim.int)
+def _movedim_int(
+    inp: TableTensor,
+    source: int,
+    destination: int,
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.movedim.int.decompose(inp, source, destination),
+    )
+
+
+@TableTensor.implements(aten.movedim.intlist)
+def _movedim_intlist(
+    inp: TableTensor,
+    source: Sequence[int],
+    destination: Sequence[int],
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.movedim.intlist.decompose(inp, source, destination),
     )
 
 

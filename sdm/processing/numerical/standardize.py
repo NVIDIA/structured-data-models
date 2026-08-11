@@ -19,7 +19,7 @@ class Standardize(Processor, InvertibleMixin):
             preserves exact constant-column handling.
     """
 
-    operates_on_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     def __init__(

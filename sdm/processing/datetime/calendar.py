@@ -19,7 +19,7 @@ class AddCalendarFields(Processor):
         fields: The calendar fields to add.
     """
 
-    operates_on_stypes = frozenset({Stype.datetime})
+    handles_stypes = frozenset({Stype.datetime})
     requires_fit = False
 
     def __init__(

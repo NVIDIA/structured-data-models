@@ -18,8 +18,6 @@ class TaskDispatch(EnsembleProcessor):
         regression: Processor selected for a numerical target.
     """
 
-    operates_on_stypes = frozenset(Stype)
-
     def __init__(
         self,
         *,
@@ -41,6 +39,15 @@ class TaskDispatch(EnsembleProcessor):
             processor.requires_fit for processor in self.processors.values()
         )
         self._task: Literal["classification", "regression"] | None = None
+
+    @property
+    def handles_stypes(self) -> frozenset[Stype]:
+        r""":meta private:"""  # noqa: D415
+        return frozenset(
+            stype
+            for processor in self.processors.values()
+            for stype in processor.handles_stypes
+        )
 
     def _fit_ensemble(
         self,

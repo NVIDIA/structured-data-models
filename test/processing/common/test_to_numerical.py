@@ -56,24 +56,19 @@ def test_to_numerical_is_identity_for_already_numerical_table() -> None:
     assert ToNumerical().transform(table) is table
 
 
-def test_to_numerical_preserves_unoperated_stype() -> None:
+def test_to_numerical_preserves_unhandled_stype() -> None:
     table = TableTensor(
         columns={
             "numerical": ("x",),
-            "categorical": ("kind",),
             "id": ("row_id",),
         },
         numerical=torch.tensor([[1.0], [2.0]]),
-        categorical=CategoricalTensor(
-            code=torch.tensor([[0], [1]], dtype=torch.int64),
-            categories=(StringTensor.from_list(["a", "b"]),),
-        ),
         id=ColumnarTensor((torch.arange(2),)),
     )
 
     output = ToNumerical().transform(table)
 
-    assert output.columns[Stype.numerical] == ("x", "kind")
+    assert output.columns[Stype.numerical] == ("x",)
     assert output.columns[Stype.id] == ("row_id",)
     assert torch.equal(output.id, table.id)
 

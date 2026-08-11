@@ -26,8 +26,7 @@ class ReduceEstimators(EnsembleProcessor):
             ``"mean"`` is supported.
     """
 
-    operates_on_stypes = frozenset({Stype.numerical})
-    unoperated_stype_policy = "error"
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def __init__(
@@ -49,6 +48,12 @@ class ReduceEstimators(EnsembleProcessor):
             raise ValueError("Expected at least one ensemble member.")
 
         reference = ensemble_table.table(0)
+        extra = reference.active_stypes - self.handles_stypes
+        if extra:
+            found = ", ".join(sorted(extra))
+            raise ValueError(
+                f"Expected a numerical-only output table (also found {found})."
+            )
         reference_columns = reference.columns[Stype.numerical]
         counts_by_location = Counter(
             ensemble_table._locations[member_id]
@@ -113,6 +118,12 @@ class ReduceEstimators(EnsembleProcessor):
             )
         if table.size(0) == 0:
             raise ValueError("Expected at least one ensemble member.")
+        extra = table.active_stypes - self.handles_stypes
+        if extra:
+            found = ", ".join(sorted(extra))
+            raise ValueError(
+                f"Expected a numerical-only output table (also found {found})."
+            )
 
         if self.method == "mean":
             numerical = table.numerical.mean(dim=0)

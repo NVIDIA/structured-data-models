@@ -20,7 +20,7 @@ class ImputeMode(Processor):
     independently.
     """
 
-    operates_on_stypes = frozenset({Stype.categorical})
+    handles_stypes = frozenset({Stype.categorical})
     requires_fit = True
 
     def __init__(self) -> None:

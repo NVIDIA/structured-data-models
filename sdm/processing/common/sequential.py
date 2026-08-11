@@ -8,7 +8,6 @@ from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
 )
-from sdm.processing.base import UnoperatedStypePolicy
 from sdm.tensor import EnsembleTable
 
 
@@ -22,18 +21,16 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
     def __init__(self, *args: object) -> None:
         super().__init__()
         self.requires_fit = False
-        self.operates_on_stypes = frozenset[Stype]()
-        self.unoperated_stype_policy: UnoperatedStypePolicy = "preserve"
         self.extend(args)
 
-    def _refresh_contract(self) -> None:
-        self.operates_on_stypes = frozenset().union(
-            *(child.operates_on_stypes for child in self)
+    @property
+    def handles_stypes(self) -> frozenset[Stype]:
+        r""":meta private:"""  # noqa: D415
+        if len(self) == 0:
+            return frozenset(Stype)
+        return frozenset(
+            stype for child in self for stype in child.handles_stypes
         )
-        if any(child.unoperated_stype_policy == "error" for child in self):
-            self.unoperated_stype_policy = "error"
-        else:
-            self.unoperated_stype_policy = "preserve"
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.
@@ -49,7 +46,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), processor)
 
         self.requires_fit = any(child.requires_fit for child in self)
-        self._refresh_contract()
         self._fitted = False
         return self
 
@@ -73,7 +69,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), child)
 
         self.requires_fit = any(child.requires_fit for child in self)
-        self._refresh_contract()
         self._fitted = False
         return self
 

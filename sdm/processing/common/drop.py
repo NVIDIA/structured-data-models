@@ -17,7 +17,7 @@ class DropStypes(Processor):
         self._stypes = frozenset(Stype(stype) for stype in stypes)
 
     @property
-    def operates_on_stypes(self) -> frozenset[Stype]:
+    def handles_stypes(self) -> frozenset[Stype]:
         """Semantic types removed by this processor."""
         return self._stypes
 

@@ -47,7 +47,7 @@ class TFIDF(EnsembleProcessor):
         lowercase: If ``True``, lowercase text before tokenizing.
     """
 
-    operates_on_stypes = frozenset({Stype.text})
+    handles_stypes = frozenset({Stype.text})
     requires_fit = True
 
     def __init__(

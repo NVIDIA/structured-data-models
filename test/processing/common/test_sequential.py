@@ -6,13 +6,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import (
-    CategoricalTensor,
-    ColumnarTensor,
-    StringTensor,
-    Stype,
-    TableTensor,
-)
+from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.tensor import EnsembleTable
 
 
@@ -70,23 +64,6 @@ def test_pipeline_accepts_lambda() -> None:
 
     assert not pipeline.requires_fit
     assert torch.equal(output.numerical, table.numerical.square())
-
-
-def test_pipeline_preserves_unoperated_stypes() -> None:
-    table = TableTensor(
-        columns={
-            Stype.numerical: ("x",),
-            Stype.id: ("entity_id",),
-        },
-        numerical=torch.tensor([[1.0], [2.0]]),
-        id=ColumnarTensor((torch.tensor([10, 11]),)),
-    )
-    pipeline = sp.Sequential(sp.Standardize())
-
-    output = pipeline.fit_transform(table)
-
-    torch.testing.assert_close(output.numerical.mean(dim=0), torch.zeros(1))
-    assert torch.equal(output.id, table.id)
 
 
 def test_pipeline_accepts_regular_callable() -> None:
@@ -179,16 +156,6 @@ def test_pipeline_checks_fitted_state() -> None:
 
     with pytest.raises(RuntimeError, match="'Sequential' is not fitted"):
         pipeline.transform(_table())
-
-
-def test_pipeline_preserves_unoperated_stype_after_transform() -> None:
-    pipeline = sp.Sequential(sp.Standardize())
-    table = _mixed_table()
-
-    output = pipeline.fit_transform(table)
-
-    assert output.columns == table.columns
-    assert torch.equal(output.categorical.code, table.categorical.code)
 
 
 def test_inverse_transform_rejects_non_invertible_step() -> None:

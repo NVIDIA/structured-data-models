@@ -18,7 +18,7 @@ from sdm.tensor import EnsembleTable
 # Generator forwarding is only observable through a stochastic transformation
 # and is therefore left to those processors as well.
 class IdentityEnsembleProcessor(EnsembleProcessor):
-    operates_on_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     def _fit_ensemble(
@@ -34,10 +34,6 @@ class IdentityEnsembleProcessor(EnsembleProcessor):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         return ensemble_table
-
-
-class RejectingEnsembleProcessor(IdentityEnsembleProcessor):
-    unoperated_stype_policy = "error"
 
 
 class FusedEnsembleProcessor(IdentityEnsembleProcessor):
@@ -67,7 +63,7 @@ class InvertibleIdentityEnsembleProcessor(
 
 
 class _StatelessProcessor(Processor, InvertibleMixin):
-    operates_on_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -130,9 +126,7 @@ def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
     assert processor.inverse_transform(table).equal(table)
 
 
-def test_ensemble_processor_noops_when_only_unoperated_stypes_are_active() -> (
-    None
-):
+def test_ensemble_processor_noops() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1, dtype=torch.int64))
     ensemble_table = EnsembleTable(table, num_members=2)
     processor = IdentityEnsembleProcessor()
@@ -140,19 +134,6 @@ def test_ensemble_processor_noops_when_only_unoperated_stypes_are_active() -> (
     assert processor.fit_ensemble(ensemble_table) is processor
     assert processor.fit_transform_ensemble(ensemble_table) is ensemble_table
     assert processor.transform_ensemble(ensemble_table) is ensemble_table
-
-
-def test_ensemble_processor_rejects_unoperated_stypes_in_all_groups() -> None:
-    first = TableTensor.from_tensor(torch.ones(2, 1))
-    second = TableTensor.from_tensor(torch.ones(2, 1, dtype=torch.int64))
-    ensemble_table = EnsembleTable.from_tables(
-        tables=(first, second),
-        member_table_ids=(0, 1),
-    )
-    processor = RejectingEnsembleProcessor()
-
-    with pytest.raises(ValueError, match="cannot preserve"):
-        processor.fit_transform_ensemble(ensemble_table)
 
 
 def test_ensemble_processor_supports_table_tensor_lifecycle() -> None:

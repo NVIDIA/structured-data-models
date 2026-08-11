@@ -46,7 +46,7 @@ class SentenceTransformer(Processor):
     """
 
     requires_fit = False
-    operates_on_stypes = frozenset({Stype.text})
+    handles_stypes = frozenset({Stype.text})
 
     def __init__(
         self,
