@@ -734,6 +734,24 @@ def _permute(inp: CategoricalTensor, dims: Sequence[int]) -> Tensor:
     return inp.__class__(code, inp.categories)
 
 
+@CategoricalTensor.implements(aten.movedim.int)
+def _movedim_int(
+    inp: CategoricalTensor,
+    source: int,
+    destination: int,
+) -> Tensor:
+    return aten.movedim.int.decompose(inp, source, destination)
+
+
+@CategoricalTensor.implements(aten.movedim.intlist)
+def _movedim_intlist(
+    inp: CategoricalTensor,
+    source: Sequence[int],
+    destination: Sequence[int],
+) -> Tensor:
+    return aten.movedim.intlist.decompose(inp, source, destination)
+
+
 @CategoricalTensor.implements(aten.select.int)
 @preserve_view_inference_mode
 def _select(inp: CategoricalTensor, dim: int, index: int) -> Tensor:

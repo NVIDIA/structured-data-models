@@ -1,4 +1,4 @@
-from typing import Literal, cast
+from typing import cast
 
 import torch
 from torch.nn import ModuleDict
@@ -28,8 +28,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
 
     Inverse transform supports routes that preserve their semantic type. Every
     active route must be invertible, and routes must not share an output
-    semantic type. Passthrough columns are preserved. ``remainder="drop"`` is
-    not invertible.
+    semantic type. Passthrough columns are preserved.
 
     Args:
         numerical: Processor or stateless callable route for numerical
@@ -45,12 +44,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             sequence is normalized to :class:`~sdm.processing.Sequential`.
         id: Processor or stateless callable route for identifier columns. A
             sequence is normalized to :class:`~sdm.processing.Sequential`.
-        remainder: How to handle non-empty semantic types without a configured
-            route. ``"passthrough"`` keeps them unchanged and is the default,
-            ``"drop"`` removes them, and ``"error"`` raises.
     """
-
-    supported_stypes = frozenset(Stype)
 
     def __init__(
         self,
@@ -60,7 +54,6 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         datetime: object = None,
         id: object = None,
         text: object = None,
-        remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
         self.processors: ModuleDict[EnsembleProcessor] = ModuleDict()
@@ -76,7 +69,9 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             processor = EnsembleProcessor.as_processor(processor)
             self.processors[str(stype)] = processor
 
-        self.remainder = remainder
+        self.handles_stypes = frozenset(
+            Stype(stype) for stype in self.processors
+        )
         self.requires_fit = any(
             processor.requires_fit for processor in self.processors.values()
         )
@@ -95,34 +90,12 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             )
         )
 
-    def _check_remainder(self, ensemble_table: EnsembleTable) -> None:
-        if self.remainder != "error":
-            return
-
-        remainder_stypes = [
-            stype
-            for stype in Stype
-            if str(stype) not in self.processors
-            and any(len(group.columns[stype]) > 0 for group in ensemble_table)
-        ]
-        if len(remainder_stypes) == 0:
-            return
-
-        names = ", ".join(f"{str(stype)!r}" for stype in remainder_stypes)
-        raise ValueError(
-            f"Found non-empty input columns for semantic types {names}, but "
-            f"{self.__class__.__name__!r} has no route for them. Configure "
-            "a processor for each semantic type or set "
-            "remainder='passthrough' or remainder='drop'."
-        )
-
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._check_remainder(ensemble_table)
         self._active_routes = self._find_active_routes(ensemble_table)
         for stype in self._active_routes:
             self.processors[stype].fit_ensemble(
@@ -136,7 +109,6 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        self._check_remainder(ensemble_table)
         self._active_routes = self._find_active_routes(ensemble_table)
         outputs = [
             self.processors[stype].fit_transform_ensemble(
@@ -145,8 +117,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             )
             for stype in self._active_routes
         ]
-        if self.remainder == "passthrough":
-            outputs.append(self._remainder_ensemble(ensemble_table))
+        outputs.append(self._remainder_ensemble(ensemble_table))
         if len(outputs) == 0:
             return ensemble_table.select_stypes(())
         return EnsembleTable.concatenate_columns(outputs)
@@ -155,8 +126,6 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        self._check_remainder(ensemble_table)
-
         active_routes = self._active_routes
         if not self.requires_fit or active_routes is None:
             active_routes = self._find_active_routes(ensemble_table)
@@ -167,8 +136,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             )
             for stype in active_routes
         ]
-        if self.remainder == "passthrough":
-            outputs.append(self._remainder_ensemble(ensemble_table))
+        outputs.append(self._remainder_ensemble(ensemble_table))
         if len(outputs) == 0:
             return ensemble_table.select_stypes(())
         return EnsembleTable.concatenate_columns(outputs)
@@ -177,12 +145,6 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if self.remainder == "drop":
-            raise ValueError(
-                "'StypeDispatch' with remainder='drop' is not invertible"
-            )
-
-        self._check_remainder(ensemble_table)
         active_routes = self._active_routes
         if not self.requires_fit or active_routes is None:
             active_routes = self._find_active_routes(ensemble_table)

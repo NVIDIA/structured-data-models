@@ -109,43 +109,6 @@ def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
         dispatch.inverse_transform(output)
 
 
-def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
-    table = _mixed_table()
-    dispatch = sp.StypeDispatch(
-        numerical=sp.Standardize(),
-        remainder="drop",
-    )
-
-    output = dispatch.fit_transform(table)
-
-    with pytest.raises(ValueError, match="remainder='drop'"):
-        dispatch.inverse_transform(output)
-
-
-def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
-    table = _mixed_table()
-    dispatch = sp.StypeDispatch(
-        numerical=sp.Standardize(),
-        remainder="error",
-    )
-
-    with pytest.raises(ValueError, match=r"non-empty.*categorical.*no route"):
-        dispatch.fit(table)
-
-
-def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
-    output = sp.StypeDispatch(remainder="drop").fit_transform(_mixed_table())
-
-    assert output.size() == (2, 0)
-    assert output.columns == {
-        Stype.numerical: (),
-        Stype.categorical: (),
-        Stype.datetime: (),
-        Stype.text: (),
-        Stype.id: (),
-    }
-
-
 def test_stype_dispatch_runs_iterable_routes() -> None:
     table = _mixed_table().replace_blocks(
         numerical=torch.tensor([[-3.0, 2.0], [1.0, 4.0]])
@@ -158,7 +121,6 @@ def test_stype_dispatch_runs_iterable_routes() -> None:
             sp.ImputeMean(),
             sp.Standardize(),
         ],
-        remainder="drop",
     )
     expected = sp.Standardize().fit_transform(
         table.select_stypes(Stype.numerical).replace_blocks(
@@ -168,7 +130,9 @@ def test_stype_dispatch_runs_iterable_routes() -> None:
 
     output = dispatch.fit_transform(table)
 
+    assert output.columns == table.columns
     torch.testing.assert_close(output.numerical, expected.numerical)
+    assert output.categorical.equal(table.categorical)
 
 
 def test_stype_dispatch_routes_text() -> None:
@@ -185,10 +149,7 @@ def test_stype_dispatch_routes_text() -> None:
 
 
 def test_stype_dispatch_uses_route_fitted_state() -> None:
-    dispatch = sp.StypeDispatch(
-        numerical=sp.Standardize(),
-        remainder="drop",
-    )
+    dispatch = sp.StypeDispatch(numerical=sp.Standardize())
 
     with pytest.raises(RuntimeError, match=r"StypeDispatch.*not fitted"):
         dispatch.transform(_mixed_table())

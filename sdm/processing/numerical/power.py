@@ -135,7 +135,7 @@ class PowerTransform(Processor, InvertibleMixin):
             features using statistics fitted after the power transform.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     def __init__(

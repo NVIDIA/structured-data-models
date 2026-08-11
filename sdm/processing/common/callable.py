@@ -7,7 +7,7 @@ from sdm.processing import Processor
 class Callable(Processor):
     """Adapt a stateless callable to the :class:`Processor` interface."""
 
-    supported_stypes = frozenset(Stype)
+    handles_stypes = frozenset(Stype)
     requires_fit = False
 
     def __init__(self, function: Callable[[TableTensor], TableTensor]) -> None:

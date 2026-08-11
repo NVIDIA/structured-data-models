@@ -1,12 +1,11 @@
-"""Semantic column types identifiers."""
-
 from __future__ import annotations
 
 import importlib.util
 import re
-from collections.abc import Mapping
+import warnings
+from collections.abc import Callable, Hashable, Iterable, Mapping
 from enum import StrEnum
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -46,19 +45,17 @@ StypeLike: TypeAlias = Stype | str
 
 # Semantic Type Inference #####################################################
 
-# Tokenize strings on separators (non-letters/digits) and camelCase boundaries:
-_WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
-_TEXT_MIN_UNIQUE_VALUES = 200
-_TEXT_MIN_UNIQUE_RATIO = 0.05
-_TEXT_MIN_AVERAGE_WORD_COUNT = 3
+Policy: TypeAlias = Literal["off", "infer", "drop"]
 
 
 def infer_stypes(
     table: pa.Table | pd.DataFrame | cudf.DataFrame,
     overrides: Mapping[str, StypeLike] | None = None,
-    with_text: bool = False,
-    with_id: bool = False,
+    *,
+    text: Literal["off", "infer", "drop"] = "off",
+    id: Literal["off", "infer", "drop"] = "off",
+    unsupported: Literal["error", "warn", "drop"] = "error",
 ) -> dict[str, StypeLike]:
     r"""Infer semantic types from raw data statistics.
 
@@ -70,7 +67,8 @@ def infer_stypes(
       :attr:`~Stype.categorical`.
     * Datetime columns are inferred as :attr:`~Stype.datetime`.
 
-    Optionally, infer the following semantic types based on best-effort:
+    Optionally, infer the following semantic types based on best-effort
+    heuristics:
 
     * String columns are inferred as :attr:`~Stype.text` if they contain at
       least 200 distinct string values, a distinct non-null value ratio of at
@@ -84,61 +82,96 @@ def infer_stypes(
         table: A :class:`pandas.DataFrame`, :class:`pyarrow.Table`, or
             :class:`cudf.DataFrame`.
         overrides: Optional semantic type overrides by column name.
-        with_text: Whether to enable :attr:`~Stype.text` detection.
-        with_id: Whether to enable :attr:`~Stype.id` detection.
+        text: The :attr:`~Stype.text` detection policy.
+            ``"off"`` disables :attr:`~Stype.text` column detection.
+            ``"infer"`` includes inferred :attr:`~Stype.text` columns.
+            ``"drop"`` omits inferred :attr:`~Stype.text` columns.
+        id: The :attr:`~Stype.id` detection policy.
+            ``"off"`` disables :attr:`~Stype.id` column detection.
+            ``"infer"`` includes inferred :attr:`~Stype.id` columns.
+            ``"drop"`` omits inferred :attr:`~Stype.id` columns.
+        unsupported: How to handle unsupported dtypes.
+            ``"error"`` raises a :class:`TypeError`.
+            ``"warn"`` emits a warning and omits the column.
+            ``"drop"`` omits the column silently.
 
     Returns:
         Dictionary mapping column names to inferred semantic type.
     """
     overrides = overrides or {}
 
+    fn: Callable[[str, object, Policy, Policy], Stype | None] | None = None
+    columns: Iterable[tuple[Hashable, object]] | None = None
     if isinstance(table, pa.Table):
-        return {
-            name: Stype(overrides[name])
-            if name in overrides
-            else _infer_arrow_stype(name, array, with_text, with_id)
-            for name, array in zip(table.column_names, table.columns)
-        }
-
+        fn = _infer_arrow_stype
+        columns = zip(table.column_names, table.columns)
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
-            return {
-                name: Stype(overrides[name])
-                if name in overrides
-                else _infer_pandas_stype(name, ser, with_text, with_id)
-                for name, ser in table.items()
-            }
-
+            fn = _infer_pandas_stype
+            columns = table.items()
     if importlib.util.find_spec("cudf") is not None:
         import cudf
 
         if isinstance(table, cudf.DataFrame):
-            return {
-                name: Stype(overrides[name])
-                if name in overrides
-                else _infer_cudf_stype(name, ser, with_text, with_id)
-                for name, ser in table.items()
-            }
+            fn = _infer_cudf_stype
+            columns = table.items()
 
-    raise TypeError(
-        f"Expected input to be a 'pandas.DataFrame', 'pyarrow.Table', "
-        f"or 'cudf.DataFrame' (got {type(table).__name__!r})"
-    )
+    if fn is None or columns is None:
+        raise TypeError(
+            f"Expected input to be a 'pandas.DataFrame', 'pyarrow.Table', "
+            f"or 'cudf.DataFrame' (got {type(table).__name__!r})"
+        )
+
+    stypes = {}
+    unsupported_columns: list[str] = []
+    for name, column in columns:
+        assert isinstance(name, str)
+        if name in overrides:
+            stypes[name] = Stype(overrides[name])
+            continue
+
+        try:
+            stype = fn(name, column, text, id)
+        except TypeError:
+            if unsupported == "error":
+                raise
+            if unsupported == "warn":
+                unsupported_columns.append(name)
+            continue
+
+        if stype is not None:
+            stypes[name] = stype
+
+    if len(unsupported_columns) == 1:
+        warnings.warn(
+            f"Dropping unsupported column {unsupported_columns[0]!r}",
+            stacklevel=2,
+        )
+    elif len(unsupported_columns) > 1:
+        warnings.warn(
+            f"Dropping unsupported columns {unsupported_columns}",
+            stacklevel=2,
+        )
+
+    return stypes
+
+
+# Helpers #####################################################################
 
 
 def _infer_arrow_stype(
     name: str,
-    array: pa.Array | pa.ChunkedArray,
-    with_text: bool,
-    with_id: bool,
-) -> Stype:
-
+    array: object,
+    text: Policy,
+    id: Policy,
+) -> Stype | None:
+    assert isinstance(array, pa.Array | pa.ChunkedArray)
     dtype = array.type
 
     if (
-        with_id
+        id != "off"
         and (
             pa.types.is_integer(dtype)
             or pa.types.is_string(dtype)
@@ -146,7 +179,7 @@ def _infer_arrow_stype(
         )
         and _has_id_token(name)
     ):
-        return Stype.id
+        return None if id == "drop" else Stype.id
 
     if (
         pa.types.is_integer(dtype)
@@ -159,8 +192,8 @@ def _infer_arrow_stype(
         return Stype.categorical
 
     if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
-        if with_text and _is_arrow_text(array):
-            return Stype.text
+        if text != "off" and _is_arrow_text(array):
+            return None if text == "drop" else Stype.text
         return Stype.categorical
 
     if pa.types.is_timestamp(dtype) or pa.types.is_date(dtype):
@@ -171,10 +204,10 @@ def _infer_arrow_stype(
 
 def _infer_pandas_stype(
     name: str,
-    column: pd.Series,
-    with_text: bool,
-    with_id: bool,
-) -> Stype:
+    ser: object,
+    text: Policy,
+    id: Policy,
+) -> Stype | None:
     import pandas as pd
     from pandas.api.types import (
         infer_dtype,
@@ -186,18 +219,19 @@ def _infer_pandas_stype(
         is_string_dtype,
     )
 
-    dtype = column.dtype
+    assert isinstance(ser, pd.Series)
+    dtype = ser.dtype
 
     is_string = is_string_dtype(dtype)
     if is_object_dtype(dtype):
-        is_string = infer_dtype(column, skipna=True) == "string"
+        is_string = infer_dtype(ser, skipna=True) == "string"
 
     if (
-        with_id
+        id != "off"
         and (is_integer_dtype(dtype) or is_string)
         and _has_id_token(name)
     ):
-        return Stype.id
+        return None if id == "drop" else Stype.id
 
     if is_integer_dtype(dtype) or is_float_dtype(dtype):
         return Stype.numerical
@@ -206,8 +240,8 @@ def _infer_pandas_stype(
         return Stype.categorical
 
     if is_string:
-        if with_text and _is_pandas_text(column):
-            return Stype.text
+        if text != "off" and _is_arrow_text(pa.array(ser, from_pandas=True)):
+            return None if text == "drop" else Stype.text
         return Stype.categorical
 
     if is_datetime64_any_dtype(dtype):
@@ -218,10 +252,10 @@ def _infer_pandas_stype(
 
 def _infer_cudf_stype(
     name: str,
-    column: cudf.Series,
-    with_text: bool,
-    with_id: bool,
-) -> Stype:
+    ser: object,
+    text: Policy,
+    id: Policy,
+) -> Stype | None:
     import cudf
     from cudf.api.types import (
         is_bool_dtype,
@@ -232,14 +266,15 @@ def _infer_cudf_stype(
         is_string_dtype,
     )
 
-    dtype = column.dtype
+    assert isinstance(ser, cudf.Series)
+    dtype = ser.dtype
 
     if (
-        with_id
+        id != "off"
         and (is_integer_dtype(dtype) or is_string_dtype(dtype))
         and _has_id_token(name)
     ):
-        return Stype.id
+        return None if id == "drop" else Stype.id
 
     if (
         is_integer_dtype(dtype)
@@ -252,8 +287,8 @@ def _infer_cudf_stype(
         return Stype.categorical
 
     if is_string_dtype(dtype):
-        if with_text and _is_cudf_text(column):
-            return Stype.text
+        if text != "off" and _is_cudf_text(ser):
+            return None if text == "drop" else Stype.text
         return Stype.categorical
 
     if is_datetime64_any_dtype(dtype):
@@ -262,8 +297,17 @@ def _infer_cudf_stype(
     raise TypeError(f"Unsupported cudf type '{dtype}' for column {name!r}")
 
 
+# Tokenize strings on separators (non-letters/digits) and camelCase boundaries:
+_WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
+
+
 def _has_id_token(name: str) -> bool:
     return "id" in (word.lower() for word in _WORD_PATTERN.split(name))
+
+
+_TEXT_MIN_UNIQUE_VALUES = 200
+_TEXT_MIN_UNIQUE_RATIO = 0.05
+_TEXT_MIN_AVERAGE_WORD_COUNT = 3
 
 
 def _is_arrow_text(array: pa.Array | pa.ChunkedArray) -> bool:
@@ -284,31 +328,15 @@ def _is_arrow_text(array: pa.Array | pa.ChunkedArray) -> bool:
     return avg_words >= _TEXT_MIN_AVERAGE_WORD_COUNT
 
 
-def _is_pandas_text(column: pd.Series) -> bool:
-    import pandas as pd
-
-    if (num_values := column.count()) == 0:
+def _is_cudf_text(ser: cudf.Series) -> bool:
+    if (num_values := ser.count()) == 0:
         return False
 
-    if (num_unique := column.nunique(dropna=True)) < _TEXT_MIN_UNIQUE_VALUES:
+    if (num_unique := ser.nunique(dropna=True)) < _TEXT_MIN_UNIQUE_VALUES:
         return False
     if num_unique / num_values <= _TEXT_MIN_UNIQUE_RATIO:
         return False
 
-    unique = pd.Series(column.dropna().unique(), copy=False)
-    avg_words = unique.str.split().str.len().mean()
-    return avg_words >= _TEXT_MIN_AVERAGE_WORD_COUNT
-
-
-def _is_cudf_text(column: cudf.Series) -> bool:
-    if (num_values := column.count()) == 0:
-        return False
-
-    if (num_unique := column.nunique(dropna=True)) < _TEXT_MIN_UNIQUE_VALUES:
-        return False
-    if num_unique / num_values <= _TEXT_MIN_UNIQUE_RATIO:
-        return False
-
-    unique = column.dropna().unique()
+    unique = ser.dropna().unique()
     avg_words = unique.str.token_count().mean()
     return avg_words >= _TEXT_MIN_AVERAGE_WORD_COUNT

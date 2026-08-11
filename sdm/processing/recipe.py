@@ -33,9 +33,6 @@ class Recipe:
     step's non-finite input contract; order steps so values are imputed before
     processors that do not explicitly document non-finite support.
 
-    Bind a recipe to context data with :meth:`bind` to obtain a reusable
-    execution for query, inverse-target, and output transforms.
-
     Args:
         features: Steps applied to model inputs before the model.
         target: Steps applied to labels. Invertible numerical target steps map

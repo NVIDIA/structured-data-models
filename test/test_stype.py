@@ -84,7 +84,7 @@ def test_infer_stypes(
 ) -> None:
     monkeypatch.setattr("sdm.stype._TEXT_MIN_UNIQUE_VALUES", 2)
 
-    assert infer_stypes(table, with_id=True, with_text=True) == {
+    assert infer_stypes(table, id="infer", text="infer") == {
         "user_id": Stype.id,
         "age": Stype.numerical,
         "income": Stype.numerical,
@@ -105,7 +105,7 @@ def test_infer_stypes_pandas_object_strings() -> None:
         }
     )
 
-    assert infer_stypes(table, with_id=True) == {
+    assert infer_stypes(table, id="infer") == {
         "city": Stype.categorical,
         "user_id": Stype.id,
         "segment_id": Stype.categorical,
@@ -124,7 +124,7 @@ def test_id_detection() -> None:
         }
     )
 
-    assert infer_stypes(table, with_id=True) == {
+    assert infer_stypes(table, id="infer") == {
         "user_id": Stype.id,
         "userId": Stype.id,
         "order_id_hash": Stype.id,

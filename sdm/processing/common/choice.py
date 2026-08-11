@@ -3,7 +3,6 @@ from typing import Literal
 import torch
 from torch.nn import ModuleList
 
-from sdm import Stype
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
@@ -23,7 +22,6 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             selects the first option for a single table.
     """
 
-    supported_stypes = frozenset(Stype)
     requires_fit = True
 
     def __init__(
@@ -36,6 +34,9 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         for arg in args:
             options.append(EnsembleProcessor.as_processor(arg))
         self.options: ModuleList[EnsembleProcessor] = ModuleList(options)
+        self.handles_stypes = frozenset(
+            stype for option in self.options for stype in option.handles_stypes
+        )
         self.method = method
         self._option_ids: tuple[int, ...] = ()
 

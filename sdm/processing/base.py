@@ -23,11 +23,11 @@ class Processor(torch.nn.Module, abc.ABC):
     and batch dimensions. Batch dimensions are processed independently.
 
     :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops for
-    supported stypes with empty blocks.
+    stypes outside of :attr:`handles_stypes`.
     """
 
-    #: Semantic types supported for input columns in this processor.
-    supported_stypes: frozenset[Stype]
+    #: Semantic types this processor operates on.
+    handles_stypes: frozenset[Stype]
 
     #: Whether this processor requires fitting.
     requires_fit: bool
@@ -35,16 +35,6 @@ class Processor(torch.nn.Module, abc.ABC):
     def __init__(self) -> None:
         super().__init__()
         self._fitted = False
-
-    def _check_supported_stypes(self, table: TableTensor) -> None:
-        supported_stypes = self.supported_stypes
-        for stype, columns in table.columns.items():
-            if stype not in supported_stypes and len(columns) > 0:
-                # TODO: Include all invalid columns in the error message
-                raise ValueError(
-                    f"{self.__class__.__name__!r} does not support "
-                    f"{str(stype)!r} columns."
-                )
 
     @staticmethod
     def as_processor(processor: object) -> Processor:
@@ -110,8 +100,7 @@ class Processor(torch.nn.Module, abc.ABC):
             table: The table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        self._check_supported_stypes(table)
-        if len(table.active_stypes & self.supported_stypes) == 0:
+        if not table.active_stypes & self.handles_stypes:
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
@@ -127,8 +116,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        self._check_supported_stypes(table)
-        if len(table.active_stypes & self.supported_stypes) == 0:
+        if not table.active_stypes & self.handles_stypes:
             return table
         self._check_is_fitted()
         return self._transform(table)
@@ -152,8 +140,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        self._check_supported_stypes(table)
-        if len(table.active_stypes & self.supported_stypes) == 0:
+        if not table.active_stypes & self.handles_stypes:
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:
