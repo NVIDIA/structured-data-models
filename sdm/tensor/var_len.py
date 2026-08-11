@@ -1119,13 +1119,6 @@ def _transpose(inp: VarLenTensor, dim0: int, dim1: int) -> VarLenTensor:
     return _from_layout_view(inp, view)
 
 
-@VarLenTensor.implements(aten.movedim.int)
-@preserve_view_inference_mode
-def _movedim(inp: VarLenTensor, source: int, destination: int) -> VarLenTensor:
-    view = _layout_view(inp).movedim(source, destination)
-    return _from_layout_view(inp, view)
-
-
 @VarLenTensor.implements(aten.permute.default)
 @preserve_view_inference_mode
 def _permute(inp: VarLenTensor, dims: Sequence[int]) -> VarLenTensor:
