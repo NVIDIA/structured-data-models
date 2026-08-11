@@ -11,15 +11,15 @@ class DropStypes(Processor):
     """
 
     requires_fit = False
-    handled_stypes: frozenset[Stype]
 
     def __init__(self, *stypes: StypeLike) -> None:
         super().__init__()
         self._stypes = stypes
-        self.handled_stypes = frozenset(Stype(stype) for stype in stypes)
+        self.handles_stypes = frozenset(Stype(stype) for stype in stypes)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        return table.drop_stypes(self._stypes)
+        return table.drop_stypes(self.handles_stypes)
 
     def __repr__(self, *, indent: int = 0) -> str:
-        return f"{' ' * indent}{self.__class__.__name__}{self._stypes!r}"
+        stypes = ", ".join(map(repr, self._stypes))
+        return f"{' ' * indent}{self.__class__.__name__}({stypes})"
