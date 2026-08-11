@@ -776,6 +776,30 @@ def _permute(inp: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
     )
 
 
+@ColumnarTensor.implements(aten.movedim.int)
+def _movedim_int(
+    inp: ColumnarTensor,
+    source: int,
+    destination: int,
+) -> ColumnarTensor:
+    return cast(
+        ColumnarTensor,
+        aten.movedim.int.decompose(inp, source, destination),
+    )
+
+
+@ColumnarTensor.implements(aten.movedim.intlist)
+def _movedim_intlist(
+    inp: ColumnarTensor,
+    source: Sequence[int],
+    destination: Sequence[int],
+) -> ColumnarTensor:
+    return cast(
+        ColumnarTensor,
+        aten.movedim.intlist.decompose(inp, source, destination),
+    )
+
+
 @ColumnarTensor.implements(aten.select.int)
 @preserve_view_inference_mode
 def _select(inp: ColumnarTensor, dim: int, index: int) -> Tensor:

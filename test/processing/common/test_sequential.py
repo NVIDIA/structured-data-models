@@ -6,11 +6,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import (
-    CategoricalTensor,
-    StringTensor,
-    TableTensor,
-)
+from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.tensor import EnsembleTable
 
 
@@ -160,13 +156,6 @@ def test_pipeline_checks_fitted_state() -> None:
 
     with pytest.raises(RuntimeError, match="'Sequential' is not fitted"):
         pipeline.transform(_table())
-
-
-def test_pipeline_rejects_unsupported_stype() -> None:
-    pipeline = sp.Sequential(sp.Standardize())
-
-    with pytest.raises(ValueError, match="categorical"):
-        pipeline.fit_transform(_mixed_table())
 
 
 def test_inverse_transform_rejects_non_invertible_step() -> None:

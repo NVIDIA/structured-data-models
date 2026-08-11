@@ -19,7 +19,7 @@ class SelectColumns(EnsembleProcessor):
             chunks to ensemble members.
     """
 
-    supported_stypes = frozenset(Stype)
+    handles_stypes = frozenset(Stype)
     requires_fit = False
 
     def __init__(

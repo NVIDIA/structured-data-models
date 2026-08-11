@@ -49,7 +49,7 @@ class ShuffleCategories(EnsembleProcessor):
             a drawn permutation.
     """
 
-    supported_stypes = frozenset({Stype.categorical})
+    handles_stypes = frozenset({Stype.categorical})
     requires_fit = True
 
     def __init__(

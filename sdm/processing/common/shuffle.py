@@ -33,7 +33,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             with a drawn permutation.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     def __init__(
@@ -148,13 +148,17 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         permutation: Tensor,
         order: tuple[int, ...],
     ) -> TableTensor:
-        return table.__class__(
+        out = table.__class__(
             columns={
                 Stype.numerical: tuple(
                     table.columns[Stype.numerical][index] for index in order
                 )
             },
             numerical=table.numerical.index_select(-1, permutation),
+        )
+        return cast(
+            TableTensor,
+            torch.cat((table.drop_stypes(Stype.numerical), out), dim=-1),
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
