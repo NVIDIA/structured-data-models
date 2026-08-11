@@ -5,6 +5,7 @@ from math import prod
 from typing import Any, Literal, cast, overload
 
 import torch
+import torch.nn.attention as torch_attn
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
@@ -12,6 +13,32 @@ from torch.nn import GELU, Linear, Sequential
 from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
 from sdm.nn.resolver import normalization_resolver
+
+
+def _configure_flash_attention(
+    impl: Literal["FA2", "FA3"] | None,
+    *,
+    force: bool,
+) -> None:
+    if impl == "FA2":
+        current = getattr(torch_attn, "current_flash_attention_impl", None)
+        if current is not None and current() is not None:
+            torch_attn.restore_flash_attention_impl()
+    elif impl == "FA3":
+        activate = getattr(torch_attn, "activate_flash_attention_impl", None)
+        if activate is None:
+            raise RuntimeError(
+                "Flash Attention 3 requires PyTorch's provider registry"
+            )
+        activate("FA3")
+    elif impl is not None:
+        raise ValueError("'flash_attention_impl' must be 'FA2' or 'FA3'")
+
+    if force:
+        torch.backends.cuda.enable_flash_sdp(True)
+        torch.backends.cuda.enable_cudnn_sdp(False)
+        torch.backends.cuda.enable_mem_efficient_sdp(False)
+        torch.backends.cuda.enable_math_sdp(False)
 
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:

@@ -8,13 +8,13 @@ from torch import Tensor
 from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
-from sdm.models._attention import configure_flash_attention
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.recipe import default_recipe
 from sdm.models.kumorfm.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
+from sdm.nn.attention import _configure_flash_attention
 from sdm.processing import Recipe, Standardize
 
 
@@ -172,7 +172,7 @@ class KumoRFM(ICLModel):
             self._load_from_pretrained()
 
         self.eval()
-        configure_flash_attention(
+        _configure_flash_attention(
             flash_attention_impl,
             force=force_flash_attention,
         )
