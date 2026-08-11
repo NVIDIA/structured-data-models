@@ -101,6 +101,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
+        _stabilize_bfloat16_amp: bool = False,
         batch_size_limit: int | None = None,
     ) -> Tensor: ...
 
@@ -113,6 +114,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
+        _stabilize_bfloat16_amp: bool = False,
         batch_size_limit: int | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
@@ -125,6 +127,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
+        _stabilize_bfloat16_amp: bool = False,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
@@ -136,6 +139,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., KV]
         return_key_value: bool = False,
         *,
+        _stabilize_bfloat16_amp: bool = False,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -179,5 +183,6 @@ class InducedTransformerBlock(torch.nn.Module):
             query=query,  # [..., Q, C]
             key_value=key_value,  # [..., M, C]
             return_key_value=return_key_value,
+            _stabilize_bfloat16_amp=_stabilize_bfloat16_amp,
             batch_size_limit=batch_size_limit,
         )  # [..., Q, C]

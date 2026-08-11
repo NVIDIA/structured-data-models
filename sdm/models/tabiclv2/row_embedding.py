@@ -28,12 +28,15 @@ class RowEmbedding(torch.nn.Module):
         norm_bias: bool,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        *,
+        _stabilize_amp: bool = False,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.lin = Linear(group_size, channels, **factory_kwargs)
         self.num_heads = num_heads
+        self._stabilize_amp = _stabilize_amp
 
         self.num_classes = num_classes
         self.y_emb: torch.nn.Module | None = None
@@ -113,6 +116,17 @@ class RowEmbedding(torch.nn.Module):
         index = (index.view(C, 1) + shift.view(1, G)) % C  # [C, G]
         x = x[..., index]  # [..., R, C, G]
         x = self.lin(x)  # [..., R, C, D]
+        projection_dtype = x.dtype
+        stabilize_amp = (
+            self._stabilize_amp
+            and y.numel() > 0
+            and x.is_cuda
+            and projection_dtype in (torch.float16, torch.bfloat16)
+            and self.lin.weight.dtype == torch.float32
+        )
+        if stabilize_amp:
+            # Preserve the residual carrier before target injection.
+            x = x.float()
 
         num_digits = 1
         if (
@@ -173,11 +187,20 @@ class RowEmbedding(torch.nn.Module):
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
+                _stabilize_bfloat16_amp=(
+                    stabilize_amp and projection_dtype == torch.bfloat16
+                ),
                 batch_size_limit=col_batch_size_limit,
             )  # [..., C, R, D]
 
             if cache is not None and cache.is_recording:
-                x, cache[key] = result
+                x, key_value = result
+                if stabilize_amp:
+                    key_value = KVCacheEntry(
+                        key=key_value.key.to(dtype=projection_dtype),
+                        value=key_value.value.to(dtype=projection_dtype),
+                    )
+                cache[key] = key_value
             else:
                 x = result
 

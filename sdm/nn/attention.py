@@ -1,6 +1,7 @@
 """Attention modules for structured tensor models."""
 
 from collections.abc import Callable
+from functools import partial
 from math import prod
 from typing import Any, Literal, cast, overload
 
@@ -752,6 +753,7 @@ class TransformerBlock(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[False] = False,
+        _stabilize_bfloat16_amp: bool = False,
         batch_size_limit: int | None = None,
     ) -> Tensor: ...
 
@@ -765,6 +767,7 @@ class TransformerBlock(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[True],
+        _stabilize_bfloat16_amp: bool = False,
         batch_size_limit: int | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
@@ -778,6 +781,7 @@ class TransformerBlock(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: bool,
+        _stabilize_bfloat16_amp: bool = False,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
@@ -790,6 +794,7 @@ class TransformerBlock(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         return_key_value: bool = False,
         *,
+        _stabilize_bfloat16_amp: bool = False,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -822,8 +827,14 @@ class TransformerBlock(torch.nn.Module):
         """
         batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
         if not self.training and not torch.compiler.is_compiling():
+            forward = self.forward
+            if _stabilize_bfloat16_amp:
+                forward = partial(
+                    forward,
+                    _stabilize_bfloat16_amp=True,
+                )
             chunked_result = _chunk_attention(
-                forward=self.forward,
+                forward=forward,
                 query=query,
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
@@ -837,22 +848,43 @@ class TransformerBlock(torch.nn.Module):
 
         if isinstance(key_value, Tensor):
             key_value = self.kv_norm(key_value)
-        attn_result = self.attn(
-            query=self.q_norm(query),
-            key_value=key_value,
-            seqused_key_value=seqused_key_value,
-            attn_mask=attn_mask,
-            rope=rope,
-            batch_size_limit=batch_size_limit,
-            return_key_value=return_key_value,
-        )
+        query_norm = self.q_norm(query)
+        if _stabilize_bfloat16_amp:
+            with torch.amp.autocast(
+                query.device.type,
+                dtype=torch.float16,
+            ):
+                attn_result = self.attn(
+                    query=query_norm,
+                    key_value=key_value,
+                    seqused_key_value=seqused_key_value,
+                    attn_mask=attn_mask,
+                    rope=rope,
+                    batch_size_limit=batch_size_limit,
+                    return_key_value=return_key_value,
+                )
+        else:
+            attn_result = self.attn(
+                query=query_norm,
+                key_value=key_value,
+                seqused_key_value=seqused_key_value,
+                attn_mask=attn_mask,
+                rope=rope,
+                batch_size_limit=batch_size_limit,
+                return_key_value=return_key_value,
+            )
         if return_key_value:
             attn_out, kv = attn_result
         else:
             attn_out = attn_result
 
         out = query + attn_out
-        out = out + self.mlp(out)
+        if _stabilize_bfloat16_amp:
+            with torch.amp.autocast(query.device.type, enabled=False):
+                mlp_out = self.mlp(out)
+        else:
+            mlp_out = self.mlp(out)
+        out = out + mlp_out
         if return_key_value:
             return out, kv
         return out

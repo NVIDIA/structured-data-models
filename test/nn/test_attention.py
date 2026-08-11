@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from sdm.cache import KVCacheEntry
 from sdm.nn import (
     SDPA,
     Attention,
@@ -14,7 +15,7 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def reference_sdpa(
@@ -892,6 +893,103 @@ def test_transformer_block(
         rope=rotary_embedding,
     )
     torch.testing.assert_close(out1, out3)
+
+
+@onlyCUDA
+def test_transformer_block_bfloat16_stabilization_chunked() -> None:
+    channels = 8
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        feedforward_channels=16,
+        device="cuda",
+    ).eval()
+    mlp_out = module.mlp[-1]
+    assert isinstance(mlp_out, torch.nn.Linear)
+    with torch.no_grad():
+        module.attn.out_lin.weight.copy_(torch.eye(channels, device="cuda"))
+        module.attn.out_lin.bias.zero_()
+        torch.nn.init.normal_(mlp_out.weight, std=0.02)
+        mlp_out.bias.zero_()
+
+    query = torch.randn(5, 3, channels, device="cuda")
+    key_value = torch.randn(5, 4, channels, device="cuda")
+    attention_dtypes: list[torch.dtype] = []
+    cache_dtypes: list[tuple[torch.dtype, torch.dtype]] = []
+    mlp_dtypes: list[torch.dtype] = []
+
+    def record_attention(
+        _module: torch.nn.Module,
+        _args: tuple[object, ...],
+        output: tuple[torch.Tensor, KVCacheEntry],
+    ) -> None:
+        attention, cache = output
+        attention_dtypes.append(attention.dtype)
+        cache_dtypes.append((cache.key.dtype, cache.value.dtype))
+
+    def record_mlp(
+        _module: torch.nn.Module,
+        _args: tuple[object, ...],
+        output: torch.Tensor,
+    ) -> None:
+        mlp_dtypes.append(output.dtype)
+
+    attention_handle = module.attn.register_forward_hook(record_attention)
+    mlp_handle = module.mlp.register_forward_hook(record_mlp)
+    with (
+        torch.inference_mode(),
+        torch.autocast(
+            "cuda",
+            dtype=torch.bfloat16,
+        ),
+    ):
+        expected, expected_cache = module(
+            query=query,
+            key_value=key_value,
+            return_key_value=True,
+            _stabilize_bfloat16_amp=True,
+        )
+
+    assert attention_dtypes == [torch.float16]
+    assert cache_dtypes == [(torch.float16, torch.float16)]
+    assert mlp_dtypes == [torch.float32]
+
+    attention_dtypes.clear()
+    cache_dtypes.clear()
+    mlp_dtypes.clear()
+    with (
+        torch.inference_mode(),
+        torch.autocast(
+            "cuda",
+            dtype=torch.bfloat16,
+        ),
+    ):
+        actual, actual_cache = module(
+            query=query,
+            key_value=key_value,
+            return_key_value=True,
+            _stabilize_bfloat16_amp=True,
+            batch_size_limit=2,
+        )
+
+    attention_handle.remove()
+    mlp_handle.remove()
+
+    assert len(attention_dtypes) > 1
+    assert all(dtype == torch.float16 for dtype in attention_dtypes)
+    assert all(
+        key_dtype == value_dtype == torch.float16
+        for key_dtype, value_dtype in cache_dtypes
+    )
+    assert all(dtype == torch.float32 for dtype in mlp_dtypes)
+    assert expected.dtype == actual.dtype == torch.float32
+    assert expected_cache.key.dtype == expected_cache.value.dtype
+    assert expected_cache.key.dtype == torch.float16
+    assert actual_cache.key.dtype == actual_cache.value.dtype
+    assert actual_cache.key.dtype == torch.float16
+    torch.testing.assert_close(actual, expected, atol=5e-4, rtol=5e-3)
+    torch.testing.assert_close(actual_cache.key, expected_cache.key)
+    torch.testing.assert_close(actual_cache.value, expected_cache.value)
 
 
 def test_transformer_block_norm_kwargs_precedence() -> None:

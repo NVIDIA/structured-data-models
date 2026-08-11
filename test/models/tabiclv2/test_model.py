@@ -2,12 +2,12 @@ import pytest
 import torch
 
 from sdm import Recipe
-from sdm.cache import Cache
+from sdm.cache import Cache, KVCacheEntry
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2 import row_embedding as row_embedding_module
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.nn import Attention
+from sdm.nn import Attention, InducedTransformerBlock
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -139,6 +139,142 @@ def test_autocast_output_is_float32(
             out = model(x_context, y_context, x_query, recipe=Recipe())
 
     assert out.numerical.dtype == torch.float32
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    ("dtype", "record_mlp_dtype"),
+    [
+        pytest.param(torch.bfloat16, torch.float32, id="bfloat16"),
+        pytest.param(torch.float16, torch.float16, id="float16"),
+    ],
+)
+def test_row_embedding_amp_stabilization(
+    dtype: torch.dtype,
+    record_mlp_dtype: torch.dtype,
+) -> None:
+    row_embedding = RowEmbedding(
+        num_classes=2,
+        channels=8,
+        num_layers=1,
+        num_heads=2,
+        group_size=2,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+        device="cuda",
+        _stabilize_amp=True,
+    ).eval()
+    assert isinstance(row_embedding.y_emb, torch.nn.Embedding)
+    with torch.no_grad():
+        row_embedding.lin.weight.zero_()
+        row_embedding.lin.bias.fill_(1)
+        row_embedding.y_emb.weight.fill_(2**-9)
+
+    col_layer = row_embedding.col_layers[0]
+    assert isinstance(col_layer, InducedTransformerBlock)
+    transformer = col_layer.transformer_2
+    carriers: list[torch.Tensor] = []
+    attention_dtypes: list[torch.dtype] = []
+    cache_dtypes: list[tuple[torch.dtype, torch.dtype]] = []
+    mlp_dtypes: list[torch.dtype] = []
+    transformer_dtypes: list[torch.dtype] = []
+
+    def record_carrier(
+        _module: torch.nn.Module,
+        _args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        query = kwargs["query"]
+        assert isinstance(query, torch.Tensor)
+        carriers.append(query.detach().clone())
+
+    def record_attention(
+        _module: torch.nn.Module,
+        _args: tuple[object, ...],
+        output: torch.Tensor | tuple[torch.Tensor, KVCacheEntry],
+    ) -> None:
+        if isinstance(output, tuple):
+            attention, key_value = output
+            cache_dtypes.append((key_value.key.dtype, key_value.value.dtype))
+        else:
+            attention = output
+        attention_dtypes.append(attention.dtype)
+
+    def record_mlp(
+        _module: torch.nn.Module,
+        _args: tuple[object, ...],
+        output: torch.Tensor,
+    ) -> None:
+        mlp_dtypes.append(output.dtype)
+
+    def record_transformer(
+        _module: torch.nn.Module,
+        _args: tuple[object, ...],
+        output: torch.Tensor | tuple[torch.Tensor, KVCacheEntry],
+    ) -> None:
+        out = output[0] if isinstance(output, tuple) else output
+        transformer_dtypes.append(out.dtype)
+
+    handles = [
+        col_layer.register_forward_pre_hook(record_carrier, with_kwargs=True),
+        transformer.attn.register_forward_hook(record_attention),
+        transformer.mlp.register_forward_hook(record_mlp),
+        transformer.register_forward_hook(record_transformer),
+    ]
+
+    x = torch.zeros(2, 2, device="cuda")
+    y = torch.zeros(1, dtype=torch.int64, device="cuda")
+    cache = Cache()
+    with torch.inference_mode(), torch.autocast("cuda", dtype=dtype):
+        recorded = row_embedding(x=x, y=y, cache=cache)
+
+    assert recorded.dtype == torch.float32
+    assert len(carriers) == 1
+    assert carriers[0].dtype == torch.float32
+    torch.testing.assert_close(
+        carriers[0][..., 0, :],
+        carriers[0].new_full(carriers[0][..., 0, :].size(), 1 + 2**-9),
+        rtol=0,
+        atol=0,
+    )
+    torch.testing.assert_close(
+        carriers[0][..., 1, :],
+        carriers[0].new_ones(carriers[0][..., 1, :].size()),
+        rtol=0,
+        atol=0,
+    )
+    assert attention_dtypes == [torch.float16]
+    assert cache_dtypes == [(torch.float16, torch.float16)]
+    assert mlp_dtypes == [record_mlp_dtype]
+    assert transformer_dtypes == [torch.float32]
+
+    key_value = cache["row_embedding.col_layer0"]
+    assert isinstance(key_value, KVCacheEntry)
+    assert key_value.key.dtype == key_value.value.dtype == dtype
+
+    carriers.clear()
+    attention_dtypes.clear()
+    cache_dtypes.clear()
+    mlp_dtypes.clear()
+    transformer_dtypes.clear()
+    with torch.inference_mode(), torch.autocast("cuda", dtype=dtype):
+        replayed = row_embedding(
+            x=x[:1],
+            y=y[:0],
+            cache=cache.freeze(),
+        )
+
+    for handle in handles:
+        handle.remove()
+
+    assert replayed.dtype == torch.float32
+    assert len(carriers) == 1
+    assert carriers[0].dtype == dtype
+    assert attention_dtypes == [dtype]
+    assert cache_dtypes == []
+    assert mlp_dtypes == [dtype]
+    assert transformer_dtypes == [dtype]
 
 
 # @pytest.mark.parametrize("batch_shape", [(), (2,)])  # TODO Reenable
