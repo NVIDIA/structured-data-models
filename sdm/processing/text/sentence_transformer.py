@@ -205,6 +205,7 @@ class SentenceTransformer(Processor):
 
         lengths = raw_lengths.clamp(max=tokenizer.max_length - 2)
         seq_len = int(lengths.max()) + 2  # [CLS] + tokens + [SEP]
+        print(f"  seq_len: {seq_len}")
 
         input_ids = torch.full(
             (num_strings, seq_len),
