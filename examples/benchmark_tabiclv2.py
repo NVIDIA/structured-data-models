@@ -20,7 +20,7 @@ one-shot classification unless noted; see the PR for the full table):
   (1.3 ms). Static compilation reaches 7.1x steady-state but recompiles
   every new table shape (~5 s/table), so keep ``dynamic=True`` for
   in-context learning. The autocast variant of this recipe (as shipped
-  in ``examples/tabiclv2.py``) measures 6.2x (16.6 ms) one-shot and
+  in ``examples/tabiclv2/quickstart.py``) measures 6.2x (16.6 ms) one-shot and
   ~9 ms fit/predict.
 * ``fp8`` (Transformer Engine, per-tensor scaling): measured *slower*
   than bf16 here (27 ms large, 21 ms vs 11 ms small) - at this model's
@@ -86,6 +86,7 @@ pools, and allocator state cannot leak between configurations::
 """
 
 import argparse
+import importlib
 import json
 import os
 import statistics
@@ -94,12 +95,16 @@ import sys
 import tempfile
 import time
 from contextlib import ExitStack
-from typing import Any
+from typing import Any, cast
 
 import torch
-from sdm.models import TabICLv2
 from torch import Tensor
 from torch.nn.attention import SDPBackend, sdpa_kernel
+
+from sdm import Recipe
+from sdm.cache import Cache, KVCacheEntry
+from sdm.models import TabICLv2
+from sdm.nn import InducedTransformerBlock, QASSMax, TransformerBlock
 
 CONFIGS = {
     # name: (precision, sdpa_priority, compile_kwargs, te_recipe) with an
@@ -132,8 +137,8 @@ CONFIGS = {
         },
         None,
     ),
-    # The examples/tabiclv2.py recipe: autocast (TableTensor-friendly)
-    # combined with dynamic fullgraph compilation.
+    # The examples/tabiclv2/quickstart.py recipe: autocast
+    # (TableTensor-friendly) combined with dynamic fullgraph compilation.
     "c12-autocast-compile": (
         "bf16-autocast",
         False,
@@ -188,7 +193,7 @@ CONFIGS = {
         None,
         True,
     ),
-    # The examples/tabiclv2.py recipe with regional compilation.
+    # The examples/tabiclv2/quickstart.py recipe with regional compilation.
     "c19-autocast-regional": (
         "bf16-autocast",
         False,
@@ -415,8 +420,6 @@ def cast_inputs(x: Tensor, y: Tensor, precision: str) -> tuple[Tensor, Tensor]:
 
 def load_transformer_engine() -> tuple[Any, Any]:
     """Import Transformer Engine lazily (optional heavy dependency)."""
-    import importlib
-
     te = importlib.import_module("transformer_engine.pytorch")
     recipes = importlib.import_module("transformer_engine.common.recipe")
     return te, recipes
@@ -443,8 +446,6 @@ def swap_te_linears(model: TabICLv2, te: Any) -> int:
     the :class:`~sdm.nn.QASSMax` scaling MLPs (which can see a single
     key-length row, so their leading product can be 1).
     """
-    from sdm.nn import QASSMax
-
     excluded: set[int] = set()
     for module in model.modules():
         if isinstance(module, QASSMax):
@@ -571,10 +572,23 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
         )
 
     def call(x: Tensor, y: Tensor, **kwargs: Any) -> Tensor:
+        # `x` holds the in-context rows followed by the query rows; `y`
+        # holds the in-context targets.
+        num_train = y.size(-1)
         with ExitStack() as stack:
             for factory in context_factories:
                 stack.enter_context(factory())
-            return model(x, y, **kwargs)
+            out = model(
+                x[..., :num_train, :],
+                y.unsqueeze(-1),
+                x[..., num_train:, :],
+                recipe=Recipe(),
+                **kwargs,
+            )
+        # A pass-through recipe keeps the ensemble dimension, and the
+        # padded cells require it: fitted pre-processing would derive its
+        # state from the padded rows, violating the `seqused_*` contract.
+        return out.numerical[0]
 
     def bucketed_call(x: Tensor, y: Tensor) -> Tensor:
         """Pad to bucketed shapes, run, and slice the true test rows."""
@@ -588,15 +602,13 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
     if compile_kwargs is not None:
         compile_kwargs = dict(compile_kwargs)
         if compile_kwargs.pop("regional", False):
-            from sdm.nn import InducedTransformerBlock, TransformerBlock
-
             for module in model.modules():
                 if isinstance(
                     module, (TransformerBlock, InducedTransformerBlock)
                 ):
                     module.compile(**compile_kwargs)
-            model.cls_model.head.compile(**compile_kwargs)
-            model.reg_model.head.compile(**compile_kwargs)
+            model.cls_model.icl_block.head.compile(**compile_kwargs)
+            model.reg_model.icl_block.head.compile(**compile_kwargs)
         else:
             model.cls_model.compile(**compile_kwargs)
             model.reg_model.compile(**compile_kwargs)
@@ -710,12 +722,11 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
             # fit are CUDA-graph-pool outputs that later replays overwrite.
             # Give the cache its own storage once per fit. (Accesses cache
             # internals: the serving-side pattern pending a public API.)
-            if not uses_cudagraphs or model._caches is None:
+            cache = model._cache
+            if not uses_cudagraphs or cache is None:
                 return
-            from sdm.cache import KVCacheEntry
-
-            for member_cache in model._caches:
-                items = member_cache._items
+            for i in range(cast(int, cache["num_estimators"])):
+                items = cast(Cache, cache[i])._items
                 for cache_key, value in list(items.items()):
                     if isinstance(value, KVCacheEntry):
                         items[cache_key] = KVCacheEntry(
@@ -724,7 +735,7 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
 
         def run_predict(x_test: Tensor) -> Tensor:
             if not bucketed:
-                return model.predict(x_test)
+                return model.predict(x_test).numerical[0]
             num_test = x_test.size(-2)
             padded_test = bucket_rows(num_test)
             # Match the fitted column padding.
@@ -751,13 +762,18 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
                 ],
                 dim=-2,
             )
-            return model.predict(x_test)[..., :num_test, :]
+            return model.predict(x_test).numerical[0][..., :num_test, :]
 
         def fit_predict() -> Tensor:
             with ExitStack() as stack:
                 for factory in context_factories:
                     stack.enter_context(factory())
-                model.fit(x_train, y, **fit_kwargs)
+                model.fit(
+                    x_train,
+                    y.unsqueeze(-1),
+                    recipe=Recipe(),
+                    **fit_kwargs,
+                )
                 clone_cached_kv()
                 pred = run_predict(x_test)
                 model.clear()
@@ -781,7 +797,12 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
             for factory in context_factories:
                 stack.enter_context(factory())
             start = time.perf_counter()
-            model.fit(x_train, y, **fit_kwargs)
+            model.fit(
+                x_train,
+                y.unsqueeze(-1),
+                recipe=Recipe(),
+                **fit_kwargs,
+            )
             # The clone is a mandatory part of fitting under CUDA graphs,
             # so it belongs inside the timed region.
             clone_cached_kv()

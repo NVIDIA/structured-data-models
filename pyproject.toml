@@ -7,7 +7,7 @@ name = "structured-data-models"
 dynamic = ["version"]
 description = "Foundation Models for Structured Data"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [
@@ -27,7 +27,6 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -41,24 +40,33 @@ dependencies = [
     "typing_extensions",
 ]
 
-[project.optional-dependencies]
-test = [
-    "pytest",
-    "pytest-cov",
-    "pandas",
-]
-doc = [
-    "myst-parser",
-    "shibuya",
-    "sphinx",
-    "sphinx-copybutton",
-]
-
 [project.urls]
 Download = "https://github.com/NVIDIA/structured-data-models/releases"
 Homepage = "https://github.com/NVIDIA/structured-data-models"
 Repository = "https://github.com/NVIDIA/structured-data-models"
 Issues = "https://github.com/NVIDIA/structured-data-models/issues"
+
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-cov",
+    "pandas",
+    "cudf-cu13>=26.8; sys_platform == 'linux'",
+    "pyg-lib; sys_platform == 'linux'",
+    "pylibcugraph-cu13>=26.8; sys_platform == 'linux'",
+    "sentence-transformers>=5.4",
+]
+doc = [
+    "myst-parser",
+    "pandas",
+    "shibuya",
+    "sphinx",
+    "sphinx-copybutton",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "doc" },
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -70,6 +78,19 @@ fallback_version = "0.1.0.dev0"
 [tool.uv]
 package = true
 exclude-newer = "7 days"
+
+[tool.uv.exclude-newer-package]
+cudf-cu13 = false
+libcudf-cu13 = false
+libcugraph-cu13 = false
+libcuvs-cu13 = false
+libkvikio-cu13 = false
+libraft-cu13 = false
+librmm-cu13 = false
+pylibcudf-cu13 = false
+pylibcugraph-cu13 = false
+pylibraft-cu13 = false
+rmm-cu13 = false
 
 [tool.pytest.ini_options]
 addopts = [
@@ -117,26 +138,33 @@ unresolved-attribute = "ignore"
 src = ["pyproject.toml", "sdm", "test", "examples"]
 line-length = 79
 indent-width = 4
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 # https://docs.astral.sh/ruff/rules/
 select = [
+    "A",    # flake8-builtins
     "B",    # bugbear
     "BLE",  # blind-except
     "C4",   # comprehensions
     "D",    # pydocstyle
     "E",    # pycodestyle errors
     "F",    # pyflakes
+    "G",    # flake8-logging-format
     "I",    # import sorting
+    "LOG",  # flake8-logging
     "NPY",  # numpy-specific rules
     "PIE",  # flake8-pie
+    "PLC0415",  # pylint: imports should be at module scope
+    "PLE",  # pylint errors
     "PT",   # pytest style
     "RET",  # return statement style
     "RUF",  # ruff-specific rules
     "SIM",  # simplification
     "T10",  # flake8-debugger
     "T20",  # flake8-print
+    "TID252",  # flake8-tidy-imports: require absolute imports
+    "TID253",  # flake8-tidy-imports: keep optional imports lazy
     "UP",   # pyupgrade
     "W",    # pycodestyle warnings
     "YTT",  # flake8-2020
@@ -150,13 +178,35 @@ ignore = [
     "RUF022",  # Ignore sorting __all__; order controls public docs.
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["sdm"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ruff.lint.flake8-builtins]
+ignorelist = ["id"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+banned-module-level-imports = [
+    "cudf",
+    "cupy",
+    "graphviz",
+    "pandas",
+    "pyg_lib",
+    "pylibcudf",
+    "pytest",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["I"]
 "examples/**/*.py" = [
-    "T201",  # Examples and benchmarks report results via `print`.
+    "D101",  # Ignore "Missing docstring in public class"
+    "D102",  # Ignore "Missing docstring in public method"
+    "D103",  # Ignore "Missing docstring in public function"
+    "T201",  # Allow print.
+    "TID253",  # Example dependencies should be imported at module scope.
 ]
 "test/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"
@@ -164,6 +214,7 @@ convention = "google"
     "D103",  # Ignore "Missing docstring in public function"
     "D104",  # Ignore "Missing docstring in public package"
     "D106",  # Ignore "Missing docstring in public nested class"
+    "TID253",  # Test dependencies should be imported at module scope.
 ]
 
 [tool.ty.analysis]
@@ -171,4 +222,8 @@ allowed-unresolved-imports = [
     "cudf.**",
     "cupy.**",
     "pyg_lib.**",
+    "pylibcudf.**",
+    "graphviz.**",
+    "pylibcugraph.**",
+    "sentence_transformers.**",
 ]

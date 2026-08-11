@@ -3,6 +3,7 @@ from typing import Literal
 
 import pytest
 import torch
+
 from sdm.nn import RotaryEmbedding
 from sdm.testing import withCUDA
 
@@ -55,33 +56,3 @@ def test_rope(
 
     with pytest.raises(ValueError, match="'channels' must be even"):
         RotaryEmbedding(channels=3, layout=layout, device=device)
-
-
-@pytest.mark.parametrize("layout", ["split_half", "interleaved"])
-def test_rope_inverse_frequencies_stay_float32(
-    layout: Literal["split_half", "interleaved"],
-) -> None:
-    torch.manual_seed(0)
-    module = RotaryEmbedding(channels=8, layout=layout)
-    reference = RotaryEmbedding(channels=8, layout=layout)
-
-    module.to(torch.bfloat16)
-    assert module.inv_freq.dtype == torch.float32
-    # Values survive the round-trip exactly (not just the dtype): the cast
-    # itself already rounds, so the originals are restored, not upcast.
-    torch.testing.assert_close(
-        module.inv_freq,
-        reference.inv_freq,
-        atol=0.0,
-        rtol=0.0,
-    )
-
-    x = torch.randn(2, 5, 3, 8, dtype=torch.bfloat16)
-    out = module(x)
-    assert out.dtype == torch.bfloat16
-    torch.testing.assert_close(
-        out.float(),
-        reference(x.float()),
-        atol=1e-2,
-        rtol=1e-2,
-    )

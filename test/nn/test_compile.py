@@ -3,6 +3,8 @@ from collections.abc import Callable, Iterator
 
 import pytest
 import torch
+from torch import Tensor
+
 from sdm.nn import (
     SDPA,
     Attention,
@@ -12,7 +14,6 @@ from sdm.nn import (
     TransformerBlock,
 )
 from sdm.testing import withCUDA
-from torch import Tensor
 
 # Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
 pytestmark = pytest.mark.skipif(

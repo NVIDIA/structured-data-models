@@ -1,6 +1,7 @@
 name: Test
 
 on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -23,17 +24,21 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           activate-environment: true
 
       - name: Install package
         run: |
           # `-e` for coverage report.
-          uv pip install --torch-backend=cpu -e '.[test]'
+          uv pip install \
+            --torch-backend=cpu \
+            --find-links=https://data.pyg.org/whl/torch-2.13.0+cpu.html \
+            --group=test \
+            -e .
 
       - name: Run tests
         env:
-          FULL_TEST: ${{ github.event_name == 'push' && github.ref_name == 'main' && '1' || '0' }}
+          FULL_TEST: ${{ ((github.event_name == 'push' && github.ref_name == 'main') || contains(github.event.pull_request.labels.*.name, 'ci-full-test')) && '1' || '0' }}
         run: |
           pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10
 

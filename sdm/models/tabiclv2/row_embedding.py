@@ -1,14 +1,18 @@
 # ruff: noqa: D101, D102
 
 import math
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, Linear, ModuleList, Parameter
 
-from sdm.cache import Cache
+from sdm.cache import Cache, KVCacheEntry
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
+from sdm.nn.memory import (
+    attention_batch_size_limit,
+    cuda_attention_memory_limit,
+)
 
 
 class RowEmbedding(torch.nn.Module):
@@ -29,8 +33,9 @@ class RowEmbedding(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.lin = Linear(group_size, channels, **factory_kwargs)
+        self.num_heads = num_heads
 
-        self.max_classes = num_classes
+        self.num_classes = num_classes
         self.y_emb: torch.nn.Module | None = None
         self.y_lin: torch.nn.Module | None = None
         if num_classes > 0:
@@ -45,7 +50,8 @@ class RowEmbedding(torch.nn.Module):
                 feedforward_channels=2 * channels,
                 num_inducing_points=num_inducing_points,
                 qassmax=True,
-                norm_bias=norm_bias,
+                norm="layer_norm",
+                norm_kwargs={"bias": norm_bias},
                 **factory_kwargs,
             )
             for _ in range(num_layers)
@@ -62,7 +68,8 @@ class RowEmbedding(torch.nn.Module):
                 num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 qassmax=False,
-                norm_bias=norm_bias,
+                norm="layer_norm",
+                norm_kwargs={"bias": norm_bias},
                 **factory_kwargs,
             )
             for _ in range(num_layers)
@@ -84,6 +91,7 @@ class RowEmbedding(torch.nn.Module):
         *,
         train_mask: Tensor | None = None,  # [R],
         max_keys: int | None = None,
+        num_classes: int | None = None,
         seqused_train: Tensor | None = None,  # [...]
         seqused_cols: Tensor | None = None,  # []
         cache: Cache | None = None,
@@ -100,7 +108,12 @@ class RowEmbedding(torch.nn.Module):
         G, D = self.lin.in_features, self.lin.out_features
         K = self.readout_token.size(-2)
         train_mask: Any = slice(R_train) if train_mask is None else train_mask
-
+        plan_attention = (
+            x.device.type == "cuda"
+            and not self.training
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+        )
         # Feature grouping: gather G columns into each token. With padded
         # columns, groups wrap modulo the true column count (kept as tensor
         # data so compiled graphs do not specialize on it): tokens at true
@@ -121,26 +134,21 @@ class RowEmbedding(torch.nn.Module):
         x = self.lin(x)  # [..., R, C, D]
 
         num_digits = 1
+        if (
+            self.y_emb is not None
+            and num_classes is not None
+            and num_classes > self.num_classes
+        ):
+            bases = _mixed_radix_bases(num_classes, self.num_classes)
+            num_digits = len(bases)
+            if y.numel() > 0:
+                x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
+                y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
+            else:
+                x = x.unsqueeze(0).expand(num_digits, *x.size())
+
         if y.numel() > 0:
             if self.y_emb is not None:
-                # TODO Cache `num_classes` to avoid device synchronization.
-                num_classes = int(y.max()) + 1
-                if torch.compiler.is_compiling():
-                    # FIXME Don't give up on hierarchical classification.
-                    torch._check(num_classes <= self.max_classes)
-                if num_classes > self.max_classes:
-                    # TODO Support KV cache
-                    if cache is not None:
-                        raise NotImplementedError(
-                            f"Key/value caching is not supported with more "
-                            f"than {self.max_classes} classes "
-                            f"(got {num_classes})"
-                        )
-
-                    bases = _mixed_radix_bases(num_classes, self.max_classes)
-                    num_digits = len(bases)
-                    y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
-                    x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
                 y_emb = self.y_emb(y).unsqueeze(-2)
             else:
                 assert self.y_lin is not None
@@ -149,16 +157,18 @@ class RowEmbedding(torch.nn.Module):
             # y_emb has shape [F, ..., R_train, 1, D]:
             x[..., train_mask, :, :] += y_emb.to(x.dtype)
 
-        # Column-wise induced set attention (B * C as the batch axis):
-        x = x.transpose(-2, -3)  # [..., C, R, D]
+        # Column-wise induced set attention (B * C as the batch axis).
+        # Materialize once to avoid repeated copies in the column layers.
+        x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
         # Valid train-row counts broadcast over the column batch axis.
         seqused_col = (
             seqused_train.unsqueeze(-1) if seqused_train is not None else None
         )
+        col_batch_size_limit = batch_size_limit
         for i, col_layer in enumerate(self.col_layers):
             key = f"row_embedding.col_layer{i}"
             if cache is not None and cache.is_replaying:
-                key_value = cache[key]
+                key_value = cast(KVCacheEntry, cache[key])
             else:
                 key_value = x[..., train_mask, :]
                 if max_keys is not None and key_value.size(-2) > max_keys:
@@ -169,12 +179,25 @@ class RowEmbedding(torch.nn.Module):
                     )[:max_keys]
                     key_value = key_value[..., index, :]
 
+            if i == 0 or (
+                plan_attention and cache is not None and cache.is_recording
+            ):
+                col_batch_size_limit = attention_batch_size_limit(
+                    requested_limit=batch_size_limit,
+                    query=x,
+                    key_value=key_value,
+                    attention_memory_limit=(
+                        cuda_attention_memory_limit(x.device)
+                        if plan_attention
+                        else None
+                    ),
+                )
             result = col_layer(
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
                 seqused_key_value=seqused_col,
                 return_key_value=cache is not None and cache.is_recording,
-                batch_size_limit=batch_size_limit,
+                batch_size_limit=col_batch_size_limit,
             )  # [..., C, R, D]
 
             if cache is not None and cache.is_recording:
@@ -203,13 +226,25 @@ class RowEmbedding(torch.nn.Module):
             attn_mask = (key_index < K + seqused_cols).view(1, K + C)
 
         # Row-wise attention (B * R as the batch axis).
+        row_batch_size_limit = attention_batch_size_limit(
+            requested_limit=batch_size_limit,
+            query=x,
+            key_value=x,
+            attention_memory_limit=(
+                cuda_attention_memory_limit(x.device)
+                if plan_attention
+                else None
+            ),
+            num_heads=self.num_heads,
+        )
         for i, row_layer in enumerate(self.row_layers):
+            query = x[..., :K, :] if i == len(self.row_layers) - 1 else x
             x = row_layer(
-                query=x[..., :K, :] if i == len(self.row_layers) - 1 else x,
+                query=query,
                 key_value=x,  # [..., R, K + C, D]
                 attn_mask=attn_mask,  # [1, K + C]
                 rope=self.rope,
-                batch_size_limit=batch_size_limit,
+                batch_size_limit=row_batch_size_limit,
             )  # [..., R, K + C, D] or [..., R, K, D]
 
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]

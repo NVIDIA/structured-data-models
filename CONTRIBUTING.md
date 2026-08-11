@@ -26,13 +26,13 @@ into three categories:
 ### Your first issue
 
 1. Read the project's [README.md](https://github.com/NVIDIA/structured-data-models/blob/main/README.md)
-   to learn how to setup the development environment.
+   to learn how to set up the development environment.
 2. Find an issue to work on. The best way is to look for the [good first issue](https://github.com/NVIDIA/structured-data-models/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
    or [help wanted](https://github.com/NVIDIA/structured-data-models/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) labels
 3. Comment on the issue saying you are going to work on it.
-4. Get familar with the developer guide relevant for you:
+4. Get familiar with the developer guide relevant for you:
    - For C++ developers it is available here [DEVELOPER_GUIDE.md](https://github.com/jarmak-nv/rapids-repo-template/blob/main/Maintainers/DEVELOPER_GUIDE.md)
-   - For Python developers, a [cuDF SAMPLE Python DEVELOPER_GUIDE.md](https://docs.rapids.ai/api/cudf/stable/developer_guide/index.html) is availabe as well.
+   - For Python developers, a [cuDF SAMPLE Python DEVELOPER_GUIDE.md](https://docs.rapids.ai/api/cudf/stable/developer_guide/index.html) is available as well.
 5. Code! Make sure to update unit tests!
 6. When done, [create your pull request](https://github.com/NVIDIA/structured-data-models/compare).
 7. Verify that CI passes all [status checks](https://help.github.com/articles/about-status-checks/), or fix if needed.
@@ -43,7 +43,7 @@ Remember, if you are unsure about anything, don't hesitate to comment on issues 
 
 ### Managing PR labels
 
-Each PR must be labeled according to whether it is a "breaking" or "non-breaking" change (using Github labels). This is used to highlight changes that users should know about when upgrading.
+Each PR must be labeled according to whether it is a "breaking" or "non-breaking" change (using GitHub labels). This is used to highlight changes that users should know about when upgrading.
 
 For structured-data-models, a "breaking" change is one that modifies the public, non-experimental, Python API in a
 non-backward-compatible way. The C++ API does not have an expectation of backward compatibility at this
@@ -74,7 +74,7 @@ The structured-data-models repository has two main branches:
 
 ### Additional details
 
-For every new version `x.y` of structured-data-models there is a corresponding branch called `branch-x.y`, from where new feature development starts and PRs will be targeted and merged before its release. The exceptions to this are the 'hotfixes' that target the `main` branch, which target critical issues raised by Github users and are directly merged to `main` branch, and create a new subversion of the project. While trying to patch an issue which requires a 'hotfix', please state the intent in the PR.
+For every new version `x.y` of structured-data-models there is a corresponding branch called `branch-x.y`, from where new feature development starts and PRs will be targeted and merged before its release. The exceptions to this are the 'hotfixes' that target the `main` branch, which target critical issues raised by GitHub users and are directly merged to `main` branch, and create a new subversion of the project. While trying to patch an issue which requires a 'hotfix', please state the intent in the PR.
 
 For all development, your changes should be pushed into a branch (created using the naming instructions below) in your own fork of structured-data-models and then create a pull request when the code is ready.
 

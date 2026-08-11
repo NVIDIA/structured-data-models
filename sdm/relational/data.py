@@ -1,23 +1,21 @@
-from collections import defaultdict
-from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from __future__ import annotations
 
-import pyarrow as pa
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from html import escape
+from typing import TYPE_CHECKING, Any, Self, cast
+
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import Stype, TableTensor
+from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID, join_index
 from sdm.tensor.mixin import DeviceMixin
 
-PREFIX = "sdm_internal"
-ROW_ID = f"__{PREFIX}_row_id__"
-LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
-RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
-
 if TYPE_CHECKING:
-    from sdm.relational import RelationalSampler
+    import graphviz
+
+    from sdm.relational import RelationalSampler, TemporalSamplingConfig
 
 
 @dataclass(frozen=True, repr=False)
@@ -32,9 +30,9 @@ class Relationship:
     """
 
     left_table: str
-    left_columns: Sequence[str]
+    left_columns: tuple[str, ...]
     right_table: str
-    right_columns: Sequence[str]
+    right_columns: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if len(self.left_columns) != len(self.right_columns):
@@ -50,10 +48,10 @@ class Relationship:
             )
 
         for column in (*self.left_columns, *self.right_columns):
-            for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
+            for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
-                        f"Column name '{column}' is reserved for internal "
+                        f"Column name {column!r} is reserved for internal "
                         f"row indexing"
                     )
 
@@ -87,53 +85,66 @@ class Relationship:
 
         return cls(
             left_table=left_table,
-            left_columns=left_columns,
+            left_columns=tuple(left_columns),
             right_table=right_table,
-            right_columns=right_columns,
+            right_columns=tuple(right_columns),
         )
 
     def _left_columns_repr(self) -> str:
         if len(self.left_columns) == 1:
             return f"{self.left_table}.{self.left_columns[0]}"
-        return f"{self.left_table}.[{', '.join(self.left_columns)}]"
+        return f"{self.left_table}.[{','.join(self.left_columns)}]"
 
     def _right_columns_repr(self) -> str:
         if len(self.right_columns) == 1:
             return f"{self.right_table}.{self.right_columns[0]}"
-        return f"{self.right_table}.[{', '.join(self.right_columns)}]"
+        return f"{self.right_table}.[{','.join(self.right_columns)}]"
 
     def __repr__(self) -> str:
-        return f"{self._left_columns_repr()}<>{self._right_columns_repr()}"
+        return f"{self._left_columns_repr()} <> {self._right_columns_repr()}"
 
 
 @dataclass(frozen=True, init=False, repr=False)
 class RelationalData(DeviceMixin):
     r"""Collection of named tables and join relationships.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import RelationalData, TableTensor
 
         data = RelationalData(
             tables={
-                "users": TableTensor.from_pandas(...),
-                "orders": TableTensor.from_pandas(...),
-                "items": TableTensor.from_pandas(...),
+                "users": TableTensor.from_columns(
+                    {"user_id": [0, 1]},
+                    stypes={"user_id": "id"},
+                ),
+                "orders": TableTensor.from_columns(
+                    {
+                        "user_id": [0, 1],
+                        "item_id": [10, 11],
+                    },
+                    stypes={
+                        "user_id": "id",
+                        "item_id": "id",
+                    },
+                ),
+                "items": TableTensor.from_columns(
+                    {"item_id": [10, 11]},
+                    stypes={"item_id": "id"},
+                ),
             },
             relationships=[
                 # Foreign key from orders to users:
-                dict(left_table="orders", left_column="user_id",
-                     right_table="users", right_column="user_id"),
+                dict(left_table="orders", left_column="user_id", right_table="users", right_column="user_id"),
                 # Foreign key from orders to items:
-                dict(left_table="orders", left_column="item_id",
-                     right_table="items", right_column="item_id"),
+                dict(left_table="orders", left_column="item_id", right_table="items", right_column="item_id"),
             ],
         )
 
     Args:
         tables: Tables keyed by table name.
         relationships: Join relationships among ``tables``.
-    """
+    """  # noqa: E501
 
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
@@ -169,41 +180,29 @@ class RelationalData(DeviceMixin):
             ):
                 if table not in self.tables:
                     raise ValueError(
-                        f"Expected '{table}' to be registered as a table"
+                        f"Expected {table!r} to be registered as a table"
                     )
 
                 for column in columns:
                     stype = self.tables[table].stype(column)
                     if stype != Stype.id:
                         raise ValueError(
-                            f"Expected column '{column}' in table '{table}' "
-                            f"to have semantic type '{Stype.id.value}' "
-                            f"(got '{stype.value}')"
+                            f"Expected column {column!r} in table {table!r} "
+                            f"to have semantic type {str(Stype.id)!r} "
+                            f"(got {str(stype)!r})"
                         )
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def _tensors(self) -> Iterator[Tensor]:
+        yield from self.tables.values()
+
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
         return self.__class__(
             tables={
-                table_name: cast(TableTensor, table.to(device))
-                for table_name, table in self.tables.items()
+                name: cast(TableTensor, fn(table))
+                for name, table in self.tables.items()
             },
             relationships=self.relationships,
         )
-
-    @property
-    def device(self) -> torch.device:  # noqa: D102
-        devices = {table.device for table in self.tables.values()}
-        if len(devices) == 0:
-            raise RuntimeError(
-                f"Could not determine 'device' of empty "
-                f"'{self.__class__.__name__}'"
-            )
-        if len(devices) > 1:
-            raise RuntimeError(
-                f"Expected tables in '{self.__class__.__name__}' to be on "
-                f"the same device (got {list(devices)})"
-            )
-        return next(iter(devices))
 
     def edge_indices(
         self,
@@ -221,90 +220,155 @@ class RelationalData(DeviceMixin):
             Each edge index has shape ``[2, num_edges]`` and stores left table
             indices in the first row and right table indices in the second row.
         """
-        device = self.device if device is None else device
-
-        columns: dict[str, list[str]] = defaultdict(list)
-        for rel in self.relationships:
-            columns[rel.left_table].extend(rel.left_columns)
-            columns[rel.right_table].extend(rel.right_columns)
-
-        tables = {
-            name: table[..., columns[name]].to_arrow()
-            for name, table in self.tables.items()
-            if name in columns
-        }
-
-        tables = {
-            name: table.append_column(
-                ROW_ID,
-                pa.array(torch.arange(table.num_rows, dtype=dtype).numpy()),
-            )
-            for name, table in tables.items()
-        }
-
         edge_indices: list[Tensor] = []
         for rel in self.relationships:
-            left = tables[rel.left_table]
-            left = left.select((*rel.left_columns, ROW_ID))
-            left = left.rename_columns({ROW_ID: LEFT_ROW_ID})
-            right = tables[rel.right_table]
-            right = right.select((*rel.right_columns, ROW_ID))
-            right = right.rename_columns({ROW_ID: RIGHT_ROW_ID})
-
-            joined = left.join(
-                right,
-                keys=list(rel.left_columns),
-                right_keys=list(rel.right_columns),
-                join_type="inner",
+            src, dst = join_index(
+                left_table=self.tables[rel.left_table],
+                right_table=self.tables[rel.right_table],
+                left_keys=rel.left_columns,
+                right_keys=rel.right_columns,
+                how="inner",
+                dtype=dtype,
+                device=device,
             )
-
-            src = torch.from_numpy(joined[LEFT_ROW_ID].to_numpy()).to(device)
-            dst = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy()).to(device)
             edge_indices.append(torch.stack([src, dst], dim=0))
 
         return tuple(edge_indices)
 
     def sampler(
         self,
-        time_columns: Mapping[str, str] | None = None,
-    ) -> "RelationalSampler":
-        r"""Create a subgraph sampler over this relational data.
+        temporal: TemporalSamplingConfig | dict[str, Any] | None = None,
+    ) -> RelationalSampler:
+        r"""Create a device-appropriate sampler over this relational data.
 
-        .. code-block:: python
+        .. testcode::
 
-            from sdm import RelationalData, TableTensor
+            from sdm import (
+                RelationalData,
+                TableTensor,
+                TemporalSamplingConfig,
+            )
 
             data = RelationalData(
                 tables={
-                    "users": TableTensor.from_pandas(...),
-                    "orders": TableTensor.from_pandas(...),
-                    "items": TableTensor.from_pandas(...),
+                    "users": TableTensor.from_columns(
+                        {"user_id": [0, 1]},
+                        stypes={"user_id": "id"},
+                    ),
+                    "orders": TableTensor.from_columns(
+                        {
+                            "user_id": [0, 1],
+                            "item_id": [10, 11],
+                            "order_date": ["2026-01-01", "2026-01-02"],
+                        },
+                        stypes={
+                            "user_id": "id",
+                            "item_id": "id",
+                            "order_date": "datetime",
+                        },
+                    ),
+                    "items": TableTensor.from_columns(
+                        {"item_id": [10, 11]},
+                        stypes={"item_id": "id"},
+                    ),
                 },
                 relationships=[
                     # Foreign key from orders to users:
-                    dict(left_table="orders", left_column="user_id",
-                         right_table="users", right_column="user_id"),
+                    dict(left_table="orders", left_column="user_id", right_table="users", right_column="user_id"),
                     # Foreign key from orders to items:
-                    dict(left_table="orders", left_column="item_id",
-                         right_table="items", right_column="item_id"),
+                    dict(left_table="orders", left_column="item_id", right_table="items", right_column="item_id"),
                 ],
             )
 
             sampler = data.sampler(
-                time_columns={"orders": "order_date"},
+                temporal=TemporalSamplingConfig(
+                    time_columns={"orders": "order_date"},
+                    strategy="last",
+                ),
             )
 
         Args:
-            time_columns: Mapping from table name to the datetime column used
-                for temporal sampling. A row in a time-aware table can only be
-                sampled if its timestamp does not exceed the query timestamp.
-        """
-        from sdm.relational import RelationalSampler
+            temporal: Temporal sampling configuration or a dictionary of its
+                constructor arguments. A row in a time-aware table can only
+                be sampled if its timestamp does not exceed the query
+                timestamp.
+        """  # noqa: E501
+        from sdm.relational.sampler import (  # noqa: PLC0415
+            TemporalSamplingConfig,
+        )
+
+        if temporal is not None and not isinstance(
+            temporal, TemporalSamplingConfig
+        ):
+            temporal = TemporalSamplingConfig(**temporal)
+
+        if self.device.type == "cuda":
+            from sdm.relational.cugraph_sampler import (  # noqa: PLC0415
+                CuGraphRelationalSampler,
+            )
+
+            return CuGraphRelationalSampler(
+                data=self,
+                temporal=temporal,
+            )
+
+        # Avoid a circular import through `sdm.relational`.
+        from sdm.relational import RelationalSampler  # noqa: PLC0415
 
         return RelationalSampler(
             data=self,
-            time_columns=time_columns,
+            temporal=temporal,
         )
+
+    def to_graphviz(
+        self,
+        *,
+        hide_columns: bool = False,
+        **kwargs: Any,
+    ) -> graphviz.Graph:
+        r"""Return a graph visualization of the relational schema.
+
+        Args:
+            hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments passed to
+                :class:`graphviz.Graph`.
+        """
+        import graphviz
+
+        def left_align(keys: list[str]) -> str:
+            if len(keys) == 0:
+                return ""
+            return "\\l".join(keys) + "\\l"
+
+        graph = graphviz.Graph(**kwargs)
+
+        for table_name, table in self.tables.items():
+            if hide_columns:
+                label = f"{{{table_name}}}"
+            else:
+                columns = [
+                    f"{column}: {stype}"
+                    for stype, columns in table._columns.items()
+                    for column in columns
+                ]
+                label = f"{{{table_name}|{left_align(columns)}}}"
+            graph.node(table_name, shape="record", label=label)
+
+        for rel in self.relationships:
+            label = "\\n".join(
+                f" {left_column} <> {right_column} "
+                for left_column, right_column in zip(
+                    rel.left_columns, rel.right_columns
+                )
+            )
+            graph.edge(
+                rel.left_table,
+                rel.right_table,
+                label=label,
+                fontsize="11pt",
+            )
+
+        return graph
 
     def __repr__(self) -> str:
         out = f"{self.__class__.__name__}(\n"
@@ -327,8 +391,6 @@ class RelationalData(DeviceMixin):
         return out
 
     def _repr_html_(self) -> str:
-        from html import escape
-
         import pandas as pd
 
         rows = [
@@ -337,7 +399,7 @@ class RelationalData(DeviceMixin):
                 table.size(-2),
                 table.size(-1),
                 ", ".join(
-                    stype.value
+                    str(stype)
                     for stype, tensor in table.items()
                     if tensor.size(-1) > 0
                 ),

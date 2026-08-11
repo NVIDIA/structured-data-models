@@ -1,10 +1,9 @@
-from collections.abc import Mapping, Sequence
-from typing import NamedTuple, cast
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Literal, NamedTuple, Self, cast
 
-import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import ColumnarTensor, Stype, TableTensor
 from sdm.relational import (
@@ -13,10 +12,41 @@ from sdm.relational import (
     Relationship,
     TaskLink,
 )
-from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID
+from sdm.relational.join import join_index
 from sdm.tensor.mixin import DeviceMixin
 
 EXAMPLE_ID = "__example__"
+
+
+@dataclass(frozen=True)
+class TemporalSamplingConfig:
+    r"""Configuration for temporal relational sampling.
+
+    Args:
+        time_columns: Mapping from table names to their datetime columns.
+        strategy: How to select neighbors that satisfy the request cutoff.
+    """
+
+    time_columns: Mapping[str, str]
+    strategy: Literal["uniform", "last"] = "last"
+
+    def __post_init__(self) -> None:
+        if len(self.time_columns) == 0:
+            raise ValueError("Expected at least one time column")
+
+
+def _validate_time_columns(
+    data: RelationalData,
+    time_columns: Mapping[str, str],
+) -> None:
+    for table_name, column_name in time_columns.items():
+        stype = data.tables[table_name].stype(column_name)
+        if stype != Stype.datetime:
+            raise ValueError(
+                f"Expected '{column_name}' in table '{table_name}' to "
+                f"have semantic type {str(Stype.datetime)!r} "
+                f"(got {str(stype)!r})"
+            )
 
 
 class _RelationalSamplerOutput(NamedTuple):
@@ -32,22 +62,15 @@ class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
         related_tables: The related tables for the task table.
     """
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
-        return self.__class__(
-            task_table=cast(TableTensor, self.task_table.to(device)),
-            related_tables=self.related_tables.to(device),
-        )
+    def _tensors(self) -> Iterator[Tensor]:
+        yield self.task_table
+        yield from self.related_tables._tensors()
 
-    @property
-    def device(self) -> torch.device:  # noqa: D102
-        devices = list({self.task_table.device, self.related_tables.device})
-        if len(devices) > 1:
-            raise RuntimeError(
-                f"Expected 'task_table' and 'related_tables' to be on the "
-                f"same device (got '{self.task_table.device}' and "
-                f"'{self.related_tables.device}')"
-            )
-        return next(iter(devices))
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return self.__class__(
+            task_table=cast(TableTensor, fn(self.task_table)),
+            related_tables=self.related_tables._apply_tensor(fn),
+        )
 
 
 class RelationalSampler:
@@ -55,27 +78,22 @@ class RelationalSampler:
 
     Args:
         data: The collection of named tables and their relationships.
-        time_columns: Mapping from table name to the datetime column used for
-            temporal sampling. A row in a time-aware table can only be sampled
-            if its timestamp does not exceed the query timestamp.
+        temporal: Temporal sampling configuration. A row in a time-aware table
+            can only be sampled if its timestamp does not exceed the query
+            timestamp.
     """
 
     def __init__(
         self,
         data: RelationalData,
-        time_columns: Mapping[str, str] | None = None,
+        temporal: TemporalSamplingConfig | None = None,
     ) -> None:
         self.data = data
-        self.time_columns = time_columns or {}
-
-        for table_name, column_name in self.time_columns.items():
-            stype = self.data.tables[table_name].stype(column_name)
-            if stype != Stype.datetime:
-                raise ValueError(
-                    f"Expected '{column_name}' in table '{table_name}' to "
-                    f"have semantic type '{Stype.datetime.value}' "
-                    f"(got '{stype.value}')"
-                )
+        self.temporal = temporal
+        self.time_columns = (
+            temporal.time_columns if temporal is not None else {}
+        )
+        _validate_time_columns(self.data, self.time_columns)
 
         self._row_dict: dict[tuple[str, str, str], Tensor] = {}
         self._colptr_dict: dict[tuple[str, str, str], Tensor] = {}
@@ -132,28 +150,11 @@ class RelationalSampler:
             task_time_column: Datetime column in ``task_table`` used as the
                 query timestamp for temporal sampling.
         """
-        if not isinstance(task_link, TaskLink):
-            task_link = TaskLink.from_mapping(task_link)
-
-        for table, columns in (
-            (task_table, task_link.task_columns),
-            (self.data.tables[task_link.table], task_link.table_columns),
-        ):
-            for column in columns:
-                stype = table.stype(column)
-                if stype != Stype.id:
-                    raise ValueError(
-                        f"Expected column '{column}' to have semantic type "
-                        f"'{Stype.id.value}' (got '{stype.value}')"
-                    )
-
-        if task_time_column is not None:
-            stype = task_table.stype(task_time_column)
-            if stype != Stype.datetime:
-                raise ValueError(
-                    f"Expected task time column to have semantic type "
-                    f"'{Stype.datetime.value}' (got '{stype.value}')"
-                )
+        task_link = self._validate_sample_inputs(
+            task_table=task_table,
+            task_link=task_link,
+            task_time_column=task_time_column,
+        )
 
         try:
             import pyg_lib  # noqa
@@ -178,45 +179,38 @@ class RelationalSampler:
                 "'https://github.com/pyg-team/pyg-lib' for more information)"
             ) from e
 
-        # Resolve entity table node indices:
-        left = task_table[task_link.task_columns].to_arrow()
-        left = left.append_column(
-            LEFT_ROW_ID,
-            pa.array(torch.arange(left.num_rows).numpy()),
-        )
-        right = self.data.tables[task_link.table][
-            task_link.table_columns
-        ].to_arrow()
-        right = right.append_column(
-            RIGHT_ROW_ID,
-            pa.array(torch.arange(right.num_rows).numpy()),
-        )
-        joined = left.join(
-            right,
-            keys=list(task_link.task_columns),
-            right_keys=list(task_link.table_columns),
-            join_type="left outer",
-        )
-        joined = joined.select([LEFT_ROW_ID, RIGHT_ROW_ID])
-        joined = joined.sort_by([(LEFT_ROW_ID, "ascending")])
-        if len(joined) != left.num_rows or joined[RIGHT_ROW_ID].null_count > 0:
-            raise ValueError(
-                f"Expected each task row to match exactly one row in "
-                f"'{task_link.table}'"
+        if not task_table.is_cpu or not self.data.is_cpu:
+            raise NotImplementedError(
+                f"{self.__class__.__name__!r} requires input data on CPU"
             )
 
-        seed = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy())
-        seed = seed.to(task_table.device)
+        # Resolve entity table node indices:
+        task_index, seed = join_index(
+            left_table=task_table,
+            right_table=self.data.tables[task_link.table],
+            left_keys=task_link.task_columns,
+            right_keys=task_link.table_columns,
+            device=task_table.device,
+        )
+        task_index, perm = task_index.sort()
+        seed = seed[perm]
+
+        expected = torch.arange(
+            task_table.size(-2),
+            dtype=task_index.dtype,
+            device=task_index.device,
+        )
+        if not task_index.equal(expected):
+            raise ValueError(
+                f"Expected each task row to match exactly one row in "
+                f"{task_link.table!r}"
+            )
+
         if task_time_column is not None:
             seed_time = task_table[task_time_column].datetime.squeeze(-1)
         else:
             fill_value = torch.iinfo(torch.int64).max
             seed_time = torch.full_like(seed, fill_value)
-
-        if not seed.is_cpu or not self.data.is_cpu:
-            raise NotImplementedError(
-                f"'{self.__class__.__name__}' requires input data on CPU"
-            )
 
         # Perform subgraph sampling:
         _, _, node_dict, *_ = torch.ops.pyg.hetero_neighbor_sample(
@@ -243,22 +237,70 @@ class RelationalSampler:
             replace=False,
             directed=True,
             disjoint=True,
-            temporal_strategy="last",
+            temporal_strategy=(
+                self.temporal.strategy if self.temporal is not None else "last"
+            ),
             return_edge_id=False,
         )
 
+        nodes = {
+            table_name: tuple(node.t().contiguous())
+            for table_name, node in node_dict.items()
+            if node.numel() > 0
+        }
+        return self._to_output(
+            task_table=task_table,
+            task_link=task_link,
+            nodes=cast(dict[str, tuple[Tensor, Tensor]], nodes),
+        )
+
+    def _validate_sample_inputs(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink | Mapping[str, str | Sequence[str]],
+        task_time_column: str | None,
+    ) -> TaskLink:
+        if not isinstance(task_link, TaskLink):
+            task_link = TaskLink.from_mapping(task_link)
+
+        for table, columns in (
+            (task_table, task_link.task_columns),
+            (self.data.tables[task_link.table], task_link.table_columns),
+        ):
+            for column in columns:
+                stype = table.stype(column)
+                if stype != Stype.id:
+                    raise ValueError(
+                        f"Expected column '{column}' to have semantic type "
+                        f"{str(Stype.id)!r} (got {str(stype)!r})"
+                    )
+
+        if task_time_column is not None:
+            stype = task_table.stype(task_time_column)
+            if stype != Stype.datetime:
+                raise ValueError(
+                    f"Expected task time column to have semantic type "
+                    f"{str(Stype.datetime)!r} (got {str(stype)!r})"
+                )
+        return task_link
+
+    def _to_output(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink,
+        nodes: Mapping[str, tuple[Tensor, Tensor]],
+    ) -> RelationalSamplerOutput:
         tables: dict[str, Tensor] = {}
-        for table_name, node in node_dict.items():
-            if node.numel() == 0:
+        for table_name, (example, index) in nodes.items():
+            if index.numel() == 0:
                 continue
-            example, index = node.t().contiguous()
             tables[table_name] = torch.cat(
                 [
+                    self.data.tables[table_name][index],
                     TableTensor(
                         columns={"id": (EXAMPLE_ID,)},
                         id=ColumnarTensor((example,)),
                     ),
-                    self.data.tables[table_name][index],
                 ],
                 dim=-1,
             )
@@ -267,27 +309,34 @@ class RelationalSampler:
         relationships = tuple(
             Relationship(
                 left_table=rel.left_table,
-                left_columns=(EXAMPLE_ID, *rel.left_columns),
+                left_columns=(*rel.left_columns, EXAMPLE_ID),
                 right_table=rel.right_table,
-                right_columns=(EXAMPLE_ID, *rel.right_columns),
+                right_columns=(*rel.right_columns, EXAMPLE_ID),
             )
             for rel in self.data.relationships
             if rel.left_table in tables and rel.right_table in tables
         )
 
         task_link = TaskLink(
-            task_columns=(EXAMPLE_ID, *task_link.task_columns),
+            task_columns=(*task_link.task_columns, EXAMPLE_ID),
             table=task_link.table,
-            table_columns=(EXAMPLE_ID, *task_link.table_columns),
+            table_columns=(*task_link.table_columns, EXAMPLE_ID),
         )
 
         task_table: Tensor = torch.cat(
             [
+                task_table,
                 TableTensor(
                     columns={"id": (EXAMPLE_ID,)},
-                    id=ColumnarTensor((torch.arange(task_table.size(0)),)),
+                    id=ColumnarTensor(
+                        (
+                            torch.arange(
+                                task_table.size(0),
+                                device=task_table.device,
+                            ),
+                        )
+                    ),
                 ),
-                task_table,
             ],
             dim=-1,
         )

@@ -1,44 +1,78 @@
-"""Fittable pre/postprocessing transforms for structured data."""
+"""Processors for structured data tables."""
 
 from sdm.processing.base import Processor, InvertibleMixin
-from sdm.processing.sequential import Sequential
-from sdm.processing.choice import Choice
-from sdm.processing.stype_dispatch import StypeDispatch
-from sdm.processing.categorical_impute import CategoricalImpute
-from sdm.processing.task_dispatch import TaskDispatch
-from sdm.processing.clip import Clip
-from sdm.processing.class_shuffle import ClassShuffle
-from sdm.processing.constant_filter import ConstantFilter
-from sdm.processing.feature_permute import FeaturePermute
-from sdm.processing.identity import Identity
-from sdm.processing.impute import MeanImpute
-from sdm.processing.postprocess import SoftmaxTemperature
-from sdm.processing.power import Power
-from sdm.processing.quantile import Quantile
+from sdm.processing.ensemble import (
+    EnsembleProcessor,
+    EnsembleInvertibleMixin,
+)
+from sdm.processing.common import (
+    Identity,
+    Callable,
+    Sequential,
+    DropStypes,
+    StypeDispatch,
+    TaskDispatch,
+    TableDispatch,
+    EnsembleProcessorAdapter,
+    Choice,
+    ToNumerical,
+    ShuffleColumns,
+    SelectColumns,
+)
+from sdm.processing.text import TFIDF, SentenceTransformer
+from sdm.processing.numerical import (
+    Clip,
+    ClipQuantiles,
+    ClipSigma,
+    ImputeMean,
+    PowerTransform,
+    QuantileTransform,
+    Standardize,
+    DropConstantColumns,
+    PCA,
+)
+from sdm.processing.categorical import (
+    AlignCategories,
+    ShuffleCategories,
+    ImputeMode,
+)
+from sdm.processing.datetime import AddCalendarFields
+from sdm.processing.output import ReduceEstimators, Softmax
 from sdm.processing.recipe import Recipe
-from sdm.processing.sigma_clip import SigmaClip
-from sdm.processing.standard_scale import StandardScale
-from sdm.processing.to_numerical import ToNumerical
 
 __all__ = [
     "Processor",
     "InvertibleMixin",
-    "Sequential",
-    "Choice",
-    "StypeDispatch",
-    "CategoricalImpute",
-    "TaskDispatch",
-    "Clip",
-    "ClassShuffle",
-    "ConstantFilter",
-    "FeaturePermute",
+    "EnsembleInvertibleMixin",
+    "EnsembleProcessorAdapter",
     "Identity",
-    "MeanImpute",
-    "Power",
-    "Quantile",
-    "SigmaClip",
-    "SoftmaxTemperature",
-    "StandardScale",
+    "Callable",
+    "Sequential",
+    "DropStypes",
+    "StypeDispatch",
+    "TaskDispatch",
+    "TableDispatch",
+    "EnsembleProcessor",
+    "Choice",
     "ToNumerical",
+    "ShuffleColumns",
+    "SelectColumns",
+    "TFIDF",
+    "SentenceTransformer",
+    "Clip",
+    "ClipQuantiles",
+    "ClipSigma",
+    "ImputeMean",
+    "PowerTransform",
+    "QuantileTransform",
+    "Standardize",
+    "DropConstantColumns",
+    "PCA",
+    "AlignCategories",
+    "ShuffleCategories",
+    "ImputeMode",
+    "AddCalendarFields",
+    "ReduceEstimators",
+    "Softmax",
     "Recipe",
 ]

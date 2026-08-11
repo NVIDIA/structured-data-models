@@ -1,11 +1,13 @@
 from textwrap import dedent
 
 import torch
+
 from sdm import RelationalData
+from sdm.testing import withCUDA
 
 
-def test_repr(data: RelationalData) -> None:
-    assert repr(data) == dedent("""\
+def test_repr(relational_data: RelationalData) -> None:
+    assert repr(relational_data) == dedent("""\
         RelationalData(
           tables={
             users: TableTensor(
@@ -17,9 +19,10 @@ def test_repr(data: RelationalData) -> None:
               },
             ),
             orders: TableTensor(
-              size=(6, 3),
+              size=(6, 4),
               blocks={
                 numerical (1): [amount],
+                datetime (1): [timestamp],
                 id (2): [user_id, item_id],
               },
             ),
@@ -32,19 +35,29 @@ def test_repr(data: RelationalData) -> None:
             ),
           },
           relationships=[
-            orders.user_id<>users.user_id,
-            orders.item_id<>items.item_id,
+            orders.user_id <> users.user_id,
+            orders.item_id <> items.item_id,
           ],
         )""")
 
 
-def test_edge_indices(data: RelationalData) -> None:
-    edge_indices = data.edge_indices()
+@withCUDA
+def test_edge_indices(
+    relational_data: RelationalData,
+    device: torch.device,
+) -> None:
+    edge_indices = relational_data.edge_indices()
 
     assert len(edge_indices) == 2
     assert edge_indices[0].equal(
-        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 1, 3, 3, 3]])
+        torch.tensor(
+            [[0, 1, 2, 3, 4, 5], [0, 0, 1, 3, 3, 3]],
+            device=device,
+        )
     )
     assert edge_indices[1].equal(
-        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 1, 2, 0, 1, 0]])
+        torch.tensor(
+            [[0, 1, 2, 3, 4, 5], [0, 1, 2, 0, 1, 0]],
+            device=device,
+        )
     )
