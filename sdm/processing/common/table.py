@@ -40,7 +40,9 @@ class TableDispatch(EnsembleProcessor):
     def handles_stypes(self) -> frozenset[Stype]:
         r""":meta private:"""  # noqa: D415
         return frozenset(
-            stype for processor in self.processors.values() for stype in processor.handles_stypes
+            stype
+            for processor in self.processors.values()
+            for stype in processor.handles_stypes
         )
 
     def _fit_ensemble(

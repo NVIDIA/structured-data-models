@@ -52,8 +52,7 @@ class ReduceEstimators(EnsembleProcessor):
         if extra:
             found = ", ".join(sorted(extra))
             raise ValueError(
-                "Expected a numerical-only output table "
-                f"(also found {found})."
+                f"Expected a numerical-only output table (also found {found})."
             )
         reference_columns = reference.columns[Stype.numerical]
         counts_by_location = Counter(
@@ -123,8 +122,7 @@ class ReduceEstimators(EnsembleProcessor):
         if extra:
             found = ", ".join(sorted(extra))
             raise ValueError(
-                "Expected a numerical-only output table "
-                f"(also found {found})."
+                f"Expected a numerical-only output table (also found {found})."
             )
 
         if self.method == "mean":
