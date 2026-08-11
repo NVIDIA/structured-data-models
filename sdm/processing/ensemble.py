@@ -20,7 +20,7 @@ class EnsembleProcessor(Processor):
     :meth:`fit_ensemble` and applies the transformation via
     :meth:`transform_ensemble`. :meth:`fit_ensemble`,
     :meth:`transform_ensemble`, and :meth:`fit_transform_ensemble`
-    are no-ops when no ensemble group has an active column with a stype from
+    are no-ops for stypes outside of :attr:`handles_stypes`.
     :attr:`~sdm.processing.base.Processor.handles_stypes`.
 
     As a :class:`~sdm.processing.base.Processor`, it also accepts a

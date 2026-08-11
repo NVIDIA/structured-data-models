@@ -105,7 +105,7 @@ def _id_table() -> TableTensor:
     )
 
 
-def test_processor_preserves_unhandled_stypes_on_forward_paths() -> None:
+def test_processor_preserves_unhandled_stypes() -> None:
     mixed = _mixed_table()
 
     transformed = sp.Standardize().fit_transform(mixed)

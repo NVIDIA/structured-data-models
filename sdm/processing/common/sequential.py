@@ -25,7 +25,9 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
 
     @property
     def handles_stypes(self) -> frozenset[Stype]:
-        """Semantic types handled by child processors."""
+        r""":meta private:"""  # noqa: D415
+        if len(self) == 0:
+            return frozenset(Stype)
         return frozenset(
             stype for child in self for stype in child.handles_stypes
         )

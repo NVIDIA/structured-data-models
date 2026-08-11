@@ -22,12 +22,11 @@ class Processor(torch.nn.Module, abc.ABC):
     the transformation via :meth:`transform`. Implementations preserve the row
     and batch dimensions. Batch dimensions are processed independently.
 
-    :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops when
-    no active column has a stype from :attr:`handles_stypes`. Other active
-    stypes are preserved by default.
+    :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops for
+    stypes outside of :attr:`handles_stypes`.
     """
 
-    #: Semantic types read or changed by this processor.
+    #: Semantic types this processor operates on.
     handles_stypes: frozenset[Stype]
 
     #: Whether this processor requires fitting.

@@ -6,8 +6,10 @@ from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
     EnsembleProcessorAdapter,
+    ImputeMode,
     InvertibleMixin,
     Processor,
+    Sequential,
     Standardize,
 )
 from sdm.tensor import EnsembleTable
@@ -126,9 +128,7 @@ def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
     assert processor.inverse_transform(table).equal(table)
 
 
-def test_ensemble_processor_noops_when_only_unhandled_stypes_are_active() -> (
-    None
-):
+def test_ensemble_processor_noops() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1, dtype=torch.int64))
     ensemble_table = EnsembleTable(table, num_members=2)
     processor = IdentityEnsembleProcessor()

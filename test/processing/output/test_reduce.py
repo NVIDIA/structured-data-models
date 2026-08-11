@@ -2,7 +2,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import TableTensor
+from sdm import ColumnarTensor, TableTensor
 from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
@@ -46,6 +46,38 @@ def test_reduce_estimators_rejects_empty_ensemble_dimension() -> None:
 def test_reduce_estimators_rejects_unknown_method() -> None:
     with pytest.raises(ValueError, match="method must be 'mean'"):
         sp.ReduceEstimators(method="median")  # type: ignore
+
+
+def test_reduce_estimators_rejects_non_numerical_stypes() -> None:
+    table = TableTensor(
+        columns={
+            "numerical": ("a", "b"),
+            "id": ("row_id",),
+        },
+        numerical=torch.ones(2, 3, 2),
+        id=ColumnarTensor((torch.arange(2 * 3).reshape(2, 3),)),
+    )
+
+    with pytest.raises(ValueError, match="numerical-only output table"):
+        sp.ReduceEstimators().transform(table)
+
+
+def test_reduce_estimators_rejects_non_numerical_ensemble_stypes() -> None:
+    member = TableTensor(
+        columns={
+            "numerical": ("a",),
+            "id": ("row_id",),
+        },
+        numerical=torch.ones(2, 1),
+        id=ColumnarTensor((torch.arange(2),)),
+    )
+    table = EnsembleTable.from_tables(
+        tables=(member, member),
+        member_table_ids=(0, 1),
+    )
+
+    with pytest.raises(ValueError, match="numerical-only output table"):
+        sp.ReduceEstimators().transform_ensemble(table)
 
 
 @withCUDA
