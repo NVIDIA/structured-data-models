@@ -8,7 +8,6 @@ from torch import Tensor
 from sdm.nn import (
     SDPA,
     Attention,
-    Float32RMSNorm,
     InducedTransformerBlock,
     QASSMax,
     RotaryEmbedding,
@@ -201,10 +200,10 @@ def test_configured_attention_compile(device: torch.device) -> None:
         channels=8,
         num_query_heads=2,
         query_transform=torch.nn.Sequential(
-            Float32RMSNorm(4, device=device),
+            torch.nn.RMSNorm(4, eps=1e-6, device=device),
             SoftplusScale(4, multiplier=0.75, device=device),
         ),
-        key_transform=Float32RMSNorm(4, device=device),
+        key_transform=torch.nn.RMSNorm(4, eps=1e-6, device=device),
         scale=1.0,
         device=device,
     )

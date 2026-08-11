@@ -24,42 +24,6 @@ from torch import Tensor
 from torch.nn import Parameter
 
 
-class Float32RMSNorm(torch.nn.Module):
-    r"""Root mean square normalization evaluated in float32.
-
-    The input and learned weight are converted to float32 for the complete
-    normalization computation. The result is converted back to the input
-    dtype.
-
-    Args:
-        channels: The number of channels in the final input dimension.
-        eps: The value added to the mean square before reciprocal square root.
-        device: The device.
-        dtype: The parameter dtype.
-    """
-
-    def __init__(
-        self,
-        channels: int,
-        eps: float = 1e-6,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        self.eps = eps
-        self.weight = Parameter(
-            data=torch.ones(channels, device=device, dtype=dtype)
-        )
-
-    def forward(self, tensor: Tensor) -> Tensor:
-        r"""Normalize the final dimension of ``tensor``."""
-        dtype = tensor.dtype
-        tensor = tensor.float()
-        variance = tensor.square().mean(dim=-1, keepdim=True)
-        tensor = tensor * (variance + self.eps).rsqrt()
-        return (tensor * self.weight.float()).to(dtype)
-
-
 class SoftplusScale(torch.nn.Module):
     r"""Scale the final dimension by learned positive factors.
 

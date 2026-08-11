@@ -10,7 +10,6 @@ from torch import Tensor
 from sdm.nn import (
     SDPA,
     Attention,
-    Float32RMSNorm,
     QASSMax,
     RotaryEmbedding,
     SoftplusScale,
@@ -41,13 +40,14 @@ def reference_sdpa(
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
-def test_float32_attention_transforms(
+def test_attention_transforms(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
-    norm = Float32RMSNorm(
-        channels=4,
-        eps=1e-6,
+    eps = 1e-6
+    norm = torch.nn.RMSNorm(
+        normalized_shape=4,
+        eps=eps,
         device=device,
         dtype=dtype,
     )
@@ -70,7 +70,7 @@ def test_float32_attention_transforms(
     tensor_float = tensor.float()
     variance = tensor_float.square().mean(dim=-1, keepdim=True)
     expected_norm = (
-        tensor_float * (variance + norm.eps).rsqrt() * norm.weight.float()
+        tensor_float * (variance + eps).rsqrt() * norm.weight.float()
     ).to(dtype)
     expected_scale = tensor * (
         scale.multiplier * F.softplus(scale.weight.float())
@@ -78,7 +78,8 @@ def test_float32_attention_transforms(
 
     normalized = norm(tensor)
     scaled = scale(tensor)
-    torch.testing.assert_close(normalized, expected_norm, rtol=0, atol=0)
+    atol = 1e-6 if dtype == torch.float32 else 0
+    torch.testing.assert_close(normalized, expected_norm, rtol=0, atol=atol)
     torch.testing.assert_close(scaled, expected_scale, rtol=0, atol=0)
     assert normalized.device == scaled.device == device
 
@@ -95,14 +96,19 @@ def test_softplus_scale_rejects_invalid_multiplier(multiplier: float) -> None:
 def test_attention_configured_device_dtype_and_meta() -> None:
     dtype = torch.bfloat16
     query_transform = torch.nn.Sequential(
-        Float32RMSNorm(2, device="meta", dtype=dtype),
+        torch.nn.RMSNorm(2, eps=1e-6, device="meta", dtype=dtype),
         SoftplusScale(2, device="meta", dtype=dtype),
     )
     module = Attention(
         channels=8,
         num_query_heads=4,
         query_transform=query_transform,
-        key_transform=Float32RMSNorm(2, device="meta", dtype=dtype),
+        key_transform=torch.nn.RMSNorm(
+            2,
+            eps=1e-6,
+            device="meta",
+            dtype=dtype,
+        ),
         device="meta",
         dtype=dtype,
     )
@@ -551,7 +557,7 @@ def test_attention_transforms_and_cache() -> None:
     channels = 4
     num_heads = 2
     query_transform = torch.nn.Sequential(
-        Float32RMSNorm(2),
+        torch.nn.RMSNorm(2, eps=1e-6),
         SoftplusScale(2, multiplier=1.5, parameter_init=0.2),
     )
     key_transform = SoftplusScale(
