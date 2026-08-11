@@ -11,21 +11,15 @@ class DropStypes(Processor):
     """
 
     requires_fit = False
+    handled_stypes: frozenset[Stype]
 
     def __init__(self, *stypes: StypeLike) -> None:
         super().__init__()
-        self._stypes = frozenset(Stype(stype) for stype in stypes)
-
-    @property
-    def handles_stypes(self) -> frozenset[Stype]:
-        """Semantic types removed by this processor."""
-        return self._stypes
+        self._stypes = stypes
+        self.handled_stypes = frozenset(Stype(stype) for stype in stypes)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         return table.drop_stypes(self._stypes)
 
     def __repr__(self, *, indent: int = 0) -> str:
-        stypes = ", ".join(
-            repr(stype.value) for stype in Stype if stype in self._stypes
-        )
-        return f"{' ' * indent}{self.__class__.__name__}({stypes})"
+        return f"{' ' * indent}{self.__class__.__name__}{self._stypes!r}"
