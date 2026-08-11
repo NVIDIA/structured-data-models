@@ -390,7 +390,9 @@ class TableTensor(Tensor):
             device: The device.
         """
         return cls.from_arrow(
-            table=pa.Table.from_pandas(df, preserve_index=False),
+            table=pa.Table.from_pandas(
+                df[stypes.keys()], preserve_index=False
+            ),
             stypes=stypes,
             device=device,
         )

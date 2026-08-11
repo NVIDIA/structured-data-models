@@ -50,7 +50,7 @@ table = sdm.TableTensor.from_arrow(
     table=arrow_table,
     stypes=sdm.infer_stypes(
         arrow_table,
-        with_text=args.text_processor != "none",
+        text="drop" if args.text_processor == "none" else "infer",
     ),
     device=device,
 )
