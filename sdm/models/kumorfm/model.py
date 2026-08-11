@@ -125,7 +125,9 @@ class KumoRFM(ICLModel):
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
         flash_attention_impl: Flash Attention implementation to use. ``None``
-            leaves PyTorch's active implementation unchanged.
+            leaves PyTorch's active implementation unchanged. This and
+            ``force_flash_attention`` configure PyTorch process-wide and
+            affect all models in the process.
         force_flash_attention: Whether to use only PyTorch's Flash backend.
             This process-wide setting persists until changed through PyTorch.
     """
