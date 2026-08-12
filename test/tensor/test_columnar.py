@@ -192,6 +192,16 @@ def test_to_copy() -> None:
         tensor.to(torch.float32)
 
 
+def test_empty_clone_preserves_device() -> None:
+    tensor = ColumnarTensor((), size=(2, 3), device="meta")
+
+    out = tensor.clone()
+
+    assert type(out) is ColumnarTensor
+    assert out.size() == tensor.size()
+    assert out.device == tensor.device
+
+
 @onlyCUDA
 def test_to_cuda() -> None:
     tensor = ColumnarTensor(

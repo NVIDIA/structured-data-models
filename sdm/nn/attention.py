@@ -476,6 +476,10 @@ class Attention(torch.nn.Module):
     This module owns the query, key, value, and output projections.
     It performs self-attention when ``key_value`` is omitted and
     cross-attention when ``key_value`` is given.
+    Supplied transformation modules are registered as-is; ``device`` and
+    ``dtype`` apply only to modules constructed by this class.
+    Query and key transformations must preserve the headed tensor shape and
+    dtype.
 
     Args:
         channels: The number of input and output channels.
@@ -489,6 +493,14 @@ class Attention(torch.nn.Module):
         qassmax: Whether to scale queries with :class:`QASSMax`.
         device: The device.
         dtype: The dtype.
+        query_transform: Transformation applied to projected query heads after
+            rotary embedding and before scaled dot-product attention.
+        key_transform: Transformation applied to newly projected key heads
+            after rotary embedding and before scaled dot-product attention.
+            Cached keys are already transformed and are not transformed again.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
+            ``None`` uses ``1 / sqrt(channels_per_head)``.
     """
 
     def __init__(
@@ -499,6 +511,10 @@ class Attention(torch.nn.Module):
         qassmax: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        *,
+        query_transform: torch.nn.Module | None = None,
+        key_transform: torch.nn.Module | None = None,
+        scale: float | None = None,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -526,8 +542,11 @@ class Attention(torch.nn.Module):
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
             qassmax=qassmax,
+            scale=scale,
             **factory_kwargs,
         )
+        self.query_transform = query_transform
+        self.key_transform = key_transform
         self.out_lin = Linear(channels, channels, **factory_kwargs)
 
         torch.nn.init.zeros_(self.out_lin.weight)
@@ -594,6 +613,8 @@ class Attention(torch.nn.Module):
                 :class:`~sdm.cache.KVCacheEntry`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
+                Cached keys have already received rotary embedding and the
+                configured key transformation.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
@@ -665,6 +686,13 @@ class Attention(torch.nn.Module):
             if not isinstance(key_value, KVCacheEntry):
                 key = rope(key)
             assert query.dtype == key.dtype == value.dtype
+
+        if self.query_transform is not None:
+            query = self.query_transform(query)
+        if self.key_transform is not None and not isinstance(
+            key_value, KVCacheEntry
+        ):
+            key = self.key_transform(key)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
