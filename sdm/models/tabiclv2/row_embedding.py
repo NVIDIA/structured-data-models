@@ -49,9 +49,9 @@ class RowEmbedding(torch.nn.Module):
                 num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 num_inducing_points=num_inducing_points,
-                qassmax=True,
                 norm="layer_norm",
                 norm_kwargs={"bias": norm_bias},
+                qassmax=True,
                 **factory_kwargs,
             )
             for _ in range(num_layers)
@@ -62,24 +62,26 @@ class RowEmbedding(torch.nn.Module):
         )
         torch.nn.init.trunc_normal_(self.readout_token, std=0.02)
 
-        self.row_layers = ModuleList(
-            TransformerBlock(
-                channels=channels,
-                num_query_heads=num_heads,
-                feedforward_channels=2 * channels,
-                qassmax=False,
-                norm="layer_norm",
-                norm_kwargs={"bias": norm_bias},
-                **factory_kwargs,
-            )
-            for _ in range(num_layers)
-        )
-
         self.rope = RotaryEmbedding(
             channels=channels // num_heads,
             layout="split_half",
             theta=100_000,
             **factory_kwargs,
+        )
+
+        self.row_layers = ModuleList(
+            TransformerBlock(
+                channels=channels,
+                num_query_heads=num_heads,
+                feedforward_channels=2 * channels,
+                norm="layer_norm",
+                norm_kwargs={"bias": norm_bias},
+                query_transform=self.rope,
+                key_transform=self.rope,
+                qassmax=False,
+                **factory_kwargs,
+            )
+            for _ in range(num_layers)
         )
 
         self.norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
@@ -211,7 +213,6 @@ class RowEmbedding(torch.nn.Module):
             x = row_layer(
                 query=query,
                 key_value=x,  # [..., R, K + C, D]
-                rope=self.rope,
                 batch_size_limit=row_batch_size_limit,
             )  # [..., R, K + C, D] or [..., R, K, D]
 
