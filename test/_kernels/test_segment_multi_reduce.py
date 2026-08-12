@@ -67,7 +67,7 @@ def _reference(
         (torch.float32, 7, 2e-5, 2e-5),
     ],
 )
-def test_segment_stats(
+def test_segment_multi_reduce(
     dtype: torch.dtype,
     num_channels: int,
     atol: float,
@@ -84,10 +84,12 @@ def test_segment_stats(
         device="cuda",
         dtype=dtype,
     )
-    module = importlib.import_module("sdm._kernels.triton.segment_stats")
+    module = importlib.import_module(
+        "sdm._kernels.triton.segment_multi_reduce"
+    )
 
     with torch.inference_mode():
-        actual = module.segment_stats(src, offsets)
+        actual = module.segment_multi_reduce(src, offsets)
 
     expected = _reference(src, offsets)
     for result, reference in zip(actual, expected, strict=True):
@@ -103,13 +105,15 @@ def test_segment_stats(
 
 
 @onlyCUDA
-def test_segment_stats_int32_offsets() -> None:
+def test_segment_multi_reduce_int32_offsets() -> None:
     src = torch.randn(7, 128, device="cuda")
     offsets = torch.tensor([0, 2, 7], device="cuda", dtype=torch.int32)
-    module = importlib.import_module("sdm._kernels.triton.segment_stats")
+    module = importlib.import_module(
+        "sdm._kernels.triton.segment_multi_reduce"
+    )
 
     with torch.inference_mode():
-        actual = module.segment_stats(src, offsets)
+        actual = module.segment_multi_reduce(src, offsets)
 
     for result, reference in zip(
         actual,
@@ -120,7 +124,7 @@ def test_segment_stats_int32_offsets() -> None:
 
 
 @onlyCUDA
-def test_segment_stats_std_threshold() -> None:
+def test_segment_multi_reduce_std_threshold() -> None:
     src = torch.tensor(
         [
             [-0.002, -0.004, -0.002, -0.004, -0.002, -0.004, -0.002],
@@ -129,9 +133,11 @@ def test_segment_stats_std_threshold() -> None:
         device="cuda",
     )
     offsets = torch.tensor([0, 2], device="cuda")
-    module = importlib.import_module("sdm._kernels.triton.segment_stats")
+    module = importlib.import_module(
+        "sdm._kernels.triton.segment_multi_reduce"
+    )
 
-    _, _, std, _, _ = module.segment_stats(src, offsets)
+    _, _, std, _, _ = module.segment_multi_reduce(src, offsets)
 
     expected = torch.tensor(
         [[0.0, 0.004, 0.0, 0.004, 0.0, 0.004, 0.0]],
@@ -141,18 +147,20 @@ def test_segment_stats_std_threshold() -> None:
 
 
 @onlyCUDA
-def test_segment_stats_empty() -> None:
-    module = importlib.import_module("sdm._kernels.triton.segment_stats")
+def test_segment_multi_reduce_empty() -> None:
+    module = importlib.import_module(
+        "sdm._kernels.triton.segment_multi_reduce"
+    )
 
-    no_segments = module.segment_stats(
+    no_segments = module.segment_multi_reduce(
         torch.empty(0, 3, device="cuda"),
         torch.tensor([0], device="cuda"),
     )
-    no_channels = module.segment_stats(
+    no_channels = module.segment_multi_reduce(
         torch.empty(2, 0, device="cuda"),
         torch.tensor([0, 2], device="cuda"),
     )
-    empty_segments = module.segment_stats(
+    empty_segments = module.segment_multi_reduce(
         torch.empty(0, 7, device="cuda"),
         torch.zeros(4, device="cuda", dtype=torch.int64),
     )
@@ -164,7 +172,7 @@ def test_segment_stats_empty() -> None:
 
 
 @onlyCUDA
-def test_segment_stats_nonfinite() -> None:
+def test_segment_multi_reduce_nonfinite() -> None:
     src = torch.tensor(
         [
             [float("nan"), 1.0, float("inf"), -float("inf")],
@@ -173,9 +181,11 @@ def test_segment_stats_nonfinite() -> None:
         device="cuda",
     )
     offsets = torch.tensor([0, 2], device="cuda")
-    module = importlib.import_module("sdm._kernels.triton.segment_stats")
+    module = importlib.import_module(
+        "sdm._kernels.triton.segment_multi_reduce"
+    )
 
-    actual = module.segment_stats(src, offsets)
+    actual = module.segment_multi_reduce(src, offsets)
 
     for result, reference in zip(
         actual,
@@ -186,16 +196,18 @@ def test_segment_stats_nonfinite() -> None:
 
 
 @onlyCUDA
-def test_segment_stats_uses_input_device() -> None:
+def test_segment_multi_reduce_uses_input_device() -> None:
     if torch.cuda.device_count() < 2:
         pytest.skip("Multiple CUDA devices not available")
 
     src = torch.randn(7, 128, device="cuda:1")
     offsets = torch.tensor([0, 2, 7], device="cuda:1")
-    module = importlib.import_module("sdm._kernels.triton.segment_stats")
+    module = importlib.import_module(
+        "sdm._kernels.triton.segment_multi_reduce"
+    )
 
     with torch.cuda.device(0), torch.inference_mode():
-        actual = module.segment_stats(src, offsets)
+        actual = module.segment_multi_reduce(src, offsets)
 
     for result, reference in zip(
         actual,

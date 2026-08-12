@@ -7,7 +7,7 @@ from torch import Tensor
 
 
 @triton.jit
-def _segment_stats_kernel(
+def _segment_multi_reduce_kernel(
     src_ptr,
     offsets_ptr,
     sum_ptr,
@@ -70,11 +70,11 @@ def _segment_stats_kernel(
     tl.store(max_ptr + output_offsets, maximum, mask=channel_mask)
 
 
-def segment_stats(
+def segment_multi_reduce(
     src: Tensor,
     offsets: Tensor,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-    """Compute five statistics for contiguous CSR segments with Triton.
+    """Compute five reductions for contiguous CSR segments with Triton.
 
     This kernel does not support autograd. It accumulates float16, bfloat16,
     and float32 values in single precision. Empty segments produce zeros for
@@ -111,7 +111,7 @@ def segment_stats(
     else:
         num_warps = 1
     grid = (shape[0], triton.cdiv(shape[1], block_channels))
-    kernel = cast(Any, _segment_stats_kernel)
+    kernel = cast(Any, _segment_multi_reduce_kernel)
     with torch.cuda.device(src.device):
         kernel[grid](
             src,
