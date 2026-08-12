@@ -230,21 +230,19 @@ class TableTensor(Tensor):
             Stype(stype): tuple(names)
             for stype, names in (columns or {}).items()
         }
-        columns = {
-            Stype.numerical: tuple(columns.get(Stype.numerical, ())),
-            Stype.categorical: tuple(columns.get(Stype.categorical, ())),
-            Stype.datetime: tuple(columns.get(Stype.datetime, ())),
-            Stype.text: tuple(columns.get(Stype.text, ())),
-            Stype.id: tuple(columns.get(Stype.id, ())),
-        }
 
-        for stype, block in (
-            (Stype.numerical, numerical),
-            (Stype.categorical, categorical),
-            (Stype.datetime, datetime),
-            (Stype.text, text),
-            (Stype.id, id),
+        for stype, block, name in (
+            (Stype.numerical, numerical, "num"),
+            (Stype.categorical, categorical, "cat"),
+            (Stype.datetime, datetime, "dt"),
+            (Stype.text, text, "text"),
+            (Stype.id, id, "id"),
         ):
+            if stype not in columns:
+                columns[stype] = tuple(
+                    f"{name}_{i}" for i in range(block.size(-1))
+                )
+
             if block.size(-1) != len(columns[stype]):
                 _columns = "column" if len(columns[stype]) == 1 else "columns"
                 raise ValueError(

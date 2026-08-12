@@ -7,10 +7,6 @@ from sdm.tensor import EnsembleTable
 
 def test_random_projection() -> None:
     table = TableTensor(
-        columns={
-            "numerical": ("0", "1", "2", "3"),
-            "categorical": ("4"),
-        },
         numerical=torch.randn(6, 4),
         categorical=CategoricalTensor(
             torch.randint(0, 2, (6, 1)), categories=(torch.arange(2),)
