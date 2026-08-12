@@ -50,7 +50,7 @@ def _build_bpe_tokenizer(
 
     tok_json = json.loads(tokenizer.backend_tokenizer.to_str())
     merges = tok_json["model"]["merges"]
-    encoder = BytePairEncoder(cudf.Series(merges))
+    encoder = BytePairEncoder(cudf.Series([f"{a} {b}" for a, b in merges]))
 
     vocab_dict = tokenizer.get_vocab()
     vocab = cudf.DataFrame(
