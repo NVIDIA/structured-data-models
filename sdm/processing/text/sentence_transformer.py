@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pyarrow.compute as pc
 import torch
@@ -150,8 +150,7 @@ class _BPETokenizer:
         word_lists = text_series.str.findall(self._GPT2_PAT)
         flat_words = word_lists.explode().reset_index(drop=True)
         flat_words = flat_words.str.translate(self.byte_translate)
-        mask = flat_words.str.len() > 0
-        flat_words = flat_words.loc[mask].reset_index(drop=True)
+        flat_words = flat_words.loc[flat_words.notna()].reset_index(drop=True)
 
         # BPE encode each word independently (no space delimiter ambiguity)
         encoded = self.encoder(flat_words)
@@ -302,11 +301,14 @@ class SentenceTransformer(Processor):
         )
         return cast(TableTensor, out)
 
+    _BUCKETS: ClassVar[list[int]] = [32, 64, 128, 256, 512]
+
     def _encode_bpe(
         self,
         text: StringTensor,
         *,
         debug: bool = False,
+        bucketed_batching: bool = False,
     ) -> Tensor:
         bpe = self._bpe_tokenizer
         assert bpe is not None
@@ -324,7 +326,7 @@ class SentenceTransformer(Processor):
         torch.cumsum(raw_lengths, dim=0, out=offsets[1:])
 
         lengths = raw_lengths.clamp(max=bpe.max_length - 2)
-        seq_len = int(lengths.max()) + 2  # [BOS] + tokens + [EOS]
+        seq_len = bpe.max_length
 
         input_ids = torch.full(
             (num_strings, seq_len),
@@ -351,13 +353,45 @@ class SentenceTransformer(Processor):
         )
         attention_mask = (input_ids != bpe.pad_id).to(torch.long)
 
-        # Sort by length so batches have similar-length sequences
+        embeddings = torch.empty(
+            num_strings,
+            self._embedding_dim,
+            device=device,
+            dtype=torch.float,
+        )
+
+        if bucketed_batching:
+            self._forward_bucketed(
+                input_ids,
+                attention_mask,
+                lengths,
+                embeddings,
+            )
+        else:
+            self._forward_sorted(
+                input_ids,
+                attention_mask,
+                lengths,
+                embeddings,
+            )
+
+        return embeddings
+
+    def _forward_sorted(
+        self,
+        input_ids: Tensor,
+        attention_mask: Tensor,
+        lengths: Tensor,
+        embeddings: Tensor,
+    ) -> None:
+        num_strings = input_ids.shape[0]
+        device = input_ids.device
+
         sort_idx = lengths.argsort()
         sorted_input_ids = input_ids[sort_idx]
         sorted_attention_mask = attention_mask[sort_idx]
         sorted_lengths = lengths[sort_idx]
 
-        # Precompute per-batch max lengths in one sync
         batch_ends = (
             torch.arange(
                 self.batch_size,
@@ -369,12 +403,6 @@ class SentenceTransformer(Processor):
         )
         batch_max_lengths = (sorted_lengths[batch_ends] + 2).tolist()
 
-        embeddings = torch.empty(
-            num_strings,
-            self._embedding_dim,
-            device=device,
-            dtype=torch.float,
-        )
         with torch.inference_mode():
             for i, batch_start in enumerate(
                 range(0, num_strings, self.batch_size)
@@ -394,4 +422,39 @@ class SentenceTransformer(Processor):
                 embeddings[sort_idx[batch_start:batch_end]] = features[
                     "sentence_embedding"
                 ]
-        return embeddings
+
+    def _forward_bucketed(
+        self,
+        input_ids: Tensor,
+        attention_mask: Tensor,
+        lengths: Tensor,
+        embeddings: Tensor,
+    ) -> None:
+        device = input_ids.device
+        buckets = torch.tensor(self._BUCKETS, device=device)
+        # +2 for BOS/EOS
+        bucket_idx = torch.bucketize(lengths + 2, buckets)
+        bucket_idx.clamp_(max=len(self._BUCKETS) - 1)
+
+        with torch.inference_mode():
+            for b, bucket_width in enumerate(self._BUCKETS):
+                mask = bucket_idx == b
+                indices = mask.nonzero(as_tuple=True)[0]
+                if indices.numel() == 0:
+                    continue
+                bucket_ids = input_ids[indices, :bucket_width]
+                bucket_mask = attention_mask[indices, :bucket_width]
+                for batch_start in range(0, indices.numel(), self.batch_size):
+                    batch_end = min(
+                        batch_start + self.batch_size,
+                        indices.numel(),
+                    )
+                    features: dict[str, Tensor] = {
+                        "input_ids": bucket_ids[batch_start:batch_end],
+                        "attention_mask": bucket_mask[batch_start:batch_end],
+                    }
+                    for module in self._model.module:
+                        features = module(features)
+                    embeddings[indices[batch_start:batch_end]] = features[
+                        "sentence_embedding"
+                    ]
