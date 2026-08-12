@@ -52,6 +52,7 @@ def _build_wp_tokenizer(
     )
 
     vocab_tokens = tokenizer.convert_ids_to_tokens(range(tokenizer.vocab_size))
+    max_length = model.max_seq_length or tokenizer.model_max_length
     return _WordPieceTokenizer(
         wpt=WordPieceVocabulary(cudf.Series(vocab_tokens)),
         normalizer=CharacterNormalizer(
@@ -61,7 +62,7 @@ def _build_wp_tokenizer(
         cls_id=tokenizer.cls_token_id,
         sep_id=tokenizer.sep_token_id,
         pad_id=tokenizer.pad_token_id,
-        max_length=tokenizer.model_max_length,
+        max_length=max_length,
     )
 
 
@@ -204,7 +205,7 @@ class SentenceTransformer(Processor):
         torch.cumsum(raw_lengths, dim=0, out=offsets[1:])
 
         lengths = raw_lengths.clamp(max=tokenizer.max_length - 2)
-        seq_len = int(lengths.max()) + 2  # [CLS] + tokens + [SEP]
+        seq_len = tokenizer.max_length
 
         input_ids = torch.full(
             (num_strings, seq_len),
@@ -263,6 +264,7 @@ class SentenceTransformer(Processor):
             device=device,
             dtype=torch.float,
         )
+        self._model.module.eval()
         with torch.inference_mode():
             for i, batch_start in enumerate(
                 range(0, num_strings, self.batch_size)
