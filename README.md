@@ -17,7 +17,7 @@
 
 **A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
 
-- **Models:** Reference implementations of structured data foundation models such as the tabular [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and relational [`NemotronRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.NemotronRelational), built on a unified interface with room for future model families.
+- **Models:** Reference implementations of structured data foundation models such as the tabular [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and the relational [`NemotronRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.NemotronRelational), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
