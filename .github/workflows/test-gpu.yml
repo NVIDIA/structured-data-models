@@ -177,7 +177,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python examples/tabiclv2/quickstart.py
-          python examples/tabiclv2/strable/main.py --text-processor tfidf
+          python examples/tabiclv2/strable.py --text-processor tfidf
           python examples/nemotron_relational/rel_bench.py --dataset rel-f1 --task driver-position
           python examples/tabiclv2/tabarena/main.py --dataset blood-transfusion-service-center
           python examples/tabiclv2/tabarena/evaluate.py

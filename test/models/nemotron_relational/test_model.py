@@ -333,12 +333,10 @@ def test_forward(
 
     if dtype.is_floating_point:
         y = TableTensor(
-            columns={"numerical": ("target",)},
             numerical=torch.randn(4, 1, device=device),
         )
     else:
         y = TableTensor(
-            columns={"categorical": ("target",)},
             categorical=CategoricalTensor(
                 code=torch.randint(0, 2, size=(4, 1), device=device),
                 categories=(torch.tensor([False, True], device=device),),
@@ -398,7 +396,6 @@ def test_many_classes_forward_and_cache(
         id=ColumnarTensor((ids,)),
     )
     target = TableTensor(
-        columns={Stype.categorical: ("target",)},
         categorical=CategoricalTensor(
             code=ids.remainder(num_classes).to(torch.int32).unsqueeze(-1),
             categories=(classes,),

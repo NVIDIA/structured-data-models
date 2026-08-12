@@ -15,10 +15,6 @@ def test_identity_returns_input_tensor_unchanged() -> None:
 
 def test_identity_accepts_non_numerical_stypes() -> None:
     table = TableTensor(
-        columns={
-            "numerical": ("x0",),
-            "categorical": ("kind",),
-        },
         numerical=torch.tensor([[1.0], [2.0]]),
         categorical=CategoricalTensor(
             code=torch.tensor([[0], [1]], dtype=torch.int32),

@@ -13,7 +13,6 @@ def _timestamp(value: datetime) -> int:
 
 def test_add_calendar_fields_channels_and_missing_values() -> None:
     table = TableTensor(
-        columns={Stype.datetime: ("event_time",)},
         datetime=torch.tensor(
             [
                 [_timestamp(datetime(2024, 2, 29, 23, 59, tzinfo=UTC))],
@@ -28,13 +27,13 @@ def test_add_calendar_fields_channels_and_missing_values() -> None:
         fields=["minute", "hour", "weekday", "day_of_month", "month"]
     ).transform(table)
 
-    assert output.columns[Stype.datetime] == ("event_time",)
+    assert output.columns[Stype.datetime] == ("dt_0",)
     assert output.columns[Stype.numerical] == (
-        "event_time__minute",
-        "event_time__hour",
-        "event_time__weekday",
-        "event_time__day_of_month",
-        "event_time__month",
+        "dt_0__minute",
+        "dt_0__hour",
+        "dt_0__weekday",
+        "dt_0__day_of_month",
+        "dt_0__month",
     )
     torch.testing.assert_close(
         output.numerical,

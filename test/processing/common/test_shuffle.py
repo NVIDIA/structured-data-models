@@ -10,8 +10,7 @@ from sdm.tensor import EnsembleTable
 
 def _table() -> TableTensor:
     return TableTensor.from_tensor(
-        torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
-        columns=("x0", "x1", "x2"),
+        torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
     )
 
 
@@ -24,7 +23,7 @@ def test_shuffle_columns_shift_rotates_numerical_block() -> None:
     )
 
     assert isinstance(output, TableTensor)
-    assert output.columns[Stype.numerical] == ("x1", "x2", "x0")
+    assert output.columns[Stype.numerical] == ("1", "2", "0")
     assert torch.equal(
         output.numerical,
         table.numerical.index_select(-1, torch.tensor([1, 2, 0])),

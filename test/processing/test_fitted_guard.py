@@ -86,10 +86,6 @@ def test_stateless_processor_runs_without_fit() -> None:
 
 def _mixed_table() -> TableTensor:
     return TableTensor(
-        columns={
-            "numerical": ("x0",),
-            "categorical": ("kind",),
-        },
         numerical=torch.tensor([[1.0], [2.0]]),
         categorical=CategoricalTensor(
             code=torch.tensor([[0], [1]], dtype=torch.int32),
@@ -99,10 +95,7 @@ def _mixed_table() -> TableTensor:
 
 
 def _id_table() -> TableTensor:
-    return TableTensor(
-        columns={"id": ("row_id",)},
-        id=ColumnarTensor((torch.arange(2),)),
-    )
+    return TableTensor(id=ColumnarTensor((torch.arange(2),)))
 
 
 def test_processor_preserves_unhandled_stypes() -> None:
