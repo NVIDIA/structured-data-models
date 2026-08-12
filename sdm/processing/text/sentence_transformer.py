@@ -1,4 +1,4 @@
-# ruff: noqa: D205
+# ruff: noqa: D205, T201
 
 from __future__ import annotations
 
@@ -201,7 +201,12 @@ class SentenceTransformer(Processor):
         )
         return cast(TableTensor, out)
 
-    def _encode_bpe(self, text: StringTensor) -> Tensor:
+    def _encode_bpe(
+        self,
+        text: StringTensor,
+        *,
+        debug: bool = False,
+    ) -> Tensor:
         bpe = self._bpe_tokenizer
         assert bpe is not None
         device = text.device
@@ -259,6 +264,20 @@ class SentenceTransformer(Processor):
         merged = flat_tokens.merge(bpe.vocab, on="token", how="left")
         flat_ids = merged["id"].fillna(bpe.unk_id).astype("int32")
         flat_values = torch.from_dlpack(flat_ids.to_cupy())
+
+        if debug:
+            offsets_dbg = torch.zeros(
+                num_strings + 1,
+                device=device,
+                dtype=torch.long,
+            )
+            torch.cumsum(raw_lengths, dim=0, out=offsets_dbg[1:])
+            for i in range(num_strings):
+                s, e = int(offsets_dbg[i]), int(offsets_dbg[i + 1])
+                tokens = subtokens_flat.iloc[s:e].to_pandas().tolist()
+                ids = flat_ids.iloc[s:e].to_pandas().tolist()
+                print(f"  [{i}] subtokens: {tokens}")
+                print(f"      ids: {ids}")
 
         # Source offsets into the flat token buffer
         offsets = torch.zeros(num_strings + 1, device=device, dtype=torch.long)

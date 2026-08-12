@@ -107,18 +107,20 @@ if has_gpu_tokenizer:
     ]
     sample_tensor = StringTensor.from_list(sample_texts, device=device)
 
-    # Embedding comparison: GPU (_encode_bpe) vs CPU (model.encode)
-    sample_tensor = StringTensor.from_list(sample_texts, device=device)
-    gpu_emb = processor._encode_bpe(sample_tensor)
-    cpu_emb = model.encode(
-        sample_texts,
-        show_progress_bar=False,
-        convert_to_tensor=True,
-        device=str(device),
-    )
-    print("Embedding comparison (GPU vs CPU):")
-    print(f"  max abs diff: {(gpu_emb - cpu_emb).abs().max().item():.6f}")
-    print(f"  allclose: {torch.allclose(gpu_emb, cpu_emb, atol=1e-5)}")
+    # Token comparison on small inputs
+    hf_tokenizer = model.tokenizer
+
+    print("GPU BPE tokenization (debug):")
+    processor._encode_bpe(sample_tensor, debug=True)
+
+    print()
+    print("CPU HuggingFace tokenization:")
+    for i, text in enumerate(sample_texts):
+        result = hf_tokenizer(text, add_special_tokens=False)
+        ids = result["input_ids"]
+        subtokens = hf_tokenizer.convert_ids_to_tokens(ids)
+        print(f"  [{i}] subtokens: {subtokens}")
+        print(f"      ids: {ids}")
     print()
 
     # NaN check
