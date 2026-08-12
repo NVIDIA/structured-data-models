@@ -13,7 +13,7 @@ class SelectColumns(EnsembleProcessor):
 
     Args:
         max_columns: The maximum number of columns to keep for each semantic
-            type in each ensemble member.
+            type in each ensemble member. Must be non-negative.
         method: The column selection method.
             ``"first"`` keeps the first columns according to their order within
             each semantic block. ``"round_robin"`` assigns each ensemble
@@ -31,6 +31,8 @@ class SelectColumns(EnsembleProcessor):
         method: Literal["first", "round_robin"] = "first",
     ) -> None:
         super().__init__()
+        if max_columns < 0:
+            raise ValueError("max_columns must be non-negative")
         self.max_columns = max_columns
         self.method = method
 
