@@ -14,23 +14,17 @@ def _table(
     values: list[list[int]],
     *,
     categories: tuple[tuple[str, ...], ...],
-    columns: tuple[str, ...] | None = None,
     device: torch.device | str | None = None,
     dtype: torch.dtype = torch.int32,
 ) -> TableTensor:
-    categorical = CategoricalTensor(
-        code=torch.tensor(values, dtype=dtype, device=device),
-        categories=tuple(
-            StringTensor.from_list(category, device=device)
-            for category in categories
-        ),
-    )
-    if columns is None:
-        return TableTensor(categorical=categorical)
-
     return TableTensor(
-        columns={"categorical": columns},
-        categorical=categorical,
+        categorical=CategoricalTensor(
+            code=torch.tensor(values, dtype=dtype, device=device),
+            categories=tuple(
+                StringTensor.from_list(category, device=device)
+                for category in categories
+            ),
+        ),
     )
 
 

@@ -9,26 +9,20 @@ from sdm.testing import onlyCUDA, withCUDA
 def _table(
     values: list[list[int]] | list[list[list[int]]],
     *,
-    columns: tuple[str, ...] | None = None,
     categories: tuple[tuple[str, ...], ...] = (
         ("a", "b", "c"),
         ("x", "y"),
     ),
     device: torch.device | None = None,
 ) -> TableTensor:
-    categorical = CategoricalTensor(
-        code=torch.tensor(values, dtype=torch.int32, device=device),
-        categories=tuple(
-            StringTensor.from_list(category, device=device)
-            for category in categories
-        ),
-    )
-    if columns is None:
-        return TableTensor(categorical=categorical)
-
     return TableTensor(
-        columns={"categorical": columns},
-        categorical=categorical,
+        categorical=CategoricalTensor(
+            code=torch.tensor(values, dtype=torch.int32, device=device),
+            categories=tuple(
+                StringTensor.from_list(category, device=device)
+                for category in categories
+            ),
+        ),
     )
 
 
@@ -136,10 +130,15 @@ def test_impute_mode_rejects_changed_vocabulary(
 
 def test_impute_mode_rejects_reordered_columns() -> None:
     processor = sp.ImputeMode().fit(_table([[0, 0], [0, 1]]))
-    query = _table(
-        [[-1, -1]],
-        columns=("segment", "kind"),
-        categories=(("x", "y"), ("a", "b", "c")),
+    query = TableTensor(
+        columns={"categorical": ("segment", "kind")},
+        categorical=CategoricalTensor(
+            code=torch.tensor([[-1, -1]], dtype=torch.int32),
+            categories=(
+                StringTensor.from_list(["x", "y"]),
+                StringTensor.from_list(["a", "b", "c"]),
+            ),
+        ),
     )
 
     with pytest.raises(
