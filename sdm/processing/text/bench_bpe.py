@@ -111,7 +111,7 @@ if has_gpu_tokenizer:
     hf_tokenizer = model.tokenizer
 
     print("GPU BPE tokenization:")
-    processor._encode_bpe(sample_tensor)
+    processor._encode_bpe(sample_tensor, debug=True)
 
     print()
     print("CPU HuggingFace tokenization:")

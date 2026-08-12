@@ -1,4 +1,4 @@
-# ruff: noqa: D205
+# ruff: noqa: D205, T201
 
 from __future__ import annotations
 
@@ -131,7 +131,12 @@ class _BPETokenizer:
             max_length=model.max_seq_length or tokenizer.model_max_length,
         )
 
-    def tokenize(self, text_series: cudf.Series) -> tuple[Tensor, Tensor]:
+    def tokenize(
+        self,
+        text_series: cudf.Series,
+        *,
+        debug: bool = False,
+    ) -> tuple[Tensor, Tensor]:
         """Pre-tokenize and BPE-encode a cuDF string Series.
 
         Returns the flat token ID tensor and a lengths tensor (one entry
@@ -182,6 +187,20 @@ class _BPETokenizer:
         flat_values = torch.from_dlpack(
             token_ids.explode().to_cupy(),
         ).long()
+
+        if debug:
+            offsets = torch.zeros(
+                num_strings + 1,
+                device=flat_values.device,
+                dtype=torch.long,
+            )
+            torch.cumsum(raw_lengths, dim=0, out=offsets[1:])
+            subtokens = encoded.str.split(" ")
+            flat_subtokens = subtokens.explode().to_pandas().tolist()
+            for i in range(num_strings):
+                s, e = int(offsets[i]), int(offsets[i + 1])
+                print(f"  [{i}] subtokens: {flat_subtokens[s:e]}")
+                print(f"      ids: {flat_values[s:e].tolist()}")
 
         return flat_values, raw_lengths
 
@@ -283,7 +302,12 @@ class SentenceTransformer(Processor):
         )
         return cast(TableTensor, out)
 
-    def _encode_bpe(self, text: StringTensor) -> Tensor:
+    def _encode_bpe(
+        self,
+        text: StringTensor,
+        *,
+        debug: bool = False,
+    ) -> Tensor:
         bpe = self._bpe_tokenizer
         assert bpe is not None
         device = text.device
@@ -293,7 +317,7 @@ class SentenceTransformer(Processor):
         if text.is_nullable:
             text_series = text_series.fillna("")
 
-        flat_values, raw_lengths = bpe.tokenize(text_series)
+        flat_values, raw_lengths = bpe.tokenize(text_series, debug=debug)
 
         # Source offsets into the flat token buffer
         offsets = torch.zeros(num_strings + 1, device=device, dtype=torch.long)
