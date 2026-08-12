@@ -266,6 +266,9 @@ class SentenceTransformer(Processor):
         flat_values = torch.from_dlpack(flat_ids.to_cupy())
 
         if debug:
+            print("flat_words:", flat_words.to_pandas().tolist())
+            print("words_per_string:", words_per_string.to_pandas().tolist())
+            print("raw_lengths:", raw_lengths.tolist())
             offsets_dbg = torch.zeros(
                 num_strings + 1,
                 device=device,
