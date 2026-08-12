@@ -19,9 +19,41 @@ if TYPE_CHECKING:
     from cudf.core.byte_pair_encoding import BytePairEncoder
 
 
+# GPT-2 pre-tokenization regex. Splits text into words, contractions,
+# numbers, punctuation runs, and whitespace runs.
+_GPT2_PAT = (
+    r"""'s|'t|'re|'ve|'m|'ll|'d"""
+    r"""| ?[a-zA-Z]+| ?[0-9]+| ?[^\sa-zA-Z0-9]+"""
+    r"""|\s+"""
+)
+
+
+def _byte_to_unicode() -> dict[str, str]:
+    """GPT-2 byte-to-unicode character mapping.
+
+    Maps every byte to a visible Unicode character so that BPE merge
+    tables can use printable tokens for all byte values.  Space (0x20)
+    becomes U+0120 (Ġ), etc.
+    """
+    bs = (
+        list(range(ord("!"), ord("~") + 1))
+        + list(range(ord("¡"), ord("¬") + 1))
+        + list(range(ord("®"), ord("ÿ") + 1))
+    )
+    cs = list(bs)
+    n = 0
+    for b in range(256):
+        if b not in bs:
+            bs.append(b)
+            cs.append(256 + n)
+            n += 1
+    return {chr(b): chr(c) for b, c in zip(bs, cs)}
+
+
 class _BPETokenizer(NamedTuple):
     encoder: BytePairEncoder
     vocab: cudf.DataFrame
+    byte_translate: dict[str, str]
     bos_id: int
     eos_id: int
     pad_id: int
@@ -63,6 +95,7 @@ def _build_bpe_tokenizer(
     return _BPETokenizer(
         encoder=encoder,
         vocab=vocab,
+        byte_translate=_byte_to_unicode(),
         bos_id=tokenizer.bos_token_id,
         eos_id=tokenizer.eos_token_id,
         pad_id=tokenizer.pad_token_id,
@@ -174,24 +207,54 @@ class SentenceTransformer(Processor):
         device = text.device
         num_strings = text.numel()
 
+        import cudf
+
         text_series = text.to_cudf()
         if text.is_nullable:
             text_series = text_series.fillna("")
 
-        # Byte-level pre-tokenization: prepend Ġ to words after spaces
-        text_series = text_series.str.replace(" ", "Ġ")
+        # GPT-2 byte-level pre-tokenization on GPU:
+        # 1. Regex split into words/contractions/numbers/punctuation
+        word_lists = text_series.str.findall(_GPT2_PAT)
+        # 2. Byte-to-unicode mapping (space -> Ġ, etc.)
+        flat_words = word_lists.explode().reset_index(drop=True)
+        flat_words = flat_words.str.translate(bpe.byte_translate)
+        # 3. Filter empty strings
+        mask = flat_words.str.len() > 0
+        flat_words = flat_words.loc[mask].reset_index(drop=True)
 
-        # BPE encode on GPU
-        encoded = bpe.encoder(text_series)
+        # BPE encode each word independently (no space ambiguity)
+        encoded = bpe.encoder(flat_words)
 
-        # Split into subword tokens and map to vocab IDs
-        token_lists = encoded.str.split(" ")
-        raw_lengths = torch.from_dlpack(token_lists.list.len().to_cupy()).to(
-            torch.long
+        # Split BPE output into subword tokens per word, then flatten
+        subtokens_per_word = encoded.str.split(" ")
+        subtokens_flat = subtokens_per_word.explode().reset_index(drop=True)
+
+        # Compute how many subtokens each original string produced
+        subtokens_per_word_len = subtokens_per_word.list.len()
+        words_per_string = word_lists.list.len()
+        # Repeat the string index for each word, then sum subtokens per string
+        string_idx = words_per_string.index.repeat(words_per_string)
+        word_to_string = cudf.Series(
+            string_idx,
+            dtype="int32",
+        ).reset_index(drop=True)
+        subtoken_counts = (
+            cudf.DataFrame(
+                {
+                    "string_idx": word_to_string,
+                    "count": subtokens_per_word_len,
+                }
+            )
+            .groupby("string_idx")
+            .sum()["count"]
+        )
+        raw_lengths = torch.from_dlpack(
+            subtoken_counts.astype("int64").to_cupy()
         )
 
         # Vocab lookup via left merge (preserves order)
-        flat_tokens = token_lists.explode().to_frame("token")
+        flat_tokens = subtokens_flat.to_frame("token")
         merged = flat_tokens.merge(bpe.vocab, on="token", how="left")
         flat_ids = merged["id"].fillna(bpe.unk_id).astype("int32")
         flat_values = torch.from_dlpack(flat_ids.to_cupy())
