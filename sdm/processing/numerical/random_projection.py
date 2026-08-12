@@ -18,7 +18,7 @@ class RandomProjection(EnsembleProcessor):
             ``1 / sqrt(channels)``.
     """
 
-    supported_stypes = frozenset({Stype.numerical})
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     def __init__(
@@ -46,7 +46,7 @@ class RandomProjection(EnsembleProcessor):
                     num_members,
                     *group.size()[1:-2],
                     self.channels,
-                    group.size(-1),
+                    group.numerical.size(-1),
                 )
             )
             assert self.init == "normal"
