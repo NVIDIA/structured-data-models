@@ -181,7 +181,7 @@ class _BPETokenizer:
         # Flatten the list column of IDs
         flat_values = torch.from_dlpack(
             token_ids.explode().to_cupy(),
-        )
+        ).long()
 
         return flat_values, raw_lengths
 
