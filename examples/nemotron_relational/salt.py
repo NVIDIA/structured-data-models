@@ -4,7 +4,6 @@ Without arguments, this runs all eight SALT tasks. Pass ``--task`` to run one
 task.
 
 Examples:
-    cd examples/nemotron_relational
     python salt.py
     python salt.py --task sales-incoterms
     python salt.py --task sales-group --num_neighbors 32
