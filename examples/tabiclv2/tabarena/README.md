@@ -21,17 +21,17 @@ pip install structured-data-models \
 Run the benchmark:
 
 ```bash
-python examples/tabiclv2/tabarena/main.py
+python main.py
 ```
 
 Pass a dataset name to run only that TabArena dataset:
 
 ```bash
-python examples/tabiclv2/tabarena/main.py --dataset blood-transfusion-service-center
+python main.py --dataset blood-transfusion-service-center
 ```
 
 Evaluate the results with:
 
 ```bash
-python examples/tabiclv2/tabarena/evaluate.py
+python evaluate.py
 ```
