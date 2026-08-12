@@ -110,7 +110,7 @@ if has_gpu_tokenizer:
     # GPU tokenization
     bpe = processor._bpe_tokenizer
     text_series = sample_tensor.to_cudf()
-    text_series = text_series.str.replace(" ", " Ġ")
+    # text_series = text_series.str.replace(" ", " Ġ")
     encoded = bpe.encoder(text_series)
     gpu_tokens = encoded.str.split(" ")
 
