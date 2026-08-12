@@ -1,0 +1,8 @@
+﻿SoftplusScale
+=============
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: SoftplusScale
+   :members:
+   :show-inheritance:

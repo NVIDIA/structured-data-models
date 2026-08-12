@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.nn - Structured Data Models</title><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="QASSMax" href="generated/sdm.nn.QASSMax.html" /><link rel="prev" title="Softmax" href="generated/sdm.processing.output.Softmax.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.nn - Structured Data Models</title><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="RotaryEmbedding" href="generated/sdm.nn.RotaryEmbedding.html" /><link rel="prev" title="Softmax" href="generated/sdm.processing.output.Softmax.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=e1a1ceaf" />
@@ -136,9 +136,10 @@ data-aria-dark="Switch to auto color mode">
 </ul>
 </li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">sdm.nn</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.RotaryEmbedding.html">RotaryEmbedding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.SoftplusScale.html">SoftplusScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.QASSMax.html">QASSMax</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.SDPA.html">SDPA</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.RotaryEmbedding.html">RotaryEmbedding</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.Attention.html">Attention</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.TransformerBlock.html">TransformerBlock</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.InducedTransformerBlock.html">InducedTransformerBlock</a></li>
@@ -200,22 +201,25 @@ data-aria-dark="Switch to auto color mode">
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.RotaryEmbedding.html#sdm.nn.RotaryEmbedding" title="sdm.nn.RotaryEmbedding"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RotaryEmbedding</span></code></a></p></td>
+<td><p>Rotary Positional Embedding (RoPE).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.SoftplusScale.html#sdm.nn.SoftplusScale" title="sdm.nn.SoftplusScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SoftplusScale</span></code></a></p></td>
+<td><p>Scale the final dimension by learned positive factors.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.QASSMax.html#sdm.nn.QASSMax" title="sdm.nn.QASSMax"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QASSMax</span></code></a></p></td>
 <td><p>Query-Aware Scalable SoftMax (QASSMax).</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.SDPA.html#sdm.nn.SDPA" title="sdm.nn.SDPA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SDPA</span></code></a></p></td>
 <td><p>Scaled Dot-Product Attention (SDPA).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.RotaryEmbedding.html#sdm.nn.RotaryEmbedding" title="sdm.nn.RotaryEmbedding"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RotaryEmbedding</span></code></a></p></td>
-<td><p>Rotary Positional Embedding (RoPE).</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.Attention.html#sdm.nn.Attention" title="sdm.nn.Attention"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Attention</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.Attention.html#sdm.nn.Attention" title="sdm.nn.Attention"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Attention</span></code></a></p></td>
 <td><p>Multi-head attention layer with grouped-query attention support.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.TransformerBlock.html#sdm.nn.TransformerBlock" title="sdm.nn.TransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerBlock</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.TransformerBlock.html#sdm.nn.TransformerBlock" title="sdm.nn.TransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerBlock</span></code></a></p></td>
 <td><p>Transformer block with pre-norm attention and feedforward modules.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.InducedTransformerBlock.html#sdm.nn.InducedTransformerBlock" title="sdm.nn.InducedTransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InducedTransformerBlock</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.InducedTransformerBlock.html#sdm.nn.InducedTransformerBlock" title="sdm.nn.InducedTransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InducedTransformerBlock</span></code></a></p></td>
 <td><p>Transformer block using learned inducing points.</p></td>
 </tr>
 </tbody>
@@ -235,10 +239,10 @@ data-aria-dark="Switch to auto color mode">
         <span>Previous</span><div class="title">Softmax</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="generated/sdm.nn.QASSMax.html">
+    <a href="generated/sdm.nn.RotaryEmbedding.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">QASSMax</div>
+        <div class="title">RotaryEmbedding</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -247,7 +251,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=7e8a5488"></script>
+      <script src="../_static/documentation_options.js?v=80e64cf8"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
