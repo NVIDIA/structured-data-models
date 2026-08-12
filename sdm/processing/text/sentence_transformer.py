@@ -1,10 +1,10 @@
-# ruff: noqa: D205, T201
+# ruff: noqa: D205
 
 from __future__ import annotations
 
 import importlib.util
 import json
-from typing import TYPE_CHECKING, Any, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pyarrow.compute as pc
 import torch
@@ -17,91 +17,173 @@ if TYPE_CHECKING:
     import cudf
     import sentence_transformers
     from cudf.core.byte_pair_encoding import BytePairEncoder
+    from pylibcudf.nvtext.tokenize import TokenizeVocabulary
 
 
-# GPT-2 pre-tokenization regex. Splits text into words, contractions,
-# numbers, punctuation runs, and whitespace runs.
-_GPT2_PAT = (
-    r"""'s|'t|'re|'ve|'m|'ll|'d"""
-    r"""| ?[a-zA-Z]+| ?[0-9]+| ?[^\sa-zA-Z0-9]+"""
-    r"""|\s+"""
-)
+class _BPETokenizer:
+    """GPU-native BPE tokenizer backed by cuDF's BytePairEncoder.
 
-
-def _byte_to_unicode() -> dict[str, str]:
-    """GPT-2 byte-to-unicode character mapping.
-
-    Maps every byte to a visible Unicode character so that BPE merge
-    tables can use printable tokens for all byte values.  Space (0x20)
-    becomes U+0120 (Ġ), etc.
+    Args:
+        encoder: cuDF BytePairEncoder with the model's merge table.
+        vocab: TokenizeVocabulary for GPU-native token-to-ID mapping.
+        byte_translate: GPT-2 byte-to-unicode character mapping.
+        bos_id: Beginning-of-sequence token ID.
+        eos_id: End-of-sequence token ID.
+        pad_id: Padding token ID.
+        unk_id: Unknown token ID.
+        max_length: Maximum sequence length.
     """
-    bs = (
-        list(range(ord("!"), ord("~") + 1))
-        + list(range(ord("¡"), ord("¬") + 1))
-        + list(range(ord("®"), ord("ÿ") + 1))
-    )
-    cs = list(bs)
-    n = 0
-    for b in range(256):
-        if b not in bs:
-            bs.append(b)
-            cs.append(256 + n)
-            n += 1
-    return {chr(b): chr(c) for b, c in zip(bs, cs)}
 
-
-class _BPETokenizer(NamedTuple):
-    encoder: BytePairEncoder
-    vocab: cudf.DataFrame
-    byte_translate: dict[str, str]
-    bos_id: int
-    eos_id: int
-    pad_id: int
-    unk_id: int
-    max_length: int
-
-
-def _build_bpe_tokenizer(
-    model: sentence_transformers.SentenceTransformer,
-) -> _BPETokenizer | None:
-    if not torch.cuda.is_available():
-        return None
-    if importlib.util.find_spec("cudf") is None:
-        return None
-
-    from transformers import PreTrainedTokenizerFast  # noqa: PLC0415
-
-    tokenizer = model.tokenizer
-    if not isinstance(tokenizer, PreTrainedTokenizerFast):
-        return None
-    if tokenizer.backend_tokenizer.model.__class__.__name__ != "BPE":
-        return None
-
-    import cudf
-    from cudf.core.byte_pair_encoding import BytePairEncoder
-
-    tok_json = json.loads(tokenizer.backend_tokenizer.to_str())
-    merges = tok_json["model"]["merges"]
-    encoder = BytePairEncoder(cudf.Series([f"{a} {b}" for a, b in merges]))
-
-    vocab_dict = tokenizer.get_vocab()
-    vocab = cudf.DataFrame(
-        {
-            "token": list(vocab_dict.keys()),
-            "id": list(vocab_dict.values()),
-        }
+    _GPT2_PAT = (
+        r"""'s|'t|'re|'ve|'m|'ll|'d"""
+        r"""| ?[a-zA-Z]+| ?[0-9]+| ?[^\sa-zA-Z0-9]+"""
+        r"""|\s+"""
     )
 
-    return _BPETokenizer(
-        encoder=encoder,
-        vocab=vocab,
-        byte_translate=_byte_to_unicode(),
-        bos_id=tokenizer.bos_token_id,
-        eos_id=tokenizer.eos_token_id,
-        pad_id=tokenizer.pad_token_id,
-        unk_id=tokenizer.unk_token_id or 3,
-        max_length=model.max_seq_length or tokenizer.model_max_length,
-    )
+    def __init__(
+        self,
+        encoder: BytePairEncoder,
+        vocab: TokenizeVocabulary,
+        byte_translate: dict[str, str],
+        bos_id: int,
+        eos_id: int,
+        pad_id: int,
+        unk_id: int,
+        max_length: int,
+    ) -> None:
+        self.encoder = encoder
+        self.vocab = vocab
+        self.byte_translate = byte_translate
+        self.bos_id = bos_id
+        self.eos_id = eos_id
+        self.pad_id = pad_id
+        self.unk_id = unk_id
+        self.max_length = max_length
+
+    @staticmethod
+    def _byte_to_unicode() -> dict[str, str]:
+        """GPT-2 byte-to-unicode character mapping.
+
+        Maps every byte to a visible Unicode character so that BPE merge
+        tables can use printable tokens for all byte values.  Space (0x20)
+        becomes U+0120 (Ġ), etc.
+        """
+        bs = (
+            list(range(ord("!"), ord("~") + 1))
+            + list(range(ord("¡"), ord("¬") + 1))
+            + list(range(ord("®"), ord("ÿ") + 1))
+        )
+        cs = list(bs)
+        n = 0
+        for b in range(256):
+            if b not in bs:
+                bs.append(b)
+                cs.append(256 + n)
+                n += 1
+        return {chr(b): chr(c) for b, c in zip(bs, cs)}
+
+    @classmethod
+    def from_model(
+        cls,
+        model: sentence_transformers.SentenceTransformer,
+    ) -> _BPETokenizer | None:
+        if not torch.cuda.is_available():
+            return None
+        if importlib.util.find_spec("cudf") is None:
+            return None
+
+        from transformers import PreTrainedTokenizerFast  # noqa: PLC0415
+
+        tokenizer = model.tokenizer
+        if not isinstance(tokenizer, PreTrainedTokenizerFast):
+            return None
+        if tokenizer.backend_tokenizer.model.__class__.__name__ != "BPE":
+            return None
+
+        import cudf
+        import pylibcudf as plc
+        from cudf.core.byte_pair_encoding import BytePairEncoder
+
+        tok_json = json.loads(tokenizer.backend_tokenizer.to_str())
+        merges = tok_json["model"]["merges"]
+        encoder = BytePairEncoder(
+            cudf.Series([f"{a} {b}" for a, b in merges]),
+        )
+
+        # Build TokenizeVocabulary: position i holds the token with ID i.
+        vocab_dict = tokenizer.get_vocab()
+        vocab_size = max(vocab_dict.values()) + 1
+        vocab_list = [""] * vocab_size
+        for token, idx in vocab_dict.items():
+            vocab_list[idx] = token
+        vocab = plc.nvtext.tokenize.TokenizeVocabulary(
+            cudf.Series(vocab_list)._column.plc_column,
+        )
+
+        return cls(
+            encoder=encoder,
+            vocab=vocab,
+            byte_translate=cls._byte_to_unicode(),
+            bos_id=tokenizer.bos_token_id,
+            eos_id=tokenizer.eos_token_id,
+            pad_id=tokenizer.pad_token_id,
+            unk_id=tokenizer.unk_token_id or 3,
+            max_length=model.max_seq_length or tokenizer.model_max_length,
+        )
+
+    def tokenize(self, text_series: cudf.Series) -> tuple[Tensor, Tensor]:
+        """Pre-tokenize and BPE-encode a cuDF string Series.
+
+        Returns the flat token ID tensor and a lengths tensor (one entry
+        per input string).
+        """
+        import cudf as cudf_mod
+
+        num_strings = len(text_series)
+
+        # GPT-2 byte-level pre-tokenization on GPU
+        word_lists = text_series.str.findall(self._GPT2_PAT)
+        flat_words = word_lists.explode().reset_index(drop=True)
+        flat_words = flat_words.str.translate(self.byte_translate)
+        mask = flat_words.str.len() > 0
+        flat_words = flat_words.loc[mask].reset_index(drop=True)
+
+        # BPE encode each word independently (no space delimiter ambiguity)
+        encoded = self.encoder(flat_words)
+
+        # Split by space and map to vocab IDs in a single GPU kernel
+        col = encoded._column
+        token_ids = cudf_mod.Series._from_column(
+            col.tokenize_with_vocabulary(self.vocab, " ", self.unk_id),
+        )
+
+        # Per-word subtoken counts
+        subtokens_per_word = token_ids.list.len()
+        subtokens_per_word_t = torch.from_dlpack(
+            subtokens_per_word.to_cupy(),
+        )
+
+        # Sum per-word counts back to per-string counts via scatter_add
+        words_per_string = torch.from_dlpack(
+            word_lists.list.len().to_cupy(),
+        )
+        word_to_string = torch.arange(
+            num_strings,
+            device=words_per_string.device,
+        ).repeat_interleave(words_per_string)
+        raw_lengths = torch.zeros(
+            num_strings,
+            device=words_per_string.device,
+            dtype=subtokens_per_word_t.dtype,
+        )
+        raw_lengths.scatter_add_(0, word_to_string, subtokens_per_word_t)
+
+        # Flatten the list column of IDs
+        flat_values = torch.from_dlpack(
+            token_ids.explode().to_cupy(),
+        )
+
+        return flat_values, raw_lengths
 
 
 class _ModuleReference(torch.nn.Module):
@@ -149,7 +231,7 @@ class SentenceTransformer(Processor):
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim
         self._model = _ModuleReference(model)
-        self._bpe_tokenizer = _build_bpe_tokenizer(model)
+        self._bpe_tokenizer = _BPETokenizer.from_model(model)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         columns = table.columns[Stype.text]
@@ -201,81 +283,17 @@ class SentenceTransformer(Processor):
         )
         return cast(TableTensor, out)
 
-    def _encode_bpe(
-        self,
-        text: StringTensor,
-        *,
-        debug: bool = False,
-    ) -> Tensor:
+    def _encode_bpe(self, text: StringTensor) -> Tensor:
         bpe = self._bpe_tokenizer
         assert bpe is not None
         device = text.device
         num_strings = text.numel()
 
-        import cudf
-
         text_series = text.to_cudf()
         if text.is_nullable:
             text_series = text_series.fillna("")
 
-        # GPT-2 byte-level pre-tokenization on GPU:
-        # 1. Regex split into words/contractions/numbers/punctuation
-        word_lists = text_series.str.findall(_GPT2_PAT)
-        # 2. Byte-to-unicode mapping (space -> Ġ, etc.)
-        flat_words = word_lists.explode().reset_index(drop=True)
-        flat_words = flat_words.str.translate(bpe.byte_translate)
-        # 3. Filter empty strings
-        mask = flat_words.str.len() > 0
-        flat_words = flat_words.loc[mask].reset_index(drop=True)
-
-        # BPE encode each word independently (no space ambiguity)
-        encoded = bpe.encoder(flat_words)
-
-        # Split BPE output into subword tokens per word, then flatten
-        subtokens_per_word = encoded.str.split(" ")
-        subtokens_flat = subtokens_per_word.explode().reset_index(drop=True)
-
-        # Compute how many subtokens each original string produced.
-        # Strings with zero regex matches must get a count of 0.
-        subtokens_per_word_len = subtokens_per_word.list.len()
-        words_per_string = word_lists.list.len()
-        string_idx = words_per_string.index.repeat(words_per_string)
-        word_to_string = cudf.Series(string_idx).reset_index(drop=True)
-        subtoken_counts = (
-            cudf.DataFrame(
-                {
-                    "string_idx": word_to_string,
-                    "count": subtokens_per_word_len,
-                }
-            )
-            .groupby("string_idx")
-            .sum()["count"]
-            .reindex(range(num_strings), fill_value=0)
-        )
-        raw_lengths = torch.from_dlpack(subtoken_counts.to_cupy())
-
-        # Vocab lookup via left merge (preserves order)
-        flat_tokens = subtokens_flat.to_frame("token")
-        merged = flat_tokens.merge(bpe.vocab, on="token", how="left")
-        flat_ids = merged["id"].fillna(bpe.unk_id)
-        flat_values = torch.from_dlpack(flat_ids.to_cupy())
-
-        if debug:
-            print("flat_words:", flat_words.to_pandas().tolist())
-            print("words_per_string:", words_per_string.to_pandas().tolist())
-            print("raw_lengths:", raw_lengths.tolist())
-            offsets_dbg = torch.zeros(
-                num_strings + 1,
-                device=device,
-                dtype=torch.long,
-            )
-            torch.cumsum(raw_lengths, dim=0, out=offsets_dbg[1:])
-            for i in range(num_strings):
-                s, e = int(offsets_dbg[i]), int(offsets_dbg[i + 1])
-                tokens = subtokens_flat.iloc[s:e].to_pandas().tolist()
-                ids = flat_ids.iloc[s:e].to_pandas().tolist()
-                print(f"  [{i}] subtokens: {tokens}")
-                print(f"      ids: {ids}")
+        flat_values, raw_lengths = bpe.tokenize(text_series)
 
         # Source offsets into the flat token buffer
         offsets = torch.zeros(num_strings + 1, device=device, dtype=torch.long)
