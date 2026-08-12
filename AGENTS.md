@@ -49,6 +49,13 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - `sdm/models`: (Pretrained) structured data models based on a common interface.
 - `sdm/testing`: Testing utilities.
 
+# Examples
+
+- Keep each example focused on the public contract or capability it demonstrates. Remove incidental setup, validation, abstraction, and explanation, but preserve correctness, leakage boundaries, and behavior essential to the example.
+- Prefer the simplest documented public API that accurately expresses the workflow. Use accepted input forms and public normalization instead of redundant wrappers or manual mechanics; use a one-shot call only when fitted state is not reused.
+- Keep the end-to-end data flow linear and visible. Use semantic container operations, keep meaningful stages named, prefer short conventional names near their use, and reserve comments for non-obvious semantics or sparse navigation.
+- Keep a self-contained workflow in one descriptively named script. Introduce functions, multiple modules, or a README only for genuine repetition, distinct responsibilities, or substantial operational instructions.
+
 # Core Design Principles
 
 - Keep the project PyTorch/tensor-centric.
