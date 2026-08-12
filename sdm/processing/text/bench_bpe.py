@@ -142,29 +142,7 @@ if has_gpu_tokenizer:
     print()
 
     # Benchmarks
-    benchmark("GPU BPE (sorted batching)")
-
-    # Bucketed batching benchmark: call _encode_bpe directly
-    from typing import cast
-
-    text = cast(StringTensor, table_x.text.movedim(-1, 0).reshape(-1))
-    for _ in range(2):
-        processor._encode_bpe(text, bucketed_batching=True)
-
-    start = torch.cuda.Event(enable_timing=True)
-    end = torch.cuda.Event(enable_timing=True)
-    times = []
-    for _ in range(5):
-        start.record()
-        processor._encode_bpe(text, bucketed_batching=True)
-        end.record()
-        torch.cuda.synchronize()
-        times.append(start.elapsed_time(end) / 1000)
-    mean = sum(times) / len(times)
-    print("GPU BPE (bucketed batching):")
-    print(f"  runs:  {times}")
-    print(f"  mean:  {mean:.4f}s")
-    print()
+    benchmark("GPU BPE tokenization")
 
     processor._bpe_tokenizer = None
     benchmark("CPU fallback (model.encode)")
