@@ -9,6 +9,7 @@ from sdm.processing.numerical.quantile import QuantileTransform
 from sdm.processing.numerical.standardize import Standardize
 from sdm.processing.numerical.constant import DropConstantColumns
 from sdm.processing.numerical.pca import PCA
+from sdm.processing.numerical.random_projection import RandomProjection
 
 __all__ = [
     "Clip",
@@ -20,4 +21,5 @@ __all__ = [
     "Standardize",
     "DropConstantColumns",
     "PCA",
+    "RandomProjection",
 ]
