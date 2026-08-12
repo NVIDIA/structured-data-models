@@ -19,7 +19,7 @@ from sdm.processing import Recipe, Standardize
 
 
 class NemotronRelational(ICLModel):
-    r"""An adapted and simplified version of the relational foundation model
+    r"""An adapted version of the relational foundation model
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
