@@ -12,6 +12,7 @@ from sdm.nn import (
     Attention,
     QASSMax,
     RotaryEmbedding,
+    SoftplusScale,
     TransformerBlock,
 )
 from sdm.testing import withCUDA
@@ -35,6 +36,24 @@ def reference_sdpa(
         attn_mask=attn_mask.unsqueeze(-3) if attn_mask is not None else None,
         scale=scale,
     ).transpose(-3, -2)
+
+
+@withCUDA
+def test_attention_transforms(device: torch.device) -> None:
+    module = Attention(
+        channels=4,
+        num_query_heads=2,
+        query_transform=torch.nn.Sequential(
+            torch.nn.RMSNorm(2, eps=1e-6, device=device),
+            SoftplusScale(2, device=device),
+        ),
+        key_transform=torch.nn.RMSNorm(2, eps=1e-6, device=device),
+        scale=1.0,
+        device=device,
+    )
+    query = torch.randn(2, 3, 4, device=device)
+
+    assert module(query).shape == query.shape
 
 
 @withCUDA
