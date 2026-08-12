@@ -230,10 +230,10 @@ class SentenceTransformer(Processor):
         subtokens_per_word = encoded.str.split(" ")
         subtokens_flat = subtokens_per_word.explode().reset_index(drop=True)
 
-        # Compute how many subtokens each original string produced
+        # Compute how many subtokens each original string produced.
+        # Strings with zero regex matches must get a count of 0.
         subtokens_per_word_len = subtokens_per_word.list.len()
         words_per_string = word_lists.list.len()
-        # Repeat the string index for each word, then sum subtokens per string
         string_idx = words_per_string.index.repeat(words_per_string)
         word_to_string = cudf.Series(
             string_idx,
@@ -248,6 +248,7 @@ class SentenceTransformer(Processor):
             )
             .groupby("string_idx")
             .sum()["count"]
+            .reindex(range(num_strings), fill_value=0)
         )
         raw_lengths = torch.from_dlpack(
             subtoken_counts.astype("int64").to_cupy()
