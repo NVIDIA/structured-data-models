@@ -51,10 +51,10 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 
 # Examples
 
-- Keep each example focused on the public contract or capability it demonstrates. Remove incidental setup, validation, abstraction, and explanation, but preserve correctness, leakage boundaries, and behavior essential to the example.
-- Prefer the simplest documented public API that accurately expresses the workflow. Use accepted input forms and public normalization instead of redundant wrappers or manual mechanics; use a one-shot call only when fitted state is not reused.
-- Keep the end-to-end data flow linear and visible. Use semantic container operations, keep meaningful stages named, prefer short conventional names near their use, and reserve comments for non-obvious semantics or sparse navigation.
-- Keep a self-contained workflow in one descriptively named script. Introduce functions, multiple modules, or a README only for genuine repetition, distinct responsibilities, or substantial operational instructions.
+- Build each example around one public contract or capability. Include only the setup, validation, abstraction, and explanation needed to understand and run it correctly, including required leakage boundaries and other correctness constraints.
+- Express the workflow through the simplest documented public API. Pass accepted input forms directly, rely on public normalization and semantic helpers, use a one-shot call when fitted state is not reused, and use separate fit and predict steps when the lifecycle or repeated queries are part of the example.
+- Present the end-to-end data flow in execution order. Use semantic container operations, name intermediates that identify meaningful stages, keep short conventional values close to their consumers, and use comments only for non-obvious semantics or navigation.
+- Represent a self-contained workflow as one descriptively named script. Use functions for genuine repetition, separate modules for distinct responsibilities, and a README for substantial setup or operational instructions.
 
 # Core Design Principles
 
