@@ -1,5 +1,6 @@
 # ruff: noqa: D205
 from collections.abc import Sequence
+from itertools import product
 from typing import Any, ClassVar, cast
 
 import torch
@@ -661,6 +662,14 @@ def _remap_v2_1_checkpoint(
             value = value.squeeze(1)
         elif key == "row_embedding.readout_token":
             value = value.squeeze(0)
+        elif key == "row_embedding.rope.inv_freq":
+            remapped[key] = value
+            for layer, side in product(range(3), ("query", "key")):
+                remapped[
+                    f"row_embedding.row_layers.{layer}.attn."
+                    f"{side}_transform.inv_freq"
+                ] = value
+            continue
         else:
             for old_prefix, new_prefix, module in (
                 (
