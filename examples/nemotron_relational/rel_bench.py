@@ -5,7 +5,6 @@ Without arguments, this runs every supported entity task in the public
 dataset or both ``--dataset`` and ``--task`` to run one task.
 
 Examples:
-    cd examples/nemotron_relational
     python rel_bench.py
     python rel_bench.py --dataset rel-f1 --task driver-dnf
     python rel_bench.py --dataset rel-f1 --num_neighbors 32
