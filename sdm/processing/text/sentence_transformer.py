@@ -179,7 +179,7 @@ class SentenceTransformer(Processor):
             text_series = text_series.fillna("")
 
         # Byte-level pre-tokenization: prepend Ġ to words after spaces
-        text_series = text_series.str.replace(" ", " Ġ")
+        text_series = text_series.str.replace(" ", "Ġ")
 
         # BPE encode on GPU
         encoded = bpe.encoder(text_series)
