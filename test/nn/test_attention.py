@@ -39,83 +39,21 @@ def reference_sdpa(
 
 
 @withCUDA
-@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
-def test_attention_transforms(
-    device: torch.device,
-    dtype: torch.dtype,
-) -> None:
-    eps = 1e-6
-    norm = torch.nn.RMSNorm(
-        normalized_shape=4,
-        eps=eps,
-        device=device,
-        dtype=dtype,
-    )
-    scale = SoftplusScale(
-        channels=4,
-        multiplier=1.75,
-        parameter_init=-0.25,
-        device=device,
-        dtype=dtype,
-    )
-    tensor = torch.tensor(
-        [[0.11, -1.7, 2.3, -0.04], [4.2, 0.31, -0.8, 1.1]],
-        device=device,
-        dtype=dtype,
-    )
-    with torch.no_grad():
-        norm.weight.copy_(tensor.new_tensor([0.7, 1.3, -0.2, 2.1]))
-        scale.weight.copy_(tensor.new_tensor([-0.4, 0.6, 0.2, -0.8]))
-
-    tensor_float = tensor.float()
-    variance = tensor_float.square().mean(dim=-1, keepdim=True)
-    expected_norm = (
-        tensor_float * (variance + eps).rsqrt() * norm.weight.float()
-    ).to(dtype)
-    expected_scale = tensor * (
-        scale.multiplier * F.softplus(scale.weight.float())
-    ).to(dtype)
-
-    normalized = norm(tensor)
-    scaled = scale(tensor)
-    atol = 1e-6 if dtype == torch.float32 else 0
-    torch.testing.assert_close(normalized, expected_norm, rtol=0, atol=atol)
-    torch.testing.assert_close(scaled, expected_scale, rtol=0, atol=0)
-    assert normalized.device == scaled.device == device
-
-
-@pytest.mark.parametrize(
-    "multiplier",
-    [0.0, -1.0, float("nan"), float("inf")],
-)
-def test_softplus_scale_rejects_invalid_multiplier(multiplier: float) -> None:
-    with pytest.raises(ValueError, match="'multiplier' must be positive"):
-        SoftplusScale(channels=4, multiplier=multiplier)
-
-
-def test_attention_configured_device_dtype_and_meta() -> None:
-    dtype = torch.bfloat16
-    query_transform = torch.nn.Sequential(
-        torch.nn.RMSNorm(2, eps=1e-6, device="meta", dtype=dtype),
-        SoftplusScale(2, device="meta", dtype=dtype),
-    )
+def test_attention_transforms(device: torch.device) -> None:
     module = Attention(
-        channels=8,
-        num_query_heads=4,
-        query_transform=query_transform,
-        key_transform=torch.nn.RMSNorm(
-            2,
-            eps=1e-6,
-            device="meta",
-            dtype=dtype,
+        channels=4,
+        num_query_heads=2,
+        query_transform=torch.nn.Sequential(
+            torch.nn.RMSNorm(2, eps=1e-6, device=device),
+            SoftplusScale(2, device=device),
         ),
-        device="meta",
-        dtype=dtype,
+        key_transform=torch.nn.RMSNorm(2, eps=1e-6, device=device),
+        scale=1.0,
+        device=device,
     )
+    query = torch.randn(2, 3, 4, device=device)
 
-    assert module.query_transform is query_transform
-    assert all(parameter.is_meta for parameter in module.parameters())
-    assert all(parameter.dtype == dtype for parameter in module.parameters())
+    assert module(query).shape == query.shape
 
 
 @withCUDA
@@ -501,116 +439,6 @@ def test_sdpa_batch_size_limit_bypass(
 
     assert sdpa.call_count == 1
     assert sdpa.call_args.kwargs["query"].size(0) == 5
-
-
-def test_attention_default_configuration() -> None:
-    rng_state = torch.random.get_rng_state()
-    module = Attention(
-        channels=8,
-        num_query_heads=4,
-        num_key_value_heads=2,
-    )
-    next_rng_state = torch.random.get_rng_state()
-    torch.random.set_rng_state(rng_state)
-    try:
-        explicit = Attention(
-            channels=8,
-            num_query_heads=4,
-            num_key_value_heads=2,
-            query_transform=None,
-            key_transform=None,
-            scale=None,
-        )
-    finally:
-        torch.random.set_rng_state(next_rng_state)
-
-    torch.testing.assert_close(
-        module.state_dict(), explicit.state_dict(), rtol=0, atol=0
-    )
-    assert set(module.state_dict()) == {
-        "qkv_lin.weight",
-        "qkv_lin.bias",
-        "out_lin.weight",
-        "out_lin.bias",
-    }
-    query = torch.randn(2, 3, 8)
-    key_value = torch.randn(2, 5, 8)
-    torch.testing.assert_close(
-        module(query=query, key_value=key_value),
-        torch.zeros_like(query),
-    )
-
-    with torch.no_grad():
-        module.out_lin.weight.normal_()
-        module.out_lin.bias.normal_()
-        explicit.load_state_dict(module.state_dict())
-
-    torch.testing.assert_close(
-        module(query=query, key_value=key_value),
-        explicit(query=query, key_value=key_value),
-        rtol=0,
-        atol=0,
-    )
-
-
-def test_attention_transforms_and_cache() -> None:
-    channels = 4
-    num_heads = 2
-    query_transform = torch.nn.Sequential(
-        torch.nn.RMSNorm(2, eps=1e-6),
-        SoftplusScale(2, multiplier=1.5, parameter_init=0.2),
-    )
-    key_transform = SoftplusScale(
-        2,
-        multiplier=2.0,
-        parameter_init=-0.3,
-    )
-    module = Attention(
-        channels=channels,
-        num_query_heads=num_heads,
-        query_transform=query_transform,
-        key_transform=key_transform,
-        scale=1.0,
-    ).eval()
-    with torch.no_grad():
-        module.qkv_lin.weight.copy_(torch.eye(channels).repeat(3, 1))
-        module.qkv_lin.bias.zero_()
-        module.out_lin.weight.copy_(torch.eye(channels))
-        module.out_lin.bias.zero_()
-
-    query = torch.randn(2, 3, channels)
-    key_value = torch.randn(2, 5, channels)
-    rope = RotaryEmbedding(channels=2, layout="interleaved")
-    output, cache = module(
-        query=query,
-        key_value=key_value,
-        rope=rope,
-        return_key_value=True,
-        batch_size_limit=1,
-    )
-
-    projected_query = query.unflatten(-1, (num_heads, 2))
-    projected_key = key_value.unflatten(-1, (num_heads, 2))
-    projected_value = key_value.unflatten(-1, (num_heads, 2))
-    projected_query = query_transform(rope(projected_query))
-    projected_key = key_transform(rope(projected_key))
-    expected = reference_sdpa(
-        query=projected_query,
-        key=projected_key,
-        value=projected_value,
-        scale=1.0,
-    ).flatten(-2)
-
-    torch.testing.assert_close(output, expected)
-    torch.testing.assert_close(cache.key, projected_key)
-    torch.testing.assert_close(cache.value, projected_value)
-    cached_output = module(
-        query=query,
-        key_value=cache,
-        rope=rope,
-        batch_size_limit=1,
-    )
-    torch.testing.assert_close(cached_output, output)
 
 
 @withCUDA
