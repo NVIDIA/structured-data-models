@@ -125,6 +125,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Standardize.html">Standardize</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.PCA.html">PCA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.RandomProjection.html">RandomProjection</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.AlignCategories.html">AlignCategories</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ShuffleCategories.html">ShuffleCategories</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
@@ -174,7 +175,9 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.gather_members"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.gather_members()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.num_members"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.num_members</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.num_groups"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.num_groups</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.EnsembleTable.num_members_in_group"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.num_members_in_group()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.table"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.table()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.EnsembleTable.expanded_group"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.expanded_group()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.select_stypes"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.select_stypes()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.concatenate_columns"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.concatenate_columns()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.replace_groups"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.replace_groups()</span></code></a></li>
@@ -344,12 +347,40 @@ the second table to member 1.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.EnsembleTable.num_members_in_group">
+<span class="sig-name descname"><span class="pre">num_members_in_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#sdm.tensor.EnsembleTable.num_members_in_group" title="Link to this definition">#</a></dt>
+<dd><p>Return the number of members of a group.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>group_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Zero-based group index.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="sdm.tensor.EnsembleTable.table">
 <span class="sig-name descname"><span class="pre">table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">member_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.tensor.EnsembleTable.table" title="Link to this definition">#</a></dt>
 <dd><p>Return the table associated with one ensemble member.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>member_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Zero-based member index.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.EnsembleTable.expanded_group">
+<span class="sig-name descname"><span class="pre">expanded_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.tensor.EnsembleTable.expanded_group" title="Link to this definition">#</a></dt>
+<dd><p>Return the logical members assigned to one group.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>group_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Zero-based group index.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a></p>
@@ -437,7 +468,7 @@ assignment.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=d9770ada"></script>
+      <script src="../../_static/documentation_options.js?v=7efa091c"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
