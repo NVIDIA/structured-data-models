@@ -90,7 +90,7 @@ def _build_bpe_tokenizer(
             "token": list(vocab_dict.keys()),
             "id": list(vocab_dict.values()),
         }
-    ).astype({"id": "int32"})
+    )
 
     return _BPETokenizer(
         encoder=encoder,
@@ -240,10 +240,7 @@ class SentenceTransformer(Processor):
         subtokens_per_word_len = subtokens_per_word.list.len()
         words_per_string = word_lists.list.len()
         string_idx = words_per_string.index.repeat(words_per_string)
-        word_to_string = cudf.Series(
-            string_idx,
-            dtype="int32",
-        ).reset_index(drop=True)
+        word_to_string = cudf.Series(string_idx).reset_index(drop=True)
         subtoken_counts = (
             cudf.DataFrame(
                 {
@@ -255,14 +252,12 @@ class SentenceTransformer(Processor):
             .sum()["count"]
             .reindex(range(num_strings), fill_value=0)
         )
-        raw_lengths = torch.from_dlpack(
-            subtoken_counts.astype("int64").to_cupy()
-        )
+        raw_lengths = torch.from_dlpack(subtoken_counts.to_cupy())
 
         # Vocab lookup via left merge (preserves order)
         flat_tokens = subtokens_flat.to_frame("token")
         merged = flat_tokens.merge(bpe.vocab, on="token", how="left")
-        flat_ids = merged["id"].fillna(bpe.unk_id).astype("int32")
+        flat_ids = merged["id"].fillna(bpe.unk_id)
         flat_values = torch.from_dlpack(flat_ids.to_cupy())
 
         if debug:
@@ -307,9 +302,7 @@ class SentenceTransformer(Processor):
             total, device=device
         ) - starts.repeat_interleave(lengths)
         src_idx = within_row + offsets[:-1].repeat_interleave(lengths)
-        input_ids[row_idx, within_row + 1] = flat_values[src_idx].to(
-            torch.long
-        )
+        input_ids[row_idx, within_row + 1] = flat_values[src_idx]
 
         input_ids[torch.arange(num_strings, device=device), lengths + 1] = (
             bpe.eos_id
