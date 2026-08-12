@@ -15,7 +15,6 @@ def test_clip_clamps_fixed_bounds_and_preserves_metadata(
             [[-101.0, -100.0], [100.0, 101.0]],
             device=device,
         ),
-        columns=("a", "b"),
     )
 
     actual = Clip(min_value=-100.0, max_value=100.0).transform(table)
