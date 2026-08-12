@@ -9,22 +9,26 @@ from sdm.testing import onlyCUDA, withCUDA
 def _table(
     values: list[list[int]] | list[list[list[int]]],
     *,
-    columns: tuple[str, ...] = ("kind", "segment"),
+    columns: tuple[str, ...] | None = None,
     categories: tuple[tuple[str, ...], ...] = (
         ("a", "b", "c"),
         ("x", "y"),
     ),
     device: torch.device | None = None,
 ) -> TableTensor:
+    categorical = CategoricalTensor(
+        code=torch.tensor(values, dtype=torch.int32, device=device),
+        categories=tuple(
+            StringTensor.from_list(category, device=device)
+            for category in categories
+        ),
+    )
+    if columns is None:
+        return TableTensor(categorical=categorical)
+
     return TableTensor(
         columns={"categorical": columns},
-        categorical=CategoricalTensor(
-            code=torch.tensor(values, dtype=torch.int32, device=device),
-            categories=tuple(
-                StringTensor.from_list(category, device=device)
-                for category in categories
-            ),
-        ),
+        categorical=categorical,
     )
 
 
@@ -62,7 +66,7 @@ def test_impute_mode_uses_most_frequent_category(
             device=device,
         ),
     )
-    assert output.columns[Stype.categorical] == ("kind", "segment")
+    assert output.columns[Stype.categorical] == ("cat_0", "cat_1")
     for actual, expected in zip(
         output.categorical.categories,
         query.categorical.categories,
@@ -106,7 +110,7 @@ def test_impute_mode_tie_uses_lowest_code(
 def test_impute_mode_rejects_all_missing_column() -> None:
     table = _table([[0, -1], [1, -1]])
 
-    with pytest.raises(ValueError, match=r"segment.*no observed values"):
+    with pytest.raises(ValueError, match=r"cat_1.*no observed values"):
         sp.ImputeMode().fit(table)
 
 
@@ -125,7 +129,7 @@ def test_impute_mode_rejects_changed_vocabulary(
 
     with pytest.raises(
         ValueError,
-        match=r"vocabulary.*kind.*fitted values.*AlignCategories",
+        match=r"vocabulary.*cat_0.*fitted values.*AlignCategories",
     ):
         processor.transform(query)
 
@@ -148,7 +152,7 @@ def test_impute_mode_rejects_reordered_columns() -> None:
 def test_impute_mode_rejects_out_of_range_code_during_fit() -> None:
     table = _table([[3, 0], [0, 1]])
 
-    with pytest.raises(ValueError, match=r"kind.*outside.*vocabulary"):
+    with pytest.raises(ValueError, match=r"cat_0.*outside.*vocabulary"):
         sp.ImputeMode().fit(table)
 
 
@@ -156,7 +160,7 @@ def test_impute_mode_rejects_out_of_range_code_during_transform() -> None:
     processor = sp.ImputeMode().fit(_table([[0, 0], [1, 1]]))
     query = _table([[3, -1]])
 
-    with pytest.raises(ValueError, match=r"kind.*outside.*vocabulary"):
+    with pytest.raises(ValueError, match=r"cat_0.*outside.*vocabulary"):
         processor.transform(query)
 
 
@@ -168,7 +172,7 @@ def test_impute_mode_composes_before_to_numerical() -> None:
 
     output = processor.fit_transform(table)
 
-    assert output.columns[Stype.numerical] == ("kind", "segment")
+    assert output.columns[Stype.numerical] == ("cat_0", "cat_1")
     assert output.columns[Stype.categorical] == ()
     assert torch.equal(
         output.numerical,

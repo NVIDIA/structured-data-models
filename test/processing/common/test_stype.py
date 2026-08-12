@@ -13,10 +13,6 @@ from sdm.tensor import EnsembleTable
 
 def _mixed_table() -> TableTensor:
     return TableTensor(
-        columns={
-            "numerical": ("x0", "x1"),
-            "categorical": ("kind",),
-        },
         numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
         categorical=CategoricalTensor(
             code=torch.tensor([[0], [1]], dtype=torch.int32),
@@ -76,7 +72,6 @@ def test_stype_dispatch_accepts_callable_route() -> None:
 
 def test_stype_dispatch_passes_generator_to_routes() -> None:
     table = TableTensor(
-        columns={"categorical": ("kind",)},
         categorical=CategoricalTensor(
             code=torch.arange(6, dtype=torch.int32).unsqueeze(1),
             categories=(StringTensor.from_list(list("abcdef")),),
@@ -137,14 +132,13 @@ def test_stype_dispatch_runs_iterable_routes() -> None:
 
 def test_stype_dispatch_routes_text() -> None:
     table = TableTensor(
-        columns={"text": ("review",)},
         text=StringTensor.from_list([["good"], ["bad"]]),
     )
     dispatch = sp.StypeDispatch(text=sp.Identity())
 
     output = dispatch.fit_transform(table)
 
-    assert output.columns[Stype.text] == ("review",)
+    assert output.columns[Stype.text] == ("text_0",)
     assert output.text.equal(table.text)
 
 
