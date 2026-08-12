@@ -14,7 +14,7 @@
 #
 # Modified for the structured-data-models package.
 
-"""Learned attention transforms with float32 arithmetic."""
+"""Learned softplus scaling."""
 
 import math
 

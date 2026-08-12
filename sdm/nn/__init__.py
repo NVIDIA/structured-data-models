@@ -1,6 +1,6 @@
 """Neural network modules for structured data models."""
 
-from sdm.nn.transforms import SoftplusScale
+from sdm.nn.softplus import SoftplusScale
 from sdm.nn.rope import RotaryEmbedding
 from sdm.nn.attention import (
     QASSMax,
