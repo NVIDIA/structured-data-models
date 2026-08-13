@@ -15,6 +15,7 @@ Strategies compared:
 # ruff: noqa
 import argparse
 
+import numpy as np
 import torch
 from sklearn.cluster import KMeans
 from sklearn.datasets import fetch_openml
@@ -105,12 +106,17 @@ y_true = test[:, target_name].categorical.squeeze(-1)  # [N_test]
 y_true_np = y_true.cpu().numpy()
 
 
+n_classes_true = len(np.unique(y_true_np))
+
+
 def auc(probs: torch.Tensor) -> float:
     scores = probs.float().cpu().numpy()
-    num_classes = scores.shape[-1]
-    if num_classes == 2:
+    if n_classes_true == 2 and scores.shape[-1] == 2:
         raw = roc_auc_score(y_true_np, scores[:, -1])
         return max(raw, 1 - raw)
+    if scores.shape[-1] < n_classes_true:
+        pad_width = n_classes_true - scores.shape[-1]
+        scores = np.pad(scores, ((0, 0), (0, pad_width)))
     return roc_auc_score(
         y_true_np, scores, multi_class="ovr", average="weighted"
     )
