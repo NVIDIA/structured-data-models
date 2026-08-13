@@ -43,6 +43,16 @@ DATASETS = {
         "target": "ObjectType",
         "n_train": 52000,
     },
+    "diabetes130": {
+        "openml_name": "Diabetes130US",
+        "target": "readmitted",
+        "n_train": 47679,
+    },
+    "coupon": {
+        "openml_name": "in_vehicle_coupon_recommendation",
+        "target": "AcceptCoupon",
+        "n_train": 8456,
+    },
 }
 
 parser = argparse.ArgumentParser()
