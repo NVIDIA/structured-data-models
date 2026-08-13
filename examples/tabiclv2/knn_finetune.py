@@ -122,7 +122,7 @@ contexts = execution.fit_transform(
     x=train_table.drop_columns(target_name),
     y=train_table[:, target_name],
     related_tables=None,
-    num_members=1,
+    num_members=args.num_estimators,
     generator=gen,
 )
 queries = execution.transform(
@@ -130,12 +130,23 @@ queries = execution.transform(
     related_tables=None,
 )
 
-train_feat = contexts[0].x.numerical  # [N_train, C]
-test_feat = queries[0].x.numerical  # [N_test, C]
-train_y = contexts[0].y.categorical.code.squeeze(-1).long()  # [N_train]
-num_classes = int(train_y.max().item()) + 1
+# Per-member preprocessed features and labels
+train_feats = [ctx.x.numerical for ctx in contexts]  # list of [N_train, C]
+test_feats = [qry.x.numerical for qry in queries]  # list of [N_test, C]
+train_ys = [
+    ctx.y.categorical.code.squeeze(-1).long() for ctx in contexts
+]  # list of [N_train]
+num_classes = int(train_ys[0].max().item()) + 1
+n_members = args.num_estimators
 
-print(f"Features: {train_feat.size(-1)} cols, {num_classes} classes")
+# Use member 0 as reference for kNN and shapes
+train_feat = train_feats[0]
+test_feat = test_feats[0]
+train_y = train_ys[0]
+
+print(
+    f"Features: {train_feat.size(-1)} cols, {num_classes} classes, {n_members} members"
+)
 
 # --- kNN indices (precomputed, leave-one-out for train) ----------------------
 
@@ -201,36 +212,38 @@ def auc(scores: np.ndarray) -> float:
 
 
 def eval_knn_batched(inner_model: torch.nn.Module) -> float:
-    """Evaluate kNN context with batched forward pass."""
-    knn_train_feat = train_feat[test_knn]  # [N_test, k, C]
-    query_feat = test_feat.unsqueeze(-2)  # [N_test, 1, C]
-    x_batched = torch.cat([knn_train_feat, query_feat], dim=-2)
-    y_batched = train_y[test_knn]  # [N_test, k]
+    """Evaluate kNN context with batched forward pass, averaged over members."""
+    member_probs = []
+    for m in range(n_members):
+        knn_train_f = train_feats[m][test_knn]  # [N_test, k, C]
+        query_f = test_feats[m].unsqueeze(-2)  # [N_test, 1, C]
+        x_batched = torch.cat([knn_train_f, query_f], dim=-2)
+        y_batched = train_ys[m][test_knn]  # [N_test, k]
 
-    all_logits = []
-    n_chunks = (n_test + args.chunk_size - 1) // args.chunk_size
-    with torch.amp.autocast(
-        device.type, torch.bfloat16, enabled=train_feat.is_cuda
-    ):
-        with torch.inference_mode():
-            for chunk_idx in range(n_chunks):
-                start = chunk_idx * args.chunk_size
-                end = min(start + args.chunk_size, n_test)
-                logits = inner_model(
-                    x_batched[start:end],
-                    y_batched[start:end],
-                    num_classes=num_classes,
-                )
-                all_logits.append(logits)
-                if (chunk_idx + 1) % 50 == 0 or chunk_idx == n_chunks - 1:
-                    print(
-                        f"  eval chunk {chunk_idx + 1}/{n_chunks}", flush=True
+        all_logits = []
+        n_chunks = (n_test + args.chunk_size - 1) // args.chunk_size
+        with torch.amp.autocast(
+            device.type, torch.bfloat16, enabled=train_feat.is_cuda
+        ):
+            with torch.inference_mode():
+                for chunk_idx in range(n_chunks):
+                    start = chunk_idx * args.chunk_size
+                    end = min(start + args.chunk_size, n_test)
+                    logits = inner_model(
+                        x_batched[start:end],
+                        y_batched[start:end],
+                        num_classes=num_classes,
                     )
+                    all_logits.append(logits)
 
-    knn_logits = torch.cat(all_logits, dim=0).squeeze(-2)
-    knn_logits = knn_logits[..., :num_classes]
-    knn_probs = torch.softmax(knn_logits.float() / 0.9, dim=-1)
-    return auc(knn_probs.cpu().numpy())
+        logits = torch.cat(all_logits, dim=0).squeeze(-2)[..., :num_classes]
+        member_probs.append(torch.softmax(logits.float() / 0.9, dim=-1))
+        print(f"  eval member {m + 1}/{n_members}", flush=True)
+
+    avg_probs = torch.stack(member_probs, dim=0).mean(
+        dim=0
+    )  # [N_test, num_classes]
+    return auc(avg_probs.cpu().numpy())
 
 
 # --- Pre-finetune baselines ---------------------------------------------------
@@ -299,14 +312,17 @@ for epoch in range(args.epochs):
         batch_idx = perm[start:end]
         bs = batch_idx.size(0)
 
+        # Pick a random member for this step
+        m = step % n_members
+
         # Build [bs, k+1, C]: k neighbors + query row
-        neighbor_feat = train_feat[train_knn[batch_idx]]  # [bs, k, C]
-        query_feat_b = train_feat[batch_idx].unsqueeze(-2)  # [bs, 1, C]
+        neighbor_feat = train_feats[m][train_knn[batch_idx]]  # [bs, k, C]
+        query_feat_b = train_feats[m][batch_idx].unsqueeze(-2)  # [bs, 1, C]
         x = torch.cat([neighbor_feat, query_feat_b], dim=-2)  # [bs, k+1, C]
 
         # Labels: [bs, k] for context, [bs] for query target
-        y_context = train_y[train_knn[batch_idx]]  # [bs, k]
-        y_target = train_y[batch_idx]  # [bs]
+        y_context = train_ys[m][train_knn[batch_idx]]  # [bs, k]
+        y_target = train_ys[m][batch_idx]  # [bs]
 
         with torch.amp.autocast(
             device.type, torch.bfloat16, enabled=train_feat.is_cuda
