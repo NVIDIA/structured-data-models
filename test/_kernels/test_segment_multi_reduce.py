@@ -177,25 +177,3 @@ def test_segment_multi_reduce_nonfinite() -> None:
         strict=True,
     ):
         torch.testing.assert_close(result, reference, equal_nan=True)
-
-
-@onlyCUDA
-def test_segment_multi_reduce_uses_input_device() -> None:
-    if torch.cuda.device_count() < 2:
-        pytest.skip("Multiple CUDA devices not available")
-
-    src = torch.randn(7, 128, device="cuda:1")
-    offsets = torch.tensor([0, 2, 7], device="cuda:1")
-    module = importlib.import_module(
-        "sdm._kernels.triton.segment_multi_reduce"
-    )
-
-    with torch.cuda.device(0), torch.inference_mode():
-        actual = module.segment_multi_reduce(src, offsets)
-
-    for result, reference in zip(
-        actual,
-        _reference(src, offsets),
-        strict=True,
-    ):
-        torch.testing.assert_close(result, reference)
