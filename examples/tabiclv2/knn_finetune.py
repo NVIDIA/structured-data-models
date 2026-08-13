@@ -132,7 +132,7 @@ queries = execution.transform(
 
 train_feat = contexts[0].x.numerical  # [N_train, C]
 test_feat = queries[0].x.numerical  # [N_test, C]
-train_y = contexts[0].y.categorical.code.squeeze(-1)  # [N_train]
+train_y = contexts[0].y.categorical.code.squeeze(-1).long()  # [N_train]
 num_classes = int(train_y.max().item()) + 1
 
 print(f"Features: {train_feat.size(-1)} cols, {num_classes} classes")
