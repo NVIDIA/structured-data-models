@@ -221,7 +221,8 @@ with autocast, torch.inference_mode():
         all_logits.append(logits)
         print(f"  kNN chunk {chunk_idx + 1}/{n_chunks}", flush=True)
 
-knn_logits = torch.cat(all_logits, dim=0).squeeze(-2)  # [N_test, num_classes]
+knn_logits = torch.cat(all_logits, dim=0).squeeze(-2)  # [N_test, 10]
+knn_logits = knn_logits[..., :num_classes]  # [N_test, num_classes]
 knn_probs = torch.softmax(knn_logits.float() / 0.9, dim=-1)
 knn_scores = knn_probs.cpu().numpy()
 print(
