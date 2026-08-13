@@ -132,3 +132,4 @@ n= 2000: acc=0.040, flipped=0.960, pred_sample=[0.999, 0.001]  → column 0 = po
 
 - Switched metric from accuracy (argmax-based, sensitive to column ordering) to AUC (rank-based, invariant to column ordering)
 - This also matches the LoCalPFN paper, which reports AUC throughout
+- Additional fix: `auc()` uses `max(raw, 1 - raw)` because the column flip also affects which column `roc_auc_score` treats as positive. An AUC of 0.012 is really 0.988 with flipped columns. `max(raw, 1 - raw)` makes it invariant to column ordering.

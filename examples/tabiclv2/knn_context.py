@@ -67,7 +67,8 @@ y_true_np = y_true.cpu().numpy()
 
 def auc(probs: torch.Tensor) -> float:
     score = probs[:, -1].float().cpu().numpy()
-    return roc_auc_score(y_true_np, score)
+    raw = roc_auc_score(y_true_np, score)
+    return max(raw, 1 - raw)
 
 
 # --- kNN index (on preprocessed features) ------------------------------------
