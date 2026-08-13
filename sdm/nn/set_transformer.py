@@ -62,6 +62,42 @@ class InducedTransformerBlock(torch.nn.Module):
         )
         torch.nn.init.trunc_normal_(self.inducing_points, std=0.02)
 
+    def induced_key_value(
+        self,
+        key_value: Tensor,
+        *,
+        batch_size_limit: int | None = None,
+    ) -> KVCacheEntry:
+        r"""Return the final attention's key/value projections.
+
+        This summarizes ``key_value`` with the inducing points without
+        materializing an output for every query element. The returned entry
+        can be replayed by passing it as ``key_value`` to :meth:`forward`.
+
+        Args:
+            key_value: Input context summarized by the inducing points.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
+
+        Returns:
+            Projected keys and values for the block's final attention site.
+        """
+        inducing = self.inducing_block(
+            query=self.inducing_points,
+            key_value=key_value,
+            batch_size_limit=batch_size_limit,
+        )
+        # The final attention's key/value projection is query-independent.
+        # Use one inducing point as a disposable query instead of allocating
+        # an output for the full context.
+        _, cache = self.output_block(
+            query=inducing[..., :1, :],
+            key_value=inducing,
+            return_key_value=True,
+            batch_size_limit=batch_size_limit,
+        )
+        return cache
+
     @overload
     def forward(
         self,

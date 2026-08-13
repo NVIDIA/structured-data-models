@@ -15,6 +15,9 @@ from sdm.nn.memory import (
     cuda_attention_memory_limit,
 )
 
+_MEMORY_EFFICIENT_COLUMN_CHUNK_SIZE = 4
+_MEMORY_EFFICIENT_ROW_CHUNK_SIZE = 2048
+
 
 class RowEmbedding(torch.nn.Module):
     def __init__(
@@ -92,6 +95,188 @@ class RowEmbedding(torch.nn.Module):
 
         self.norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
 
+    def _project_chunk(
+        self,
+        x: Tensor,
+        row_start: int,
+        row_end: int,
+        feature_index: Tensor,
+        y_emb: Tensor | None,
+        num_digits: int,
+    ) -> Tensor:
+        x = self.lin(x[..., row_start:row_end, :][..., feature_index])
+        if num_digits > 1:
+            if y_emb is None:
+                x = x.unsqueeze(0).expand(num_digits, *x.size())
+            else:
+                x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
+        if y_emb is not None:
+            target_end = min(row_end, y_emb.size(-3))
+            if row_start < target_end:
+                x[..., : target_end - row_start, :, :] += y_emb[
+                    ..., row_start:target_end, :, :
+                ].to(x.dtype)
+        return x
+
+    def _memory_efficient_forward(
+        self,
+        x: Tensor,
+        y_emb: Tensor | None,
+        *,
+        R_train: int,
+        num_digits: int,
+        cache: Cache | None,
+        batch_size_limit: int | None,
+    ) -> Tensor:
+        R, C = x.size()[-2:]
+        G = self.lin.in_features
+
+        def memory_limit() -> int | None:
+            if x.device.type != "cuda":
+                return None
+            return cuda_attention_memory_limit(x.device)
+
+        shift = 2 ** torch.arange(G, device=x.device)
+        feature_index = torch.arange(C, device=x.device).view(C, 1)
+        feature_index = (feature_index + shift.view(1, G)) % C
+
+        layer_caches: list[KVCacheEntry]
+        if cache is not None and cache.is_replaying:
+            layer_caches = [
+                cast(KVCacheEntry, cache[f"row_embedding.col_layer{i}"])
+                for i in range(len(self.col_layers))
+            ]
+        else:
+            cache_chunks: list[list[KVCacheEntry]] = [
+                [] for _ in self.col_layers
+            ]
+            # Phase 1: build each layer's inducing K/V by column chunks.
+            for start in range(0, C, _MEMORY_EFFICIENT_COLUMN_CHUNK_SIZE):
+                end = min(
+                    start + _MEMORY_EFFICIENT_COLUMN_CHUNK_SIZE,
+                    C,
+                )
+                context = (
+                    self._project_chunk(
+                        x=x,
+                        row_start=0,
+                        row_end=R_train,
+                        feature_index=feature_index[start:end],
+                        y_emb=y_emb,
+                        num_digits=num_digits,
+                    )
+                    .transpose(-2, -3)
+                    .contiguous()
+                )
+                for i, layer in enumerate(self.col_layers):
+                    layer = cast(InducedTransformerBlock, layer)
+                    limit = attention_batch_size_limit(
+                        requested_limit=batch_size_limit,
+                        query=context,
+                        key_value=context,
+                        attention_memory_limit=memory_limit(),
+                    )
+                    if i < len(self.col_layers) - 1:
+                        context, layer_cache = layer(
+                            query=context,
+                            key_value=context,
+                            return_key_value=True,
+                            batch_size_limit=limit,
+                        )
+                    else:
+                        layer_cache = layer.induced_key_value(
+                            context,
+                            batch_size_limit=limit,
+                        )
+                    cache_chunks[i].append(layer_cache)
+
+            layer_caches = [
+                KVCacheEntry(
+                    key=torch.cat([entry.key for entry in chunks], dim=-4),
+                    value=torch.cat([entry.value for entry in chunks], dim=-4),
+                )
+                for chunks in cache_chunks
+            ]
+            if cache is not None:
+                for i, layer_cache in enumerate(layer_caches):
+                    cache[f"row_embedding.col_layer{i}"] = layer_cache
+
+        out: Tensor | None = None
+        # Phase 2: replay those K/V summaries over independent row chunks.
+        for start in range(0, R, _MEMORY_EFFICIENT_ROW_CHUNK_SIZE):
+            end = min(start + _MEMORY_EFFICIENT_ROW_CHUNK_SIZE, R)
+            chunk = self._project_chunk(
+                x=x,
+                row_start=start,
+                row_end=end,
+                feature_index=feature_index,
+                y_emb=y_emb,
+                num_digits=num_digits,
+            ).transpose(-2, -3)
+            for layer, layer_cache in zip(
+                self.col_layers, layer_caches, strict=True
+            ):
+                layer = cast(InducedTransformerBlock, layer)
+                limit = attention_batch_size_limit(
+                    requested_limit=batch_size_limit,
+                    query=chunk,
+                    key_value=layer_cache,
+                    attention_memory_limit=memory_limit(),
+                )
+                chunk = layer(
+                    query=chunk,
+                    key_value=layer_cache,
+                    batch_size_limit=limit,
+                )
+            if num_digits > 1:
+                chunk = chunk.mean(dim=0)
+            chunk = self._aggregate_rows(
+                chunk,
+                batch_size_limit=batch_size_limit,
+                attention_memory_limit=memory_limit(),
+            )
+            if out is None:
+                out = chunk.new_empty((*chunk.size()[:-2], R, chunk.size(-1)))
+            out[..., start:end, :].copy_(chunk)
+
+        assert out is not None
+        return out
+
+    def _aggregate_rows(
+        self,
+        x: Tensor,  # [..., C, R, D]
+        *,
+        batch_size_limit: int | None,
+        attention_memory_limit: int | None,
+    ) -> Tensor:
+        *B, _, R, D = x.size()
+        K = self.readout_token.size(-2)
+        x = torch.cat(
+            [
+                self.readout_token.to(x.dtype)
+                .view(*(1,) * len(B), 1, K, D)
+                .expand(*B, R, K, D),
+                x.transpose(-2, -3),
+            ],
+            dim=-2,
+        )  # [..., R, K + C, D]
+        row_limit = attention_batch_size_limit(
+            requested_limit=batch_size_limit,
+            query=x,
+            key_value=x,
+            attention_memory_limit=attention_memory_limit,
+            num_heads=self.num_heads,
+        )
+        for i, row_layer in enumerate(self.row_layers):
+            row_layer = cast(TabICLv2TransformerBlock, row_layer)
+            query = x[..., :K, :] if i == len(self.row_layers) - 1 else x
+            x = row_layer(
+                query=query,
+                key_value=x,
+                batch_size_limit=row_limit,
+            )
+        return self.norm(x).view(*B, R, K * D)
+
     def forward(
         self,
         x: Tensor,  # [..., R, C]
@@ -103,25 +288,18 @@ class RowEmbedding(torch.nn.Module):
         cache: Cache | None = None,
         batch_size_limit: int | None = None,
         generator: torch.Generator | None = None,
+        memory_efficient: bool = False,
     ) -> Tensor:  # [..., R, K * D]
-        *B, R, C = x.size()
+        R, C = x.size()[-2:]
         R_train = y.size(-1)
-        G, D = self.lin.in_features, self.lin.out_features
-        K = self.readout_token.size(-2)
-        train_mask: Any = slice(R_train) if train_mask is None else train_mask
+        G = self.lin.in_features
+        train_index: Any = slice(R_train) if train_mask is None else train_mask
         plan_attention = (
             x.device.type == "cuda"
             and not self.training
             and not torch.is_grad_enabled()
             and not torch.compiler.is_compiling()
         )
-        # Feature grouping: gather G columns into each token.
-        shift = 2 ** torch.arange(G, device=x.device)
-        index = torch.arange(C, device=x.device)
-        index = (index.view(C, 1) + shift.view(1, G)) % C  # [C, G]
-        x = x[..., index]  # [..., R, C, G]
-        x = self.lin(x)  # [..., R, C, D]
-
         num_digits = 1
         if (
             self.y_emb is not None
@@ -131,11 +309,9 @@ class RowEmbedding(torch.nn.Module):
             bases = _mixed_radix_bases(num_classes, self.num_classes)
             num_digits = len(bases)
             if y.numel() > 0:
-                x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
                 y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
-            else:
-                x = x.unsqueeze(0).expand(num_digits, *x.size())
 
+        y_emb: Tensor | None = None
         if y.numel() > 0:
             if self.y_emb is not None:
                 y_emb = self.y_emb(y).unsqueeze(-2)
@@ -143,19 +319,71 @@ class RowEmbedding(torch.nn.Module):
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
 
+        if memory_efficient and R > _MEMORY_EFFICIENT_ROW_CHUNK_SIZE:
+            if torch.compiler.is_compiling():
+                raise RuntimeError(
+                    "Memory-efficient row embedding does not support "
+                    "torch.compile"
+                )
+            if self.training:
+                raise RuntimeError(
+                    "Memory-efficient row embedding requires evaluation mode"
+                )
+            if torch.is_grad_enabled():
+                raise RuntimeError(
+                    "Memory-efficient row embedding requires gradients to "
+                    "be disabled"
+                )
+            if not (
+                isinstance(train_index, slice)
+                and train_index.indices(R) == (0, R_train, 1)
+            ):
+                raise ValueError(
+                    "Memory-efficient row embedding requires the training "
+                    "rows to be a contiguous prefix"
+                )
+            if max_keys is not None:
+                raise ValueError(
+                    "Memory-efficient row embedding does not support "
+                    "'max_keys'"
+                )
+            return self._memory_efficient_forward(
+                x=x,
+                y_emb=y_emb,
+                R_train=R_train,
+                num_digits=num_digits,
+                cache=cache,
+                batch_size_limit=batch_size_limit,
+            )
+
+        # Feature grouping: gather G columns into each token.
+        shift = 2 ** torch.arange(G, device=x.device)
+        index = torch.arange(C, device=x.device)
+        index = (index.view(C, 1) + shift.view(1, G)) % C  # [C, G]
+        x = x[..., index]  # [..., R, C, G]
+        x = self.lin(x)  # [..., R, C, D]
+
+        if num_digits > 1:
+            if y.numel() > 0:
+                x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
+            else:
+                x = x.unsqueeze(0).expand(num_digits, *x.size())
+
+        if y_emb is not None:
             # y_emb has shape [F, ..., R_train, 1, D]:
-            x[..., train_mask, :, :] += y_emb.to(x.dtype)
+            x[..., train_index, :, :] += y_emb.to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis).
         # Materialize once to avoid repeated copies in the column layers.
         x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
         col_batch_size_limit = batch_size_limit
         for i, col_layer in enumerate(self.col_layers):
+            col_layer = cast(InducedTransformerBlock, col_layer)
             key = f"row_embedding.col_layer{i}"
             if cache is not None and cache.is_replaying:
                 key_value = cast(KVCacheEntry, cache[key])
             else:
-                key_value = x[..., train_mask, :]
+                key_value = x[..., train_index, :]
                 if max_keys is not None and key_value.size(-2) > max_keys:
                     index = torch.randperm(
                         key_value.size(-2),
@@ -192,37 +420,15 @@ class RowEmbedding(torch.nn.Module):
         if num_digits > 1:  # Average over mixed-radix digits.
             x = x.mean(dim=0)  # [F, ..., C, R, D] -> [..., C, R, D]
 
-        x = torch.cat(  # Prepend readout tokens before row-wise attention.
-            [
-                self.readout_token.to(x.dtype)
-                .view(*(1,) * len(B), 1, K, D)
-                .expand(*B, R, K, D),
-                x.transpose(-2, -3),  # [..., R, C, D]
-            ],
-            dim=-2,
-        )  # [..., R, K + C, D]
-
-        # Row-wise attention (B * R as the batch axis).
-        row_batch_size_limit = attention_batch_size_limit(
-            requested_limit=batch_size_limit,
-            query=x,
-            key_value=x,
+        return self._aggregate_rows(
+            x,
+            batch_size_limit=batch_size_limit,
             attention_memory_limit=(
                 cuda_attention_memory_limit(x.device)
                 if plan_attention
                 else None
             ),
-            num_heads=self.num_heads,
         )
-        for i, row_layer in enumerate(self.row_layers):
-            query = x[..., :K, :] if i == len(self.row_layers) - 1 else x
-            x = row_layer(
-                query=query,  # [..., R, K + C, D] or [..., R, K, D]
-                key_value=x,  # [..., R, K + C, D]
-                batch_size_limit=row_batch_size_limit,
-            )  # [..., R, K + C, D] or [..., R, K, D]
-
-        return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]
 
 
 def _mixed_radix_bases(num_classes: int, max_classes: int) -> list[int]:

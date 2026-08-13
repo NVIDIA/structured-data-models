@@ -16,7 +16,14 @@ from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 
+_ESTIMATOR_EXECUTION_CACHE = "estimator_execution"
 _QUANTILE_COLUMNS = tuple(f"q{i:03d}" for i in range(1, 1000))
+
+_EstimatorExecution = Literal[
+    "sequential",
+    "batched",
+    "batched_memory_efficient",
+]
 
 
 class TabICLv2(ICLModel):
@@ -111,8 +118,12 @@ class TabICLv2(ICLModel):
         estimator_execution: How to execute ensemble members. ``"sequential"``
             evaluates one estimator at a time. ``"batched"`` stacks compatible
             transformed estimators and evaluates each group in one model call,
-            trading higher peak memory for potential throughput gains. Cached
-            prediction reuses the groups created during :meth:`fit`.
+            trading higher peak memory for potential throughput gains.
+            ``"batched_memory_efficient"`` uses the same estimator groups but
+            bounds row-embedding activation memory by processing rows and
+            columns in chunks when there are more than 2,048 total rows;
+            smaller inputs use the standard row embedding. Cached prediction
+            reuses both the groups and execution selected during :meth:`fit`.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -123,7 +134,7 @@ class TabICLv2(ICLModel):
     )
     supports_related_tables: ClassVar[bool] = False
     supported_execution_modes: ClassVar[frozenset[str]] = frozenset(
-        {"sequential", "batched"}
+        {"sequential", "batched", "batched_memory_efficient"}
     )
 
     def __init__(
@@ -131,7 +142,7 @@ class TabICLv2(ICLModel):
         pretrained: bool = True,
         device: torch.device | str | None = None,
         *,
-        estimator_execution: Literal["sequential", "batched"] = "sequential",
+        estimator_execution: _EstimatorExecution = "sequential",
     ) -> None:
         super().__init__(estimator_execution=estimator_execution)
 
@@ -221,8 +232,26 @@ class TabICLv2(ICLModel):
                 dtype=torch.int64 if classes is not None else x.dtype,
             )
 
+        if cache is None:
+            execution = self.estimator_execution
+        elif cache.is_recording:
+            execution = self.estimator_execution
+            cache[_ESTIMATOR_EXECUTION_CACHE] = execution
+        else:
+            # Caches created before this mode existed used standard batching.
+            execution = cast(
+                str,
+                cache.get(_ESTIMATOR_EXECUTION_CACHE, "batched"),
+            )
+        memory_efficient = execution == "batched_memory_efficient"
+
         if classes is None:
-            raw = self.reg_model(x, y, cache=cache)
+            raw = self.reg_model(
+                x,
+                y,
+                cache=cache,
+                memory_efficient=memory_efficient,
+            )
             raw = raw.sort(dim=-1)[0]
         else:
             raw = self.cls_model(
@@ -230,6 +259,7 @@ class TabICLv2(ICLModel):
                 y,
                 cache=cache,
                 num_classes=len(classes),
+                memory_efficient=memory_efficient,
             )
         return self._to_table(raw, classes)
 
@@ -299,11 +329,28 @@ class _TabICLv2(torch.nn.Module):
         *,
         cache: Cache | None = None,
         num_classes: int | None = None,
+        memory_efficient: bool = False,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if not y.is_floating_point():
             assert num_classes is not None
 
-        x = self.row_embedding(x, y, num_classes=num_classes, cache=cache)
+        if memory_efficient:
+            x = self.row_embedding(
+                x,
+                y,
+                num_classes=num_classes,
+                cache=cache,
+                memory_efficient=True,
+            )
+        else:
+            # Preserve the original call for compatible RowEmbedding
+            # substitutions that do not expose the optional policy keyword.
+            x = self.row_embedding(
+                x,
+                y,
+                num_classes=num_classes,
+                cache=cache,
+            )
         return self.icl_block(
             x=x,
             y=y,
