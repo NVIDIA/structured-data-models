@@ -64,7 +64,7 @@ class RelationalSampler:
         for table_name, column_name in self.time_columns.items():
             stype = data.tables[table_name].stype(column_name)
             if stype != Stype.datetime:
-                raise ValueError(  # TODO CHECK if str is necessary
+                raise ValueError(
                     f"Expected '{column_name}' in table '{table_name}' to "
                     f"have semantic type {str(Stype.datetime)!r} "
                     f"(got {str(stype)!r})"
@@ -124,7 +124,7 @@ class RelationalSampler:
             for column in columns:
                 stype = table.stype(column)
                 if stype != Stype.id:
-                    raise ValueError(  # TODO CHeck if str is necessary
+                    raise ValueError(
                         f"Expected column '{column}' to have semantic type "
                         f"{str(Stype.id)!r} (got {str(stype)!r})"
                     )
@@ -132,7 +132,7 @@ class RelationalSampler:
         if task_time_column is not None:
             stype = task_table.stype(task_time_column)
             if stype != Stype.datetime:
-                raise ValueError(  # TODO CHeck if str is necessary
+                raise ValueError(
                     f"Expected task time column to have semantic type "
                     f"{str(Stype.datetime)!r} (got {str(stype)!r})"
                 )
