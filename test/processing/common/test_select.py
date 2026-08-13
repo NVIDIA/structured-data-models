@@ -1,7 +1,14 @@
+import pytest
 import torch
 
-from sdm import TableTensor
+from sdm import Stype, TableTensor
 from sdm.processing import SelectColumns
+from sdm.tensor import EnsembleTable
+
+
+def test_select_columns_rejects_negative_max_columns() -> None:
+    with pytest.raises(ValueError, match="max_columns must be positive"):
+        SelectColumns(max_columns=-1)
 
 
 def test_select_first_columns() -> None:
@@ -12,3 +19,30 @@ def test_select_first_columns() -> None:
 
     out = SelectColumns(max_columns=2, method="first").transform(table)
     assert out.equal(table.select_columns(("num_0", "num_1", "dt_0", "dt_1")))
+
+
+def test_select_columns_round_robin_routes_members() -> None:
+    table = TableTensor(
+        numerical=torch.arange(10, dtype=torch.float).view(2, 5),
+    )
+
+    out = SelectColumns(
+        max_columns=2,
+        method="round_robin",
+    ).fit_transform_ensemble(EnsembleTable(table, num_members=4))
+
+    expected_columns = (
+        ("num_0", "num_1"),
+        ("num_2", "num_3"),
+        ("num_4", "num_0"),
+        ("num_1", "num_2"),
+    )
+    for member_id, columns in enumerate(expected_columns):
+        indices = [
+            table.columns[Stype.numerical].index(column) for column in columns
+        ]
+        expected = TableTensor.from_tensor(
+            table.numerical[..., indices],
+            columns=columns,
+        )
+        assert out.table(member_id).equal(expected)
