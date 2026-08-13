@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -15,6 +15,8 @@ from sdm.models.tabiclv2.ckpt import remap_ckpt
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
+
+_QUANTILE_COLUMNS = tuple(f"q{i:03d}" for i in range(1, 1000))
 
 
 class TabICLv2(ICLModel):
@@ -106,6 +108,11 @@ class TabICLv2(ICLModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+        estimator_execution: How to execute ensemble members. ``"sequential"``
+            evaluates one estimator at a time. ``"batched"`` stacks compatible
+            transformed estimators and evaluates each group in one model call,
+            trading higher peak memory for potential throughput gains. Cached
+            prediction reuses the groups created during :meth:`fit`.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -115,13 +122,18 @@ class TabICLv2(ICLModel):
         {Stype.numerical, Stype.categorical}
     )
     supports_related_tables: ClassVar[bool] = False
+    supported_execution_modes: ClassVar[frozenset[str]] = frozenset(
+        {"sequential", "batched"}
+    )
 
     def __init__(
         self,
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        *,
+        estimator_execution: Literal["sequential", "batched"] = "sequential",
     ) -> None:
-        super().__init__()
+        super().__init__(estimator_execution=estimator_execution)
 
         self.cls_model = _TabICLv2(
             num_classes=10,
@@ -210,18 +222,31 @@ class TabICLv2(ICLModel):
             )
 
         if classes is None:
-            out = self.reg_model(x, y, cache=cache)
-            return TableTensor(
-                columns={
-                    Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
-                },
-                numerical=out.sort(dim=-1)[0],
+            raw = self.reg_model(x, y, cache=cache)
+            raw = raw.sort(dim=-1)[0]
+        else:
+            raw = self.cls_model(
+                x,
+                y,
+                cache=cache,
+                num_classes=len(classes),
             )
+        return self._to_table(raw, classes)
 
-        out = self.cls_model(x, y, cache=cache, num_classes=len(classes))
+    @staticmethod
+    def _to_table(raw: Tensor, classes: Tensor | None) -> TableTensor:
+        if classes is None:
+            return TableTensor(
+                columns={Stype.numerical: _QUANTILE_COLUMNS},
+                numerical=raw,
+            )
         return TableTensor(
-            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=out[..., : len(classes)],
+            columns={
+                Stype.numerical: tuple(
+                    str(value) for value in classes.tolist()
+                )
+            },
+            numerical=raw[..., : len(classes)],
         )
 
 

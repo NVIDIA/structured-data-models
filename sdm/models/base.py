@@ -1,19 +1,36 @@
 import abc
 import copy
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    Recipe,
+    RelatedTables,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.callbacks import Callback
-from sdm.processing.execution import RecipeExecution
+from sdm.processing.execution import (
+    ContextGroup,
+    MemberContext,
+    MemberQuery,
+    QueryGroup,
+    RecipeExecution,
+)
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
+
+_CachedGroup = tuple[tuple[int, ...], Cache]
 
 
 class ICLModel(torch.nn.Module, abc.ABC):
@@ -34,8 +51,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
-    def __init__(self) -> None:
+    #: Supported ensemble execution modes.
+    supported_execution_modes: ClassVar[frozenset[str]] = frozenset(
+        {"sequential"}
+    )
+
+    def __init__(self, *, estimator_execution: str = "sequential") -> None:
         super().__init__()
+        self.estimator_execution = estimator_execution
         self._cache: Cache | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
@@ -145,62 +168,100 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
+        group_members = self._uses_grouped_execution()
         with torch.amp.autocast(x_query.device.type, enabled=False):
-            contexts = recipe_execution.fit_transform(
+            context_groups = recipe_execution.fit_transform(
                 x=x_context,
                 y=y_context,
                 related_tables=related_context_tables,
                 num_members=num_estimators,
+                group_members=group_members,
                 generator=generator,
             )
-            queries = recipe_execution.transform(
+            query_groups = recipe_execution.transform(
                 x=x_query,
                 related_tables=related_query_tables,
             )
 
-        outs: list[TableTensor] = []
-        for context, query in zip(contexts, queries):
-            self._validate_context(
-                x=context.x,
-                y=context.y,
-                related_tables=context.related_tables,
-            )
-            x_query = query.x
-            related_query_tables = query.related_tables
-            for callback in callbacks:
-                x_query, related_query_tables = callback.on_preprocessing_end(
-                    self,
-                    x_query,
-                    related_query_tables,
+        contexts: list[MemberContext | None] = [None] * num_estimators
+        queries: list[MemberQuery | None] = [None] * num_estimators
+        outs: list[TableTensor | None] = [None] * num_estimators
+        for context_group, query_group in zip(
+            context_groups, query_groups, strict=True
+        ):
+            if context_group.member_ids != query_group.member_ids:
+                raise RuntimeError("Context and query groups do not match")
+            prepared_queries = []
+            for member_id, context, query in zip(
+                context_group.member_ids,
+                context_group.members,
+                query_group.members,
+                strict=True,
+            ):
+                self._validate_context(
+                    x=context.x,
+                    y=context.y,
+                    related_tables=context.related_tables,
                 )
-            self._validate_query(
-                x_context=context.x.schema,
-                x_query=x_query,
-                related_context_tables=context.related_tables.schema
-                if context.related_tables is not None
-                else None,
-                related_query_tables=related_query_tables,
+                query_x = query.x
+                query_related_tables = query.related_tables
+                for callback in callbacks:
+                    query_x, query_related_tables = (
+                        callback.on_preprocessing_end(
+                            self,
+                            query_x,
+                            query_related_tables,
+                        )
+                    )
+                query = replace(
+                    query,
+                    x=query_x,
+                    related_tables=query_related_tables,
+                )
+                self._validate_query(
+                    x_context=context.x.schema,
+                    x_query=query_x,
+                    related_context_tables=context.related_tables.schema
+                    if context.related_tables is not None
+                    else None,
+                    related_query_tables=query_related_tables,
+                )
+                contexts[member_id] = context
+                queries[member_id] = query
+                prepared_queries.append(query)
+
+            query_group = replace(
+                query_group,
+                members=tuple(prepared_queries),
             )
-            out = self._forward(
-                x_context=context.x,
-                y_context=context.y,
-                x_query=x_query,
-                related_context_tables=context.related_tables,
-                related_query_tables=related_query_tables,
+
+            group_outs = self._forward_group(
+                context_group=context_group,
+                query_group=query_group,
                 cache=None,
                 generator=generator,
                 **kwargs,
             )
-            out = cast(TableTensor, out.to(x_query.dtype))
-            outs.append(out)
+            for member_id, out, query in zip(
+                context_group.member_ids,
+                group_outs,
+                query_group.members,
+                strict=True,
+            ):
+                outs[member_id] = cast(TableTensor, out.to(query.x.dtype))
+
+        if any(item is None for item in (*contexts, *queries, *outs)):
+            raise RuntimeError("Expected one result per estimator")
+        contexts_out = tuple(cast(MemberContext, item) for item in contexts)
+        outs_out = tuple(cast(TableTensor, item) for item in outs)
 
         # Regression: invert target before stacking estimator outputs.
-        if contexts[0].y.numerical.size(-1) > 0:
+        if contexts_out[0].y.numerical.size(-1) > 0:
             with torch.amp.autocast(x_query.device.type, enabled=False):
-                outs = list(recipe_execution.inverse_transform_target(outs))
+                outs_out = recipe_execution.inverse_transform_target(outs_out)
 
         with torch.amp.autocast(x_query.device.type, enabled=False):
-            prediction = recipe_execution.transform_output(outs)
+            prediction = recipe_execution.transform_output(outs_out)
 
         for callback in callbacks:
             callback.on_forward_end(self, prediction)
@@ -249,12 +310,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
+        group_members = self._uses_grouped_execution()
         with torch.amp.autocast(x.device.type, enabled=False):
-            contexts = recipe_execution.fit_transform(
+            context_groups = recipe_execution.fit_transform(
                 x=x,
                 y=y,
                 related_tables=related_tables,
                 num_members=num_estimators,
+                group_members=group_members,
                 generator=generator,
             )
 
@@ -263,37 +326,43 @@ class ICLModel(torch.nn.Module, abc.ABC):
             recipe_execution=recipe_execution,
             kwargs=kwargs,
         )
-        for i, context in enumerate(contexts):
-            self._validate_context(
-                x=context.x,
-                y=context.y,
-                related_tables=context.related_tables,
+        cached_groups: list[_CachedGroup] = []
+        for context_group in context_groups:
+            metadata = []
+            for context in context_group.members:
+                self._validate_context(
+                    x=context.x,
+                    y=context.y,
+                    related_tables=context.related_tables,
+                )
+                metadata.append(self._member_metadata(context))
+
+            model_cache = (
+                metadata[0]
+                if len(context_group.member_ids) == 1
+                else Cache(classes=metadata[0]["classes"])
             )
-            estimator_cache = Cache(
-                x_schema=context.x.schema,
-                related_tables_schema=context.related_tables.schema
-                if context.related_tables is not None
-                else None,
-                classes=(
-                    context.y.categorical.categories[0]
-                    if context.y.categorical.size(-1) > 0
-                    else None
-                ),
-            )
-            self._forward(
-                x_context=context.x,
-                y_context=context.y,
-                x_query=None,
-                related_context_tables=context.related_tables,
-                related_query_tables=None,
-                cache=estimator_cache,
+            self._forward_group(
+                context_group=context_group,
+                query_group=None,
+                cache=model_cache,
                 generator=generator,
                 **kwargs,
             )
-            if x.is_cuda and num_estimators > 1:
-                estimator_cache = estimator_cache.cpu().pin_memory()
-            cache[i] = estimator_cache
 
+            if x.is_cuda and num_estimators > 1:
+                model_cache = model_cache.cpu().pin_memory()
+                if len(context_group.member_ids) == 1:
+                    metadata = [model_cache]
+                else:
+                    metadata = [item.cpu().pin_memory() for item in metadata]
+            for member_id, item in zip(
+                context_group.member_ids, metadata, strict=True
+            ):
+                cache[member_id] = item
+            cached_groups.append((context_group.member_ids, model_cache))
+
+        cache["member_groups"] = tuple(cached_groups)
         self._cache = cache.freeze()
 
     def predict(
@@ -365,8 +434,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
 
         num_estimators = cast(int, self._cache["num_estimators"])
-        caches = [cast(Cache, self._cache[i]) for i in range(num_estimators)]
-        next_cache = caches[0]
+        cached_groups = cast(
+            tuple[_CachedGroup, ...], self._cache["member_groups"]
+        )
+        next_cache = cached_groups[0][1]
 
         compute_stream: torch.cuda.Stream | None = None
         transfer_stream: torch.cuda.Stream | None = None
@@ -386,53 +457,77 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 self._cache["recipe_execution"],
             )
             with torch.amp.autocast(x.device.type, enabled=False):
-                queries = recipe_execution.transform(x, related_tables)
+                query_groups = recipe_execution.transform(x, related_tables)
+
+            queries: list[MemberQuery | None] = [None] * num_estimators
+            prepared_query_groups = []
+            for query_group in query_groups:
+                prepared_queries = []
+                for member_id, query in zip(
+                    query_group.member_ids, query_group.members, strict=True
+                ):
+                    metadata = cast(Cache, self._cache[member_id])
+                    query_x = query.x
+                    query_related_tables = query.related_tables
+                    for callback in callbacks:
+                        query_x, query_related_tables = (
+                            callback.on_preprocessing_end(
+                                self,
+                                query_x,
+                                query_related_tables,
+                            )
+                        )
+                    query = replace(
+                        query,
+                        x=query_x,
+                        related_tables=query_related_tables,
+                    )
+                    self._validate_query(
+                        x_context=cast(TableSchema, metadata["x_schema"]),
+                        x_query=query_x,
+                        related_context_tables=cast(
+                            RelatedTablesSchema | None,
+                            metadata["related_tables_schema"],
+                        ),
+                        related_query_tables=query_related_tables,
+                    )
+                    queries[member_id] = query
+                    prepared_queries.append(query)
+                prepared_query_groups.append(
+                    replace(query_group, members=tuple(prepared_queries))
+                )
+            query_groups = tuple(prepared_query_groups)
 
             if x.is_cuda:
                 assert compute_stream is not None
                 assert transfer_stream is not None
                 compute_stream.wait_stream(transfer_stream)
 
-            outs: list[TableTensor] = []
-            for i, query in enumerate(queries):
+            outs: list[TableTensor | None] = [None] * num_estimators
+            for group_id, (query_group, cached_group) in enumerate(
+                zip(query_groups, cached_groups, strict=True)
+            ):
+                member_ids, _ = cached_group
+                if query_group.member_ids != member_ids:
+                    raise RuntimeError("Cached estimator groups do not match")
                 cache, next_cache = next_cache, None
                 assert cache is not None
 
-                x_query = query.x
-                related_query_tables = query.related_tables
-                for callback in callbacks:
-                    x_query, related_query_tables = (
-                        callback.on_preprocessing_end(
-                            self,
-                            x_query,
-                            related_query_tables,
-                        )
-                    )
-                self._validate_query(
-                    x_context=cast(TableSchema, cache["x_schema"]),
-                    x_query=x_query,
-                    related_context_tables=cast(
-                        RelatedTablesSchema,
-                        cache["related_tables_schema"],
-                    ),
-                    related_query_tables=related_query_tables,
-                )
-
-                if i + 1 < num_estimators:
-                    next_cache = caches[i + 1]
+                if group_id + 1 < len(cached_groups):
+                    next_cache = cached_groups[group_id + 1][1]
                 if x.is_cuda and next_cache is not None:
                     assert transfer_stream is not None
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
-                out = self._forward(
-                    x_context=None,
-                    y_context=None,
-                    x_query=x_query,
-                    related_context_tables=None,
-                    related_query_tables=related_query_tables,
+                metadata = tuple(
+                    cast(Cache, self._cache[member_id])
+                    for member_id in member_ids
+                )
+                group_outs = self._predict_group(
+                    query_group=query_group,
+                    metadata=metadata,
                     cache=cache,
-                    generator=None,
                     **cast(dict[str, Any], self._cache["kwargs"]),
                 )
 
@@ -441,8 +536,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     for tensor in cache._tensors():
                         tensor.record_stream(compute_stream)
 
-                out = cast(TableTensor, out.to(x_query.dtype))
-                outs.append(out)
+                for member_id, out, query in zip(
+                    member_ids,
+                    group_outs,
+                    query_group.members,
+                    strict=True,
+                ):
+                    outs[member_id] = cast(TableTensor, out.to(query.x.dtype))
 
                 if x.is_cuda and next_cache is not None:
                     assert compute_stream is not None
@@ -454,13 +554,19 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 transfer_stream.synchronize()
             raise
 
+        if any(item is None for item in (*queries, *outs)):
+            raise RuntimeError("Expected one result per estimator")
+        outs_out = [cast(TableTensor, item) for item in outs]
+
         # Regression: invert target before stacking estimator outputs.
         if cast(Cache, self._cache[0])["classes"] is None:
             with torch.amp.autocast(x.device.type, enabled=False):
-                outs = list(recipe_execution.inverse_transform_target(outs))
+                outs_out = list(
+                    recipe_execution.inverse_transform_target(outs_out)
+                )
 
         with torch.amp.autocast(x.device.type, enabled=False):
-            prediction = recipe_execution.transform_output(outs)
+            prediction = recipe_execution.transform_output(outs_out)
 
         for callback in callbacks:
             callback.on_forward_end(self, prediction)
@@ -509,6 +615,178 @@ class ICLModel(torch.nn.Module, abc.ABC):
         r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################
+
+    def _uses_grouped_execution(self) -> bool:
+        if self.estimator_execution not in self.supported_execution_modes:
+            supported = ", ".join(
+                repr(mode) for mode in sorted(self.supported_execution_modes)
+            )
+            raise ValueError(
+                f"Unsupported estimator execution "
+                f"{self.estimator_execution!r}; expected one of {supported}"
+            )
+        return self.estimator_execution != "sequential"
+
+    @staticmethod
+    def _member_metadata(context: MemberContext) -> Cache:
+        return Cache(
+            x_schema=context.x.schema,
+            related_tables_schema=context.related_tables.schema
+            if context.related_tables is not None
+            else None,
+            classes=(
+                context.y.categorical.categories[0]
+                if context.y.categorical.size(-1) > 0
+                else None
+            ),
+        )
+
+    def _forward_group(
+        self,
+        context_group: ContextGroup,
+        query_group: QueryGroup | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> tuple[TableTensor, ...]:
+        contexts = context_group.members
+        x_context = self._stack_tables(
+            tuple(context.x for context in contexts)
+        )
+        y_context = self._stack_tables(
+            tuple(context.y for context in contexts)
+        )
+        related_context = self._stack_related_tables(
+            tuple(context.related_tables for context in contexts)
+        )
+        x_query = None
+        related_query = None
+        if query_group is not None:
+            x_query = self._stack_tables(
+                tuple(query.x for query in query_group.members)
+            )
+            related_query = self._stack_related_tables(
+                tuple(query.related_tables for query in query_group.members)
+            )
+
+        out = self._forward(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_context,
+            related_query_tables=related_query,
+            cache=cache,
+            generator=generator,
+            **kwargs,
+        )
+        if query_group is None:
+            return ()
+        metadata = tuple(
+            self._member_metadata(context) for context in contexts
+        )
+        return self._split_group_output(out, metadata)
+
+    def _predict_group(
+        self,
+        query_group: QueryGroup,
+        metadata: Sequence[Cache],
+        cache: Cache,
+        **kwargs: Any,
+    ) -> tuple[TableTensor, ...]:
+        x_query = self._stack_tables(
+            tuple(query.x for query in query_group.members)
+        )
+        out = self._forward(
+            x_context=None,
+            y_context=None,
+            x_query=x_query,
+            related_context_tables=None,
+            related_query_tables=self._stack_related_tables(
+                tuple(query.related_tables for query in query_group.members)
+            ),
+            cache=cache,
+            generator=None,
+            **kwargs,
+        )
+        return self._split_group_output(out, metadata)
+
+    @staticmethod
+    def _stack_tables(tables: Sequence[TableTensor]) -> TableTensor:
+        if len(tables) == 1:
+            return tables[0]
+
+        first = tables[0]
+        blocks: dict[Stype, Tensor] = {}
+        for stype, first_block in first.items():
+            member_blocks = tuple(table.blocks[stype] for table in tables)
+            if isinstance(first_block, CategoricalTensor):
+                categorical_blocks = tuple(
+                    cast(CategoricalTensor, block) for block in member_blocks
+                )
+                blocks[stype] = CategoricalTensor(
+                    code=torch.stack(
+                        tuple(block.code for block in categorical_blocks),
+                        dim=0,
+                    ),
+                    categories=first_block.categories,
+                )
+            else:
+                blocks[stype] = torch.stack(member_blocks, dim=0)
+        return first.replace_blocks(
+            numerical=blocks[Stype.numerical],
+            categorical=cast(CategoricalTensor, blocks[Stype.categorical]),
+            datetime=blocks[Stype.datetime],
+            text=cast(StringTensor, blocks[Stype.text]),
+            id=cast(ColumnarTensor, blocks[Stype.id]),
+        )
+
+    @classmethod
+    def _stack_related_tables(
+        cls,
+        related: Sequence[RelatedTables | None],
+    ) -> RelatedTables | None:
+        first = related[0]
+        if first is None:
+            return None
+        if len(related) == 1:
+            return first
+        return replace(
+            first,
+            tables={
+                name: cls._stack_tables(
+                    tuple(
+                        cast(RelatedTables, item).tables[name]
+                        for item in related
+                    )
+                )
+                for name in first.tables
+            },
+        )
+
+    @staticmethod
+    def _split_group_output(
+        output: TableTensor,
+        metadata: Sequence[Cache],
+    ) -> tuple[TableTensor, ...]:
+        if len(metadata) == 1:
+            return (output,)
+        outputs = tuple(
+            cast(TableTensor, item) for item in output.unbind(dim=0)
+        )
+        restored = []
+        for item, member_metadata in zip(outputs, metadata, strict=True):
+            classes = cast(Tensor | None, member_metadata["classes"])
+            if classes is not None:
+                item = TableTensor(
+                    columns={
+                        Stype.numerical: tuple(
+                            str(value) for value in classes.tolist()
+                        )
+                    },
+                    numerical=item.numerical[..., : len(classes)],
+                )
+            restored.append(item)
+        return tuple(restored)
 
     def _validate_context(
         self,

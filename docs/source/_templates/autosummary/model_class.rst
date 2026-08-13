@@ -6,7 +6,7 @@
    :members:
    :show-inheritance:
 {%- if objname != "ICLModel" %}
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supports_related_tables
+   :exclude-members: supported_execution_modes, supported_feature_stypes, supported_target_stypes, supports_related_tables
 {%- endif %}
 
 {% if objname != "ICLModel" %}
@@ -26,6 +26,10 @@ Capabilities
        {%- endfor %}
    * - **Related Table Support**
      - {{ "✅" if cls.supports_related_tables else "❌" }}
+   * - **Supported Estimator Execution Modes**
+     - {% for mode in cls.supported_execution_modes | sort -%}
+         ``{{ mode }}``{{ ", " if not loop.last }}
+       {%- endfor %}
 
 Default Recipe
 --------------
