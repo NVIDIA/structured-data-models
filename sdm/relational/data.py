@@ -282,7 +282,7 @@ class RelationalData(DeviceMixin):
             time_columns: Mapping from table name to the datetime column used
                 for temporal sampling. A row in a time-aware table can only be
                 sampled if its timestamp does not exceed the query timestamp.
-        """
+        """  # noqa: E501
         from sdm.relational import RelationalSampler  # noqa: PLC0415
 
         return RelationalSampler(data=self, time_columns=time_columns)

@@ -445,7 +445,11 @@ class CuGraphRelationalSampler:
                 example[mask],
                 node[mask] - self._vertex_offsets[i],
             )
-        return nodes
+        return {
+            table_name: (example, node)
+            for table_name, (example, node) in nodes.items()
+            if node.numel() > 0
+        }
 
     def _sample_temporal_hop(
         self,

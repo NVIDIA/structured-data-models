@@ -15,7 +15,7 @@ Each ``--num_neighbors`` value configures one hop: ``32`` is one hop,
 """
 
 import argparse
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 import relbench
@@ -129,7 +129,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
     context = context[torch.randperm(len(context))[: args.context_size]]
 
     model = sdm.models.NemotronRelational(device=device)
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "task_link": {
             "task_column": task.entity_col,
             "table": task.entity_table,
