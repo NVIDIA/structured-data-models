@@ -16,6 +16,8 @@ from sklearn.metrics import roc_auc_score
 import sdm
 from sdm.processing.execution import RecipeExecution
 
+from recipe import knn_recipe
+
 DATASETS = {
     "eeg-eye-state": {
         "openml_name": "eeg-eye-state",
@@ -76,16 +78,16 @@ y_true = test[:, target_name].categorical.squeeze(-1)
 # --- kNN index ---------------------------------------------------------------
 
 model = sdm.models.TabICLv2(device=device)
-recipe = model.default_recipe()
+recipe = knn_recipe()
 
-knn_recipe = RecipeExecution(recipe)
-knn_contexts = knn_recipe.fit_transform(
+knn_execution = RecipeExecution(recipe)
+knn_contexts = knn_execution.fit_transform(
     x=train.drop_columns(target_name),
     y=train[:, target_name],
     related_tables=None,
     num_members=1,
 )
-knn_queries = knn_recipe.transform(
+knn_queries = knn_execution.transform(
     x=test.drop_columns(target_name),
     related_tables=None,
 )
@@ -139,6 +141,7 @@ with autocast:
         model.fit(
             x=context.drop_columns(target_name),
             y=context[:, target_name],
+            recipe=recipe,
             num_estimators=args.num_estimators,
         )
         pred = model.predict(test[query_idx].drop_columns(target_name))

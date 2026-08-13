@@ -21,6 +21,8 @@ from sklearn.metrics import roc_auc_score
 import sdm
 from sdm.processing.execution import RecipeExecution
 
+from recipe import knn_recipe
+
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--k", type=int, default=100, help="context size for kNN / random"
@@ -80,16 +82,16 @@ def orient_probs(probs: torch.Tensor, y_batch: torch.Tensor) -> torch.Tensor:
 # --- kNN index (on preprocessed features) ------------------------------------
 
 model = sdm.models.TabICLv2(device=device)
-recipe = model.default_recipe()
+recipe = knn_recipe()
 
-knn_recipe = RecipeExecution(recipe)
-knn_contexts = knn_recipe.fit_transform(
+knn_execution = RecipeExecution(recipe)
+knn_contexts = knn_execution.fit_transform(
     x=train.drop_columns(target_name),
     y=train[:, target_name],
     related_tables=None,
     num_members=1,
 )
-knn_queries = knn_recipe.transform(
+knn_queries = knn_execution.transform(
     x=test.drop_columns(target_name),
     related_tables=None,
 )
@@ -116,6 +118,7 @@ with autocast:
         x_context=train.drop_columns(target_name),
         y_context=train[:, target_name],
         x_query=test.drop_columns(target_name),
+        recipe=recipe,
         num_estimators=args.num_estimators,
     )
 print(
@@ -133,6 +136,7 @@ for i in range(args.num_random_draws):
             x_context=context.drop_columns(target_name),
             y_context=context[:, target_name],
             x_query=test.drop_columns(target_name),
+            recipe=recipe,
             num_estimators=args.num_estimators,
         )
     random_aucs.append(auc(pred_rand.numerical))
@@ -151,6 +155,7 @@ with autocast:
             x_context=context.drop_columns(target_name),
             y_context=context[:, target_name],
             x_query=test[i : i + 1].drop_columns(target_name),
+            recipe=recipe,
             num_estimators=args.num_estimators,
         )
         probs = pred.numerical  # [1, num_classes_seen]
@@ -188,6 +193,7 @@ with autocast:
             x_context=context.drop_columns(target_name),
             y_context=context[:, target_name],
             x_query=test[i : i + 1].drop_columns(target_name),
+            recipe=recipe,
             num_estimators=args.num_estimators,
         )
         probs = pred.numerical  # [1, num_classes_seen]

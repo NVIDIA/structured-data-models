@@ -163,3 +163,41 @@ Two problems with the eeg-eye-state + batching setup:
 - Added `orient_probs` per query to handle the class flip issue before concatenating
 - Added progress prints every 50 queries (e.g., `kNN 50/268`)
 - Kept AUC metric with `max(raw, 1 - raw)`, `orient_probs`, mixed context strategy, and all CLI flags except `--batch-size`
+
+## v8 — Clustered kNN script and diagnostic
+
+### New scripts
+
+- `knn_context_clustered.py`: groups test rows by k-means on features, uses union of kNN sets per cluster as shared context via fit/predict caching. Avoids per-query loop bottleneck.
+- `knn_context_diagnostic.py`: per-cluster table showing queries, ctx_size, ctx\_%pos, raw_auc, adj_auc, col1=pos, mean_conf, num_cls. Supports `--dataset` flag for eeg-eye-state, diabetes, churn.
+
+### Clustered kNN results (eeg-eye-state, k=100, 20 clusters)
+
+- Full context (10,000 rows): 0.999
+- Random context (100 rows): 0.765
+- Clustered kNN (20 clusters): 0.605
+- Clustered kNN (200 clusters): 0.503
+- More clusters = worse, not better
+
+### Cross-dataset column flip diagnostic
+
+Ran `knn_context_diagnostic.py` on three datasets. The column flip (model assigns positive-class probability to different output columns depending on the context set) is confirmed across all three:
+
+| Dataset                              | col1=pos | col1=neg | adj_auc range |
+| ------------------------------------ | -------- | -------- | ------------- |
+| eeg-eye-state (k=100, n_train=10000) | 9        | 9        | 0.987–1.000   |
+| churn (k=100, n_train=3500)          | 9        | 11       | 0.603–1.000   |
+| diabetes (k=100, n_train=500)        | 8        | 11       | 0.500–1.000   |
+| diabetes (k=10, n_train=500)         | 9        | 10       | 0.500–1.000   |
+
+### Key findings
+
+1. **The column flip is a general TabICLv2 behavior**, not dataset-specific. Across all datasets and settings, roughly half the clusters get col1=positive, half get col1=negative.
+
+2. **Per-cluster prediction quality varies by dataset.** On eeg-eye-state, adj_auc is near-perfect (0.987–1.000) in every cluster — the model learns the task perfectly but assigns classes to inconsistent columns. On diabetes, many clusters have weak adj_auc (0.500–0.625), meaning the model also struggles with local context quality on that dataset.
+
+3. **The flip is the primary blocker for aggregating predictions across different context sets.** Any approach that runs multiple fit/predict calls with different contexts (per-query, clustered, or otherwise) cannot naively concatenate probabilities because the column mapping is inconsistent.
+
+4. **Context size doesn't explain the flip.** On eeg-eye-state, clusters with 141 and 3,967 context rows both flip either way. On diabetes with k=10 (46–98 context rows), the same ~50/50 split occurs.
+
+5. **Class balance in context doesn't explain it either.** Clusters with ctx\_%pos from 0.04 to 0.63 appear on both sides of the flip.
