@@ -39,6 +39,26 @@ class ShuffleCategories(EnsembleProcessor):
         self._permutations: BufferList[BufferList[Tensor]] = BufferList()
         self._permutation_ids: tuple[int, ...] = ()
 
+    def get_extra_state(
+        self,
+    ) -> tuple[bool, tuple[tuple[int, ...], ...], tuple[int, ...]]:
+        r""":meta private:"""  # noqa: D415
+        return (
+            self._fitted,
+            self._offsets,
+            self._permutation_ids,
+        )
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        fitted, offsets, permutation_ids = cast(
+            tuple[bool, tuple[tuple[int, ...], ...], tuple[int, ...]],
+            state,
+        )
+        super().set_extra_state(fitted)
+        self._offsets = offsets
+        self._permutation_ids = permutation_ids
+
     def _draw_permutations(
         self,
         table: TableTensor,

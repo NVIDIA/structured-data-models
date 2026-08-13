@@ -1,5 +1,6 @@
 import copy
 from itertools import repeat
+from typing import cast
 
 import torch
 from torch.nn import ModuleList
@@ -38,6 +39,24 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         self.requires_fit = processor.requires_fit
 
         self._group_processors: ModuleList[Processor] = ModuleList()
+
+    def get_extra_state(self) -> tuple[bool, int]:
+        r""":meta private:"""  # noqa: D415
+        return (
+            self._fitted,
+            len(self._group_processors),
+        )
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        fitted, num_groups = cast(tuple[bool, int], state)
+        super().set_extra_state(fitted)
+        self._group_processors = ModuleList(
+            [
+                self.processor if index == 0 else copy.deepcopy(self.processor)
+                for index in range(num_groups)
+            ]
+        )
 
     @property
     def handles_stypes(self) -> frozenset[Stype]:

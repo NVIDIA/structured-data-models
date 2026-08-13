@@ -69,6 +69,39 @@ class TFIDF(EnsembleProcessor):
         self._states = torch.nn.ModuleList()
         self._member_state_ids: tuple[int, ...] = ()
 
+    def get_extra_state(
+        self,
+    ) -> tuple[bool, tuple[tuple[pa.Array, ...], ...], tuple[int, ...]]:
+        r""":meta private:"""  # noqa: D415
+        vocabularies = tuple(
+            tuple(cast(_TFIDFState, state).vocabularies)
+            for state in self._states
+        )
+        return (
+            self._fitted,
+            vocabularies,
+            self._member_state_ids,
+        )
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        fitted, vocabularies, member_state_ids = cast(
+            tuple[
+                bool,
+                tuple[tuple[pa.Array, ...], ...],
+                tuple[int, ...],
+            ],
+            state,
+        )
+        super().set_extra_state(fitted)
+        self._states = torch.nn.ModuleList(
+            [
+                _TFIDFState(list(state_vocabularies), [])
+                for state_vocabularies in vocabularies
+            ]
+        )
+        self._member_state_ids = member_state_ids
+
     def _character_ngrams(
         self,
         tensor: StringTensor,
