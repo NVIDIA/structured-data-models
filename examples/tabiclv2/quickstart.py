@@ -14,7 +14,7 @@ table = sdm.TableTensor.from_pandas(
 )
 model = sdm.models.TabICLv2(device=device)
 
-# Default in-context learning forward pass ####################################
+# Default in-context learning forward pass:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model(
         x_context=table[:300].drop_columns("target"),
@@ -23,7 +23,7 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
         num_estimators=2,
     )
 
-# Fit + Predict forward pass via key/value caching for fast inference #########
+# Fit + Predict forward pass via key/value caching for fast inference:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model.fit(
         x=table[:300].drop_columns("target"),
@@ -34,7 +34,7 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
 
 model.clear()
 
-# Capturing embeddings ########################################################
+# Capturing embeddings:
 embeddings: list[Tensor] = []
 
 
