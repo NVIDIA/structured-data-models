@@ -41,20 +41,20 @@ class SelectColumns(EnsembleProcessor):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         if self.method == "first":
-            new_groups = []
+            groups = []
             for group in ensemble_table:
-                new_columns: Mapping[StypeLike, Sequence[str]] = {
+                columns: Mapping[StypeLike, Sequence[str]] = {
                     stype: column_names[: self.max_columns]
                     for stype, column_names in group.columns.items()
                 }
-                new_blocks = {
+                blocks = {
                     stype: block[..., : self.max_columns]
                     for stype, block in group.items()
                 }
-                new_groups.append(
-                    group.__class__(columns=new_columns, **new_blocks)
+                groups.append(
+                    group.__class__(columns=new_columns, **blocks)
                 )
-            return ensemble_table.replace_groups(new_groups)
+            return ensemble_table.replace_groups(groups)
 
         assert self.method == "round_robin"
         tables = []
