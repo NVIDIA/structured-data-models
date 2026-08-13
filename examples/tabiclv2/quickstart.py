@@ -1,5 +1,6 @@
 import torch
 from sklearn.datasets import load_breast_cancer
+from torch import Tensor
 
 import sdm
 
@@ -13,7 +14,7 @@ table = sdm.TableTensor.from_pandas(
 )
 model = sdm.models.TabICLv2(device=device)
 
-# Default in-context learning forward pass:
+# Default in-context learning forward pass ####################################
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model(
         x_context=table[:300].drop_columns("target"),
@@ -22,7 +23,7 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
         num_estimators=2,
     )
 
-# Fit + Predict forward pass via key/value caching for fast inference:
+# Fit + Predict forward pass via key/value caching for fast inference #########
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model.fit(
         x=table[:300].drop_columns("target"),
@@ -32,3 +33,20 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model.predict(table[300:].drop_columns("target"))
 
 model.clear()
+
+# Capturing embeddings ########################################################
+embeddings: list[Tensor] = []
+
+
+def _embedding(module: torch.nn.Module, args: tuple[Tensor, ...]) -> None:
+    embeddings.append(args[0])
+
+
+handle = model.cls_model.icl_block.head.register_forward_pre_hook(_embedding)
+with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
+    model(
+        x_context=table[:300].drop_columns("target"),
+        y_context=table[:300, "target"],
+        x_query=table[300:].drop_columns("target"),
+    )
+handle.remove()
