@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Literal
 
 import torch
@@ -10,7 +11,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.nn._buffer import BufferList
+from sdm.nn._buffer import NestedBufferList
 from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
 from sdm.tensor import EnsembleTable
@@ -70,31 +71,7 @@ class AlignCategories(EnsembleProcessor):
     ) -> None:
         super().__init__()
         self.sort_by = sort_by
-        self._category_values = BufferList()
-        self._category_offsets: tuple[int, ...] = (0,)
-
-    @property
-    def _categories(self) -> tuple[tuple[Tensor, ...], ...]:
-        return tuple(
-            tuple(self._category_values[index] for index in range(start, end))
-            for start, end in zip(
-                self._category_offsets,
-                self._category_offsets[1:],
-            )
-        )
-
-    @_categories.setter
-    def _categories(
-        self,
-        categories: tuple[tuple[Tensor, ...], ...],
-    ) -> None:
-        values = []
-        offsets = [0]
-        for member_categories in categories:
-            values.extend(member_categories)
-            offsets.append(len(values))
-        self._category_values = BufferList(values)
-        self._category_offsets = tuple(offsets)
+        self._categories = NestedBufferList()
 
     def _fit_column(
         self,
@@ -238,7 +215,7 @@ class AlignCategories(EnsembleProcessor):
             table,
             align_codes=False,
         )
-        self._categories = fitted_categories
+        self._categories = NestedBufferList(fitted_categories)
 
     def _fit_transform(
         self,
@@ -247,7 +224,7 @@ class AlignCategories(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> TableTensor:
         fitted_categories, aligned_tables = self._fit_and_align(table)
-        self._categories = fitted_categories
+        self._categories = NestedBufferList(fitted_categories)
         return aligned_tables[0]
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -283,7 +260,7 @@ class AlignCategories(EnsembleProcessor):
                 align_codes=False,
             )
             fitted_categories.extend(group_categories)
-        self._categories = tuple(fitted_categories)
+        self._categories = NestedBufferList(fitted_categories)
 
     def _fit_transform_ensemble(
         self,
@@ -303,7 +280,7 @@ class AlignCategories(EnsembleProcessor):
             tables=aligned_tables,
             member_table_ids=member_table_ids,
         )
-        self._categories = tuple(fitted_categories)
+        self._categories = NestedBufferList(fitted_categories)
         return output
 
     def _transform_ensemble(
@@ -318,7 +295,9 @@ class AlignCategories(EnsembleProcessor):
             aligned_tables.extend(
                 self._align_to_categories(
                     group,
-                    self._categories[offset:end],
+                    tuple(
+                        self._categories[index] for index in range(offset, end)
+                    ),
                 )
             )
             offset = end
@@ -422,7 +401,7 @@ class AlignCategories(EnsembleProcessor):
     def _align_to_categories(
         self,
         table: TableTensor,
-        fitted_categories: tuple[tuple[Tensor, ...], ...],
+        fitted_categories: Sequence[Sequence[Tensor]],
     ) -> tuple[TableTensor, ...]:
         codes = table.categorical.code
         single_table = codes.dim() == 2
