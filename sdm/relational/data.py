@@ -241,7 +241,7 @@ class RelationalData(DeviceMixin):
     ) -> RelationalSampler:
         r"""Create a device-appropriate sampler over this relational data.
 
-        .. testcode::
+        .. code-block:: python
 
             import sdm
 
