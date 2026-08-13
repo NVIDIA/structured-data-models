@@ -4,7 +4,7 @@ import torch
 from sdm import TableTensor
 from sdm.processing import PowerTransform
 from sdm.processing.numerical import power as power_module
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
 @onlyFullTest
