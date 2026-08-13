@@ -9,14 +9,12 @@ from torch.nn import Embedding, LayerNorm, Linear, ModuleList, Parameter
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
+from sdm.models.tabiclv2.config import TabICLv2InferenceConfig
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding
 from sdm.nn.memory import (
     attention_batch_size_limit,
     cuda_attention_memory_limit,
 )
-
-_MEMORY_EFFICIENT_COLUMN_CHUNK_SIZE = 4
-_MEMORY_EFFICIENT_ROW_CHUNK_SIZE = 2048
 
 
 class RowEmbedding(torch.nn.Module):
@@ -127,6 +125,7 @@ class RowEmbedding(torch.nn.Module):
         num_digits: int,
         cache: Cache | None,
         batch_size_limit: int | None,
+        inference_config: TabICLv2InferenceConfig,
     ) -> Tensor:
         R, C = x.size()[-2:]
         G = self.lin.in_features
@@ -151,9 +150,9 @@ class RowEmbedding(torch.nn.Module):
                 [] for _ in self.col_layers
             ]
             # Phase 1: build each layer's inducing K/V by column chunks.
-            for start in range(0, C, _MEMORY_EFFICIENT_COLUMN_CHUNK_SIZE):
+            for start in range(0, C, inference_config.column_chunk_size):
                 end = min(
-                    start + _MEMORY_EFFICIENT_COLUMN_CHUNK_SIZE,
+                    start + inference_config.column_chunk_size,
                     C,
                 )
                 context = (
@@ -203,8 +202,8 @@ class RowEmbedding(torch.nn.Module):
 
         out: Tensor | None = None
         # Phase 2: replay those K/V summaries over independent row chunks.
-        for start in range(0, R, _MEMORY_EFFICIENT_ROW_CHUNK_SIZE):
-            end = min(start + _MEMORY_EFFICIENT_ROW_CHUNK_SIZE, R)
+        for start in range(0, R, inference_config.row_chunk_size):
+            end = min(start + inference_config.row_chunk_size, R)
             chunk = self._project_chunk(
                 x=x,
                 row_start=start,
@@ -289,6 +288,7 @@ class RowEmbedding(torch.nn.Module):
         batch_size_limit: int | None = None,
         generator: torch.Generator | None = None,
         memory_efficient: bool = False,
+        inference_config: TabICLv2InferenceConfig | None = None,
     ) -> Tensor:  # [..., R, K * D]
         R, C = x.size()[-2:]
         R_train = y.size(-1)
@@ -319,7 +319,10 @@ class RowEmbedding(torch.nn.Module):
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
 
-        if memory_efficient and R > _MEMORY_EFFICIENT_ROW_CHUNK_SIZE:
+        if inference_config is None:
+            inference_config = TabICLv2InferenceConfig()
+
+        if memory_efficient and inference_config.row_chunk_size < R:
             if torch.compiler.is_compiling():
                 raise RuntimeError(
                     "Memory-efficient row embedding does not support "
@@ -354,6 +357,7 @@ class RowEmbedding(torch.nn.Module):
                 num_digits=num_digits,
                 cache=cache,
                 batch_size_limit=batch_size_limit,
+                inference_config=inference_config,
             )
 
         # Feature grouping: gather G columns into each token.

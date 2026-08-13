@@ -12,6 +12,7 @@ from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.tabiclv2.ckpt import remap_ckpt
+from sdm.models.tabiclv2.config import TabICLv2InferenceConfig
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -124,6 +125,8 @@ class TabICLv2(ICLModel):
             columns in chunks when there are more than 2,048 total rows;
             smaller inputs use the standard row embedding. Cached prediction
             reuses both the groups and execution selected during :meth:`fit`.
+        inference_config: Advanced inference controls. The default uses row
+            chunks of 2,048 and column chunks of 4, matching TabPFN v3.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -143,8 +146,14 @@ class TabICLv2(ICLModel):
         device: torch.device | str | None = None,
         *,
         estimator_execution: _EstimatorExecution = "sequential",
+        inference_config: TabICLv2InferenceConfig | None = None,
     ) -> None:
         super().__init__(estimator_execution=estimator_execution)
+        self.inference_config = (
+            TabICLv2InferenceConfig()
+            if inference_config is None
+            else inference_config
+        )
 
         self.cls_model = _TabICLv2(
             num_classes=10,
@@ -251,6 +260,7 @@ class TabICLv2(ICLModel):
                 y,
                 cache=cache,
                 memory_efficient=memory_efficient,
+                inference_config=self.inference_config,
             )
             raw = raw.sort(dim=-1)[0]
         else:
@@ -260,6 +270,7 @@ class TabICLv2(ICLModel):
                 cache=cache,
                 num_classes=len(classes),
                 memory_efficient=memory_efficient,
+                inference_config=self.inference_config,
             )
         return self._to_table(raw, classes)
 
@@ -330,6 +341,7 @@ class _TabICLv2(torch.nn.Module):
         cache: Cache | None = None,
         num_classes: int | None = None,
         memory_efficient: bool = False,
+        inference_config: TabICLv2InferenceConfig | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if not y.is_floating_point():
             assert num_classes is not None
@@ -341,6 +353,7 @@ class _TabICLv2(torch.nn.Module):
                 num_classes=num_classes,
                 cache=cache,
                 memory_efficient=True,
+                inference_config=inference_config,
             )
         else:
             # Preserve the original call for compatible RowEmbedding
