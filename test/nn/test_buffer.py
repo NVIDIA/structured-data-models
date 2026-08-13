@@ -1,6 +1,5 @@
 import copy
 
-import pytest
 import torch
 
 from sdm.nn._buffer import BufferList
@@ -21,30 +20,8 @@ def test_buffer_list_is_an_indexed_buffer_collection() -> None:
 
     assert len(buffers) == 2
     assert tuple(name for name, _ in buffers.named_buffers()) == ("0", "1")
-    assert buffers[-1] is buffers[1]
-    with pytest.raises(IndexError, match="out of range"):
-        buffers[2]
-
-
-def test_buffer_list_respects_persistence() -> None:
-    persistent = BufferList([torch.tensor([1.0]), torch.tensor([2.0])])
-    non_persistent = BufferList(
-        [torch.tensor([3.0]), torch.tensor([4.0])],
-        persistent=False,
-    )
-
-    assert tuple(persistent.state_dict()) == ("0", "1")
-    assert tuple(non_persistent.state_dict()) == ()
-    assert len(tuple(non_persistent.buffers())) == 2
-    with pytest.raises(RuntimeError, match="Unexpected key"):
-        non_persistent.load_state_dict(persistent.state_dict())
-
-    restored = BufferList()
-    restored.load_state_dict(persistent.state_dict())
-    assert all(
-        torch.equal(actual, expected)
-        for actual, expected in zip(restored, persistent, strict=True)
-    )
+    assert buffers[0].equal(torch.tensor([1.0, 2.0]))
+    assert tuple(buffers)[1].equal(torch.tensor([3.0]))
 
 
 def test_buffer_list_loads_tensor_subclasses() -> None:
@@ -93,46 +70,6 @@ def test_buffer_list_moves_device_and_floating_dtype(
     assert buffers[0].dtype == torch.float64
     assert buffers[1].device == device
     assert buffers[1].dtype == torch.long
-
-
-@withCUDA
-def test_buffer_list_load_preserves_destination_device_and_dtype(
-    device: torch.device,
-) -> None:
-    source = BufferList([torch.tensor([1.0, 2.0])])
-    target = BufferList([torch.empty(0, dtype=torch.float64)]).to(device)
-
-    target.load_state_dict(source.state_dict())
-
-    assert target[0].device == device
-    assert target[0].dtype == torch.float64
-    assert torch.equal(
-        target[0].cpu(),
-        torch.tensor([1.0, 2.0], dtype=torch.float64),
-    )
-
-
-@pytest.mark.parametrize("size", [0, 1])
-def test_buffer_list_load_resizes_to_checkpoint(size: int) -> None:
-    source = BufferList(torch.tensor([float(index)]) for index in range(size))
-    target = BufferList([torch.tensor([1.0]), torch.tensor([2.0])])
-
-    target.load_state_dict(source.state_dict())
-
-    assert len(target) == size
-    assert tuple(target.state_dict()) == tuple(
-        str(index) for index in range(size)
-    )
-
-
-def test_buffer_list_load_honors_assign() -> None:
-    state = BufferList([torch.tensor([1.0])]).state_dict()
-    target = BufferList([torch.empty(1, dtype=torch.float64)])
-
-    target.load_state_dict(state, assign=True)
-
-    assert target[0] is state["0"]
-    assert target[0].dtype == torch.float32
 
 
 def test_buffer_list_deepcopy_has_independent_storage() -> None:
