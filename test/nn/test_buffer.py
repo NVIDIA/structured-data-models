@@ -37,6 +37,23 @@ def test_buffer_list_loads_tensor_subclasses() -> None:
     assert torch.equal(source[0], tensor)
 
 
+@withCUDA
+def test_buffer_list_preserves_existing_buffer_on_load(
+    device: torch.device,
+) -> None:
+    buffer = torch.empty(1, dtype=torch.float64, device=device)
+    restored = BufferList([buffer])
+
+    restored.load_state_dict(BufferList([torch.tensor([3.0])]).state_dict())
+
+    assert restored[0] is buffer
+    assert restored[0].dtype == torch.float64
+    assert restored[0].device == device
+    assert restored[0].equal(
+        torch.tensor([3.0], dtype=torch.float64, device=device)
+    )
+
+
 def test_buffer_list_registers_as_a_nested_module() -> None:
     module = torch.nn.Module()
     module.buffer_list = BufferList([torch.tensor([1.0])])

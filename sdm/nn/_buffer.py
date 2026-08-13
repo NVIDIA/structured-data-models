@@ -33,9 +33,13 @@ class BufferList(torch.nn.Module):
         loaded_keys = []
         index = 0
         while isinstance(state_dict.get(f"{prefix}{index}"), Tensor):
+            name = str(index)
             key = f"{prefix}{index}"
-            self.register_buffer(str(index), state_dict.pop(key).clone())
-            loaded_keys.append(key)
+            # Let PyTorch load existing buffers in place; only materialize
+            # entries missing from a fresh list.
+            if name not in self._buffers:
+                self.register_buffer(name, state_dict.pop(key).clone())
+                loaded_keys.append(key)
             index += 1
 
         super()._load_from_state_dict(
