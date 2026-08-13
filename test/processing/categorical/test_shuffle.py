@@ -117,6 +117,17 @@ def test_shuffle_categories_preserves_missing() -> None:
     assert output.categorical.tolist() == target.categorical.tolist()
 
 
+def test_shuffle_categories_preserves_empty_vocabulary() -> None:
+    target = _table(
+        [[-1], [-1]],
+        ((),),
+    )
+
+    output = ShuffleCategories(method="random").fit_transform(target)
+
+    assert output.equal(target)
+
+
 @pytest.mark.parametrize("method", ["shift", "random"])
 def test_shuffle_categories_ensemble_matches_independent_processors(
     method: Literal["shift", "random"],
@@ -166,6 +177,110 @@ def test_shuffle_categories_ensemble_matches_independent_processors(
         expected_query = reference.transform(query_tables[table_id])
         assert context_output.table(member_id).equal(expected_context)
         assert query_output.table(member_id).equal(expected_query)
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
+@withCUDA
+def test_shuffle_categories_shares_permutations_by_table_repetition(
+    method: Literal["shift", "random"],
+    device: torch.device,
+) -> None:
+    first = _table(
+        [[0], [1], [2]],
+        (("a", "b", "c"),),
+        device=device,
+    )
+    second = _table(
+        [[0], [1], [2]],
+        (("x", "y", "z"),),
+        device=device,
+    )
+    ensemble = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0, 1),
+    )
+    generator = torch.Generator(device=device).manual_seed(7)
+
+    processor = ShuffleCategories(method=method).fit_ensemble(
+        ensemble,
+        generator=generator,
+    )
+    output = processor.transform_ensemble(ensemble)
+
+    assert torch.equal(
+        output.table(0).categorical.code,
+        output.table(1).categorical.code,
+    )
+    assert torch.equal(
+        output.table(2).categorical.code,
+        output.table(3).categorical.code,
+    )
+    for member_id in range(ensemble.num_members):
+        assert output.table(member_id).categorical.tolist() == (
+            ensemble.table(member_id).categorical.tolist()
+        )
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_categories_uses_schema_compatible_shared_states(
+    method: Literal["shift", "random"],
+) -> None:
+    first = _table(
+        [[0], [1], [2]],
+        (("a", "b", "c"),),
+    )
+    second = _table(
+        [[0, 0], [1, 1], [2, 0]],
+        (("x", "y", "z"), ("off", "on")),
+    )
+    ensemble = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0, 1),
+    )
+
+    processor = ShuffleCategories(method=method).fit_ensemble(
+        ensemble,
+        generator=torch.Generator().manual_seed(7),
+    )
+    output = processor.transform_ensemble(ensemble)
+
+    assert output.table(0).categorical.size(-1) == 1
+    assert output.table(1).categorical.size(-1) == 2
+    for member_id in range(ensemble.num_members):
+        assert output.table(member_id).categorical.tolist() == (
+            ensemble.table(member_id).categorical.tolist()
+        )
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_categories_restores_ensemble_state(
+    method: Literal["shift", "random"],
+) -> None:
+    first = _table(
+        [[0], [1], [2]],
+        (("a", "b", "c"),),
+    )
+    second = _table(
+        [[2], [1], [0]],
+        (("x", "y", "z"),),
+    )
+    ensemble = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0, 1),
+    )
+    processor = ShuffleCategories(method=method).fit_ensemble(
+        ensemble,
+        generator=torch.Generator().manual_seed(7),
+    )
+    expected = processor.transform_ensemble(ensemble)
+
+    restored = ShuffleCategories(method=method)
+    restored.load_state_dict(processor.state_dict())
+    output = restored.transform_ensemble(ensemble)
+
+    assert restored.is_fitted
+    for member_id in range(ensemble.num_members):
+        assert output.table(member_id).equal(expected.table(member_id))
 
 
 def test_shuffle_categories_requires_fitted_member_count() -> None:
