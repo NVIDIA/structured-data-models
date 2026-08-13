@@ -1,3 +1,5 @@
+from typing import cast
+
 import torch
 
 from sdm import CategoricalTensor, Stype, TableTensor
@@ -112,7 +114,7 @@ class ImputeMode(Processor):
         for index, (actual, expected) in enumerate(
             zip(table.categorical.categories, self._categories)
         ):
-            expected = expected.to(device=actual.device)
+            expected = cast(torch.Tensor, expected).to(device=actual.device)
             if not actual.equal(expected):
                 raise ValueError(
                     "Expected the category vocabulary for categorical column "
