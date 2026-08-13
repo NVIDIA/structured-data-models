@@ -171,6 +171,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#model-concepts">Model Concepts</a></li>
 <li><a class="reference internal" href="#ensembling">Ensembling</a></li>
 <li><a class="reference internal" href="#autocasting">Autocasting</a></li>
+<li><a class="reference internal" href="#embeddings">Embeddings</a></li>
 <li><a class="reference internal" href="#relational-context">Relational Context</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
@@ -306,6 +307,19 @@ For example, to run the model forward pass in <a class="reference external" href
 <p>Pre-processing and post-processing routines remain outside the model’s autocast policy.
 They will run with the dtypes of the model inputs.</p>
 </section>
+<section id="embeddings">
+<h2>Embeddings<a class="headerlink" href="#embeddings" title="Link to this heading">#</a></h2>
+<p>Intermediate embeddings of a <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> can be captured by attaching a standard PyTorch hook at any child module, <em>e.g.</em>, via <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.register_forward_pre_hook" title="(in PyTorch v2.13)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.register_forward_pre_hook()</span></code></a>.
+For example, the following snippet records the query embeddings passed into the <a class="reference internal" href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a> classification head:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="k">def</span><span class="w"> </span><span class="nf">_embedding</span><span class="p">(</span><span class="n">_module</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">args</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span data-line="2">    <span class="n">query_embedding</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</span><span data-line="3">
+</span><span data-line="4"><span class="n">model</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">TabICLv2</span><span class="p">()</span>
+</span><span data-line="5"><span class="n">handle</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">cls_model</span><span class="o">.</span><span class="n">icl_block</span><span class="o">.</span><span class="n">head</span><span class="o">.</span><span class="n">register_forward_pre_hook</span><span class="p">(</span><span class="n">_embedding</span><span class="p">)</span>
+</span></pre></div>
+</div>
+<p>Such embeddings can be used for downstream analysis, such as clustering, retrieval, or similarity search.</p>
+</section>
 <section id="relational-context">
 <h2>Relational Context<a class="headerlink" href="#relational-context" title="Link to this heading">#</a></h2>
 <p>So far, we have described the single-table in-context learning paradigm.
@@ -438,7 +452,7 @@ The full relational sampling and prediction flow is shown in <a class="reference
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=2badc35e"></script>
+      <script src="_static/documentation_options.js?v=5c360fc3"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
