@@ -6,7 +6,7 @@ from torch._ops import OpOverload
 from torch.utils._python_dispatch import TorchDispatchMode
 
 from sdm.cache import Cache, KVCacheEntry
-from sdm.models import TabICLv2InferenceConfig
+from sdm.models.tabiclv2 import TabICLv2InferenceConfig
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.testing import withCUDA

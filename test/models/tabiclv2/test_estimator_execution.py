@@ -4,7 +4,8 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm.models import TabICLv2, TabICLv2InferenceConfig
+from sdm.models import TabICLv2
+from sdm.models.tabiclv2 import TabICLv2InferenceConfig
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention, TransformerBlock
