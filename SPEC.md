@@ -1,47 +1,41 @@
-# Spec: Couple target category shuffles by estimator
+# Spec: Estimatorgekoppelte Target-Kategorie-Shuffles
 
-Reference: `tabicl==2.0.0` at `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` at `ee56f84161cb1c93b559977d67447e82b16d3541`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bb06773db1b469e027acb385d4fe43dcfe21d2ee`.
 
 ## Problem
 
-Current `ShuffleCategories` is already estimator-aware, but it samples each estimator independently. TabICLv2 does something different: it creates all cyclic class shifts, pairs them with the Latin feature patterns, shuffles those pairs with one seed, and executes every selected pair once with `none` and once with `power` normalization. The two normalization members must therefore share the same class shuffle.
+`ShuffleCategories` arbeitet auf `main` bereits estimatorabhängig, zieht aber für jeden logischen Estimator unabhängig eine Permutation. TabICLv2 bildet zuerst Paare aus Feature- und Klassen-Pattern, mischt diese mit einem Seed und führt jedes ausgewählte Paar einmal mit `none`- und einmal mit `power`-Normalisierung aus. Beide Normalisierungen müssen deshalb denselben Klassen-Shift verwenden.
 
-This processor belongs only in the TabICLv2 target path. Categorical features are aligned, converted to numerical columns, and later covered by `ShuffleColumns`; moving `ShuffleCategories` into the feature path would multiply expensive categorical representations without matching the reference.
+Der Processor gehört im TabICLv2-Rezept nur in den Target-Pfad. Kategoriale Features werden ausgerichtet, numerisch kodiert und später durch `ShuffleColumns` abgedeckt. Ein zusätzlicher Feature-Category-Shuffle würde Repräsentationen vervielfachen, ohne Referenzverhalten herzustellen. Vor der Estimatorreduktion muss außerdem jede Modell-Ausgabe wieder dieselbe kanonische, nach Werten sortierte Klassenachse beschreiben.
 
-Independent shifts also leave output mapping ambiguous. Before estimator outputs are combined, every class axis must describe the same canonical, value-sorted target vocabulary.
+## Lösung
 
-## Proposed solution
-
-- Build one private TabICLv2 estimator plan containing `(feature_pattern_id, class_pattern_id, normalization_id)` for every global estimator ID.
-- Give `ShuffleCategories` a narrow internal resolver for fitted per-member permutations. It receives global member IDs and category counts; the existing `method="shift"` path remains unchanged when no plan is supplied.
-- Generate class patterns exactly as the reference: identity for one estimator, otherwise every cyclic shift, then pair and seed-shuffle them with the feature pattern IDs before normalization is assigned.
-- Reuse the processor's existing permutation-state deduplication so the same target mapping is transformed once and shared by the `none`/`power` pair.
-- Align target categories by value and map each estimator output back to that canonical class axis before reduction. Do not add a public TabICLv2-specific mode to the generic processor.
-
-Pseudo-code:
+- Ein privater, modellseitiger Estimatorplan ordnet jeder globalen Estimator-ID `(feature_pattern_id, class_shift_id, normalization_id)` zu. Er erzeugt die Feature-/Klassen-Kombination und Seed-Mischung exakt wie die Referenz; die Normalisierungsduplizierung geschieht erst danach.
+- `ShuffleCategories` erhält einen schmalen internen Resolver für vorgeplante Permutations-IDs. Ohne Plan bleibt das allgemeine unabhängige Verhalten unverändert; es entsteht kein öffentlicher TabICLv2-Modus.
+- Für `method="shift"` speichert der allgemeine Zustand nur den Offset statt eines materialisierten Mappings der Länge `K`. Gleiche Offsets werden einmal gehalten und von allen zugehörigen Estimatoren referenziert.
+- Kompatible Target-Tabellen werden für alle eindeutigen Offsets auf CUDA in einem Durchlauf berechnet: `(code[None] - shifts[:, None, None]) % K`. Ein `where` erhält negative Missing-Codes; die invers verschobenen Kategorie-Vektoren sichern dieselben dekodierten Werte. `random` nutzt weiterhin das allgemeine Mapping.
+- Nach dem Modell wird jede Estimatorausgabe mit ihrem inversen Shift auf den kanonischen Klassenraum abgebildet und erst dann reduziert.
 
 ```text
-fit canonical target vocabulary
-build seeded feature × class configuration IDs
-duplicate each selected pair for none and power
-resolve the class permutation from the global estimator ID
-transform the shared target once per unique class permutation
-inverse-map every model output to canonical classes, then reduce
+kanonisches Target fitten -> gekoppelte Estimator-IDs planen -> eindeutige Shifts gebündelt anwenden
+Modell pro Estimator -> Klassenachse invers kanonisieren -> Estimatoren reduzieren
 ```
 
-## Benchmark results
+## GPU-Benchmark-Ergebnisse
 
-Synchronized wall time, 10 repeats, 50,000-row target, one categorical column, cardinality 100, eight estimators; the paired prototype has four unique shifts. GPU is an NVIDIA L4 with int32 codes.
+NVIDIA L4, PyTorch 2.13/CUDA 13, int32-Codes, eine Target-Spalte, 10 % Missing, acht Estimatoren und vier gekoppelte Shifts; synchronisierte Median/p95-Wall-Time über 30 Läufe.
 
-| Device | Independent median/p95 | Paired median/p95 |      Peak delta |
-| ------ | ---------------------: | ----------------: | --------------: |
-| CPU    |        8.76 / 11.23 ms |    5.15 / 6.34 ms |    not measured |
-| L4     |         6.97 / 7.22 ms |    3.85 / 4.01 ms | 2.54 → 2.15 MiB |
+| Zeilen / Klassen | Main: 8 unabhängig | Nur gekoppelt: 4 Mappings | Gekoppelte Shift-Arithmetik | Peak Main → Arithmetik |
+| ---------------: | -----------------: | ------------------------: | --------------------------: | ---------------------: |
+|      50.000 / 10 |     6,005/7,480 ms |            4,288/6,471 ms |              0,728/0,814 ms |        2,44 → 1,57 MiB |
+|     50.000 / 100 |     6,107/6,407 ms |            3,176/3,652 ms |              0,766/0,986 ms |        2,44 → 1,57 MiB |
+|    500.000 / 100 |     6,161/6,836 ms |            3,162/3,414 ms |              0,735/0,832 ms |      26,37 → 15,74 MiB |
 
-A deliberately irrelevant feature stress case (10,000 rows, 32 columns, cardinality 1,024) improved from 68.62 to 36.24 ms median on L4, but it must not be added to the TabICLv2 recipe.
+Eine Lookup-Tabelle war bei 50.000 Zeilen/100 Klassen mit 0,800 ms langsamer und brauchte 2,34 MiB. Der CUDA-Profiler zählt pro Anwendung 192 Kernel-Events auf `main`, aber nur 15 für die Shift-Arithmetik. Damit ist nicht nur das Koppeln korrekt: Die kompakte Arithmetik ist unter den semantisch gleichwertigen Kandidaten auch der schnellste gemessene Pfad.
 
-## Testing
+## Teststrategie
 
-- Compare class-pattern assignment and the full coupled plan exactly with the pinned reference for classification and regression.
-- Verify global IDs in vectorized and one-member sequential execution, shared `none`/`power` mappings, missing labels, one/many classes, and deterministic seeds.
-- Compare per-estimator canonical outputs, reduction, final class columns, and public probabilities; keep generic independent-shuffle tests unchanged.
+- Feature-/Klassen-Plan, globale IDs und Seed-Verbrauch für Klassifikation und Regression exakt mit der gepinnten Referenz vergleichen.
+- Gleiche `none`-/`power`-Shifts, Missing-Codes, eine/viele Klassen, deterministische Seeds sowie vektorisierte und sequenzielle Estimatorausführung prüfen.
+- Shift-Arithmetik elementweise gegen das bestehende Mapping vergleichen; `random` und unabhängiges generisches Shuffling unverändert testen.
+- Per-Estimator-Ausgaben nach kanonischer Rückabbildung, Reduktion, finale Klassenreihenfolge und öffentliche Wahrscheinlichkeiten vergleichen.
