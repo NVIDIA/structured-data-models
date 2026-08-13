@@ -39,7 +39,6 @@ class InducedTransformerBlock(torch.nn.Module):
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         num_inducing_points: The number of learned inducing points :math:`M`.
-        qassmax: Whether to scale induced vectors with :class:`QASSMax`.
         norm: The normalization layer name or a callable returning the
             normalization layer. The callable is invoked once per norm site,
             so each site gets a fresh instance. A module instance is shared
@@ -47,6 +46,7 @@ class InducedTransformerBlock(torch.nn.Module):
         norm_kwargs: Additional keyword arguments passed to the normalization
             layer constructor. Takes precedence over ``device`` and
             ``dtype``.
+        qassmax: Whether to scale induced vectors with :class:`QASSMax`.
         device: The device.
         dtype: The dtype.
     """
@@ -58,9 +58,9 @@ class InducedTransformerBlock(torch.nn.Module):
         feedforward_channels: int,
         num_key_value_heads: int | None = None,
         num_inducing_points: int = 16,
-        qassmax: bool = False,
         norm: str | Callable[..., torch.nn.Module] = "layer_norm",
         norm_kwargs: dict[str, Any] | None = None,
+        qassmax: bool = False,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -72,9 +72,9 @@ class InducedTransformerBlock(torch.nn.Module):
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
             feedforward_channels=feedforward_channels,
-            qassmax=qassmax,
             norm=norm,
             norm_kwargs=norm_kwargs,
+            qassmax=qassmax,
             **factory_kwargs,
         )
         self.transformer_2 = TransformerBlock(
