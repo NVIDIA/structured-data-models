@@ -121,7 +121,7 @@ Intermediate embeddings of any {py:class}`~sdm.models.ICLModel` can be captured 
 For example, the following snippet records the query embeddings passed into the {py:class}`~sdm.models.TabICLv2` classification head:
 
 ```python
-def _embedding(_module: torch.nn.Module, args: tuple[torch.Tensor, ...]) -> None:
+def _embedding(_module: torch.nn.Module, args: tuple[Tensor, ...]) -> None:
     query_embedding = args[0]
 
 model = sdm.models.TabICLv2()
