@@ -207,3 +207,11 @@ Ran `knn_context_diagnostic.py` on three datasets. The column flip (model assign
 Root cause: `AlignCategories(sort_by="code")` on the target preserves data-dependent category order from PyArrow, then `ShuffleCategories` adds a random offset. Different context sets → different orderings.
 
 Fix: shared `recipe.py` with `AlignCategories(sort_by="value")` on target + fixed `generator` on every model call. Both needed — `sort_by="value"` canonicalizes base order, fixed generator makes shuffle deterministic.
+
+## v10 — Batched kNN script
+
+New script `knn_context_batched.py`. Bypasses `ICLModel` wrapper and calls `_TabICLv2` directly with a batch dimension `[B, k+1, C]`. All per-query contexts processed in one forward pass (chunked for memory). No Python loop over test rows.
+
+Verified that `_TabICLv2`, `RowEmbedding`, `ICLBlock`, `InducedTransformerBlock`, and `TransformerBlock` all support arbitrary leading batch dims — `...` indexing, `*B` unpacking, and `torch.broadcast_shapes` throughout.
+
+Tradeoffs vs ICLModel path: single estimator (no ensemble diversity), no KV caching, recipe preprocessing done upfront separately. Softmax with temperature=0.9 applied manually to match default recipe output.
