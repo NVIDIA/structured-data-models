@@ -11,12 +11,17 @@ from sdm import (
     TableTensor,
 )
 from sdm.cache import Cache
-from sdm.models import KumoRFM
-from sdm.models.kumorfm import invariant_gnn as invariant_gnn_module
-from sdm.models.kumorfm import model as kumorfm_model
-from sdm.models.kumorfm.graph import HomogeneousGraph
-from sdm.models.kumorfm.invariant_gnn import InvariantGNN
-from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
+from sdm.models import NemotronRelational
+from sdm.models.nemotron_relational import (
+    invariant_gnn as invariant_gnn_module,
+)
+from sdm.models.nemotron_relational import model as nemotron_relational_model
+from sdm.models.nemotron_relational.graph import HomogeneousGraph
+from sdm.models.nemotron_relational.invariant_gnn import InvariantGNN
+from sdm.models.nemotron_relational.model import (
+    _NemotronRelational,
+    _remap_v2_1_checkpoint,
+)
 from sdm.testing import withCUDA
 
 
@@ -40,7 +45,7 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
         return {"state_dict": {path: torch.tensor(1)}}
 
     def load_state_dict(
-        self: _KumoRFM,
+        self: _NemotronRelational,
         state_dict: object,
         strict: bool = True,
         assign: bool = False,
@@ -55,12 +60,22 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
         remaps.append((state_dict, is_classifier))
         return {str(is_classifier): torch.tensor(1)}
 
-    monkeypatch.setattr(kumorfm_model, "download_checkpoint", download)
-    monkeypatch.setattr(kumorfm_model.torch, "load", load)
-    monkeypatch.setattr(kumorfm_model, "_remap_v2_1_checkpoint", remap)
-    monkeypatch.setattr(_KumoRFM, "load_state_dict", load_state_dict)
+    monkeypatch.setattr(
+        nemotron_relational_model, "download_checkpoint", download
+    )
+    monkeypatch.setattr(nemotron_relational_model.torch, "load", load)
+    monkeypatch.setattr(
+        nemotron_relational_model,
+        "_remap_v2_1_checkpoint",
+        remap,
+    )
+    monkeypatch.setattr(
+        _NemotronRelational,
+        "load_state_dict",
+        load_state_dict,
+    )
 
-    model = KumoRFM()
+    model = NemotronRelational()
 
     assert not model.training
     assert model.reg_model.row_embedding.norm.bias is not None
@@ -285,11 +300,11 @@ def test_forward(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
-    model = KumoRFM(pretrained=False, device=device)
+    model = NemotronRelational(pretrained=False, device=device)
     if device.type == "cpu":
-        assert repr(model) == "KumoRFM()"
+        assert repr(model) == "NemotronRelational()"
     else:
-        assert repr(model) == "KumoRFM(device=cuda:0)"
+        assert repr(model) == "NemotronRelational(device=cuda:0)"
 
     related_tables = RelatedTables(
         tables=relational_data.tables,
@@ -397,7 +412,7 @@ def test_many_classes_forward_and_cache(
             }
         ],
     )
-    model = _KumoRFM(
+    model = _NemotronRelational(
         num_classes=2,
         num_quantiles=0,
         channels=4,

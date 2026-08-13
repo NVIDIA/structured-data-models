@@ -8,7 +8,7 @@ A foundation model in this domain needs more than the neural network itself: typ
 `structured-data-models` keeps these concerns explicit while moving the full modeling workflow into GPU-accelerated PyTorch.
 In particular, this library provides:
 
-- [**Models**](icl): Reference implementations of structured data foundation models such as the tabular {py:class}`~sdm.models.TabICLv2` and relational {py:class}`~sdm.models.KumoRFM`, built on a unified interface with room for future model families.
+- [**Models**](icl): Reference implementations of structured data foundation models such as the tabular {py:class}`~sdm.models.TabICLv2` and relational {py:class}`~sdm.models.NemotronRelational`, built on a unified interface with room for future model families.
 - [**Tensor semantics**](tensor): PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - [**Data processing**](processing): Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
@@ -106,4 +106,4 @@ For example, datetime columns can be expanded into calendar features, and text c
 These components are reusable across model families rather than tied to a single model implementation, and are designed for ensemble-aware, GPU-accelerated execution across the entire processing stack.
 
 For relational tasks, {py:class}`~sdm.relational.RelatedTables` allows foundation models to attach to surrounding tables and relationships.
-Models that support relational context, such as {py:class}`~sdm.models.KumoRFM`, can process these {py:class}`~sdm.relational.RelatedTables` through the same {py:meth}`~sdm.models.ICLModel.fit`, {py:meth}`~sdm.models.ICLModel.predict`, {py:class}`~sdm.processing.recipe.Recipe`, and {py:class}`~sdm.tensor.TableTensor` interfaces.
+Models that support relational context, such as {py:class}`~sdm.models.NemotronRelational`, can process these {py:class}`~sdm.relational.RelatedTables` through the same {py:meth}`~sdm.models.ICLModel.fit`, {py:meth}`~sdm.models.ICLModel.predict`, {py:class}`~sdm.processing.recipe.Recipe`, and {py:class}`~sdm.tensor.TableTensor` interfaces.
