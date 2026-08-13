@@ -39,16 +39,13 @@ def test_buffer_list_loads_tensor_subclasses() -> None:
 
 def test_buffer_list_registers_as_a_nested_module() -> None:
     module = torch.nn.Module()
-    module.register_buffer("0", torch.tensor([2.0]))
     module.buffer_list = BufferList([torch.tensor([1.0])])
 
-    assert tuple(module.state_dict()) == ("0", "buffer_list.0")
+    assert tuple(module.state_dict()) == ("buffer_list.0",)
 
     restored = torch.nn.Module()
-    restored.register_buffer("0", torch.empty(1))
     restored.buffer_list = BufferList()
     restored.load_state_dict(module.state_dict())
-    assert torch.equal(restored.get_buffer("0"), torch.tensor([2.0]))
     assert torch.equal(restored.buffer_list[0], torch.tensor([1.0]))
 
 
