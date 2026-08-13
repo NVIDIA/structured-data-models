@@ -123,3 +123,21 @@ def test_ensemble_processor_state_dict_round_trip() -> None:
         restored = factory()
         restored.load_state_dict(_round_trip(processor))
         _assert_ensemble_equal(restored.transform_ensemble(ensemble), expected)
+
+
+def test_stype_dispatch_restores_routes_active_during_fit() -> None:
+    fit_table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0], [4.0]]))
+    transform_table = _mixed_table()
+    processor = sp.StypeDispatch(
+        numerical=sp.Standardize(),
+        categorical=sp.ImputeMode(),
+    ).fit(fit_table)
+    expected = processor.transform(transform_table)
+
+    restored = sp.StypeDispatch(
+        numerical=sp.Standardize(),
+        categorical=sp.ImputeMode(),
+    )
+    restored.load_state_dict(_round_trip(processor))
+
+    assert restored.transform(transform_table).equal(expected)
