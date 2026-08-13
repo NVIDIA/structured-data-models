@@ -1,9 +1,9 @@
 from typing import Literal, cast
 
 import torch
-from torch import Tensor
 
 from sdm import Stype, TableTensor
+from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
@@ -30,7 +30,7 @@ class RandomProjection(EnsembleProcessor):
         super().__init__()
         self.channels = channels
         self.init = init
-        self._weights: list[Tensor] = []
+        self._weights = BufferList()
 
     def _fit_ensemble(
         self,
@@ -38,7 +38,7 @@ class RandomProjection(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._weights = []
+        weights = []
         for i, group in enumerate(ensemble_table):
             num_members = ensemble_table.num_members_in_group(i)
             weight = group.numerical.new_empty(
@@ -51,7 +51,8 @@ class RandomProjection(EnsembleProcessor):
             )
             assert self.init == "normal"
             weight.normal_(std=self.channels**-0.5, generator=generator)
-            self._weights.append(weight)
+            weights.append(weight)
+        self._weights = BufferList(weights)
 
     def _transform_ensemble(
         self,

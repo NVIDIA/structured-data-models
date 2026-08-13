@@ -1,17 +1,24 @@
+from typing import cast
+
 import torch
 
 from sdm import CategoricalTensor, TableTensor
 from sdm.processing import RandomProjection
 from sdm.tensor import EnsembleTable
+from sdm.testing import onlyCUDA
 
 
-def test_random_projection() -> None:
-    table = TableTensor(
+def _table() -> TableTensor:
+    return TableTensor(
         numerical=torch.randn(6, 4),
         categorical=CategoricalTensor(
             torch.randint(0, 2, (6, 1)), categories=(torch.arange(2),)
         ),
     )
+
+
+def test_random_projection() -> None:
+    table = _table()
 
     inp = EnsembleTable(table, num_members=8)
     out = RandomProjection(8).fit_transform_ensemble(inp)
@@ -24,3 +31,18 @@ def test_random_projection() -> None:
     assert group.numerical.stride() == (6 * 8, 8, 1)
     assert group.categorical.size() == (8, 6, 1)
     assert group.categorical.stride() == (0, 1, 1)
+
+
+@onlyCUDA
+def test_random_projection_moves_fitted_state_to_cuda() -> None:
+    table = _table()
+    processor = RandomProjection(8).fit_ensemble(
+        EnsembleTable(table, num_members=8)
+    )
+
+    processor.cuda()
+    output = processor.transform_ensemble(
+        EnsembleTable(cast(TableTensor, table.cuda()), num_members=8)
+    )
+
+    assert all(group.is_cuda for group in output)
