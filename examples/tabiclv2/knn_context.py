@@ -58,16 +58,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--dataset", choices=list(DATASETS), default="eeg-eye-state"
 )
-parser.add_argument(
-    "--k", type=int, default=100, help="context size for kNN / random"
-)
-parser.add_argument("--num-estimators", type=int, default=4)
-parser.add_argument("--num-random-draws", type=int, default=5)
-parser.add_argument("--seed", type=int, default=0)
-parser.add_argument(
-    "--n-train", type=int, default=None, help="override default n_train"
-)
+parser.add_argument("--k", type=int, default=100)
+parser.add_argument("--num-estimators", type=int, default=8)
 args = parser.parse_args()
+
+args.num_random_draws = 5
+args.seed = 0
+args.n_train = None
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(args.seed)

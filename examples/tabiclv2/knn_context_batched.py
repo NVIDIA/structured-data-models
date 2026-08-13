@@ -57,20 +57,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--dataset", choices=list(DATASETS), default="eeg-eye-state"
 )
-parser.add_argument(
-    "--k", type=int, default=100, help="kNN neighbors per query"
-)
-parser.add_argument("--num-estimators", type=int, default=4)
-parser.add_argument("--num-random-draws", type=int, default=5)
-parser.add_argument("--seed", type=int, default=0)
-parser.add_argument("--n-train", type=int, default=None)
-parser.add_argument(
-    "--chunk-size",
-    type=int,
-    default=256,
-    help="max queries per forward pass (memory control)",
-)
+parser.add_argument("--k", type=int, default=100)
+parser.add_argument("--num-estimators", type=int, default=8)
 args = parser.parse_args()
+
+args.num_random_draws = 5
+args.seed = 0
+args.n_train = None
+args.chunk_size = 256
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(args.seed)

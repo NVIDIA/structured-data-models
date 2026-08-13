@@ -60,24 +60,16 @@ parser.add_argument(
     "--dataset", choices=list(DATASETS), default="eeg-eye-state"
 )
 parser.add_argument("--k", type=int, default=100)
-parser.add_argument("--lr", type=float, default=1e-4)
-parser.add_argument("--epochs", type=int, default=5)
-parser.add_argument(
-    "--batch-size",
-    type=int,
-    default=64,
-    help="training batch size (number of query rows per step)",
-)
-parser.add_argument(
-    "--chunk-size", type=int, default=256, help="eval chunk size"
-)
-parser.add_argument(
-    "--num-estimators", type=int, default=4, help="for full/random baselines"
-)
-parser.add_argument("--num-random-draws", type=int, default=5)
-parser.add_argument("--seed", type=int, default=0)
-parser.add_argument("--n-train", type=int, default=None)
+parser.add_argument("--lr", type=float, default=1e-5)
+parser.add_argument("--num-estimators", type=int, default=8)
 args = parser.parse_args()
+
+args.epochs = 5
+args.batch_size = 64
+args.chunk_size = 256
+args.num_random_draws = 5
+args.seed = 0
+args.n_train = None
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(args.seed)
