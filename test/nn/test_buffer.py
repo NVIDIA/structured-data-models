@@ -7,6 +7,10 @@ from sdm.nn._buffer import BufferList
 from sdm.testing import onlyCUDA, withCUDA
 
 
+class _TensorSubclass(torch.Tensor):
+    pass
+
+
 def test_buffer_list_is_an_indexed_buffer_collection() -> None:
     buffers = BufferList(
         [
@@ -41,6 +45,16 @@ def test_buffer_list_respects_persistence() -> None:
         torch.equal(actual, expected)
         for actual, expected in zip(restored, persistent, strict=True)
     )
+
+
+def test_buffer_list_loads_tensor_subclasses() -> None:
+    tensor = torch.tensor([1.0]).as_subclass(_TensorSubclass)
+    restored = BufferList()
+
+    restored.load_state_dict(BufferList([tensor]).state_dict())
+
+    assert type(restored[0]) is _TensorSubclass
+    assert torch.equal(restored[0], tensor)
 
 
 def test_buffer_list_registers_as_a_nested_module() -> None:
