@@ -57,3 +57,11 @@
 - One of the datasets highlighted in LoCalPFN paper figures
 - Bumped default n_train to 10,000 (test set ~4,980 rows)
 - Per-query loops are now ~5,000 passes each — runtime is significant
+
+## v5 — Batched kNN/mixed loops
+
+- Added `--batch-size` flag (default 1 = per-query, same as before)
+- When batch-size > 1, groups consecutive test rows and uses the union of their kNN sets as context
+- Tradeoff: larger batches = fewer forward passes but less focused context (union of neighborhoods is larger and less query-specific)
+- With batch-size=50 and 5,000 test rows: 100 forward passes instead of 5,000
+- Context size per batch: up to batch_size * k unique rows (less with overlap between neighbors)

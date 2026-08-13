@@ -29,6 +29,12 @@ parser.add_argument(
     default=0.8,
     help="fraction of k from kNN vs random in mixed mode",
 )
+parser.add_argument(
+    "--batch-size",
+    type=int,
+    default=1,
+    help="query batch size for kNN/mixed (1 = per-query, >1 = batched with union of neighbors)",
+)
 parser.add_argument("--num-estimators", type=int, default=4)
 parser.add_argument("--num-random-draws", type=int, default=5)
 parser.add_argument("--seed", type=int, default=0)
@@ -124,19 +130,24 @@ print(
     f"Random context ({args.k} rows, avg {args.num_random_draws} draws): {mean_acc:.3f}"
 )
 
-# 3. kNN context (per-query)
+# 3. kNN context
 num_classes = train[:, target_name].categorical.max().item() + 1
+bs = args.batch_size
 knn_probs = []
 with autocast:
-    for i in range(n_test):
-        context = train[knn_indices[i]]
+    for start in range(0, n_test, bs):
+        end = min(start + bs, n_test)
+        batch_knn = knn_indices[start:end]  # [bs, k]
+        ctx_indices = batch_knn.unique() if bs > 1 else batch_knn[0]
+        context = train[ctx_indices]
+        query = test[start:end]
         pred = model(
             x_context=context.drop_columns(target_name),
             y_context=context[:, target_name],
-            x_query=test[i : i + 1].drop_columns(target_name),
+            x_query=query.drop_columns(target_name),
             num_estimators=args.num_estimators,
         )
-        probs = pred.numerical  # [1, num_classes_seen]
+        probs = pred.numerical  # [batch, num_classes_seen]
         if probs.size(-1) < num_classes:
             probs = torch.nn.functional.pad(
                 probs, (0, num_classes - probs.size(-1))
@@ -145,33 +156,39 @@ with autocast:
 
 knn_preds = torch.cat(knn_probs, dim=0).argmax(dim=-1)  # [N_test]
 knn_acc = (knn_preds == y_true).float().mean().item()
-print(f"kNN context    ({args.k} rows per query):   {knn_acc:.3f}")
+ctx_label = (
+    f"{args.k} rows per query" if bs == 1 else f"k={args.k}, batch={bs}"
+)
+print(f"kNN context    ({ctx_label}):   {knn_acc:.3f}")
 
-# 4. Mixed context (kNN + random per-query)
+# 4. Mixed context (kNN + random)
 k_knn = int(args.k * args.knn_ratio)
 k_rand = args.k - k_knn
 mixed_probs = []
 with autocast:
-    for i in range(n_test):
-        knn_ctx = knn_indices[i, :k_knn]
+    for start in range(0, n_test, bs):
+        end = min(start + bs, n_test)
+        batch_knn = knn_indices[start:end, :k_knn]
+        knn_ctx = batch_knn.unique() if bs > 1 else batch_knn[0]
         remaining = torch.ones(n_train, dtype=torch.bool, device=device)
         remaining[knn_ctx] = False
         rand_pool = remaining.nonzero(as_tuple=False).squeeze(-1)
-        gen = torch.Generator(device=device).manual_seed(args.seed + i)
+        gen = torch.Generator(device=device).manual_seed(args.seed + start)
         rand_ctx = rand_pool[
             torch.randperm(rand_pool.size(0), device=device, generator=gen)[
                 :k_rand
             ]
         ]
-        indices = torch.cat([knn_ctx, rand_ctx])
-        context = train[indices]
+        ctx_indices = torch.cat([knn_ctx, rand_ctx])
+        context = train[ctx_indices]
+        query = test[start:end]
         pred = model(
             x_context=context.drop_columns(target_name),
             y_context=context[:, target_name],
-            x_query=test[i : i + 1].drop_columns(target_name),
+            x_query=query.drop_columns(target_name),
             num_estimators=args.num_estimators,
         )
-        probs = pred.numerical  # [1, num_classes_seen]
+        probs = pred.numerical  # [batch, num_classes_seen]
         if probs.size(-1) < num_classes:
             probs = torch.nn.functional.pad(
                 probs, (0, num_classes - probs.size(-1))
