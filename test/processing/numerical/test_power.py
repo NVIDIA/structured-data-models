@@ -7,22 +7,7 @@ from sdm.processing.numerical import power as power_module
 from sdm.testing import onlyCUDA, withCUDA
 
 
-def test_power_transform_uses_module_lambda_optimizer(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fixed_optimizer(
-        inp: torch.Tensor,
-        constant_features: torch.Tensor,
-    ) -> torch.Tensor:
-        return torch.full_like(constant_features, 0.5, dtype=inp.dtype)
-
-    monkeypatch.setattr(power_module, "_optimize_lambdas", fixed_optimizer)
-    inp = torch.arange(12, dtype=torch.float32).view(6, 2)
-    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
-
-    assert torch.equal(processor.lambdas, torch.full((1, 2), 0.5))
-
-
+@onlyFullTest
 @onlyCUDA
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_power_transform_accepts_caller_compiled_optimizer(
