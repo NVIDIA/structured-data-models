@@ -144,20 +144,41 @@ std = train_feat.std(dim=0).clamp(min=1e-8)
 train_norm = (train_feat - mean) / std
 test_norm = (test_feat - mean) / std
 
-# Train kNN: each row's k nearest neighbors, excluding itself
-train_dists = torch.cdist(train_norm, train_norm)  # [N_train, N_train]
-train_dists.fill_diagonal_(float("inf"))
-train_knn = train_dists.topk(
-    args.k, dim=-1, largest=False
-).indices  # [N_train, k]
+knn_chunk = 5000
 
-# Test kNN: standard
-test_dists = torch.cdist(test_norm, train_norm)  # [N_test, N_train]
-test_knn = test_dists.topk(
-    args.k, dim=-1, largest=False
-).indices  # [N_test, k]
+# Train kNN: each row's k nearest neighbors, excluding itself (chunked)
+train_knn_parts = []
+train_norm_cpu = train_norm.cpu()
+for i in range(0, n_train, knn_chunk):
+    chunk_dists = torch.cdist(
+        train_norm_cpu[i : i + knn_chunk], train_norm_cpu
+    )
+    # Exclude self: set diagonal block to inf
+    for j in range(chunk_dists.size(0)):
+        chunk_dists[j, i + j] = float("inf")
+    train_knn_parts.append(
+        chunk_dists.topk(args.k, dim=-1, largest=False).indices
+    )
+    print(
+        f"  train kNN chunk {min(i + knn_chunk, n_train)}/{n_train}",
+        flush=True,
+    )
+train_knn = torch.cat(train_knn_parts, dim=0).to(device)  # [N_train, k]
+del train_knn_parts
 
-del train_dists, test_dists
+# Test kNN (chunked)
+test_knn_parts = []
+test_norm_cpu = test_norm.cpu()
+for i in range(0, n_test, knn_chunk):
+    chunk_dists = torch.cdist(test_norm_cpu[i : i + knn_chunk], train_norm_cpu)
+    test_knn_parts.append(
+        chunk_dists.topk(args.k, dim=-1, largest=False).indices
+    )
+    print(
+        f"  test kNN chunk {min(i + knn_chunk, n_test)}/{n_test}", flush=True
+    )
+test_knn = torch.cat(test_knn_parts, dim=0).to(device)  # [N_test, k]
+del test_knn_parts, train_norm_cpu, test_norm_cpu
 
 print(
     f"kNN indices computed (train: {train_knn.shape}, test: {test_knn.shape})"
