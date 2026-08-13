@@ -8,7 +8,7 @@ from torch import Tensor
 from torch.nn import LayerNorm, Linear
 
 from sdm.cache import Cache
-from sdm.models.nemotron_relational.graph import HomogeneousGraph
+from sdm.models.nemotron.relational.graph import HomogeneousGraph
 from sdm.nn.memory import cuda_memory_availability
 
 # Empirical upper bounds for transient aggregation work.

@@ -12,13 +12,11 @@ from sdm import (
 )
 from sdm.cache import Cache
 from sdm.models import NemotronRelational
-from sdm.models.nemotron_relational import (
-    invariant_gnn as invariant_gnn_module,
-)
-from sdm.models.nemotron_relational import model as nemotron_relational_model
-from sdm.models.nemotron_relational.graph import HomogeneousGraph
-from sdm.models.nemotron_relational.invariant_gnn import InvariantGNN
-from sdm.models.nemotron_relational.model import (
+from sdm.models.nemotron.relational import invariant_gnn as gnn_module
+from sdm.models.nemotron.relational import model as model_module
+from sdm.models.nemotron.relational.graph import HomogeneousGraph
+from sdm.models.nemotron.relational.invariant_gnn import InvariantGNN
+from sdm.models.nemotron.relational.model import (
     _NemotronRelational,
     _remap_v2_1_checkpoint,
 )
@@ -60,15 +58,9 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
         remaps.append((state_dict, is_classifier))
         return {str(is_classifier): torch.tensor(1)}
 
-    monkeypatch.setattr(
-        nemotron_relational_model, "download_checkpoint", download
-    )
-    monkeypatch.setattr(nemotron_relational_model.torch, "load", load)
-    monkeypatch.setattr(
-        nemotron_relational_model,
-        "_remap_v2_1_checkpoint",
-        remap,
-    )
+    monkeypatch.setattr(model_module, "download_checkpoint", download)
+    monkeypatch.setattr(model_module.torch, "load", load)
+    monkeypatch.setattr(model_module, "_remap_v2_1_checkpoint", remap)
     monkeypatch.setattr(
         _NemotronRelational,
         "load_state_dict",
@@ -257,7 +249,7 @@ def test_invariant_gnn_destination_chunks(
             generator=torch.Generator(device=device).manual_seed(0),
         )
         monkeypatch.setattr(
-            invariant_gnn_module,
+            gnn_module,
             "_automatic_aggregation_work_byte_limit",
             lambda _x, _graph: 1024,
         )
