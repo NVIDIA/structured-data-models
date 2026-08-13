@@ -122,7 +122,7 @@ class SentenceTransformer(Processor):
         else:
             text = cast(StringTensor, table.text.movedim(-1, 0).reshape(-1))
             if self._word_piece_tokenizer is not None:
-                emb = self._encode_gpu(text)
+                emb = self._encode_word_piece(text)
             else:
                 array = text.to_arrow()
                 if text.is_nullable:
@@ -154,7 +154,7 @@ class SentenceTransformer(Processor):
         )
         return cast(TableTensor, out)
 
-    def _encode_gpu(self, text: StringTensor) -> Tensor:
+    def _encode_word_piece(self, text: StringTensor) -> Tensor:
         tokenizer = self._word_piece_tokenizer
         assert tokenizer is not None
         device = text.device
