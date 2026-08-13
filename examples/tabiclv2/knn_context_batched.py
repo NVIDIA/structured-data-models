@@ -219,7 +219,8 @@ with autocast, torch.inference_mode():
             num_classes=num_classes,
         )  # [chunk, 1, num_classes]
         all_logits.append(logits)
-        print(f"  kNN chunk {chunk_idx + 1}/{n_chunks}", flush=True)
+        if (chunk_idx + 1) % 50 == 0 or chunk_idx == n_chunks - 1:
+            print(f"  kNN chunk {chunk_idx + 1}/{n_chunks}", flush=True)
 
 knn_logits = torch.cat(all_logits, dim=0).squeeze(-2)  # [N_test, 10]
 knn_logits = knn_logits[..., :num_classes]  # [N_test, num_classes]

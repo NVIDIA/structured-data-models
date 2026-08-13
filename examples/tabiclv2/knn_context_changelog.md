@@ -214,4 +214,15 @@ New script `knn_context_batched.py`. Bypasses `ICLModel` wrapper and calls `_Tab
 
 Verified that `_TabICLv2`, `RowEmbedding`, `ICLBlock`, `InducedTransformerBlock`, and `TransformerBlock` all support arbitrary leading batch dims — `...` indexing, `*B` unpacking, and `torch.broadcast_shapes` throughout.
 
-Tradeoffs vs ICLModel path: single estimator (no ensemble diversity), no KV caching, recipe preprocessing done upfront separately. Softmax with temperature=0.9 applied manually to match default recipe output.
+Tradeoffs vs ICLModel path: single estimator (no ensemble diversity), no KV caching, recipe preprocessing done upfront separately. Softmax with temperature=0.9 applied manually to match default recipe output. Inner model outputs 10 logit columns (pretrained class count); must truncate to `num_classes` before softmax.
+
+## v11 — Fine-tuning script
+
+New script `knn_finetune.py`. Full LoCalPFN reproduction: retrieval + fine-tuning.
+
+- Precomputes kNN indices for training rows (leave-one-out: query excluded from its own neighbor set)
+- Fine-tunes all `_TabICLv2` parameters with Adam
+- Training: for each row, use its k nearest neighbors as context, predict the row, cross-entropy loss
+- Uses batched `[B, k+1, C]` forward pass for both training and evaluation
+- Reports pre-finetune baselines (full, random, kNN) and per-epoch kNN AUC + loss
+- Flags: `--lr`, `--epochs`, `--batch-size`, `--dataset`, `--k`
