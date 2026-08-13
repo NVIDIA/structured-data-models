@@ -1,8 +1,0 @@
-﻿CuGraphRelationalSampler
-========================
-
-.. currentmodule:: sdm.relational
-
-.. autoclass:: CuGraphRelationalSampler
-   :members:
-   :show-inheritance:
