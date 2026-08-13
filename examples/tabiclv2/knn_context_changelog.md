@@ -133,3 +133,33 @@ n= 2000: acc=0.040, flipped=0.960, pred_sample=[0.999, 0.001]  → column 0 = po
 - Switched metric from accuracy (argmax-based, sensitive to column ordering) to AUC (rank-based, invariant to column ordering)
 - This also matches the LoCalPFN paper, which reports AUC throughout
 - Additional fix: `auc()` uses `max(raw, 1 - raw)` because the column flip also affects which column `roc_auc_score` treats as positive. An AUC of 0.012 is really 0.988 with flipped columns. `max(raw, 1 - raw)` makes it invariant to column ordering.
+
+### Remaining issue: per-batch column flip in kNN/mixed loops
+
+The `max(raw, 1 - raw)` fix works for full context and random context (single forward pass, consistent column assignment). But the kNN and mixed loops concatenate probabilities across many batches. If different batches flip the column assignment differently (because they have different context sizes — the union of kNN sets varies per batch), the concatenated probabilities are a mix of both orientations. AUC computed on this mixture is unreliable — some batches contribute correct rankings, others inverted ones, and they partially cancel out.
+
+Results before `max(raw, 1-raw)` fix (n_train=1000, batch_size=32):
+
+- Full context (1000 rows): 0.012 (→ 0.988 after fix)
+- Random context (100 rows, avg 5 draws): 0.577 (→ 0.577, no flip here since context size is stable at 100)
+- kNN context (k=100, batch=32): 0.474 (unreliable — mixed orientations across batches)
+- Mixed context (80 kNN + 20 random): 0.486 (unreliable — same issue)
+
+## v7 — Switch to diabetes, drop batching
+
+### Why
+
+Two problems with the eeg-eye-state + batching setup:
+
+1. **Batching undermines locality.** The whole point of kNN context is that each query sees only its own local neighborhood. Batching groups queries and gives them the union of their neighborhoods — which dilutes the locality and defeats the purpose. This should have been flagged earlier.
+
+2. **eeg-eye-state is too large.** 14,980 rows means thousands of per-query forward passes. Even at batch-size=1 with n_train=14,000, the kNN loop over ~1,000 test rows took >13 minutes and didn't finish.
+
+### What changed
+
+- Dataset: eeg-eye-state → diabetes (OpenML, 768 rows, 8 numerical features, binary, ~65/35 balance)
+- Default n_train: 10,000 → 500 (leaves 268 test rows — ~268 forward passes for kNN, should finish in ~2 min)
+- Removed `--batch-size` flag and all batching logic — loops always run per-query (batch-size=1), which is the correct reproduction of LoCalPFN's local context approach
+- Added `orient_probs` per query to handle the class flip issue before concatenating
+- Added progress prints every 50 queries (e.g., `kNN 50/268`)
+- Kept AUC metric with `max(raw, 1 - raw)`, `orient_probs`, mixed context strategy, and all CLI flags except `--batch-size`
