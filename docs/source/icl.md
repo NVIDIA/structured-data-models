@@ -122,7 +122,7 @@ For example, the following snippet records the query embeddings passed into the 
 
 ```python
 def _embedding(_module: torch.nn.Module, args: tuple[torch.Tensor, ...]) -> None:
-    embedding = args[0]
+    query_embedding = args[0]
 
 model = sdm.models.TabICLv2()
 handle = model.cls_model.icl_block.head.register_forward_pre_hook(_embedding)
