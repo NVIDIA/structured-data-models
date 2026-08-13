@@ -201,3 +201,9 @@ Ran `knn_context_diagnostic.py` on three datasets. The column flip (model assign
 4. **Context size doesn't explain the flip.** On eeg-eye-state, clusters with 141 and 3,967 context rows both flip either way. On diabetes with k=10 (46–98 context rows), the same ~50/50 split occurs.
 
 5. **Class balance in context doesn't explain it either.** Clusters with ctx\_%pos from 0.04 to 0.63 appear on both sides of the flip.
+
+## v9 — Root cause and fix
+
+Root cause: `AlignCategories(sort_by="code")` on the target preserves data-dependent category order from PyArrow, then `ShuffleCategories` adds a random offset. Different context sets → different orderings.
+
+Fix: shared `recipe.py` with `AlignCategories(sort_by="value")` on target + fixed `generator` on every model call. Both needed — `sort_by="value"` canonicalizes base order, fixed generator makes shuffle deterministic.
