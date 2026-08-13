@@ -84,15 +84,7 @@ class Processor(torch.nn.Module, abc.ABC):
                 and isinstance(state, torch.Tensor)
                 and buffer.shape != state.shape
             ):
-                setattr(
-                    self,
-                    name,
-                    torch.empty(
-                        state.shape,
-                        dtype=buffer.dtype,
-                        device=buffer.device,
-                    ),
-                )
+                buffer.resize_(state.shape)
         super()._load_from_state_dict(
             state_dict,
             prefix,

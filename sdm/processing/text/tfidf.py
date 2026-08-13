@@ -96,7 +96,13 @@ class TFIDF(EnsembleProcessor):
         super().set_extra_state(fitted)
         self._states = torch.nn.ModuleList(
             [
-                _TFIDFState(list(state_vocabularies), [])
+                _TFIDFState(
+                    list(state_vocabularies),
+                    [
+                        torch.empty(len(vocabulary))
+                        for vocabulary in state_vocabularies
+                    ],
+                )
                 for state_vocabularies in vocabularies
             ]
         )
