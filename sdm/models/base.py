@@ -89,7 +89,8 @@ class ICLModel(torch.nn.Module, ABC):
             seqused_train: Valid in-context example counts with shape
                 ``[...]`` and :external+torch:ref:`torch.int32 <dtype-doc>`
                 dtype.
-                Counts must be positive. When set, only the first
+                Out-of-range counts are clamped and produce degenerate
+                predictions rather than errors. When set, only the first
                 ``seqused_train`` of the ``R_context`` in-context rows act as
                 context, and the remaining rows are treated as padding: they
                 are masked from every attention key/value stream and cannot
@@ -548,6 +549,11 @@ class ICLModel(torch.nn.Module, ABC):
         seqused_train: Tensor | None,
         seqused_cols: Tensor | None = None,
     ) -> None:
+        # Only dtypes are checked. Validating the counts themselves would
+        # read them off the device on every call, and that synchronization
+        # would land directly in the serving latencies this padding exists
+        # to improve. Out-of-range counts are clamped where they are
+        # consumed instead, matching `seqused_cols`.
         if seqused_train is not None and seqused_train.dtype != torch.int32:
             raise ValueError(
                 f"'seqused_train' must have dtype torch.int32 "

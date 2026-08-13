@@ -1,5 +1,6 @@
 # ruff: noqa: D205
 from collections.abc import Sequence
+from itertools import product
 from typing import Any, ClassVar, cast
 
 import torch
@@ -9,16 +10,16 @@ from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumorfm.invariant_gnn import InvariantGNN
-from sdm.models.kumorfm.recipe import default_recipe
-from sdm.models.kumorfm.task import TaskGraph
+from sdm.models.nemotron.relational.invariant_gnn import InvariantGNN
+from sdm.models.nemotron.relational.recipe import default_recipe
+from sdm.models.nemotron.relational.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
 
 
-class KumoRFM(ICLModel):
-    r"""An adapted and simplified version of the relational foundation model
+class NemotronRelational(ICLModel):
+    r"""An adapted version of the relational foundation model
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
@@ -30,8 +31,9 @@ class KumoRFM(ICLModel):
         :figclass: dark-only
         :width: 100%
 
-    :class:`KumoRFM` extends the in-context learning structure of tabular
-    foundation models from single tables to relational, multi-table inputs.
+    :class:`NemotronRelational` extends the in-context learning structure of
+    tabular foundation models from single tables to relational, multi-table
+    inputs.
     It processes task rows together with one or more related tables, avoiding
     manual flattening of relational data into a single table.
 
@@ -54,7 +56,7 @@ class KumoRFM(ICLModel):
     .. testcode::
 
         from sdm import RelatedTables, TableTensor
-        from sdm.models import KumoRFM
+        from sdm.models import NemotronRelational
 
         task_table = TableTensor.from_columns(
             {"user_id": [0, 1, 2, 3], "churn": [True, False, True, False]},
@@ -104,7 +106,7 @@ class KumoRFM(ICLModel):
             "orders": related_tables.tables["orders"][3:],
         })
 
-        model = KumoRFM(device="cuda")
+        model = NemotronRelational(device="cuda")
 
         # Default in-context learning forward pass:
         out = model(
@@ -145,13 +147,13 @@ class KumoRFM(ICLModel):
     ) -> None:
         super().__init__()
 
-        self.cls_model = _KumoRFM(
+        self.cls_model = _NemotronRelational(
             num_classes=10,
             num_quantiles=0,
             norm_bias=True,
             device=device,
         )
-        self.reg_model = _KumoRFM(
+        self.reg_model = _NemotronRelational(
             num_classes=0,
             num_quantiles=999,
             norm_bias=True,
@@ -163,7 +165,7 @@ class KumoRFM(ICLModel):
 
         self.eval()
 
-    def _load_from_pretrained(self) -> "KumoRFM":
+    def _load_from_pretrained(self) -> "NemotronRelational":
         device = next(self.parameters()).device
 
         for variant, filename in self._checkpoint_filenames.items():
@@ -239,7 +241,7 @@ class KumoRFM(ICLModel):
         return default_recipe()
 
 
-class _KumoRFM(torch.nn.Module):
+class _NemotronRelational(torch.nn.Module):
     def __init__(
         self,
         num_classes: int,
@@ -661,6 +663,14 @@ def _remap_v2_1_checkpoint(
             value = value.squeeze(1)
         elif key == "row_embedding.readout_token":
             value = value.squeeze(0)
+        elif key == "row_embedding.rope.inv_freq":
+            remapped[key] = value
+            for layer, side in product(range(3), ("query", "key")):
+                remapped[
+                    f"row_embedding.row_layers.{layer}.attn."
+                    f"{side}_transform.inv_freq"
+                ] = value
+            continue
         else:
             for old_prefix, new_prefix, module in (
                 (

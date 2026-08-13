@@ -49,9 +49,9 @@ class RowEmbedding(torch.nn.Module):
                 num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 num_inducing_points=num_inducing_points,
-                qassmax=True,
                 norm="layer_norm",
                 norm_kwargs={"bias": norm_bias},
+                qassmax=True,
                 **factory_kwargs,
             )
             for _ in range(num_layers)
@@ -62,24 +62,26 @@ class RowEmbedding(torch.nn.Module):
         )
         torch.nn.init.trunc_normal_(self.readout_token, std=0.02)
 
-        self.row_layers = ModuleList(
-            TransformerBlock(
-                channels=channels,
-                num_query_heads=num_heads,
-                feedforward_channels=2 * channels,
-                qassmax=False,
-                norm="layer_norm",
-                norm_kwargs={"bias": norm_bias},
-                **factory_kwargs,
-            )
-            for _ in range(num_layers)
-        )
-
         self.rope = RotaryEmbedding(
             channels=channels // num_heads,
             layout="split_half",
             theta=100_000,
             **factory_kwargs,
+        )
+
+        self.row_layers = ModuleList(
+            TransformerBlock(
+                channels=channels,
+                num_query_heads=num_heads,
+                feedforward_channels=2 * channels,
+                norm="layer_norm",
+                norm_kwargs={"bias": norm_bias},
+                query_transform=self.rope,
+                key_transform=self.rope,
+                qassmax=False,
+                **factory_kwargs,
+            )
+            for _ in range(num_layers)
         )
 
         self.norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
@@ -161,8 +163,14 @@ class RowEmbedding(torch.nn.Module):
         # Materialize once to avoid repeated copies in the column layers.
         x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
         # Valid train-row counts broadcast over the column batch axis.
+        # Clamped like `seqused_cols`: a non-positive count would mask out
+        # every in-context row and silently return degenerate numbers, and
+        # rejecting it would require reading the values off the device on
+        # every call.
         seqused_col = (
-            seqused_train.unsqueeze(-1) if seqused_train is not None else None
+            seqused_train.clamp(min=1).unsqueeze(-1)
+            if seqused_train is not None
+            else None
         )
         col_batch_size_limit = batch_size_limit
         for i, col_layer in enumerate(self.col_layers):
@@ -242,8 +250,9 @@ class RowEmbedding(torch.nn.Module):
             x = row_layer(
                 query=query,
                 key_value=x,  # [..., R, K + C, D]
+                # RoPE is applied inside the block via `query_transform` /
+                # `key_transform`; only the column mask is passed here.
                 attn_mask=attn_mask,  # [1, K + C]
-                rope=self.rope,
                 batch_size_limit=row_batch_size_limit,
             )  # [..., R, K + C, D] or [..., R, K, D]
 

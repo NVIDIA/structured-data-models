@@ -1,13 +1,13 @@
-"""Benchmark KumoRFM on RelBench SALT autocomplete tasks.
+"""Benchmark NemotronRelational on RelBench SALT autocomplete tasks.
 
 Without arguments, this runs all eight SALT tasks. Pass ``--task`` to run one
 task.
 
 Examples:
-    python examples/kumorfm/salt.py
-    python examples/kumorfm/salt.py --task sales-incoterms
-    python examples/kumorfm/salt.py --task sales-group --num_neighbors 32
-    python examples/kumorfm/salt.py --task item-plant --num_neighbors 32 32 8
+    python salt.py
+    python salt.py --task sales-incoterms
+    python salt.py --task sales-group --num_neighbors 32
+    python salt.py --task item-plant --num_neighbors 32 32 8
 
 Each ``--num_neighbors`` value configures one hop: ``32`` is one hop, and
 ``32 32 8`` is three hops.
@@ -15,7 +15,7 @@ Each ``--num_neighbors`` value configures one hop: ``32`` is one hop, and
 
 import argparse
 from collections.abc import Sequence
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 import torch
@@ -29,10 +29,9 @@ from sdm import (
     RelationalData,
     Stype,
     TableTensor,
-    TemporalSamplingConfig,
     infer_stypes,
 )
-from sdm.models import KumoRFM
+from sdm.models import NemotronRelational
 
 SALT_DATASET = "rel-salt"
 SALT_PRESETS = {
@@ -103,16 +102,7 @@ def run_task(task_name: str) -> None:
         for name, table in db.table_dict.items()
         if table.time_col is not None
     }
-    sampler = data.sampler(
-        temporal=(
-            TemporalSamplingConfig(
-                time_columns=time_columns,
-                strategy="last",
-            )
-            if time_columns
-            else None
-        ),
-    )
+    sampler = data.sampler(time_columns)
 
     frames = [
         task.get_table(split, mask_input_cols=False).df
@@ -143,7 +133,7 @@ def run_task(task_name: str) -> None:
     perm = torch.randperm(len(context))[: args.context_size]
     context = cast(TableTensor, context[perm])
     num_neighbors = args.num_neighbors or SALT_PRESETS[task_name][0]
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "task_link": {
             "task_column": task.entity_col,
             "table": task.entity_table,
@@ -158,7 +148,7 @@ def run_task(task_name: str) -> None:
     x_context = context.drop_columns(task.target_col)
     y_context = context[task.target_col]
 
-    model = KumoRFM(device=device)
+    model = NemotronRelational(device=device)
     mrr = MeanMetric().to(device)
     accuracy = MeanMetric().to(device)
     batch_size = args.batch_size or SALT_PRESETS[task_name][1]

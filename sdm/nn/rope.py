@@ -9,7 +9,7 @@ class RotaryEmbedding(torch.nn.Module):
 
     Args:
         channels: The number of channels per attention head.
-        layout: The channel pairing layout. ``""split_half"`` pairs the first
+        layout: The channel pairing layout. ``"split_half"`` pairs the first
             half of the channels with the second half. ``"interleaved"`` pairs
             adjacent even and off channels.
         theta: The base frequency used to initialize inverse frequencies.

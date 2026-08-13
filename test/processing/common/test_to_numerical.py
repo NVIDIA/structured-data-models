@@ -12,10 +12,6 @@ from sdm.processing import ToNumerical
 
 def _table() -> TableTensor:
     return TableTensor(
-        columns={
-            "numerical": ("age", "income"),
-            "categorical": ("country", "segment"),
-        },
         numerical=torch.tensor([[30.0, 100.0], [40.0, 200.0]]),
         categorical=CategoricalTensor(
             code=torch.tensor([[0, 1], [-1, 0]], dtype=torch.int64),
@@ -36,10 +32,10 @@ def test_to_numerical_converts_categorical_stype() -> None:
 
     assert isinstance(output, TableTensor)
     assert output.columns[Stype.numerical] == (
-        "age",
-        "income",
-        "country",
-        "segment",
+        "num_0",
+        "num_1",
+        "cat_0",
+        "cat_1",
     )
     assert output.columns[Stype.categorical] == ()
     assert torch.equal(output.numerical[..., :2], table.numerical)
@@ -48,34 +44,26 @@ def test_to_numerical_converts_categorical_stype() -> None:
 
 
 def test_to_numerical_is_identity_for_already_numerical_table() -> None:
-    table = TableTensor.from_tensor(
-        torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
-        columns=("x0", "x1"),
-    )
+    table = TableTensor.from_tensor(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
 
     assert ToNumerical().transform(table) is table
 
 
 def test_to_numerical_preserves_unhandled_stype() -> None:
     table = TableTensor(
-        columns={
-            "numerical": ("x",),
-            "id": ("row_id",),
-        },
         numerical=torch.tensor([[1.0], [2.0]]),
         id=ColumnarTensor((torch.arange(2),)),
     )
 
     output = ToNumerical().transform(table)
 
-    assert output.columns[Stype.numerical] == ("x",)
-    assert output.columns[Stype.id] == ("row_id",)
+    assert output.columns[Stype.numerical] == ("num_0",)
+    assert output.columns[Stype.id] == ("id_0",)
     assert torch.equal(output.id, table.id)
 
 
 def test_to_numerical_converts_categorical_only_table() -> None:
     table = TableTensor(
-        columns={"categorical": ("country",)},
         categorical=CategoricalTensor(
             code=torch.tensor([[0], [1]], dtype=torch.int64),
             categories=(StringTensor.from_list(["US", "DE"]),),
@@ -85,7 +73,7 @@ def test_to_numerical_converts_categorical_only_table() -> None:
     output = ToNumerical().transform(table)
 
     assert isinstance(output, TableTensor)
-    assert output.columns[Stype.numerical] == ("country",)
+    assert output.columns[Stype.numerical] == ("cat_0",)
     assert output.columns[Stype.categorical] == ()
     assert torch.equal(
         output.numerical,

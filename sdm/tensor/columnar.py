@@ -359,10 +359,12 @@ def _to_dtype_layout(
         raise TypeError(
             f"Can't convert {inp.__class__.__name__!r} to dtype '{dtype}'"
         )
+    if device is None:
+        device = inp.device
 
     if (
         not copy
-        and (device is None or torch.device(device) == inp.device)
+        and torch.device(device) == inp.device
         and (layout is None or layout == inp.layout)
         and (
             memory_format is None

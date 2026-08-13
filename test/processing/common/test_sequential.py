@@ -19,10 +19,6 @@ def _mixed_table(numerical: torch.Tensor | None = None) -> TableTensor:
         categories=(StringTensor.from_list(["a", "b"]),),
     )
     return TableTensor(
-        columns={
-            "numerical": ("x0", "x1"),
-            "categorical": ("kind",),
-        },
         numerical=numerical,
         categorical=categorical,
     )
@@ -31,7 +27,7 @@ def _mixed_table(numerical: torch.Tensor | None = None) -> TableTensor:
 def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     if numerical is None:
         numerical = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    return TableTensor.from_tensor(numerical, columns=("x0", "x1"))
+    return TableTensor.from_tensor(numerical)
 
 
 def _add_one(table: TableTensor) -> TableTensor:

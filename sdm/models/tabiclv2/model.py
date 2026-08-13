@@ -1,5 +1,6 @@
 # ruff: noqa: D205
 
+from itertools import product
 from typing import Any, ClassVar, cast
 
 import torch
@@ -418,6 +419,11 @@ def _remap_ckpt(
 
         elif key == "row_interactor.tf_row.rope.freqs":
             out["row_embedding.rope.inv_freq"] = value
+            for layer, side in product(range(3), ("query", "key")):
+                out[
+                    f"row_embedding.row_layers.{layer}.attn."
+                    f"{side}_transform.inv_freq"
+                ] = value
 
         elif key.startswith("row_interactor.out_ln."):
             out[key.replace("row_interactor.out_ln", "row_embedding.norm")] = (

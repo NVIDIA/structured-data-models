@@ -307,10 +307,21 @@ def pad_to_buckets(
             ],
             dim=-2,
         )
-        y = torch.cat(
-            [y, y.new_zeros(*batch_shape, padded_train - num_train)],
-            dim=-1,
-        )
+        # Pad the labels by repeating a real one instead of writing zeros.
+        # Labels define the categorical category set, so a zero pad would
+        # introduce a class the true labels never contain: it renumbers
+        # every real row's code and widens the output by a column, which
+        # is exactly what the padded-vs-unpadded gate compares.
+        if num_train > 0:
+            y = torch.cat(
+                [
+                    y,
+                    y[..., :1].expand(*batch_shape, padded_train - num_train),
+                ],
+                dim=-1,
+            )
+        else:  # No real label to repeat; `expand` would fail on a 0-width y.
+            y = y.new_zeros(*batch_shape, padded_train)
     # Exact-fit tables skip the seqused arguments entirely: masking costs
     # measurably more than unmasked attention (bool-mask SDPA), so the
     # unpadded graph family serves on-grid tables at full speed. Off-grid
@@ -667,6 +678,11 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
                         yw = torch.zeros(*batch_shape, train_b, device=device)
                     xw, yw = cast_inputs(xw, yw, precision)
                     for _ in range(2):  # Graph capture needs a re-visit.
+                        # Only the masked family is warmed here. The unmasked
+                        # family serves exactly-on-grid tables, which for
+                        # every shipped workload is only the base shape - and
+                        # that is already warmed by the cold call plus the
+                        # post-compile warmups above.
                         call(
                             xw,
                             yw,

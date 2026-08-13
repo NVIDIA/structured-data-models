@@ -740,6 +740,40 @@ def test_seqused_train_validates() -> None:
             seqused_train=torch.tensor(6),
         )
 
+    # Zero or negative counts would mask out every in-context row. They are
+    # clamped like `seqused_cols` rather than rejected, since reading the
+    # values off the device on every call would cost a synchronization in
+    # the serving path this padding exists to speed up. The contract is
+    # therefore degenerate-but-finite output, not an error.
+    for count in (0, -1):
+        out = model(
+            x_context,
+            y_context,
+            x_query,
+            recipe=Recipe(),
+            seqused_train=torch.tensor(count, dtype=torch.int32),
+        )
+        assert torch.isfinite(out.numerical).all()
+
+    # A clamped count behaves as though exactly one in-context row is valid.
+    torch.manual_seed(0)
+    clamped = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=Recipe(),
+        seqused_train=torch.tensor(0, dtype=torch.int32),
+    )
+    torch.manual_seed(0)
+    one_row = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=Recipe(),
+        seqused_train=torch.tensor(1, dtype=torch.int32),
+    )
+    torch.testing.assert_close(clamped.numerical, one_row.numerical)
+
 
 def test_seqused_cols_validates() -> None:
     model = TabICLv2(pretrained=False)
