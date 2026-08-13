@@ -51,9 +51,7 @@ class SelectColumns(EnsembleProcessor):
                     stype: block[..., : self.max_columns]
                     for stype, block in group.items()
                 }
-                groups.append(
-                    group.__class__(columns=new_columns, **blocks)
-                )
+                groups.append(group.__class__(columns=columns, **blocks))
             return ensemble_table.replace_groups(groups)
 
         assert self.method == "round_robin"
