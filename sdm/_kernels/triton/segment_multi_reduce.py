@@ -17,7 +17,7 @@ def _segment_multi_reduce_kernel(
     max_ptr,
     num_channels: tl.constexpr,
     block_channels: tl.constexpr,
-):
+) -> None:
     segment = tl.program_id(0)
     channels = tl.program_id(1) * block_channels + tl.arange(0, block_channels)
     channel_mask = channels < num_channels
