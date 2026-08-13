@@ -1,46 +1,41 @@
-# Spec: Apply planned shuffles to stored table groups
+# Spec: Geplante Spalten-Shuffles auf gestapelten Tabellen
 
-Reference: `tabicl==2.0.0` at `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` at `ee56f84161cb1c93b559977d67447e82b16d3541`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bb06773db1b469e027acb385d4fe43dcfe21d2ee`.
 
 ## Problem
 
-An `EnsembleTable` has logical estimators and stored tables. In the current TabICLv2 feature recipe, the `none`/`power` `Choice` produces eight logical estimators backed by one compatible group with exactly two stored tables: shape `[2, rows, columns]` and alternating locations. The reference selects four shuffle configurations and applies each to both normalizations.
+Eine `EnsembleTable` trennt logische Estimatoren von physisch gespeicherten Tabellen. Im aktuellen TabICLv2-Feature-Rezept erzeugt die `none`-/`power`-`Choice` acht logische Estimatoren, aber nur zwei kompatible Tabellen in einer Gruppe `[2, Zeilen, Spalten]`. Die Referenz wählt vier Shuffle-Konfigurationen und wendet jede auf beide Normalisierungen an.
 
-Current `ShuffleColumns` instead fits and applies one state per logical estimator, producing eight temporary tables before `from_tables()` stacks normalization pairs again. Equal schema alone is not permission to share a permutation: sharing is correct only when the estimator plan assigns the same permutation ID. Different schemas or column counts must remain separate.
+`ShuffleColumns` verarbeitet auf `main` trotzdem acht logische Mitglieder einzeln. Danach hält es acht temporäre Tabellen, bevor `from_tables()` dieselben Normalisierungspaare wieder stapelt. Schema-Gleichheit allein erlaubt jedoch kein Teilen: Nur dieselbe geplante Permutations-ID darf gemeinsam ausgeführt werden; unterschiedliche Spaltenzahlen oder inkompatible Tabellen müssen getrennt bleiben.
 
-Simply copying the existing category grouping pattern is insufficient because `gather_members()` currently extracts grouped results and restacks them. That prototype regressed the representative CPU case.
+## Lösung
 
-## Proposed solution
-
-- Deduplicate fitted column permutations by their exact index tuple and retain one permutation ID per logical estimator. Consume the explicit IDs produced by the Latin/category estimator-plan specs.
-- For every permutation ID, select its logical members and apply the permutation once to each compatible stored group. In TabICLv2 this means four operations over two stacked normalization tables instead of eight operations over individual tables.
-- Add a narrow internal `EnsembleTable` assembly path using the existing `groups` and `locations` vocabulary. It must preserve already-processed groups and logical member order without unpacking and restacking tensors; no new public container abstraction is needed.
-- Use the grouped no-restack path initially on CUDA. Keep the current per-member CPU application because the large CPU case regressed despite fewer operations. Both paths use the same fitted permutation states and produce identical tables.
-- Reuse the internal assembly path for paired target category shuffles only when it is non-regressive. Never combine incompatible groups, and validate permutation length once during fitting rather than in the hot path.
-
-Pseudo-code:
+- Gefittete Spaltenpermutationen werden über ihr exaktes Indextupel dedupliziert; jede logische Estimator-ID verweist auf eine Permutations-ID aus dem gemeinsamen Plan.
+- Die Eingaben werden nach kompatibler gespeicherter Gruppe und Spaltenzahl partitioniert. Für eine Partition werden die eindeutigen Indizes zu `[P, C]` gestapelt und alle gespeicherten Tabellen mit einem gebündelten CUDA-`gather` verarbeitet.
+- Die Quelltabelle `[S, R, C]` wird nur als View auf `[P, S, R, C]` erweitert; `gather` materialisiert ausschließlich die benötigte Ausgabe. Für TabICLv2 entsteht so ein Tensor `[4, 2, R, C]` statt acht Einzelresultaten plus Restacking.
+- Ein schmaler interner `EnsembleTable`-Assembly-Pfad übernimmt die fertigen Gruppen und `(group, position)`-Locations direkt. Er erhält logische Reihenfolge und Sharing, führt keine erneute Tensor-Kopie aus und erzeugt keine neue öffentliche Container-Abstraktion.
+- Inkompatible Gruppen werden separat gebatcht. Wenn kein gemeinsames Batch möglich ist, bleibt der bestehende per-Member-Pfad der korrekte Fallback.
 
 ```text
-group logical members by planned permutation ID
-for each ID: select referenced stored tables and permute each compatible group
-record output group and (group, position) location for every logical member
-return those groups and locations directly; do not restack
+logische Mitglieder nach exakter Permutations-ID und kompatibler Quellgruppe partitionieren
+Permutationstensor [P,C] stapeln -> einmal gather auf [P,S,R,C]
+Ausgabegruppen und logische Locations direkt zusammensetzen
 ```
 
-## Benchmark results
+## GPU-Benchmark-Ergebnisse
 
-Synchronized wall time, 100 float32 columns, eight estimators, two stored tables, four shared permutations; GPU is an NVIDIA L4. Values are median/p95 over 10–20 runs.
+NVIDIA L4, PyTorch 2.13/CUDA 13, float32, 100 Spalten, acht Estimatoren, zwei gespeicherte Tabellen und vier Permutationen; synchronisierte Median/p95-Wall-Time über 30 Läufe.
 
-|   Rows |            CPU current → grouped |     L4 current → grouped |
-| -----: | -------------------------------: | -----------------------: |
-|  1,000 |         6.39/6.91 → 2.50/2.55 ms | 6.61/7.05 → 1.17/1.48 ms |
-| 10,000 |     16.30/25.06 → 14.19/20.84 ms | 6.68/6.98 → 1.16/1.46 ms |
-| 50,000 | 120.71/142.14 → 151.73/164.83 ms | 7.39/7.93 → 1.68/1.70 ms |
+| Zeilen | Main: einzeln + Restack | Vier `index_select` ohne Restack | Ein batched `gather` | Peak Main → batched |
+| -----: | ----------------------: | -------------------------------: | -------------------: | ------------------: |
+|  1.000 |         7,922/12,597 ms |                   2,396/2,791 ms |       0,718/1,191 ms |     6,12 → 3,06 MiB |
+| 10.000 |          7,666/8,775 ms |                   1,645/2,099 ms |       0,727/0,992 ms |   63,82 → 30,52 MiB |
+| 50.000 |          8,403/8,937 ms |                   1,642/2,165 ms |       1,529/1,564 ms | 312,60 → 152,59 MiB |
 
-At 50,000 rows, CUDA peak allocation drops from 312.6 to 152.6 MiB. The 25.7% CPU regression is why the initial fast path must be CUDA-only rather than selected solely from table compatibility.
+Bei 50.000 Zeilen war batched `gather` auch für 1/2/4/8 eindeutige Permutationen schneller als getrenntes `index_select` (0,451/0,808/1,536/2,977 ms gegenüber 0,478/0,956/1,725/3,203 ms). Der CUDA-Profiler reduziert 64 auf 6 Kernel-Events pro Anwendung. Damit ersetzt die Evidenz den bisherigen Vorschlag „mehrfach `index_select`“ durch den gebündelten Algorithmus; ein datenabhängiger Schwellwert ist nicht nötig.
 
-## Testing
+## Teststrategie
 
-- Compare every member's data, columns, inverse transform, and order against the existing path for shared tables, two normalization tables, repeated mappings, and incompatible schemas.
-- Verify four output groups of shape `[2, rows, columns]` for the representative plan without asserting private helper layout.
-- Keep synchronized CPU/L4 scenarios at 1k, 10k, and 50k rows as permanent non-regression benchmarks.
+- Daten, Spaltennamen, inverse Transformation und logische Reihenfolge für geteilte Tabellen, zwei Normalisierungen, wiederholte IDs und inkompatible Schemata gegen den bestehenden Pfad vergleichen.
+- Die öffentliche Ausgabe für eine, zwei, vier und acht Permutationen sowie CPU-Fallback und CUDA-Pfad prüfen, ohne private Helper-Struktur festzuschreiben.
+- 1.000, 10.000 und 50.000 Zeilen als permanente synchronisierte GPU-Nichtregressionsszenarien behalten; Peak-Speicher zusätzlich für die große Tabelle messen.
