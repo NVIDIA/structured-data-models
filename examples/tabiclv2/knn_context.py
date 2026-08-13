@@ -114,12 +114,14 @@ autocast = torch.amp.autocast(
 
 # 1. Full context
 with autocast:
+    gen = torch.Generator(device=device).manual_seed(args.seed)
     pred_full = model(
         x_context=train.drop_columns(target_name),
         y_context=train[:, target_name],
         x_query=test.drop_columns(target_name),
         recipe=recipe,
         num_estimators=args.num_estimators,
+        generator=gen,
     )
 print(
     f"Full context  ({n_train} rows):           {auc(pred_full.numerical):.3f}"
@@ -128,16 +130,20 @@ print(
 # 2. Random context (averaged over several draws)
 random_aucs = []
 for i in range(args.num_random_draws):
-    gen = torch.Generator(device=device).manual_seed(args.seed + i)
-    indices = torch.randperm(n_train, device=device, generator=gen)[: args.k]
+    rand_gen = torch.Generator(device=device).manual_seed(args.seed + i)
+    indices = torch.randperm(n_train, device=device, generator=rand_gen)[
+        : args.k
+    ]
     context = train[indices]
     with autocast:
+        model_gen = torch.Generator(device=device).manual_seed(args.seed)
         pred_rand = model(
             x_context=context.drop_columns(target_name),
             y_context=context[:, target_name],
             x_query=test.drop_columns(target_name),
             recipe=recipe,
             num_estimators=args.num_estimators,
+            generator=model_gen,
         )
     random_aucs.append(auc(pred_rand.numerical))
 mean_auc = sum(random_aucs) / len(random_aucs)
@@ -151,12 +157,14 @@ knn_probs = []
 with autocast:
     for i in range(n_test):
         context = train[knn_indices[i]]
+        gen = torch.Generator(device=device).manual_seed(args.seed)
         pred = model(
             x_context=context.drop_columns(target_name),
             y_context=context[:, target_name],
             x_query=test[i : i + 1].drop_columns(target_name),
             recipe=recipe,
             num_estimators=args.num_estimators,
+            generator=gen,
         )
         probs = pred.numerical  # [1, num_classes_seen]
         if probs.size(-1) < num_classes:
@@ -181,20 +189,22 @@ with autocast:
         remaining = torch.ones(n_train, dtype=torch.bool, device=device)
         remaining[knn_ctx] = False
         rand_pool = remaining.nonzero(as_tuple=False).squeeze(-1)
-        gen = torch.Generator(device=device).manual_seed(args.seed + i)
+        rand_gen = torch.Generator(device=device).manual_seed(args.seed + i)
         rand_ctx = rand_pool[
-            torch.randperm(rand_pool.size(0), device=device, generator=gen)[
-                :k_rand
-            ]
+            torch.randperm(
+                rand_pool.size(0), device=device, generator=rand_gen
+            )[:k_rand]
         ]
         ctx_indices = torch.cat([knn_ctx, rand_ctx])
         context = train[ctx_indices]
+        model_gen = torch.Generator(device=device).manual_seed(args.seed)
         pred = model(
             x_context=context.drop_columns(target_name),
             y_context=context[:, target_name],
             x_query=test[i : i + 1].drop_columns(target_name),
             recipe=recipe,
             num_estimators=args.num_estimators,
+            generator=model_gen,
         )
         probs = pred.numerical  # [1, num_classes_seen]
         if probs.size(-1) < num_classes:

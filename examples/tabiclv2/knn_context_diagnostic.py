@@ -138,11 +138,13 @@ with autocast:
         ctx_labels = train_labels[ctx_idx].float()
         ctx_pct_pos = ctx_labels.mean().item()
 
+        gen = torch.Generator(device=device).manual_seed(args.seed)
         model.fit(
             x=context.drop_columns(target_name),
             y=context[:, target_name],
             recipe=recipe,
             num_estimators=args.num_estimators,
+            generator=gen,
         )
         pred = model.predict(test[query_idx].drop_columns(target_name))
         model.clear()

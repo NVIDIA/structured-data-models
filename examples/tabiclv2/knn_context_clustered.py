@@ -108,12 +108,14 @@ autocast = torch.amp.autocast(
 
 # 1. Full context
 with autocast:
+    gen = torch.Generator(device=device).manual_seed(args.seed)
     pred_full = model(
         x_context=train.drop_columns(target_name),
         y_context=train[:, target_name],
         x_query=test.drop_columns(target_name),
         recipe=recipe,
         num_estimators=args.num_estimators,
+        generator=gen,
     )
 print(
     f"Full context    ({n_train} rows):           {auc(pred_full.numerical):.3f}"
@@ -126,12 +128,14 @@ for i in range(args.num_random_draws):
     indices = torch.randperm(n_train, device=device, generator=gen)[: args.k]
     context = train[indices]
     with autocast:
+        gen = torch.Generator(device=device).manual_seed(args.seed)
         pred_rand = model(
             x_context=context.drop_columns(target_name),
             y_context=context[:, target_name],
             x_query=test.drop_columns(target_name),
             recipe=recipe,
             num_estimators=args.num_estimators,
+            generator=gen,
         )
     random_aucs.append(auc(pred_rand.numerical))
 mean_auc = sum(random_aucs) / len(random_aucs)
@@ -153,11 +157,13 @@ with autocast:
         ctx_indices = knn_indices[query_indices].unique()
         context = train[ctx_indices]
 
+        gen = torch.Generator(device=device).manual_seed(args.seed)
         model.fit(
             x=context.drop_columns(target_name),
             y=context[:, target_name],
             recipe=recipe,
             num_estimators=args.num_estimators,
+            generator=gen,
         )
         pred = model.predict(test[query_indices].drop_columns(target_name))
         model.clear()
