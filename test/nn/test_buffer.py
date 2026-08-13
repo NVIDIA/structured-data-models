@@ -32,6 +32,8 @@ def test_buffer_list_respects_persistence() -> None:
     assert tuple(persistent.state_dict()) == ("0", "1")
     assert tuple(non_persistent.state_dict()) == ()
     assert len(tuple(non_persistent.buffers())) == 2
+    with pytest.raises(RuntimeError, match="Unexpected key"):
+        non_persistent.load_state_dict(persistent.state_dict())
 
     restored = BufferList()
     restored.load_state_dict(persistent.state_dict())
@@ -47,6 +49,11 @@ def test_buffer_list_registers_as_a_nested_module() -> None:
 
     assert tuple(module.state_dict()) == ("states.0",)
     assert tuple(name for name, _ in module.named_buffers()) == ("states.0",)
+
+    restored = torch.nn.Module()
+    restored.states = BufferList()
+    restored.load_state_dict(module.state_dict())
+    assert torch.equal(restored.states[0], torch.tensor([1.0]))
 
 
 @onlyCUDA
@@ -72,6 +79,23 @@ def test_buffer_list_moves_device_and_floating_dtype(
     assert buffers[0].dtype == torch.float64
     assert buffers[1].device == device
     assert buffers[1].dtype == torch.long
+
+
+@withCUDA
+def test_buffer_list_load_preserves_destination_device_and_dtype(
+    device: torch.device,
+) -> None:
+    source = BufferList([torch.tensor([1.0, 2.0])])
+    target = BufferList([torch.empty(0, dtype=torch.float64)]).to(device)
+
+    target.load_state_dict(source.state_dict())
+
+    assert target[0].device == device
+    assert target[0].dtype == torch.float64
+    assert torch.equal(
+        target[0].cpu(),
+        torch.tensor([1.0, 2.0], dtype=torch.float64),
+    )
 
 
 def test_buffer_list_deepcopy_has_independent_storage() -> None:

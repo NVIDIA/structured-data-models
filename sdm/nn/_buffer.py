@@ -41,14 +41,43 @@ class BufferList(torch.nn.Module):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
+        if not self._persistent:
+            super()._load_from_state_dict(
+                state_dict,
+                prefix,
+                local_metadata,
+                strict,
+                missing_keys,
+                unexpected_keys,
+                error_msgs,
+            )
+            return
+
+        loaded_keys = []
+        for index in range(len(self)):
+            key = f"{prefix}{index}"
+            state = state_dict.get(key)
+            if not isinstance(state, Tensor):
+                continue
+            current = self.get_buffer(str(index))
+            setattr(
+                self,
+                str(index),
+                state.to(device=current.device, dtype=current.dtype).clone(),
+            )
+            state_dict.pop(key)
+            loaded_keys.append(key)
+
         key = f"{prefix}{len(self)}"
         while key in state_dict and isinstance(state_dict[key], Tensor):
+            buffer = state_dict.pop(key)
             self.register_buffer(
                 str(self._size),
-                torch.empty_like(state_dict[key]),
+                buffer.clone(),
                 persistent=self._persistent,
             )
             self._size += 1
+            loaded_keys.append(key)
             key = f"{prefix}{len(self)}"
         super()._load_from_state_dict(
             state_dict,
@@ -59,6 +88,9 @@ class BufferList(torch.nn.Module):
             unexpected_keys,
             error_msgs,
         )
+        for key in loaded_keys:
+            if key in missing_keys:
+                missing_keys.remove(key)
 
     def __getitem__(self, index: int) -> Tensor:
         index = operator.index(index)
