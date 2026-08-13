@@ -12,6 +12,7 @@ from sdm.relational import (
     TaskLink,
 )
 from sdm.relational.backend import (
+    CuGraphRelationalSampler,
     PyGLibRelationalSampler,
 )
 from sdm.tensor.mixin import DeviceMixin

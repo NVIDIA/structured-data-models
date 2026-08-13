@@ -17,7 +17,7 @@ class PyGLibRelationalSampler:
     ) -> None:
 
         if not data.is_cpu:
-            raise NotImplementedError(
+            raise ValueError(
                 f"{self.__class__.__name__!r} requires input data on CPU "
                 f"(got '{data.device}')"
             )
