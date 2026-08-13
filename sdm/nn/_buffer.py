@@ -6,7 +6,10 @@ from torch import Tensor
 
 
 class BufferList(torch.nn.Module):
-    """Store an indexed collection of registered buffers.
+    """Store tensors as indexed persistent PyTorch buffers.
+
+    The tensors move with this module and are included in its
+    :meth:`~torch.nn.Module.state_dict`.
 
     Args:
         buffers: Tensors to register in order.
@@ -27,12 +30,12 @@ class BufferList(torch.nn.Module):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
-        loaded_keys = []
+        consumed_keys = []
         index = 0
         while isinstance(state_dict.get(f"{prefix}{index}"), Tensor):
             key = f"{prefix}{index}"
             self.register_buffer(str(index), state_dict.pop(key).clone())
-            loaded_keys.append(key)
+            consumed_keys.append(key)
             index += 1
 
         super()._load_from_state_dict(
@@ -44,7 +47,7 @@ class BufferList(torch.nn.Module):
             unexpected_keys,
             error_msgs,
         )
-        for key in loaded_keys:
+        for key in consumed_keys:
             if key in missing_keys:
                 missing_keys.remove(key)
 

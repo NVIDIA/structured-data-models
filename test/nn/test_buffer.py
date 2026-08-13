@@ -19,32 +19,37 @@ def test_buffer_list_is_an_indexed_buffer_collection() -> None:
     )
 
     assert len(buffers) == 2
-    assert tuple(name for name, _ in buffers.named_buffers()) == ("0", "1")
+    assert tuple(buffers.state_dict()) == ("0", "1")
     assert buffers[0].equal(torch.tensor([1.0, 2.0]))
     assert tuple(buffers)[1].equal(torch.tensor([3.0]))
 
 
 def test_buffer_list_loads_tensor_subclasses() -> None:
     tensor = torch.tensor([1.0]).as_subclass(_TensorSubclass)
+    source = BufferList([tensor])
     restored = BufferList()
 
-    restored.load_state_dict(BufferList([tensor]).state_dict())
+    restored.load_state_dict(source.state_dict())
 
     assert type(restored[0]) is _TensorSubclass
     assert torch.equal(restored[0], tensor)
+    restored[0].add_(1)
+    assert torch.equal(source[0], tensor)
 
 
 def test_buffer_list_registers_as_a_nested_module() -> None:
     module = torch.nn.Module()
-    module.states = BufferList([torch.tensor([1.0])])
+    module.register_buffer("0", torch.tensor([2.0]))
+    module.buffer_list = BufferList([torch.tensor([1.0])])
 
-    assert tuple(module.state_dict()) == ("states.0",)
-    assert tuple(name for name, _ in module.named_buffers()) == ("states.0",)
+    assert tuple(module.state_dict()) == ("0", "buffer_list.0")
 
     restored = torch.nn.Module()
-    restored.states = BufferList()
+    restored.register_buffer("0", torch.empty(1))
+    restored.buffer_list = BufferList()
     restored.load_state_dict(module.state_dict())
-    assert torch.equal(restored.states[0], torch.tensor([1.0]))
+    assert torch.equal(restored.get_buffer("0"), torch.tensor([2.0]))
+    assert torch.equal(restored.buffer_list[0], torch.tensor([1.0]))
 
 
 @onlyCUDA
