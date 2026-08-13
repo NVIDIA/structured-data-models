@@ -42,12 +42,8 @@ def _build_wp_tokenizer(
         return None
 
     import cudf
-    from cudf.core.character_normalizer import (
-        CharacterNormalizer,
-    )
-    from cudf.core.wordpiece_tokenize import (
-        WordPieceVocabulary,
-    )
+    from cudf.core.character_normalizer import CharacterNormalizer
+    from cudf.core.wordpiece_tokenize import WordPieceVocabulary
 
     vocab_tokens = tokenizer.convert_ids_to_tokens(range(tokenizer.vocab_size))
     max_length = model.max_seq_length or tokenizer.model_max_length
