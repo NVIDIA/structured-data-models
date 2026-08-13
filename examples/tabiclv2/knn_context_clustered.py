@@ -38,6 +38,11 @@ DATASETS = {
         "target": "satisfaction",
         "n_train": 100000,
     },
+    "sdss17": {
+        "openml_name": "SDSS17",
+        "target": "ObjectType",
+        "n_train": 52000,
+    },
 }
 
 parser = argparse.ArgumentParser()
@@ -91,9 +96,14 @@ y_true_np = y_true.cpu().numpy()
 
 
 def auc(probs: torch.Tensor) -> float:
-    score = probs[:, -1].float().cpu().numpy()
-    raw = roc_auc_score(y_true_np, score)
-    return max(raw, 1 - raw)
+    scores = probs.float().cpu().numpy()
+    num_classes = scores.shape[-1]
+    if num_classes == 2:
+        raw = roc_auc_score(y_true_np, scores[:, -1])
+        return max(raw, 1 - raw)
+    return roc_auc_score(
+        y_true_np, scores, multi_class="ovr", average="weighted"
+    )
 
 
 # --- kNN index (on preprocessed features) ------------------------------------

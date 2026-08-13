@@ -8,7 +8,6 @@ context. Compares four strategies:
   1. Full context  — all training rows (TabICLv2 default)
   2. Random context — k random training rows (controls for context size)
   3. kNN context    — k nearest training rows per query row
-  4. Mixed context  — kNN neighbors + random rows for class diversity
 """
 
 # ruff: noqa
@@ -26,12 +25,6 @@ from recipe import knn_recipe
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--k", type=int, default=100, help="context size for kNN / random"
-)
-parser.add_argument(
-    "--knn-ratio",
-    type=float,
-    default=0.8,
-    help="fraction of k from kNN vs random in mixed mode",
 )
 parser.add_argument("--num-estimators", type=int, default=4)
 parser.add_argument("--num-random-draws", type=int, default=5)
@@ -66,17 +59,6 @@ def auc(probs: torch.Tensor) -> float:
     score = probs[:, -1].float().cpu().numpy()
     raw = roc_auc_score(y_true_np, score)
     return max(raw, 1 - raw)
-
-
-def orient_probs(probs: torch.Tensor, y_batch: torch.Tensor) -> torch.Tensor:
-    """Flip probability columns if the last column is anti-correlated with labels."""
-    if probs.size(0) < 2 or probs.size(-1) < 2:
-        return probs
-    score = probs[:, -1].float()
-    y = y_batch.float()
-    if (score * y).sum() < ((1 - score) * y).sum():
-        return probs.flip(-1)
-    return probs
 
 
 # --- kNN index (on preprocessed features) ------------------------------------
@@ -171,50 +153,10 @@ with autocast:
             probs = torch.nn.functional.pad(
                 probs, (0, num_classes - probs.size(-1))
             )
-        knn_probs.append(orient_probs(probs, y_true[i : i + 1]))
+        knn_probs.append(probs)
         if (i + 1) % 50 == 0 or i == n_test - 1:
             print(f"  kNN {i + 1}/{n_test}", flush=True)
 
 knn_all_probs = torch.cat(knn_probs, dim=0)  # [N_test, num_classes]
 knn_auc = auc(knn_all_probs)
 print(f"kNN context    ({args.k} rows per query):   {knn_auc:.3f}")
-
-# 4. Mixed context (kNN + random, per-query)
-k_knn = int(args.k * args.knn_ratio)
-k_rand = args.k - k_knn
-mixed_probs = []
-with autocast:
-    for i in range(n_test):
-        knn_ctx = knn_indices[i, :k_knn]
-        remaining = torch.ones(n_train, dtype=torch.bool, device=device)
-        remaining[knn_ctx] = False
-        rand_pool = remaining.nonzero(as_tuple=False).squeeze(-1)
-        rand_gen = torch.Generator(device=device).manual_seed(args.seed + i)
-        rand_ctx = rand_pool[
-            torch.randperm(
-                rand_pool.size(0), device=device, generator=rand_gen
-            )[:k_rand]
-        ]
-        ctx_indices = torch.cat([knn_ctx, rand_ctx])
-        context = train[ctx_indices]
-        model_gen = torch.Generator(device=device).manual_seed(args.seed)
-        pred = model(
-            x_context=context.drop_columns(target_name),
-            y_context=context[:, target_name],
-            x_query=test[i : i + 1].drop_columns(target_name),
-            recipe=recipe,
-            num_estimators=args.num_estimators,
-            generator=model_gen,
-        )
-        probs = pred.numerical  # [1, num_classes_seen]
-        if probs.size(-1) < num_classes:
-            probs = torch.nn.functional.pad(
-                probs, (0, num_classes - probs.size(-1))
-            )
-        mixed_probs.append(orient_probs(probs, y_true[i : i + 1]))
-        if (i + 1) % 50 == 0 or i == n_test - 1:
-            print(f"  Mixed {i + 1}/{n_test}", flush=True)
-
-mixed_all_probs = torch.cat(mixed_probs, dim=0)  # [N_test, num_classes]
-mixed_auc = auc(mixed_all_probs)
-print(f"Mixed context  ({k_knn} kNN + {k_rand} random): {mixed_auc:.3f}")
