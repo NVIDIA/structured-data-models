@@ -18,7 +18,6 @@ def _segment_multi_reduce_kernel(
     num_channels: tl.constexpr,
     block_channels: tl.constexpr,
 ):
-    # One program traverses one CSR segment for one channel tile.
     segment = tl.program_id(0)
     channels = tl.program_id(1) * block_channels + tl.arange(0, block_channels)
     channel_mask = channels < num_channels
@@ -74,24 +73,6 @@ def segment_multi_reduce(
     src: Tensor,
     offsets: Tensor,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-    """Compute five reductions for contiguous CSR segments with Triton.
-
-    This kernel does not support autograd. It accumulates float16, bfloat16,
-    and float32 values in single precision. Empty segments produce zeros for
-    every statistic. Standard deviations are zero when the variance is at most
-    ``1e-5``, and infinite minimum or maximum values are replaced with zero.
-
-    Args:
-        src: Contiguous CUDA values with shape ``[E, D]``, where ``E`` is the
-            number of edges and ``D`` is the number of channels.
-        offsets: Contiguous, valid int32 or int64 CSR offsets with shape
-            ``[N + 1]``, where ``N`` is the number of segments. Must be on the
-            same CUDA device as ``src``.
-
-    Returns:
-        Sum, mean, standard deviation, minimum, and maximum tensors, each with
-        shape ``[N, D]`` and the same dtype as ``src``.
-    """
     shape = (offsets.numel() - 1, src.size(1))
     outputs = (
         src.new_empty(shape),
@@ -111,9 +92,8 @@ def segment_multi_reduce(
     else:
         num_warps = 1
     grid = (shape[0], triton.cdiv(shape[1], block_channels))
-    kernel = cast(Any, _segment_multi_reduce_kernel)
     with torch.cuda.device(src.device):
-        kernel[grid](
+        cast(Any, _segment_multi_reduce_kernel)[grid](
             src,
             offsets,
             *outputs,
