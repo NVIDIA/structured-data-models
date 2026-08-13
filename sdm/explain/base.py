@@ -19,12 +19,12 @@ class Explainer(ABC, Generic[_ResultT]):  # noqa: D101
     def explain(
         self,
         model: ICLModel,
-        x_context: Tensor | TableTensor,
-        y_context: Tensor | TableTensor,
         x_query: Tensor | TableTensor,
-        related_context_tables: RelatedTables | None = None,
         related_query_tables: RelatedTables | None = None,
         *,
+        x_context: Tensor | TableTensor,
+        y_context: Tensor | TableTensor,
+        related_context_tables: RelatedTables | None = None,
         recipe: Recipe | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -42,19 +42,27 @@ class Explainer(ABC, Generic[_ResultT]):  # noqa: D101
     def explain(  # noqa: D102
         self,
         model: ICLModel,
-        *args: Any,
+        x_query: Tensor | TableTensor,
+        related_query_tables: RelatedTables | None = None,
+        *,
+        x_context: Tensor | TableTensor | None = None,
+        y_context: Tensor | TableTensor | None = None,
+        related_context_tables: RelatedTables | None = None,
+        recipe: Recipe | None = None,
+        generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> _ResultT:
-        is_forward = (
-            len(args) >= 3
-            or "x_context" in kwargs
-            or "y_context" in kwargs
-            or (len(args) == 2 and "x_query" in kwargs)
-        )
-        if is_forward:
+        if x_context is not None:
+            assert y_context is not None
             return self._explain_forward(
                 model,
-                *args,
+                x_context,
+                y_context,
+                x_query,
+                related_context_tables,
+                related_query_tables,
+                recipe=recipe,
+                generator=generator,
                 **kwargs,
             )
 
@@ -68,8 +76,8 @@ class Explainer(ABC, Generic[_ResultT]):  # noqa: D101
 
         return self._explain_predict(
             model,
-            *args,
-            **kwargs,
+            x_query,
+            related_query_tables,
         )
 
     @abstractmethod
