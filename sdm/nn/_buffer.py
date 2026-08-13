@@ -8,9 +8,6 @@ from torch import Tensor
 class BufferList(torch.nn.Module):
     """Store tensors as indexed persistent PyTorch buffers.
 
-    The tensors move with this module and are included in its
-    :meth:`~torch.nn.Module.state_dict`.
-
     Args:
         buffers: Tensors to register in order.
     """
