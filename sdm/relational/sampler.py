@@ -110,9 +110,9 @@ class RelationalSampler:
             task_time_column: Datetime column in ``task_table`` used as the
                 query timestamp for temporal sampling.
             temporal_strategy: How temporal neighbors are selected. ``"last"``
-            selects the most recent neighbors before each seed timestamp.
-            ``"uniform"`` samples uniformly from neighbors before each seed
-            timestamp.
+                selects the most recent neighbors before each seed timestamp.
+                ``"uniform"`` samples uniformly from neighbors before each seed
+                timestamp.
         """
         if not isinstance(task_link, TaskLink):
             task_link = TaskLink.from_mapping(task_link)
