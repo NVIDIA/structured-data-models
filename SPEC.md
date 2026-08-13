@@ -4,43 +4,37 @@ Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseli
 
 ## Problem
 
-`ShuffleColumns` ist ein allgemeiner Processor. Seine öffentliche `method` muss daher die ausgeführte Strategie beschreiben und darf sich nicht stillschweigend mit der Spaltenanzahl ändern. Die TabICLv2-Referenz verletzt dieses Prinzip: `latin` fällt oberhalb von 4.000 Spalten auf `random` zurück.
+`ShuffleColumns` ist ein allgemeiner Processor. Seine gewählte Methode darf sich deshalb nicht unbemerkt mit der Spaltenanzahl ändern. TabICLv2 wechselt bei mehr als 4.000 Spalten von `latin` zu `random`; laut [TabICL #9](https://github.com/soda-inria/tabicl/issues/9) schützt diese Grenze die rekursive `O(C²)`-Implementierung. Für genau 4.000 gibt es weder eine Qualitätsmessung noch eine allgemeine algorithmische Begründung.
 
-Die Grenze wurde nach einem RecursionError bei 3.000 Features in [TabICL #9](https://github.com/soda-inria/tabicl/issues/9) eingeführt. Als Begründung wurden die Kosten der eager Latin-Implementierung und die Annahme genannt, Random sei bei vielen Features ausreichend divers. Es gibt dort keine Qualitätsmessung oder Herleitung für genau 4.000. Der Referenzcode materialisiert alle `C × C` Python-Indizes; bei `C=4.000` dauert das 6,41 s und erreicht 397,7 MiB RSS. Die Grenze schützt somit diese Implementierung, nicht die Latin-Semantik.
+Die Referenz erzeugt eine zufällige Symbol-, Zeilen- und Spaltenreihenfolge eines zyklischen Latin-Quadrats. Diese Verteilung lässt sich auf CUDA ohne das vollständige Quadrat erzeugen. Für identische TabICLv2-Seeds muss zusätzlich der Python-RNG-Verbrauch exakt reproduziert werden; diese teure Anforderung gehört in den Modellplan, nicht als Sonderregel in den allgemeinen Processor.
 
-## Allgemeine Regel und Lösung
+## Lösung
 
-- `random` wird der Default. Explizites `method="latin"` erzeugt bei jeder Spaltenanzahl Latin-Permutationen; explizites `random` bleibt random. Es gibt keinen impliziten Fallback.
-- Aufwand und Speicher skalieren mit Spalten `C` und angeforderten Estimatoren `E`, nicht mit einem festen Grenzwert. Ein Latin-Zyklus enthält `C` balancierte Permutationen; innerhalb eines Zyklus werden IDs nicht wiederholt. Bei `E > C` beginnt ein neuer deterministisch randomisierter Zyklus.
-- Ein Estimator erhält wie jeder andere genau eine Permutation der gewählten Methode. Modelle, die für `E=1` Identity benötigen, komponieren `Identity`; der generische Processor bekommt keine Modell-Sonderregel.
-- Die Referenz-RNG-Aufrufe werden ohne Rekursion reproduziert. Eine Order-Statistic-Struktur zieht dieselbe Symbolfolge in `O(C log C)`; Zeilen- und Spaltenreihenfolge bleiben eindimensional. Nur die angeforderten Permutationen werden als device-lokale `torch.long`-Tensoren materialisiert. Gesamt: `O(C log C + E·C)` Zeit und `O(C + E·C)` Speicher.
-- Falls später eine reale Ressourcenobergrenze belegt wird, wird sie explizit konfigurierbar oder führt zu einem klaren Fehler; sie ändert niemals unbemerkt die gewählte Methode.
-
-Pseudo-Code:
+- `random` wird der Default. Explizites `method="latin"` bleibt bei jeder Spaltenanzahl Latin; ein Ressourcenlimit meldet einen Fehler oder ist explizit konfigurierbar, ändert aber nie die Methode.
+- Der allgemeine CUDA-Pfad zieht Symbol-, Zeilen- und Pattern-Reihenfolge mit dem übergebenen `torch.Generator` direkt auf dem Eingabe-Device. Er hat dieselbe Latin-Verteilung wie die Referenz, materialisiert aber nur `E` Permutationen als einen Tensor `[E, C]`: `base[(pattern[:, None] - rows[None, :]) % C]`.
+- Der interne TabICLv2-Estimatorplan bildet für exakte Seed-Parität dieselben Python-RNG-Ziehungen ab. Eine Order-Statistic-Struktur dekodiert die Symbolfolge iterativ in `O(C log C)`; anschließend werden nur die ausgewählten Pattern-IDs auf CUDA materialisiert. Der generische Processor erhält fertige IDs/Zustände und kennt keine TabICLv2-Schwelle.
+- Innerhalb eines Zyklus werden Pattern-IDs nicht wiederholt. Bei `E > C` beginnt ein neuer deterministischer Zyklus. Ein Modell, das für einen Estimator Identity benötigt, komponiert `Identity`; `ShuffleColumns` bekommt keine `E=1`-Sonderregel.
 
 ```text
-Methode und Seed festlegen
-Latin-Zustand aus Symbol-, Zeilen- und Spaltenreihenfolge erzeugen
-angeforderte Pattern-IDs ohne Wiederholung pro Zyklus wählen
-nur diese Permutationen auf dem Eingabe-Device materialisieren
+allgemein: drei CUDA-Permutationen ziehen -> E Pattern-IDs wählen -> [E,C] gebündelt materialisieren
+TabICLv2: Python-RNG kompakt nachbilden -> ausgewählte IDs übertragen -> dieselbe CUDA-Materialisierung
 ```
 
-## Benchmark-Ergebnisse
+## GPU-Benchmark-Ergebnisse
 
-CPU-Planung, acht ausgewählte Permutationen, sieben Läufe. Der skalierbare Prototyp stimmt für vier Seeds und `C=1…100` exakt mit der eager Referenz überein.
+NVIDIA L4, PyTorch 2.13/CUDA 13, acht Patterns, synchronisierte End-to-End-Wall-Time nach Warm-up; Median/p95 über 10–20 Läufe. Der exakte kompakte Plan stimmt für vier Seeds und `C=1…100` elementweise mit der gepinnten Referenz überein.
 
-| Spalten |                Eager Latin | Skalierbares Latin Median/p95 |  Random Median/p95 |
-| ------: | -------------------------: | ----------------------------: | -----------------: |
-|     100 |           0,473 / 0,636 ms |              0,219 / 0,224 ms |                  – |
-|   4.000 |   6.407 ms / 397,7 MiB RSS |              11,22 / 11,38 ms |    7,21 / 11,98 ms |
-|   8.000 | nicht ausgeführt (`O(C²)`) |              31,18 / 41,57 ms |   14,89 / 20,44 ms |
-|  16.000 | nicht ausgeführt (`O(C²)`) |              50,63 / 63,73 ms |   29,43 / 34,16 ms |
-|  64.000 | nicht ausgeführt (`O(C²)`) |            229,68 / 233,03 ms | 123,03 / 140,24 ms |
+| Spalten | Exakt: Host-Materialisierung | Exakt: CUDA-Materialisierung | Allgemeines CUDA-Latin | Peak exakt auf CUDA |
+| ------: | ---------------------------: | ---------------------------: | ---------------------: | ------------------: |
+|     100 |               0,307/0,330 ms |               0,377/0,568 ms |         0,236/0,289 ms |            0,02 MiB |
+|   4.000 |             11,771/12,315 ms |             11,553/12,042 ms |         0,335/0,470 ms |            0,55 MiB |
+|  16.000 |             53,036/58,404 ms |             52,462/65,316 ms |         0,347/0,388 ms |            2,20 MiB |
+|  64.000 |           251,510/260,869 ms |           244,946/249,433 ms |         0,352/0,392 ms |            8,79 MiB |
 
-Der vollständige skalierbare Lauf bis 64.000 Spalten erreichte 35,2 MiB Prozess-RSS. Latin ist messbar teurer als Random, aber ohne Schwelle praktisch ausführbar; der Nutzer wählt den Trade-off über `method`.
+Der Profiler bestätigt die Entscheidung: Bei `C=64.000` sinkt die reine Materialisierung von 6,09 ms auf 0,097 ms; der verbleibende exakte Aufwand kommt fast vollständig vom seriellen Python-RNG-Plan. Das CUDA-Latin ist rund 696-mal schneller als der exakte Lauf, ist aber wegen anderer Seed-Samples kein Ersatz für TabICLv2-Ausführungsparität.
 
-## Testing
+## Teststrategie
 
-- Bis einschließlich 4.000 Spalten Permutationen und RNG-Reproduzierbarkeit exakt mit der gepinnten Referenz vergleichen.
-- Bei 4.001, 8.000 und 64.000 Spalten die Latin-Eigenschaft und das Ausbleiben eines Methodenwechsels prüfen.
-- Einen/viele Estimatoren, mehrere Latin-Zyklen, `random` als Default, Inverse-Transform sowie bestehende `shift`-, CPU- und CUDA-Pfade abdecken.
+- Verteilungseigenschaften und Latin-Invarianten des allgemeinen CUDA-Pfads für kleine/große `C`, mehrere `E`, mehrere Zyklen und deterministische `torch.Generator` prüfen.
+- Den internen TabICLv2-Plan bis 4.000 Spalten und über mehrere Seeds exakt vergleichen; oberhalb davon Latin-Invarianten und fehlenden Methodenwechsel prüfen.
+- Inverse Transformation, `random` als Default, bestehende `shift`-/CPU-Pfade und vollständige per-Estimator-Modellinputs abdecken.
