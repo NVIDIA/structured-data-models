@@ -1,34 +1,12 @@
-from typing import Literal, cast
+from typing import Literal
 
 import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, Stype, TableTensor
+from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.tensor import EnsembleTable
-
-
-class _CategoryPermutations(torch.nn.Module):
-    """Store fitted categorical code permutations."""
-
-    permutations: Tensor
-    offsets: Tensor
-
-    def __init__(
-        self,
-        permutations: Tensor,
-        offsets: tuple[int, ...],
-    ) -> None:
-        super().__init__()
-        self.register_buffer("permutations", permutations)
-        self.register_buffer(
-            "offsets",
-            torch.tensor(
-                offsets,
-                dtype=torch.long,
-                device=permutations.device,
-            ),
-        )
 
 
 class ShuffleCategories(EnsembleProcessor):
@@ -58,7 +36,8 @@ class ShuffleCategories(EnsembleProcessor):
     ) -> None:
         super().__init__()
         self.method = method
-        self._permutations = torch.nn.ModuleList()
+        self._permutations = BufferList()
+        self._offsets: tuple[tuple[int, ...], ...] = ()
         self._permutation_ids: tuple[int, ...] = ()
 
     def _draw_permutations(
@@ -108,7 +87,8 @@ class ShuffleCategories(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> None:
 
-        self._permutations = torch.nn.ModuleList()
+        permutations_by_id = []
+        offsets_by_id = []
         permutation_ids = []
         permutation_id_by_key: dict[
             tuple[torch.device, tuple[int, ...], tuple[int, ...]], int
@@ -126,13 +106,14 @@ class ShuffleCategories(EnsembleProcessor):
             )
             permutation_id = permutation_id_by_key.get(key)
             if permutation_id is None:
-                permutation_id = len(self._permutations)
+                permutation_id = len(permutations_by_id)
                 permutation_id_by_key[key] = permutation_id
-                self._permutations.append(
-                    _CategoryPermutations(permutations, offsets)
-                )
+                permutations_by_id.append(permutations)
+                offsets_by_id.append(offsets)
             permutation_ids.append(permutation_id)
 
+        self._permutations = BufferList(permutations_by_id)
+        self._offsets = tuple(offsets_by_id)
         self._permutation_ids = tuple(permutation_ids)
 
     def _transform_ensemble(
@@ -154,14 +135,13 @@ class ShuffleCategories(EnsembleProcessor):
         if len(member_ids_by_permutation) == ensemble_table.num_members:
             member_tables: list[TableTensor] = []
             for member_id, permutation_id in enumerate(self._permutation_ids):
-                permutations = cast(
-                    _CategoryPermutations,
-                    self._permutations[permutation_id],
-                )
+                permutations = self._permutations[permutation_id]
+                offsets = self._offsets[permutation_id]
                 member_tables.append(
                     self._permute(
                         ensemble_table.table(member_id),
                         permutations,
+                        offsets,
                     )
                 )
             return EnsembleTable.from_tables(
@@ -172,12 +152,13 @@ class ShuffleCategories(EnsembleProcessor):
         outputs: dict[int, EnsembleTable] = {}
         for permutation_id, member_ids in member_ids_by_permutation.items():
             selected = ensemble_table.select_members(member_ids)
-            permutations = cast(
-                _CategoryPermutations,
-                self._permutations[permutation_id],
-            )
+            permutations = self._permutations[permutation_id]
+            offsets = self._offsets[permutation_id]
             outputs[permutation_id] = selected.replace_groups(
-                [self._permute(group, permutations) for group in selected]
+                [
+                    self._permute(group, permutations, offsets)
+                    for group in selected
+                ]
             )
 
         output_tables = []
@@ -197,16 +178,14 @@ class ShuffleCategories(EnsembleProcessor):
     @staticmethod
     def _permute(
         table: TableTensor,
-        permutations: _CategoryPermutations,
+        permutations: Tensor,
+        offsets: tuple[int, ...],
     ) -> TableTensor:
-        offsets = permutations.offsets.tolist()
         code = table.categorical.code.clone()
         valid_mask = table.categorical.isfinite()
         categories: list[Tensor] = []
         for index, category in enumerate(table.categorical.categories):
-            permutation = permutations.permutations[
-                offsets[index] : offsets[index + 1]
-            ]
+            permutation = permutations[offsets[index] : offsets[index + 1]]
             codes = code[..., index]
             valid = valid_mask[..., index]
             valid_codes = codes[valid].to(torch.long)

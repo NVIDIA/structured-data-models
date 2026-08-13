@@ -10,6 +10,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
 from sdm.tensor import EnsembleTable
@@ -69,7 +70,31 @@ class AlignCategories(EnsembleProcessor):
     ) -> None:
         super().__init__()
         self.sort_by = sort_by
-        self._categories: tuple[tuple[Tensor, ...], ...] = ()
+        self._category_values = BufferList()
+        self._category_offsets: tuple[int, ...] = (0,)
+
+    @property
+    def _categories(self) -> tuple[tuple[Tensor, ...], ...]:
+        return tuple(
+            tuple(self._category_values[index] for index in range(start, end))
+            for start, end in zip(
+                self._category_offsets,
+                self._category_offsets[1:],
+            )
+        )
+
+    @_categories.setter
+    def _categories(
+        self,
+        categories: tuple[tuple[Tensor, ...], ...],
+    ) -> None:
+        values = []
+        offsets = [0]
+        for member_categories in categories:
+            values.extend(member_categories)
+            offsets.append(len(values))
+        self._category_values = BufferList(values)
+        self._category_offsets = tuple(offsets)
 
     def _fit_column(
         self,
