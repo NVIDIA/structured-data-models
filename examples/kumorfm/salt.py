@@ -29,7 +29,6 @@ from sdm import (
     RelationalData,
     Stype,
     TableTensor,
-    TemporalSamplingConfig,
     infer_stypes,
 )
 from sdm.models import KumoRFM
@@ -103,16 +102,7 @@ def run_task(task_name: str) -> None:
         for name, table in db.table_dict.items()
         if table.time_col is not None
     }
-    sampler = data.sampler(
-        temporal=(
-            TemporalSamplingConfig(
-                time_columns=time_columns,
-                strategy="last",
-            )
-            if time_columns
-            else None
-        ),
-    )
+    sampler = data.sampler(time_columns)
 
     frames = [
         task.get_table(split, mask_input_cols=False).df

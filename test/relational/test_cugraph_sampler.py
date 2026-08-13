@@ -5,14 +5,7 @@ import pyarrow as pa
 import pytest
 import torch
 
-from sdm import (
-    ColumnarTensor,
-    RelationalData,
-    Stype,
-    TableTensor,
-    TemporalSamplingConfig,
-)
-from sdm.relational import CuGraphRelationalSampler
+from sdm import ColumnarTensor, RelationalData, Stype, TableTensor
 from sdm.relational.sampler import EXAMPLE_ID
 from sdm.testing import onlyCUDA
 

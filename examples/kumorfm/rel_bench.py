@@ -100,16 +100,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
         for name, table in db.table_dict.items()
         if table.time_col is not None
     }
-    sampler = data.sampler(
-        temporal=(
-            sdm.TemporalSamplingConfig(
-                time_columns=time_columns,
-                strategy="last",
-            )
-            if time_columns
-            else None
-        ),
-    )
+    sampler = data.sampler(time_columns)
 
     dfs = [
         task.get_table(split, mask_input_cols=False).df
