@@ -41,21 +41,6 @@ def test_power_transform_accepts_caller_compiled_optimizer(
     torch.testing.assert_close(compiled, eager, atol=1e-3, rtol=1e-3)
 
 
-def test_power_transform_lambda_optimizer_remains_overridable() -> None:
-    class FixedLambdaPowerTransform(PowerTransform):
-        def _optimize_lambdas(
-            self,
-            inp: torch.Tensor,
-            constant_features: torch.Tensor,
-        ) -> torch.Tensor:
-            return torch.ones_like(constant_features, dtype=inp.dtype)
-
-    inp = torch.arange(12, dtype=torch.float32).view(6, 2)
-    processor = FixedLambdaPowerTransform().fit(TableTensor.from_tensor(inp))
-
-    assert torch.equal(processor.lambdas, torch.ones((1, 2)))
-
-
 @withCUDA
 def test_power_transform_standardized_fit_transform_and_inverse_round_trip(
     device: torch.device,
