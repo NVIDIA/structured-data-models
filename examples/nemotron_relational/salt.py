@@ -1,13 +1,13 @@
-"""Benchmark KumoRFM on RelBench SALT autocomplete tasks.
+"""Benchmark NemotronRelational on RelBench SALT autocomplete tasks.
 
 Without arguments, this runs all eight SALT tasks. Pass ``--task`` to run one
 task.
 
 Examples:
-    python examples/kumorfm/salt.py
-    python examples/kumorfm/salt.py --task sales-incoterms
-    python examples/kumorfm/salt.py --task sales-group --num_neighbors 32
-    python examples/kumorfm/salt.py --task item-plant --num_neighbors 32 32 8
+    python salt.py
+    python salt.py --task sales-incoterms
+    python salt.py --task sales-group --num_neighbors 32
+    python salt.py --task item-plant --num_neighbors 32 32 8
 
 Each ``--num_neighbors`` value configures one hop: ``32`` is one hop, and
 ``32 32 8`` is three hops.
@@ -32,7 +32,7 @@ from sdm import (
     TemporalSamplingConfig,
     infer_stypes,
 )
-from sdm.models import KumoRFM
+from sdm.models import NemotronRelational
 
 SALT_DATASET = "rel-salt"
 SALT_PRESETS = {
@@ -158,7 +158,7 @@ def run_task(task_name: str) -> None:
     x_context = context.drop_columns(task.target_col)
     y_context = context[task.target_col]
 
-    model = KumoRFM(device=device)
+    model = NemotronRelational(device=device)
     mrr = MeanMetric().to(device)
     accuracy = MeanMetric().to(device)
     batch_size = args.batch_size or SALT_PRESETS[task_name][1]

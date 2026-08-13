@@ -17,13 +17,13 @@
 
 **A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
 
-- **Models:** Reference implementations of structured data foundation models such as the tabular [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and relational [`KumoRFM`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRFM), built on a unified interface with room for future model families.
+- **Models:** Reference implementations of structured data foundation models such as the tabular [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and the relational [`NemotronRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.NemotronRelational), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
 ## Installation
 
-The `structured-data-models` package is available from Python 3.11 and PyTorch 2.7 onwards.
+The `structured-data-models` package is available from Python 3.11 and PyTorch 2.5 onwards.
 Install via:
 
 ```bash
@@ -41,7 +41,7 @@ pip install structured-data-models
 
 **Relational Foundation Models:**
 
-- **[`KumoRFM`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRFM)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
+- **[`NemotronRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.NemotronRelational)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
 
 ## Quick Tour
 
