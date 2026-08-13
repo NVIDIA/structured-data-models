@@ -41,44 +41,38 @@ class BufferList(torch.nn.Module):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
-        if not self._persistent:
-            super()._load_from_state_dict(
-                state_dict,
-                prefix,
-                local_metadata,
-                strict,
-                missing_keys,
-                unexpected_keys,
-                error_msgs,
-            )
-            return
+        if self._persistent:
+            size = 0
+            while isinstance(state_dict.get(f"{prefix}{size}"), Tensor):
+                size += 1
 
-        loaded_keys = []
-        for index in range(len(self)):
-            key = f"{prefix}{index}"
-            state = state_dict.get(key)
-            if not isinstance(state, Tensor):
-                continue
-            current = self.get_buffer(str(index))
-            setattr(
-                self,
-                str(index),
-                state.to(device=current.device, dtype=current.dtype).clone(),
-            )
-            state_dict.pop(key)
-            loaded_keys.append(key)
+            for index in range(len(self) - 1, size - 1, -1):
+                delattr(self, str(index))
+            self._size = size
 
-        key = f"{prefix}{len(self)}"
-        while key in state_dict and isinstance(state_dict[key], Tensor):
-            buffer = state_dict.pop(key)
-            self.register_buffer(
-                str(self._size),
-                buffer.clone(),
-                persistent=self._persistent,
-            )
-            self._size += 1
-            loaded_keys.append(key)
-            key = f"{prefix}{len(self)}"
+            for index in range(size):
+                name = str(index)
+                state = state_dict[f"{prefix}{name}"]
+                if name not in self._buffers:
+                    self.register_buffer(
+                        name,
+                        torch.empty_like(state),
+                        persistent=True,
+                    )
+                    continue
+
+                current = self.get_buffer(name)
+                if current.shape != state.shape:
+                    setattr(
+                        self,
+                        name,
+                        torch.empty(
+                            state.shape,
+                            dtype=current.dtype,
+                            device=current.device,
+                        ),
+                    )
+
         super()._load_from_state_dict(
             state_dict,
             prefix,
@@ -88,11 +82,9 @@ class BufferList(torch.nn.Module):
             unexpected_keys,
             error_msgs,
         )
-        for key in loaded_keys:
-            if key in missing_keys:
-                missing_keys.remove(key)
 
     def __getitem__(self, index: int) -> Tensor:
+
         index = operator.index(index)
         if not -len(self) <= index < len(self):
             raise IndexError(f"index {index} is out of range")

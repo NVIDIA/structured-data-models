@@ -98,6 +98,29 @@ def test_buffer_list_load_preserves_destination_device_and_dtype(
     )
 
 
+@pytest.mark.parametrize("size", [0, 1])
+def test_buffer_list_load_resizes_to_checkpoint(size: int) -> None:
+    source = BufferList(torch.tensor([float(index)]) for index in range(size))
+    target = BufferList([torch.tensor([1.0]), torch.tensor([2.0])])
+
+    target.load_state_dict(source.state_dict())
+
+    assert len(target) == size
+    assert tuple(target.state_dict()) == tuple(
+        str(index) for index in range(size)
+    )
+
+
+def test_buffer_list_load_honors_assign() -> None:
+    state = BufferList([torch.tensor([1.0])]).state_dict()
+    target = BufferList([torch.empty(1, dtype=torch.float64)])
+
+    target.load_state_dict(state, assign=True)
+
+    assert target[0] is state["0"]
+    assert target[0].dtype == torch.float32
+
+
 def test_buffer_list_deepcopy_has_independent_storage() -> None:
     buffers = BufferList([torch.tensor([1.0, 2.0])])
 
