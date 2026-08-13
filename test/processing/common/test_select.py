@@ -7,7 +7,7 @@ from sdm.tensor import EnsembleTable
 
 
 def test_select_columns_rejects_negative_max_columns() -> None:
-    with pytest.raises(ValueError, match="max_columns must be non-negative"):
+    with pytest.raises(ValueError, match="max_columns must be positive"):
         SelectColumns(max_columns=-1)
 
 

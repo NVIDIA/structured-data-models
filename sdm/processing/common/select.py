@@ -13,7 +13,7 @@ class SelectColumns(EnsembleProcessor):
 
     Args:
         max_columns: The maximum number of columns to keep for each semantic
-            type in each ensemble member. Must be non-negative.
+            type in each ensemble member. Must be positive.
         method: The column selection method.
             ``"first"`` keeps the first columns according to their order within
             each semantic block. ``"round_robin"`` assigns each ensemble
@@ -31,8 +31,8 @@ class SelectColumns(EnsembleProcessor):
         method: Literal["first", "round_robin"] = "first",
     ) -> None:
         super().__init__()
-        if max_columns < 0:
-            raise ValueError("max_columns must be non-negative")
+        if max_columns <= 0:
+            raise ValueError("max_columns must be positive")
         self.max_columns = max_columns
         self.method = method
 
@@ -60,41 +60,40 @@ class SelectColumns(EnsembleProcessor):
         tables = []
         for member_id in range(ensemble_table.num_members):
             table = ensemble_table.table(member_id)
-            new_columns: dict[StypeLike, tuple[str, ...]] = {}
-            new_blocks = {}
+            columns: dict[StypeLike, tuple[str, ...]] = {}
+            blocks = {}
             for stype, block in table.items():
                 column_names = table.columns[stype]
-                column_count = min(self.max_columns, len(column_names))
-                start_index = (
-                    0
-                    if column_count == len(column_names)
-                    else member_id * self.max_columns
-                )
-                indices = (
-                    tuple(
-                        (start_index + offset) % len(column_names)
-                        for offset in range(column_count)
-                    )
-                    if column_count > 0
-                    else ()
-                )
-                new_columns[stype] = tuple(
-                    column_names[index] for index in indices
-                )
-                if indices == tuple(range(len(column_names))):
-                    new_blocks[stype] = block
+                num_columns = len(column_names)
+                # Empty blocks are passed through unchanged.
+                if num_columns == 0:
+                    columns[stype] = column_names
+                    blocks[stype] = block
                     continue
-                if len(indices) == 0:
-                    new_blocks[stype] = block[..., :0]
+                chunk_size = min(self.max_columns, num_columns)
+                start = member_id * chunk_size % num_columns
+                first_count = min(chunk_size, num_columns - start)
+                wrap_count = chunk_size - first_count
+                # Consecutive chunk from ``start``, wrapping past the last
+                # column back to the first.
+                columns[stype] = (
+                    column_names[start : start + first_count]
+                    + column_names[:wrap_count]
+                )
+                if wrap_count == 0:
+                    blocks[stype] = block[..., start : start + first_count]
                     continue
-                new_blocks[stype] = torch.cat(
-                    [block.narrow(-1, index, 1) for index in indices],
+                blocks[stype] = torch.cat(
+                    [
+                        block[..., start : start + first_count],
+                        block[..., :wrap_count],
+                    ],
                     dim=-1,
                 )
             tables.append(
                 table.__class__(
-                    columns=new_columns,
-                    **new_blocks,
+                    columns=columns,
+                    **blocks,
                 )
             )
         return EnsembleTable.from_tables(
