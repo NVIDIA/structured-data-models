@@ -10,9 +10,9 @@ from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.nemotron_relational.invariant_gnn import InvariantGNN
-from sdm.models.nemotron_relational.recipe import default_recipe
-from sdm.models.nemotron_relational.task import TaskGraph
+from sdm.models.nemotron.relational.invariant_gnn import InvariantGNN
+from sdm.models.nemotron.relational.recipe import default_recipe
+from sdm.models.nemotron.relational.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
