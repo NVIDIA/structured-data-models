@@ -1,8 +1,44 @@
+import pytest
 import torch
 
 from sdm import TableTensor
 from sdm.processing import PowerTransform
-from sdm.testing import withCUDA
+from sdm.processing.numerical import power as power_module
+from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
+
+
+@onlyFullTest
+@onlyCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_power_transform_accepts_caller_compiled_optimizer(
+    dtype: torch.dtype,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inp = torch.linspace(
+        -3,
+        3,
+        steps=2 * 17 * 3,
+        device="cuda",
+        dtype=dtype,
+    ).view(2, 17, 3)
+    table = TableTensor.from_tensor(inp)
+
+    with torch.inference_mode():
+        eager = PowerTransform().fit_transform(table).numerical
+        compiled_optimizer = torch.compile(
+            power_module._optimize_lambdas,
+            fullgraph=True,
+        )
+        monkeypatch.setattr(
+            power_module,
+            "_optimize_lambdas",
+            compiled_optimizer,
+        )
+        compiled = PowerTransform().fit_transform(table).numerical
+
+    assert compiled.shape == inp.shape
+    assert torch.isfinite(compiled).all()
+    torch.testing.assert_close(compiled, eager, atol=1e-3, rtol=1e-3)
 
 
 @withCUDA
