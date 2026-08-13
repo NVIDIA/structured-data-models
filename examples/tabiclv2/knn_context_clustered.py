@@ -25,7 +25,25 @@ from sdm.processing.execution import RecipeExecution
 
 from recipe import knn_recipe
 
+DATASETS = {
+    "eeg-eye-state": {
+        "openml_name": "eeg-eye-state",
+        "target": "Class",
+        "n_train": 10000,
+    },
+    "diabetes": {"openml_name": "diabetes", "target": "class", "n_train": 500},
+    "churn": {"openml_name": "churn", "target": "class", "n_train": 3500},
+    "customer-satisfaction": {
+        "openml_name": "customer_satisfaction_in_airline",
+        "target": "satisfaction",
+        "n_train": 100000,
+    },
+}
+
 parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--dataset", choices=list(DATASETS), default="eeg-eye-state"
+)
 parser.add_argument(
     "--k", type=int, default=100, help="kNN neighbors per query row"
 )
@@ -35,18 +53,29 @@ parser.add_argument(
 parser.add_argument("--num-estimators", type=int, default=4)
 parser.add_argument("--num-random-draws", type=int, default=5)
 parser.add_argument("--seed", type=int, default=0)
-parser.add_argument("--n-train", type=int, default=10000)
+parser.add_argument(
+    "--n-train", type=int, default=None, help="override default n_train"
+)
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(args.seed)
 
-target_name = "Class"
-data = fetch_openml("eeg-eye-state", version=1, as_frame=True, parser="auto")
+ds = DATASETS[args.dataset]
+target_name: str = str(ds["target"])
+args.n_train = args.n_train if args.n_train is not None else int(ds["n_train"])
+
+data = fetch_openml(ds["openml_name"], version=1, as_frame=True, parser="auto")
 df = data.data.assign(**{target_name: data.target}).sample(
     frac=1, random_state=args.seed
 )
 stypes = sdm.infer_stypes(df, overrides={target_name: "categorical"})
+
+print(
+    f"Dataset: {args.dataset} ({len(df)} rows, n_train={args.n_train}, "
+    f"n_test={len(df) - args.n_train}, k={args.k}, clusters={args.num_clusters})"
+)
+print()
 
 train = sdm.TableTensor.from_pandas(
     df=df.iloc[: args.n_train], stypes=stypes, device=device
