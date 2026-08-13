@@ -59,6 +59,7 @@ def _reference(
 
 
 @onlyCUDA
+@pytest.mark.parametrize("offset_dtype", [torch.int32, torch.int64])
 @pytest.mark.parametrize(
     ("dtype", "num_channels", "atol", "rtol"),
     [
@@ -68,6 +69,7 @@ def _reference(
     ],
 )
 def test_segment_multi_reduce(
+    offset_dtype: torch.dtype,
     dtype: torch.dtype,
     num_channels: int,
     atol: float,
@@ -77,6 +79,7 @@ def test_segment_multi_reduce(
     offsets = torch.tensor(
         [0, *torch.tensor(degrees).cumsum(0).tolist()],
         device="cuda",
+        dtype=offset_dtype,
     )
     src = torch.randn(
         sum(degrees),
@@ -102,25 +105,6 @@ def test_segment_multi_reduce(
             rtol=rtol,
             equal_nan=True,
         )
-
-
-@onlyCUDA
-def test_segment_multi_reduce_int32_offsets() -> None:
-    src = torch.randn(7, 128, device="cuda")
-    offsets = torch.tensor([0, 2, 7], device="cuda", dtype=torch.int32)
-    module = importlib.import_module(
-        "sdm._kernels.triton.segment_multi_reduce"
-    )
-
-    with torch.inference_mode():
-        actual = module.segment_multi_reduce(src, offsets)
-
-    for result, reference in zip(
-        actual,
-        _reference(src, offsets),
-        strict=True,
-    ):
-        torch.testing.assert_close(result, reference)
 
 
 @onlyCUDA
