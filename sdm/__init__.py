@@ -17,7 +17,6 @@ from sdm.relational import (
     RelationalData,
     TaskLink,
     RelatedTables,
-    TemporalSamplingConfig,
 )
 from sdm.processing import Recipe
 from sdm import evaluation, models
@@ -42,7 +41,6 @@ __all__ = [
     "RelationalData",
     "TaskLink",
     "RelatedTables",
-    "TemporalSamplingConfig",
     "Recipe",
     "evaluation",
     "models",
