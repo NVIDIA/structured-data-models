@@ -177,3 +177,18 @@ def test_segment_multi_reduce_nonfinite() -> None:
         strict=True,
     ):
         torch.testing.assert_close(result, reference, equal_nan=True)
+
+
+@onlyCUDA
+def test_segment_multi_reduce_requires_contiguous_inputs() -> None:
+    src = torch.randn(7, 6, device="cuda")
+    offsets = torch.tensor([0, -1, 2, -1, 7, -1], device="cuda")
+    module = importlib.import_module(
+        "sdm._kernels.triton.segment_multi_reduce"
+    )
+
+    with pytest.raises(ValueError, match="src and offsets must be contiguous"):
+        module.segment_multi_reduce(src[:, ::2], offsets[::2].contiguous())
+
+    with pytest.raises(ValueError, match="src and offsets must be contiguous"):
+        module.segment_multi_reduce(src[:, ::2].contiguous(), offsets[::2])

@@ -73,6 +73,9 @@ def segment_multi_reduce(
     src: Tensor,
     offsets: Tensor,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    if not src.is_contiguous() or not offsets.is_contiguous():
+        raise ValueError("src and offsets must be contiguous")
+
     shape = (offsets.numel() - 1, src.size(1))
     outputs = (
         src.new_empty(shape),
