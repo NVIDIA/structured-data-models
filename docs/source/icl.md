@@ -117,7 +117,7 @@ They will run with the dtypes of the model inputs.
 
 ## Embeddings
 
-Intermediate embeddings of any {py:class}`~sdm.models.ICLModel` can be captured by attaching a standard PyTorch hook, *e.g.*, via {py:meth}`torch.nn.Module.register_forward_pre_hook`.
+Intermediate embeddings of any {py:class}`~sdm.models.ICLModel` can be captured by attaching a standard PyTorch hook at any child module, *e.g.*, via {py:meth}`torch.nn.Module.register_forward_pre_hook`.
 For example, the following snippet records the query embeddings passed into the {py:class}`~sdm.models.TabICLv2` classification head:
 
 ```python
