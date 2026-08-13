@@ -12,8 +12,7 @@ class SelectColumns(EnsembleProcessor):
     r"""Select a subset of columns for each semantic type.
 
     Args:
-        max_columns: The maximum number of columns to keep for each semantic
-            type in each ensemble member. Must be non-negative.
+        max_columns: The maximum number of columns to keep per semantic type.
         method: The column selection method.
             ``"first"`` keeps the first columns according to their order within
             each semantic block. ``"round_robin"`` assigns each ensemble
