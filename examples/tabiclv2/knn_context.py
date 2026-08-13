@@ -15,6 +15,7 @@ import argparse
 
 import torch
 from sklearn.datasets import fetch_openml
+from sklearn.metrics import roc_auc_score
 
 import sdm
 from sdm.processing.execution import RecipeExecution
@@ -61,11 +62,12 @@ n_train = train.size(0)
 n_test = test.size(0)
 
 y_true = test[:, target_name].categorical.squeeze(-1)  # [N_test]
+y_true_np = y_true.cpu().numpy()
 
 
-def accuracy(pred: sdm.TableTensor) -> float:
-    probs = pred.numerical  # [N_test, num_classes]
-    return (probs.argmax(dim=-1) == y_true).float().mean().item()
+def auc(probs: torch.Tensor) -> float:
+    score = probs[:, -1].float().cpu().numpy()
+    return roc_auc_score(y_true_np, score)
 
 
 # --- kNN index (on preprocessed features) ------------------------------------
@@ -109,7 +111,9 @@ with autocast:
         x_query=test.drop_columns(target_name),
         num_estimators=args.num_estimators,
     )
-print(f"Full context  ({n_train} rows):           {accuracy(pred_full):.3f}")
+print(
+    f"Full context  ({n_train} rows):           {auc(pred_full.numerical):.3f}"
+)
 
 # 2. Random context (averaged over several draws)
 random_accs = []
@@ -124,10 +128,10 @@ for i in range(args.num_random_draws):
             x_query=test.drop_columns(target_name),
             num_estimators=args.num_estimators,
         )
-    random_accs.append(accuracy(pred_rand))
-mean_acc = sum(random_accs) / len(random_accs)
+    random_accs.append(auc(pred_rand.numerical))
+mean_auc = sum(random_accs) / len(random_accs)
 print(
-    f"Random context ({args.k} rows, avg {args.num_random_draws} draws): {mean_acc:.3f}"
+    f"Random context ({args.k} rows, avg {args.num_random_draws} draws): {mean_auc:.3f}"
 )
 
 # 3. kNN context
@@ -154,12 +158,12 @@ with autocast:
             )
         knn_probs.append(probs)
 
-knn_preds = torch.cat(knn_probs, dim=0).argmax(dim=-1)  # [N_test]
-knn_acc = (knn_preds == y_true).float().mean().item()
+knn_all_probs = torch.cat(knn_probs, dim=0)  # [N_test, num_classes]
+knn_auc = auc(knn_all_probs)
 ctx_label = (
     f"{args.k} rows per query" if bs == 1 else f"k={args.k}, batch={bs}"
 )
-print(f"kNN context    ({ctx_label}):   {knn_acc:.3f}")
+print(f"kNN context    ({ctx_label}):   {knn_auc:.3f}")
 
 # 4. Mixed context (kNN + random)
 k_knn = int(args.k * args.knn_ratio)
@@ -195,6 +199,6 @@ with autocast:
             )
         mixed_probs.append(probs)
 
-mixed_preds = torch.cat(mixed_probs, dim=0).argmax(dim=-1)  # [N_test]
-mixed_acc = (mixed_preds == y_true).float().mean().item()
-print(f"Mixed context  ({k_knn} kNN + {k_rand} random): {mixed_acc:.3f}")
+mixed_all_probs = torch.cat(mixed_probs, dim=0)  # [N_test, num_classes]
+mixed_auc = auc(mixed_all_probs)
+print(f"Mixed context  ({k_knn} kNN + {k_rand} random): {mixed_auc:.3f}")

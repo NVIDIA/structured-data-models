@@ -32,7 +32,6 @@
 - Random portion drawn from training rows NOT in the kNN set (no overlap)
 - Per-query random seed is `seed + i` so each query gets a different random complement
 - Added `--knn-ratio` CLI flag
-- Added `--knn-ratio` CLI flag
 
 ## v3 results (seed=0, k=100, knn_ratio=0.8, n_train=3500, num_estimators=4)
 
@@ -65,3 +64,71 @@
 - Tradeoff: larger batches = fewer forward passes but less focused context (union of neighborhoods is larger and less query-specific)
 - With batch-size=50 and 5,000 test rows: 100 forward passes instead of 5,000
 - Context size per batch: up to batch_size * k unique rows (less with overlap between neighbors)
+
+## v5 results (eeg-eye-state, seed=0, k=100, batch_size=32, n_train=10000, num_estimators=4)
+
+- Full context (10,000 rows): 0.010 accuracy
+- Random context (100 rows, avg 5 draws): 0.533
+- kNN context (k=100, batch=32): 0.494
+- Mixed context (80 kNN + 20 random): 0.470
+- All results used accuracy metric, which turned out to be unreliable (see v6)
+
+## v6 — Switch from accuracy to AUC
+
+### What happened
+
+Full context accuracy at n_train=10,000 was 0.010 — near zero on a binary task. That's too systematic to be random failure. To investigate, ran a debug script (not part of knn_context.py) that tested the model at various context sizes with a fixed test set (last 200 rows of the shuffled data). Reproduce with:
+
+```bash
+python3 -c "
+import torch, sdm
+from sklearn.datasets import fetch_openml
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+data = fetch_openml('eeg-eye-state', version=1, as_frame=True, parser='auto')
+df = data.data.assign(Class=data.target).sample(frac=1, random_state=0)
+stypes = sdm.infer_stypes(df, overrides={'Class': 'categorical'})
+
+test = sdm.TableTensor.from_pandas(df=df.iloc[-200:], stypes=stypes, device=device)
+y_true = test[:, 'Class'].categorical.squeeze(-1)
+
+model = sdm.models.TabICLv2(device=device)
+for n in [100, 300, 500, 1000, 2000]:
+    train = sdm.TableTensor.from_pandas(df=df.iloc[:n], stypes=stypes, device=device)
+    with torch.amp.autocast(device.type, torch.bfloat16, enabled=train.is_cuda):
+        pred = model(
+            x_context=train.drop_columns('Class'),
+            y_context=train[:, 'Class'],
+            x_query=test.drop_columns('Class'),
+            num_estimators=4,
+        )
+    probs = pred.numerical
+    preds = probs.argmax(dim=-1)
+    acc = (preds == y_true).float().mean().item()
+    flipped_acc = (1 - preds == y_true).float().mean().item()
+    print(f'n={n:5d}: acc={acc:.3f}, flipped={flipped_acc:.3f}, pred_sample={probs[0].tolist()}')
+"
+```
+
+### What the debug showed
+
+```
+n=  100: acc=0.680, flipped=0.320, pred_sample=[0.097, 0.903]  → column 1 = positive
+n=  300: acc=0.860, flipped=0.140, pred_sample=[0.043, 0.957]  → column 1 = positive
+n=  500: acc=0.115, flipped=0.885, pred_sample=[0.993, 0.007]  → column 0 = positive (FLIPPED)
+n= 1000: acc=0.075, flipped=0.925, pred_sample=[0.995, 0.005]  → column 0 = positive (FLIPPED)
+n= 2000: acc=0.040, flipped=0.960, pred_sample=[0.999, 0.001]  → column 0 = positive (FLIPPED)
+```
+
+### Diagnosis
+
+- The model is learning well at all sizes — flipped accuracy improves from 88.5% to 96% as context grows
+- Between n=300 and n=500, the output column mapping inverts: the column that carries the positive-class probability switches from column 1 to column 0
+- Category encoding was ruled out — both train and test use the same ordering (cat[0]=1, cat[1]=2) at all sizes
+- The flip is internal to the model — its output column assignment is not stable across context sizes
+- All previous accuracy-based results on eeg-eye-state were unreliable because of this
+
+### Fix
+
+- Switched metric from accuracy (argmax-based, sensitive to column ordering) to AUC (rank-based, invariant to column ordering)
+- This also matches the LoCalPFN paper, which reports AUC throughout
