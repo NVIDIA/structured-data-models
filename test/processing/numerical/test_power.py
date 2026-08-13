@@ -29,7 +29,13 @@ def test_power_transform_accepts_caller_compiled_optimizer(
     dtype: torch.dtype,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    inp = torch.randn((2, 17, 3), device="cuda", dtype=dtype)
+    inp = torch.linspace(
+        -3,
+        3,
+        steps=2 * 17 * 3,
+        device="cuda",
+        dtype=dtype,
+    ).view(2, 17, 3)
     table = TableTensor.from_tensor(inp)
 
     with torch.inference_mode():
