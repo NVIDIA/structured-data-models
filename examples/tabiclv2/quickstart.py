@@ -1,5 +1,6 @@
 import torch
 from sklearn.datasets import load_breast_cancer
+from torch import Tensor
 
 import sdm
 
@@ -32,3 +33,20 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model.predict(table[300:].drop_columns("target"))
 
 model.clear()
+
+# Capturing embeddings:
+embeddings: list[Tensor] = []
+
+
+def _embedding(module: torch.nn.Module, args: tuple[Tensor, ...]) -> None:
+    embeddings.append(args[0])
+
+
+handle = model.cls_model.icl_block.head.register_forward_pre_hook(_embedding)
+with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
+    model(
+        x_context=table[:300].drop_columns("target"),
+        y_context=table[:300, "target"],
+        x_query=table[300:].drop_columns("target"),
+    )
+handle.remove()

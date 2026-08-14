@@ -15,7 +15,7 @@ Each ``--num_neighbors`` value configures one hop: ``32`` is one hop, and
 
 import argparse
 from collections.abc import Sequence
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 import torch
@@ -29,7 +29,6 @@ from sdm import (
     RelationalData,
     Stype,
     TableTensor,
-    TemporalSamplingConfig,
     infer_stypes,
 )
 from sdm.models import NemotronRelational
@@ -103,16 +102,7 @@ def run_task(task_name: str) -> None:
         for name, table in db.table_dict.items()
         if table.time_col is not None
     }
-    sampler = data.sampler(
-        temporal=(
-            TemporalSamplingConfig(
-                time_columns=time_columns,
-                strategy="last",
-            )
-            if time_columns
-            else None
-        ),
-    )
+    sampler = data.sampler(time_columns)
 
     frames = [
         task.get_table(split, mask_input_cols=False).df
@@ -143,7 +133,7 @@ def run_task(task_name: str) -> None:
     perm = torch.randperm(len(context))[: args.context_size]
     context = cast(TableTensor, context[perm])
     num_neighbors = args.num_neighbors or SALT_PRESETS[task_name][0]
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "task_link": {
             "task_column": task.entity_col,
             "table": task.entity_table,

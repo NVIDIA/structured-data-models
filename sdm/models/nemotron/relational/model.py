@@ -10,9 +10,9 @@ from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.nemotron_relational.invariant_gnn import InvariantGNN
-from sdm.models.nemotron_relational.recipe import default_recipe
-from sdm.models.nemotron_relational.task import TaskGraph
+from sdm.models.nemotron.relational.invariant_gnn import InvariantGNN
+from sdm.models.nemotron.relational.recipe import default_recipe
+from sdm.models.nemotron.relational.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
@@ -608,8 +608,8 @@ def _remap_v2_1_checkpoint(
             "norm1_1": "q_norm",
             "norm1_2": "kv_norm",
             "attn.packed_lin": "attn.qkv_lin",
-            "attn.ssmax_scale": "attn.sdpa.qassmax.scale",
-            "attn.ssmax_gate": "attn.sdpa.qassmax.gate",
+            "attn.ssmax_scale": "attn.sdpa.query_scaling.scale",
+            "attn.ssmax_gate": "attn.sdpa.query_scaling.gate",
             "norm2": "mlp.0",
             "lin1": "mlp.1",
             "lin2": "mlp.3",

@@ -10,6 +10,7 @@ from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
 from sdm.cache import KVCacheEntry
+from sdm.nn import QueryScaling
 from sdm.nn.resolver import normalization_resolver
 
 
@@ -187,133 +188,33 @@ def _chunk_attention(
     )
 
 
-class QASSMax(torch.nn.Module):
-    r"""Query-Aware Scalable SoftMax (QASSMax).
-
-    This scaling method was introduced in the `"TabICLv2: A better, faster,
-    scalable, and open tabular foundation model"
-    <https://arxiv.org/abs/2602.11139>`_ paper as a temperature-scaling method
-    for attention.
-
-    For a query tensor :math:`q` and key length :math:`n`, this module returns
-    a scaled query
-
-    .. math::
-
-        \tilde{q}_{hi} = q_{hi} \cdot
-          \mathrm{MLP}_{\mathrm{base}}(\log n)_{hi} \cdot
-          \left(1 + \tanh(\mathrm{MLP}_{\mathrm{gate}}(q_h)_i)\right),
-
-    where :math:`h` indexes attention heads, :math:`i` indexes head channels,
-    :math:`\mathrm{MLP}_{\mathrm{base}}` maps the log key length to per-head,
-    per-channel scale factors, and :math:`\mathrm{MLP}_{\mathrm{gate}}` maps
-    each per-head query vector to a bounded query-dependent gate.
-
-    Multiplying the query scales the subsequent attention logits while keeping
-    the attention computation compatible with standard softmax kernels.
-    The length-dependent factor counteracts attention fading as the number of
-    keys grows, while the query-dependent gate lets the scale vary across
-    queries.
-
-    Args:
-        channels: The number of channels per attention head.
-        num_heads: The number of query attention heads.
-        hidden_channels: The hidden width of the scale and gate MLPs.
-        device: The device.
-        dtype: The dtype.
-    """
-
-    def __init__(
-        self,
-        channels: int,
-        num_heads: int,
-        hidden_channels: int = 64,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
-        self.scale = Sequential(
-            Linear(1, hidden_channels, **factory_kwargs),
-            GELU(),
-            Linear(hidden_channels, num_heads * channels, **factory_kwargs),
-        )
-        self.gate = Sequential(
-            Linear(channels, hidden_channels, **factory_kwargs),
-            GELU(),
-            Linear(hidden_channels, channels, **factory_kwargs),
-        )
-
-        torch.nn.init.zeros_(cast(Linear, self.gate[-1]).weight)
-        torch.nn.init.zeros_(cast(Linear, self.gate[-1]).bias)
-
-    def forward(
-        self,
-        query: Tensor,  # [..., S, H, C]
-        key_len: Tensor | int,  # [..., 1] or [..., S] or scalar
-    ) -> Tensor:  # [..., S, H, C]
-        r"""The forward pass.
-
-        Args:
-            query: The query tensor to scale, with shape ``[..., S, H, C]``.
-                ``S`` is the query sequence length, ``H`` is the number of
-                attention heads, and ``C`` is the channels per head.
-            key_len: The number of valid keys used to scale each query.
-                An ``int`` denotes one shared key length for every query.
-                A tensor shaped ``[..., 1]`` denotes one key length per batch
-                item, shared across all query positions in ``S``.
-                A tensor shaped ``[..., S]`` denotes one individual key length
-                per query position.
-
-        Returns:
-            Tensor with shape ``[..., S, H, C]``.
-        """
-        if isinstance(key_len, Tensor):
-            log_key_len = key_len.float().clamp(min=1.0).log().to(query.dtype)
-        else:
-            one = query.new_ones((), dtype=torch.float32)
-            log_key_len = (one * key_len).clamp(min=1.0).log().to(query.dtype)
-            log_key_len = log_key_len.view([1] * (query.dim() - 2))
-        scale = self.scale(log_key_len.unsqueeze(-1))  # [..., S or 1, H * C]
-        scale = scale.unflatten(-1, (query.size(-2), query.size(-1)))
-        gate = 1 + self.gate(query).tanh()
-        return query * scale * gate
-
-
 class SDPA(torch.nn.Module):
     r"""Scaled Dot-Product Attention (SDPA).
 
     This module wraps :func:`torch.nn.functional.scaled_dot_product_attention`
     and extends it by arbitrary batch dimensions, optional inference-time
-    batch chunking, :class:`QASSMax`-based temperature-scaling, and padding
-    support for key/value pairs.
+    batch chunking, query-scaling, and padding support for key/value pairs.
 
     Args:
-        channels: The number of channels per attention head.
         num_query_heads: The number of query attention heads.
         num_key_value_heads: The number of key/value attention heads.
             Setting this below ``num_query_heads`` enables grouped-query
             attention (GQA); setting it to ``1`` enables multi-query attention
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
-        qassmax: Whether to scale queries via :class:`QASSMax`.
+        query_scaling: Query scaling module to scale projected query heads
+            before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
-        device: The device.
-        dtype: The dtype.
     """
 
     def __init__(
         self,
-        channels: int,
         num_query_heads: int,
         num_key_value_heads: int | None = None,
-        qassmax: bool = False,
+        query_scaling: QueryScaling | None = None,
         scale: float | None = None,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -324,18 +225,10 @@ class SDPA(torch.nn.Module):
                 f"`num_key_value_heads` ({num_key_value_heads})"
             )
 
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
         self.num_query_heads = num_query_heads
         self.num_key_value_heads = num_key_value_heads
+        self.query_scaling = query_scaling
         self.scale = scale
-        self.qassmax: QASSMax | None = None
-        if qassmax:
-            self.qassmax = QASSMax(
-                channels=channels,
-                num_heads=num_query_heads,
-                **factory_kwargs,
-            )
 
     def forward(
         self,
@@ -421,14 +314,14 @@ class SDPA(torch.nn.Module):
                 assert out is not None
                 return out.view(batch_shape + query_size)
 
-        if self.qassmax is not None:
+        if self.query_scaling is not None:
             if seqused_key_value is not None:
                 key_len = seqused_key_value.unsqueeze(-1)
             elif attn_mask is not None and attn_mask.size(-1) > 1:
                 key_len = attn_mask.sum(dim=-1)
             else:
                 key_len = key.size(-3)
-            query = self.qassmax(query, key_len=key_len)
+            query = self.query_scaling(query, key_len=key_len)
 
         # Broadcast and flatten batch dimensions => [B, S, H, C].
         query_size = query.size()[-3:]
@@ -483,11 +376,12 @@ class Attention(torch.nn.Module):
             attention (GQA); setting it to ``1`` enables multi-query attention
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
-        qassmax: Whether to scale queries with :class:`QASSMax`.
         query_transform: Transformation applied to projected query heads before
             scaled dot-product attention.
         key_transform: Transformation applied to projected key heads before
             scaled dot-product attention.
+        query_scaling: Query scaling module to scale projected query heads
+            before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
@@ -500,9 +394,9 @@ class Attention(torch.nn.Module):
         channels: int,
         num_query_heads: int,
         num_key_value_heads: int | None = None,
-        qassmax: bool = False,
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
+        query_scaling: QueryScaling | None = None,
         scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -531,12 +425,10 @@ class Attention(torch.nn.Module):
         self.query_transform = query_transform
         self.key_transform = key_transform
         self.sdpa = SDPA(
-            channels=self.head_dim,
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
-            qassmax=qassmax,
+            query_scaling=query_scaling,
             scale=scale,
-            **factory_kwargs,
         )
         self.out_lin = Linear(channels, channels, **factory_kwargs)
 
@@ -690,9 +582,6 @@ class Attention(torch.nn.Module):
 class TransformerBlock(torch.nn.Module):
     r"""Transformer block with pre-norm attention and feedforward modules.
 
-    Supports optional :class:`RotaryEmbedding` on projected query/key tensors
-    and optional :class:`QASSMax` query scaling inside attention.
-
     Args:
         channels: The number of input and output channels.
         num_query_heads: The number of query attention heads.
@@ -706,11 +595,12 @@ class TransformerBlock(torch.nn.Module):
         norm_kwargs: Additional keyword arguments passed to the normalization
             layer constructor. Takes precedence over ``device`` and
             ``dtype``.
-        qassmax: Whether to scale queries with :class:`QASSMax`.
         query_transform: Transformation applied to projected query heads before
             scaled dot-product attention.
         key_transform: Transformation applied to projected key heads before
             scaled dot-product attention.
+        query_scaling: Query scaling module to scale projected query heads
+            before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
@@ -726,9 +616,9 @@ class TransformerBlock(torch.nn.Module):
         num_key_value_heads: int | None = None,
         norm: str | Callable[..., torch.nn.Module] = "layer_norm",
         norm_kwargs: dict[str, Any] | None = None,
-        qassmax: bool = False,
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
+        query_scaling: QueryScaling | None = None,
         scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -744,9 +634,9 @@ class TransformerBlock(torch.nn.Module):
             channels=channels,
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
-            qassmax=qassmax,
             query_transform=query_transform,
             key_transform=key_transform,
+            query_scaling=query_scaling,
             scale=scale,
             **factory_kwargs,
         )
