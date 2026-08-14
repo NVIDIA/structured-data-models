@@ -150,7 +150,9 @@ class ColumnarTensor(Tensor):
         is_large_string = pa.types.is_large_string(array.type)
         if is_string or is_large_string:
             column = StringTensor.from_arrow(array, device=device)
-        elif array.null_count > 0 and pa.types.is_integer(array.type):
+        elif array.null_count > 0 and (
+            pa.types.is_integer(array.type) or pa.types.is_boolean(array.type)
+        ):
             column = NullableIntTensor.from_arrow(array, device=device)
         else:
             column = arrow_as_tensor(array, device=device)
@@ -170,11 +172,17 @@ class ColumnarTensor(Tensor):
             ser: The :class:`cudf.Series` or :class:`cudf.Index`.
             device: The device.
         """
-        from cudf.api.types import is_integer_dtype, is_string_dtype
+        from cudf.api.types import (
+            is_bool_dtype,
+            is_integer_dtype,
+            is_string_dtype,
+        )
 
         if is_string_dtype(ser.dtype):
             column = StringTensor.from_cudf(ser, device=device)
-        elif ser._column.null_count > 0 and is_integer_dtype(ser.dtype):
+        elif ser._column.null_count > 0 and (
+            is_integer_dtype(ser.dtype) or is_bool_dtype(ser.dtype)
+        ):
             column = NullableIntTensor.from_cudf(ser, device=device)
         else:
             if ser._column.null_count > 0:
