@@ -226,3 +226,36 @@ New script `knn_finetune.py`. Full LoCalPFN reproduction: retrieval + fine-tunin
 - Uses batched `[B, k+1, C]` forward pass for both training and evaluation
 - Reports pre-finetune baselines (full, random, kNN) and per-epoch kNN AUC + loss
 - Flags: `--lr`, `--epochs`, `--batch-size`, `--dataset`, `--k`
+
+## v12 — Multi-estimator fine-tuning, 2-hop, DiskGraph integration
+
+- Added multi-estimator support to fine-tuning: preprocess with `num_members=N`, cycle through members during training, average softmax outputs during eval
+- Added `knn_finetune_2hop.py`: Python-loop 2-hop context (union of 1-hop + neighbors-of-neighbors, subsampled to k)
+- Added `knn_finetune_diskgraph.py`: DiskGraph-based 2-hop sampling. Ingests kNN graph as Parquet, uses `SamplerEngine` for multi-hop traversal. Has an unresolved index mapping issue (DiskGraph global IDs != our 0-based indices).
+
+### Results (coupon dataset)
+
+**1-hop fine-tuning (knn_finetune.py, 8 estimators, lr=1e-5):**
+
+- Pre-finetune kNN: 0.550 → Post-finetune kNN: 0.819 (+0.246, after single estimator run it was also similar at +0.224)
+
+**2-hop fine-tuning (knn_finetune_2hop.py, coupon):**
+
+- Post-finetune 1-hop: 0.673 (was 0.550, +0.123)
+- Post-finetune 2-hop: 0.662 (was 0.564, +0.097)
+- 2-hop didn't outperform 1-hop — direct neighbors are more useful than transitive neighbors on this dataset
+
+**Datasets where TabICLv2 struggles (frozen model near chance):**
+
+- diabetes130: ~0.51 AUC all strategies, fine-tuning didn't help (loss plateau ~0.9)
+- sdss17: ~0.42 AUC, fine-tuning overfits (low train loss, declining test AUC)
+- coupon: 0.55-0.60 frozen → 0.82 fine-tuned — the only dataset with clear fine-tuning gains
+
+## Summary of exploration
+
+1. **kNN retrieval alone** works when the frozen model already handles the dataset well (eeg-eye-state: 0.996 kNN vs 0.999 full, with k=100 using 1% of training data)
+2. **The column flip** in TabICLv2's output was the primary obstacle — caused by data-dependent category ordering in the recipe. Fixed with `AlignCategories(sort_by="value")` + fixed generator.
+3. **Batched `_TabICLv2`** already supports per-query contexts via a leading batch dimension — no model surgery needed.
+4. **Fine-tuning + retrieval** (LoCalPFN approach) showed strong gains on coupon (+0.25 AUC), confirming the approach transfers to TabICLv2.
+5. **2-hop context** didn't add value over 1-hop on coupon.
+6. **DiskGraph integration** was partially implemented but blocked by a global ID mapping issue. The kNN graph was successfully ingested and sampled, but the returned IDs don't map directly to our 0-based row indices.
