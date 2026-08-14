@@ -1,0 +1,4 @@
+Nemotron-Relational reuses TabICLv2-derived model components and initializes from pretrained TabICLv2 weights.
+
+See the TabICLv2 third-party license notice at:
+sdm/models/tabiclv2/LICENSE
