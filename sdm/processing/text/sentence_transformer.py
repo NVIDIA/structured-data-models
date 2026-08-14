@@ -1,3 +1,5 @@
+# ruff: noqa: D205
+
 from __future__ import annotations
 
 import importlib.util
@@ -19,9 +21,9 @@ if TYPE_CHECKING:
 class _WordPieceTokenizer(NamedTuple):
     wpt: WordPieceVocabulary
     normalizer: CharacterNormalizer
-    cls_id: int
-    sep_id: int
-    pad_id: int
+    cls_token_id: int
+    sep_token_id: int
+    pad_token_id: int
     max_length: int
 
 
@@ -53,9 +55,9 @@ def _build_wp_tokenizer(
             do_lower=tokenizer.do_lower_case,
             special_tokens=cudf.Series(tokenizer.all_special_tokens),
         ),
-        cls_id=tokenizer.cls_token_id,
-        sep_id=tokenizer.sep_token_id,
-        pad_id=tokenizer.pad_token_id,
+        cls_token_id=tokenizer.cls_token_id,
+        sep_token_id=tokenizer.sep_token_id,
+        pad_token_id=tokenizer.pad_token_id,
         max_length=max_length,
     )
 
@@ -73,15 +75,21 @@ class _ModuleReference(torch.nn.Module):
 
 
 class SentenceTransformer(Processor):
-    """Transform text columns with a sentence transformer.
+    r"""Transform text columns with a
+    :class:`sentence_transformers.SentenceTransformer
+    <sentence_transformers.sentence_transformer.model.SentenceTransformer>`
+    model.
 
     Args:
         model_name: Model name or local path passed to
             :class:`sentence_transformers.SentenceTransformer
             <sentence_transformers.sentence_transformer.model.SentenceTransformer>`.
-        batch_size: Batch size for the forward pass. Adjusting the batch size
-            can significantly improve processing speed. The optimal value
-            depends on your hardware, model size, precision, and input length.
+        batch_size: Batch size passed to
+            :meth:`sentence_transformers.SentenceTransformer.encode()
+            <sentence_transformers.sentence_transformer.model.SentenceTransformer.encode>`.
+            Adjusting the batch size can significantly improve processing
+            speed. The optimal value depends on your hardware, model size,
+            precision, and input length.
     """
 
     requires_fit = False
@@ -181,11 +189,11 @@ class SentenceTransformer(Processor):
 
         input_ids = torch.full(
             (num_strings, seq_len),
-            tokenizer.pad_id,
+            tokenizer.pad_token_id,
             device=device,
             dtype=torch.long,
         )
-        input_ids[:, 0] = tokenizer.cls_id
+        input_ids[:, 0] = tokenizer.cls_token_id
 
         # Scatter truncated token IDs into positions 1..lengths[i]+1
         row_idx = torch.arange(num_strings, device=device).repeat_interleave(
@@ -202,9 +210,9 @@ class SentenceTransformer(Processor):
         )
 
         input_ids[torch.arange(num_strings, device=device), lengths + 1] = (
-            tokenizer.sep_id
+            tokenizer.sep_token_id
         )
-        attention_mask = (input_ids != tokenizer.pad_id).to(torch.long)
+        attention_mask = (input_ids != tokenizer.pad_token_id).to(torch.long)
 
         # Sort by length so batches have similar-length sequences
         sort_idx = lengths.argsort()
