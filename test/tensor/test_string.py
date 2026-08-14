@@ -252,6 +252,16 @@ def test_eq(device: torch.device) -> None:
     assert not other.eq(left).any()
     assert other.ne(left).all()
 
+    out = torch.empty(0, dtype=torch.bool, device=device)
+    assert torch.eq(other, left, out=out) is out
+    assert not out.any()
+    assert torch.ne(other, left, out=out) is out
+    assert out.all()
+    assert torch.eq(left, 1, out=out) is out
+    assert not out.any()
+    assert torch.ne(left, 1, out=out) is out
+    assert out.all()
+
     left = StringTensor.from_list([["a", "b"]], device=device)
     right = StringTensor.from_list([["a"], ["b"]], device=device)
 

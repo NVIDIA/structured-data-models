@@ -423,6 +423,17 @@ def _eq(
     return mask.view(size)
 
 
+@StringTensor.implements(aten.eq.Tensor_out)
+@StringTensor.implements(aten.eq.Scalar_out)
+def _eq_out(
+    inp: Tensor,
+    other: Tensor | int | float | complex | bool,
+    *,
+    out: Tensor,
+) -> Tensor:
+    return aten.eq.Scalar_out(_eq(inp, other), True, out=out)
+
+
 @StringTensor.implements(aten.ne.Tensor)
 @StringTensor.implements(aten.ne.Scalar)
 @StringTensor.implements(aten.ne.str)
@@ -497,6 +508,17 @@ def _ne(
             mask = torch.from_dlpack(out.to_cupy()).view(size)
 
     return mask.view(size)
+
+
+@StringTensor.implements(aten.ne.Tensor_out)
+@StringTensor.implements(aten.ne.Scalar_out)
+def _ne_out(
+    inp: Tensor,
+    other: Tensor | int | float | complex | bool,
+    *,
+    out: Tensor,
+) -> Tensor:
+    return aten.eq.Scalar_out(_ne(inp, other), True, out=out)
 
 
 @StringTensor.implements(aten.sort.default)
