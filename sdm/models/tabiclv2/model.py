@@ -292,11 +292,11 @@ def _remap_ckpt(
         tail = tail.replace("attn.out_proj.", "attn.out_lin.")
         tail = tail.replace(
             "attn.ssmax_layer.base_mlp.",
-            "attn.sdpa.qassmax.scale.",
+            "attn.sdpa.query_scaling.scale.",
         )
         tail = tail.replace(
             "attn.ssmax_layer.query_mlp.",
-            "attn.sdpa.qassmax.gate.",
+            "attn.sdpa.query_scaling.gate.",
         )
 
         if tail.startswith("norm1."):

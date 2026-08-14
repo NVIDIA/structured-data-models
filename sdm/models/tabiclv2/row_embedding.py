@@ -8,7 +8,12 @@ from torch import Tensor
 from torch.nn import Embedding, LayerNorm, Linear, ModuleList, Parameter
 
 from sdm.cache import Cache, KVCacheEntry
-from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
+from sdm.nn import (
+    InducedTransformerBlock,
+    QASSMax,
+    RotaryEmbedding,
+    TransformerBlock,
+)
 from sdm.nn.memory import (
     attention_batch_size_limit,
     cuda_attention_memory_limit,
@@ -51,7 +56,11 @@ class RowEmbedding(torch.nn.Module):
                 num_inducing_points=num_inducing_points,
                 norm="layer_norm",
                 norm_kwargs={"bias": norm_bias},
-                qassmax=True,
+                query_scaling=QASSMax(
+                    channels=channels // num_heads,
+                    num_heads=num_heads,
+                    **factory_kwargs,
+                ),
                 **factory_kwargs,
             )
             for _ in range(num_layers)
@@ -78,7 +87,6 @@ class RowEmbedding(torch.nn.Module):
                 norm_kwargs={"bias": norm_bias},
                 query_transform=self.rope,
                 key_transform=self.rope,
-                qassmax=False,
                 **factory_kwargs,
             )
             for _ in range(num_layers)
