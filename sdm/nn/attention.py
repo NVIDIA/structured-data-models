@@ -196,7 +196,6 @@ class SDPA(torch.nn.Module):
     batch chunking, query-scaling, and padding support for key/value pairs.
 
     Args:
-        channels: The number of channels per attention head.
         num_query_heads: The number of query attention heads.
         num_key_value_heads: The number of key/value attention heads.
             Setting this below ``num_query_heads`` enables grouped-query
@@ -208,8 +207,6 @@ class SDPA(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
-        device: The device.
-        dtype: The dtype.
     """
 
     def __init__(

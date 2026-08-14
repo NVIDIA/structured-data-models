@@ -269,6 +269,9 @@ def test_sdpa_errors() -> None:
             attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
         )
 
+    with pytest.raises(ValueError, match="must be divisible"):
+        SDPA(num_query_heads=4, num_key_value_heads=3)
+
 
 def test_sdpa_batch_size_limit() -> None:
     channels = 3
