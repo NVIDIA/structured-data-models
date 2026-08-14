@@ -150,6 +150,37 @@ def test_arrow() -> None:
     assert tensor.tolist() == [[1, 2], None, [3]]
 
 
+@pytest.mark.parametrize(
+    "dtype",
+    [pa.list_(pa.bool_()), pa.large_list(pa.bool_())],
+)
+def test_arrow_bool(dtype: pa.DataType) -> None:
+    array = pa.array([[True, False], [], [True]], type=dtype)[1:]
+
+    tensor = VarLenTensor.from_arrow(array)
+
+    assert tensor.dtype == torch.bool
+    assert tensor.storage_offset() == 1
+    assert tensor.to_arrow().type == dtype
+    assert tensor.to_arrow().to_pylist() == [[], [True]]
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [pa.list_(pa.bool_()), pa.large_list(pa.bool_())],
+)
+def test_arrow_nullable_bool(dtype: pa.DataType) -> None:
+    array = pa.array([[True, False], None, [True]], type=dtype)
+
+    tensor = VarLenTensor.from_arrow(array)
+
+    assert tensor.dtype == torch.bool
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([True, False, True]))
+    assert tensor.to_arrow().type == dtype
+    assert tensor.to_arrow().to_pylist() == [[True, False], None, [True]]
+
+
 def test_list() -> None:
     data = [
         [[1, 2], [3, 4, 5]],

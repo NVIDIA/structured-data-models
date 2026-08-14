@@ -305,17 +305,22 @@ class VarLenTensor(Tensor):
                 f"{cls.__name__!r} cannot represent inner null values"
             )
 
-        dtype = ARROW_TORCH_DTYPES.get(array.values.type)
-        if dtype is None:
-            raise TypeError(f"Unsupported value type '{array.values.type}'")
-
-        buffer = array.values.buffers()[1]
-        if buffer is not None and buffer.size > 0:
-            data = torch.frombuffer(buffer, dtype=dtype)
-            start = array.values.offset
-            data = data[start : start + len(array.values)].to(device)
+        if pa.types.is_boolean(array.values.type):
+            data = arrow_as_tensor(array.values, device=device)
         else:
-            data = torch.empty(0, dtype=dtype, device=device)
+            dtype = ARROW_TORCH_DTYPES.get(array.values.type)
+            if dtype is None:
+                raise TypeError(
+                    f"Unsupported value type '{array.values.type}'"
+                )
+
+            buffer = array.values.buffers()[1]
+            if buffer is not None and buffer.size > 0:
+                data = torch.frombuffer(buffer, dtype=dtype)
+                start = array.values.offset
+                data = data[start : start + len(array.values)].to(device)
+            else:
+                data = torch.empty(0, dtype=dtype, device=device)
 
         offset = torch.frombuffer(
             array.buffers()[1],

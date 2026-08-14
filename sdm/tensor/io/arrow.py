@@ -5,7 +5,6 @@ import torch
 from torch import Tensor
 
 ARROW_TORCH_DTYPES = {
-    # TODO Support boolean dtype.
     # TODO Support bfloat16 dtype.
     pa.uint8(): torch.uint8,
     pa.uint16(): torch.uint16,
@@ -78,6 +77,17 @@ def to_arrow(tensor: Tensor, valid_mask: Tensor | None = None) -> pa.Array:
     tensor = tensor.detach().contiguous().view(-1).cpu()
     if valid_mask is not None:
         valid_mask = valid_mask.contiguous().view(-1).cpu()
+
+    # Arrow stores booleans bit-packed, so they cannot use the raw tensor
+    # buffer conversion below.
+    if tensor.dtype == torch.bool:
+        return pa.array(
+            tensor.numpy(),
+            mask=valid_mask.logical_not().numpy()
+            if valid_mask is not None
+            else None,
+            type=pa.bool_(),
+        )
 
     arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
     if arrow_type is None:

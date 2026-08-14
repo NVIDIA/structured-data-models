@@ -16,6 +16,7 @@ from typing_extensions import override
 from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
+from sdm.tensor.io.nim import to_nim_config as table_to_nim_config
 from sdm.tensor.mixin import _resolve_device
 
 if TYPE_CHECKING:
@@ -370,6 +371,36 @@ class TableTensor(Tensor):
                 arrays.extend(to_arrow(t) for t in tensor)
 
         return pa.Table.from_arrays(arrays, names=columns)
+
+    def to_nim_config(
+        self,
+        *,
+        primary_key: str | Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        r"""Convert this tensor to NIM schema and Arrow data fragments.
+
+        The returned dictionary is not a complete prediction request.
+        ``config["schema"]`` is a NIM ``TableSchema`` fragment and
+        ``config["data"]`` is a :class:`pyarrow.Table` for the client to
+        encode using Arrow IPC. The client owns IPC framing and HTTP transport.
+
+        Args:
+            primary_key: Optional primary key column or columns.
+
+        Returns:
+            A dictionary containing the NIM schema and its Arrow table.
+        """
+        if self.dim() != 2:
+            raise ValueError(
+                f"Expected a two-dimensional table for NIM conversion "
+                f"(got {self.dim()}D)"
+            )
+
+        return table_to_nim_config(
+            self.to_arrow(),
+            self.stypes,
+            primary_key=primary_key,
+        )
 
     @classmethod
     def from_pandas(

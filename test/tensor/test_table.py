@@ -1,5 +1,5 @@
 import io
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from textwrap import dedent
 from typing import cast
 
@@ -1086,6 +1086,295 @@ def test_arrow_empty() -> None:
     assert table.num_rows == 0
     assert table.column_names == ["age", "country"]
     assert table.to_pydict() == {"age": [], "country": []}
+
+
+def test_to_nim_config() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table(
+            {
+                "score": pa.array([1.25, 2.5], type=pa.float32()),
+                "country": pa.array(["US", None]),
+                "event_time": pa.array(
+                    [datetime(2025, 1, 1), None],
+                    type=pa.timestamp("us"),
+                ),
+                "description": pa.array(["first", "second"]),
+                "user_id": pa.array(
+                    [42, 9_007_199_254_740_992],
+                    type=pa.int64(),
+                ),
+            }
+        ),
+        stypes={
+            "score": "numerical",
+            "country": "categorical",
+            "event_time": "datetime",
+            "description": "text",
+            "user_id": "id",
+        },
+    )
+
+    config = tensor.to_nim_config(primary_key="user_id")
+
+    assert config["schema"] == {
+        "columns": {
+            "score": {
+                "dtype": "float32",
+                "stype": "numerical",
+            },
+            "country": {
+                "dtype": "string",
+                "stype": "categorical",
+            },
+            "event_time": {
+                "dtype": "timestamp[us]",
+                "stype": "timestamp",
+            },
+            "description": {
+                "dtype": "string",
+                "stype": "text",
+            },
+            "user_id": {
+                "dtype": "int64",
+                "stype": "ID",
+                "nullable": False,
+            },
+        },
+        "primary_key": "user_id",
+    }
+    data = config["data"]
+    assert isinstance(data, pa.Table)
+    assert data.to_pydict() == {
+        "score": [1.25, 2.5],
+        "country": ["US", None],
+        "event_time": [datetime(2025, 1, 1), None],
+        "description": ["first", "second"],
+        "user_id": [42, 9_007_199_254_740_992],
+    }
+
+
+def test_to_nim_config_arrow_ipc_round_trip() -> None:
+    tensor = TableTensor.from_columns(
+        data={"country": ["US", None], "user_id": [1, 2]},
+        stypes={"country": "categorical", "user_id": "id"},
+    )
+    data = tensor.to_nim_config()["data"]
+
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, data.schema) as writer:
+        writer.write_table(data)
+
+    decoded = pa.ipc.open_stream(sink.getvalue()).read_all()
+    assert decoded.equals(data)
+    assert decoded.to_pydict() == {
+        "country": ["US", None],
+        "user_id": [1, 2],
+    }
+
+
+def test_to_nim_config_converts_nan_to_null() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["value"]},
+        numerical=torch.tensor([[float("nan")], [1.0]]),
+    )
+
+    assert tensor.to_nim_config()["data"]["value"].to_pylist() == [None, 1.0]
+
+
+def test_to_nim_config_rejects_infinity() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["value"]},
+        numerical=torch.tensor([[float("inf")]]),
+    )
+
+    with pytest.raises(ValueError, match="Expected finite numeric values"):
+        tensor.to_nim_config()
+
+
+def test_to_nim_config_categorical_scalars() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table(
+            {
+                "flag": pa.array([True, False, None]),
+                "bucket": pa.array([10, None, 20], type=pa.int32()),
+            }
+        ),
+        stypes={"flag": "categorical", "bucket": "categorical"},
+    )
+
+    config = tensor.to_nim_config()
+
+    assert config["schema"]["columns"] == {
+        "flag": {"dtype": "bool", "stype": "categorical"},
+        "bucket": {"dtype": "int32", "stype": "categorical"},
+    }
+    assert config["data"].to_pydict() == {
+        "flag": [True, False, None],
+        "bucket": [10, None, 20],
+    }
+    assert config["data"].schema.types == [pa.bool_(), pa.int32()]
+
+
+def test_to_nim_config_integer_boundaries() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table(
+            {
+                "value": pa.array(
+                    [
+                        -(2**53),
+                        -(2**53) + 1,
+                        2**53 - 1,
+                        2**53,
+                    ],
+                    type=pa.int64(),
+                )
+            }
+        ),
+        stypes={"value": "id"},
+    )
+
+    assert tensor.to_nim_config()["data"]["value"].to_pylist() == [
+        -(2**53),
+        -(2**53) + 1,
+        2**53 - 1,
+        2**53,
+    ]
+
+
+def test_to_nim_config_rejects_uint64_overflow() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table({"value": pa.array([2**63], type=pa.uint64())}),
+        stypes={"value": "id"},
+    )
+
+    with pytest.raises(ValueError, match="outside the supported int64 range"):
+        tensor.to_nim_config()
+
+
+def test_to_nim_config_normalizes_timestamp_timezone() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table(
+            {
+                "event_time": pa.array(
+                    [
+                        datetime(
+                            2025,
+                            1,
+                            1,
+                            2,
+                            tzinfo=timezone(timedelta(hours=2)),
+                        )
+                    ],
+                    type=pa.timestamp("us", tz="+02:00"),
+                )
+            }
+        ),
+        stypes={"event_time": "datetime"},
+    )
+
+    data = tensor.to_nim_config()["data"]
+    assert data["event_time"].type == pa.timestamp("us")
+    assert data["event_time"].to_pylist() == [datetime(2025, 1, 1)]
+
+
+def test_to_nim_config_rejects_batched_table() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["value"]},
+        numerical=torch.randn(2, 3, 1),
+    )
+
+    with pytest.raises(ValueError, match="two-dimensional"):
+        tensor.to_nim_config()
+
+
+def test_to_nim_config_rejects_empty_columns() -> None:
+    tensor = TableTensor(size=(2,))
+
+    with pytest.raises(ValueError, match="without columns"):
+        tensor.to_nim_config()
+
+
+def test_to_nim_config_leaves_admission_limits_to_client() -> None:
+    name = "x" * 1_025
+    tensor = TableTensor.from_columns(
+        data={name: ["🐍" * 1_025]},
+        stypes={name: "text"},
+    )
+
+    data = tensor.to_nim_config()["data"]
+    assert data.column_names == [name]
+
+    tensor = TableTensor(
+        columns={"numerical": ["value"]},
+        numerical=torch.empty(10_001, 1),
+    )
+    data = tensor.to_nim_config()["data"]
+    assert data.num_rows == 10_001
+
+
+def test_to_nim_config_validates_primary_key() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table(
+            {
+                "group": pa.array(["a", "a", "b"]),
+                "value": pa.array([1, 1, 2]),
+            }
+        ),
+        stypes={"group": "categorical", "value": "id"},
+    )
+
+    with pytest.raises(ValueError, match="'missing' to exist"):
+        tensor.to_nim_config(primary_key="missing")
+
+    with pytest.raises(ValueError, match="primary key values to be unique"):
+        tensor.to_nim_config(primary_key=("group", "value"))
+
+
+def test_to_nim_config_composite_primary_key() -> None:
+    tensor = TableTensor.from_columns(
+        data={"group": ["a", "a"], "value": [1, 2]},
+        stypes={"group": "id", "value": "id"},
+    )
+
+    config = tensor.to_nim_config(primary_key=("group", "value"))
+
+    assert config["schema"]["primary_key"] == ["group", "value"]
+    assert config["schema"]["columns"]["group"]["nullable"] is False
+    assert config["schema"]["columns"]["value"]["nullable"] is False
+
+
+def test_to_nim_config_rejects_null_primary_key() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table({"value": pa.array([1.0, None])}),
+        stypes={"value": "id"},
+    )
+
+    with pytest.raises(ValueError, match="to be non-null"):
+        tensor.to_nim_config(primary_key="value")
+
+
+def test_to_nim_config_rejects_unsupported_dtype() -> None:
+    tensor = TableTensor(
+        columns={"categorical": ["value"]},
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0]]),
+            categories=(torch.tensor([1 + 2j]),),
+        ),
+    )
+
+    with pytest.raises(TypeError, match="Unsupported data type"):
+        tensor.to_nim_config()
+
+
+def test_to_nim_config_empty_rows() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table({"value": pa.array([], type=pa.string())}),
+        stypes={"value": "text"},
+    )
+
+    data = tensor.to_nim_config()["data"]
+    assert data.num_rows == 0
+    assert data.column_names == ["value"]
 
 
 def test_from_pandas() -> None:
