@@ -26,9 +26,9 @@ def test_combine_arrow_dictionary_string_chunks() -> None:
 
 def test_arrow_bool() -> None:
     tensor = arrow_as_tensor(pa.array([True, False, True], type=pa.bool_()))
-
     assert tensor.dtype == torch.bool
     assert tensor.equal(torch.tensor([True, False, True]))
+
     assert to_arrow(tensor).to_pylist() == [True, False, True]
 
     valid_mask = torch.tensor([True, False, True])

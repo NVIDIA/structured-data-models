@@ -210,7 +210,7 @@ class NullableIntTensor(Tensor):
             )
 
         column, _ = ser.to_pylibcudf()
-        cp_dtype = {  # TODO?
+        cp_dtype = {
             plc.TypeId.BOOL8: cp.bool_,
             plc.TypeId.UINT8: cp.uint8,
             plc.TypeId.UINT16: cp.uint16,
