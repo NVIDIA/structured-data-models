@@ -651,7 +651,7 @@ def _isnan(inp: NullableTensor) -> Tensor:
 
 @NullableTensor.implements(aten.isfinite.default)
 def _isfinite(inp: NullableTensor) -> Tensor:
-    return inp._valid
+    return inp._valid.clone()
 
 
 @NullableTensor.implements(aten.nan_to_num.default)
