@@ -35,15 +35,15 @@ def test_arrow() -> None:
     assert tensor.size() == (0,)
 
 
-def test_arrow_bool() -> None:
+def test_bool() -> None:
+    tensor = NullableIntTensor.from_list([True, None, False])
+    assert tensor.dtype == torch.bool
+    assert tensor.tolist() == [True, None, False]
+
     tensor = NullableIntTensor.from_arrow(
         pa.array([True, None, False], type=pa.bool_()),
         size=(1, 3),
     )
-
-    assert tensor.size() == (1, 3)
-    assert tensor.dtype == torch.bool
-    assert tensor.tolist() == [[True, None, False]]
     assert tensor.to_arrow().type == pa.bool_()
     assert tensor.to_arrow().to_pylist() == [True, None, False]
 
@@ -62,6 +62,19 @@ def test_cudf() -> None:
 
     tensor = NullableIntTensor.from_cudf(cudf.Series([], dtype="int32"))
     assert tensor.size() == (0,)
+
+
+@onlyCUDA
+def test_cudf_bool() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    ser = cudf.Series([True, None, False], dtype="bool")
+    tensor = NullableIntTensor.from_cudf(ser, size=(1, 3))
+
+    assert tensor.size() == (1, 3)
+    assert tensor.dtype == torch.bool
+    assert tensor.tolist() == [[True, None, False]]
+    assert tensor.to_cudf().to_arrow().to_pylist() == [True, None, False]
 
 
 def test_nan_to_num() -> None:

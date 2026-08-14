@@ -13,9 +13,9 @@ from typing_extensions import override
 from sdm.tensor.io import (
     ARROW_TORCH_DTYPES,
     arrow_as_tensor,
+    to_arrow,
     to_cudf,
 )
-from sdm.tensor.io import to_arrow as tensor_to_arrow
 from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 if TYPE_CHECKING:
@@ -151,7 +151,7 @@ class NullableIntTensor(Tensor):
         if buffer is not None and buffer.size > 0:
             if arrow_dtype == torch.bool:
                 data = arrow_as_tensor(
-                    array.fill_null(False),
+                    array.fill_null(False) if array.null_count > 0 else array,
                     dtype=arrow_dtype,
                 )
                 storage_offset = 0
@@ -179,8 +179,7 @@ class NullableIntTensor(Tensor):
 
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
-        tensor = cast(NullableIntTensor, self.contiguous().view(-1).cpu())
-        return tensor_to_arrow(tensor._data, tensor._valid)
+        return to_arrow(self._data, self._valid)
 
     @classmethod
     def from_cudf(
@@ -212,6 +211,7 @@ class NullableIntTensor(Tensor):
 
         column, _ = ser.to_pylibcudf()
         cp_dtype = {  # TODO?
+            plc.TypeId.BOOL8: cp.bool_,
             plc.TypeId.UINT8: cp.uint8,
             plc.TypeId.UINT16: cp.uint16,
             plc.TypeId.UINT32: cp.uint32,
@@ -261,7 +261,7 @@ class NullableIntTensor(Tensor):
 
         def flatten(value: Any) -> tuple[int, ...]:
             if value is None:
-                data.append(0)
+                data.append(False)
                 valid.append(False)
                 return ()
 
@@ -274,7 +274,7 @@ class NullableIntTensor(Tensor):
                 return (0,)
 
             if not is_sequence(value[0]):
-                data.extend(0 if item is None else item for item in value)
+                data.extend(False if item is None else item for item in value)
                 valid.extend(item is not None for item in value)
                 return (len(value),)
 
@@ -292,7 +292,8 @@ class NullableIntTensor(Tensor):
             return (len(value), *child_size)
 
         size = flatten(values)
-        dtype = torch.int64 if dtype is None and len(data) == 0 else dtype
+        if dtype is None and not any(valid):
+            dtype = torch.int64
 
         return cls(
             torch.tensor(data, dtype=dtype, device=device).view(size),
