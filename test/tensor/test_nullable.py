@@ -85,3 +85,18 @@ def test_nan_to_num() -> None:
 
     out = torch.nan_to_num(tensor, nan=-1)
     assert out.equal(torch.tensor([1, -1, 3]))
+
+
+def test_isnan_isfinite() -> None:
+    tensor = NullableTensor.from_list([1, None, 3])
+
+    out = torch.isnan(tensor)
+    assert out.dtype == torch.bool
+    assert out.equal(torch.tensor([False, True, False]))
+
+    out = tensor.isfinite()
+    assert out.dtype == torch.bool
+    assert out.equal(torch.tensor([True, False, True]))
+
+    out[0] = False
+    assert tensor.tolist() == [1, None, 3]
