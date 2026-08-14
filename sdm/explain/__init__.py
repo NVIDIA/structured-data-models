@@ -1,5 +1,7 @@
-# ruff: noqa: D104
+"""Explainability modules for structured data models."""
 
-from sdm.explain.base import Explainer
+from sdm.explain.base import ICLExplainer
 
-__all__ = ["Explainer"]
+__all__ = [
+    "ICLExplainer",
+]
