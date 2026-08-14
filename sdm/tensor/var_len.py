@@ -311,9 +311,16 @@ class VarLenTensor(Tensor):
 
         buffer = array.values.buffers()[1]
         if buffer is not None and buffer.size > 0:
-            data = torch.frombuffer(buffer, dtype=dtype)
-            start = array.values.offset
-            data = data[start : start + len(array.values)].to(device)
+            if dtype == torch.bool:
+                data = arrow_as_tensor(
+                    array.values,
+                    dtype=dtype,
+                    device=device,
+                )
+            else:
+                data = torch.frombuffer(buffer, dtype=dtype)
+                start = array.values.offset
+                data = data[start : start + len(array.values)].to(device)
         else:
             data = torch.empty(0, dtype=dtype, device=device)
 
