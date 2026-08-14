@@ -324,90 +324,84 @@ plan = {
 }
 
 
-def sample_2hop(engine, query_ids, plan, k, seed=0):
-    """Sample 2-hop neighborhoods and return [len(query_ids), k] index tensor."""
+def sample_2hop_local(engine, local_id, plan):
+    """Sample 2-hop neighbors for a single node, return local IDs."""
+    global_id = local_to_global[local_id]
     iterator = engine.sample(
-        {"nodes": query_ids},
+        {"nodes": [global_id]},
         json.dumps(plan),
         fused=False,
     )
 
-    # Collect all global IDs from node events
-    all_global_ids = set()
+    neighbor_local_ids = []
     for event in iterator:
         if event["type"] == "node":
-            batch = event["batch"]
-            gids = batch.column("id_b").to_pylist()
-            all_global_ids.update(gids)
+            gids = event["batch"].column("id_b").to_pylist()
+            for gid in gids:
+                if gid in global_to_local and global_to_local[gid] != local_id:
+                    neighbor_local_ids.append(global_to_local[gid])
 
-    # Remove query IDs from neighbor sets
-    query_set = set(query_ids)
-    neighbor_ids = list(all_global_ids - query_set)
-
-    return neighbor_ids
+    return list(set(neighbor_local_ids))
 
 
-def build_2hop_indices(engine, all_ids, plan, k, batch_size=500, seed=0):
+def build_2hop_indices(engine, n_rows, plan, k, seed=0):
     """Build 2-hop context indices for all rows, subsampled to k."""
     gen = torch.Generator().manual_seed(seed)
-    result = torch.zeros(len(all_ids), k, dtype=torch.long)
+    result = torch.zeros(n_rows, k, dtype=torch.long)
 
-    for start in range(0, len(all_ids), batch_size):
-        end = min(start + batch_size, len(all_ids))
-        batch_ids = all_ids[start:end]
+    for i in range(n_rows):
+        neighbors = sample_2hop_local(engine, i, plan)
+        neighbors_t = torch.tensor(neighbors, dtype=torch.long)
 
-        # Sample each query individually to get per-query neighbors
-        for i, qid in enumerate(batch_ids):
-            neighbors = sample_2hop(engine, [qid], plan, k, seed)
-            neighbors_t = torch.tensor(neighbors, dtype=torch.long)
+        if neighbors_t.size(0) >= k:
+            perm = torch.randperm(neighbors_t.size(0), generator=gen)[:k]
+            result[i] = neighbors_t[perm]
+        elif neighbors_t.size(0) > 0:
+            pad = neighbors_t[
+                torch.randint(
+                    neighbors_t.size(0),
+                    (k - neighbors_t.size(0),),
+                    generator=gen,
+                )
+            ]
+            result[i] = torch.cat([neighbors_t, pad])
 
-            if neighbors_t.size(0) >= k:
-                perm = torch.randperm(neighbors_t.size(0), generator=gen)[:k]
-                result[start + i] = neighbors_t[perm]
-            elif neighbors_t.size(0) > 0:
-                pad = neighbors_t[
-                    torch.randint(
-                        neighbors_t.size(0),
-                        (k - neighbors_t.size(0),),
-                        generator=gen,
-                    )
-                ]
-                result[start + i] = torch.cat([neighbors_t, pad])
-
-        if (end) % 2000 == 0 or end == len(all_ids):
-            print(f"  2-hop sampling {end}/{len(all_ids)}", flush=True)
+        if (i + 1) % 2000 == 0 or i == n_rows - 1:
+            print(f"  2-hop sampling {i + 1}/{n_rows}", flush=True)
 
     return result
 
 
 print("Building 2-hop train indices via DiskGraph...")
-train_ids = list(range(n_train))
 train_knn_2hop = build_2hop_indices(
-    engine, train_ids, plan, args.k, seed=args.seed
+    engine, n_train, plan, args.k, seed=args.seed
 ).to(device)
 
 print("Building 2-hop test indices via DiskGraph...")
-# For test, we sample starting from training nodes closest to test rows
-# Use 1-hop test kNN as seed nodes, then expand via DiskGraph
+# For test rows: use their 1-hop train neighbors as seeds into the graph
 test_knn_2hop_parts = []
 test_knn_1hop_cpu = test_knn_1hop.cpu()
-gen = torch.Generator().manual_seed(args.seed + 1)
+gen_test = torch.Generator().manual_seed(args.seed + 1)
 for i in range(n_test):
-    # Start from this test row's 1-hop neighbors in the train graph
-    seed_nodes = test_knn_1hop_cpu[i, : args.hop1_fanout].tolist()
-    neighbors = sample_2hop(engine, seed_nodes, plan, args.k, args.seed)
-    neighbors_t = torch.tensor(neighbors, dtype=torch.long)
+    # Collect 2-hop neighbors from each of this test row's 1-hop train neighbors
+    all_neighbors = set()
+    for seed_local in test_knn_1hop_cpu[i, : args.hop1_fanout].tolist():
+        neighbors = sample_2hop_local(engine, seed_local, plan)
+        all_neighbors.update(neighbors)
 
+    neighbors_t = torch.tensor(list(all_neighbors), dtype=torch.long)
     row = torch.zeros(args.k, dtype=torch.long)
     if neighbors_t.size(0) >= args.k:
-        perm = torch.randperm(neighbors_t.size(0), generator=gen)[: args.k]
+        perm = torch.randperm(neighbors_t.size(0), generator=gen_test)[
+            : args.k
+        ]
         row = neighbors_t[perm]
     elif neighbors_t.size(0) > 0:
         pad = neighbors_t[
             torch.randint(
                 neighbors_t.size(0),
                 (args.k - neighbors_t.size(0),),
-                generator=gen,
+                generator=gen_test,
             )
         ]
         row = torch.cat([neighbors_t, pad])
@@ -416,11 +410,23 @@ for i in range(n_test):
     if (i + 1) % 1000 == 0 or i == n_test - 1:
         print(f"  test 2-hop {i + 1}/{n_test}", flush=True)
 
-test_knn_2hop = torch.stack(test_knn_2hop_parts).to(device)  # [N_test, k]
+test_knn_2hop = torch.stack(test_knn_2hop_parts).to(device)
 train_knn_1hop = train_knn_1hop.to(device)
 
 print(
     f"2-hop indices: train={train_knn_2hop.shape}, test={test_knn_2hop.shape}"
+)
+print(
+    f"train_knn_2hop range: {train_knn_2hop.min().item()} to {train_knn_2hop.max().item()}, n_train={n_train}"
+)
+print(
+    f"test_knn_2hop range: {test_knn_2hop.min().item()} to {test_knn_2hop.max().item()}, n_train={n_train}"
+)
+print(
+    f"train_knn_1hop range: {train_knn_1hop.min().item()} to {train_knn_1hop.max().item()}"
+)
+print(
+    f"test_knn_1hop range: {test_knn_1hop.min().item()} to {test_knn_1hop.max().item()}"
 )
 print()
 
