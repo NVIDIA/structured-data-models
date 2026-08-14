@@ -237,21 +237,26 @@ def test_quantile_transform_adapter_matches_grouped_tables(
     query_output = processor.transform_ensemble(query)
     restored = processor.inverse_transform_ensemble(context_output)
 
-    expected_contexts = []
-    expected_queries = []
-    expected_restored = []
-    for context_table, query_table in zip(contexts, queries, strict=True):
+    expected_contexts = {}
+    expected_queries = {}
+    expected_restored = {}
+    expected_generator = torch.Generator(device=device).manual_seed(7)
+    for table_id in dict.fromkeys(member_table_ids):
+        context_table = contexts[table_id]
+        query_table = queries[table_id]
         reference = QuantileTransform(
             n_quantiles=8,
             subsample=subsample,
         )
         expected_context = reference.fit_transform(
             context_table,
-            generator=torch.Generator(device=device).manual_seed(7),
+            generator=expected_generator,
         )
-        expected_contexts.append(expected_context)
-        expected_queries.append(reference.transform(query_table))
-        expected_restored.append(reference.inverse_transform(expected_context))
+        expected_contexts[table_id] = expected_context
+        expected_queries[table_id] = reference.transform(query_table)
+        expected_restored[table_id] = reference.inverse_transform(
+            expected_context
+        )
 
     for member_id, table_id in enumerate(member_table_ids):
         assert context_output.table(member_id).equal(

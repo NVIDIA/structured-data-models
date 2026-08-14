@@ -193,7 +193,7 @@ def _two_group_ensemble_table() -> EnsembleTable:
     )
 
 
-def test_adapter_fits_each_group_separately() -> None:
+def test_adapter_fits_each_stored_table_separately() -> None:
     ensemble_table = _two_group_ensemble_table()
     processor = EnsembleProcessorAdapter(Standardize(with_std=False))
 
@@ -217,6 +217,93 @@ def test_adapter_fit_transform_matches_fit_then_transform() -> None:
 
     for member_id in range(ensemble_table.num_members):
         assert output.table(member_id).equal(expected.table(member_id))
+
+
+def test_adapter_state_follows_members_when_group_order_changes() -> None:
+    fitted = _two_group_ensemble_table()
+    first = TableTensor.from_tensor(
+        torch.tensor([[2.0], [4.0]]), columns=("first",)
+    )
+    second = TableTensor.from_tensor(
+        torch.tensor([[4.0], [8.0]]), columns=("second",)
+    )
+    # Keep the logical member assignments from `fitted`, but reverse the
+    # physical order in which its incompatible groups are constructed.
+    transformed = EnsembleTable.from_tables(
+        tables=(second, first),
+        member_table_ids=(0, 1, 0),
+    )
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+
+    processor.fit_ensemble(fitted)
+    output = processor.transform_ensemble(transformed)
+
+    assert output.table(0).numerical.tolist() == [[0.0], [4.0]]
+    assert output.table(1).numerical.tolist() == [[0.0], [2.0]]
+    assert output.table(2).equal(output.table(0))
+
+
+def test_adapter_preserves_shared_table_state_and_output() -> None:
+    first = TableTensor.from_tensor(torch.tensor([[1.0], [3.0]]))
+    second = TableTensor.from_tensor(torch.tensor([[100.0], [200.0]]))
+    fitted = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
+    )
+    query_first = TableTensor.from_tensor(torch.tensor([[2.0], [4.0]]))
+    query_second = TableTensor.from_tensor(torch.tensor([[125.0], [225.0]]))
+    query = EnsembleTable.from_tables(
+        tables=(query_first, query_second),
+        member_table_ids=(1, 0, 1),
+    )
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+
+    processor.fit_ensemble(fitted)
+    output = processor.transform_ensemble(query)
+
+    assert len(processor._table_processors) == 2
+    assert next(iter(output)).size(0) == 2
+    assert output.table(0).numerical.tolist() == [[-25.0], [75.0]]
+    assert output.table(1).numerical.tolist() == [[0.0], [2.0]]
+    assert output.table(2).equal(output.table(0))
+
+
+def test_adapter_splits_shared_input_for_distinct_fitted_states() -> None:
+    first = TableTensor.from_tensor(torch.tensor([[1.0], [3.0]]))
+    second = TableTensor.from_tensor(torch.tensor([[100.0], [200.0]]))
+    fitted = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1),
+    )
+    shared = TableTensor.from_tensor(torch.tensor([[10.0], [20.0]]))
+    query = EnsembleTable(shared, num_members=2)
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+
+    processor.fit_ensemble(fitted)
+    output = processor.transform_ensemble(query)
+    restored = processor.inverse_transform_ensemble(output)
+
+    assert next(iter(output)).size(0) == 2
+    assert output.table(0).numerical.tolist() == [[8.0], [18.0]]
+    assert output.table(1).numerical.tolist() == [[-140.0], [-130.0]]
+    assert restored.table(0).equal(shared)
+    assert restored.table(1).equal(shared)
+
+
+def test_adapter_accepts_empty_ensemble_with_generator() -> None:
+    ensemble_table = EnsembleTable(
+        TableTensor.from_tensor(torch.ones(2, 1)),
+        num_members=0,
+    )
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+
+    output = processor.fit_transform_ensemble(
+        ensemble_table,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    assert output is ensemble_table
+    assert processor.transform_ensemble(ensemble_table) is ensemble_table
 
 
 def test_adapter_inverse_restores_input() -> None:

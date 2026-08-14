@@ -179,7 +179,7 @@ def _fit_draws(
             generator=generator,
         )
 
-    assert _GeneratorRecordingProcessor.generators == [generator] * 4
+    assert _GeneratorRecordingProcessor.generators == [generator] * 5
     return list(_GeneratorRecordingProcessor.draws)
 
 
@@ -189,7 +189,7 @@ def test_model_recipe_fitting_honors_generator(cached: bool) -> None:
     second = _fit_draws(seed=0, cached=cached)
     different_seed = _fit_draws(seed=1, cached=cached)
 
-    assert len(first) == 4
+    assert len(first) == 5
     assert all(torch.equal(left, right) for left, right in zip(first, second))
     assert any(
         not torch.equal(left, right)
