@@ -110,6 +110,7 @@ class QASSMax(QueryScaling):
         *,
         key_len: Tensor | int,  # [..., 1] or [..., S] or scalar
     ) -> Tensor:  # [..., S, H, C]
+        r""":meta private:"""  # noqa: D415
         if isinstance(key_len, Tensor):
             log_key_len = key_len.float().clamp(min=1.0).log().to(query.dtype)
         else:
