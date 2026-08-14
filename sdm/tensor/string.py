@@ -349,7 +349,11 @@ class StringTensor(VarLenTensor):
 
 @StringTensor.implements(aten.eq.Tensor)
 @StringTensor.implements(aten.eq.str)
-def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
+def _eq(inp: Tensor, other: Tensor | str) -> Tensor:
+    if not isinstance(inp, StringTensor):
+        assert isinstance(other, StringTensor)
+        return _eq(other, inp)
+
     if isinstance(other, Tensor) and inp.device != other.device:
         raise RuntimeError(
             f"Expected both tensors to be on the same device "
@@ -412,7 +416,11 @@ def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
 
 @StringTensor.implements(aten.ne.Tensor)
 @StringTensor.implements(aten.ne.str)
-def _ne(inp: StringTensor, other: Tensor | str) -> Tensor:
+def _ne(inp: Tensor, other: Tensor | str) -> Tensor:
+    if not isinstance(inp, StringTensor):
+        assert isinstance(other, StringTensor)
+        return _ne(other, inp)
+
     if isinstance(other, Tensor) and inp.device != other.device:
         raise RuntimeError(
             f"Expected both tensors to be on the same device "
