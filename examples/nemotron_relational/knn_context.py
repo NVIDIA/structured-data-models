@@ -23,8 +23,8 @@ from sklearn.cluster import KMeans
 import sdm
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dataset", default="rel-f1")
-parser.add_argument("--task", default="driver-dnf")
+parser.add_argument("--dataset", default="rel-amazon")
+parser.add_argument("--task", default="user-churn")
 parser.add_argument("--k", type=int, default=100)
 parser.add_argument("--num-clusters", type=int, default=20)
 parser.add_argument("--num-neighbors", type=int, nargs="+", default=[16, 16])
