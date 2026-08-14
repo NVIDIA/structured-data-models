@@ -92,11 +92,15 @@ def test_sdpa_compile(
     channels = 4
     num_query_heads = 4
     module = SDPA(
-        channels=channels,
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
-        qassmax=qassmax,
-        device=device,
+        query_scaling=QASSMax(
+            channels // num_query_heads,
+            num_query_heads,
+            device=device,
+        )
+        if qassmax
+        else None,
     )
 
     kv_heads = num_key_value_heads or num_query_heads
@@ -150,7 +154,13 @@ def test_attention_compile(
         channels=channels,
         num_query_heads=4,
         num_key_value_heads=num_key_value_heads,
-        qassmax=qassmax,
+        query_scaling=QASSMax(
+            channels // 4,
+            num_heads=4,
+            device=device,
+        )
+        if qassmax
+        else None,
         device=device,
     )
     query = torch.randn(2, 3, channels, device=device)
@@ -205,7 +215,13 @@ def test_transformer_block_compile(
         channels=channels,
         num_query_heads=2,
         feedforward_channels=16,
-        qassmax=qassmax,
+        query_scaling=QASSMax(
+            channels // 2,
+            num_heads=2,
+            device=device,
+        )
+        if qassmax
+        else None,
         device=device,
     )
     query = torch.randn(2, 3, channels, device=device)
@@ -246,7 +262,11 @@ def test_induced_transformer_block_compile(
         num_query_heads=2,
         feedforward_channels=16,
         num_inducing_points=4,
-        qassmax=True,
+        query_scaling=QASSMax(
+            channels // 2,
+            num_heads=2,
+            device=device,
+        ),
         device=device,
     )
     query = torch.randn(2, 6, channels, device=device)
