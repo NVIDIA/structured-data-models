@@ -95,7 +95,7 @@ def test_sdpa_compile(
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
         query_scaling=QASSMax(
-            channels // num_query_heads,
+            channels,
             num_query_heads,
             device=device,
         )
