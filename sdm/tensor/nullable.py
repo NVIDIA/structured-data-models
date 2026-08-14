@@ -49,7 +49,6 @@ class NullableIntTensor(Tensor):
         torch.uint16,
         torch.uint32,
         torch.uint64,
-        torch.bool,
         torch.int8,
         torch.int16,
         torch.int32,
