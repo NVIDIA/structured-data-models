@@ -348,8 +348,12 @@ class StringTensor(VarLenTensor):
 
 
 @StringTensor.implements(aten.eq.Tensor)
+@StringTensor.implements(aten.eq.Scalar)
 @StringTensor.implements(aten.eq.str)
-def _eq(inp: Tensor, other: Tensor | str) -> Tensor:
+def _eq(
+    inp: Tensor,
+    other: Tensor | str | int | float | complex | bool,
+) -> Tensor:
     if not isinstance(inp, StringTensor):
         assert isinstance(other, StringTensor)
         return _eq(other, inp)
@@ -361,8 +365,13 @@ def _eq(inp: Tensor, other: Tensor | str) -> Tensor:
         )
 
     if not isinstance(other, StringTensor | str):
+        size = (
+            torch.broadcast_shapes(inp.size(), other.size())
+            if isinstance(other, Tensor)
+            else inp.size()
+        )
         return torch.zeros(
-            torch.broadcast_shapes(inp.size(), other.size()),
+            size,
             dtype=torch.bool,
             device=inp.device,
         )
@@ -415,8 +424,12 @@ def _eq(inp: Tensor, other: Tensor | str) -> Tensor:
 
 
 @StringTensor.implements(aten.ne.Tensor)
+@StringTensor.implements(aten.ne.Scalar)
 @StringTensor.implements(aten.ne.str)
-def _ne(inp: Tensor, other: Tensor | str) -> Tensor:
+def _ne(
+    inp: Tensor,
+    other: Tensor | str | int | float | complex | bool,
+) -> Tensor:
     if not isinstance(inp, StringTensor):
         assert isinstance(other, StringTensor)
         return _ne(other, inp)
@@ -428,8 +441,13 @@ def _ne(inp: Tensor, other: Tensor | str) -> Tensor:
         )
 
     if not isinstance(other, StringTensor | str):
+        size = (
+            torch.broadcast_shapes(inp.size(), other.size())
+            if isinstance(other, Tensor)
+            else inp.size()
+        )
         return torch.ones(
-            torch.broadcast_shapes(inp.size(), other.size()),
+            size,
             dtype=torch.bool,
             device=inp.device,
         )

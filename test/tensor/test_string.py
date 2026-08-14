@@ -245,6 +245,8 @@ def test_eq(device: torch.device) -> None:
     )
     assert (left != right).equal(~(left == right))
     assert (left != "a").equal(~(left == "a"))
+    assert not left.eq(1).any()
+    assert left.ne(1).all()
 
     other = torch.ones(3, device=device)
     assert not other.eq(left).any()
