@@ -5,7 +5,6 @@ import torch
 from torch import Tensor
 
 ARROW_TORCH_DTYPES = {
-    # TODO Support bfloat16 dtype.
     pa.bool_(): torch.bool,
     pa.uint8(): torch.uint8,
     pa.uint16(): torch.uint16,
