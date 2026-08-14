@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -15,6 +15,30 @@ from sdm.nn import (
     TransformerBlock,
 )
 from sdm.testing import withCUDA
+
+
+class _ScaledFeedForward(torch.nn.Module):
+    def __init__(
+        self,
+        channels: int,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+        *,
+        multiplier: float = 0.0,
+        **_: Any,
+    ) -> None:
+        super().__init__()
+        self.weight = torch.nn.Parameter(
+            torch.full(
+                (channels,),
+                multiplier,
+                device=device,
+                dtype=dtype,
+            )
+        )
+
+    def forward(self, tensor: Tensor) -> Tensor:
+        return tensor * self.weight
 
 
 def reference_sdpa(
@@ -674,6 +698,7 @@ def test_attention_batch_size_limit_propagation() -> None:
         outer_module = (
             module.qkv_lin if isinstance(module, Attention) else module.q_norm
         )
+        assert outer_module is not None
         outer_batch_sizes: list[int] = []
         handle = outer_module.register_forward_pre_hook(
             lambda _module, args, batch_sizes=outer_batch_sizes: (
@@ -715,6 +740,7 @@ def test_transformer_block_batch_size_limit_bypass(
     module.train(training)
     query = torch.randn(5, 3, 8)
     batch_sizes: list[int] = []
+    assert module.q_norm is not None
     handle = module.q_norm.register_forward_pre_hook(
         lambda _module, args: batch_sizes.append(args[0].size(0))
     )
@@ -847,7 +873,10 @@ def test_transformer_block_norm_kwargs_precedence() -> None:
         feedforward_channels=16,
         norm_kwargs={"dtype": torch.float64},
     )
-    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
+    assert module.q_norm is not None
+    assert module.kv_norm is not None
+    mlp = cast(torch.nn.Sequential, module.mlp)
+    for norm in (module.q_norm, module.kv_norm, mlp[0]):
         assert next(norm.parameters()).dtype == torch.float64
 
     # The `dtype` argument still applies when `norm_kwargs` does not set it.
@@ -858,7 +887,10 @@ def test_transformer_block_norm_kwargs_precedence() -> None:
         norm_kwargs={"eps": 1e-6},
         dtype=torch.float64,
     )
-    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
+    assert module.q_norm is not None
+    assert module.kv_norm is not None
+    mlp = cast(torch.nn.Sequential, module.mlp)
+    for norm in (module.q_norm, module.kv_norm, mlp[0]):
         assert next(norm.parameters()).dtype == torch.float64
 
 
@@ -871,7 +903,10 @@ def test_transformer_block_norm_callable() -> None:
         norm=torch.nn.RMSNorm,
         norm_kwargs={"eps": 1e-6, "dtype": torch.float64},
     )
-    norms = (module.q_norm, module.kv_norm, module.mlp[0])
+    assert module.q_norm is not None
+    assert module.kv_norm is not None
+    mlp = cast(torch.nn.Sequential, module.mlp)
+    norms = (module.q_norm, module.kv_norm, mlp[0])
     for norm in norms:
         assert isinstance(norm, torch.nn.RMSNorm)
         assert norm.normalized_shape == (8,)
@@ -883,6 +918,65 @@ def test_transformer_block_norm_callable() -> None:
     assert param_ids[0].isdisjoint(param_ids[1])
     assert param_ids[0].isdisjoint(param_ids[2])
     assert param_ids[1].isdisjoint(param_ids[2])
+
+
+def test_transformer_block_shared_and_post_attention_norm() -> None:
+    channels = 4
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        feedforward_channels=8,
+        norm=torch.nn.RMSNorm,
+        norm_kwargs={"eps": 1e-6},
+        shared_attention_norm=True,
+        post_attention_norm=True,
+        feedforward_layer=_ScaledFeedForward,
+    )
+    with torch.no_grad():
+        module.attn.out_lin.weight.copy_(torch.eye(channels))
+        module.attn.out_lin.bias.zero_()
+
+    reference_attention = Attention(
+        channels=channels,
+        num_query_heads=2,
+    )
+    reference_attention.load_state_dict(module.attn.state_dict())
+    assert module.shared_attention_norm is not None
+    assert module.post_attention_norm is not None
+    shared_norm = module.shared_attention_norm
+    post_norm = module.post_attention_norm
+    query = torch.randn(2, 3, channels)
+    key_value = torch.randn(2, 5, channels)
+    expected = query + post_norm(
+        reference_attention(
+            query=shared_norm(query),
+            key_value=shared_norm(key_value),
+        )
+    )
+
+    direct, cache = module(
+        query=query,
+        key_value=key_value,
+        return_key_value=True,
+    )
+    replay = module(query=query, key_value=cache)
+
+    torch.testing.assert_close(direct, expected)
+    torch.testing.assert_close(replay, direct)
+
+
+def test_transformer_block_feedforward_layer() -> None:
+    module = TransformerBlock(
+        channels=4,
+        num_query_heads=2,
+        feedforward_channels=8,
+        feedforward_layer=_ScaledFeedForward,
+        feedforward_kwargs={"multiplier": 2.0},
+        dtype=torch.float64,
+    )
+    query = torch.randn(2, 3, 4, dtype=torch.float64)
+
+    torch.testing.assert_close(module(query=query), 3 * query)
 
 
 def test_transformer_block_kv_cache() -> None:
