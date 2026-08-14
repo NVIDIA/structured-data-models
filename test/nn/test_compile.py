@@ -154,11 +154,7 @@ def test_attention_compile(
         channels=channels,
         num_query_heads=4,
         num_key_value_heads=num_key_value_heads,
-        query_scaling=QASSMax(
-            channels // 4,
-            num_heads=4,
-            device=device,
-        )
+        query_scaling=QASSMax(channels // 4, num_heads=4, device=device)
         if qassmax
         else None,
         device=device,
@@ -215,11 +211,7 @@ def test_transformer_block_compile(
         channels=channels,
         num_query_heads=2,
         feedforward_channels=16,
-        query_scaling=QASSMax(
-            channels // 2,
-            num_heads=2,
-            device=device,
-        )
+        query_scaling=QASSMax(channels // 2, num_heads=2, device=device)
         if qassmax
         else None,
         device=device,
@@ -262,11 +254,7 @@ def test_induced_transformer_block_compile(
         num_query_heads=2,
         feedforward_channels=16,
         num_inducing_points=4,
-        query_scaling=QASSMax(
-            channels // 2,
-            num_heads=2,
-            device=device,
-        ),
+        query_scaling=QASSMax(channels // 2, num_heads=2, device=device),
         device=device,
     )
     query = torch.randn(2, 6, channels, device=device)
