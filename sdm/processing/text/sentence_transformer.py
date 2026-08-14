@@ -46,8 +46,6 @@ class _WordPieceTokenizer:
                 <sentence_transformers.sentence_transformer.model.SentenceTransformer>`
                 model whose tokenizer and vocabulary are extracted.
         """
-        if not torch.cuda.is_available():
-            return None
         if importlib.util.find_spec("cudf") is None:
             return None
 
@@ -192,7 +190,8 @@ class SentenceTransformer(Processor):
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim
         self._model = _ModuleReference(model)
-        self._word_piece_tokenizer = _WordPieceTokenizer.build(model)
+        self._word_piece_tokenizer: _WordPieceTokenizer | None = None
+        self._wp_tokenizer_initialized = False
 
     def _transform(self, table: TableTensor) -> TableTensor:
         columns = table.columns[Stype.text]
@@ -202,6 +201,13 @@ class SentenceTransformer(Processor):
             for column in columns
             for i in range(self._embedding_dim)
         )
+
+        if not self._wp_tokenizer_initialized:
+            if table.device.type == "cuda":
+                self._word_piece_tokenizer = _WordPieceTokenizer.build(
+                    self._model.module
+                )
+            self._wp_tokenizer_initialized = True
 
         if table.text.numel() == 0:
             numerical = torch.empty(
