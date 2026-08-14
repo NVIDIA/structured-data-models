@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ClipSigma - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="ImputeMean" href="sdm.processing.numerical.ImputeMean.html" /><link rel="prev" title="ClipQuantiles" href="sdm.processing.numerical.ClipQuantiles.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>QueryScaling - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="QASSMax" href="sdm.nn.QASSMax.html" /><link rel="prev" title="SoftplusScale" href="sdm.nn.SoftplusScale.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -20,7 +20,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="ClipSigma"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="QueryScaling"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -96,7 +96,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.relational.RelationalSampler.html">RelationalSampler</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="reference internal" href="../processing.html">sdm.processing</a><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../processing.html">sdm.processing</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html">EnsembleProcessor</a></li>
@@ -116,7 +116,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.SelectColumns.html">SelectColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Clip.html">Clip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">ClipSigma</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
@@ -134,10 +134,10 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.Softmax.html">Softmax</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../nn.html">sdm.nn</a><ul>
+<li class="toctree-l1 current"><a class="reference internal" href="../nn.html">sdm.nn</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.RotaryEmbedding.html">RotaryEmbedding</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.SoftplusScale.html">SoftplusScale</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.nn.QueryScaling.html">QueryScaling</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">QueryScaling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.QASSMax.html">QASSMax</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.SDPA.html">SDPA</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.Attention.html">Attention</a></li>
@@ -168,8 +168,10 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.numerical.ClipSigma"><code class="docutils literal notranslate"><span class="pre">ClipSigma</span></code></a></li>
-<li><a class="reference internal" href="#capabilities">Capabilities</a></li>
+<li><a class="reference internal" href="#sdm.nn.QueryScaling"><code class="docutils literal notranslate"><span class="pre">QueryScaling</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.nn.QueryScaling.forward"><code class="docutils literal notranslate"><span class="pre">QueryScaling.forward()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -187,11 +189,11 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="1" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <a itemprop="item" href="../processing.html"><span itemprop="name">sdm.processing</span></a>
+        <a itemprop="item" href="../nn.html"><span itemprop="name">sdm.nn</span></a>
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">ClipSigma</strong>
+        <strong itemprop="name">QueryScaling</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -204,39 +206,48 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="clipsigma">
-<h1>ClipSigma<a class="headerlink" href="#clipsigma" title="Link to this heading">#</a></h1>
+          <section id="queryscaling">
+<h1>QueryScaling<a class="headerlink" href="#queryscaling" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.numerical.ClipSigma">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.numerical.</span></span><span class="sig-name descname"><span class="pre">ClipSigma</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.numerical.ClipSigma" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
-<p>Two-stage z-score outlier clipping with soft logarithmic bounds.</p>
-<p>The first pass masks values outside the initial z-score bounds, then the
-second pass refits bounds on the remaining values. The transform applies
-logarithmic soft clipping instead of hard truncation.</p>
+<dt class="sig sig-object py" id="sdm.nn.QueryScaling">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.nn.</span></span><span class="sig-name descname"><span class="pre">QueryScaling</span></span><a class="headerlink" href="#sdm.nn.QueryScaling" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<p>Base class for query scaling modules in <a class="reference internal" href="sdm.nn.SDPA.html#sdm.nn.SDPA" title="sdm.nn.SDPA"><code class="xref py py-class docutils literal notranslate"><span class="pre">SDPA</span></code></a>.</p>
+<p>Query scaling modules transform projected query heads before scaled
+dot-product attention. They may use the effective key length to implement
+length-aware temperature scaling while preserving compatibility with
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html#torch.nn.functional.scaled_dot_product_attention" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nn.functional.scaled_dot_product_attention()</span></code></a>.</p>
+<dl class="field-list simple">
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.nn.QueryScaling.forward">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_len</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.nn.QueryScaling.forward" title="Link to this definition">#</a></dt>
+<dd><p>The forward pass.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Positive z-score multiplier setting how many standard
-deviations from the mean mark the soft clipping bounds.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>query</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a>) – The query tensor to scale, with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">S,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.
+<code class="docutils literal notranslate"><span class="pre">S</span></code> is the query sequence length, <code class="docutils literal notranslate"><span class="pre">H</span></code> is the number of
+attention heads, and <code class="docutils literal notranslate"><span class="pre">C</span></code> is the channels per head.</p></li>
+<li><p><strong>key_len</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of valid keys used to scale each query.
+An <code class="docutils literal notranslate"><span class="pre">int</span></code> denotes one shared key length for every query.
+A tensor shaped <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">1]</span></code> denotes one key length per batch
+item, shared across all query positions in <code class="docutils literal notranslate"><span class="pre">S</span></code>.
+A tensor shaped <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">S]</span></code> denotes one individual key length
+per query position.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Tensor with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">S,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
 
-<section id="capabilities">
-<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
-<div class="table-wrapper docutils container">
-<table class="docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><strong>Handled Semantic Types</strong></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">numerical</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p><strong>Requires Fitting</strong></p></td>
-<td><p>✅</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
+</dd></dl>
+
 </section>
 
         </article><button class="back-to-top" type="button">
@@ -245,16 +256,16 @@ deviations from the mean mark the soft clipping bounds.</p>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.numerical.ClipQuantiles.html">
+    <a href="sdm.nn.SoftplusScale.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">ClipQuantiles</div></div>
+        <span>Previous</span><div class="title">SoftplusScale</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.numerical.ImputeMean.html">
+    <a href="sdm.nn.QASSMax.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">ImputeMean</div>
+        <div class="title">QASSMax</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>

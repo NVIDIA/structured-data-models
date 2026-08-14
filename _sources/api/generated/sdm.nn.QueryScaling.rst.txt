@@ -1,0 +1,8 @@
+﻿QueryScaling
+============
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: QueryScaling
+   :members:
+   :show-inheritance:
