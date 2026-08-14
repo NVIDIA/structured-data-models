@@ -11,8 +11,12 @@ from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import override
 
-from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
-from sdm.tensor.io.arrow import _combine_arrow_chunks
+from sdm.tensor.io import (
+    ARROW_TORCH_DTYPES,
+    arrow_as_tensor,
+    combine_arrow_chunks,
+    to_arrow,
+)
 
 aten = torch.ops.aten
 
@@ -282,7 +286,7 @@ class VarLenTensor(Tensor):
             device: The device.
         """
         if isinstance(array, pa.ChunkedArray):
-            array = _combine_arrow_chunks(array)
+            array = combine_arrow_chunks(array)
 
         if size is None:
             size = (len(array),)

@@ -13,10 +13,10 @@ from typing_extensions import override
 from sdm.tensor.io import (
     ARROW_TORCH_DTYPES,
     arrow_as_tensor,
+    combine_arrow_chunks,
     to_arrow,
     to_cudf,
 )
-from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 if TYPE_CHECKING:
     import cudf
@@ -132,7 +132,7 @@ class NullableTensor(Tensor):
             device: The device.
         """
         if isinstance(array, pa.ChunkedArray):
-            array = _combine_arrow_chunks(array)
+            array = combine_arrow_chunks(array)
 
         if size is None:
             size = (len(array),)
