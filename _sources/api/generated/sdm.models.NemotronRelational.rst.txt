@@ -31,13 +31,16 @@ Default Recipe
      features=Sequential(
        TableDispatch(
          related=StypeDispatch(
-           datetime=AddCalendarFields([
-             'minute',
-             'hour',
-             'weekday',
-             'day_of_month',
-             'month',
-           ]),
+           datetime=AddCalendarFields(
+             fields=[
+               'minute',
+               'hour',
+               'weekday',
+               'day_of_month',
+               'month',
+             ],
+             encoding='raw',
+           ),
          ),
        ),
        StypeDispatch(
