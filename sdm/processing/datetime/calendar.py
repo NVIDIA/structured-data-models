@@ -17,7 +17,7 @@ class AddCalendarFields(Processor):
 
     Args:
         fields: The calendar fields to add.
-        encoding: How to encode each field. ``"raw"`` uses integer values.
+        encoding: How to encode each field. ``"raw"`` uses raw integer values.
             ``"cyclic"`` uses sine and cosine values.
     """
 
@@ -42,6 +42,9 @@ class AddCalendarFields(Processor):
         self.encoding = encoding
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if len(self.fields) == 0:
+            return table
+
         datetime = table.datetime
         na_mask = datetime == NaT
 
@@ -133,6 +136,7 @@ class AddCalendarFields(Processor):
                 for fn in ("sin", "cos")
             )
         else:
+            assert self.encoding == "raw"
             columns = tuple(
                 f"{column}__{field}"
                 for column in table.columns[Stype.datetime]
