@@ -35,6 +35,19 @@ def test_arrow() -> None:
     assert tensor.size() == (0,)
 
 
+def test_arrow_bool() -> None:
+    tensor = NullableIntTensor.from_arrow(
+        pa.array([True, None, False], type=pa.bool_()),
+        size=(1, 3),
+    )
+
+    assert tensor.size() == (1, 3)
+    assert tensor.dtype == torch.bool
+    assert tensor.tolist() == [[True, None, False]]
+    assert tensor.to_arrow().type == pa.bool_()
+    assert tensor.to_arrow().to_pylist() == [True, None, False]
+
+
 @onlyCUDA
 def test_cudf() -> None:
     cudf = pytest.importorskip("cudf")

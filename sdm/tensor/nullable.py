@@ -12,10 +12,10 @@ from typing_extensions import override
 
 from sdm.tensor.io import (
     ARROW_TORCH_DTYPES,
-    TORCH_ARROW_DTYPES,
     arrow_as_tensor,
     to_cudf,
 )
+from sdm.tensor.io import to_arrow as tensor_to_arrow
 from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 if TYPE_CHECKING:
@@ -48,6 +48,7 @@ class NullableIntTensor(Tensor):
         torch.uint16,
         torch.uint32,
         torch.uint64,
+        torch.bool,
         torch.int8,
         torch.int16,
         torch.int32,
@@ -147,15 +148,23 @@ class NullableIntTensor(Tensor):
             raise TypeError(f"Unsupported value type '{array.type}'")
 
         buffer = array.buffers()[1]
+        storage_offset = array.offset
         if buffer is not None and buffer.size > 0:
-            data = torch.frombuffer(buffer, dtype=arrow_dtype)
+            if arrow_dtype == torch.bool:
+                data = arrow_as_tensor(
+                    array.fill_null(False),
+                    dtype=arrow_dtype,
+                )
+                storage_offset = 0
+            else:
+                data = torch.frombuffer(buffer, dtype=arrow_dtype)
         else:
             data = torch.empty(0, dtype=arrow_dtype, device=device)
         data = torch.as_strided(
             data,
             size=size,
             stride=_contiguous_stride(size),
-            storage_offset=array.offset,
+            storage_offset=storage_offset,
         ).to(device, dtype)
 
         if array.null_count > 0:
@@ -172,20 +181,7 @@ class NullableIntTensor(Tensor):
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
         tensor = cast(NullableIntTensor, self.contiguous().view(-1).cpu())
-
-        arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
-        if arrow_type is None:
-            raise TypeError(f"Unsupported data type '{tensor.dtype}'")
-
-        return pa.Array.from_buffers(
-            type=arrow_type,
-            length=tensor.numel(),
-            buffers=[
-                pa.array(tensor._valid.numpy(), type=pa.bool_()).buffers()[1],
-                pa.py_buffer(tensor._data.numpy()),
-            ],
-            null_count=-1,
-        )
+        return tensor_to_arrow(tensor._data, tensor._valid)
 
     @classmethod
     def from_cudf(
