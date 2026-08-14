@@ -57,6 +57,16 @@ def arrow_as_tensor(
         dtype: The dtype.
         device: The device.
     """
+    if isinstance(array, pa.ChunkedArray):
+        array = _combine_arrow_chunks(array)
+
+    if pa.types.is_boolean(array.type) and array.null_count > 0:
+        dtype = dtype or torch.get_default_dtype()
+        if dtype.is_floating_point:
+            array = array.cast(TORCH_ARROW_DTYPES[dtype])
+        else:
+            array = array.fill_null(False)
+
     values = array.to_numpy(zero_copy_only=False)
 
     with warnings.catch_warnings():
