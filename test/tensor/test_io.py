@@ -4,8 +4,12 @@ import pyarrow as pa
 import pytest
 import torch
 
-from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.io.arrow import _combine_arrow_chunks
+from sdm.tensor.io import (
+    arrow_as_tensor,
+    combine_arrow_chunks,
+    to_arrow,
+    to_cudf,
+)
 from sdm.testing import onlyCUDA
 
 
@@ -17,7 +21,7 @@ def test_combine_arrow_dictionary_string_chunks() -> None:
         ]
     )
 
-    out = _combine_arrow_chunks(array)
+    out = combine_arrow_chunks(array)
 
     assert pa.types.is_dictionary(out.type)
     assert out.dictionary.type == pa.large_string()

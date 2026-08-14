@@ -21,8 +21,15 @@ ARROW_TORCH_DTYPES = {
 TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
 
 
-def _combine_arrow_chunks(array: pa.ChunkedArray) -> pa.Array:
-    r"""Combine chunks after promoting 32-bit string offsets."""
+def combine_arrow_chunks(array: pa.ChunkedArray) -> pa.Array:
+    r"""Combine a :class:`pyarrow.ChunkedArray` into a single array.
+
+    String and string-dictionary chunks are promoted to large-string storage
+    before combining to prevent offset overflows.
+
+    Args:
+        array: The :class:`pyarrow.ChunkedArray`.
+    """
     if array.num_chunks == 0:
         return array.combine_chunks()
     if array.num_chunks == 1:
@@ -58,7 +65,7 @@ def arrow_as_tensor(
         device: The device.
     """
     if isinstance(array, pa.ChunkedArray):
-        array = _combine_arrow_chunks(array)
+        array = combine_arrow_chunks(array)
 
     if pa.types.is_boolean(array.type) and array.null_count > 0:
         dtype = dtype or torch.get_default_dtype()
