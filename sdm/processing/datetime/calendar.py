@@ -38,6 +38,10 @@ class AddCalendarFields(Processor):
         encoding: Literal["raw", "cyclic"] = "raw",
     ) -> None:
         super().__init__()
+
+        if len(fields) != len(set(fields)):
+            raise ValueError("Expected datetime fields to be unique")
+
         self.fields = fields
         self.encoding = encoding
 
