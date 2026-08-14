@@ -1,37 +1,56 @@
 import sentence_transformers as st
 import torch
 
+from sdm import StringTensor, TableTensor
+from sdm.processing import SentenceTransformer
+
 model_name = "intfloat/e5-base-v2"
-model = st.SentenceTransformer(model_name, device="cuda")
+device = torch.device("cuda:0")
+
+model = st.SentenceTransformer(model_name)
+processor = SentenceTransformer(model_name).to(device)
+
+long_text = "word " * model.max_seq_length
+
+texts = [
+    ["hello world", "short"],
+    ["", "a"],
+    [None, "café naïve üñîçødé"],
+    [long_text, "x y z"],
+]
+
+table = TableTensor(
+    columns={"text": ("title", "body")},
+    text=StringTensor.from_list(texts, device=device),
+)
+gpu_output = processor(table)
+gpu_emb = gpu_output.numerical
+
+flat_texts = [
+    t if t is not None else ""
+    for col_idx in range(2)
+    for row in texts
+    for t in [row[col_idx]]
+]
 model.eval()
-
-text = "What is the capital of France?"
-
-# CPU encode() path — applies default prompt automatically
 with torch.inference_mode():
-    emb_encode = model.encode(
-        [text],
+    ref_emb = model.encode(
+        flat_texts,
         convert_to_tensor=True,
-        device="cuda",
         show_progress_bar=False,
+        device=str(device),
     )
+ref_emb = (
+    ref_emb.reshape(2, len(texts), -1).movedim(0, -2).reshape(len(texts), -1)
+)
 
-# Direct tokenize + module iteration — no prompt
-tokenized = model.tokenizer(
-    [text],
-    padding=True,
-    truncation=True,
-    max_length=model.max_seq_length,
-    return_tensors="pt",
-).to("cuda")
+print(f"Model: {model_name}")
+print(f"Default prompt: {model.default_prompt_name!r}")
+print()
 
-with torch.inference_mode():
-    features = dict(tokenized)
-    for module in model:
-        features = module(features)
-    emb_direct = features["sentence_embedding"]
-
-print(f"default_prompt_name: {model.default_prompt_name}")
-print(f"prompts: {model.prompts}")
-print(f"allclose: {torch.allclose(emb_encode, emb_direct, atol=1e-5)}")
-print(f"max diff: {(emb_encode - emb_direct).abs().max().item()}")
+for i, row in enumerate(texts):
+    print(f"Row {i}: {row}")
+    print(f"  GPU: {gpu_emb[i, :5].tolist()}")
+    print(f"  CPU: {ref_emb[i, :5].tolist()}")
+    print(f"  Max diff: {(gpu_emb[i] - ref_emb[i]).abs().max().item():.6f}")
+    print()
