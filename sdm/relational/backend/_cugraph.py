@@ -1,22 +1,14 @@
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
 from torch import Tensor
 
 from sdm import NaT, TableTensor
-from sdm.relational import (
-    RelationalData,
-    RelationalSampler,
-    TaskLink,
-    TemporalSamplingConfig,
-)
+from sdm._warnings import warn_once
+from sdm.relational import RelationalData, TaskLink
 from sdm.relational.join import join_index
-from sdm.relational.sampler import (
-    RelationalSamplerOutput,
-    _validate_time_columns,
-)
 
 _INTEGER_DTYPES = {
     torch.uint8,
@@ -27,52 +19,30 @@ _INTEGER_DTYPES = {
 }
 
 
-class CuGraphRelationalSampler(RelationalSampler):
-    r"""GPU subgraph sampler over relational data.
-
-    The sampler materializes a persistent single-GPU cuGraph topology and
-    keeps task lookup, sampling, and output assembly on the CUDA device.
-    For temporal data, each hop samples uniformly from eligible neighbors
-    against the original task cutoff. This retains a fixed cutoff across hops
-    instead of propagating sampled edge times.
-
-    Args:
-        data: CUDA-resident tables and their relationships.
-        temporal: Temporal sampling configuration. Only uniform neighbor
-            selection is currently supported.
-        random_state: Seed for the advancing cuGraph random-state stream.
-    """
-
+class CuGraphRelationalSampler:
     def __init__(
         self,
         data: RelationalData,
-        temporal: TemporalSamplingConfig | None = None,
-        random_state: int | None = None,
+        time_columns: Mapping[str, str],
     ) -> None:
-        if data.device.type != "cuda":
-            raise ValueError(
-                f"'{self.__class__.__name__}' requires CUDA-resident data"
-            )
-        if temporal is not None and temporal.strategy == "last":
-            raise NotImplementedError(
-                "cuGraph temporal sampling does not support strategy 'last'"
-            )
 
-        self.data = data
-        self.temporal = temporal
-        self.time_columns = (
-            temporal.time_columns if temporal is not None else {}
-        )
-        self._generator = np.random.default_rng(random_state)
-        _validate_time_columns(self.data, self.time_columns)
+        if not data.is_cuda:
+            raise ValueError(
+                f"{self.__class__.__name__!r} requires input data on a CUDA "
+                f"device (got '{data.device}')"
+            )
 
         try:
             import cupy as cp
             import pylibcugraph  # noqa: PLC0415
-        except ImportError as exc:
+        except ImportError as e:
             raise ImportError(
-                "CUDA relational sampling requires cupy and pylibcugraph"
-            ) from exc
+                f"{self.__class__.__name__!r} requires 'cupy' and "
+                f"'pylibcugraph'"
+            ) from e
+
+        self.data = data
+        self.time_columns = time_columns
 
         self._cp = cp
         self._pylibcugraph = pylibcugraph
@@ -119,22 +89,17 @@ class CuGraphRelationalSampler(RelationalSampler):
     def sample(
         self,
         task_table: TableTensor,
-        task_link: TaskLink | Mapping[str, str | Sequence[str]],
+        task_link: TaskLink,
         num_neighbors: Sequence[int],
         task_time_column: str | None = None,
-    ) -> RelationalSamplerOutput:
-        r"""Sample CUDA-resident related tables for task rows."""
-        task_link = self._validate_sample_inputs(
-            task_table=task_table,
-            task_link=task_link,
-            task_time_column=task_time_column,
-        )
+        temporal_strategy: Literal["last", "uniform"] = "last",
+    ) -> dict[str, tuple[Tensor, Tensor]]:
+
         if task_table.device != self.data.device:
             raise ValueError(
-                "Expected task and relational tables on the same CUDA device"
+                f"Expected task and relational tables on the same CUDA device "
+                f"(got '{task_table.device}' and '{self.data.device}')"
             )
-        if len(num_neighbors) == 0:
-            raise ValueError("Expected at least one sampling hop")
 
         with torch.cuda.device(self.data.device):
             seed = self._resolve_seed(
@@ -149,26 +114,31 @@ class CuGraphRelationalSampler(RelationalSampler):
             else:
                 seed_time = task_table[task_time_column].datetime.squeeze(-1)
 
-            if self._num_edges == 0:
-                nodes = self._seed_nodes(seed=seed, task_link=task_link)
-            elif self.time_columns:
-                nodes = self._sample_temporal(
-                    seed=seed,
-                    seed_time=seed_time,
-                    num_neighbors=num_neighbors,
-                    seed_table=task_link.table,
-                )
-            else:
-                nodes = self._sample_non_temporal(
+            if self._num_edges == 0 or len(num_neighbors) == 0:
+                return self._seed_nodes(seed=seed, task_link=task_link)
+
+            if len(self.time_columns) == 0:
+                return self._sample_non_temporal(
                     seed=seed,
                     num_neighbors=num_neighbors,
                 )
 
-        return self._to_output(
-            task_table=task_table,
-            task_link=task_link,
-            nodes=nodes,
-        )
+            if temporal_strategy == "last":
+                warn_once(
+                    key="cugraph-last-strategy",
+                    message=(
+                        "cugraph-based sampling does not yet support "
+                        "temporal_strategy='last'. Falling back to 'uniform' "
+                        "temporal sampling."
+                    ),
+                )
+
+            return self._sample_temporal(
+                seed=seed,
+                seed_time=seed_time,
+                num_neighbors=num_neighbors,
+                seed_table=task_link.table,
+            )
 
     def _build_graph(self) -> None:
         cp = self._cp
@@ -475,7 +445,11 @@ class CuGraphRelationalSampler(RelationalSampler):
                 example[mask],
                 node[mask] - self._vertex_offsets[i],
             )
-        return nodes
+        return {
+            table_name: (example, node)
+            for table_name, (example, node) in nodes.items()
+            if node.numel() > 0
+        }
 
     def _sample_temporal_hop(
         self,
@@ -556,9 +530,10 @@ class CuGraphRelationalSampler(RelationalSampler):
 
     def _next_random_state(self) -> int:
         return int(
-            self._generator.integers(
+            torch.randint(
                 low=0,
-                high=np.iinfo(np.int32).max,
+                high=torch.iinfo(torch.int32).max,
+                size=(),
             )
         )
 

@@ -115,6 +115,21 @@ with torch.amp.autocast("cuda", dtype=torch.bfloat16):
 Pre-processing and post-processing routines remain outside the model’s autocast policy.
 They will run with the dtypes of the model inputs.
 
+## Embeddings
+
+Intermediate embeddings of a {py:class}`~sdm.models.ICLModel` can be captured by attaching a standard PyTorch hook at any child module, *e.g.*, via {py:meth}`torch.nn.Module.register_forward_pre_hook`.
+For example, the following snippet records the query embeddings passed into the {py:class}`~sdm.models.TabICLv2` classification head:
+
+```python
+def _embedding(_module: torch.nn.Module, args: tuple[Tensor, ...]) -> None:
+    query_embedding = args[0]
+
+model = sdm.models.TabICLv2()
+handle = model.cls_model.icl_block.head.register_forward_pre_hook(_embedding)
+```
+
+Such embeddings can be used for downstream analysis, such as clustering, retrieval, or similarity search.
+
 ## Relational Context
 
 So far, we have described the single-table in-context learning paradigm.
@@ -231,4 +246,4 @@ For example, {py:class}`~sdm.models.NemotronRelational` consumes the `x_context`
 
 To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we provide heterogeneous, temporally aware subgraph samplers with CPU and CUDA backends, based on [`pyg-lib`](https://github.com/pyg-team/pyg-lib) and [`cugraph`](https://docs.rapids.ai/api/cugraph), respectively.
 Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
-The full relational sampling and prediction flow is shown in [`examples/nemotron_relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/nemotron_relational/rel_bench.py).
+The full relational sampling and prediction flow is shown in [`examples/nemotron/relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/nemotron/relational/rel_bench.py).

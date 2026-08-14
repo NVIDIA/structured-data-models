@@ -5,8 +5,7 @@ import torch
 from torch import Tensor
 
 ARROW_TORCH_DTYPES = {
-    # TODO Support boolean dtype.
-    # TODO Support bfloat16 dtype.
+    pa.bool_(): torch.bool,
     pa.uint8(): torch.uint8,
     pa.uint16(): torch.uint16,
     pa.uint32(): torch.uint32,
@@ -22,8 +21,15 @@ ARROW_TORCH_DTYPES = {
 TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
 
 
-def _combine_arrow_chunks(array: pa.ChunkedArray) -> pa.Array:
-    r"""Combine chunks after promoting 32-bit string offsets."""
+def combine_arrow_chunks(array: pa.ChunkedArray) -> pa.Array:
+    r"""Combine a :class:`pyarrow.ChunkedArray` into a single array.
+
+    String and string-dictionary chunks are promoted to large-string storage
+    before combining to prevent offset overflows.
+
+    Args:
+        array: The :class:`pyarrow.ChunkedArray`.
+    """
     if array.num_chunks == 0:
         return array.combine_chunks()
     if array.num_chunks == 1:
@@ -58,6 +64,16 @@ def arrow_as_tensor(
         dtype: The dtype.
         device: The device.
     """
+    if isinstance(array, pa.ChunkedArray):
+        array = combine_arrow_chunks(array)
+
+    if pa.types.is_boolean(array.type) and array.null_count > 0:
+        dtype = dtype or torch.get_default_dtype()
+        if dtype.is_floating_point:
+            array = array.cast(TORCH_ARROW_DTYPES[dtype])
+        else:
+            array = array.fill_null(False)
+
     values = array.to_numpy(zero_copy_only=False)
 
     with warnings.catch_warnings():
@@ -83,6 +99,11 @@ def to_arrow(tensor: Tensor, valid_mask: Tensor | None = None) -> pa.Array:
     if arrow_type is None:
         raise TypeError(f"Unsupported data type '{tensor.dtype}'")
 
+    if tensor.dtype == torch.bool:
+        buffer = pa.array(tensor.numpy(), type=pa.bool_()).buffers()[1]
+    else:
+        buffer = pa.py_buffer(tensor.numpy())
+
     return pa.Array.from_buffers(
         type=arrow_type,
         length=tensor.numel(),
@@ -90,7 +111,7 @@ def to_arrow(tensor: Tensor, valid_mask: Tensor | None = None) -> pa.Array:
             pa.array(valid_mask.numpy(), type=pa.bool_()).buffers()[1]
             if valid_mask is not None
             else None,
-            pa.py_buffer(tensor.numpy()),
+            buffer,
         ],
         null_count=-1 if valid_mask is not None else 0,
     )

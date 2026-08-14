@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
-from sdm.models.nemotron_relational.graph import HomogeneousGraph
+from sdm.models.nemotron.relational.graph import HomogeneousGraph
 from sdm.relational.join import join_index
 
 
