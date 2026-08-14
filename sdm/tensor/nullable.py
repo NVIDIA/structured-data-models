@@ -36,14 +36,15 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
 
 
 class NullableIntTensor(Tensor):
-    r"""A :class:`torch.Tensor` for nullable integer values.
+    r"""A :class:`torch.Tensor` for nullable values.
 
     Args:
-        data: Integer tensor containing the values.
+        data: Tensor containing the values.
         valid: Boolean mask indicating valid, non-null values.
     """
 
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...]] = (
+        torch.bool,
         torch.uint8,
         torch.uint16,
         torch.uint32,
@@ -70,8 +71,8 @@ class NullableIntTensor(Tensor):
         r"""Create a tensor wrapper."""
         if data.dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
-                f"Expected 'data' in {cls.__name__!r} to have integer "
-                f"dtype (got '{data.dtype}')"
+                f"Expected 'data' in {cls.__name__!r} to have integer or "
+                f"boolean dtype (got '{data.dtype}')"
             )
         if valid.dtype != torch.bool:
             raise ValueError(
@@ -123,11 +124,10 @@ class NullableIntTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> Self:
-        r"""Create tensor from an integer :class:`pyarrow.Array`.
+        r"""Create tensor from a :class:`pyarrow.Array`.
 
         Args:
-            array: The integer :class:`pyarrow.Array` or
-                :class:`pyarrow.ChunkedArray`.
+            array: The :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`.
             dtype: The dtype.
             size: The shape of the tensor.
             device: The device.
@@ -192,10 +192,10 @@ class NullableIntTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> Self:
-        r"""Create tensor from an integer :class:`cudf.Series`.
+        r"""Create tensor from a :class:`cudf.Series`.
 
         Args:
-            ser: The integer :class:`cudf.Series` or :class:`cudf.Index`.
+            ser: The :class:`cudf.Series` or :class:`cudf.Index`.
             dtype: The dtype.
             size: The shape of the tensor.
             device: The device.
@@ -212,7 +212,7 @@ class NullableIntTensor(Tensor):
             )
 
         column, _ = ser.to_pylibcudf()
-        cp_dtype = {
+        cp_dtype = {  # TODO?
             plc.TypeId.UINT8: cp.uint8,
             plc.TypeId.UINT16: cp.uint16,
             plc.TypeId.UINT32: cp.uint32,
@@ -240,15 +240,15 @@ class NullableIntTensor(Tensor):
     @classmethod
     def from_list(
         cls,
-        values: int | Sequence[Any] | None,
+        values: int | bool | Sequence[Any] | None,
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
     ) -> Self:
-        r"""Create tensor from a rectangular Python list of integers.
+        r"""Create tensor from a rectangular Python list.
 
         Args:
-            values: The rectangular Python list of integers.
+            values: The rectangular Python list.
             dtype: The dtype.
             device: The device.
         """
@@ -304,7 +304,10 @@ class NullableIntTensor(Tensor):
 
     @property
     def data(self) -> Tensor:
-        r"""Return the integer values tensor."""
+        r"""Return the physical data.
+
+        Values at positions where :attr:`valid` is ``False`` are unspecified.
+        """
         return self._data
 
     @property
@@ -431,7 +434,7 @@ class NullableIntTensor(Tensor):
         )
 
     @override
-    def item(self) -> int | None:  # type: ignore
+    def item(self) -> int | bool | None:  # type: ignore
         if self._data.numel() != 1:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} with {self._data.numel()} "
