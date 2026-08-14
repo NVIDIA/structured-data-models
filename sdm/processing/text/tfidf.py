@@ -1,6 +1,6 @@
 import math
 import re
-from itertools import accumulate
+from itertools import accumulate, product
 from typing import cast
 
 import pyarrow as pa
@@ -15,7 +15,7 @@ from sdm.tensor import EnsembleTable
 from sdm.tensor.io import arrow_as_tensor
 
 
-class _TFIDFState(torch.nn.Module):
+class _TFIDFBatchState(torch.nn.Module):
     def __init__(
         self,
         vocabularies: list[pa.Array],
@@ -27,6 +27,29 @@ class _TFIDFState(torch.nn.Module):
             self.register_buffer(f"idf_{column}", idf)
 
 
+class _TFIDFState(torch.nn.Module):
+    def __init__(
+        self,
+        batch_shape: tuple[int, ...],
+        batch_states: list[_TFIDFBatchState],
+        vocabularies: list[pa.Array],
+        vocabulary_indices: list[list[Tensor]],
+    ) -> None:
+        super().__init__()
+        self.batch_shape = batch_shape
+        self.batch_states = torch.nn.ModuleList(batch_states)
+        self.vocabularies = vocabularies
+        for batch, indices in enumerate(vocabulary_indices):
+            for column, index in enumerate(indices):
+                self.register_buffer(
+                    f"vocabulary_index_{batch}_{column}",
+                    index,
+                )
+
+    def vocabulary_index(self, batch: int, column: int) -> Tensor:
+        return self.get_buffer(f"vocabulary_index_{batch}_{column}")
+
+
 class TFIDF(EnsembleProcessor):
     """Encode text columns as character n-gram TF-IDF vectors.
 
@@ -36,6 +59,8 @@ class TFIDF(EnsembleProcessor):
     weights per text column. Transform replaces text with concatenated
     numerical features (one per retained n-gram), applies those idf weights,
     L2-normalizes each row, and ignores n-grams unseen at fit time.
+    Ordinary batch dimensions learn vocabulary and idf state independently;
+    their vocabularies are mapped into a deterministic common output schema.
     When fitted on an :class:`~sdm.tensor.EnsembleTable`, distinct member
     tables learn independent vocabularies and can produce different numerical
     schemas; members assigned the same table share fitted state.
@@ -43,7 +68,9 @@ class TFIDF(EnsembleProcessor):
     Args:
         ngram_range: Inclusive ``(min_n, max_n)`` character-window sizes.
         max_features: If set, keep only this many most frequent n-grams per
-            column. ``None`` keeps the full vocabulary.
+            column and batch. The common schema for batched output can be
+            wider because it is the union of independently retained features.
+            ``None`` keeps the full vocabulary.
         lowercase: If ``True``, lowercase text before tokenizing.
     """
 
@@ -186,10 +213,10 @@ class TFIDF(EnsembleProcessor):
         )
         return ngrams, offset
 
-    def _learn_state(
+    def _learn_batch_state(
         self,
         table: TableTensor,
-    ) -> _TFIDFState:
+    ) -> _TFIDFBatchState:
         device = table.text.device
         vocabularies: list[pa.Array] = []
         idfs: list[Tensor] = []
@@ -263,7 +290,61 @@ class TFIDF(EnsembleProcessor):
             vocabularies.append(vocabulary)
             idfs.append(idf)
 
-        return _TFIDFState(vocabularies, idfs)
+        return _TFIDFBatchState(vocabularies, idfs)
+
+    def _learn_state(self, table: TableTensor) -> _TFIDFState:
+        batch_shape = tuple(table.shape[:-2])
+        batch_indices = tuple(product(*(range(size) for size in batch_shape)))
+
+        batch_states = [
+            self._learn_batch_state(
+                table[index] if index else table,
+            )
+            for index in batch_indices
+        ]
+
+        vocabularies: list[pa.Array] = []
+        for column in range(table.text.size(-1)):
+            column_vocabularies = [
+                state.vocabularies[column] for state in batch_states
+            ]
+            if len(column_vocabularies) == 0:
+                vocabulary = pa.array([], type=pa.large_string())
+            elif len(column_vocabularies) == 1:
+                vocabulary = column_vocabularies[0]
+            else:
+                vocabulary = pc.call_function(
+                    "unique",
+                    [pa.concat_arrays(column_vocabularies)],
+                )
+                order = pc.call_function("sort_indices", [vocabulary])
+                vocabulary = vocabulary.take(order)
+            vocabularies.append(vocabulary)
+
+        vocabulary_indices: list[list[Tensor]] = []
+        for state in batch_states:
+            indices: list[Tensor] = []
+            for column, vocabulary in enumerate(vocabularies):
+                index = pc.call_function(
+                    "index_in",
+                    [state.vocabularies[column]],
+                    options=pc.SetLookupOptions(value_set=vocabulary),
+                ).fill_null(-1)
+                indices.append(
+                    arrow_as_tensor(
+                        index,
+                        dtype=torch.int64,
+                        device=table.device,
+                    )
+                )
+            vocabulary_indices.append(indices)
+
+        return _TFIDFState(
+            batch_shape,
+            batch_states,
+            vocabularies,
+            vocabulary_indices,
+        )
 
     def _fit_ensemble(
         self,
@@ -334,38 +415,122 @@ class TFIDF(EnsembleProcessor):
         state: _TFIDFState,
     ) -> TableTensor:
         device = table.text.device
-        dtype = (
-            state.get_buffer("idf_0").dtype
-            if state.vocabularies
-            else torch.get_default_dtype()
+        batch_shape = tuple(table.shape[:-2])
+        try:
+            broadcast_shape = torch.broadcast_shapes(
+                state.batch_shape,
+                batch_shape,
+            )
+        except RuntimeError:
+            broadcast_shape = None
+        if broadcast_shape != batch_shape:
+            raise ValueError(
+                "Expected fitted batch shape "
+                f"{state.batch_shape} to broadcast to transform batch "
+                f"shape {batch_shape}."
+            )
+        batch_state_ids = (
+            torch.arange(math.prod(state.batch_shape))
+            .reshape(state.batch_shape)
+            .expand(batch_shape)
+            .reshape(-1)
+            .tolist()
+            if state.batch_shape
+            else [0] * math.prod(batch_shape)
         )
-        text_names = table.columns[Stype.text]
-        leading_shape = table.text.shape[:-1]
-        n_rows = math.prod(leading_shape)
 
+        num_text_columns = table.text.size(-1)
+        if num_text_columns != len(state.vocabularies):
+            raise ValueError(
+                "Expected transform input to have "
+                f"{len(state.vocabularies)} text columns "
+                f"(got {num_text_columns})."
+            )
+
+        dtype = torch.get_default_dtype()
+        if len(state.batch_states) > 0 and num_text_columns > 0:
+            dtype = state.batch_states[0].get_buffer("idf_0").dtype
+        text_names = table.columns[Stype.text]
         vocab_sizes = [len(vocabulary) for vocabulary in state.vocabularies]
         column_offsets = [0, *accumulate(vocab_sizes)]
         total_width = column_offsets[-1]
+
+        batch_indices = tuple(product(*(range(size) for size in batch_shape)))
+        numerical_batches = [
+            self._encode_batch(
+                table[index] if index else table,
+                cast(_TFIDFBatchState, state.batch_states[state_id]),
+                state,
+                state_id,
+                column_offsets,
+                dtype,
+            )
+            for index, state_id in zip(
+                batch_indices,
+                batch_state_ids,
+                strict=True,
+            )
+        ]
+        if len(numerical_batches) == 0:
+            numerical = torch.empty(
+                (*batch_shape, table.size(-2), total_width),
+                dtype=dtype,
+                device=device,
+            )
+        elif batch_shape:
+            numerical = torch.stack(numerical_batches).reshape(
+                *batch_shape,
+                table.size(-2),
+                total_width,
+            )
+        else:
+            numerical = numerical_batches[0]
+
+        names: list[str] = []
+        for column, vocab_size in enumerate(vocab_sizes):
+            names.extend(
+                f"{text_names[column]}_{i}" for i in range(vocab_size)
+            )
+
+        out = table.__class__(
+            columns={Stype.numerical: tuple(names)},
+            numerical=numerical,
+        )
+        remainder = table.drop_stypes(Stype.text)
+        if remainder.size(-1) == 0:
+            return out
+        return cast(TableTensor, torch.cat((remainder, out), dim=-1))
+
+    def _encode_batch(
+        self,
+        table: TableTensor,
+        batch_state: _TFIDFBatchState,
+        state: _TFIDFState,
+        state_id: int,
+        column_offsets: list[int],
+        dtype: torch.dtype,
+    ) -> Tensor:
+        device = table.text.device
+        n_rows = table.size(-2)
+        total_width = column_offsets[-1]
         numerical = torch.zeros(
-            (*leading_shape, total_width),
+            (n_rows, total_width),
             dtype=dtype,
             device=device,
         )
-        flat_numerical = numerical.view(n_rows, total_width)
-        names: list[str] = []
         for column in range(table.text.size(-1)):
-            vocabulary = state.vocabularies[column]
-            idf = getattr(state, f"idf_{column}")
-            vocab_size = vocab_sizes[column]
+            vocabulary = batch_state.vocabularies[column]
+            idf = getattr(batch_state, f"idf_{column}")
+            vocab_size = len(vocabulary)
             column_start = column_offsets[column]
-            column_slice = flat_numerical[
+            column_slice = numerical[
                 :, column_start : column_offsets[column + 1]
             ]
 
             if vocab_size > 0:
                 column_text = cast(
                     StringTensor,
-                    table.text[..., column].reshape(-1),
+                    table.text[:, column],
                 )
                 flat, offsets = self._character_ngrams(
                     column_text,
@@ -408,19 +573,11 @@ class TFIDF(EnsembleProcessor):
                 )
                 counts.mul_(idf)
                 norm = counts.norm(dim=1, keepdim=True).clamp_min_(1e-12)
-                column_slice.copy_(counts.div_(norm))
-            names.extend(
-                f"{text_names[column]}_{i}" for i in range(vocab_size)
-            )
+                column_slice[:, state.vocabulary_index(state_id, column)] = (
+                    counts.div_(norm)
+                )
 
-        out = table.__class__(
-            columns={Stype.numerical: tuple(names)},
-            numerical=numerical,
-        )
-        remainder = table.drop_stypes(Stype.text)
-        if remainder.size(-1) == 0:
-            return out
-        return cast(TableTensor, torch.cat((remainder, out), dim=-1))
+        return numerical
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (

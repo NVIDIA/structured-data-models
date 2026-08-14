@@ -22,6 +22,163 @@ def test_preserves_leading_dimensions() -> None:
     assert output.numerical.shape[:-1] == (2, 2)
 
 
+def test_batch_dimensions_learn_independent_vocabulary() -> None:
+    train = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [
+                [["aa"], ["aa"]],
+                [["zz"], ["zz"]],
+            ]
+        )
+    )
+    query = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [
+                [["zz"], ["zz"]],
+                [["aa"], ["aa"]],
+            ]
+        )
+    )
+    encoder = TFIDF(ngram_range=(2, 2))
+
+    fitted = encoder.fit_transform(train)
+    output = encoder.transform(query)
+    reversed_fitted = TFIDF(ngram_range=(2, 2)).fit_transform(train[[1, 0]])
+
+    assert fitted.numerical.shape == (2, 2, 6)
+    assert output.numerical.shape == fitted.numerical.shape
+    assert torch.equal(fitted.numerical, reversed_fitted.numerical.flip(0))
+    assert fitted.numerical.ne(0).any(dim=-1).all()
+    assert output.numerical.eq(0).all()
+    first_support = fitted.numerical[0].ne(0).any(dim=0)
+    second_support = fitted.numerical[1].ne(0).any(dim=0)
+    assert not (first_support & second_support).any()
+
+
+def test_multiple_batch_dimensions_are_independent() -> None:
+    train = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [
+                [
+                    [["aa"], ["aa"]],
+                    [["bb"], ["bb"]],
+                ],
+                [
+                    [["cc"], ["cc"]],
+                    [["dd"], ["dd"]],
+                ],
+            ]
+        )
+    )
+    query = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [
+                [
+                    [["bb"], ["bb"]],
+                    [["cc"], ["cc"]],
+                ],
+                [
+                    [["dd"], ["dd"]],
+                    [["aa"], ["aa"]],
+                ],
+            ]
+        )
+    )
+    encoder = TFIDF(ngram_range=(2, 2))
+
+    encoder.fit(train)
+    output = encoder.transform(query)
+
+    assert output.numerical.shape == (2, 2, 2, 12)
+    assert output.numerical.eq(0).all()
+
+
+def test_batched_idf_matches_independently_fitted_tables() -> None:
+    batches = (
+        TableTensor.from_tensor(StringTensor.from_list([["aa xx"], ["aa"]])),
+        TableTensor.from_tensor(StringTensor.from_list([["aa xx"], ["xx"]])),
+    )
+    table = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [
+                [["aa xx"], ["aa"]],
+                [["aa xx"], ["xx"]],
+            ]
+        )
+    )
+
+    output = TFIDF(ngram_range=(2, 2)).fit_transform(table)
+
+    for batch_id, batch in enumerate(batches):
+        expected = TFIDF(ngram_range=(2, 2)).fit_transform(batch)
+        padded = torch.nn.functional.pad(
+            expected.numerical,
+            (0, output.size(-1) - expected.size(-1)),
+        )
+        assert torch.allclose(
+            output.numerical[batch_id].sort(dim=-1).values,
+            padded.sort(dim=-1).values,
+        )
+
+
+def test_unbatched_fit_broadcasts_to_query_batches() -> None:
+    train = TableTensor.from_tensor(StringTensor.from_list([["aa"], ["zz"]]))
+    query = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [
+                [["aa"], ["zz"]],
+                [["zz"], ["unseen"]],
+            ]
+        )
+    )
+    encoder = TFIDF(ngram_range=(2, 2)).fit(train)
+
+    output = encoder.transform(query)
+
+    assert output.numerical.shape == (2, 2, 6)
+    assert torch.equal(
+        output.numerical[0],
+        encoder.transform(query[0]).numerical,
+    )
+    assert torch.equal(
+        output.numerical[1],
+        encoder.transform(query[1]).numerical,
+    )
+
+
+def test_batched_fit_rejects_mismatched_query_batch_shape() -> None:
+    train = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [
+                [["aa"], ["aa"]],
+                [["zz"], ["zz"]],
+            ]
+        )
+    )
+    query = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [
+                [["aa"], ["aa"]],
+                [["zz"], ["zz"]],
+                [["xx"], ["xx"]],
+            ]
+        )
+    )
+    encoder = TFIDF(ngram_range=(2, 2)).fit(train)
+
+    with pytest.raises(ValueError, match="fitted batch shape"):
+        encoder.transform(query)
+
+
+def test_zero_sized_batch_dimension() -> None:
+    text = StringTensor.from_list([]).reshape(0, 2, 1)
+    table = TableTensor.from_tensor(text)
+
+    output = TFIDF(ngram_range=(2, 2)).fit_transform(table)
+
+    assert output.numerical.shape == (0, 2, 0)
+
+
 def test_rows_are_l2_normalized() -> None:
     table = TableTensor.from_tensor(
         StringTensor.from_list([["short"], ["a much longer text cell"]])
