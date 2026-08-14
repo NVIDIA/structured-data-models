@@ -247,13 +247,61 @@ print(f"Ingest complete: {index_dir}")
 
 engine = diskgraph.SamplerEngine(index_dir, random_seed=args.seed)
 
-# Determine relation name from the ingested graph
+# Determine relation name and build global-to-local ID mapping
 type_mapping = json.loads(engine.get_type_mapping())
 print(f"Type mapping: {json.dumps(type_mapping, indent=2)}")
 
-# Build sampling plan: 2 hops
-# The relation name depends on how DiskGraph names the fkey edges
-# For embedded fkeys on "edges" table: edges_src_to_nodes_node_id and edges_dst_to_nodes_node_id
+# DiskGraph assigns its own global IDs via PK hashing. We need to discover
+# the mapping from our node_id (0..N-1) to DiskGraph's global IDs, then
+# invert it. Sample all nodes to get the mapping.
+_iter = engine.sample(
+    {"nodes": list(range(min(10, n_train)))},
+    json.dumps(
+        {
+            "layers": [
+                {
+                    "fanouts": {},
+                    "default_fanout": {
+                        "fanout": 1,
+                        "mode": "uniform",
+                        "absent_key_policy": "uniform_fallback",
+                    },
+                }
+            ]
+        }
+    ),
+    fused=False,
+)
+for _ev in _iter:
+    if _ev["type"] == "node":
+        _sample_gids = _ev["batch"].column("id_b").to_pylist()
+        _sample_lids = _ev["batch"].column("id_a").to_pylist()
+        print(f"Sample global IDs: {_sample_gids[:10]}")
+        print(f"Sample local IDs:  {_sample_lids[:10]}")
+        print(f"Max global ID: {max(_sample_gids) if _sample_gids else 'N/A'}")
+        break
+
+# Build full global-to-local mapping by querying each node as a seed
+# DiskGraph returns (seed_index, global_id) pairs in node events
+global_to_local = {}
+for node_id in range(n_train):
+    _iter = engine.sample(
+        {"nodes": [node_id]},
+        json.dumps({"layers": []}),
+        fused=False,
+    )
+    for _ev in _iter:
+        if _ev["type"] == "node":
+            gid = _ev["batch"].column("id_b").to_pylist()[0]
+            global_to_local[gid] = node_id
+            break
+    if (node_id + 1) % 2000 == 0 or node_id == n_train - 1:
+        print(f"  ID mapping {node_id + 1}/{n_train}", flush=True)
+
+print(f"Global-to-local mapping: {len(global_to_local)} entries")
+# Also build local-to-global for seeding queries
+local_to_global = {v: k for k, v in global_to_local.items()}
+
 plan = {
     "layers": [
         {
