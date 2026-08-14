@@ -79,24 +79,14 @@ def to_arrow(tensor: Tensor, valid_mask: Tensor | None = None) -> pa.Array:
     if valid_mask is not None:
         valid_mask = valid_mask.contiguous().view(-1).cpu()
 
-    if tensor.dtype == torch.bool:
-        array = pa.array(tensor.numpy(), type=pa.bool_())
-        if valid_mask is None:
-            return array
-
-        return pa.Array.from_buffers(
-            type=pa.bool_(),
-            length=tensor.numel(),
-            buffers=[
-                pa.array(valid_mask.numpy(), type=pa.bool_()).buffers()[1],
-                array.buffers()[1],
-            ],
-            null_count=-1,
-        )
-
     arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
     if arrow_type is None:
         raise TypeError(f"Unsupported data type '{tensor.dtype}'")
+
+    if tensor.dtype == torch.bool:
+        buffer = pa.array(tensor.numpy(), type=pa.bool_()).buffers()[1]
+    else:
+        buffer = pa.py_buffer(tensor.numpy())
 
     return pa.Array.from_buffers(
         type=arrow_type,
@@ -105,7 +95,7 @@ def to_arrow(tensor: Tensor, valid_mask: Tensor | None = None) -> pa.Array:
             pa.array(valid_mask.numpy(), type=pa.bool_()).buffers()[1]
             if valid_mask is not None
             else None,
-            pa.py_buffer(tensor.numpy()),
+            buffer,
         ],
         null_count=-1 if valid_mask is not None else 0,
     )
