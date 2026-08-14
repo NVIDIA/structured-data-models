@@ -33,6 +33,9 @@ class Recipe:
     step's non-finite input contract; order steps so values are imputed before
     processors that do not explicitly document non-finite support.
 
+    Processors that require fitting cannot be reused within or between roles
+    because each use learns independent state.
+
     Args:
         features: Steps applied to model inputs before the model.
         target: Steps applied to labels. Invertible numerical target steps map
@@ -52,71 +55,128 @@ class Recipe:
         target: Processor | Iterable[Processor] | None = None,
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
-
-        self.features = EnsembleProcessor.as_processor(
+        features = EnsembleProcessor.as_processor(
             sp.Identity() if features is None else features
         )
-        self.target = EnsembleProcessor.as_processor(
+        target = EnsembleProcessor.as_processor(
             sp.Identity() if target is None else target
         )
-        self.output = EnsembleProcessor.as_processor(
+        output = EnsembleProcessor.as_processor(
             sp.Identity() if output is None else output
         )
 
-        self._validate_target()
-        self._validate_output()
+        self._validate(features, target, output)
+        self.features = features
+        self.target = target
+        self.output = output
 
     def prepend_features(self, processor: object) -> Self:
         """Prepend a processor to the feature pipeline."""
-        self.features = processor + self.features
+        features = processor + self.features
+        self._validate(features, self.target, self.output)
+        self.features = features
         return self
 
     def append_features(self, processor: object) -> Self:
         """Append a processor to the feature pipeline."""
-        self.features = self.features + processor
+        features = self.features + processor
+        self._validate(features, self.target, self.output)
+        self.features = features
         return self
 
     def prepend_target(self, processor: object) -> Self:
         """Prepend a processor to the target pipeline."""
-        self.target = processor + self.target
-        self._validate_target()
+        target = processor + self.target
+        self._validate(self.features, target, self.output)
+        self.target = target
         return self
 
     def append_target(self, processor: object) -> Self:
         """Append a processor to the target pipeline."""
-        self.target = self.target + processor
-        self._validate_target()
+        target = self.target + processor
+        self._validate(self.features, target, self.output)
+        self.target = target
         return self
 
     def prepend_output(self, processor: object) -> Self:
         """Prepend a processor to the output pipeline."""
-        self.output = processor + self.output
-        self._validate_output()
+        output = processor + self.output
+        self._validate(self.features, self.target, output)
+        self.output = output
         return self
 
     def append_output(self, processor: object) -> Self:
         """Append a processor to the output pipeline."""
-        self.output = self.output + processor
-        self._validate_output()
+        output = self.output + processor
+        self._validate(self.features, self.target, output)
+        self.output = output
         return self
 
-    def _validate_target(self) -> None:
-        if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
+    @classmethod
+    def _validate(
+        cls,
+        features: EnsembleProcessor,
+        target: EnsembleProcessor,
+        output: EnsembleProcessor,
+    ) -> None:
+        cls._validate_target(target)
+        cls._validate_output(output)
+        cls._validate_role_aliases(features, target, output)
+
+    @staticmethod
+    def _validate_target(target: EnsembleProcessor) -> None:
+        if any(isinstance(m, sp.TaskDispatch) for m in target.modules()):
             raise ValueError(
                 "'TaskDispatch' is not supported in 'Recipe.target'"
             )
-        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+        if any(isinstance(m, sp.TableDispatch) for m in target.modules()):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.target'"
             )
 
-    def _validate_output(self) -> None:
-        if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
+    @staticmethod
+    def _validate_output(output: EnsembleProcessor) -> None:
+        if any(isinstance(m, sp.TableDispatch) for m in output.modules()):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.output'"
             )
-        if self.output.requires_fit:
+        if output.requires_fit:
             raise ValueError("'Recipe.output' should not require fitting")
+
+    @staticmethod
+    def _stateful_processors(
+        processor: EnsembleProcessor,
+    ) -> Iterable[tuple[str, Processor]]:
+        for path, module in processor.named_modules(remove_duplicate=False):
+            if isinstance(module, Processor) and module.requires_fit:
+                yield path, module
+
+    @classmethod
+    def _validate_role_aliases(
+        cls,
+        features: EnsembleProcessor,
+        target: EnsembleProcessor,
+        output: EnsembleProcessor,
+    ) -> None:
+        seen: dict[int, str] = {}
+        for role, processor in (
+            ("features", features),
+            ("target", target),
+            ("output", output),
+        ):
+            for path, module in cls._stateful_processors(processor):
+                location = f"Recipe.{role}"
+                if path:
+                    location = f"{location}.{path}"
+                previous_location = seen.get(id(module))
+                if previous_location is not None:
+                    raise ValueError(
+                        f"Stateful processor {module.__class__.__name__!r} "
+                        f"is reused at '{previous_location}' and "
+                        f"'{location}'; create a separate processor "
+                        "instance for each use"
+                    )
+                seen[id(module)] = location
 
     def __repr__(self) -> str:
         return (

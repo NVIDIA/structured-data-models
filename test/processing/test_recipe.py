@@ -59,6 +59,68 @@ def test_recipe_roles_fit_transform_features_and_target() -> None:
     )
 
 
+def test_recipe_rejects_stateful_processor_shared_across_roles() -> None:
+    processor = sp.Standardize()
+
+    with pytest.raises(
+        ValueError,
+        match=r"Standardize.*Recipe\.features.*Recipe\.target",
+    ):
+        sp.Recipe(features=processor, target=processor)
+
+
+def test_recipe_rejects_nested_stateful_alias() -> None:
+    processor = sp.Standardize()
+
+    with pytest.raises(
+        ValueError,
+        match=r"Standardize.*Recipe\.features.*Recipe\.target",
+    ):
+        sp.Recipe(
+            features=[sp.Identity(), processor],
+            target=[processor, sp.Identity()],
+        )
+
+
+def test_recipe_rejects_stateful_processor_reused_within_role() -> None:
+    processor = sp.Standardize()
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"Standardize.*Recipe\.features\.0\.processor"
+            r".*Recipe\.features\.1\.processor"
+        ),
+    ):
+        sp.Recipe(features=[processor, processor])
+
+
+def test_recipe_allows_stateless_processor_shared_across_roles() -> None:
+    processor = sp.Identity()
+    recipe = sp.Recipe(features=processor, target=processor)
+    table = _table()
+
+    torch.testing.assert_close(
+        recipe.features.transform(table).numerical,
+        table.numerical,
+    )
+    torch.testing.assert_close(
+        recipe.target.transform(table).numerical,
+        table.numerical,
+    )
+
+
+def test_recipe_alias_validation_does_not_replace_existing_role() -> None:
+    processor = sp.Standardize()
+    recipe = sp.Recipe(features=processor)
+    target = recipe.target
+
+    with pytest.raises(ValueError, match=r"reused at"):
+        recipe.append_target(processor)
+
+    assert recipe.target is target
+
+
 def test_recipe_role_fit_accepts_table() -> None:
     recipe = sp.Recipe(features=[sp.Standardize()])
     features = _table()
