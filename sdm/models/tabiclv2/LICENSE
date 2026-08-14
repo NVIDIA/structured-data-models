@@ -1,4 +1,5 @@
-This package includes code derived from the TabICLv2 implementation and may load pretrained TabICLv2 weights:
+This package includes code derived from the TabICLv2 implementation and may
+load pretrained TabICLv2 weights:
 https://github.com/soda-inria/tabicl
 https://huggingface.co/jingang/TabICL
 
