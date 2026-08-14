@@ -8,7 +8,7 @@ from torch import Tensor
 from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
-from sdm.nn import TransformerBlock
+from sdm.nn import QASSMax, TransformerBlock
 from sdm.nn.memory import (
     attention_batch_size_limit,
     cuda_attention_memory_limit,
@@ -52,7 +52,11 @@ class ICLBlock(torch.nn.Module):
                 feedforward_channels=2 * channels,
                 norm="layer_norm",
                 norm_kwargs={"bias": norm_bias},
-                qassmax=True,
+                query_scaling=QASSMax(
+                    channels=channels // num_heads,
+                    num_heads=num_heads,
+                    **factory_kwargs,
+                ),
                 **factory_kwargs,
             )
             self.layers.append(layer)

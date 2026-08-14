@@ -10,7 +10,7 @@ from torch import Tensor
 from torch.nn import Parameter
 
 from sdm.cache import KVCacheEntry
-from sdm.nn import TransformerBlock
+from sdm.nn import QueryScaling, TransformerBlock
 
 
 class InducedTransformerBlock(torch.nn.Module):
@@ -46,7 +46,8 @@ class InducedTransformerBlock(torch.nn.Module):
         norm_kwargs: Additional keyword arguments passed to the normalization
             layer constructor. Takes precedence over ``device`` and
             ``dtype``.
-        qassmax: Whether to scale induced vectors with :class:`QASSMax`.
+        query_scaling: Query scaling module to scale projected query heads
+            before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
         device: The device.
         dtype: The dtype.
     """
@@ -60,7 +61,7 @@ class InducedTransformerBlock(torch.nn.Module):
         num_inducing_points: int = 16,
         norm: str | Callable[..., torch.nn.Module] = "layer_norm",
         norm_kwargs: dict[str, Any] | None = None,
-        qassmax: bool = False,
+        query_scaling: QueryScaling | None = None,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -74,7 +75,7 @@ class InducedTransformerBlock(torch.nn.Module):
             feedforward_channels=feedforward_channels,
             norm=norm,
             norm_kwargs=norm_kwargs,
-            qassmax=qassmax,
+            query_scaling=query_scaling,
             **factory_kwargs,
         )
         self.transformer_2 = TransformerBlock(

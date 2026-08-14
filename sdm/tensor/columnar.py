@@ -11,9 +11,8 @@ import torch
 from torch import Tensor
 from typing_extensions import override
 
-from sdm.tensor import NullableIntTensor, StringTensor, VarLenTensor
+from sdm.tensor import NullableTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.io.arrow import _combine_arrow_chunks
 from sdm.tensor.mixin import _resolve_device
 
 if TYPE_CHECKING:
@@ -143,15 +142,14 @@ class ColumnarTensor(Tensor):
         """
         device = torch.device("cpu" if device is None else device)
 
-        if isinstance(array, pa.ChunkedArray):
-            array = _combine_arrow_chunks(array)
-
         is_string = pa.types.is_string(array.type)
         is_large_string = pa.types.is_large_string(array.type)
         if is_string or is_large_string:
             column = StringTensor.from_arrow(array, device=device)
-        elif array.null_count > 0 and pa.types.is_integer(array.type):
-            column = NullableIntTensor.from_arrow(array, device=device)
+        elif array.null_count > 0 and (
+            pa.types.is_integer(array.type) or pa.types.is_boolean(array.type)
+        ):
+            column = NullableTensor.from_arrow(array, device=device)
         else:
             column = arrow_as_tensor(array, device=device)
 
@@ -170,12 +168,18 @@ class ColumnarTensor(Tensor):
             ser: The :class:`cudf.Series` or :class:`cudf.Index`.
             device: The device.
         """
-        from cudf.api.types import is_integer_dtype, is_string_dtype
+        from cudf.api.types import (
+            is_bool_dtype,
+            is_integer_dtype,
+            is_string_dtype,
+        )
 
         if is_string_dtype(ser.dtype):
             column = StringTensor.from_cudf(ser, device=device)
-        elif ser._column.null_count > 0 and is_integer_dtype(ser.dtype):
-            column = NullableIntTensor.from_cudf(ser, device=device)
+        elif ser._column.null_count > 0 and (
+            is_integer_dtype(ser.dtype) or is_bool_dtype(ser.dtype)
+        ):
+            column = NullableTensor.from_cudf(ser, device=device)
         else:
             if ser._column.null_count > 0:
                 ser = ser.fillna(float("nan"))
@@ -200,7 +204,7 @@ class ColumnarTensor(Tensor):
         return pa.Table.from_arrays(
             arrays=[
                 column.to_arrow()
-                if isinstance(column, VarLenTensor | NullableIntTensor)
+                if isinstance(column, VarLenTensor | NullableTensor)
                 else to_arrow(column)
                 for column in self.unbind(-1)
             ],
@@ -226,7 +230,7 @@ class ColumnarTensor(Tensor):
         return cudf.DataFrame(
             {
                 name: column.to_cudf()
-                if isinstance(column, StringTensor | NullableIntTensor)
+                if isinstance(column, StringTensor | NullableTensor)
                 else to_cudf(column)
                 for name, column in zip(names, self.unbind(-1))
             },
