@@ -123,16 +123,17 @@ class _WordPieceTokenizer:
         )
         input_ids[:, 0] = self.cls_token_id
 
-        max_content = self.max_length - 2
-        col_idx = torch.arange(max_content, device=device)
-        mask = col_idx.unsqueeze(0) < lengths.unsqueeze(1)
-        src = col_idx.unsqueeze(0) + offsets[:-1].unsqueeze(1)
-        safe_src = torch.where(mask, src, torch.zeros_like(src))
-        input_ids[:, 1 : max_content + 1] = torch.where(
-            mask,
-            flat_values[safe_src].to(torch.long),
-            input_ids[:, 1 : max_content + 1],
-        )
+        if flat_values.numel() > 0:
+            max_content = self.max_length - 2
+            col_idx = torch.arange(max_content, device=device)
+            mask = col_idx.unsqueeze(0) < lengths.unsqueeze(1)
+            src = col_idx.unsqueeze(0) + offsets[:-1].unsqueeze(1)
+            safe_src = torch.where(mask, src, torch.zeros_like(src))
+            input_ids[:, 1 : max_content + 1] = torch.where(
+                mask,
+                flat_values[safe_src].to(torch.long),
+                input_ids[:, 1 : max_content + 1],
+            )
 
         input_ids[torch.arange(num_strings, device=device), lengths + 1] = (
             self.sep_token_id
