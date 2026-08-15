@@ -81,7 +81,7 @@ class ICLModel(torch.nn.Module, ABC):
                 ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
             related_context_tables: Related context for in-context examples.
             related_query_tables: Related context for query examples.
-            recipe: The recipe for pre- and post-processing.
+            recipe: The custom recipe for pre- and post-processing.
             num_estimators: The number of estimators ``E`` for ensembling.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -187,8 +187,7 @@ class ICLModel(torch.nn.Module, ABC):
             y: The targets of in-context examples with shape
                 ``[..., R, 1]``.
             related_tables: Related context for in-context examples.
-            recipe: The recipe for pre- and post-processing. If ``None``, no
-                recipe is applied.
+            recipe: The custom recipe for pre- and post-processing.
             num_estimators: The number of estimators for ensembling.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
