@@ -1,6 +1,6 @@
 # Installation
 
-The `structured-data-models` package is available from Python 3.11 and PyTorch 2.5 onwards.
+The `structured-data-models` package is available from Python 3.11 and PyTorch 2.7 onwards.
 Install via:
 
 ```bash
