@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
-from sdm.models.kumorfm.graph import HomogeneousGraph
+from sdm.models.nemotron.relational.graph import HomogeneousGraph
 from sdm.relational.join import join_index
 
 
@@ -36,7 +36,8 @@ class TaskGraph:  # noqa: D101
 
         if len(related_tables.task_links) != 1:
             raise ValueError(
-                f"'KumoRFM' expects exactly one task link to an entity table "
+                f"'NemotronRelational' expects exactly one task link to an "
+                f"entity table "
                 f"(got {len(related_tables.task_links)})"
             )
 

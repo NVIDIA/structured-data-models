@@ -11,7 +11,7 @@ from sdm.nn import (
     SDPA,
     Attention,
     QASSMax,
-    RotaryEmbedding,
+    SoftplusScale,
     TransformerBlock,
 )
 from sdm.testing import withCUDA
@@ -38,37 +38,21 @@ def reference_sdpa(
 
 
 @withCUDA
-@pytest.mark.parametrize(
-    "key_len_fn",
-    [
-        lambda: 4,
-        lambda: torch.tensor([[1, 2, 0], [3, 4, 1]]),
-        lambda: torch.tensor([[4], [1]], dtype=torch.int32),
-    ],
-)
-def test_qassmax(
-    device: torch.device,
-    key_len_fn: Callable[[], Tensor | int],
-) -> None:
-    channels = 2
-    num_heads = 3
-    module = QASSMax(
-        channels=channels,
-        num_heads=num_heads,
-        hidden_channels=4,
+def test_attention_transforms(device: torch.device) -> None:
+    module = Attention(
+        channels=4,
+        num_query_heads=2,
+        query_transform=torch.nn.Sequential(
+            torch.nn.RMSNorm(2, eps=1e-6, device=device),
+            SoftplusScale(2, device=device),
+        ),
+        key_transform=torch.nn.RMSNorm(2, eps=1e-6, device=device),
+        scale=1.0,
         device=device,
     )
+    query = torch.randn(2, 3, 4, device=device)
 
-    query = torch.randn(2, 3, num_heads, channels, device=device)
-
-    key_len = key_len_fn()
-    if isinstance(key_len, Tensor):
-        key_len = key_len.to(device)
-
-    out = module(query, key_len)
-    assert out.shape == query.shape
-    assert out.dtype == query.dtype
-    assert out.device == query.device
+    assert module(query).shape == query.shape
 
 
 @withCUDA
@@ -87,7 +71,6 @@ def test_sdpa(
     channels = 3
     num_query_heads = 4
     module = SDPA(
-        channels=channels,
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
     )
@@ -229,12 +212,7 @@ def test_sdpa_scale(device: torch.device) -> None:
     channels = 4
     num_heads = 2
     scale = 1.0
-    module = SDPA(
-        channels=channels,
-        num_query_heads=num_heads,
-        scale=scale,
-        device=device,
-    )
+    module = SDPA(num_query_heads=num_heads, scale=scale)
     query = torch.randn(2, 3, num_heads, channels, device=device)
     key = torch.randn(2, 5, num_heads, channels, device=device)
     value = torch.randn(2, 5, num_heads, channels, device=device)
@@ -253,7 +231,7 @@ def test_sdpa_scale(device: torch.device) -> None:
 def test_sdpa_errors() -> None:
     channels = 3
     num_heads = 2
-    module = SDPA(channels=channels, num_query_heads=num_heads)
+    module = SDPA(num_query_heads=num_heads)
 
     query = torch.randn(1, 2, num_heads, channels)
     key = torch.randn(1, 2, num_heads, channels)
@@ -292,7 +270,7 @@ def test_sdpa_errors() -> None:
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
-        SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
+        SDPA(num_query_heads=4, num_key_value_heads=3)
 
 
 def test_sdpa_batch_size_limit() -> None:
@@ -300,7 +278,6 @@ def test_sdpa_batch_size_limit() -> None:
     num_query_heads = 4
     num_key_value_heads = 2
     module = SDPA(
-        channels=channels,
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
     ).eval()
@@ -350,7 +327,7 @@ def test_sdpa_batch_size_limit() -> None:
 
 
 def test_batch_size_limit_autocast_dtype() -> None:
-    sdpa = SDPA(channels=3, num_query_heads=2).eval()
+    sdpa = SDPA(num_query_heads=2).eval()
     query = torch.randn(5, 3, 2, 3)
     key = torch.randn(5, 4, 2, 3)
     value = torch.randn(5, 4, 2, 3)
@@ -397,7 +374,7 @@ def test_sdpa_batch_size_limit_bypass(
     compiling: bool,
     batch_size_limit: int | None,
 ) -> None:
-    module = SDPA(channels=3, num_query_heads=2)
+    module = SDPA(num_query_heads=2)
     module.train(training)
     query = torch.randn(5, 3, 2, 3)
     key = torch.randn(5, 4, 2, 3)
@@ -432,23 +409,25 @@ def test_sdpa_batch_size_limit_bypass(
     ],
 )
 @pytest.mark.parametrize("qassmax", [False, True])
-@pytest.mark.parametrize("rope", [False, True])
 def test_attention(
     device: torch.device,
     num_key_value_heads: int | None,
     qassmax: bool,
-    rope: bool,
 ) -> None:
     channels = 8
     num_query_heads = 4
-    dtype = torch.float32
     module = Attention(
         channels=channels,
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
-        qassmax=qassmax,
+        query_scaling=QASSMax(
+            channels // num_query_heads,
+            num_query_heads,
+            device=device,
+        )
+        if qassmax
+        else None,
         device=device,
-        dtype=dtype,
     )
     if num_key_value_heads is None:
         num_key_value_heads = num_query_heads
@@ -456,20 +435,11 @@ def test_attention(
     expected_qkv = (num_query_heads + 2 * num_key_value_heads) * head_dim
     assert module.qkv_lin.out_features == expected_qkv
 
-    query = torch.randn(2, 4, channels, dtype=dtype, device=device)
-    key_value = torch.randn(2, 5, channels, dtype=dtype, device=device)
+    query = torch.randn(2, 4, channels, device=device)
+    key_value = torch.randn(2, 5, channels, device=device)
     attn_mask = torch.randint(0, 2, (2, 4, 5), dtype=torch.bool, device=device)
 
-    rotary_embedding: RotaryEmbedding | None = None
-    if rope:
-        rotary_embedding = RotaryEmbedding(
-            channels=head_dim,
-            layout="split_half",
-            device=device,
-            dtype=dtype,
-        )
-
-    out = module(query=query, key_value=None, rope=rotary_embedding)
+    out = module(query=query, key_value=None)
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
@@ -478,28 +448,28 @@ def test_attention(
         query=query,
         key_value=key_value,
         attn_mask=attn_mask,
-        rope=rotary_embedding,
     )
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
 
-    query = torch.randn(2, 4, channels, dtype=dtype, device=device)
-    out = module(query=query, key_value=query, rope=rotary_embedding)
+    query = torch.randn(2, 4, channels, device=device)
+    out = module(query=query, key_value=query)
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
 
 
 @pytest.mark.parametrize("qassmax", [False, True])
-@pytest.mark.parametrize("rope", [False, True])
-def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
+def test_attention_kv_cache(qassmax: bool) -> None:
     channels = 8
     num_heads = 2
     module = Attention(
         channels=channels,
         num_query_heads=num_heads,
-        qassmax=qassmax,
+        query_scaling=QASSMax(channels // num_heads, num_heads)
+        if qassmax
+        else None,
     )
 
     with torch.no_grad():
@@ -517,38 +487,27 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
         dtype=torch.bool,
     ).expand(2, -1, -1)
 
-    rotary_embedding: RotaryEmbedding | None = None
-    if rope:
-        rotary_embedding = RotaryEmbedding(
-            channels=channels // num_heads,
-            layout="split_half",
-        )
-
     direct_out = module(
         query=query,
         key_value=key_value,
         attn_mask=attn_mask,
-        rope=rotary_embedding,
     )
     cache_out, kv = module(
         query=query,
         key_value=key_value,
         attn_mask=attn_mask,
-        rope=rotary_embedding,
         return_key_value=True,
     )
     cached_out = module(
         query=query,
         key_value=kv,
         attn_mask=attn_mask,
-        rope=rotary_embedding,
     )
     module.eval()
     chunked_cache_out, chunked_kv = module(
         query=query,
         key_value=key_value,
         attn_mask=attn_mask,
-        rope=rotary_embedding,
         return_key_value=True,
         batch_size_limit=1,
     )
@@ -556,7 +515,6 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
         query=query,
         key_value=kv,
         attn_mask=attn_mask,
-        rope=rotary_embedding,
         batch_size_limit=1,
     )
 
@@ -786,7 +744,7 @@ def test_return_key_value_positional_compatibility() -> None:
 
     for module in modules:
         forward = cast(Callable[..., object], module.forward)
-        result = forward(query, None, None, None, None, True)
+        result = forward(query, None, None, None, True)
         assert isinstance(result, tuple)
         assert len(result) == 2
 
@@ -794,12 +752,10 @@ def test_return_key_value_positional_compatibility() -> None:
 @withCUDA
 @pytest.mark.parametrize("norm", ["layer_norm", "rms_norm"])
 @pytest.mark.parametrize("qassmax", [False, True])
-@pytest.mark.parametrize("rope", [False, True])
 def test_transformer_block(
     device: torch.device,
     norm: str,
     qassmax: bool,
-    rope: bool,
 ) -> None:
     batch_size = 2
     query_len = 3
@@ -811,7 +767,9 @@ def test_transformer_block(
         channels=channels,
         num_query_heads=num_heads,
         feedforward_channels=feedforward_channels,
-        qassmax=qassmax,
+        query_scaling=QASSMax(channels // num_heads, num_heads, device=device)
+        if qassmax
+        else None,
         norm=norm,
         device=device,
     )
@@ -824,15 +782,7 @@ def test_transformer_block(
     attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
     attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
 
-    rotary_embedding: RotaryEmbedding | None = None
-    if rope:
-        rotary_embedding = RotaryEmbedding(
-            channels=channels // num_heads,
-            layout="split_half",
-            device=device,
-        )
-
-    out = module(query=query, rope=rotary_embedding)
+    out = module(query=query)
     assert out.size() == query.size()
     assert out.dtype == query.dtype
     assert out.device == query.device
@@ -841,7 +791,6 @@ def test_transformer_block(
         query=query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
-        rope=rotary_embedding,
     )
     assert out.size() == query.size()
     assert out.dtype == query.dtype
@@ -855,20 +804,17 @@ def test_transformer_block(
         query=query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
-        rope=rotary_embedding,
     )
     out2 = module(
         query=query,
         key_value=key_value,
         attn_mask=attn_mask,
-        rope=rotary_embedding,
     )
     module.eval()
     chunked_out = module(
         query=query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
-        rope=rotary_embedding,
         batch_size_limit=1,
     )
     # Both paths reduce to the same boolean mask and SDPA kernel, but with
@@ -889,7 +835,6 @@ def test_transformer_block(
         query=query,
         key_value=new_key_value,
         seqused_key_value=seqused_key_value,
-        rope=rotary_embedding,
     )
     torch.testing.assert_close(out1, out3)
 
