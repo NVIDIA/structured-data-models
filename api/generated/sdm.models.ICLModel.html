@@ -260,7 +260,7 @@ columns.</p></li>
 <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R_query,</span> <span class="pre">D]</span></code> with <code class="docutils literal notranslate"><span class="pre">R_query</span></code> rows and <code class="docutils literal notranslate"><span class="pre">D</span></code> columns.</p></li>
 <li><p><strong>related_context_tables</strong> (<a class="reference internal" href="sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.task.RelatedTables"><em>RelatedTables</em></a><em> | </em><em>None</em>) – Related context for in-context examples.</p></li>
 <li><p><strong>related_query_tables</strong> (<a class="reference internal" href="sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.task.RelatedTables"><em>RelatedTables</em></a><em> | </em><em>None</em>) – Related context for query examples.</p></li>
-<li><p><strong>recipe</strong> (<a class="reference internal" href="sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a><em> | </em><em>None</em>) – The recipe for pre- and post-processing.</p></li>
+<li><p><strong>recipe</strong> (<a class="reference internal" href="sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a><em> | </em><em>None</em>) – The custom recipe for pre- and post-processing.</p></li>
 <li><p><strong>num_estimators</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of estimators <code class="docutils literal notranslate"><span class="pre">E</span></code> for ensembling.</p></li>
 <li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom number generator used for sampling during
 pre-processing and model execution.</p></li>
@@ -291,8 +291,7 @@ examples while only providing new query examples.</p>
 <li><p><strong>y</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a><em> | </em><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – The targets of in-context examples with shape
 <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R,</span> <span class="pre">1]</span></code>.</p></li>
 <li><p><strong>related_tables</strong> (<a class="reference internal" href="sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.task.RelatedTables"><em>RelatedTables</em></a><em> | </em><em>None</em>) – Related context for in-context examples.</p></li>
-<li><p><strong>recipe</strong> (<a class="reference internal" href="sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a><em> | </em><em>None</em>) – The recipe for pre- and post-processing. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, no
-recipe is applied.</p></li>
+<li><p><strong>recipe</strong> (<a class="reference internal" href="sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a><em> | </em><em>None</em>) – The custom recipe for pre- and post-processing.</p></li>
 <li><p><strong>num_estimators</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of estimators for ensembling.</p></li>
 <li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom number generator used for sampling during
 pre-processing and model execution.</p></li>
@@ -381,7 +380,7 @@ stacked estimator outputs with shape <code class="docutils literal notranslate">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=5cdfd290"></script>
+      <script src="../../_static/documentation_options.js?v=2d014730"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
