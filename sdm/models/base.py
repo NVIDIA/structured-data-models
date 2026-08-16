@@ -52,8 +52,6 @@ class ICLModel(torch.nn.Module, ABC):
     def __init__(self) -> None:
         super().__init__()
         self._cache: Cache | None = None
-        self._cache_is_pinned = False
-        self._cache_transfer_stream: torch.cuda.Stream | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -251,7 +249,6 @@ class ICLModel(torch.nn.Module, ABC):
             cache[i] = estimator_cache
 
         self._cache = cache.freeze()
-        self._cache_is_pinned = x.is_cuda and num_estimators > 1
 
     @_maybe_inference_mode()
     def predict(
@@ -295,50 +292,36 @@ class ICLModel(torch.nn.Module, ABC):
                 ).tables,
             )
 
-        recipe_execution = cast(
-            RecipeExecution,
-            self._cache["recipe_execution"],
-        )
-        with torch.amp.autocast(x.device.type, enabled=False):
-            queries = recipe_execution.transform(x, related_tables)
-
         num_estimators = cast(int, self._cache["num_estimators"])
-        estimator_caches = tuple(
-            cast(Cache, self._cache[i]) for i in range(num_estimators)
-        )
-        query_device = queries[0].x.device
-        prefetch = (
-            num_estimators > 1
-            and query_device.type == "cuda"
-            and all(query.x.device == query_device for query in queries)
-            and self._cache_is_pinned
-        )
+        caches = [cast(Cache, self._cache[i]) for i in range(num_estimators)]
+        next_cache = caches[0]
 
-        transfer_stream = self._cache_transfer_stream
         compute_stream: torch.cuda.Stream | None = None
-        next_device_cache: Cache | None = None
-
-        def prefetch_cache(cache: Cache) -> Cache:
-            assert transfer_stream is not None
-            with torch.cuda.stream(transfer_stream):
-                return cache.to(query_device, non_blocking=True)
-
-        outs: list[TableTensor] = []
+        transfer_stream: torch.cuda.Stream | None = None
         try:
-            if prefetch:
-                if (
-                    transfer_stream is None
-                    or transfer_stream.device != query_device
-                ):
-                    if transfer_stream is not None:
-                        transfer_stream.synchronize()
-                    transfer_stream = torch.cuda.Stream(device=query_device)
-                    self._cache_transfer_stream = transfer_stream
-                compute_stream = torch.cuda.current_stream(device=query_device)
-                next_device_cache = prefetch_cache(estimator_caches[0])
+            if x.is_cuda:
+                compute_stream = torch.cuda.current_stream(x.device)
+                transfer_stream = torch.cuda.Stream(x.device)
+                with torch.cuda.stream(transfer_stream):
+                    next_cache = next_cache.to(x.device, non_blocking=True)
 
-            for i, cache in enumerate(estimator_caches):
-                query = queries[i]
+            recipe_execution = cast(
+                RecipeExecution,
+                self._cache["recipe_execution"],
+            )
+            with torch.amp.autocast(x.device.type, enabled=False):
+                queries = recipe_execution.transform(x, related_tables)
+
+            if x.is_cuda:
+                assert compute_stream is not None
+                assert transfer_stream is not None
+                compute_stream.wait_stream(transfer_stream)
+
+            outs: list[TableTensor] = []
+            for i, query in enumerate(queries):
+                cache, next_cache = next_cache, None
+                assert cache is not None
+
                 self._validate_query(
                     x_context=cast(TableSchema, cache["x_schema"]),
                     x_query=query.x,
@@ -349,22 +332,12 @@ class ICLModel(torch.nn.Module, ABC):
                     related_query_tables=query.related_tables,
                 )
 
-                if prefetch:
-                    assert compute_stream is not None
+                if i + 1 < num_estimators:
+                    next_cache = caches[i + 1]
+                if x.is_cuda and next_cache is not None:
                     assert transfer_stream is not None
-                    assert next_device_cache is not None
-                    device_cache = next_device_cache
-                    next_device_cache = None
-                    compute_stream.wait_stream(transfer_stream)
-                    if i + 1 < num_estimators:
-                        next_device_cache = prefetch_cache(
-                            estimator_caches[i + 1]
-                        )
-                else:
-                    device_cache = cache.to(
-                        query.x.device,
-                        non_blocking=True,
-                    )
+                    with torch.cuda.stream(transfer_stream):
+                        next_cache = next_cache.to(x.device, non_blocking=True)
 
                 out = self._forward(
                     x_context=None,
@@ -372,34 +345,27 @@ class ICLModel(torch.nn.Module, ABC):
                     x_query=query.x,
                     related_context_tables=None,
                     related_query_tables=query.related_tables,
-                    cache=device_cache,
+                    cache=cache,
                     generator=None,
                     **cast(dict[str, Any], self._cache["kwargs"]),
                 )
-                if prefetch:
-                    assert transfer_stream is not None
+
+                if x.is_cuda:
                     assert compute_stream is not None
-                    # The transfer stream owns these allocations; wait for
-                    # compute before releasing them.
-                    transfer_stream.wait_stream(compute_stream)
-                del device_cache
+                    for tensor in cache._tensors():
+                        tensor.record_stream(compute_stream)
+
                 out = cast(TableTensor, out.to(query.x.dtype))
                 outs.append(out)
-        except BaseException as error:
-            if prefetch:
-                for name, stream in (
-                    ("transfer", transfer_stream),
-                    ("compute", compute_stream),
-                ):
-                    if stream is None:
-                        continue
-                    try:
-                        stream.synchronize()
-                    except RuntimeError as cleanup_error:
-                        error.add_note(
-                            f"Failed to synchronize the {name} CUDA stream "
-                            f"during cleanup: {cleanup_error}"
-                        )
+
+                if x.is_cuda and next_cache is not None:
+                    assert compute_stream is not None
+                    assert transfer_stream is not None
+                    compute_stream.wait_stream(transfer_stream)
+
+        except BaseException:
+            if transfer_stream is not None:
+                transfer_stream.synchronize()
             raise
 
         # Regression: invert target before stacking estimator outputs.
@@ -412,11 +378,7 @@ class ICLModel(torch.nn.Module, ABC):
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
-        if self._cache_transfer_stream is not None:
-            self._cache_transfer_stream.synchronize()
         self._cache = None
-        self._cache_is_pinned = False
-        self._cache_transfer_stream = None
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
