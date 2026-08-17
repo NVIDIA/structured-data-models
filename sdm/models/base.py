@@ -382,19 +382,17 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
-        for stream in self._transfer_streams.values():
-            stream.synchronize()
         self._cache = None
 
     def __getstate__(self) -> dict[str, object]:
         for stream in self._transfer_streams.values():
             stream.synchronize()
-        state = self.__dict__.copy()
+        state = super().__getstate__()
         state.pop("_transfer_streams", None)
         return state
 
     def __setstate__(self, state: dict[str, object]) -> None:
-        self.__dict__.update(state)
+        state = super().__setstate__(state)
         self._transfer_streams = {}
 
     def __repr__(self) -> str:
