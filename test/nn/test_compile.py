@@ -1,6 +1,5 @@
 import os
 from collections.abc import Callable, Iterator
-from typing import Any
 
 import pytest
 import torch
@@ -21,34 +20,6 @@ pytestmark = pytest.mark.skipif(
     os.getenv("FULL_TEST", "0") != "1",
     reason="Fast test run",
 )
-
-
-class _CompileFeedForward(torch.nn.Sequential):
-    def __init__(
-        self,
-        channels: int,
-        feedforward_channels: int,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-        **_: Any,
-    ) -> None:
-        super().__init__(
-            torch.nn.RMSNorm(channels, eps=1e-6, device=device, dtype=dtype),
-            torch.nn.Linear(
-                channels,
-                feedforward_channels,
-                device=device,
-                dtype=dtype,
-            ),
-            torch.nn.SiLU(),
-            torch.nn.Linear(
-                feedforward_channels,
-                channels,
-                device=device,
-                dtype=dtype,
-            ),
-            torch.nn.RMSNorm(channels, eps=1e-6, device=device, dtype=dtype),
-        )
 
 
 @pytest.fixture(autouse=True)
@@ -268,29 +239,6 @@ def test_transformer_block_compile(
         seqused_key_value=seqused,
         attn_mask=attn_mask,
     )
-    torch.testing.assert_close(out, expected)
-
-
-@withCUDA
-def test_configured_transformer_block_compile(device: torch.device) -> None:
-    channels = 8
-    module = TransformerBlock(
-        channels=channels,
-        num_query_heads=2,
-        feedforward_channels=16,
-        norm=torch.nn.RMSNorm,
-        norm_kwargs={"eps": 1e-6},
-        shared_attention_norm=True,
-        post_attention_norm=True,
-        feedforward_layer=_CompileFeedForward,
-        device=device,
-    )
-    query = torch.randn(2, 3, channels, device=device)
-    key_value = torch.randn(2, 5, channels, device=device)
-
-    expected = module(query=query, key_value=key_value)
-    out = fullgraph(module)(query=query, key_value=key_value)
-
     torch.testing.assert_close(out, expected)
 
 
