@@ -303,9 +303,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
             if x.is_cuda:
                 compute_stream = torch.cuda.current_stream(x.device)
                 if x.device not in self._transfer_streams:
-                    stream = torch.cuda.Stream(x.device)
-                    self._transfer_streams[x.device] = stream
-                transfer_stream = self._transfer_streams[x.device]
+                    transfer_stream = torch.cuda.Stream(x.device)
+                    self._transfer_streams[x.device] = transfer_stream
+                else:
+                    transfer_stream = self._transfer_streams[x.device]
                 with torch.cuda.stream(transfer_stream):
                     next_cache = next_cache.to(x.device, non_blocking=True)
 
@@ -392,7 +393,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         return state
 
     def __setstate__(self, state: dict[str, object]) -> None:
-        state = super().__setstate__(state)
+        super().__setstate__(state)
         self._transfer_streams = {}
 
     def __repr__(self) -> str:
