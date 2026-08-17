@@ -2,7 +2,6 @@ r"""Set-transformer modules for structured tensor models."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any, Literal, overload
 
 import torch
@@ -10,7 +9,7 @@ from torch import Tensor
 from torch.nn import Parameter
 
 from sdm.cache import KVCacheEntry
-from sdm.nn import QueryScaling, TransformerBlock
+from sdm.nn import TransformerBlock
 
 
 class InducedTransformerBlock(torch.nn.Module):
@@ -25,8 +24,8 @@ class InducedTransformerBlock(torch.nn.Module):
 
     .. math::
 
-        H = \mathrm{TransformerBlock}_1(I, \mathrm{key\_value}), \quad
-        \mathrm{out} = \mathrm{TransformerBlock}_2(\mathrm{query}, H),
+        H = \mathrm{InducingBlock}_1(I, \mathrm{key\_value}), \quad
+        \mathrm{out} = \mathrm{OutputBlock}_2(\mathrm{query}, H),
 
     where :math:`I` are the learned inducing points and :math:`H` are the
     inducing points after attending to the key/value elements. Passing
@@ -34,21 +33,11 @@ class InducedTransformerBlock(torch.nn.Module):
 
     Args:
         channels: The number of input and output channels.
-        num_query_heads: The number of query attention heads.
-        feedforward_channels: The hidden width of the MLP.
-        num_key_value_heads: The number of key/value attention heads.
-            Defaults to ``num_query_heads`` (standard multi-head attention).
         num_inducing_points: The number of learned inducing points :math:`M`.
-        pre_attn_norm: Whether to apply shared normalization to the query and
-            key/value inputs before each attention block.
-        post_attn_norm: Whether to apply normalization to each attention output
-            before its residual addition.
-        norm: The normalization layer name or a callable returning the
-            normalization layer.
-        norm_kwargs: Additional keyword arguments passed to the normalization
-            layer constructor.
-        query_scaling: Query scaling module to scale projected query heads
-            before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
+        inducing_block: The :class:`TransformerBlock` that updates the learned
+            inducing points from key/value context.
+        output_block: The :class:`TransformerBlock` that updates the input
+            queries from the induced context.
         device: The device.
         dtype: The dtype.
     """
@@ -56,44 +45,17 @@ class InducedTransformerBlock(torch.nn.Module):
     def __init__(
         self,
         channels: int,
-        num_query_heads: int,
-        feedforward_channels: int,
-        num_key_value_heads: int | None = None,
-        num_inducing_points: int = 16,
-        pre_attn_norm: bool = True,
-        post_attn_norm: bool = False,
-        norm: str | Callable[..., torch.nn.Module] = "layer_norm",
-        norm_kwargs: dict[str, Any] | None = None,
-        query_scaling: QueryScaling | None = None,
-        device: torch.device | None = None,
+        num_inducing_points: int,
+        inducing_block: TransformerBlock,
+        output_block: TransformerBlock,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.transformer_1 = TransformerBlock(
-            channels=channels,
-            num_query_heads=num_query_heads,
-            feedforward_channels=feedforward_channels,
-            num_key_value_heads=num_key_value_heads,
-            pre_attn_norm=pre_attn_norm,
-            post_attn_norm=post_attn_norm,
-            norm=norm,
-            norm_kwargs=norm_kwargs,
-            query_scaling=query_scaling,
-            **factory_kwargs,
-        )
-        self.transformer_2 = TransformerBlock(
-            channels=channels,
-            num_query_heads=num_query_heads,
-            feedforward_channels=feedforward_channels,
-            num_key_value_heads=num_key_value_heads,
-            pre_attn_norm=pre_attn_norm,
-            post_attn_norm=post_attn_norm,
-            norm=norm,
-            norm_kwargs=norm_kwargs,
-            **factory_kwargs,
-        )
+        self.inducing_block = inducing_block
+        self.output_block = output_block
 
         self.inducing_points = Parameter(
             torch.empty(num_inducing_points, channels, **factory_kwargs)
@@ -176,14 +138,14 @@ class InducedTransformerBlock(torch.nn.Module):
                 key_value = query
             if attn_mask is not None:
                 attn_mask = attn_mask.unsqueeze(-2)  # [..., 1, KV]
-            key_value = self.transformer_1(
+            key_value = self.inducing_block(
                 query=self.inducing_points,  # [M, C]
                 key_value=key_value,  # [..., KV, C]
                 seqused_key_value=seqused_key_value,  # [...]
                 attn_mask=attn_mask,  # [..., 1, KV]
                 batch_size_limit=batch_size_limit,
             )  # [..., M, C]
-        return self.transformer_2(
+        return self.output_block(
             query=query,  # [..., Q, C]
             key_value=key_value,  # [..., M, C]
             return_key_value=return_key_value,
