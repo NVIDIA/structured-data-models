@@ -40,12 +40,9 @@ class InducedTransformerBlock(torch.nn.Module):
             Defaults to ``num_query_heads`` (standard multi-head attention).
         num_inducing_points: The number of learned inducing points :math:`M`.
         norm: The normalization layer name or a callable returning the
-            normalization layer. The callable is invoked once per norm site,
-            so each site gets a fresh instance. A module instance is shared
-            across all norm sites.
+            normalization layer.
         norm_kwargs: Additional keyword arguments passed to the normalization
-            layer constructor. Takes precedence over ``device`` and
-            ``dtype``.
+            layer constructor.
         query_scaling: Query scaling module to scale projected query heads
             before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
         device: The device.

@@ -300,10 +300,7 @@ def _remap_ckpt(
         )
 
         if tail.startswith("norm1."):
-            return [
-                prefix + tail.replace("norm1.", "q_norm.", 1),
-                prefix + tail.replace("norm1.", "kv_norm.", 1),
-            ]
+            tail = tail.replace("norm1.", "pre_norm.", 1)
         if tail.startswith("norm2."):
             tail = tail.replace("norm2.", "mlp.0.", 1)
         elif tail.startswith("linear1."):

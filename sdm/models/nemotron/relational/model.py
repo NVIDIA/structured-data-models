@@ -605,8 +605,8 @@ def _remap_v2_1_checkpoint(
 ) -> dict[str, Tensor]:
     def _map_transformer(tail: str) -> str:
         replacements = {
-            "norm1_1": "q_norm",
-            "norm1_2": "kv_norm",
+            "norm1_1": "pre_norm",
+            "norm1_2": "pre_norm",
             "attn.packed_lin": "attn.qkv_lin",
             "attn.ssmax_scale": "attn.sdpa.query_scaling.scale",
             "attn.ssmax_gate": "attn.sdpa.query_scaling.gate",

@@ -9,7 +9,7 @@ def _normalize_string(value: str) -> str:
 
 
 def normalization_resolver(
-    query: str | Callable[..., torch.nn.Module],
+    norm: str | Callable[..., torch.nn.Module],
     *args: Any,
     **kwargs: Any,
 ) -> torch.nn.Module:
@@ -23,18 +23,15 @@ def normalization_resolver(
     across resolution sites.
 
     Args:
-        query: The normalization layer name, a callable returning the
-            normalization layer, or a module to return unchanged.
+        norm: The normalization layer name, a callable returning the
+            normalization layer.
         *args: Additional positional arguments passed to the normalization
             layer constructor.
         **kwargs: Additional keyword arguments passed to the normalization
             layer constructor.
     """
-    if isinstance(query, torch.nn.Module):
-        return query
-
-    if not isinstance(query, str):
-        return query(*args, **kwargs)
+    if not isinstance(norm, str):
+        return norm(*args, **kwargs)
 
     modules: tuple[type[torch.nn.Module], ...] = tuple(
         value
@@ -46,13 +43,13 @@ def normalization_resolver(
         )
     )
 
-    query_repr = _normalize_string(query)
+    norm_repr = _normalize_string(norm)
     for cls in modules:
         cls_repr = _normalize_string(cls.__name__)
-        if query_repr in {cls_repr, cls_repr.replace("norm", "")}:
+        if norm_repr in {cls_repr, cls_repr.replace("norm", "")}:
             return cls(*args, **kwargs)
 
     raise ValueError(
-        f"Could not resolve normalization {query!r}. "
+        f"Could not resolve normalization {norm!r}. "
         f"Available choices: {', '.join(cls.__name__ for cls in modules)}"
     )
