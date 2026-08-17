@@ -580,7 +580,7 @@ class Attention(torch.nn.Module):
 
 
 class TransformerBlock(torch.nn.Module):
-    r"""Transformer block with pre-norm attention and feedforward modules.
+    r"""Transformer block with normalization and feedforward modules.
 
     Args:
         channels: The number of input and output channels.
@@ -588,13 +588,14 @@ class TransformerBlock(torch.nn.Module):
         feedforward_channels: The hidden width of the MLP.
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
+        pre_attn_norm: Whether to apply shared normalization to the query and
+            key/value inputs before attention.
+        post_attn_norm: Whether to apply normalization to the attention output
+            before its residual addition.
         norm: The normalization layer name or a callable returning the
-            normalization layer. The callable is invoked once per norm site,
-            so each of the three sites gets a fresh instance. A module
-            instance is shared across all three sites.
+            normalization layer.
         norm_kwargs: Additional keyword arguments passed to the normalization
-            layer constructor. Takes precedence over ``device`` and
-            ``dtype``.
+            layer constructor.
         query_transform: Transformation applied to projected query heads before
             scaled dot-product attention.
         key_transform: Transformation applied to projected key heads before
@@ -614,6 +615,8 @@ class TransformerBlock(torch.nn.Module):
         num_query_heads: int,
         feedforward_channels: int,
         num_key_value_heads: int | None = None,
+        pre_attn_norm: bool = True,
+        post_attn_norm: bool = False,
         norm: str | Callable[..., torch.nn.Module] = "layer_norm",
         norm_kwargs: dict[str, Any] | None = None,
         query_transform: torch.nn.Module | None = None,
@@ -625,11 +628,14 @@ class TransformerBlock(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        # User `norm_kwargs` win; `device`/`dtype` fill unspecified keys.
         norm_kwargs = {**factory_kwargs, **(norm_kwargs or {})}
 
-        self.q_norm = normalization_resolver(norm, channels, **norm_kwargs)
-        self.kv_norm = normalization_resolver(norm, channels, **norm_kwargs)
+        self.pre_norm: torch.nn.Module | None = None
+        if pre_attn_norm:
+            self.pre_norm = normalization_resolver(
+                norm, channels, **norm_kwargs
+            )
+
         self.attn = Attention(
             channels=channels,
             num_query_heads=num_query_heads,
@@ -640,6 +646,13 @@ class TransformerBlock(torch.nn.Module):
             scale=scale,
             **factory_kwargs,
         )
+
+        self.post_norm: torch.nn.Module | None = None
+        if post_attn_norm:
+            self.post_norm = normalization_resolver(
+                norm, channels, **norm_kwargs
+            )
+
         self.mlp = Sequential(
             normalization_resolver(norm, channels, **norm_kwargs),
             Linear(channels, feedforward_channels, **factory_kwargs),
@@ -736,11 +749,11 @@ class TransformerBlock(torch.nn.Module):
             if chunked_result is not None:
                 return chunked_result
 
-        if isinstance(key_value, Tensor):
-            key_value = self.kv_norm(key_value)
         attn_result = self.attn(
-            query=self.q_norm(query),
-            key_value=key_value,
+            query=self.pre_norm(query) if self.pre_norm is not None else query,
+            key_value=self.pre_norm(key_value)
+            if self.pre_norm is not None and isinstance(key_value, Tensor)
+            else key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
             batch_size_limit=batch_size_limit,
@@ -751,8 +764,10 @@ class TransformerBlock(torch.nn.Module):
         else:
             attn_out = attn_result
 
+        if self.post_norm is not None:
+            attn_out = self.post_norm(attn_out)
+
         out = query + attn_out
         out = out + self.mlp(out)
-        if return_key_value:
-            return out, kv
-        return out
+
+        return (out, kv) if return_key_value else out
