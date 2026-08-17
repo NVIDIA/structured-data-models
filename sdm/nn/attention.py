@@ -603,15 +603,6 @@ class TransformerBlock(torch.nn.Module):
             ``None`` uses ``1 / sqrt(channels_per_head)``.
         device: The device.
         dtype: The dtype.
-        shared_attention_norm: Whether to use one ``norm`` instance for both
-            query and key/value inputs instead of independent instances.
-        post_attention_norm: Whether to apply ``norm`` to the attention output
-            before its residual addition.
-        feedforward_layer: Optional feed-forward layer constructor. ``None``
-            uses the standard normalized GELU MLP.
-        feedforward_kwargs: Additional keyword arguments passed to
-            ``feedforward_layer``. Takes precedence over ``device`` and
-            ``dtype``.
     """
 
     def __init__(
@@ -629,11 +620,6 @@ class TransformerBlock(torch.nn.Module):
         scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        *,
-        shared_attention_norm: bool = False,
-        post_attention_norm: bool = False,
-        feedforward_layer: Callable[..., torch.nn.Module] | None = None,
-        feedforward_kwargs: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
