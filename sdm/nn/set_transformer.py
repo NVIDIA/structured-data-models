@@ -39,6 +39,10 @@ class InducedTransformerBlock(torch.nn.Module):
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         num_inducing_points: The number of learned inducing points :math:`M`.
+        pre_attn_norm: Whether to apply normalization to the query and
+            key/value inputs before each attention block.
+        post_attn_norm: Whether to apply normalization to each attention output
+            before its residual addition.
         norm: The normalization layer name or a callable returning the
             normalization layer.
         norm_kwargs: Additional keyword arguments passed to the normalization
@@ -56,6 +60,8 @@ class InducedTransformerBlock(torch.nn.Module):
         feedforward_channels: int,
         num_key_value_heads: int | None = None,
         num_inducing_points: int = 16,
+        pre_attn_norm: bool = True,
+        post_attn_norm: bool = False,
         norm: str | Callable[..., torch.nn.Module] = "layer_norm",
         norm_kwargs: dict[str, Any] | None = None,
         query_scaling: QueryScaling | None = None,
@@ -68,8 +74,10 @@ class InducedTransformerBlock(torch.nn.Module):
         self.transformer_1 = TransformerBlock(
             channels=channels,
             num_query_heads=num_query_heads,
-            num_key_value_heads=num_key_value_heads,
             feedforward_channels=feedforward_channels,
+            num_key_value_heads=num_key_value_heads,
+            pre_attn_norm=pre_attn_norm,
+            post_attn_norm=post_attn_norm,
             norm=norm,
             norm_kwargs=norm_kwargs,
             query_scaling=query_scaling,
@@ -78,8 +86,10 @@ class InducedTransformerBlock(torch.nn.Module):
         self.transformer_2 = TransformerBlock(
             channels=channels,
             num_query_heads=num_query_heads,
-            num_key_value_heads=num_key_value_heads,
             feedforward_channels=feedforward_channels,
+            num_key_value_heads=num_key_value_heads,
+            pre_attn_norm=pre_attn_norm,
+            post_attn_norm=post_attn_norm,
             norm=norm,
             norm_kwargs=norm_kwargs,
             **factory_kwargs,
