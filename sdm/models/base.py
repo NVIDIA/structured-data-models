@@ -14,6 +14,8 @@ from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
+_TRANSFER_STREAMS: dict[torch.device, torch.cuda.Stream] = {}
+
 
 @contextlib.contextmanager
 def _maybe_inference_mode() -> Iterator[None]:
@@ -301,7 +303,9 @@ class ICLModel(torch.nn.Module, ABC):
         try:
             if x.is_cuda:
                 compute_stream = torch.cuda.current_stream(x.device)
-                transfer_stream = torch.cuda.Stream(x.device)
+                if x.device not in _TRANSFER_STREAMS:
+                    _TRANSFER_STREAMS[x.device] = torch.cuda.Stream(x.device)
+                transfer_stream = _TRANSFER_STREAMS[x.device]
                 with torch.cuda.stream(transfer_stream):
                     next_cache = next_cache.to(x.device, non_blocking=True)
 
