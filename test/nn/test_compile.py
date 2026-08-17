@@ -239,7 +239,7 @@ def test_transformer_block_compile(
     module = TransformerBlock(
         channels=channels,
         num_query_heads=2,
-        feedforward_channels=16,
+        mlp=torch.nn.Identity(),
         query_scaling=QASSMax(channels // 2, num_heads=2, device=device)
         if qassmax
         else None,
@@ -303,10 +303,20 @@ def test_induced_transformer_block_compile(
     channels = 8
     module = InducedTransformerBlock(
         channels=channels,
-        num_query_heads=2,
-        feedforward_channels=16,
         num_inducing_points=4,
-        query_scaling=QASSMax(channels // 2, num_heads=2, device=device),
+        inducing_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            mlp=torch.nn.Identity(),
+            query_scaling=QASSMax(channels // 2, num_heads=2, device=device),
+            device=device,
+        ),
+        output_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            mlp=torch.nn.Identity(),
+            device=device,
+        ),
         device=device,
     )
     query = torch.randn(2, 6, channels, device=device)
