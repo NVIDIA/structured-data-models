@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import functools
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
@@ -9,6 +10,7 @@ import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
+from torch.utils._python_dispatch import return_and_correct_aliasing
 from typing_extensions import override
 
 from sdm.tensor import StringTensor, VarLenTensor
@@ -112,10 +114,21 @@ class CategoricalTensor(Tensor):
                     "contain null values"
                 )
 
+        return cls._new_wrapper(code, categories)
+
+    @classmethod
+    def _new_wrapper(
+        cls,
+        code: Tensor,
+        categories: Sequence[Tensor],
+        *,
+        size: Sequence[int | torch.SymInt] | None = None,
+        stride: Sequence[int | torch.SymInt] | None = None,
+    ) -> Self:
         out = Tensor._make_wrapper_subclass(
             cls,
-            size=code.size(),
-            strides=code.stride(),
+            size=code.size() if size is None else size,
+            strides=code.stride() if stride is None else stride,
             storage_offset=code.storage_offset(),
             dtype=code.dtype,
             device=code.device,
@@ -124,6 +137,8 @@ class CategoricalTensor(Tensor):
 
         out._code = code
         out._categories = tuple(categories)
+        for i, category in enumerate(out._categories):
+            setattr(out, f"_category_{i}", category)
 
         return out
 
@@ -343,9 +358,48 @@ class CategoricalTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [
+            "_code",
+            *(f"_category_{i}" for i in range(len(self._categories))),
+        ]
+        return attrs, (self.__class__, len(self._categories))
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Tensor],
+        ctx: tuple[Any, ...],
+        outer_size: Sequence[int | torch.SymInt],
+        outer_stride: Sequence[int | torch.SymInt],
+    ) -> CategoricalTensor:
+        cls, num_categories = ctx
+        categories = tuple(
+            inner_tensors[f"_category_{i}"] for i in range(num_categories)
+        )
+        code = inner_tensors["_code"]
+        with torch.inference_mode(code.is_inference()):
+            return cls._new_wrapper(
+                code=code,
+                categories=categories,
+                size=outer_size,
+                stride=outer_stride,
+            )
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._code, self._categories)
         return (self.__class__, args)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> CategoricalTensor:
+        if id(self) in memo:
+            return memo[id(self)]
+
+        with torch.inference_mode(self.is_inference()):
+            out = self.__class__(
+                code=copy.deepcopy(self._code, memo),
+                categories=copy.deepcopy(self._categories, memo),
+            )
+        memo[id(self)] = out
+        return out
 
     @classmethod
     def __torch_function__(
@@ -365,20 +419,39 @@ class CategoricalTensor(Tensor):
     @classmethod
     def __torch_dispatch__(  # type: ignore
         cls,
-        func: Callable[..., Any],
+        func: Any,
         types: tuple[type[Any], ...],
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        kwargs = {} if kwargs is None else kwargs
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            out = handler(*args, **kwargs)
+            if pytree.tree_any(
+                lambda value: isinstance(value, CategoricalTensor),
+                out,
+            ):
+                return return_and_correct_aliasing(func, args, kwargs, out)
+            return out
+
+        for i, argument in enumerate(func._schema.arguments):
+            if argument.alias_info is None or not argument.alias_info.is_write:
+                continue
+            value = args[i] if i < len(args) else kwargs.get(argument.name)
+            if pytree.tree_any(
+                lambda item: isinstance(item, CategoricalTensor),
+                value,
+            ):
+                raise NotImplementedError(
+                    f"'{func}' cannot mutate a {cls.__name__!r} argument"
+                )
 
         # Operate on vanilla tensors for all non-handled functions:
         args = pytree.tree_map_only(CategoricalTensor, lambda x: x._code, args)
         kwargs = pytree.tree_map_only(
             CategoricalTensor, lambda x: x._code, kwargs
         )
-        return func(*args, **(kwargs or {}))
+        return func(*args, **kwargs)
 
     @override
     def is_shared(self) -> bool:
@@ -443,6 +516,13 @@ def _isfinite(inp: CategoricalTensor) -> Tensor:
 @preserve_view_inference_mode
 def _alias(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(aten.alias.default(inp._code), inp._categories)
+
+
+@CategoricalTensor.implements(aten.detach.default)
+@preserve_view_inference_mode
+def _detach(inp: CategoricalTensor) -> CategoricalTensor:
+    categories = tuple(category.detach() for category in inp._categories)
+    return inp.__class__(inp._code.detach(), categories)
 
 
 @CategoricalTensor.implements(aten.to.dtype_layout)
@@ -596,21 +676,40 @@ def _contiguous(
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> CategoricalTensor:
+    if inp.is_contiguous(memory_format=memory_format):
+        return inp
     code = inp._code.contiguous(memory_format=memory_format)
     return inp.__class__(code, inp._categories)
 
 
 @CategoricalTensor.implements(aten.is_pinned.default)
-def _is_pinned(inp: CategoricalTensor) -> bool:
-    return inp._code.is_pinned() and all(
-        category.is_pinned() for category in inp._categories
+def _is_pinned(
+    inp: CategoricalTensor,
+    device: torch.device | None = None,
+) -> bool:
+    if device is None:
+        return inp._code.is_pinned() and all(
+            category.is_pinned() for category in inp._categories
+        )
+    return inp._code.is_pinned(device=device) and all(
+        category.is_pinned(device=device) for category in inp._categories
     )
 
 
 @CategoricalTensor.implements(aten._pin_memory.default)
-def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
-    categories = tuple(category.pin_memory() for category in inp._categories)
-    return inp.__class__(inp._code.pin_memory(), categories)
+def _pin_memory(
+    inp: CategoricalTensor,
+    device: torch.device | None = None,
+) -> CategoricalTensor:
+    if device is None:
+        categories = tuple(
+            category.pin_memory() for category in inp._categories
+        )
+        return inp.__class__(inp._code.pin_memory(), categories)
+    categories = tuple(
+        category.pin_memory(device=device) for category in inp._categories
+    )
+    return inp.__class__(inp._code.pin_memory(device=device), categories)
 
 
 @CategoricalTensor.implements(aten.pin_memory.default)
@@ -618,9 +717,9 @@ def _pin_memory_composite(
     inp: CategoricalTensor,
     device: torch.device | None = None,
 ) -> CategoricalTensor:
-    if _is_pinned(inp):
+    if _is_pinned(inp, device=device):
         return inp
-    return _pin_memory(inp)
+    return _pin_memory(inp, device=device)
 
 
 @CategoricalTensor.implements(aten.equal.default)
@@ -797,12 +896,12 @@ def _narrow(
 
 @CategoricalTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
-def _unbind(inp: CategoricalTensor, dim: int = 0) -> tuple[Tensor, ...]:
+def _unbind(inp: CategoricalTensor, dim: int = 0) -> list[Tensor]:
     code_list = inp._code.unbind(dim)
     dim %= inp.dim()
     if dim == inp.dim() - 1:
-        return code_list
-    return tuple(inp.__class__(code, inp.categories) for code in code_list)
+        return list(code_list)
+    return [inp.__class__(code, inp.categories) for code in code_list]
 
 
 @CategoricalTensor.implements(aten.split.Tensor)
@@ -811,15 +910,15 @@ def _split(
     inp: CategoricalTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[CategoricalTensor, ...]:
+) -> list[CategoricalTensor]:
     code_list = inp._code.split(split_size, dim)
     dim %= inp.dim()
     if dim != inp.dim() - 1:
-        return tuple(inp.__class__(code, inp.categories) for code in code_list)
-    return tuple(
+        return [inp.__class__(code, inp.categories) for code in code_list]
+    return [
         inp.__class__(code, inp.categories[i : i + split_size])
         for code, i in zip(code_list, range(0, inp.size(dim), split_size))
-    )
+    ]
 
 
 @CategoricalTensor.implements(aten.split.sizes)
@@ -830,17 +929,17 @@ def _split_with_sizes(
     inp: CategoricalTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[CategoricalTensor, ...]:
+) -> list[CategoricalTensor]:
     code_list = inp._code.split(tuple(split_sizes), dim)
     dim %= inp.dim()
     if dim != inp.dim() - 1:
-        return tuple(inp.__class__(code, inp.categories) for code in code_list)
+        return [inp.__class__(code, inp.categories) for code in code_list]
 
     offset = (0, *accumulate(split_sizes))
-    return tuple(
+    return [
         inp.__class__(code, inp.categories[start:end])
         for code, start, end in zip(code_list, offset[:-1], offset[1:])
-    )
+    ]
 
 
 @CategoricalTensor.implements(aten.index_select.default)

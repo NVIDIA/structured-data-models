@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import functools
 import math
 from collections import defaultdict
@@ -11,6 +12,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch.utils import _pytree as pytree
+from torch.utils._python_dispatch import return_and_correct_aliasing
 from typing_extensions import override
 
 from sdm import NaT, Stype, StypeLike
@@ -146,6 +149,8 @@ class TableTensor(Tensor):
         text: StringTensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
+        _stride: Sequence[int | torch.SymInt] | None = None,
+        _storage_offset: int | torch.SymInt = 0,
     ) -> None:
         pass
 
@@ -159,6 +164,8 @@ class TableTensor(Tensor):
         text: StringTensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
+        _stride: Sequence[int | torch.SymInt] | None = None,
+        _storage_offset: int | torch.SymInt = 0,
     ) -> Self:
         r"""Create a tensor wrapper."""
         if size is not None and len(size) == 0:
@@ -258,12 +265,20 @@ class TableTensor(Tensor):
         if len(column_names) != len(column_to_loc):
             raise ValueError("Expected column names to be unique")
 
+        layout: dict[str, Any] = {}
+        if _stride is not None:
+            layout = {
+                "strides": _stride,
+                "storage_offset": _storage_offset,
+            }
+
         out = Tensor._make_wrapper_subclass(
             cls,
             size=(*size, len(column_names)),
             dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,
+            **layout,
         )
 
         out._numerical = numerical
@@ -692,6 +707,8 @@ class TableTensor(Tensor):
             datetime=self.datetime if datetime is None else datetime,
             text=self.text if text is None else text,
             id=self.id if id is None else id,
+            _stride=self.stride(),
+            _storage_offset=self.storage_offset(),
         )
 
     def select_stypes(
@@ -827,6 +844,57 @@ class TableTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(
+        self,
+    ) -> tuple[
+        list[str],
+        tuple[
+            tuple[tuple[Stype, tuple[str, ...]], ...],
+            int | torch.SymInt,
+            bool,
+        ],
+    ]:
+        attrs = [
+            "_numerical",
+            "_categorical",
+            "_datetime",
+            "_text",
+            "_id",
+        ]
+        return attrs, (
+            tuple(self._columns.items()),
+            self.storage_offset(),
+            self.is_inference(),
+        )
+
+    @classmethod
+    def __tensor_unflatten__(
+        cls,
+        inner_tensors: dict[str, Tensor],
+        ctx: tuple[
+            tuple[tuple[Stype, tuple[str, ...]], ...],
+            int | torch.SymInt,
+            bool,
+        ],
+        outer_size: Sequence[int | torch.SymInt],
+        outer_stride: Sequence[int | torch.SymInt],
+    ) -> Self:
+        column_items, storage_offset, is_inference = ctx
+        with torch.inference_mode(is_inference):
+            return cls(
+                columns=dict(column_items),
+                numerical=inner_tensors["_numerical"],
+                categorical=cast(
+                    CategoricalTensor,
+                    inner_tensors["_categorical"],
+                ),
+                datetime=inner_tensors["_datetime"],
+                text=cast(StringTensor, inner_tensors["_text"]),
+                id=cast(ColumnarTensor, inner_tensors["_id"]),
+                _stride=outer_stride,
+                _storage_offset=storage_offset,
+            )
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
             tuple(self.size()[:-1]),
@@ -836,8 +904,32 @@ class TableTensor(Tensor):
             self._datetime,
             self._text,
             self._id,
+            None,
+            tuple(self.stride()),
+            self.storage_offset(),
         )
         return (self.__class__, args)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> TableTensor:
+        if id(self) in memo:
+            return memo[id(self)]
+
+        with torch.inference_mode(self.is_inference()):
+            out = self.__class__(
+                columns=cast(
+                    Mapping[StypeLike, Sequence[str]],
+                    self._columns,
+                ),
+                numerical=copy.deepcopy(self._numerical, memo),
+                categorical=copy.deepcopy(self._categorical, memo),
+                datetime=copy.deepcopy(self._datetime, memo),
+                text=copy.deepcopy(self._text, memo),
+                id=copy.deepcopy(self._id, memo),
+                _stride=self.stride(),
+                _storage_offset=self.storage_offset(),
+            )
+        memo[id(self)] = out
+        return out
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
@@ -847,8 +939,18 @@ class TableTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        kwargs = {} if kwargs is None else kwargs
+        if not all(issubclass(cls, candidate) for candidate in types):
+            return NotImplemented
+
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            out = handler(*args, **kwargs)
+            if pytree.tree_any(
+                lambda value: isinstance(value, TableTensor),
+                out,
+            ):
+                return return_and_correct_aliasing(func, args, kwargs, out)
+            return out
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
@@ -890,7 +992,7 @@ class TableTensor(Tensor):
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
     ) -> bool:
-        return all(
+        return Tensor.is_contiguous(self, memory_format=memory_format) and all(
             tensor.is_contiguous(memory_format=memory_format)
             for _, tensor in self.items()
         )
@@ -982,6 +1084,7 @@ def _alias(inp: TableTensor) -> TableTensor:
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(aten.alias.default(_layout(inp))),
         **blocks,
     )
 
@@ -1015,6 +1118,10 @@ def _to_dtype_layout(
     ):
         return inp
 
+    outer_layout = aten._to_copy.default(
+        _layout(inp),
+        memory_format=memory_format,
+    )
     blocks = {
         stype: aten.to.dtype_layout(
             tensor,
@@ -1036,6 +1143,7 @@ def _to_dtype_layout(
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(outer_layout),
         **blocks,
     )
 
@@ -1127,37 +1235,72 @@ def _clone(
     return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
 
 
+@TableTensor.implements(aten.detach.default)
+@preserve_view_inference_mode
+def _detach(inp: TableTensor) -> TableTensor:
+    blocks = {
+        stype: tensor.detach()
+        if tensor.requires_grad
+        else aten.alias.default(tensor)
+        for stype, tensor in inp.items()
+    }
+    return inp.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(_layout(inp)),
+        **blocks,
+    )
+
+
 @TableTensor.implements(aten.contiguous.default)
 def _contiguous(
     inp: TableTensor,
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> TableTensor:
+    layout = _layout(inp).contiguous(memory_format=memory_format)
     blocks = {
         stype: tensor.contiguous(memory_format=memory_format)
         for stype, tensor in inp.items()
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
 
 @TableTensor.implements(aten.is_pinned.default)
-def _is_pinned(inp: TableTensor) -> bool:
+def _is_pinned(
+    inp: TableTensor,
+    device: torch.device | None = None,
+) -> bool:
+    def is_pinned(tensor: Tensor) -> bool:
+        if device is None:
+            return tensor.is_pinned()
+        return tensor.is_pinned(device=device)
+
     return all(
-        tensor.is_pinned() for _, tensor in inp.items() if tensor.numel() > 0
+        is_pinned(tensor) for _, tensor in inp.items() if tensor.numel() > 0
     )
 
 
 @TableTensor.implements(aten._pin_memory.default)
-def _pin_memory(inp: TableTensor) -> TableTensor:
+def _pin_memory(
+    inp: TableTensor,
+    device: torch.device | None = None,
+) -> TableTensor:
+    def pin_memory(tensor: Tensor) -> Tensor:
+        if device is None:
+            return tensor.pin_memory()
+        return tensor.pin_memory(device=device)
+
     blocks = {
-        stype: tensor.pin_memory() if tensor.numel() > 0 else tensor
+        stype: pin_memory(tensor) if tensor.numel() > 0 else tensor
         for stype, tensor in inp.items()
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(_layout(inp)),
         **blocks,
     )
 
@@ -1167,9 +1310,9 @@ def _pin_memory_composite(
     inp: TableTensor,
     device: torch.device | None = None,
 ) -> TableTensor:
-    if _is_pinned(inp):
+    if _is_pinned(inp, device=device):
         return inp
-    return _pin_memory(inp)
+    return _pin_memory(inp, device=device)
 
 
 @TableTensor.implements(aten.equal.default)
@@ -1249,12 +1392,14 @@ def _view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
             f"{inp.size(-1)} {_columns} into shape {size}"
         )
 
+    layout = aten.view.default(_layout(inp), size)
     blocks = {
         stype: tensor.view((*size[:-1], tensor.size(-1)))
         for stype, tensor in inp.items()
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1308,8 +1453,10 @@ def _squeeze_dims(inp: TableTensor, dim: Sequence[int]) -> TableTensor:
             f"Can't squeeze the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.squeeze.dims(_layout(inp), dims)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1325,8 +1472,10 @@ def _unsqueeze(inp: TableTensor, dim: int) -> TableTensor:
             f"{inp.__class__.__name__!r}"
         )
 
+    layout = aten.unsqueeze.default(_layout(inp), dim)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1347,6 +1496,7 @@ def _expand(
             f"{inp.size(-1)} {_columns} to shape {size}"
         )
 
+    layout = aten.expand.default(_layout(inp), size, implicit=implicit)
     blocks = {
         stype: aten.expand.default(
             tensor,
@@ -1357,6 +1507,7 @@ def _expand(
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1376,8 +1527,10 @@ def _transpose(inp: TableTensor, dim0: int, dim1: int) -> TableTensor:
             f"{inp.__class__.__name__!r}"
         )
 
+    layout = aten.transpose.int(_layout(inp), dim0, dim1)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1394,8 +1547,10 @@ def _permute(inp: TableTensor, dims: Sequence[int]) -> TableTensor:
             f"Can't permute the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.permute.default(_layout(inp), dims)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1436,8 +1591,10 @@ def _select(inp: TableTensor, dim: int, index: int) -> TableTensor:
         stype: tensor.select(dim, index) for stype, tensor in inp.items()
     }
 
+    layout = aten.select.int(_layout(inp), dim, index)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1462,6 +1619,7 @@ def _slice(
             f"Can't slice the column dimension of '{inp.__class__.__name__}'"
         )
 
+    layout = aten.slice.Tensor(_layout(inp), dim, start, end, step)
     blocks = {
         stype: aten.slice.Tensor(tensor, dim, start, end, step)
         for stype, tensor in inp.items()
@@ -1469,6 +1627,7 @@ def _slice(
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1488,6 +1647,7 @@ def _narrow(
             f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
         )
 
+    layout = aten.narrow.default(_layout(inp), dim, start, length)
     blocks = {
         stype: tensor.narrow(dim, start, length)
         for stype, tensor in inp.items()
@@ -1495,28 +1655,33 @@ def _narrow(
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
 
 @TableTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
-def _unbind(inp: TableTensor, dim: int = 0) -> tuple[TableTensor, ...]:
+def _unbind(inp: TableTensor, dim: int = 0) -> list[TableTensor]:
     if _is_column_dim(inp, dim):
+        if inp.size(dim) == 0:
+            return []
         return _split(inp, split_size=1, dim=dim)
 
     tensors_dict: dict[Stype, tuple[Tensor, ...]] = {
         stype: tensor.unbind(dim) for stype, tensor in inp.items()
     }
+    layouts = aten.unbind.int(_layout(inp), dim)
 
     stypes = tuple(tensors_dict.keys())
-    return tuple(
+    return [
         inp.__class__(
             columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+            **_layout_kwargs(layout),
             **dict(zip(stypes, blocks)),
         )
-        for blocks in zip(*tensors_dict.values())
-    )
+        for blocks, layout in zip(zip(*tensors_dict.values()), layouts)
+    ]
 
 
 @TableTensor.implements(aten.split.Tensor)
@@ -1525,34 +1690,55 @@ def _split(
     inp: TableTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[TableTensor, ...]:
+) -> list[TableTensor]:
     if _is_column_dim(inp, dim):
         if split_size != 1:
             raise RuntimeError(
                 f"Can only split the column dimension of "
                 f"{inp.__class__.__name__!r} with split size 1"
             )
-        return tuple(
-            inp.__class__(
-                columns={stype: (name,)},
-                **{stype: tensor.narrow(-1, i, 1)},
-            )
+        layouts = aten.split.Tensor(_layout(inp), split_size, dim)
+        columns = tuple(
+            (stype, tensor, i, name)
             for stype, tensor in inp.items()
             for i, name in enumerate(inp._columns[stype])
         )
+        if len(columns) == 0:
+            return [
+                inp.__class__(
+                    size=inp.size()[:-1],
+                    columns=cast(
+                        dict[StypeLike, tuple[str, ...]],
+                        inp._columns,
+                    ),
+                    device=inp.device,
+                    **_layout_kwargs(layout),
+                )
+                for layout in layouts
+            ]
+        return [
+            inp.__class__(
+                columns={stype: (name,)},
+                **_layout_kwargs(layout),
+                **{stype: tensor.narrow(-1, i, 1)},
+            )
+            for (stype, tensor, i, name), layout in zip(columns, layouts)
+        ]
 
     tensors_dict: dict[Stype, tuple[Tensor, ...]] = {
         stype: tensor.split(split_size, dim) for stype, tensor in inp.items()
     }
+    layouts = aten.split.Tensor(_layout(inp), split_size, dim)
 
     stypes = tuple(tensors_dict.keys())
-    return tuple(
+    return [
         inp.__class__(
             columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+            **_layout_kwargs(layout),
             **dict(zip(stypes, blocks)),
         )
-        for blocks in zip(*tensors_dict.values())
-    )
+        for blocks, layout in zip(zip(*tensors_dict.values()), layouts)
+    ]
 
 
 @TableTensor.implements(aten.split.sizes)
@@ -1563,7 +1749,7 @@ def _split_with_sizes(
     inp: TableTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[TableTensor, ...]:
+) -> list[TableTensor]:
     if _is_column_dim(inp, dim):
         raise RuntimeError(
             f"Can't split the column dimension of {inp.__class__.__name__!r}"
@@ -1573,15 +1759,17 @@ def _split_with_sizes(
     blocks_dict: dict[Stype, tuple[Tensor, ...]] = {
         stype: tensor.split(split_sizes, dim) for stype, tensor in inp.items()
     }
+    layouts = aten.split_with_sizes.default(_layout(inp), split_sizes, dim)
 
     stypes = tuple(blocks_dict.keys())
-    return tuple(
+    return [
         inp.__class__(
             columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+            **_layout_kwargs(layout),
             **dict(zip(stypes, blocks)),
         )
-        for blocks in zip(*blocks_dict.values())
-    )
+        for blocks, layout in zip(zip(*blocks_dict.values()), layouts)
+    ]
 
 
 @TableTensor.implements(aten.index_select.default)
@@ -1595,12 +1783,14 @@ def _index_select(
             f"Can't index the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.index_select.default(_layout(inp), dim, index)
     blocks = {
         stype: tensor.index_select(dim, index) for stype, tensor in inp.items()
     }
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1626,6 +1816,7 @@ def _index(
             )
         current_dim += num_indexed_dims
 
+    layout = aten.index.Tensor(_layout(inp), indices)
     blocks = {
         stype: aten.index.Tensor(tensor, indices)
         for stype, tensor in inp.items()
@@ -1633,6 +1824,7 @@ def _index(
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1649,6 +1841,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     tensors = cast(Sequence[TableTensor], tensors)
 
     ref = tensors[0]
+    layout = aten.cat.default([_layout(tensor) for tensor in tensors], dim)
     if not _is_column_dim(ref, dim):
         tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
 
@@ -1681,6 +1874,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
         size=size[:-1] if size is not None else None,
         columns=cast(dict[StypeLike, tuple[str, ...]], columns),
         device=ref.device if len(blocks) == 0 else None,
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1711,14 +1905,32 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
         stype: torch.stack([tensor.blocks[stype] for tensor in tensors], dim)
         for stype in ref._columns
     }
+    layout = aten.stack.default([_layout(tensor) for tensor in tensors], dim)
 
     return ref.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], ref._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
 
 # Helpers #####################################################################
+
+
+def _layout(inp: Tensor) -> Tensor:
+    return aten.as_strided.default(
+        torch.empty(0, dtype=torch.uint8, device="meta"),
+        inp.size(),
+        inp.stride(),
+        inp.storage_offset(),
+    )
+
+
+def _layout_kwargs(layout: Tensor) -> dict[str, Any]:
+    return {
+        "_stride": layout.stride(),
+        "_storage_offset": layout.storage_offset(),
+    }
 
 
 def _block_size_repr(size: Sequence[int]) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import functools
 import math
 from collections.abc import Callable, Sequence
@@ -9,6 +10,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch.utils import _pytree as pytree
+from torch.utils._python_dispatch import return_and_correct_aliasing
 from typing_extensions import override
 
 from sdm.tensor import NullableTensor, StringTensor, VarLenTensor
@@ -62,6 +65,8 @@ class ColumnarTensor(Tensor):
         columns: Sequence[Tensor],
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
+        _stride: Sequence[int | torch.SymInt] | None = None,
+        _storage_offset: int | torch.SymInt = 0,
     ) -> None:
         pass
 
@@ -70,6 +75,8 @@ class ColumnarTensor(Tensor):
         columns: Sequence[Tensor],
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
+        _stride: Sequence[int | torch.SymInt] | None = None,
+        _storage_offset: int | torch.SymInt = 0,
     ) -> Self:
         r"""Create a tensor wrapper."""
         # Avoid a circular import through `sdm.tensor`.
@@ -114,15 +121,25 @@ class ColumnarTensor(Tensor):
                 "Expected 'size' to be given for zero columnar data"
             )
 
+        layout: dict[str, Any] = {}
+        if _stride is not None:
+            layout = {
+                "strides": _stride,
+                "storage_offset": _storage_offset,
+            }
+
         out = Tensor._make_wrapper_subclass(
             cls,
             size=(*size, len(columns)),
             dtype=torch.uint8,  # NOTE Do not use.
             device=device,
             requires_grad=False,
+            **layout,
         )
 
         out._columns = columns
+        for i, column in enumerate(columns):
+            setattr(out, f"_column_{i}", column)
 
         return out
 
@@ -259,9 +276,61 @@ class ColumnarTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(
+        self,
+    ) -> tuple[list[str], tuple[torch.device, int | torch.SymInt, bool]]:
+        attrs = [f"_column_{i}" for i in range(len(self._columns))]
+        return attrs, (
+            self.device,
+            self.storage_offset(),
+            self.is_inference(),
+        )
+
+    @classmethod
+    def __tensor_unflatten__(
+        cls,
+        inner_tensors: dict[str, Tensor],
+        ctx: tuple[torch.device, int | torch.SymInt, bool],
+        outer_size: Sequence[int | torch.SymInt],
+        outer_stride: Sequence[int | torch.SymInt],
+    ) -> Self:
+        device, storage_offset, is_inference = ctx
+        columns = tuple(
+            inner_tensors[f"_column_{i}"] for i in range(len(inner_tensors))
+        )
+        with torch.inference_mode(is_inference):
+            return cls(
+                columns=columns,
+                size=cast(Sequence[int], outer_size[:-1]),
+                device=device,
+                _stride=outer_stride,
+                _storage_offset=storage_offset,
+            )
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
-        args = (self._columns, tuple(self.size())[:-1], self.device)
+        args = (
+            self._columns,
+            tuple(self.size())[:-1],
+            self.device,
+            tuple(self.stride()),
+            self.storage_offset(),
+        )
         return (self.__class__, args)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> ColumnarTensor:
+        if id(self) in memo:
+            return memo[id(self)]
+
+        with torch.inference_mode(self.is_inference()):
+            out = self.__class__(
+                columns=copy.deepcopy(self._columns, memo),
+                size=self.size()[:-1],
+                device=self.device,
+                _stride=self.stride(),
+                _storage_offset=self.storage_offset(),
+            )
+        memo[id(self)] = out
+        return out
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
@@ -271,8 +340,18 @@ class ColumnarTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        kwargs = {} if kwargs is None else kwargs
+        if not all(issubclass(cls, candidate) for candidate in types):
+            return NotImplemented
+
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            out = handler(*args, **kwargs)
+            if pytree.tree_any(
+                lambda value: isinstance(value, ColumnarTensor),
+                out,
+            ):
+                return return_and_correct_aliasing(func, args, kwargs, out)
+            return out
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
@@ -293,7 +372,7 @@ class ColumnarTensor(Tensor):
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
     ) -> bool:
-        return all(
+        return Tensor.is_contiguous(self, memory_format=memory_format) and all(
             column.is_contiguous(memory_format=memory_format)
             for column in self._columns
         )
@@ -339,10 +418,12 @@ class ColumnarTensor(Tensor):
 @ColumnarTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
 def _alias(inp: ColumnarTensor) -> ColumnarTensor:
+    layout = aten.alias.default(_layout(inp))
     return inp.__class__(
         columns=inp._columns,
         size=inp.size()[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -381,6 +462,10 @@ def _to_dtype_layout(
     ):
         return inp
 
+    outer_layout = aten._to_copy.default(
+        _layout(inp),
+        memory_format=memory_format,
+    )
     return inp.__class__(
         columns=[
             aten.to.dtype_layout(
@@ -397,6 +482,7 @@ def _to_dtype_layout(
         ],
         size=inp.size()[:-1],
         device=device,
+        **_layout_kwargs(outer_layout),
     )
 
 
@@ -487,12 +573,28 @@ def _clone(
     return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
 
 
+@ColumnarTensor.implements(aten.detach.default)
+@preserve_view_inference_mode
+def _detach(inp: ColumnarTensor) -> ColumnarTensor:
+    columns = [
+        column.detach() if column.requires_grad else aten.alias.default(column)
+        for column in inp._columns
+    ]
+    return inp.__class__(
+        columns=columns,
+        size=inp.size()[:-1],
+        device=inp.device,
+        **_layout_kwargs(_layout(inp)),
+    )
+
+
 @ColumnarTensor.implements(aten.contiguous.default)
 def _contiguous(
     inp: ColumnarTensor,
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> ColumnarTensor:
+    layout = _layout(inp).contiguous(memory_format=memory_format)
     return inp.__class__(
         columns=[
             column.contiguous(memory_format=memory_format)
@@ -500,20 +602,34 @@ def _contiguous(
         ],
         size=inp.size()[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
 @ColumnarTensor.implements(aten.is_pinned.default)
-def _is_pinned(inp: ColumnarTensor) -> bool:
-    return all(column.is_pinned() for column in inp._columns)
+def _is_pinned(
+    inp: ColumnarTensor,
+    device: torch.device | None = None,
+) -> bool:
+    if device is None:
+        return all(column.is_pinned() for column in inp._columns)
+    return all(column.is_pinned(device=device) for column in inp._columns)
 
 
 @ColumnarTensor.implements(aten._pin_memory.default)
-def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
+def _pin_memory(
+    inp: ColumnarTensor,
+    device: torch.device | None = None,
+) -> ColumnarTensor:
+    if device is None:
+        columns = [column.pin_memory() for column in inp._columns]
+    else:
+        columns = [column.pin_memory(device=device) for column in inp._columns]
     return inp.__class__(
-        columns=[column.pin_memory() for column in inp._columns],
+        columns=columns,
         size=inp.size()[:-1],
         device=inp.device,
+        **_layout_kwargs(_layout(inp)),
     )
 
 
@@ -522,9 +638,9 @@ def _pin_memory_composite(
     inp: ColumnarTensor,
     device: torch.device | None = None,
 ) -> ColumnarTensor:
-    if _is_pinned(inp):
+    if _is_pinned(inp, device=device):
         return inp
-    return _pin_memory(inp)
+    return _pin_memory(inp, device=device)
 
 
 @ColumnarTensor.implements(aten.equal.default)
@@ -600,10 +716,12 @@ def _view(inp: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
             f"{inp.size(-1)} {_columns} into shape {size}"
         )
 
+    layout = aten.view.default(_layout(inp), size)
     return inp.__class__(
         columns=[column.view(size[:-1]) for column in inp._columns],
         size=size[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -658,6 +776,7 @@ def _squeeze_dims(inp: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
             f"Can't squeeze the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.squeeze.dims(_layout(inp), dims)
     return inp.__class__(
         columns=[column.squeeze(dims) for column in inp._columns],
         size=tuple(
@@ -666,6 +785,7 @@ def _squeeze_dims(inp: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
             if i not in dims or dim_size != 1
         ),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -685,10 +805,12 @@ def _unsqueeze(inp: ColumnarTensor, dim: int) -> ColumnarTensor:
             f"{inp.__class__.__name__!r}"
         )
 
+    layout = aten.unsqueeze.default(_layout(inp), dim)
     return inp.__class__(
         columns=[column.unsqueeze(dim) for column in inp._columns],
         size=(*inp.size()[:dim], 1, *inp.size()[dim:-1]),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -718,6 +840,7 @@ def _expand(
 
     old_size = (*(1,) * (len(size) - inp.dim()), *inp.size())
 
+    layout = aten.expand.default(_layout(inp), size, implicit=implicit)
     return inp.__class__(
         columns=[
             aten.expand.default(
@@ -731,6 +854,7 @@ def _expand(
             old if new == -1 else new for old, new in zip(old_size, size)
         )[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -759,10 +883,12 @@ def _transpose(
     size = list(inp.size())
     size[dim0], size[dim1] = size[dim1], size[dim0]
 
+    layout = aten.transpose.int(_layout(inp), dim0, dim1)
     return inp.__class__(
         columns=columns,
         size=size[:-1],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -775,10 +901,12 @@ def _permute(inp: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
             f"Can't permute the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.permute.default(_layout(inp), dims)
     return inp.__class__(
         columns=[column.permute(dims[:-1]) for column in inp._columns],
         size=tuple(inp.size(dim) for dim in dims[:-1]),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -814,10 +942,12 @@ def _select(inp: ColumnarTensor, dim: int, index: int) -> Tensor:
     if dim == inp.dim() - 1:
         return aten.alias.default(inp._columns[index])
 
+    layout = aten.select.int(_layout(inp), dim, index)
     return inp.__class__(
         columns=[column.select(dim, index) for column in inp._columns],
         size=(*inp.size()[:dim], *inp.size()[dim + 1 : -1]),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -831,12 +961,14 @@ def _slice(
     step: int = 1,
 ) -> ColumnarTensor:
     dim = _normalize_dim(inp, dim)
+    layout = aten.slice.Tensor(_layout(inp), dim, start, end, step)
 
     if dim == inp.dim() - 1:
         return inp.__class__(
             columns=inp._columns[slice(start, end, step)],
             size=inp.size()[:-1],
             device=inp.device,
+            **_layout_kwargs(layout),
         )
 
     return inp.__class__(
@@ -850,6 +982,7 @@ def _slice(
             *inp.size()[dim + 1 : -1],
         ),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -861,33 +994,59 @@ def _narrow(
     start: int,
     length: int,
 ) -> ColumnarTensor:
-    return _slice(inp, dim=dim, start=start, end=start + length)
+    dim = _normalize_dim(inp, dim)
+    layout = aten.narrow.default(_layout(inp), dim, start, length)
+
+    if dim == inp.dim() - 1:
+        start = start + inp.size(dim) if start < 0 else start
+        return inp.__class__(
+            columns=inp._columns[start : start + length],
+            size=inp.size()[:-1],
+            device=inp.device,
+            **_layout_kwargs(layout),
+        )
+
+    return inp.__class__(
+        columns=[
+            aten.narrow.default(column, dim, start, length)
+            for column in inp._columns
+        ],
+        size=layout.size()[:-1],
+        device=inp.device,
+        **_layout_kwargs(layout),
+    )
 
 
 @ColumnarTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
-def _unbind(inp: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
+def _unbind(inp: ColumnarTensor, dim: int = 0) -> list[Tensor]:
     dim = _normalize_dim(inp, dim)
 
     if dim == inp.dim() - 1:
-        return tuple(aten.alias.default(column) for column in inp._columns)
+        return [aten.alias.default(column) for column in inp._columns]
 
+    layouts = aten.unbind.int(_layout(inp), dim)
     columns_list = [column.unbind(dim) for column in inp._columns]
     if len(columns_list) == 0:
         size = (*inp.size()[:dim], *inp.size()[dim + 1 : -1])
-        return tuple(
+        return [
             inp.__class__(
                 columns=(),
                 size=size,
                 device=inp.device,
+                **_layout_kwargs(layout),
             )
-            for _ in range(inp.size(dim))
-        )
+            for layout in layouts
+        ]
 
-    return tuple(
-        inp.__class__(columns=columns, device=inp.device)
-        for columns in zip(*columns_list)
-    )
+    return [
+        inp.__class__(
+            columns=columns,
+            device=inp.device,
+            **_layout_kwargs(layout),
+        )
+        for columns, layout in zip(zip(*columns_list), layouts)
+    ]
 
 
 @ColumnarTensor.implements(aten.split.Tensor)
@@ -896,11 +1055,10 @@ def _split(
     inp: ColumnarTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[ColumnarTensor, ...]:
-    split_sizes = tuple(
-        min(split_size, inp.size(dim) - start)
-        for start in range(0, inp.size(dim), split_size)
-    )
+) -> list[ColumnarTensor]:
+    dim = _normalize_dim(inp, dim)
+    layouts = aten.split.Tensor(_layout(inp), split_size, dim)
+    split_sizes = tuple(layout.size(dim) for layout in layouts)
     return _split_with_sizes(inp, split_sizes, dim=dim)
 
 
@@ -912,9 +1070,10 @@ def _split_with_sizes(
     inp: ColumnarTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[ColumnarTensor, ...]:
+) -> list[ColumnarTensor]:
     dim = _normalize_dim(inp, dim)
     split_sizes = tuple(split_sizes)
+    layouts = aten.split_with_sizes.default(_layout(inp), split_sizes, dim)
 
     if dim == inp.dim() - 1:
         if sum(split_sizes) != inp.size(dim):
@@ -926,19 +1085,20 @@ def _split_with_sizes(
 
         start = 0
         outs = []
-        for split_size in split_sizes:
+        for split_size, layout in zip(split_sizes, layouts):
             out = inp.__class__(
                 columns=inp._columns[start : start + split_size],
                 size=inp.size()[:-1],
                 device=inp.device,
+                **_layout_kwargs(layout),
             )
             start += split_size
             outs.append(out)
-        return tuple(outs)
+        return outs
 
     columns_list = [col.split(split_sizes, dim=dim) for col in inp._columns]
     if len(columns_list) == 0:
-        return tuple(
+        return [
             inp.__class__(
                 columns=(),
                 size=(
@@ -947,14 +1107,19 @@ def _split_with_sizes(
                     *inp.size()[dim + 1 : -1],
                 ),
                 device=inp.device,
+                **_layout_kwargs(layout),
             )
-            for split_size in split_sizes
-        )
+            for split_size, layout in zip(split_sizes, layouts)
+        ]
 
-    return tuple(
-        inp.__class__(columns=columns, device=inp.device)
-        for columns in zip(*columns_list)
-    )
+    return [
+        inp.__class__(
+            columns=columns,
+            device=inp.device,
+            **_layout_kwargs(layout),
+        )
+        for columns, layout in zip(zip(*columns_list), layouts)
+    ]
 
 
 @ColumnarTensor.implements(aten.index_select.default)
@@ -964,11 +1129,13 @@ def _index_select(
     index: Tensor,
 ) -> ColumnarTensor:
     dim = _normalize_dim(inp, dim)
+    layout = aten.index_select.default(_layout(inp), dim, index)
     if dim == inp.dim() - 1:
         return inp.__class__(
             columns=[inp._columns[i] for i in index.tolist()],
             size=inp.size()[:-1],
             device=inp.device,
+            **_layout_kwargs(layout),
         )
 
     return inp.__class__(
@@ -979,6 +1146,7 @@ def _index_select(
             *inp.size()[dim + 1 : -1],
         ),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -987,6 +1155,7 @@ def _index(
     inp: ColumnarTensor,
     indices: Sequence[Tensor | None],
 ) -> ColumnarTensor:
+    layout = aten.index.Tensor(_layout(inp), indices)
     current_dim = 0
     has_other_index = False
     column_index: Tensor | None = None
@@ -1021,6 +1190,7 @@ def _index(
             columns=[inp._columns[i] for i in column_index.tolist()],
             size=inp.size()[:-1],
             device=inp.device,
+            **_layout_kwargs(layout),
         )
 
     if len(inp._columns) == 0:
@@ -1029,6 +1199,7 @@ def _index(
             columns=(),
             size=aten.index.Tensor(dummy, indices).size()[:-1],
             device=inp.device,
+            **_layout_kwargs(layout),
         )
 
     return inp.__class__(
@@ -1036,6 +1207,7 @@ def _index(
             aten.index.Tensor(column, indices) for column in inp._columns
         ],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -1048,12 +1220,14 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
 
     tensors = cast(Sequence[ColumnarTensor], tensors)
     dim = _normalize_dim(tensors[0], dim)
+    layout = aten.cat.default([_layout(tensor) for tensor in tensors], dim)
 
     if dim == tensors[0].dim() - 1:
         return tensors[0].__class__(
             columns=tuple(chain.from_iterable(t._columns for t in tensors)),
             size=tensors[0].size()[:-1],
             device=tensors[0].device,
+            **_layout_kwargs(layout),
         )
 
     return tensors[0].__class__(
@@ -1067,6 +1241,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
             *tensors[0].size()[dim + 1 : -1],
         ),
         device=tensors[0].device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -1092,6 +1267,7 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
             f"{tensors[0].__class__.__name__!r}"
         )
 
+    layout = aten.stack.default([_layout(tensor) for tensor in tensors], dim)
     return tensors[0].__class__(
         columns=[
             torch.stack([tensor._columns[i] for tensor in tensors], dim=dim)
@@ -1103,10 +1279,27 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
             *tensors[0].size()[dim:-1],
         ),
         device=tensors[0].device,
+        **_layout_kwargs(layout),
     )
 
 
 # Helpers #####################################################################
+
+
+def _layout(inp: Tensor) -> Tensor:
+    return aten.as_strided.default(
+        torch.empty(0, dtype=torch.uint8, device="meta"),
+        inp.size(),
+        inp.stride(),
+        inp.storage_offset(),
+    )
+
+
+def _layout_kwargs(layout: Tensor) -> dict[str, Any]:
+    return {
+        "_stride": layout.stride(),
+        "_storage_offset": layout.storage_offset(),
+    }
 
 
 def _normalize_dim(inp: Tensor, dim: int) -> int:

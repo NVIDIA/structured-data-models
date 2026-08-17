@@ -1,0 +1,58 @@
+import torch
+from torch import Tensor
+
+from sdm import ColumnarTensor
+
+aten = torch.ops.aten
+
+
+def make_columnar() -> ColumnarTensor:
+    return ColumnarTensor(
+        (
+            torch.arange(24).view(2, 3, 4),
+            torch.arange(100, 124).view(2, 3, 4),
+        ),
+    )
+
+
+def dense(inp: ColumnarTensor) -> Tensor:
+    return torch.tensor(inp.tolist())
+
+
+def assert_matches_dense(out: ColumnarTensor, expected: Tensor) -> None:
+    assert type(out) is ColumnarTensor
+    assert out.size() == expected.size()
+    assert out.stride() == expected.stride()
+    assert out.storage_offset() == expected.storage_offset()
+    assert out.tolist() == expected.tolist()
+
+
+def assert_shares_column_storage(
+    out: ColumnarTensor,
+    inp: ColumnarTensor,
+) -> None:
+    for actual, source in zip(out.unbind(-1), inp.unbind(-1)):
+        assert (
+            actual.untyped_storage().data_ptr()
+            == source.untyped_storage().data_ptr()
+        )
+
+
+def test_squeeze_overloads() -> None:
+    inp = aten.unsqueeze.default(make_columnar(), 0)
+    reference = dense(inp)
+
+    outputs = (
+        aten.squeeze.default(inp),
+        aten.squeeze.dim(inp, 0),
+        aten.squeeze.dims(inp, (0,)),
+    )
+    expected = (
+        aten.squeeze.default(reference),
+        aten.squeeze.dim(reference, 0),
+        aten.squeeze.dims(reference, (0,)),
+    )
+
+    for out, dense_out in zip(outputs, expected):
+        assert_matches_dense(out, dense_out)
+        assert_shares_column_storage(out, inp)
