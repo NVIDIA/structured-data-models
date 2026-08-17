@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -15,6 +15,30 @@ from sdm.nn import (
     TransformerBlock,
 )
 from sdm.testing import withCUDA
+
+
+class _ScaledFeedForward(torch.nn.Module):
+    def __init__(
+        self,
+        channels: int,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+        *,
+        multiplier: float = 0.0,
+        **_: Any,
+    ) -> None:
+        super().__init__()
+        self.weight = torch.nn.Parameter(
+            torch.full(
+                (channels,),
+                multiplier,
+                device=device,
+                dtype=dtype,
+            )
+        )
+
+    def forward(self, tensor: Tensor) -> Tensor:
+        return tensor * self.weight
 
 
 def reference_sdpa(

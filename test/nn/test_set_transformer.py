@@ -1,8 +1,35 @@
+from typing import Any
+
 import pytest
 import torch
+from torch import Tensor
 
 from sdm.nn import InducedTransformerBlock, TransformerBlock
 from sdm.testing import withCUDA
+
+
+class _ScaledFeedForward(torch.nn.Module):
+    def __init__(
+        self,
+        channels: int,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+        *,
+        multiplier: float = 0.0,
+        **_: Any,
+    ) -> None:
+        super().__init__()
+        self.weight = torch.nn.Parameter(
+            torch.full(
+                (channels,),
+                multiplier,
+                device=device,
+                dtype=dtype,
+            )
+        )
+
+    def forward(self, tensor: Tensor) -> Tensor:
+        return tensor * self.weight
 
 
 @withCUDA
@@ -155,3 +182,26 @@ def test_induced_transformer_block_kv_cache() -> None:
     assert self_kv.value.size() == self_kv.key.size()
     torch.testing.assert_close(self_cache_out, self_out)
     torch.testing.assert_close(self_cached_out, self_out)
+
+
+def test_induced_transformer_block_configuration() -> None:
+    module = InducedTransformerBlock(
+        channels=4,
+        num_query_heads=2,
+        feedforward_channels=8,
+        num_inducing_points=3,
+        norm=torch.nn.RMSNorm,
+        shared_attention_norm=True,
+        post_attention_norm=True,
+        feedforward_layer=_ScaledFeedForward,
+        feedforward_kwargs={"multiplier": 1.0},
+    )
+    query = torch.randn(2, 5, 4, requires_grad=True)
+
+    direct, cache = module(query=query, return_key_value=True)
+    replay = module(query=query, key_value=cache)
+
+    torch.testing.assert_close(direct, 2 * query)
+    torch.testing.assert_close(replay, direct)
+    direct.sum().backward()
+    torch.testing.assert_close(query.grad, torch.full_like(query, 2))
