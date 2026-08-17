@@ -97,7 +97,8 @@ PROCESSORS = (
 @dataclass(frozen=True)
 class Dataset:
     name: str
-    table: pa.Table
+    context: pa.Table
+    query: pa.Table
     task: Task
     target_name: str
     text_stypes: dict[str, Stype]
@@ -165,13 +166,18 @@ def _load_dataset(name: str, rng: np.random.Generator) -> Dataset:
     if len(table) > MAX_ROWS:
         indices = np.sort(rng.choice(len(table), MAX_ROWS, replace=False))
         table = table.take(pa.array(indices))
+    order = rng.permutation(len(table))
+    split_index = int(0.8 * len(table))
+    context = table.take(pa.array(order[:split_index]))
+    query = table.take(pa.array(order[split_index:]))
 
     num_text_columns = sum(
         stype == Stype.text for stype in text_stypes.values()
     )
     return Dataset(
         name=name,
-        table=table,
+        context=context,
+        query=query,
         task=task,
         target_name=target_name,
         text_stypes=text_stypes,
@@ -246,19 +252,16 @@ def _run(
     stypes = (
         dataset.plain_stypes if spec.kind == "none" else dataset.text_stypes
     )
-    table = sdm.TableTensor.from_arrow(
-        table=dataset.table,
+    context = sdm.TableTensor.from_arrow(
+        table=dataset.context,
         stypes=stypes,
         device=device,
     )
-    split_generator = torch.Generator(device=device).manual_seed(SEED)
-    order = torch.randperm(
-        table.size(0),
-        generator=split_generator,
+    query = sdm.TableTensor.from_arrow(
+        table=dataset.query,
+        stypes=stypes,
         device=device,
     )
-    table = table[order]
-    context, query = table.split(int(0.8 * table.size(0)))
     recipe = _make_recipe(model, spec, embedding)
     model_generator = torch.Generator(device=device).manual_seed(SEED)
 
@@ -267,7 +270,7 @@ def _run(
     with torch.amp.autocast(
         device.type,
         torch.float16,
-        enabled=table.is_cuda,
+        enabled=context.is_cuda,
     ):
         prediction = model(
             x_context=context.drop_columns(dataset.target_name),
@@ -295,7 +298,7 @@ def _run(
         processor=spec.name,
         tokenizer=spec.tokenizer,
         model=spec.model_name,
-        num_rows=table.size(0),
+        num_rows=context.size(0) + query.size(0),
         num_context_rows=context.size(0),
         num_query_rows=query.size(0),
         num_text_columns=dataset.num_text_columns,
