@@ -1,16 +1,14 @@
 import pytest
 import torch
 
-from sdm.nn import InducedTransformerBlock, QASSMax
+from sdm.nn import InducedTransformerBlock, TransformerBlock
 from sdm.testing import withCUDA
 
 
 @withCUDA
 @pytest.mark.parametrize("num_key_value_heads", [None, 1])
-@pytest.mark.parametrize("qassmax", [False, True])
 def test_induced_transformer_block(
     device: torch.device,
-    qassmax: bool,
     num_key_value_heads: int | None,
 ) -> None:
     batch_size = 2
@@ -18,13 +16,21 @@ def test_induced_transformer_block(
     channels = 8
     module = InducedTransformerBlock(
         channels=channels,
-        num_query_heads=2,
-        num_key_value_heads=num_key_value_heads,
-        feedforward_channels=16,
         num_inducing_points=4,
-        query_scaling=QASSMax(channels // 2, num_heads=2, device=device)
-        if qassmax
-        else None,
+        inducing_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            num_key_value_heads=num_key_value_heads,
+            mlp=torch.nn.Identity(),
+            device=device,
+        ),
+        output_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            num_key_value_heads=num_key_value_heads,
+            mlp=torch.nn.Identity(),
+            device=device,
+        ),
         device=device,
     )
     query = torch.randn(batch_size, set_size, channels, device=device)
@@ -62,9 +68,17 @@ def test_induced_transformer_block_kv_cache() -> None:
     num_inducing_points = 4
     module = InducedTransformerBlock(
         channels=channels,
-        num_query_heads=num_heads,
-        feedforward_channels=16,
         num_inducing_points=num_inducing_points,
+        inducing_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=num_heads,
+            mlp=torch.nn.Identity(),
+        ),
+        output_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=num_heads,
+            mlp=torch.nn.Identity(),
+        ),
     )
 
     query = torch.randn(batch_size, set_size, channels)

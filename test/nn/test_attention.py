@@ -564,7 +564,7 @@ def test_attention_empty_query_chunked_kv_cache() -> None:
         lambda: TransformerBlock(
             channels=8,
             num_query_heads=2,
-            feedforward_channels=16,
+            mlp=torch.nn.Identity(),
         ),
     ],
     ids=["attention", "transformer-block"],
@@ -659,7 +659,8 @@ def test_attention_batch_size_limit_propagation() -> None:
         TransformerBlock(
             channels=channels,
             num_query_heads=num_heads,
-            feedforward_channels=16,
+            mlp=torch.nn.Identity(),
+            query_norm=torch.nn.LayerNorm(channels),
         ),
     )
 
@@ -674,7 +675,7 @@ def test_attention_batch_size_limit_propagation() -> None:
         outer_module = (
             module.qkv_lin
             if isinstance(module, Attention)
-            else module.pre_norm
+            else module.query_norm
         )
         assert outer_module is not None
         outer_batch_sizes: list[int] = []
@@ -713,13 +714,14 @@ def test_transformer_block_batch_size_limit_bypass(
     module = TransformerBlock(
         channels=8,
         num_query_heads=2,
-        feedforward_channels=16,
+        mlp=torch.nn.Identity(),
+        query_norm=torch.nn.LayerNorm(8),
     )
     module.train(training)
     query = torch.randn(5, 3, 8)
     batch_sizes: list[int] = []
-    assert module.pre_norm is not None
-    handle = module.pre_norm.register_forward_pre_hook(
+    assert module.query_norm is not None
+    handle = module.query_norm.register_forward_pre_hook(
         lambda _module, args: batch_sizes.append(args[0].size(0))
     )
 
@@ -742,7 +744,7 @@ def test_return_key_value_positional_compatibility() -> None:
         TransformerBlock(
             channels=channels,
             num_query_heads=2,
-            feedforward_channels=16,
+            mlp=torch.nn.Identity(),
         ),
     )
 
@@ -754,27 +756,26 @@ def test_return_key_value_positional_compatibility() -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("norm", ["layer_norm", "rms_norm"])
 @pytest.mark.parametrize("qassmax", [False, True])
-def test_transformer_block(
-    device: torch.device,
-    norm: str,
-    qassmax: bool,
-) -> None:
+def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     batch_size = 2
     query_len = 3
     key_value_len = 5
     channels = 8
     num_heads = 2
-    feedforward_channels = 16
     module = TransformerBlock(
         channels=channels,
         num_query_heads=num_heads,
-        feedforward_channels=feedforward_channels,
+        mlp=torch.nn.Sequential(
+            torch.nn.Linear(channels, 16, device=device),
+            torch.nn.ReLU(),
+            torch.nn.Linear(16, channels, device=device),
+        ),
+        query_norm=torch.nn.LayerNorm(channels, device=device),
+        key_value_norm=torch.nn.LayerNorm(channels, device=device),
         query_scaling=QASSMax(channels // num_heads, num_heads, device=device)
         if qassmax
         else None,
-        norm=norm,
         device=device,
     )
     query = torch.randn(batch_size, query_len, channels, device=device)
@@ -843,64 +844,6 @@ def test_transformer_block(
     torch.testing.assert_close(out1, out3)
 
 
-def test_transformer_block_norm_kwargs_precedence() -> None:
-    # User-provided `norm_kwargs` win over the `device`/`dtype` arguments.
-    module = TransformerBlock(
-        channels=8,
-        num_query_heads=2,
-        feedforward_channels=16,
-        pre_attn_norm=True,
-        post_attn_norm=True,
-        norm_kwargs={"dtype": torch.float64},
-    )
-    assert module.pre_norm is not None
-    assert module.post_norm is not None
-    for norm in (module.pre_norm, module.post_norm, module.mlp[0]):
-        assert next(norm.parameters()).dtype == torch.float64
-
-    # The `dtype` argument still applies when `norm_kwargs` does not set it.
-    module = TransformerBlock(
-        channels=8,
-        num_query_heads=2,
-        feedforward_channels=16,
-        pre_attn_norm=True,
-        post_attn_norm=True,
-        norm_kwargs={"eps": 1e-6},
-        dtype=torch.float64,
-    )
-    assert module.pre_norm is not None
-    assert module.post_norm is not None
-    for norm in (module.pre_norm, module.post_norm, module.mlp[0]):
-        assert next(norm.parameters()).dtype == torch.float64
-
-
-def test_transformer_block_norm_callable() -> None:
-    # A norm class is instantiated per site, so no site shares an instance.
-    module = TransformerBlock(
-        channels=8,
-        num_query_heads=2,
-        feedforward_channels=16,
-        pre_attn_norm=True,
-        post_attn_norm=True,
-        norm=torch.nn.RMSNorm,
-        norm_kwargs={"eps": 1e-6, "dtype": torch.float64},
-    )
-    assert module.pre_norm is not None
-    assert module.post_norm is not None
-    norms = (module.pre_norm, module.post_norm, module.mlp[0])
-    for norm in norms:
-        assert isinstance(norm, torch.nn.RMSNorm)
-        assert norm.normalized_shape == (8,)
-        assert norm.eps == 1e-6
-        assert next(norm.parameters()).dtype == torch.float64
-    assert len({id(norm) for norm in norms}) == 3
-
-    param_ids = [{id(param) for param in norm.parameters()} for norm in norms]
-    assert param_ids[0].isdisjoint(param_ids[1])
-    assert param_ids[0].isdisjoint(param_ids[2])
-    assert param_ids[1].isdisjoint(param_ids[2])
-
-
 def test_transformer_block_kv_cache() -> None:
     batch_size = 2
     query_len = 3
@@ -910,7 +853,7 @@ def test_transformer_block_kv_cache() -> None:
     module = TransformerBlock(
         channels=channels,
         num_query_heads=num_heads,
-        feedforward_channels=16,
+        mlp=torch.nn.Identity(),
     )
     with torch.no_grad():
         module.attn.out_lin.weight.copy_(torch.eye(channels))
