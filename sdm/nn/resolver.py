@@ -19,8 +19,7 @@ def normalization_resolver(
     case-insensitively; hyphens, underscores, and spaces are ignored and the
     ``"norm"`` suffix is optional. A callable (*e.g.*, a layer class) is
     called with the given arguments, so every resolution yields a fresh
-    module. A module instance is returned unchanged and is therefore shared
-    across resolution sites.
+    module.
 
     Args:
         norm: The normalization layer name, a callable returning the
