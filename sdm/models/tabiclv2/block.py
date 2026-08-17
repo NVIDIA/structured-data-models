@@ -1,3 +1,5 @@
+# ruff: noqa: D101
+
 from typing import Any, cast
 
 import torch
@@ -6,7 +8,7 @@ from torch.nn import GELU, LayerNorm, Linear, Sequential
 from sdm.nn import QASSMax, RotaryEmbedding, TransformerBlock
 
 
-class TabICLv2TransformerBlock(TransformerBlock):  # noqa: D101
+class TabICLv2TransformerBlock(TransformerBlock):
     def __init__(
         self,
         channels: int,
