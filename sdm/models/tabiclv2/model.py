@@ -300,9 +300,10 @@ def _remap_ckpt(
         )
 
         if tail.startswith("norm1."):
+            tail = tail.removeprefix("norm1.")
             return [
-                prefix + tail.replace("norm1.", "q_norm.", 1),
-                prefix + tail.replace("norm1.", "kv_norm.", 1),
+                prefix + "query_norm." + tail,
+                prefix + "key_value_norm." + tail,
             ]
         if tail.startswith("norm2."):
             tail = tail.replace("norm2.", "mlp.0.", 1)
@@ -350,14 +351,14 @@ def _remap_ckpt(
                     value
                 )
             elif tail.startswith("multihead_attn1."):
-                prefix = f"row_embedding.col_layers.{layer}.transformer_1."
+                prefix = f"row_embedding.col_layers.{layer}.inducing_block."
                 for new_key in _map_transformer(
                     prefix,
                     tail.removeprefix("multihead_attn1."),
                 ):
                     out[new_key] = value
             elif tail.startswith("multihead_attn2."):
-                prefix = f"row_embedding.col_layers.{layer}.transformer_2."
+                prefix = f"row_embedding.col_layers.{layer}.output_block."
                 for new_key in _map_transformer(
                     prefix,
                     tail.removeprefix("multihead_attn2."),
@@ -376,7 +377,6 @@ def _remap_ckpt(
                 out[new_key] = value
 
         elif key == "row_interactor.tf_row.rope.freqs":
-            out["row_embedding.rope.inv_freq"] = value
             for layer, side in product(range(3), ("query", "key")):
                 out[
                     f"row_embedding.row_layers.{layer}.attn."

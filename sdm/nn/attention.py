@@ -2,16 +2,15 @@
 
 from collections.abc import Callable
 from math import prod
-from typing import Any, Literal, cast, overload
+from typing import Any, Literal, overload
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
+from torch.nn import Linear
 
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
-from sdm.nn.resolver import normalization_resolver
 
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
@@ -580,22 +579,19 @@ class Attention(torch.nn.Module):
 
 
 class TransformerBlock(torch.nn.Module):
-    r"""Transformer block with pre-norm attention and feedforward modules.
+    r"""Transformer block with normalization and feedforward residual modules.
 
     Args:
         channels: The number of input and output channels.
         num_query_heads: The number of query attention heads.
-        feedforward_channels: The hidden width of the MLP.
+        mlp: Feedforward module applied after the attention residual.
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
-        norm: The normalization layer name or a callable returning the
-            normalization layer. The callable is invoked once per active
-            standard norm site. A module instance is reused across those
-            sites. Custom shared or feed-forward options replace their
-            corresponding standard sites.
-        norm_kwargs: Additional keyword arguments passed to the normalization
-            layer constructor. Takes precedence over ``device`` and
-            ``dtype``.
+        query_norm: Normalization applied to query inputs before attention.
+        key_value_norm: Normalization applied to key/value inputs before
+            attention.
+        post_attn_norm: Normalization applied to the attention output before
+            its residual addition.
         query_transform: Transformation applied to projected query heads before
             scaled dot-product attention.
         key_transform: Transformation applied to projected key heads before
@@ -622,10 +618,11 @@ class TransformerBlock(torch.nn.Module):
         self,
         channels: int,
         num_query_heads: int,
-        feedforward_channels: int,
+        mlp: torch.nn.Module,
         num_key_value_heads: int | None = None,
-        norm: str | Callable[..., torch.nn.Module] = "layer_norm",
-        norm_kwargs: dict[str, Any] | None = None,
+        query_norm: torch.nn.Module | None = None,
+        key_value_norm: torch.nn.Module | None = None,
+        post_attn_norm: torch.nn.Module | None = None,
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
@@ -640,23 +637,12 @@ class TransformerBlock(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        # User `norm_kwargs` win; `device`/`dtype` fill unspecified keys.
-        norm_kwargs = {**factory_kwargs, **(norm_kwargs or {})}
 
-        if not shared_attention_norm:
-            self.q_norm = normalization_resolver(norm, channels, **norm_kwargs)
-            self.kv_norm = normalization_resolver(
-                norm, channels, **norm_kwargs
-            )
-            self.shared_attention_norm = None
-        else:
-            self.q_norm = None
-            self.kv_norm = None
-            self.shared_attention_norm = normalization_resolver(
-                norm,
-                channels,
-                **norm_kwargs,
-            )
+        self.mlp = mlp
+        self.query_norm = query_norm
+        self.key_value_norm = key_value_norm
+        self.post_attn_norm = post_attn_norm
+
         self.attn = Attention(
             channels=channels,
             num_query_heads=num_query_heads,
@@ -667,36 +653,6 @@ class TransformerBlock(torch.nn.Module):
             scale=scale,
             **factory_kwargs,
         )
-        self.post_attention_norm = (
-            None
-            if not post_attention_norm
-            else normalization_resolver(
-                norm,
-                channels,
-                **norm_kwargs,
-            )
-        )
-        if feedforward_layer is None:
-            self.mlp = Sequential(
-                normalization_resolver(norm, channels, **norm_kwargs),
-                Linear(channels, feedforward_channels, **factory_kwargs),
-                GELU(),
-                Linear(feedforward_channels, channels, **factory_kwargs),
-            )
-            torch.nn.init.zeros_(cast(Linear, self.mlp[-1]).weight)
-            torch.nn.init.zeros_(cast(Linear, self.mlp[-1]).bias)
-        else:
-            feedforward_kwargs = {
-                **factory_kwargs,
-                **(feedforward_kwargs or {}),
-            }
-            self.mlp = feedforward_layer(
-                channels=channels,
-                feedforward_channels=feedforward_channels,
-                norm=norm,
-                norm_kwargs=norm_kwargs,
-                **feedforward_kwargs,
-            )
 
     @overload
     def forward(
@@ -784,37 +740,30 @@ class TransformerBlock(torch.nn.Module):
             if chunked_result is not None:
                 return chunked_result
 
-        if self.shared_attention_norm is None:
-            q_norm = cast(torch.nn.Module, self.q_norm)
-            attention_query = q_norm(query)
-            attention_key_value = key_value
-            if isinstance(key_value, Tensor):
-                kv_norm = cast(torch.nn.Module, self.kv_norm)
-                attention_key_value = kv_norm(key_value)
-        else:
-            attention_query = self.shared_attention_norm(query)
-            attention_key_value = (
-                self.shared_attention_norm(key_value)
-                if isinstance(key_value, Tensor)
-                else key_value
-            )
-        attn_result = self.attn(
-            query=attention_query,
-            key_value=attention_key_value,
+        if self.key_value_norm is None:
+            pass
+        elif key_value is None and self.key_value_norm is not self.query_norm:
+            key_value = self.key_value_norm(query)
+        elif isinstance(key_value, Tensor):
+            key_value = self.key_value_norm(key_value)
+
+        result = self.attn(
+            query=query if self.query_norm is None else self.query_norm(query),
+            key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
             batch_size_limit=batch_size_limit,
             return_key_value=return_key_value,
         )
         if return_key_value:
-            attn_out, kv = attn_result
+            out, kv = result
         else:
-            attn_out = attn_result
+            out = result
 
-        if self.post_attention_norm is not None:
-            attn_out = self.post_attention_norm(attn_out)
-        out = query + attn_out
+        if self.post_attn_norm is not None:
+            out = self.post_attn_norm(out)
+
+        out = query + out
         out = out + self.mlp(out)
-        if return_key_value:
-            return out, kv
-        return out
+
+        return (out, kv) if return_key_value else out
