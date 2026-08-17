@@ -40,21 +40,6 @@ class InducedTransformerBlock(torch.nn.Module):
             queries from the induced context.
         device: The device.
         dtype: The dtype.
-        query_transform: Transformation applied to projected query heads in
-            both internal transformer blocks. It is copied for each block.
-        key_transform: Transformation applied to projected key heads in both
-            internal transformer blocks. It is copied for each block.
-        scale: Scaling factor passed to scaled dot-product attention in both
-            internal transformer blocks.
-        shared_attention_norm: Whether both internal transformer blocks use one
-            ``norm`` instance for their query and key/value inputs.
-        post_attention_norm: Whether both internal transformer blocks apply
-            ``norm`` to attention outputs before their residual additions.
-        feedforward_layer: Optional feed-forward layer constructor used by both
-            internal transformer blocks. Each block constructs an independent
-            instance. ``None`` uses the standard normalized GELU MLP.
-        feedforward_kwargs: Additional keyword arguments passed to
-            ``feedforward_layer`` by both internal transformer blocks.
     """
 
     def __init__(
@@ -65,14 +50,6 @@ class InducedTransformerBlock(torch.nn.Module):
         output_block: TransformerBlock,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        *,
-        query_transform: torch.nn.Module | None = None,
-        key_transform: torch.nn.Module | None = None,
-        scale: float | None = None,
-        shared_attention_norm: bool = False,
-        post_attention_norm: bool = False,
-        feedforward_layer: Callable[..., torch.nn.Module] | None = None,
-        feedforward_kwargs: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
