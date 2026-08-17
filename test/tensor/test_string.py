@@ -360,6 +360,12 @@ def test_null_handling() -> None:
 
 
 @onlyCUDA
+def test_record_stream() -> None:
+    tensor = StringTensor.from_list(["hi", None], device="cuda")
+    assert tensor.record_stream(torch.cuda.Stream()) is None
+
+
+@onlyCUDA
 def test_cudf_null_handling() -> None:
     cudf = pytest.importorskip("cudf")
     tensor = StringTensor.from_cudf(cudf.Series(["hi", None, "yo"]))
