@@ -1,4 +1,4 @@
-This package includes code derived from the TabFM implementation.
+This package includes code derived from the TabFM implementation:
 https://github.com/google-research/tabfm
 
 This package does not download, bundle, or provide pretrained TabFM weights.
