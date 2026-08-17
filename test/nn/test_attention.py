@@ -849,10 +849,13 @@ def test_transformer_block_norm_kwargs_precedence() -> None:
         channels=8,
         num_query_heads=2,
         feedforward_channels=16,
+        pre_attn_norm=True,
+        post_attn_norm=True,
         norm_kwargs={"dtype": torch.float64},
     )
     assert module.pre_norm is not None
-    for norm in (module.pre_norm, module.mlp[0]):
+    assert module.post_norm is not None
+    for norm in (module.pre_norm, module.post_norm, module.mlp[0]):
         assert next(norm.parameters()).dtype == torch.float64
 
     # The `dtype` argument still applies when `norm_kwargs` does not set it.
@@ -860,11 +863,14 @@ def test_transformer_block_norm_kwargs_precedence() -> None:
         channels=8,
         num_query_heads=2,
         feedforward_channels=16,
+        pre_attn_norm=True,
+        post_attn_norm=True,
         norm_kwargs={"eps": 1e-6},
         dtype=torch.float64,
     )
     assert module.pre_norm is not None
-    for norm in (module.pre_norm, module.mlp[0]):
+    assert module.post_norm is not None
+    for norm in (module.pre_norm, module.post_norm, module.mlp[0]):
         assert next(norm.parameters()).dtype == torch.float64
 
 
@@ -874,20 +880,25 @@ def test_transformer_block_norm_callable() -> None:
         channels=8,
         num_query_heads=2,
         feedforward_channels=16,
+        pre_attn_norm=True,
+        post_attn_norm=True,
         norm=torch.nn.RMSNorm,
         norm_kwargs={"eps": 1e-6, "dtype": torch.float64},
     )
     assert module.pre_norm is not None
-    norms = (module.pre_norm, module.mlp[0])
+    assert module.post_norm is not None
+    norms = (module.pre_norm, module.post_norm, module.mlp[0])
     for norm in norms:
         assert isinstance(norm, torch.nn.RMSNorm)
         assert norm.normalized_shape == (8,)
         assert norm.eps == 1e-6
         assert next(norm.parameters()).dtype == torch.float64
-    assert len({id(norm) for norm in norms}) == 2
+    assert len({id(norm) for norm in norms}) == 3
 
     param_ids = [{id(param) for param in norm.parameters()} for norm in norms]
     assert param_ids[0].isdisjoint(param_ids[1])
+    assert param_ids[0].isdisjoint(param_ids[2])
+    assert param_ids[1].isdisjoint(param_ids[2])
 
 
 def test_transformer_block_kv_cache() -> None:

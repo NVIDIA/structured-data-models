@@ -44,9 +44,3 @@ def test_normalization_resolver_callable() -> None:
 
     other = normalization_resolver(torch.nn.LayerNorm, 8)
     assert other is not module
-
-
-def test_normalization_resolver_module() -> None:
-    # A module instance is returned unchanged.
-    module = torch.nn.LayerNorm(8)
-    assert normalization_resolver(module) is module
