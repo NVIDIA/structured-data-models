@@ -346,6 +346,12 @@ def _alias(inp: ColumnarTensor) -> ColumnarTensor:
     )
 
 
+@ColumnarTensor.implements(aten.record_stream.default)
+def _record_stream(inp: ColumnarTensor, stream: torch.Stream) -> None:
+    for column in inp._columns:
+        column.record_stream(stream)
+
+
 @ColumnarTensor.implements(aten.to.dtype_layout)
 def _to_dtype_layout(
     inp: ColumnarTensor,

@@ -703,6 +703,14 @@ def _alias(inp: VarLenTensor) -> VarLenTensor:
     )
 
 
+@VarLenTensor.implements(aten.record_stream.default)
+def _record_stream(inp: VarLenTensor, stream: torch.Stream) -> None:
+    inp._data.record_stream(stream)
+    inp._offset.record_stream(stream)
+    if inp._valid is not None:
+        inp._valid.record_stream(stream)
+
+
 @VarLenTensor.implements(aten.to.dtype_layout)
 def _to_dtype_layout(
     inp: VarLenTensor,

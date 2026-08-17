@@ -464,6 +464,12 @@ def _alias(inp: NullableTensor) -> NullableTensor:
     )
 
 
+@NullableTensor.implements(aten.record_stream.default)
+def _record_stream(inp: NullableTensor, stream: torch.Stream) -> None:
+    inp._data.record_stream(stream)
+    inp._valid.record_stream(stream)
+
+
 @NullableTensor.implements(aten.to.dtype_layout)
 def _to_dtype_layout(
     inp: NullableTensor,

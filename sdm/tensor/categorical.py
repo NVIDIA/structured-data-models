@@ -445,6 +445,13 @@ def _alias(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(aten.alias.default(inp._code), inp._categories)
 
 
+@CategoricalTensor.implements(aten.record_stream.default)
+def _record_stream(inp: CategoricalTensor, stream: torch.Stream) -> None:
+    inp._code.record_stream(stream)
+    for category in inp._categories:
+        category.record_stream(stream)
+
+
 @CategoricalTensor.implements(aten.to.dtype_layout)
 def _to_dtype_layout(
     inp: CategoricalTensor,
