@@ -52,6 +52,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
     def __init__(self) -> None:
         super().__init__()
         self._cache: Cache | None = None
+        self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     @_maybe_inference_mode()
     def forward(
@@ -301,7 +302,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
         try:
             if x.is_cuda:
                 compute_stream = torch.cuda.current_stream(x.device)
-                transfer_stream = torch.cuda.Stream(x.device)
+                if x.device not in self._transfer_streams:
+                    transfer_stream = torch.cuda.Stream(x.device)
+                    self._transfer_streams[x.device] = transfer_stream
+                else:
+                    transfer_stream = self._transfer_streams[x.device]
                 with torch.cuda.stream(transfer_stream):
                     next_cache = next_cache.to(x.device, non_blocking=True)
 
@@ -379,6 +384,17 @@ class ICLModel(torch.nn.Module, abc.ABC):
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
         self._cache = None
+
+    def __getstate__(self) -> dict[str, object]:
+        for stream in self._transfer_streams.values():
+            stream.synchronize()
+        state = super().__getstate__()
+        state.pop("_transfer_streams", None)
+        return state
+
+    def __setstate__(self, state: dict[str, object]) -> None:
+        super().__setstate__(state)
+        self._transfer_streams = {}
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
