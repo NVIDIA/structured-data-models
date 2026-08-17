@@ -588,7 +588,7 @@ class TransformerBlock(torch.nn.Module):
         feedforward_channels: The hidden width of the MLP.
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
-        pre_attn_norm: Whether to apply normalization to the query and
+        pre_attn_norm: Whether to apply shared normalization to the query and
             key/value inputs before attention.
         post_attn_norm: Whether to apply normalization to the attention output
             before its residual addition.

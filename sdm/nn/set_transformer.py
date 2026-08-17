@@ -39,7 +39,7 @@ class InducedTransformerBlock(torch.nn.Module):
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         num_inducing_points: The number of learned inducing points :math:`M`.
-        pre_attn_norm: Whether to apply normalization to the query and
+        pre_attn_norm: Whether to apply shared normalization to the query and
             key/value inputs before each attention block.
         post_attn_norm: Whether to apply normalization to each attention output
             before its residual addition.
