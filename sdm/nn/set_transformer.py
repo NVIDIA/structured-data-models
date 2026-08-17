@@ -48,7 +48,7 @@ class InducedTransformerBlock(torch.nn.Module):
         num_inducing_points: int,
         inducing_block: TransformerBlock,
         output_block: TransformerBlock,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()

@@ -7,7 +7,7 @@ from typing import Any, Literal, overload
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Identity, Linear
+from torch.nn import Linear
 
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
@@ -625,14 +625,8 @@ class TransformerBlock(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.mlp = mlp
-        if query_norm is None:
-            query_norm = Identity()
         self.query_norm = query_norm
-        if key_value_norm is None:
-            key_value_norm = Identity()
         self.key_value_norm = key_value_norm
-        if post_attn_norm is None:
-            post_attn_norm = Identity()
         self.post_attn_norm = post_attn_norm
 
         self.attn = Attention(
@@ -732,22 +726,30 @@ class TransformerBlock(torch.nn.Module):
             if chunked_result is not None:
                 return chunked_result
 
-        attn_result = self.attn(
-            query=self.query_norm(query),
-            key_value=self.key_value_norm(key_value)
-            if isinstance(key_value, Tensor)
-            else key_value,
+        if self.key_value_norm is None:
+            pass
+        elif key_value is None and self.key_value_norm is not self.query_norm:
+            key_value = self.key_value_norm(query)
+        elif isinstance(key_value, Tensor):
+            key_value = self.key_value_norm(key_value)
+
+        result = self.attn(
+            query=query if self.query_norm is None else self.query_norm(query),
+            key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
             batch_size_limit=batch_size_limit,
             return_key_value=return_key_value,
         )
         if return_key_value:
-            attn_out, kv = attn_result
+            out, kv = result
         else:
-            attn_out = attn_result
+            out = result
 
-        out = query + self.post_attn_norm(attn_out)
+        if self.post_attn_norm is not None:
+            out = self.post_attn_norm(out)
+
+        out = query + out
         out = out + self.mlp(out)
 
         return (out, kv) if return_key_value else out
