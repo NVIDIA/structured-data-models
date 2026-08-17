@@ -26,7 +26,6 @@ class _BPETokenizer:
     Args:
         encoder: cuDF BytePairEncoder with the model's merge table.
         vocab: TokenizeVocabulary for GPU-native token-to-ID mapping.
-        byte_translate: GPT-2 byte-to-unicode character mapping.
         bos_id: Beginning-of-sequence token ID.
         eos_id: End-of-sequence token ID.
         pad_id: Padding token ID.
@@ -34,17 +33,16 @@ class _BPETokenizer:
         max_length: Maximum sequence length.
     """
 
-    _GPT2_PAT = (
+    _BYTE_LEVEL_PAT = (
         r"""'s|'t|'re|'ve|'m|'ll|'d"""
-        r"""| ?[a-zA-Z]+| ?[0-9]+| ?[^\sa-zA-Z0-9]+"""
-        r"""|\s+"""
+        r"""| ?[^\W\d_]+| ?\d+| ?(?:[^\s\w]|_)+"""
+        r"""|\s+| ?."""
     )
 
     def __init__(
         self,
         encoder: BytePairEncoder,
         vocab: TokenizeVocabulary,
-        byte_translate: dict[str, str],
         bos_id: int,
         eos_id: int,
         pad_id: int,
@@ -53,7 +51,21 @@ class _BPETokenizer:
     ) -> None:
         self.encoder = encoder
         self.vocab = vocab
-        self.byte_translate = byte_translate
+        byte_values = [char.encode() for char in self._byte_encoder()]
+        device = torch.device("cuda", torch.cuda.current_device())
+        self._byte_values = torch.tensor(
+            [
+                [value[0], value[1] if len(value) == 2 else 0]
+                for value in byte_values
+            ],
+            dtype=torch.uint8,
+            device=device,
+        )
+        self._byte_lengths = torch.tensor(
+            [len(value) for value in byte_values],
+            dtype=torch.long,
+            device=device,
+        )
         self.bos_id = bos_id
         self.eos_id = eos_id
         self.pad_id = pad_id
@@ -61,8 +73,8 @@ class _BPETokenizer:
         self.max_length = max_length
 
     @staticmethod
-    def _byte_to_unicode() -> dict[str, str]:
-        """GPT-2 byte-to-unicode character mapping.
+    def _byte_encoder() -> tuple[str, ...]:
+        """Return the byte-to-Unicode alphabet used by ByteLevel BPE.
 
         Maps every byte to a visible Unicode character so that BPE merge
         tables can use printable tokens for all byte values.  Space (0x20)
@@ -80,7 +92,10 @@ class _BPETokenizer:
                 bs.append(b)
                 cs.append(256 + n)
                 n += 1
-        return {chr(b): chr(c) for b, c in zip(bs, cs)}
+        byte_encoder = [""] * 256
+        for byte, codepoint in zip(bs, cs):
+            byte_encoder[byte] = chr(codepoint)
+        return tuple(byte_encoder)
 
     @classmethod
     def from_model(
@@ -105,6 +120,14 @@ class _BPETokenizer:
         from cudf.core.byte_pair_encoding import BytePairEncoder
 
         tok_json = json.loads(tokenizer.backend_tokenizer.to_str())
+        pre_tokenizer = tok_json["pre_tokenizer"]
+        if (
+            tok_json["normalizer"] is not None
+            or pre_tokenizer["type"] != "ByteLevel"
+            or pre_tokenizer["add_prefix_space"]
+        ):
+            return None
+
         merges = tok_json["model"]["merges"]
         encoder = BytePairEncoder(
             cudf.Series([f"{a} {b}" for a, b in merges]),
@@ -123,13 +146,50 @@ class _BPETokenizer:
         return cls(
             encoder=encoder,
             vocab=vocab,
-            byte_translate=cls._byte_to_unicode(),
             bos_id=tokenizer.bos_token_id,
             eos_id=tokenizer.eos_token_id,
             pad_id=tokenizer.pad_token_id,
             unk_id=tokenizer.unk_token_id or 3,
             max_length=model.max_seq_length or tokenizer.model_max_length,
         )
+
+    def _translate_bytes(self, words: cudf.Series) -> cudf.Series:
+        """Map raw UTF-8 bytes to the ByteLevel BPE Unicode alphabet."""
+        words_tensor = StringTensor.from_cudf(words)
+        data = words_tensor._data
+        byte_ids = data.long()
+        byte_values = self._byte_values.to(data.device)[byte_ids]
+        byte_lengths = self._byte_lengths.to(data.device)[byte_ids]
+
+        # Each input byte expands to one or two UTF-8 bytes. Allocate the
+        # bounded maximum to avoid reading the output size back on the host.
+        translated = torch.empty(
+            data.numel() * 2,
+            dtype=torch.uint8,
+            device=data.device,
+        )
+        expanded_offsets = torch.zeros(
+            data.numel() + 1,
+            dtype=torch.long,
+            device=data.device,
+        )
+        torch.cumsum(byte_lengths, dim=0, out=expanded_offsets[1:])
+        positions = expanded_offsets[:-1]
+        translated[positions] = byte_values[:, 0]
+        expanded = byte_lengths == 2
+        translated[positions[expanded] + 1] = byte_values[expanded, 1]
+
+        offsets = expanded_offsets[words_tensor._offset.long()].to(
+            words_tensor._offset.dtype
+        )
+        return StringTensor(
+            data=translated,
+            offset=offsets,
+            valid=words_tensor._valid,
+            size=words_tensor.size(),
+            stride=words_tensor.stride(),
+            storage_offset=int(words_tensor.storage_offset()),
+        ).to_cudf()
 
     def tokenize(
         self,
@@ -146,11 +206,11 @@ class _BPETokenizer:
 
         num_strings = len(text_series)
 
-        # GPT-2 byte-level pre-tokenization on GPU
-        word_lists = text_series.str.findall(self._GPT2_PAT)
+        # ByteLevel pre-tokenization on GPU
+        word_lists = text_series.str.findall(self._BYTE_LEVEL_PAT)
         flat_words = word_lists.explode().reset_index(drop=True)
-        flat_words = flat_words.str.translate(self.byte_translate)
         flat_words = flat_words.loc[flat_words.notna()].reset_index(drop=True)
+        flat_words = self._translate_bytes(flat_words)
 
         # BPE encode each word independently (no space delimiter ambiguity)
         encoded = self.encoder(flat_words)
