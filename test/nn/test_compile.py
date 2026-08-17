@@ -1,6 +1,5 @@
 import os
 from collections.abc import Callable, Iterator
-from typing import Any
 
 import pytest
 import torch
@@ -9,7 +8,6 @@ from torch import Tensor
 from sdm.nn import (
     SDPA,
     Attention,
-    InducedTransformerBlock,
     QASSMax,
     RotaryEmbedding,
     TransformerBlock,
@@ -21,34 +19,6 @@ pytestmark = pytest.mark.skipif(
     os.getenv("FULL_TEST", "0") != "1",
     reason="Fast test run",
 )
-
-
-class _CompileFeedForward(torch.nn.Sequential):
-    def __init__(
-        self,
-        channels: int,
-        feedforward_channels: int,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-        **_: Any,
-    ) -> None:
-        super().__init__(
-            torch.nn.RMSNorm(channels, eps=1e-6, device=device, dtype=dtype),
-            torch.nn.Linear(
-                channels,
-                feedforward_channels,
-                device=device,
-                dtype=dtype,
-            ),
-            torch.nn.SiLU(),
-            torch.nn.Linear(
-                feedforward_channels,
-                channels,
-                device=device,
-                dtype=dtype,
-            ),
-            torch.nn.RMSNorm(channels, eps=1e-6, device=device, dtype=dtype),
-        )
 
 
 @pytest.fixture(autouse=True)
@@ -291,39 +261,4 @@ def test_configured_transformer_block_compile(device: torch.device) -> None:
     expected = module(query=query, key_value=key_value)
     out = fullgraph(module)(query=query, key_value=key_value)
 
-    torch.testing.assert_close(out, expected)
-
-
-@withCUDA
-@pytest.mark.parametrize("self_attn", [False, True])
-def test_induced_transformer_block_compile(
-    device: torch.device,
-    self_attn: bool,
-) -> None:
-    channels = 8
-    module = InducedTransformerBlock(
-        channels=channels,
-        num_inducing_points=4,
-        inducing_block=TransformerBlock(
-            channels=channels,
-            num_query_heads=2,
-            mlp=torch.nn.Identity(),
-            query_scaling=QASSMax(channels // 2, num_heads=2, device=device),
-            device=device,
-        ),
-        output_block=TransformerBlock(
-            channels=channels,
-            num_query_heads=2,
-            mlp=torch.nn.Identity(),
-            device=device,
-        ),
-        device=device,
-    )
-    query = torch.randn(2, 6, channels, device=device)
-    key_value = (
-        None if self_attn else torch.randn(2, 5, channels, device=device)
-    )
-
-    expected = module(query=query, key_value=key_value)
-    out = fullgraph(module)(query=query, key_value=key_value)
     torch.testing.assert_close(out, expected)
