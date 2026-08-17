@@ -5,7 +5,7 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_cell_embedder_matches_google_golden(device: torch.device) -> None:
+def test_cell_embedding(device: torch.device) -> None:
     module = CellEmbedding(
         channels=8,
         group_size=3,
