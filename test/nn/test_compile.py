@@ -8,6 +8,7 @@ from torch import Tensor
 from sdm.nn import (
     SDPA,
     Attention,
+    InducedTransformerBlock,
     QASSMax,
     RotaryEmbedding,
     TransformerBlock,
@@ -242,23 +243,35 @@ def test_transformer_block_compile(
 
 
 @withCUDA
-def test_configured_transformer_block_compile(device: torch.device) -> None:
+@pytest.mark.parametrize("self_attn", [False, True])
+def test_induced_transformer_block_compile(
+    device: torch.device,
+    self_attn: bool,
+) -> None:
     channels = 8
-    module = TransformerBlock(
+    module = InducedTransformerBlock(
         channels=channels,
-        num_query_heads=2,
-        feedforward_channels=16,
-        norm=torch.nn.RMSNorm,
-        norm_kwargs={"eps": 1e-6},
-        shared_attention_norm=True,
-        post_attention_norm=True,
-        feedforward_layer=_CompileFeedForward,
+        num_inducing_points=4,
+        inducing_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            mlp=torch.nn.Identity(),
+            query_scaling=QASSMax(channels // 2, num_heads=2, device=device),
+            device=device,
+        ),
+        output_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            mlp=torch.nn.Identity(),
+            device=device,
+        ),
         device=device,
     )
-    query = torch.randn(2, 3, channels, device=device)
-    key_value = torch.randn(2, 5, channels, device=device)
+    query = torch.randn(2, 6, channels, device=device)
+    key_value = (
+        None if self_attn else torch.randn(2, 5, channels, device=device)
+    )
 
     expected = module(query=query, key_value=key_value)
     out = fullgraph(module)(query=query, key_value=key_value)
-
     torch.testing.assert_close(out, expected)
