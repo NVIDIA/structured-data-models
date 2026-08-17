@@ -5,13 +5,7 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import (
-    Embedding,
-    LayerNorm,
-    Linear,
-    ModuleList,
-    Parameter,
-)
+from torch.nn import Embedding, LayerNorm, Linear, ModuleList, Parameter
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
