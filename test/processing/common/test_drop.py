@@ -6,10 +6,6 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 
 def _mixed_table() -> TableTensor:
     return TableTensor(
-        columns={
-            "numerical": ("x0", "x1"),
-            "categorical": ("kind",),
-        },
         numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
         categorical=CategoricalTensor(
             code=torch.tensor([[0], [1]], dtype=torch.int32),
@@ -24,7 +20,7 @@ def test_drop_stypes_removes_configured_stypes() -> None:
     output = sp.DropStypes(Stype.numerical).fit_transform(table)
 
     assert output.columns[Stype.numerical] == ()
-    assert output.columns[Stype.categorical] == ("kind",)
+    assert output.columns[Stype.categorical] == ("cat_0",)
     assert torch.equal(output.categorical.code, table.categorical.code)
 
 

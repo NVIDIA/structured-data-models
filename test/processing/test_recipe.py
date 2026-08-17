@@ -10,7 +10,7 @@ from sdm.testing import withCUDA
 def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     if numerical is None:
         numerical = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    return TableTensor.from_tensor(numerical, columns=("x0", "x1"))
+    return TableTensor.from_tensor(numerical)
 
 
 def test_recipe_normalizes_empty_roles_and_repr() -> None:
@@ -84,10 +84,6 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     recipe = TabICLv2.default_recipe()
 
     features = TableTensor(
-        columns={
-            "numerical": ("a", "b"),
-            "categorical": ("kind",),
-        },
         numerical=torch.randn(8, 2, device=device),
         categorical=CategoricalTensor(
             code=torch.tensor(
@@ -101,10 +97,7 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
             ),
         ),
     )
-    target = TableTensor.from_tensor(
-        torch.randn(8, 1, device=device),
-        columns=("y",),
-    )
+    target = TableTensor.from_tensor(torch.randn(8, 1, device=device))
 
     model_features = recipe.features.fit_transform(features)
     model_target = recipe.target.fit_transform(target)
@@ -112,7 +105,11 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     assert model_features.size() == features.size()
     assert model_features.numerical.device == device
     assert model_features.categorical.size(-1) == 0
-    assert set(model_features.columns[Stype.numerical]) == {"a", "b", "kind"}
+    assert set(model_features.columns[Stype.numerical]) == {
+        "num_0",
+        "num_1",
+        "cat_0",
+    }
     assert torch.isfinite(model_features.numerical).all()
 
     assert model_target.numerical.device == device
@@ -122,6 +119,6 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
 
     # The original categorical column uses sparse codes 1 and 3.
     transformed = TabICLv2.default_recipe().target.fit_transform(
-        features.select_columns("kind")
+        features.select_columns("cat_0")
     )
     assert transformed.categorical.unique().sort().values.tolist() == [0, 1]

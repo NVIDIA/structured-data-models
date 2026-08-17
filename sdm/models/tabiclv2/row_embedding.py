@@ -8,7 +8,8 @@ from torch import Tensor
 from torch.nn import Embedding, LayerNorm, Linear, ModuleList, Parameter
 
 from sdm.cache import Cache, KVCacheEntry
-from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
+from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
+from sdm.nn import InducedTransformerBlock, RotaryEmbedding
 from sdm.nn.memory import (
     attention_batch_size_limit,
     cuda_attention_memory_limit,
@@ -46,12 +47,21 @@ class RowEmbedding(torch.nn.Module):
         self.col_layers = ModuleList(
             InducedTransformerBlock(
                 channels=channels,
-                num_query_heads=num_heads,
-                feedforward_channels=2 * channels,
                 num_inducing_points=num_inducing_points,
-                qassmax=True,
-                norm="layer_norm",
-                norm_kwargs={"bias": norm_bias},
+                inducing_block=TabICLv2TransformerBlock(
+                    channels=channels,
+                    num_heads=num_heads,
+                    norm_bias=norm_bias,
+                    qassmax=True,
+                    **factory_kwargs,
+                ),
+                output_block=TabICLv2TransformerBlock(
+                    channels=channels,
+                    num_heads=num_heads,
+                    norm_bias=norm_bias,
+                    qassmax=False,
+                    **factory_kwargs,
+                ),
                 **factory_kwargs,
             )
             for _ in range(num_layers)
@@ -62,24 +72,22 @@ class RowEmbedding(torch.nn.Module):
         )
         torch.nn.init.trunc_normal_(self.readout_token, std=0.02)
 
-        self.row_layers = ModuleList(
-            TransformerBlock(
-                channels=channels,
-                num_query_heads=num_heads,
-                feedforward_channels=2 * channels,
-                qassmax=False,
-                norm="layer_norm",
-                norm_kwargs={"bias": norm_bias},
-                **factory_kwargs,
-            )
-            for _ in range(num_layers)
-        )
-
-        self.rope = RotaryEmbedding(
+        rope = RotaryEmbedding(
             channels=channels // num_heads,
             layout="split_half",
             theta=100_000,
             **factory_kwargs,
+        )
+        self.row_layers = ModuleList(
+            TabICLv2TransformerBlock(
+                channels=channels,
+                num_heads=num_heads,
+                norm_bias=norm_bias,
+                qassmax=False,
+                rope=rope,
+                **factory_kwargs,
+            )
+            for _ in range(num_layers)
         )
 
         self.norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
@@ -211,7 +219,6 @@ class RowEmbedding(torch.nn.Module):
             x = row_layer(
                 query=query,
                 key_value=x,  # [..., R, K + C, D]
-                rope=self.rope,
                 batch_size_limit=row_batch_size_limit,
             )  # [..., R, K + C, D] or [..., R, K, D]
 

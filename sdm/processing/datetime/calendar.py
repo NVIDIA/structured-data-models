@@ -17,6 +17,8 @@ class AddCalendarFields(Processor):
 
     Args:
         fields: The calendar fields to add.
+        encoding: How to encode each field. ``"raw"`` uses raw integer values.
+            ``"cyclic"`` uses sine and cosine values.
     """
 
     handles_stypes = frozenset({Stype.datetime})
@@ -33,56 +35,117 @@ class AddCalendarFields(Processor):
                 "month",
             ]
         ],
+        encoding: Literal["raw", "cyclic"] = "raw",
     ) -> None:
         super().__init__()
+
+        if len(fields) != len(set(fields)):
+            raise ValueError("Expected datetime fields to be unique")
+
         self.fields = fields
+        self.encoding = encoding
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        if table.datetime.size(-1) == 0 or len(self.fields) == 0:
+        if len(self.fields) == 0:
             return table
 
         datetime = table.datetime
         na_mask = datetime == NaT
 
-        outs: list[Tensor] = []
-        for field in self.fields:
-            if field in ("minute", "hour"):
-                time_of_day = datetime.remainder(US_PER_DAY)
-                if field == "minute":
-                    out = time_of_day.div(US_PER_MINUTE, rounding_mode="floor")
-                    out = out.remainder(60)
-                    outs.append(out)
-                else:
-                    assert field == "hour"
-                    out = time_of_day.div(US_PER_HOUR, rounding_mode="floor")
-                    outs.append(out)
-            elif field in ("weekday", "day_of_month", "month"):
-                days = datetime.div(US_PER_DAY, rounding_mode="floor")
-                if field == "weekday":
-                    out = (days + 3).remainder(7)
-                    outs.append(out)
-                else:
-                    _, month, day = _civil_from_days(days)
-                    if field == "month":
-                        outs.append(month - 1)
-                    else:
-                        assert field == "day_of_month"
-                        outs.append(day - 1)
-            else:
-                raise ValueError(
-                    f"{self.__class__.__name__!r} received unsupported "
-                    f"field {field!r}"
-                )
+        days: Tensor | None = None
+        if len({"weekday", "day_of_month", "month"} & set(self.fields)) > 0:
+            days = datetime.div(US_PER_DAY, rounding_mode="floor")
 
-        out = torch.stack(outs, dim=-1).to(table.numerical.dtype)
+        year = month = day = None
+        if len({"day_of_month", "month"} & set(self.fields)) > 0:
+            assert days is not None
+            year, month, day = _civil_from_days(days)
+
+        time_of_day: Tensor | None = None
+        if len({"minute", "hour"} & set(self.fields)) > 0:
+            time_of_day = datetime.remainder(US_PER_DAY)
+
+        outs: dict[str, Tensor] = {}
+        for field in self.fields:
+            if field == "minute":
+                assert time_of_day is not None
+                out = time_of_day.div(US_PER_MINUTE, rounding_mode="floor")
+                outs[field] = out.remainder(60)
+                continue
+
+            if field == "hour":
+                assert time_of_day is not None
+                out = time_of_day.div(US_PER_HOUR, rounding_mode="floor")
+                outs[field] = out
+                continue
+
+            if field == "weekday":
+                assert days is not None
+                outs[field] = (days + 3).remainder(7)
+                continue
+
+            if field == "month":
+                assert month is not None
+                outs[field] = month - 1
+                continue
+
+            if field == "day_of_month":
+                assert day is not None
+                outs[field] = day - 1
+                continue
+
+            raise ValueError(
+                f"{self.__class__.__name__!r} received unsupported "
+                f"field {field!r}"
+            )
+
+        if self.encoding == "cyclic":
+            for field, out in outs.items():
+                if field == "minute":
+                    outs[field] = out / 60.0
+                elif field == "hour":
+                    outs[field] = out / 24.0
+                elif field == "weekday":
+                    outs[field] = out / 7.0
+                elif field == "month":
+                    outs[field] = out / 12.0
+                else:
+                    assert field == "day_of_month"
+                    assert year is not None
+                    assert month is not None
+                    period = torch.tensor(
+                        [-1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+                        device=year.device,
+                    )
+                    period = period[month]
+                    leap_year = (year.remainder(4) == 0) & (
+                        (year.remainder(100) != 0) | (year.remainder(400) == 0)
+                    )
+                    period = torch.where(leap_year & (month == 2), 29, period)
+                    outs[field] = out / period
+
+        out = torch.stack(list(outs.values()), dim=-1)
+        out = out.to(table.numerical.dtype)
         out = out.masked_fill(na_mask.unsqueeze(-1), float("nan"))
         out = out.flatten(-2, -1)
 
-        columns = tuple(
-            f"{column}__{field}"
-            for column in table.columns[Stype.datetime]
-            for field in self.fields
-        )
+        if self.encoding == "cyclic":
+            out *= 2 * torch.pi
+            out = torch.stack([out.sin(), out.cos()], dim=-1).flatten(-2, -1)
+
+            columns = tuple(
+                f"{column}__{field}__{fn}"
+                for column in table.columns[Stype.datetime]
+                for field in self.fields
+                for fn in ("sin", "cos")
+            )
+        else:
+            assert self.encoding == "raw"
+            columns = tuple(
+                f"{column}__{field}"
+                for column in table.columns[Stype.datetime]
+                for field in self.fields
+            )
 
         out_table = TableTensor(
             columns={Stype.numerical: columns},
@@ -93,12 +156,15 @@ class AddCalendarFields(Processor):
 
     def __repr__(self, *, indent: int = 0) -> str:
         field_repr = "".join(
-            f"{' ' * (indent + 2)}{field!r},\n" for field in self.fields
+            f"{' ' * (indent + 4)}{field!r},\n" for field in self.fields
         )
         return (
-            f"{' ' * indent}{self.__class__.__name__}([\n"
+            f"{' ' * indent}{self.__class__.__name__}(\n"
+            f"{' ' * (indent + 2)}fields=[\n"
             f"{field_repr}"
-            f"{' ' * indent}])"
+            f"{' ' * (indent + 2)}],\n"
+            f"{' ' * (indent + 2)}encoding={self.encoding!r},\n"
+            f"{' ' * indent})"
         )
 
 

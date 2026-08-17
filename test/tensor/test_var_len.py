@@ -150,6 +150,23 @@ def test_arrow() -> None:
     assert tensor.tolist() == [[1, 2], None, [3]]
 
 
+def test_arrow_bool() -> None:
+    tensor = VarLenTensor.from_arrow(
+        pa.array(
+            [[True, False], None, [True]],
+            type=pa.list_(pa.bool_()),
+        ),
+    )
+
+    assert tensor.size() == (3,)
+    assert tensor.dtype == torch.bool
+    assert tensor._data.equal(torch.tensor([True, False, True]))
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([True, False, True]))
+    assert tensor.to_arrow().type == pa.list_(pa.bool_())
+    assert tensor.to_arrow().to_pylist() == [[True, False], None, [True]]
+
+
 def test_list() -> None:
     data = [
         [[1, 2], [3, 4, 5]],
@@ -401,6 +418,9 @@ def test_isnan_isfinite() -> None:
     out = tensor.isfinite()
     assert out.dtype == torch.bool
     assert out.equal(torch.tensor([True, False, True]))
+
+    out[0] = False
+    assert tensor.tolist() == [[1, 2], None, [3]]
 
 
 def test_masked_select() -> None:

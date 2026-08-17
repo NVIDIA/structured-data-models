@@ -4,18 +4,8 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import TableTensor
 from sdm.tensor import EnsembleTable
-
-
-def _categorical_target() -> TableTensor:
-    return TableTensor(
-        columns={"categorical": ("target",)},
-        categorical=CategoricalTensor(
-            code=torch.tensor([[0], [1]], dtype=torch.int32),
-            categories=(StringTensor.from_list(["a", "b"]),),
-        ),
-    )
 
 
 def _numerical_table(

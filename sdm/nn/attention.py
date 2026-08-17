@@ -2,16 +2,15 @@
 
 from collections.abc import Callable
 from math import prod
-from typing import Any, Literal, cast, overload
+from typing import Any, Literal, overload
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
+from torch.nn import Linear
 
 from sdm.cache import KVCacheEntry
-from sdm.nn import RotaryEmbedding
-from sdm.nn.resolver import normalization_resolver
+from sdm.nn import QueryScaling
 
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
@@ -94,7 +93,6 @@ def _chunk_attention(
     key_value: Tensor | KVCacheEntry | None,
     seqused_key_value: Tensor | None,
     attn_mask: Tensor | None,
-    rope: RotaryEmbedding | None,
     return_key_value: bool,
     batch_size_limit: int,
 ) -> Tensor | tuple[Tensor, KVCacheEntry] | None:
@@ -139,7 +137,6 @@ def _chunk_attention(
             attn_mask=_optional_batch_chunk(
                 attn_mask, batch_shape, 2, start, end
             ),
-            rope=rope,
             return_key_value=return_key_value,
             batch_size_limit=batch_size_limit,
         )
@@ -190,133 +187,33 @@ def _chunk_attention(
     )
 
 
-class QASSMax(torch.nn.Module):
-    r"""Query-Aware Scalable SoftMax (QASSMax).
-
-    This scaling method was introduced in the `"TabICLv2: A better, faster,
-    scalable, and open tabular foundation model"
-    <https://arxiv.org/abs/2602.11139>`_ paper as a temperature-scaling method
-    for attention.
-
-    For a query tensor :math:`q` and key length :math:`n`, this module returns
-    a scaled query
-
-    .. math::
-
-        \tilde{q}_{hi} = q_{hi} \cdot
-          \mathrm{MLP}_{\mathrm{base}}(\log n)_{hi} \cdot
-          \left(1 + \tanh(\mathrm{MLP}_{\mathrm{gate}}(q_h)_i)\right),
-
-    where :math:`h` indexes attention heads, :math:`i` indexes head channels,
-    :math:`\mathrm{MLP}_{\mathrm{base}}` maps the log key length to per-head,
-    per-channel scale factors, and :math:`\mathrm{MLP}_{\mathrm{gate}}` maps
-    each per-head query vector to a bounded query-dependent gate.
-
-    Multiplying the query scales the subsequent attention logits while keeping
-    the attention computation compatible with standard softmax kernels.
-    The length-dependent factor counteracts attention fading as the number of
-    keys grows, while the query-dependent gate lets the scale vary across
-    queries.
-
-    Args:
-        channels: The number of channels per attention head.
-        num_heads: The number of query attention heads.
-        hidden_channels: The hidden width of the scale and gate MLPs.
-        device: The device.
-        dtype: The dtype.
-    """
-
-    def __init__(
-        self,
-        channels: int,
-        num_heads: int,
-        hidden_channels: int = 64,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
-        self.scale = Sequential(
-            Linear(1, hidden_channels, **factory_kwargs),
-            GELU(),
-            Linear(hidden_channels, num_heads * channels, **factory_kwargs),
-        )
-        self.gate = Sequential(
-            Linear(channels, hidden_channels, **factory_kwargs),
-            GELU(),
-            Linear(hidden_channels, channels, **factory_kwargs),
-        )
-
-        torch.nn.init.zeros_(cast(Linear, self.gate[-1]).weight)
-        torch.nn.init.zeros_(cast(Linear, self.gate[-1]).bias)
-
-    def forward(
-        self,
-        query: Tensor,  # [..., S, H, C]
-        key_len: Tensor | int,  # [..., 1] or [..., S] or scalar
-    ) -> Tensor:  # [..., S, H, C]
-        r"""The forward pass.
-
-        Args:
-            query: The query tensor to scale, with shape ``[..., S, H, C]``.
-                ``S`` is the query sequence length, ``H`` is the number of
-                attention heads, and ``C`` is the channels per head.
-            key_len: The number of valid keys used to scale each query.
-                An ``int`` denotes one shared key length for every query.
-                A tensor shaped ``[..., 1]`` denotes one key length per batch
-                item, shared across all query positions in ``S``.
-                A tensor shaped ``[..., S]`` denotes one individual key length
-                per query position.
-
-        Returns:
-            Tensor with shape ``[..., S, H, C]``.
-        """
-        if isinstance(key_len, Tensor):
-            log_key_len = key_len.float().clamp(min=1.0).log().to(query.dtype)
-        else:
-            one = query.new_ones((), dtype=torch.float32)
-            log_key_len = (one * key_len).clamp(min=1.0).log().to(query.dtype)
-            log_key_len = log_key_len.view([1] * (query.dim() - 2))
-        scale = self.scale(log_key_len.unsqueeze(-1))  # [..., S or 1, H * C]
-        scale = scale.unflatten(-1, (query.size(-2), query.size(-1)))
-        gate = 1 + self.gate(query).tanh()
-        return query * scale * gate
-
-
 class SDPA(torch.nn.Module):
     r"""Scaled Dot-Product Attention (SDPA).
 
     This module wraps :func:`torch.nn.functional.scaled_dot_product_attention`
     and extends it by arbitrary batch dimensions, optional inference-time
-    batch chunking, :class:`QASSMax`-based temperature-scaling, and padding
-    support for key/value pairs.
+    batch chunking, query-scaling, and padding support for key/value pairs.
 
     Args:
-        channels: The number of channels per attention head.
         num_query_heads: The number of query attention heads.
         num_key_value_heads: The number of key/value attention heads.
             Setting this below ``num_query_heads`` enables grouped-query
             attention (GQA); setting it to ``1`` enables multi-query attention
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
-        qassmax: Whether to scale queries via :class:`QASSMax`.
+        query_scaling: Query scaling module to scale projected query heads
+            before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
-        device: The device.
-        dtype: The dtype.
     """
 
     def __init__(
         self,
-        channels: int,
         num_query_heads: int,
         num_key_value_heads: int | None = None,
-        qassmax: bool = False,
+        query_scaling: QueryScaling | None = None,
         scale: float | None = None,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -327,18 +224,10 @@ class SDPA(torch.nn.Module):
                 f"`num_key_value_heads` ({num_key_value_heads})"
             )
 
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
         self.num_query_heads = num_query_heads
         self.num_key_value_heads = num_key_value_heads
+        self.query_scaling = query_scaling
         self.scale = scale
-        self.qassmax: QASSMax | None = None
-        if qassmax:
-            self.qassmax = QASSMax(
-                channels=channels,
-                num_heads=num_query_heads,
-                **factory_kwargs,
-            )
 
     def forward(
         self,
@@ -424,14 +313,14 @@ class SDPA(torch.nn.Module):
                 assert out is not None
                 return out.view(batch_shape + query_size)
 
-        if self.qassmax is not None:
+        if self.query_scaling is not None:
             if seqused_key_value is not None:
                 key_len = seqused_key_value.unsqueeze(-1)
             elif attn_mask is not None and attn_mask.size(-1) > 1:
                 key_len = attn_mask.sum(dim=-1)
             else:
                 key_len = key.size(-3)
-            query = self.qassmax(query, key_len=key_len)
+            query = self.query_scaling(query, key_len=key_len)
 
         # Broadcast and flatten batch dimensions => [B, S, H, C].
         query_size = query.size()[-3:]
@@ -486,7 +375,15 @@ class Attention(torch.nn.Module):
             attention (GQA); setting it to ``1`` enables multi-query attention
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
-        qassmax: Whether to scale queries with :class:`QASSMax`.
+        query_transform: Transformation applied to projected query heads before
+            scaled dot-product attention.
+        key_transform: Transformation applied to projected key heads before
+            scaled dot-product attention.
+        query_scaling: Query scaling module to scale projected query heads
+            before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
+            ``None`` uses ``1 / sqrt(channels_per_head)``.
         device: The device.
         dtype: The dtype.
     """
@@ -496,7 +393,10 @@ class Attention(torch.nn.Module):
         channels: int,
         num_query_heads: int,
         num_key_value_heads: int | None = None,
-        qassmax: bool = False,
+        query_transform: torch.nn.Module | None = None,
+        key_transform: torch.nn.Module | None = None,
+        query_scaling: QueryScaling | None = None,
+        scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -521,12 +421,13 @@ class Attention(torch.nn.Module):
         self.qkv_lin = Linear(
             channels, self.q_dim + 2 * self.kv_dim, **factory_kwargs
         )
+        self.query_transform = query_transform
+        self.key_transform = key_transform
         self.sdpa = SDPA(
-            channels=self.head_dim,
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
-            qassmax=qassmax,
-            **factory_kwargs,
+            query_scaling=query_scaling,
+            scale=scale,
         )
         self.out_lin = Linear(channels, channels, **factory_kwargs)
 
@@ -540,7 +441,6 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | None = None,
@@ -553,7 +453,6 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[True],
         batch_size_limit: int | None = None,
@@ -566,7 +465,6 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: bool,
         batch_size_limit: int | None = None,
@@ -578,7 +476,6 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None = None,
         return_key_value: bool = False,
         *,
         batch_size_limit: int | None = None,
@@ -598,8 +495,6 @@ class Attention(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
-            rope: Rotary Positional Embedding applied after query/key
-                projection.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
             batch_size_limit: Maximum number of batch elements processed at
@@ -619,7 +514,6 @@ class Attention(torch.nn.Module):
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
-                rope=rope,
                 return_key_value=return_key_value,
                 batch_size_limit=batch_size_limit,
             )
@@ -660,11 +554,13 @@ class Attention(torch.nn.Module):
                 -1, [self.num_key_value_heads, self.head_dim]
             )
 
-        if rope is not None:
-            query = rope(query)
-            if not isinstance(key_value, KVCacheEntry):
-                key = rope(key)
-            assert query.dtype == key.dtype == value.dtype
+        if self.query_transform is not None:
+            query = self.query_transform(query)
+        if (
+            not isinstance(key_value, KVCacheEntry)
+            and self.key_transform is not None
+        ):
+            key = self.key_transform(key)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
@@ -683,25 +579,28 @@ class Attention(torch.nn.Module):
 
 
 class TransformerBlock(torch.nn.Module):
-    r"""Transformer block with pre-norm attention and feedforward modules.
-
-    Supports optional :class:`RotaryEmbedding` on projected query/key tensors
-    and optional :class:`QASSMax` query scaling inside attention.
+    r"""Transformer block with normalization and feedforward residual modules.
 
     Args:
         channels: The number of input and output channels.
         num_query_heads: The number of query attention heads.
-        feedforward_channels: The hidden width of the MLP.
+        mlp: Feedforward module applied after the attention residual.
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
-        qassmax: Whether to scale queries with :class:`QASSMax`.
-        norm: The normalization layer name or a callable returning the
-            normalization layer. The callable is invoked once per norm site,
-            so each of the three sites gets a fresh instance. A module
-            instance is shared across all three sites.
-        norm_kwargs: Additional keyword arguments passed to the normalization
-            layer constructor. Takes precedence over ``device`` and
-            ``dtype``.
+        query_norm: Normalization applied to query inputs before attention.
+        key_value_norm: Normalization applied to key/value inputs before
+            attention.
+        post_attn_norm: Normalization applied to the attention output before
+            its residual addition.
+        query_transform: Transformation applied to projected query heads before
+            scaled dot-product attention.
+        key_transform: Transformation applied to projected key heads before
+            scaled dot-product attention.
+        query_scaling: Query scaling module to scale projected query heads
+            before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
+            ``None`` uses ``1 / sqrt(channels_per_head)``.
         device: The device.
         dtype: The dtype.
     """
@@ -710,37 +609,36 @@ class TransformerBlock(torch.nn.Module):
         self,
         channels: int,
         num_query_heads: int,
-        feedforward_channels: int,
+        mlp: torch.nn.Module,
         num_key_value_heads: int | None = None,
-        qassmax: bool = False,
-        norm: str | Callable[..., torch.nn.Module] = "layer_norm",
-        norm_kwargs: dict[str, Any] | None = None,
+        query_norm: torch.nn.Module | None = None,
+        key_value_norm: torch.nn.Module | None = None,
+        post_attn_norm: torch.nn.Module | None = None,
+        query_transform: torch.nn.Module | None = None,
+        key_transform: torch.nn.Module | None = None,
+        query_scaling: QueryScaling | None = None,
+        scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        # User `norm_kwargs` win; `device`/`dtype` fill unspecified keys.
-        norm_kwargs = {**factory_kwargs, **(norm_kwargs or {})}
 
-        self.q_norm = normalization_resolver(norm, channels, **norm_kwargs)
-        self.kv_norm = normalization_resolver(norm, channels, **norm_kwargs)
+        self.mlp = mlp
+        self.query_norm = query_norm
+        self.key_value_norm = key_value_norm
+        self.post_attn_norm = post_attn_norm
+
         self.attn = Attention(
             channels=channels,
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
-            qassmax=qassmax,
+            query_transform=query_transform,
+            key_transform=key_transform,
+            query_scaling=query_scaling,
+            scale=scale,
             **factory_kwargs,
         )
-        self.mlp = Sequential(
-            normalization_resolver(norm, channels, **norm_kwargs),
-            Linear(channels, feedforward_channels, **factory_kwargs),
-            GELU(),
-            Linear(feedforward_channels, channels, **factory_kwargs),
-        )
-
-        torch.nn.init.zeros_(cast(Linear, self.mlp[-1]).weight)
-        torch.nn.init.zeros_(cast(Linear, self.mlp[-1]).bias)
 
     @overload
     def forward(
@@ -749,7 +647,6 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | None = None,
@@ -762,7 +659,6 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[True],
         batch_size_limit: int | None = None,
@@ -775,7 +671,6 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: bool,
         batch_size_limit: int | None = None,
@@ -787,7 +682,6 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None = None,
         return_key_value: bool = False,
         *,
         batch_size_limit: int | None = None,
@@ -807,8 +701,6 @@ class TransformerBlock(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
-            rope: Rotary Positional Embedding applied after query/key
-                projection.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
             batch_size_limit: Maximum number of batch elements processed at
@@ -828,31 +720,36 @@ class TransformerBlock(torch.nn.Module):
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
-                rope=rope,
                 return_key_value=return_key_value,
                 batch_size_limit=batch_size_limit,
             )
             if chunked_result is not None:
                 return chunked_result
 
-        if isinstance(key_value, Tensor):
-            key_value = self.kv_norm(key_value)
-        attn_result = self.attn(
-            query=self.q_norm(query),
+        if self.key_value_norm is None:
+            pass
+        elif key_value is None and self.key_value_norm is not self.query_norm:
+            key_value = self.key_value_norm(query)
+        elif isinstance(key_value, Tensor):
+            key_value = self.key_value_norm(key_value)
+
+        result = self.attn(
+            query=query if self.query_norm is None else self.query_norm(query),
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
-            rope=rope,
             batch_size_limit=batch_size_limit,
             return_key_value=return_key_value,
         )
         if return_key_value:
-            attn_out, kv = attn_result
+            out, kv = result
         else:
-            attn_out = attn_result
+            out = result
 
-        out = query + attn_out
+        if self.post_attn_norm is not None:
+            out = self.post_attn_norm(out)
+
+        out = query + out
         out = out + self.mlp(out)
-        if return_key_value:
-            return out, kv
-        return out
+
+        return (out, kv) if return_key_value else out

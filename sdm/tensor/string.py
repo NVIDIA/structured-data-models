@@ -13,8 +13,7 @@ from typing_extensions import override
 
 from sdm._warnings import warn_once
 from sdm.tensor import VarLenTensor
-from sdm.tensor.io import arrow_as_tensor
-from sdm.tensor.io.arrow import _combine_arrow_chunks
+from sdm.tensor.io import arrow_as_tensor, combine_arrow_chunks
 
 if TYPE_CHECKING:
     import cudf
@@ -63,7 +62,7 @@ class StringTensor(VarLenTensor):
             device: The device.
         """
         if isinstance(array, pa.ChunkedArray):
-            array = _combine_arrow_chunks(array)
+            array = combine_arrow_chunks(array)
 
         if size is None:
             size = (len(array),)

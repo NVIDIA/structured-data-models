@@ -8,7 +8,7 @@ from torch import Tensor
 from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
-from sdm.nn import TransformerBlock
+from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 from sdm.nn.memory import (
     attention_batch_size_limit,
     cuda_attention_memory_limit,
@@ -44,32 +44,22 @@ class ICLBlock(torch.nn.Module):
         else:
             self.y_lin = Linear(1, channels, **factory_kwargs)
 
-        self.layers = ModuleList()
-        for _ in range(num_layers):
-            layer = TransformerBlock(
+        self.layers = ModuleList(
+            TabICLv2TransformerBlock(
                 channels=channels,
-                num_query_heads=num_heads,
-                feedforward_channels=2 * channels,
+                num_heads=num_heads,
+                norm_bias=norm_bias,
                 qassmax=True,
-                norm="layer_norm",
-                norm_kwargs={"bias": norm_bias},
                 **factory_kwargs,
             )
-            self.layers.append(layer)
+            for _ in range(num_layers)
+        )
 
         self.norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
         self.head = Sequential(
-            Linear(
-                in_features=channels,
-                out_features=2 * channels,
-                **factory_kwargs,
-            ),
+            Linear(channels, 2 * channels, **factory_kwargs),
             GELU(),
-            Linear(
-                in_features=2 * channels,
-                out_features=out_channels,
-                **factory_kwargs,
-            ),
+            Linear(2 * channels, out_channels, **factory_kwargs),
         )
 
     def forward(

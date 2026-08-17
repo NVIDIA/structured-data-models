@@ -9,7 +9,12 @@ description = "Foundation Models for Structured Data"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = [
+    "LICENSE",
+    "sdm/models/tabiclv2/LICENSE",
+    "sdm/models/tabfm/LICENSE",
+    "sdm/models/nemotron/relational/NOTICE",
+]
 authors = [
     { name = "NVIDIA" },
 ]
@@ -33,7 +38,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "torch>=2.5",
+    "torch>=2.7",
     "numpy",
     "pyarrow",
     "huggingface_hub",
