@@ -37,12 +37,13 @@ class CellEmbedding(torch.nn.Module):
     ) -> Tensor:  # [..., R, C, D]
         C = x.size(-1)
 
-        # Feature grouping: gather `group_size` columns into each token.
+        # Feature grouping:
         index = torch.arange(C, device=x.device)
         shift = 2 ** torch.arange(self.group_size, device=x.device) - 1
         index = (index.view(C, 1) + shift.view(1, self.group_size)) % C
         x = x[..., index]  # [..., R, C, G]
 
+        # Compute Fourier features per semantic type:
         grouped_mask = categorical_mask[..., index]  # [..., C, G]
         freq = torch.where(
             grouped_mask.unsqueeze(-1),  # [..., C, G, 1]
@@ -53,6 +54,7 @@ class CellEmbedding(torch.nn.Module):
         fourier = torch.cat([angle.sin(), angle.cos()], dim=-1)
         fourier = fourier.to(self.num_lin.weight.dtype)
 
+        # Project Fourier features per semantic type:
         return torch.where(
             grouped_mask.unsqueeze(-1),  # [..., C, G, 1]
             self.cat_lin(fourier),  # [..., R, C, G, D]
