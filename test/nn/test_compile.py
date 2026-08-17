@@ -92,11 +92,15 @@ def test_sdpa_compile(
     channels = 4
     num_query_heads = 4
     module = SDPA(
-        channels=channels,
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
-        qassmax=qassmax,
-        device=device,
+        query_scaling=QASSMax(
+            channels,
+            num_query_heads,
+            device=device,
+        )
+        if qassmax
+        else None,
     )
 
     kv_heads = num_key_value_heads or num_query_heads
@@ -131,19 +135,18 @@ def test_sdpa_compile(
 
 @withCUDA
 @pytest.mark.parametrize(
-    ("num_key_value_heads", "qassmax", "rope", "self_attn"),
+    ("num_key_value_heads", "qassmax", "self_attn"),
     [
-        (None, False, False, True),
-        (None, True, True, False),
-        (1, False, True, True),
-        (2, True, False, False),
+        (None, False, True),
+        (None, True, False),
+        (1, False, True),
+        (2, True, False),
     ],
 )
 def test_attention_compile(
     device: torch.device,
     num_key_value_heads: int | None,
     qassmax: bool,
-    rope: bool,
     self_attn: bool,
 ) -> None:
     channels = 8
@@ -151,23 +154,18 @@ def test_attention_compile(
         channels=channels,
         num_query_heads=4,
         num_key_value_heads=num_key_value_heads,
-        qassmax=qassmax,
+        query_scaling=QASSMax(channels // 4, num_heads=4, device=device)
+        if qassmax
+        else None,
         device=device,
-    )
-    rotary_embedding = (
-        RotaryEmbedding(channels=2, layout="split_half", device=device)
-        if rope
-        else None
     )
     query = torch.randn(2, 3, channels, device=device)
     key_value = (
         None if self_attn else torch.randn(2, 5, channels, device=device)
     )
 
-    expected = module(query=query, key_value=key_value, rope=rotary_embedding)
-    out = fullgraph(module)(
-        query=query, key_value=key_value, rope=rotary_embedding
-    )
+    expected = module(query=query, key_value=key_value)
+    out = fullgraph(module)(query=query, key_value=key_value)
     torch.testing.assert_close(out, expected)
 
 
@@ -195,18 +193,17 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
 
 @withCUDA
 @pytest.mark.parametrize(
-    ("qassmax", "rope", "masking"),
+    ("qassmax", "masking"),
     [
-        (False, False, None),
-        (True, True, None),
-        (False, True, "seqused"),
-        (True, False, "attn_mask"),
+        (False, None),
+        (True, None),
+        (False, "seqused"),
+        (True, "attn_mask"),
     ],
 )
 def test_transformer_block_compile(
     device: torch.device,
     qassmax: bool,
-    rope: bool,
     masking: str | None,
 ) -> None:
     channels = 8
@@ -214,13 +211,10 @@ def test_transformer_block_compile(
         channels=channels,
         num_query_heads=2,
         feedforward_channels=16,
-        qassmax=qassmax,
+        query_scaling=QASSMax(channels // 2, num_heads=2, device=device)
+        if qassmax
+        else None,
         device=device,
-    )
-    rotary_embedding = (
-        RotaryEmbedding(channels=4, layout="split_half", device=device)
-        if rope
-        else None
     )
     query = torch.randn(2, 3, channels, device=device)
     key_value = torch.randn(2, 5, channels, device=device)
@@ -238,14 +232,12 @@ def test_transformer_block_compile(
         key_value=key_value,
         seqused_key_value=seqused,
         attn_mask=attn_mask,
-        rope=rotary_embedding,
     )
     out = fullgraph(module)(
         query=query,
         key_value=key_value,
         seqused_key_value=seqused,
         attn_mask=attn_mask,
-        rope=rotary_embedding,
     )
     torch.testing.assert_close(out, expected)
 
@@ -262,7 +254,7 @@ def test_induced_transformer_block_compile(
         num_query_heads=2,
         feedforward_channels=16,
         num_inducing_points=4,
-        qassmax=True,
+        query_scaling=QASSMax(channels // 2, num_heads=2, device=device),
         device=device,
     )
     query = torch.randn(2, 6, channels, device=device)

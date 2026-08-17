@@ -15,7 +15,7 @@ from sdm.tensor.mixin import DeviceMixin
 if TYPE_CHECKING:
     import graphviz
 
-    from sdm.relational import RelationalSampler, TemporalSamplingConfig
+    from sdm.relational import RelationalSampler
 
 
 @dataclass(frozen=True, repr=False)
@@ -237,25 +237,21 @@ class RelationalData(DeviceMixin):
 
     def sampler(
         self,
-        temporal: TemporalSamplingConfig | dict[str, Any] | None = None,
+        time_columns: Mapping[str, str] | None = None,
     ) -> RelationalSampler:
         r"""Create a device-appropriate sampler over this relational data.
 
-        .. testcode::
+        .. code-block:: python
 
-            from sdm import (
-                RelationalData,
-                TableTensor,
-                TemporalSamplingConfig,
-            )
+            import sdm
 
-            data = RelationalData(
+            data = sdm.RelationalData(
                 tables={
-                    "users": TableTensor.from_columns(
+                    "users": sdm.TableTensor.from_columns(
                         {"user_id": [0, 1]},
                         stypes={"user_id": "id"},
                     ),
-                    "orders": TableTensor.from_columns(
+                    "orders": sdm.TableTensor.from_columns(
                         {
                             "user_id": [0, 1],
                             "item_id": [10, 11],
@@ -267,7 +263,7 @@ class RelationalData(DeviceMixin):
                             "order_date": "datetime",
                         },
                     ),
-                    "items": TableTensor.from_columns(
+                    "items": sdm.TableTensor.from_columns(
                         {"item_id": [10, 11]},
                         stypes={"item_id": "id"},
                     ),
@@ -280,45 +276,16 @@ class RelationalData(DeviceMixin):
                 ],
             )
 
-            sampler = data.sampler(
-                temporal=TemporalSamplingConfig(
-                    time_columns={"orders": "order_date"},
-                    strategy="last",
-                ),
-            )
+            sampler = data.sampler(time_columns={"orders": "order_date"})
 
         Args:
-            temporal: Temporal sampling configuration or a dictionary of its
-                constructor arguments. A row in a time-aware table can only
-                be sampled if its timestamp does not exceed the query
-                timestamp.
+            time_columns: Mapping from table name to the datetime column used
+                for temporal sampling. A row in a time-aware table can only be
+                sampled if its timestamp does not exceed the query timestamp.
         """  # noqa: E501
-        from sdm.relational.sampler import (  # noqa: PLC0415
-            TemporalSamplingConfig,
-        )
-
-        if temporal is not None and not isinstance(
-            temporal, TemporalSamplingConfig
-        ):
-            temporal = TemporalSamplingConfig(**temporal)
-
-        if self.device.type == "cuda":
-            from sdm.relational.cugraph_sampler import (  # noqa: PLC0415
-                CuGraphRelationalSampler,
-            )
-
-            return CuGraphRelationalSampler(
-                data=self,
-                temporal=temporal,
-            )
-
-        # Avoid a circular import through `sdm.relational`.
         from sdm.relational import RelationalSampler  # noqa: PLC0415
 
-        return RelationalSampler(
-            data=self,
-            temporal=temporal,
-        )
+        return RelationalSampler(data=self, time_columns=time_columns)
 
     def to_graphviz(
         self,

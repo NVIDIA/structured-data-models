@@ -14,12 +14,10 @@ def _table(
     values: list[list[int]],
     *,
     categories: tuple[tuple[str, ...], ...],
-    columns: tuple[str, ...] = ("kind", "segment"),
     device: torch.device | str | None = None,
     dtype: torch.dtype = torch.int32,
 ) -> TableTensor:
     return TableTensor(
-        columns={"categorical": columns},
         categorical=CategoricalTensor(
             code=torch.tensor(values, dtype=dtype, device=device),
             categories=tuple(
@@ -157,13 +155,11 @@ def test_align_categories_orders_values(
 ) -> None:
     context = _table(
         [[0], [1], [2], [-1]],
-        columns=("kind",),
         categories=(("zebra", "éclair", "ant", "unused"),),
         device=device,
     )
     query = _table(
         [[0], [1], [2], [-1]],
-        columns=("kind",),
         categories=(("éclair", "zebra", "ant"),),
         device=device,
     )
@@ -190,7 +186,6 @@ def test_align_categories_orders_values(
 @withCUDA
 def test_align_categories_numeric_values(device: torch.device) -> None:
     context = TableTensor(
-        columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
             code=torch.tensor(
                 [[0], [1], [0]],
@@ -201,7 +196,6 @@ def test_align_categories_numeric_values(device: torch.device) -> None:
         ),
     )
     query = TableTensor(
-        columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
             code=torch.tensor(
                 [[0], [1], [2], [-1]],
@@ -233,14 +227,12 @@ def test_align_categories_does_not_match_nan_category_values(
     device: torch.device,
 ) -> None:
     context = TableTensor(
-        columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
             code=torch.tensor([[0], [1]], dtype=torch.int32, device=device),
             categories=(torch.tensor([torch.nan, 1.0], device=device),),
         ),
     )
     query = TableTensor(
-        columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
             code=torch.tensor(
                 [[0], [1], [2]],
@@ -260,14 +252,12 @@ def test_align_categories_scales_to_large_numeric_vocabulary() -> None:
     size = 10_000
     codes = torch.arange(size, dtype=torch.int32).unsqueeze(-1)
     context = TableTensor(
-        columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
             code=codes,
             categories=(torch.arange(size),),
         ),
     )
     query = TableTensor(
-        columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
             code=codes,
             categories=(torch.arange(size).flip(0),),
@@ -353,12 +343,10 @@ def test_align_categories_orders_unsigned_pandas_values(
 def test_align_categories_all_missing_context_has_empty_vocabulary() -> None:
     context = _table(
         [[-1], [-1]],
-        columns=("kind",),
         categories=(("red", "blue"),),
     )
     query = _table(
         [[0], [1], [-1]],
-        columns=("kind",),
         categories=(("red", "green"),),
     )
 
@@ -385,11 +373,8 @@ def test_align_categories_all_missing_pandas_context_accepts_strings() -> None:
 
 
 def test_align_categories_rejects_changed_category_value_type() -> None:
-    processor = AlignCategories().fit(
-        _table([[0]], columns=("kind",), categories=(("red",),))
-    )
+    processor = AlignCategories().fit(_table([[0]], categories=(("red",),)))
     query = TableTensor(
-        columns={"categorical": ("kind",)},
         categorical=CategoricalTensor(
             code=torch.tensor([[0]], dtype=torch.int32),
             categories=(torch.tensor([1]),),
@@ -406,13 +391,11 @@ def test_align_categories_ensemble_matches_member_fits(
 ) -> None:
     first_context = _table(
         [[0], [1]],
-        columns=("kind",),
         categories=(("red", "blue", "green"),),
         device=device,
     )
     second_context = _table(
         [[1], [2]],
-        columns=("kind",),
         categories=(("red", "blue", "green"),),
         device=device,
     )
@@ -423,7 +406,6 @@ def test_align_categories_ensemble_matches_member_fits(
     )
     query = _table(
         [[0], [1], [2]],
-        columns=("kind",),
         categories=(("red", "blue", "green"),),
         device=device,
     )

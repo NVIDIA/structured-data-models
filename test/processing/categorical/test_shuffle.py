@@ -20,16 +20,9 @@ def _table(
     numerical: torch.Tensor | None = None,
     device: torch.device | None = None,
 ) -> TableTensor:
-    columns: dict[str, tuple[str, ...]] = {
-        "categorical": tuple(f"cat{i}" for i in range(len(categories))),
-    }
     if numerical is not None:
-        columns["numerical"] = tuple(
-            f"num{i}" for i in range(numerical.size(-1))
-        )
         numerical = numerical.to(device)
     return TableTensor(
-        columns=columns,
         numerical=numerical,
         categorical=CategoricalTensor(
             code=torch.tensor(values, dtype=torch.int32, device=device),
@@ -50,7 +43,7 @@ def test_shuffle_categories_shift_maps_single_target() -> None:
 
     output = processor.fit_transform(target)
 
-    assert output.columns[Stype.categorical] == ("cat0",)
+    assert output.columns[Stype.categorical] == ("cat_0",)
     assert torch.equal(
         output.categorical.code[:3, 0].sort().values,
         torch.arange(3, dtype=torch.int32),

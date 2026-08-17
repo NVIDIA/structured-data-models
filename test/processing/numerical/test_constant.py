@@ -18,23 +18,14 @@ def test_unique_filter(device: torch.device) -> None:
         ],
         device=device,
     )
-    table = TableTensor.from_tensor(
-        data,
-        columns=(
-            "constant",
-            "variable",
-            "two_values",
-            "two_more_values",
-            "also_constant",
-        ),
-    )
+    table = TableTensor.from_tensor(data)
 
     output = DropConstantColumns().fit_transform(table)
 
     assert output.columns[Stype.numerical] == (
-        "variable",
-        "two_values",
-        "two_more_values",
+        "1",
+        "2",
+        "3",
     )
     assert output.numerical.equal(data[:, [1, 2, 3]])
     assert output.device == device
@@ -52,12 +43,11 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
             ],
             device=device,
         ),
-        columns=("one", "two", "three"),
     )
 
     output = DropConstantColumns(threshold=2).fit_transform(table)
 
-    assert output.columns[Stype.numerical] == ("three",)
+    assert output.columns[Stype.numerical] == ("2",)
 
 
 def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
@@ -78,14 +68,11 @@ def test_variance_filter(device: torch.device) -> None:
         dtype=torch.float64,
         device=device,
     )
-    table = TableTensor.from_tensor(
-        data,
-        columns=("constant", "near_constant", "variable", "also_constant"),
-    )
+    table = TableTensor.from_tensor(data)
 
     output = DropConstantColumns(method="variance").fit_transform(table)
 
-    assert output.columns[Stype.numerical] == ("variable",)
+    assert output.columns[Stype.numerical] == ("2",)
     assert output.numerical.equal(data[:, [2]])
     assert output.device == device
 
@@ -107,11 +94,9 @@ def test_drop_constant_columns_ensemble_matches_member_fits(
 ) -> None:
     first_context = TableTensor.from_tensor(
         torch.tensor([[1.0, 2.0], [1.0, 3.0]], device=device),
-        columns=("a", "b"),
     )
     second_context = TableTensor.from_tensor(
         torch.tensor([[1.0, 2.0], [3.0, 2.0]], device=device),
-        columns=("a", "b"),
     )
     member_table_ids = (1, 0, 1, 0, 0, 1, 1, 0)
     context = EnsembleTable.from_tables(
@@ -120,7 +105,6 @@ def test_drop_constant_columns_ensemble_matches_member_fits(
     )
     query = TableTensor.from_tensor(
         torch.tensor([[4.0, 5.0], [6.0, 7.0]], device=device),
-        columns=("a", "b"),
     )
     processor = DropConstantColumns()
 
