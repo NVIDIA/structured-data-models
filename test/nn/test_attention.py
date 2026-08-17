@@ -696,7 +696,9 @@ def test_attention_batch_size_limit_propagation() -> None:
         expected = module(query=query)
 
         outer_module = (
-            module.qkv_lin if isinstance(module, Attention) else module.q_norm
+            module.qkv_lin
+            if isinstance(module, Attention)
+            else module.pre_norm
         )
         assert outer_module is not None
         outer_batch_sizes: list[int] = []
@@ -740,8 +742,8 @@ def test_transformer_block_batch_size_limit_bypass(
     module.train(training)
     query = torch.randn(5, 3, 8)
     batch_sizes: list[int] = []
-    assert module.q_norm is not None
-    handle = module.q_norm.register_forward_pre_hook(
+    assert module.pre_norm is not None
+    handle = module.pre_norm.register_forward_pre_hook(
         lambda _module, args: batch_sizes.append(args[0].size(0))
     )
 
@@ -871,12 +873,13 @@ def test_transformer_block_norm_kwargs_precedence() -> None:
         channels=8,
         num_query_heads=2,
         feedforward_channels=16,
+        pre_attn_norm=True,
+        post_attn_norm=True,
         norm_kwargs={"dtype": torch.float64},
     )
-    assert module.q_norm is not None
-    assert module.kv_norm is not None
-    mlp = cast(torch.nn.Sequential, module.mlp)
-    for norm in (module.q_norm, module.kv_norm, mlp[0]):
+    assert module.pre_norm is not None
+    assert module.post_norm is not None
+    for norm in (module.pre_norm, module.post_norm, module.mlp[0]):
         assert next(norm.parameters()).dtype == torch.float64
 
     # The `dtype` argument still applies when `norm_kwargs` does not set it.
@@ -884,13 +887,14 @@ def test_transformer_block_norm_kwargs_precedence() -> None:
         channels=8,
         num_query_heads=2,
         feedforward_channels=16,
+        pre_attn_norm=True,
+        post_attn_norm=True,
         norm_kwargs={"eps": 1e-6},
         dtype=torch.float64,
     )
-    assert module.q_norm is not None
-    assert module.kv_norm is not None
-    mlp = cast(torch.nn.Sequential, module.mlp)
-    for norm in (module.q_norm, module.kv_norm, mlp[0]):
+    assert module.pre_norm is not None
+    assert module.post_norm is not None
+    for norm in (module.pre_norm, module.post_norm, module.mlp[0]):
         assert next(norm.parameters()).dtype == torch.float64
 
 
@@ -900,13 +904,14 @@ def test_transformer_block_norm_callable() -> None:
         channels=8,
         num_query_heads=2,
         feedforward_channels=16,
+        pre_attn_norm=True,
+        post_attn_norm=True,
         norm=torch.nn.RMSNorm,
         norm_kwargs={"eps": 1e-6, "dtype": torch.float64},
     )
-    assert module.q_norm is not None
-    assert module.kv_norm is not None
-    mlp = cast(torch.nn.Sequential, module.mlp)
-    norms = (module.q_norm, module.kv_norm, mlp[0])
+    assert module.pre_norm is not None
+    assert module.post_norm is not None
+    norms = (module.pre_norm, module.post_norm, module.mlp[0])
     for norm in norms:
         assert isinstance(norm, torch.nn.RMSNorm)
         assert norm.normalized_shape == (8,)
