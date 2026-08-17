@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sdm.nn import InducedTransformerBlock
+from sdm.nn import InducedTransformerBlock, QASSMax
 from sdm.testing import withCUDA
 
 
@@ -22,7 +22,9 @@ def test_induced_transformer_block(
         num_key_value_heads=num_key_value_heads,
         feedforward_channels=16,
         num_inducing_points=4,
-        qassmax=qassmax,
+        query_scaling=QASSMax(channels // 2, num_heads=2, device=device)
+        if qassmax
+        else None,
         device=device,
     )
     query = torch.randn(batch_size, set_size, channels, device=device)

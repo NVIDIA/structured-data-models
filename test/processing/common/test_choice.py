@@ -58,8 +58,7 @@ class AddFittedMemberCount(EnsembleProcessor):
 
 def _table() -> TableTensor:
     return TableTensor.from_tensor(
-        torch.arange(64, dtype=torch.float32).view(32, 2),
-        columns=("x0", "x1"),
+        torch.arange(64, dtype=torch.float32).view(32, 2)
     )
 
 

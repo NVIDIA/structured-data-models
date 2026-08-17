@@ -18,7 +18,7 @@ Overview
        | 28.54M (regression)
      - `BSD-3-Clause <https://github.com/soda-inria/tabicl/blob/main/LICENSE>`__
      - `BSD-3-Clause <https://huggingface.co/jingang/TabICL>`__
-   * - :class:`~sdm.models.KumoRFM` (`Paper <https://arxiv.org/abs/2604.12596>`__)
+   * - :class:`~sdm.models.NemotronRelational` (`Paper <https://arxiv.org/abs/2604.12596>`__)
      - 2026-04-14
      - | 29.93M (classification)
        | 30.94M (regression)

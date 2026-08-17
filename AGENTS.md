@@ -1,6 +1,6 @@
 # Overview
 
-This repository is an open-source model zoo for structured data models (e.g., TabICLv2, KumoRFM-2, etc).
+This repository is an open-source model zoo for structured data models (e.g., TabICLv2, NemotronRelational, etc).
 
 The repository provides reusable model architectures, tensor containers, preprocessing and postprocessing blocks, attention modules, key/value cache building blocks, ensembling utilities, benchmark examples, and NIM-compatible runtime foundations.
 It should stay generic, modular, and lightweight.
@@ -48,6 +48,13 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - `sdm/nn`: Common neural network building blocks for structured data models.
 - `sdm/models`: (Pretrained) structured data models based on a common interface.
 - `sdm/testing`: Testing utilities.
+
+# Examples
+
+- Build each example around one public contract or capability. Include only the setup, validation, abstraction, and explanation needed to understand and run it correctly, including required leakage boundaries and other correctness constraints.
+- Express the workflow through the simplest documented public API. Pass accepted input forms directly, rely on public normalization and semantic helpers, use a one-shot call when fitted state is not reused, and use separate fit and predict steps when the lifecycle or repeated queries are part of the example.
+- Present the end-to-end data flow in execution order. Use semantic container operations, name intermediates that identify meaningful stages, keep short conventional values close to their consumers, and use comments only for non-obvious semantics or navigation.
+- Represent a self-contained workflow as one descriptively named script. Use functions for genuine repetition, separate modules for distinct responsibilities, and a README for substantial setup or operational instructions.
 
 # Core Design Principles
 

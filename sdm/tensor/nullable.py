@@ -12,11 +12,11 @@ from typing_extensions import override
 
 from sdm.tensor.io import (
     ARROW_TORCH_DTYPES,
-    TORCH_ARROW_DTYPES,
     arrow_as_tensor,
+    combine_arrow_chunks,
+    to_arrow,
     to_cudf,
 )
-from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 if TYPE_CHECKING:
     import cudf
@@ -35,15 +35,16 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
-class NullableIntTensor(Tensor):
-    r"""A :class:`torch.Tensor` for nullable integer values.
+class NullableTensor(Tensor):
+    r"""A :class:`torch.Tensor` for nullable values.
 
     Args:
-        data: Integer tensor containing the values.
+        data: Tensor containing the values.
         valid: Boolean mask indicating valid, non-null values.
     """
 
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...]] = (
+        torch.bool,
         torch.uint8,
         torch.uint16,
         torch.uint32,
@@ -69,8 +70,8 @@ class NullableIntTensor(Tensor):
         r"""Create a tensor wrapper."""
         if data.dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
-                f"Expected 'data' in {cls.__name__!r} to have integer "
-                f"dtype (got '{data.dtype}')"
+                f"Expected 'data' in {cls.__name__!r} to have integer or "
+                f"boolean dtype (got '{data.dtype}')"
             )
         if valid.dtype != torch.bool:
             raise ValueError(
@@ -122,17 +123,16 @@ class NullableIntTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> Self:
-        r"""Create tensor from an integer :class:`pyarrow.Array`.
+        r"""Create tensor from a :class:`pyarrow.Array`.
 
         Args:
-            array: The integer :class:`pyarrow.Array` or
-                :class:`pyarrow.ChunkedArray`.
+            array: The :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`.
             dtype: The dtype.
             size: The shape of the tensor.
             device: The device.
         """
         if isinstance(array, pa.ChunkedArray):
-            array = _combine_arrow_chunks(array)
+            array = combine_arrow_chunks(array)
 
         if size is None:
             size = (len(array),)
@@ -147,15 +147,23 @@ class NullableIntTensor(Tensor):
             raise TypeError(f"Unsupported value type '{array.type}'")
 
         buffer = array.buffers()[1]
+        storage_offset = array.offset
         if buffer is not None and buffer.size > 0:
-            data = torch.frombuffer(buffer, dtype=arrow_dtype)
+            if arrow_dtype == torch.bool:
+                data = arrow_as_tensor(
+                    array.fill_null(False) if array.null_count > 0 else array,
+                    dtype=arrow_dtype,
+                )
+                storage_offset = 0
+            else:
+                data = torch.frombuffer(buffer, dtype=arrow_dtype)
         else:
             data = torch.empty(0, dtype=arrow_dtype, device=device)
         data = torch.as_strided(
             data,
             size=size,
             stride=_contiguous_stride(size),
-            storage_offset=array.offset,
+            storage_offset=storage_offset,
         ).to(device, dtype)
 
         if array.null_count > 0:
@@ -171,21 +179,7 @@ class NullableIntTensor(Tensor):
 
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
-        tensor = cast(NullableIntTensor, self.contiguous().view(-1).cpu())
-
-        arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
-        if arrow_type is None:
-            raise TypeError(f"Unsupported data type '{tensor.dtype}'")
-
-        return pa.Array.from_buffers(
-            type=arrow_type,
-            length=tensor.numel(),
-            buffers=[
-                pa.array(tensor._valid.numpy(), type=pa.bool_()).buffers()[1],
-                pa.py_buffer(tensor._data.numpy()),
-            ],
-            null_count=-1,
-        )
+        return to_arrow(self._data, self._valid)
 
     @classmethod
     def from_cudf(
@@ -196,10 +190,10 @@ class NullableIntTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> Self:
-        r"""Create tensor from an integer :class:`cudf.Series`.
+        r"""Create tensor from a :class:`cudf.Series`.
 
         Args:
-            ser: The integer :class:`cudf.Series` or :class:`cudf.Index`.
+            ser: The :class:`cudf.Series` or :class:`cudf.Index`.
             dtype: The dtype.
             size: The shape of the tensor.
             device: The device.
@@ -217,6 +211,7 @@ class NullableIntTensor(Tensor):
 
         column, _ = ser.to_pylibcudf()
         cp_dtype = {
+            plc.TypeId.BOOL8: cp.bool_,
             plc.TypeId.UINT8: cp.uint8,
             plc.TypeId.UINT16: cp.uint16,
             plc.TypeId.UINT32: cp.uint32,
@@ -244,15 +239,15 @@ class NullableIntTensor(Tensor):
     @classmethod
     def from_list(
         cls,
-        values: int | Sequence[Any] | None,
+        values: int | bool | Sequence[Any] | None,
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
     ) -> Self:
-        r"""Create tensor from a rectangular Python list of integers.
+        r"""Create tensor from a rectangular Python list.
 
         Args:
-            values: The rectangular Python list of integers.
+            values: The rectangular Python list.
             dtype: The dtype.
             device: The device.
         """
@@ -266,7 +261,7 @@ class NullableIntTensor(Tensor):
 
         def flatten(value: Any) -> tuple[int, ...]:
             if value is None:
-                data.append(0)
+                data.append(False)
                 valid.append(False)
                 return ()
 
@@ -279,7 +274,7 @@ class NullableIntTensor(Tensor):
                 return (0,)
 
             if not is_sequence(value[0]):
-                data.extend(0 if item is None else item for item in value)
+                data.extend(False if item is None else item for item in value)
                 valid.extend(item is not None for item in value)
                 return (len(value),)
 
@@ -297,7 +292,8 @@ class NullableIntTensor(Tensor):
             return (len(value), *child_size)
 
         size = flatten(values)
-        dtype = torch.int64 if dtype is None and len(data) == 0 else dtype
+        if dtype is None and not any(valid):
+            dtype = torch.int64
 
         return cls(
             torch.tensor(data, dtype=dtype, device=device).view(size),
@@ -308,7 +304,10 @@ class NullableIntTensor(Tensor):
 
     @property
     def data(self) -> Tensor:
-        r"""Return the integer values tensor."""
+        r"""Return the physical data.
+
+        Values at positions where :attr:`valid` is ``False`` are unspecified.
+        """
         return self._data
 
     @property
@@ -350,7 +349,7 @@ class NullableIntTensor(Tensor):
         ctx: tuple[Any, ...],
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
-    ) -> NullableIntTensor:
+    ) -> NullableTensor:
         (cls,) = ctx
         return cls(inner_tensors["_data"], inner_tensors["_valid"])
 
@@ -366,7 +365,7 @@ class NullableIntTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if func is torch.isfinite or func is Tensor.isfinite:
-            assert isinstance(args[0], NullableIntTensor)
+            assert isinstance(args[0], NullableTensor)
             return _isfinite(args[0])
 
         with torch._C.DisableTorchFunction():
@@ -435,7 +434,7 @@ class NullableIntTensor(Tensor):
         )
 
     @override
-    def item(self) -> int | None:  # type: ignore
+    def item(self) -> int | bool | None:  # type: ignore
         if self._data.numel() != 1:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} with {self._data.numel()} "
@@ -456,18 +455,18 @@ class NullableIntTensor(Tensor):
         return out
 
 
-@NullableIntTensor.implements(aten.alias.default)
+@NullableTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
-def _alias(inp: NullableIntTensor) -> NullableIntTensor:
+def _alias(inp: NullableTensor) -> NullableTensor:
     return inp.__class__(
         data=aten.alias.default(inp._data),
         valid=aten.alias.default(inp._valid),
     )
 
 
-@NullableIntTensor.implements(aten.to.dtype_layout)
+@NullableTensor.implements(aten.to.dtype_layout)
 def _to_dtype_layout(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     *,
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
@@ -476,7 +475,7 @@ def _to_dtype_layout(
     non_blocking: bool = False,
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
-) -> NullableIntTensor:
+) -> NullableTensor:
 
     if dtype is not None and dtype not in inp.ALLOWED_DTYPES:
         raise TypeError(
@@ -523,14 +522,14 @@ def _to_dtype_layout(
     )
 
 
-@NullableIntTensor.implements(aten.to.dtype)
+@NullableTensor.implements(aten.to.dtype)
 def _to_dtype(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     dtype: torch.dtype,
     non_blocking: bool = False,
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _to_dtype_layout(
         inp,
         dtype=dtype,
@@ -540,15 +539,15 @@ def _to_dtype(
     )
 
 
-@NullableIntTensor.implements(aten.to.device)
+@NullableTensor.implements(aten.to.device)
 def _to_device(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     device: torch.device,
     dtype: torch.dtype,
     non_blocking: bool = False,
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _to_dtype_layout(
         inp,
         dtype=dtype,
@@ -559,14 +558,14 @@ def _to_device(
     )
 
 
-@NullableIntTensor.implements(aten.to.other)
+@NullableTensor.implements(aten.to.other)
 def _to_other(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     other: Tensor,
     non_blocking: bool = False,
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _to_dtype_layout(
         inp,
         dtype=other.dtype,
@@ -578,9 +577,9 @@ def _to_other(
     )
 
 
-@NullableIntTensor.implements(aten._to_copy.default)
+@NullableTensor.implements(aten._to_copy.default)
 def _to_copy(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     *,
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
@@ -588,7 +587,7 @@ def _to_copy(
     pin_memory: bool = False,  # Ignored by PyTorch.
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _to_dtype_layout(
         inp,
         dtype=dtype,
@@ -601,63 +600,63 @@ def _to_copy(
     )
 
 
-@NullableIntTensor.implements(aten.clone.default)
+@NullableTensor.implements(aten.clone.default)
 def _clone(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     *,
     memory_format: torch.memory_format | None = None,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
 
 
-@NullableIntTensor.implements(aten.contiguous.default)
+@NullableTensor.implements(aten.contiguous.default)
 def _contiguous(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return inp.__class__(
         data=inp._data.contiguous(memory_format=memory_format),
         valid=inp._valid.contiguous(memory_format=memory_format),
     )
 
 
-@NullableIntTensor.implements(aten.is_pinned.default)
-def _is_pinned(inp: NullableIntTensor) -> bool:
+@NullableTensor.implements(aten.is_pinned.default)
+def _is_pinned(inp: NullableTensor) -> bool:
     return inp._data.is_pinned() and inp._valid.is_pinned()
 
 
-@NullableIntTensor.implements(aten._pin_memory.default)
-def _pin_memory(inp: NullableIntTensor) -> NullableIntTensor:
+@NullableTensor.implements(aten._pin_memory.default)
+def _pin_memory(inp: NullableTensor) -> NullableTensor:
     return inp.__class__(
         data=inp._data.pin_memory(),
         valid=inp._valid.pin_memory(),
     )
 
 
-@NullableIntTensor.implements(aten.pin_memory.default)
+@NullableTensor.implements(aten.pin_memory.default)
 def _pin_memory_composite(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     device: torch.device | None = None,
-) -> NullableIntTensor:
+) -> NullableTensor:
     if _is_pinned(inp):
         return inp
     return _pin_memory(inp)
 
 
-@NullableIntTensor.implements(aten.isnan.default)
-def _isnan(inp: NullableIntTensor) -> Tensor:
+@NullableTensor.implements(aten.isnan.default)
+def _isnan(inp: NullableTensor) -> Tensor:
     return ~inp._valid
 
 
-@NullableIntTensor.implements(aten.isfinite.default)
-def _isfinite(inp: NullableIntTensor) -> Tensor:
-    return inp._valid
+@NullableTensor.implements(aten.isfinite.default)
+def _isfinite(inp: NullableTensor) -> Tensor:
+    return inp._valid.clone()
 
 
-@NullableIntTensor.implements(aten.nan_to_num.default)
+@NullableTensor.implements(aten.nan_to_num.default)
 def _nan_to_num(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     nan: int = 0,
     posinf: Any = None,
     neginf: Any = None,
@@ -665,8 +664,8 @@ def _nan_to_num(
     return torch.where(inp._valid, inp._data, nan)
 
 
-@NullableIntTensor.implements(aten.equal.default)
-def _equal(inp: NullableIntTensor, other: Tensor) -> bool:
+@NullableTensor.implements(aten.equal.default)
+def _equal(inp: NullableTensor, other: Tensor) -> bool:
     if inp.__class__ is not other.__class__:
         return False
     if inp.size() != other.size():
@@ -678,9 +677,9 @@ def _equal(inp: NullableIntTensor, other: Tensor) -> bool:
     return inp._data[inp._valid].equal(other._data[other._valid])
 
 
-@NullableIntTensor.implements(aten.allclose.default)
+@NullableTensor.implements(aten.allclose.default)
 def _allclose(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     other: Tensor,
     rtol: float = 1e-05,
     atol: float = 1e-08,
@@ -689,161 +688,159 @@ def _allclose(
     return _equal(inp, other)
 
 
-@NullableIntTensor.implements(aten.view.default)
+@NullableTensor.implements(aten.view.default)
 @preserve_view_inference_mode
-def _view(inp: NullableIntTensor, size: Sequence[int]) -> NullableIntTensor:
+def _view(inp: NullableTensor, size: Sequence[int]) -> NullableTensor:
     return _apply(inp, lambda x: aten.view.default(x, size))
 
 
-@NullableIntTensor.implements(aten._unsafe_view.default)
+@NullableTensor.implements(aten._unsafe_view.default)
 @preserve_view_inference_mode
 def _unsafe_view(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     size: Sequence[int],
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _apply(inp, lambda x: aten._unsafe_view.default(x, size))
 
 
-@NullableIntTensor.implements(aten.reshape.default)
-def _reshape(inp: NullableIntTensor, size: Sequence[int]) -> NullableIntTensor:
+@NullableTensor.implements(aten.reshape.default)
+def _reshape(inp: NullableTensor, size: Sequence[int]) -> NullableTensor:
     return cast(
-        NullableIntTensor,
+        NullableTensor,
         aten.reshape.default.decompose(inp, size),
     )
 
 
-@NullableIntTensor.implements(aten.flatten.using_ints)
+@NullableTensor.implements(aten.flatten.using_ints)
 def _flatten(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     start_dim: int = 0,
     end_dim: int = -1,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return cast(
-        NullableIntTensor,
+        NullableTensor,
         aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
     )
 
 
-@NullableIntTensor.implements(aten.squeeze.default)
+@NullableTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
-def _squeeze(inp: NullableIntTensor) -> NullableIntTensor:
+def _squeeze(inp: NullableTensor) -> NullableTensor:
     return _apply(inp, lambda x: aten.squeeze.default(x))
 
 
-@NullableIntTensor.implements(aten.squeeze.dim)
+@NullableTensor.implements(aten.squeeze.dim)
 @preserve_view_inference_mode
-def _squeeze_dim(inp: NullableIntTensor, dim: int) -> NullableIntTensor:
+def _squeeze_dim(inp: NullableTensor, dim: int) -> NullableTensor:
     return _apply(inp, lambda x: aten.squeeze.dim(x, dim))
 
 
-@NullableIntTensor.implements(aten.squeeze.dims)
+@NullableTensor.implements(aten.squeeze.dims)
 @preserve_view_inference_mode
 def _squeeze_dims(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     dim: Sequence[int],
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _apply(inp, lambda x: aten.squeeze.dims(x, dim))
 
 
-@NullableIntTensor.implements(aten.unsqueeze.default)
+@NullableTensor.implements(aten.unsqueeze.default)
 @preserve_view_inference_mode
-def _unsqueeze(inp: NullableIntTensor, dim: int) -> NullableIntTensor:
+def _unsqueeze(inp: NullableTensor, dim: int) -> NullableTensor:
     return _apply(inp, lambda x: aten.unsqueeze.default(x, dim))
 
 
-@NullableIntTensor.implements(aten.expand.default)
+@NullableTensor.implements(aten.expand.default)
 @preserve_view_inference_mode
 def _expand(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     size: Sequence[int],
     *,
     implicit: bool = False,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _apply(
         inp,
         lambda x: aten.expand.default(x, size, implicit=implicit),
     )
 
 
-@NullableIntTensor.implements(aten.t.default)
+@NullableTensor.implements(aten.t.default)
 @preserve_view_inference_mode
-def _t(inp: NullableIntTensor) -> NullableIntTensor:
+def _t(inp: NullableTensor) -> NullableTensor:
     return _apply(inp, lambda x: aten.t.default(x))
 
 
-@NullableIntTensor.implements(aten.transpose.int)
+@NullableTensor.implements(aten.transpose.int)
 @preserve_view_inference_mode
-def _transpose(
-    inp: NullableIntTensor, dim0: int, dim1: int
-) -> NullableIntTensor:
+def _transpose(inp: NullableTensor, dim0: int, dim1: int) -> NullableTensor:
     return _apply(inp, lambda x: aten.transpose.int(x, dim0, dim1))
 
 
-@NullableIntTensor.implements(aten.permute.default)
+@NullableTensor.implements(aten.permute.default)
 @preserve_view_inference_mode
-def _permute(inp: NullableIntTensor, dims: Sequence[int]) -> NullableIntTensor:
+def _permute(inp: NullableTensor, dims: Sequence[int]) -> NullableTensor:
     return _apply(inp, lambda x: aten.permute.default(x, dims))
 
 
-@NullableIntTensor.implements(aten.movedim.int)
+@NullableTensor.implements(aten.movedim.int)
 def _movedim_int(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     source: int,
     destination: int,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return cast(
-        NullableIntTensor,
+        NullableTensor,
         aten.movedim.int.decompose(inp, source, destination),
     )
 
 
-@NullableIntTensor.implements(aten.movedim.intlist)
+@NullableTensor.implements(aten.movedim.intlist)
 def _movedim_intlist(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     source: Sequence[int],
     destination: Sequence[int],
-) -> NullableIntTensor:
+) -> NullableTensor:
     return cast(
-        NullableIntTensor,
+        NullableTensor,
         aten.movedim.intlist.decompose(inp, source, destination),
     )
 
 
-@NullableIntTensor.implements(aten.select.int)
+@NullableTensor.implements(aten.select.int)
 @preserve_view_inference_mode
-def _select(inp: NullableIntTensor, dim: int, index: int) -> NullableIntTensor:
+def _select(inp: NullableTensor, dim: int, index: int) -> NullableTensor:
     return _apply(inp, lambda x: aten.select.int(x, dim, index))
 
 
-@NullableIntTensor.implements(aten.slice.Tensor)
+@NullableTensor.implements(aten.slice.Tensor)
 @preserve_view_inference_mode
 def _slice(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     dim: int = 0,
     start: int | None = None,
     end: int | None = None,
     step: int = 1,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _apply(inp, lambda x: aten.slice.Tensor(x, dim, start, end, step))
 
 
-@NullableIntTensor.implements(aten.narrow.default)
+@NullableTensor.implements(aten.narrow.default)
 @preserve_view_inference_mode
 def _narrow(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     dim: int,
     start: int,
     length: int,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _apply(inp, lambda x: aten.narrow.default(x, dim, start, length))
 
 
-@NullableIntTensor.implements(aten.unbind.int)
+@NullableTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
 def _unbind(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     dim: int = 0,
-) -> tuple[NullableIntTensor, ...]:
+) -> tuple[NullableTensor, ...]:
     return tuple(
         inp.__class__(data, valid)
         for data, valid in zip(
@@ -853,13 +850,13 @@ def _unbind(
     )
 
 
-@NullableIntTensor.implements(aten.split.Tensor)
+@NullableTensor.implements(aten.split.Tensor)
 @preserve_view_inference_mode
 def _split(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[NullableIntTensor, ...]:
+) -> tuple[NullableTensor, ...]:
     return tuple(
         inp.__class__(data, valid)
         for data, valid in zip(
@@ -869,15 +866,15 @@ def _split(
     )
 
 
-@NullableIntTensor.implements(aten.split.sizes)
-@NullableIntTensor.implements(aten.split.default)
-@NullableIntTensor.implements(aten.split_with_sizes.default)
+@NullableTensor.implements(aten.split.sizes)
+@NullableTensor.implements(aten.split.default)
+@NullableTensor.implements(aten.split_with_sizes.default)
 @preserve_view_inference_mode
 def _split_with_sizes(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[NullableIntTensor, ...]:
+) -> tuple[NullableTensor, ...]:
     return tuple(
         inp.__class__(data, valid)
         for data, valid in zip(
@@ -887,55 +884,55 @@ def _split_with_sizes(
     )
 
 
-@NullableIntTensor.implements(aten.masked_select.default)
-def _masked_select(inp: NullableIntTensor, mask: Tensor) -> NullableIntTensor:
+@NullableTensor.implements(aten.masked_select.default)
+def _masked_select(inp: NullableTensor, mask: Tensor) -> NullableTensor:
     return _apply(inp, lambda x: aten.masked_select.default(x, mask))
 
 
-@NullableIntTensor.implements(aten.index_select.default)
+@NullableTensor.implements(aten.index_select.default)
 def _index_select(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     dim: int,
     index: Tensor,
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _apply(inp, lambda x: aten.index_select.default(x, dim, index))
 
 
-@NullableIntTensor.implements(aten.take.default)
-def _take(inp: NullableIntTensor, index: Tensor) -> NullableIntTensor:
+@NullableTensor.implements(aten.take.default)
+def _take(inp: NullableTensor, index: Tensor) -> NullableTensor:
     return _apply(inp, lambda x: aten.take.default(x, index))
 
 
-@NullableIntTensor.implements(aten.index.Tensor)
+@NullableTensor.implements(aten.index.Tensor)
 def _index(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     indices: Sequence[Tensor | None],
-) -> NullableIntTensor:
+) -> NullableTensor:
     return _apply(inp, lambda x: aten.index.Tensor(x, indices))
 
 
-@NullableIntTensor.implements(aten.cat.default)
-def _cat(tensors: Sequence[Tensor], dim: int = 0) -> NullableIntTensor:
+@NullableTensor.implements(aten.cat.default)
+def _cat(tensors: Sequence[Tensor], dim: int = 0) -> NullableTensor:
     if len(tensors) == 0:
         raise ValueError("Expected a non-empty list of Tensors")
 
-    if not isinstance(tensors[0], NullableIntTensor):
+    if not isinstance(tensors[0], NullableTensor):
         raise TypeError(
-            f"Expected {NullableIntTensor.__name__!r} as element 0, but got "
+            f"Expected {NullableTensor.__name__!r} as element 0, but got "
             f"{tensors[0].__class__.__name__!r}"
         )
 
-    tensors = cast(Sequence[NullableIntTensor], tensors)
+    tensors = cast(Sequence[NullableTensor], tensors)
     return tensors[0].__class__(
         data=torch.cat([tensor._data for tensor in tensors], dim=dim),
         valid=torch.cat([tensor._valid for tensor in tensors], dim=dim),
     )
 
 
-@NullableIntTensor.implements(aten.stack.default)
-def _stack(tensors: Sequence[Tensor], dim: int = 0) -> NullableIntTensor:
+@NullableTensor.implements(aten.stack.default)
+def _stack(tensors: Sequence[Tensor], dim: int = 0) -> NullableTensor:
     out = torch.cat([tensor.unsqueeze(dim) for tensor in tensors], dim=dim)
-    return cast(NullableIntTensor, out)
+    return cast(NullableTensor, out)
 
 
 # Helpers #####################################################################
@@ -951,7 +948,7 @@ def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
 
 
 def _apply(
-    inp: NullableIntTensor,
+    inp: NullableTensor,
     fn: Callable[[Tensor], Tensor],
-) -> NullableIntTensor:
+) -> NullableTensor:
     return inp.__class__(fn(inp._data), fn(inp._valid))

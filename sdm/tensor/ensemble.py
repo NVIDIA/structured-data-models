@@ -263,6 +263,14 @@ class EnsembleTable:
         """Return the number of groups of compatible tables."""
         return len(self._groups)
 
+    def num_members_in_group(self, group_id: int) -> int:
+        """Return the number of members of a group.
+
+        Args:
+            group_id: Zero-based group index.
+        """
+        return sum(i == group_id for i, _ in self._locations)
+
     def table(self, member_id: int) -> TableTensor:
         """Return the table associated with one ensemble member.
 
@@ -271,6 +279,26 @@ class EnsembleTable:
         """
         group_index, position = self._locations[member_id]
         return self._groups[group_index][position]
+
+    def expanded_group(self, group_id: int) -> TableTensor:
+        """Return the logical members assigned to one group.
+
+        Args:
+            group_id: Zero-based group index.
+        """
+        group = self._groups[group_id]
+        positions = tuple(
+            position for i, position in self._locations if i == group_id
+        )
+        if positions == tuple(range(group.size(0))):
+            return group
+        if group.size(0) == 1:
+            return cast(
+                TableTensor,
+                group.expand(len(positions), *group.size()[1:]),
+            )
+        index = torch.tensor(positions, device=group.device)
+        return cast(TableTensor, group.index_select(0, index))
 
     def __iter__(self) -> Iterator[TableTensor]:
         """Iterate over groups of compatible tables."""

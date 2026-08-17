@@ -1,6 +1,6 @@
+import abc
 import contextlib
 import copy
-from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from typing import Any, ClassVar, cast
 
@@ -33,7 +33,7 @@ def _maybe_inference_mode() -> Iterator[None]:
         yield
 
 
-class ICLModel(torch.nn.Module, ABC):
+class ICLModel(torch.nn.Module, abc.ABC):
     r"""Base model for in-context foundation models on structured data.
 
     :class:`ICLModel` defines the public interface shared among in-context
@@ -391,7 +391,7 @@ class ICLModel(torch.nn.Module, ABC):
 
     # Abstract Methods ########################################################
 
-    @abstractmethod
+    @abc.abstractmethod
     def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
@@ -406,7 +406,7 @@ class ICLModel(torch.nn.Module, ABC):
         pass
 
     @classmethod
-    @abstractmethod
+    @abc.abstractmethod
     def default_recipe(cls) -> Recipe:
         r"""Return the default processing recipe for this model."""
 

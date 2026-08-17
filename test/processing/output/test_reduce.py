@@ -14,7 +14,7 @@ def test_reduce_estimators_mean(device: torch.device) -> None:
         dtype=torch.float32,
         device=device,
     ).reshape(2, 3, 4, 2)
-    table = TableTensor.from_tensor(values, columns=("a", "b"))
+    table = TableTensor.from_tensor(values)
     processor = sp.ReduceEstimators(method="mean")
 
     output = processor.transform(table)
@@ -50,10 +50,6 @@ def test_reduce_estimators_rejects_unknown_method() -> None:
 
 def test_reduce_estimators_rejects_non_numerical_stypes() -> None:
     table = TableTensor(
-        columns={
-            "numerical": ("a", "b"),
-            "id": ("row_id",),
-        },
         numerical=torch.ones(2, 3, 2),
         id=ColumnarTensor((torch.arange(2 * 3).reshape(2, 3),)),
     )
@@ -64,10 +60,6 @@ def test_reduce_estimators_rejects_non_numerical_stypes() -> None:
 
 def test_reduce_estimators_rejects_non_numerical_ensemble_stypes() -> None:
     member = TableTensor(
-        columns={
-            "numerical": ("a",),
-            "id": ("row_id",),
-        },
         numerical=torch.ones(2, 1),
         id=ColumnarTensor((torch.arange(2),)),
     )

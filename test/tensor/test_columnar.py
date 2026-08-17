@@ -7,7 +7,7 @@ import torch
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
-    NullableIntTensor,
+    NullableTensor,
     StringTensor,
 )
 from sdm.testing import onlyCUDA
@@ -63,7 +63,7 @@ def test_from_arrow() -> None:
     assert tensor.tolist() == [["a"], ["bb"], [""]]
 
     tensor = ColumnarTensor.from_arrow(pa.array([1, None, 3]))
-    assert isinstance(tensor._columns[0], NullableIntTensor)
+    assert isinstance(tensor._columns[0], NullableTensor)
     assert tensor.tolist() == [[1], [None], [3]]
     assert tensor.to_arrow().to_pydict() == {"0": [1, None, 3]}
 
@@ -117,7 +117,7 @@ def test_from_cudf() -> None:
     tensor = ColumnarTensor.from_cudf(
         cudf.Series([1, None, 3], dtype="int64"),
     )
-    assert isinstance(tensor._columns[0], NullableIntTensor)
+    assert isinstance(tensor._columns[0], NullableTensor)
     assert tensor.tolist() == [[1], [None], [3]]
     assert tensor.to_cudf().to_arrow().to_pydict() == {"0": [1, None, 3]}
 
@@ -190,6 +190,16 @@ def test_to_copy() -> None:
 
     with pytest.raises(TypeError, match="convert"):
         tensor.to(torch.float32)
+
+
+def test_empty_clone_preserves_device() -> None:
+    tensor = ColumnarTensor((), size=(2, 3), device="meta")
+
+    out = tensor.clone()
+
+    assert type(out) is ColumnarTensor
+    assert out.size() == tensor.size()
+    assert out.device == tensor.device
 
 
 @onlyCUDA
