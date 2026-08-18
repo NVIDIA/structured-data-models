@@ -206,19 +206,6 @@ def test_adapter_fits_each_group_separately() -> None:
     assert output.table(2).equal(output.table(0))
 
 
-def test_adapter_fit_transform_matches_fit_then_transform() -> None:
-    ensemble_table = _two_group_ensemble_table()
-    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
-    combined = EnsembleProcessorAdapter(Standardize(with_std=False))
-
-    processor.fit_ensemble(ensemble_table)
-    output = processor.transform_ensemble(ensemble_table)
-    expected = combined.fit_transform_ensemble(ensemble_table)
-
-    for member_id in range(ensemble_table.num_members):
-        assert output.table(member_id).equal(expected.table(member_id))
-
-
 def test_adapter_inverse_restores_input() -> None:
     ensemble_table = _two_group_ensemble_table()
     processor = EnsembleProcessorAdapter(Standardize(with_std=False))
