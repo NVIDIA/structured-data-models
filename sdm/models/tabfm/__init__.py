@@ -1,4 +1,4 @@
-"""TabFM models and checkpoint-compatible components."""
+"""TabFM."""
 
 from sdm.models.tabfm.model import TabFM
 
