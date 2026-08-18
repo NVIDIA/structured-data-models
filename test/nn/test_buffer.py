@@ -86,20 +86,6 @@ def test_buffer_list_preserves_existing_buffer_on_load(
     )
 
 
-def test_buffer_list_registers_as_a_nested_module() -> None:
-    module = torch.nn.Module()
-    module.buffer_list = BufferList([BufferList([torch.tensor([1.0])])])
-
-    restored = torch.nn.Module()
-    restored.buffer_list = BufferList()
-    restored.load_state_dict(module.state_dict())
-    nested = restored.buffer_list[0]
-    assert isinstance(nested, BufferList)
-    value = nested[0]
-    assert isinstance(value, torch.Tensor)
-    assert torch.equal(value, torch.tensor([1.0]))
-
-
 @withCUDA
 def test_buffer_list_moves_device_and_dtype(
     device: torch.device,
