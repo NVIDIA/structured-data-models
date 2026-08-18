@@ -23,7 +23,7 @@ class SwiGLU(torch.nn.Module):
     Args:
         channels: The number of input and output channels.
         hidden_channels: The hidden channels of the gate and up projections.
-        bias: If set to ``False``, the network will not learn an additive bias.
+        bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
     """

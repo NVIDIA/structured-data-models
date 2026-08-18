@@ -1,18 +1,12 @@
-# ruff: noqa: D101, D102
+# ruff: noqa: D101
 
 import math
 from typing import Any
 
 import torch
-from torch import Tensor
-from torch.nn import ModuleList, RMSNorm, Sequential
+from torch.nn import RMSNorm, Sequential
 
-from sdm.nn import (
-    RotaryEmbedding,
-    SoftplusScale,
-    SwiGLU,
-    TransformerBlock,
-)
+from sdm.nn import RotaryEmbedding, SoftplusScale, SwiGLU, TransformerBlock
 
 
 class TabFMTransformerBlock(TransformerBlock):
@@ -20,7 +14,6 @@ class TabFMTransformerBlock(TransformerBlock):
         self,
         channels: int,
         num_heads: int,
-        hidden_channels: int,
         rope: RotaryEmbedding | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -48,11 +41,7 @@ class TabFMTransformerBlock(TransformerBlock):
             num_query_heads=num_heads,
             mlp=Sequential(
                 RMSNorm(channels, eps=1e-6, **factory_kwargs),
-                SwiGLU(
-                    channels=channels,
-                    hidden_channels=hidden_channels,
-                    **factory_kwargs,
-                ),
+                SwiGLU(channels, 4 * channels, **factory_kwargs),
                 RMSNorm(channels, eps=1e-6, **factory_kwargs),
             ),
             query_norm=norm,
