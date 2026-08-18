@@ -24,38 +24,38 @@ import sdm
 DATASETS: list[tuple[int, str]] = [
     # --- Classification ---
     # Binary
-    (31, "classification"),  # credit-g
-    (37, "classification"),  # diabetes
-    (1462, "classification"),  # banknote-authentication
-    (1510, "classification"),  # wdbc
-    (1489, "classification"),  # phoneme
-    (1461, "classification"),  # bank-marketing
+    # (31, "classification"),  # credit-g (1000 rows)
+    # (37, "classification"),  # diabetes (768 rows)
+    # (1462, "classification"),  # banknote-authentication (1372 rows)
+    # (1510, "classification"),  # wdbc (569 rows)
+    # (1489, "classification"),  # phoneme (5404 rows)
+    (1461, "classification"),  # bank-marketing (45K rows)
     # Multi-class
-    (23, "classification"),  # cmc
-    (188, "classification"),  # eucalyptus
-    (12, "classification"),  # mfeat-factors
-    (14, "classification"),  # mfeat-fourier
-    (40691, "classification"),  # wine-quality-white
-    (181, "classification"),  # yeast
-    (1466, "classification"),  # cardiotocography
-    (40975, "classification"),  # car
-    (40496, "classification"),  # LED-display
-    (1476, "classification"),  # gas-drift
-    (40668, "classification"),  # connect-4
-    (6, "classification"),  # letter
-    (554, "classification"),  # mnist_784
-    (40685, "classification"),  # shuttle
+    # (23, "classification"),  # cmc (1473 rows)
+    # (188, "classification"),  # eucalyptus (736 rows)
+    # (12, "classification"),  # mfeat-factors (2000 rows)
+    # (14, "classification"),  # mfeat-fourier (2000 rows)
+    # (40691, "classification"),  # wine-quality-white (1599 rows)
+    # (181, "classification"),  # yeast (1484 rows)
+    # (1466, "classification"),  # cardiotocography (2126 rows)
+    # (40975, "classification"),  # car (1728 rows)
+    # (40496, "classification"),  # LED-display (500 rows)
+    (1476, "classification"),  # gas-drift (13910 rows)
+    (40668, "classification"),  # connect-4 (67K rows)
+    (6, "classification"),  # letter (20K rows)
+    (554, "classification"),  # mnist_784 (70K rows)
+    (40685, "classification"),  # shuttle (58K rows)
     # --- Regression ---
-    (531, "regression"),  # boston
-    (507, "regression"),  # space_ga
-    (422, "regression"),  # california housing
-    (546, "regression"),  # pol
-    (41021, "regression"),  # Moneyball
+    # (531, "regression"),  # boston (506 rows)
+    # (507, "regression"),  # space_ga (3107 rows)
+    # (422, "regression"),  # california housing (8885 rows)
+    # (546, "regression"),  # pol (576 rows)
+    # (41021, "regression"),  # Moneyball (1232 rows)
     (41540, "regression"),  # house_prices_nominal
-    (42225, "regression"),  # flood
-    (42570, "regression"),  # superconductor
+    (42225, "regression"),  # flood (776K rows)
+    # (42570, "regression"),  # superconductor (4209 rows)
     (42571, "regression"),  # concrete
-    (41980, "regression"),  # particulate-matter-ukair
+    # (41980, "regression"),  # particulate-matter-ukair (4440 rows)
 ]
 
 
@@ -73,11 +73,6 @@ def run_dataset(
         target = target[0]
 
     df = df.dropna(subset=[target])
-
-    # Cap dataset size to keep sweep manageable.
-    max_rows = 10_000
-    if len(df) > max_rows:
-        df = df.sample(n=max_rows, random_state=seed)
 
     train_df, test_df = train_test_split(
         df,
