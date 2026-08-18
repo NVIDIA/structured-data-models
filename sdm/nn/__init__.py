@@ -2,6 +2,7 @@
 
 from sdm.nn.feedforward import ChunkedFeedForward, SwiGLUFeedForward
 from sdm.nn.rope import RotaryEmbedding
+from sdm.nn.glu import SwiGLU
 from sdm.nn.softplus import SoftplusScale
 from sdm.nn.scaling import QueryScaling, QASSMax
 from sdm.nn.attention import SDPA, Attention, TransformerBlock
@@ -12,6 +13,7 @@ __all__ = [
     "SwiGLUFeedForward",
     "ChunkedFeedForward",
     "RotaryEmbedding",
+    "SwiGLU",
     "SoftplusScale",
     "QueryScaling",
     "QASSMax",
