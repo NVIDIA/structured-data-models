@@ -1,3 +1,5 @@
+# ruff: noqa: D205
+
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
@@ -15,7 +17,28 @@ from sdm.tensor.table import TableSchema
 
 
 class TabFM(ICLModel):
-    r"""The Google TabFM tabular foundation model.
+    r"""The tabular foundation model as introduced in `"Introducing TabFM: A
+    Zero-shot Foundation Model for Tabular Data" <https://research.google/blog/
+    introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
+
+    Architecturally, :class:`TabFM` can be viewed as a scaled-up
+    :class:`TabICLv2`-style model with Fourier cell embeddings, separate
+    numerical and categorical cell projections, two repeated column/row
+    interaction stages, :class:`~torch.nn.RMSNorm`-based transformer blocks and
+    :class:`~sdm.nn.SwiGLU` feed-forward blocks.
+
+    Due to the size of its checkpoints (~1.6B parameters), each :class:`TabFM`
+    instance is responsible for a single task only: classification or
+    regression.
+
+    .. note::
+        :class:`TabFM` model weights are distributed under a
+        `non-commerical license <https://huggingface.co/google/
+        tabfm-1.0.0-pytorch/blob/
+        77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__.
+        Users are expected to download the
+        `checkpoint <https://huggingface.co/google/tabfm-1.0.0-pytorch>`__
+        manually and use it in accordance with its license.
 
     Args:
         task: The prediction task.
