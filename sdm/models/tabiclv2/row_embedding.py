@@ -217,7 +217,7 @@ class RowEmbedding(torch.nn.Module):
         for i, row_layer in enumerate(self.row_layers):
             query = x[..., :K, :] if i == len(self.row_layers) - 1 else x
             x = row_layer(
-                query=query,
+                query=query,  # [..., R, K + C, D] or [..., R, K, D]
                 key_value=x,  # [..., R, K + C, D]
                 batch_size_limit=row_batch_size_limit,
             )  # [..., R, K + C, D] or [..., R, K, D]
