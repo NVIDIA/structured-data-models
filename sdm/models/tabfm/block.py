@@ -4,8 +4,7 @@ import math
 from typing import Any
 
 import torch
-from torch import Tensor
-from torch.nn import ModuleList, RMSNorm, Sequential
+from torch.nn import RMSNorm, Sequential
 
 from sdm.nn import RotaryEmbedding, SoftplusScale, SwiGLU, TransformerBlock
 
@@ -60,45 +59,3 @@ class TabFMTransformerBlock(TransformerBlock):
             bias=False,
             **factory_kwargs,
         )
-
-
-class Encoder(torch.nn.Module):
-    def __init__(
-        self,
-        num_blocks: int,
-        channels: int,
-        num_heads: int,
-        hidden_channels: int,
-        rope_theta: float | None = 100_000.0,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        self.blocks = ModuleList(
-            TabFMTransformerBlock(
-                channels=channels,
-                num_heads=num_heads,
-                hidden_channels=hidden_channels,
-                rope=None
-                if rope_theta is None
-                else RotaryEmbedding(
-                    channels=channels // num_heads,
-                    layout="interleaved",
-                    theta=rope_theta,
-                    requires_grad=False,
-                    **factory_kwargs,
-                ),
-                **factory_kwargs,
-            )
-            for _ in range(num_blocks)
-        )
-
-    def forward(
-        self,
-        tensor: Tensor,
-        attn_mask: Tensor | None = None,
-    ) -> Tensor:
-        for block in self.blocks:
-            tensor = block(query=tensor, attn_mask=attn_mask)
-        return tensor
