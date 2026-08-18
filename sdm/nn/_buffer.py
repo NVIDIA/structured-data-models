@@ -8,7 +8,7 @@ from torch import Tensor
 
 
 class BufferList(torch.nn.Module):
-    """Store tensors and nested buffer lists as indexed PyTorch state.
+    """Ordered list of tensors registered as PyTorch module state.
 
     Args:
         buffers: Tensors and buffer lists to register in order.
@@ -77,6 +77,8 @@ class BufferList(torch.nn.Module):
 
     def get_extra_state(self) -> tuple[bool, ...]:
         r""":meta private:"""  # noqa: D415
+        # Layout of the buffer list in a tuple of booleans.
+        # True at positions that hold a nested BufferList rather than a tensor.
         return tuple(str(index) in self._modules for index in range(len(self)))
 
     def set_extra_state(self, state: object) -> None:

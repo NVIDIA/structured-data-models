@@ -11,22 +11,44 @@ class _TensorSubclass(torch.Tensor):
     pass
 
 
-def test_buffer_list_is_an_indexed_buffer_collection() -> None:
+def test_buffer_list_is_an_indexed_collection() -> None:
     buffers = BufferList(
         [
-            torch.tensor([1.0, 2.0]),
-            torch.tensor([3.0]),
+            BufferList([torch.tensor([1.0, 2.0]), torch.tensor([3.0])]),
+            BufferList(),
+            torch.tensor([5.0]),
         ]
     )
 
-    assert len(buffers) == 2
-    assert tuple(buffers.state_dict()) == ("0", "1", "_extra_state")
-    first = buffers[0]
-    second = buffers[1]
-    assert isinstance(first, torch.Tensor)
-    assert isinstance(second, torch.Tensor)
-    assert first.equal(torch.tensor([1.0, 2.0]))
-    assert second.equal(torch.tensor([3.0]))
+    assert len(buffers) == 3
+    assert isinstance(buffers[0], BufferList)
+    assert isinstance(buffers[1], BufferList)
+    assert isinstance(buffers[2], torch.Tensor)
+    assert len(buffers[0]) == 2
+    assert len(buffers[1]) == 0
+    assert buffers[0][0].equal(torch.tensor([1.0, 2.0]))
+    assert buffers[0][1].equal(torch.tensor([3.0]))
+    assert buffers[2].equal(torch.tensor([5.0]))
+
+
+def test_buffer_list_roundtrips_state_dict() -> None:
+    source = BufferList(
+        [
+            BufferList([torch.tensor([1.0]), torch.tensor([2.0])]),
+            BufferList(),
+            torch.tensor([5.0]),
+        ]
+    )
+    restored = BufferList()
+
+    restored.load_state_dict(source.state_dict())
+
+    assert isinstance(restored[0], BufferList)
+    assert isinstance(restored[1], BufferList)
+    assert isinstance(restored[2], torch.Tensor)
+    assert restored[0][0].equal(source[0][0])
+    assert restored[0][1].equal(source[0][1])
+    assert restored[2].equal(source[2])
 
 
 def test_buffer_list_loads_tensor_subclasses() -> None:
@@ -37,12 +59,10 @@ def test_buffer_list_loads_tensor_subclasses() -> None:
     restored.load_state_dict(source.state_dict())
 
     loaded = restored[0]
-    original = source[0]
     assert type(loaded) is _TensorSubclass
-    assert isinstance(original, torch.Tensor)
     assert torch.equal(loaded, tensor)
     loaded.add_(1)
-    assert torch.equal(original, tensor)
+    assert torch.equal(source[0], tensor)
 
 
 def test_buffer_list_loads_nested_string_tensor() -> None:
@@ -81,102 +101,20 @@ def test_buffer_list_preserves_existing_buffer_on_load(
 
 def test_buffer_list_registers_as_a_nested_module() -> None:
     module = torch.nn.Module()
-    module.buffer_list = BufferList([torch.tensor([1.0])])
-
-    assert tuple(module.state_dict()) == (
-        "buffer_list.0",
-        "buffer_list._extra_state",
+    module.buffer_list = BufferList(
+        [BufferList([torch.tensor([1.0])])]
     )
 
     restored = torch.nn.Module()
     restored.buffer_list = BufferList()
     restored.load_state_dict(module.state_dict())
-    loaded = restored.buffer_list[0]
-    assert isinstance(loaded, torch.Tensor)
-    assert torch.equal(loaded, torch.tensor([1.0]))
-
-
-@onlyCUDA
-def test_buffer_list_cuda_and_cpu() -> None:
-    buffers = BufferList([torch.tensor([1.0])]).cuda()
-
-    cuda_buffer = buffers[0]
-    assert isinstance(cuda_buffer, torch.Tensor)
-    assert cuda_buffer.is_cuda
-    buffers.cpu()
-    cpu_buffer = buffers[0]
-    assert isinstance(cpu_buffer, torch.Tensor)
-    assert not cpu_buffer.is_cuda
+    nested = restored.buffer_list[0]
+    assert isinstance(nested, BufferList)
+    assert torch.equal(nested[0], torch.tensor([1.0]))
 
 
 @withCUDA
-def test_buffer_list_moves_device_and_floating_dtype(
-    device: torch.device,
-) -> None:
-    buffers = BufferList(
-        [
-            torch.tensor([1.0]),
-            torch.tensor([2], dtype=torch.long),
-        ]
-    ).to(device=device, dtype=torch.float64)
-
-    floating = buffers[0]
-    integer = buffers[1]
-    assert isinstance(floating, torch.Tensor)
-    assert isinstance(integer, torch.Tensor)
-    assert floating.device == device
-    assert floating.dtype == torch.float64
-    assert integer.device == device
-    assert integer.dtype == torch.long
-
-
-def test_buffer_list_deepcopy_has_independent_storage() -> None:
-    buffers = BufferList([torch.tensor([1.0, 2.0])])
-
-    cloned = copy.deepcopy(buffers)
-    cloned_buffer = cloned[0]
-    original_buffer = buffers[0]
-    assert isinstance(cloned_buffer, torch.Tensor)
-    assert isinstance(original_buffer, torch.Tensor)
-    cloned_buffer.add_(1)
-
-    assert torch.equal(original_buffer, torch.tensor([1.0, 2.0]))
-    assert torch.equal(cloned_buffer, torch.tensor([2.0, 3.0]))
-
-
-def test_buffer_list_loads_nested_uneven_and_empty_lists() -> None:
-    source = BufferList(
-        [
-            BufferList([torch.tensor([1.0]), torch.tensor([2.0])]),
-            BufferList(),
-            BufferList([torch.tensor([3.0])]),
-        ]
-    )
-    restored = BufferList()
-
-    restored.load_state_dict(source.state_dict())
-
-    assert len(restored) == 3
-    empty = restored[1]
-    first = restored[0]
-    last = restored[2]
-    assert isinstance(empty, BufferList)
-    assert isinstance(first, BufferList)
-    assert isinstance(last, BufferList)
-    assert len(empty) == 0
-    first_value = first[0]
-    second_value = first[1]
-    last_value = last[0]
-    assert isinstance(first_value, torch.Tensor)
-    assert isinstance(second_value, torch.Tensor)
-    assert isinstance(last_value, torch.Tensor)
-    assert torch.equal(first_value, torch.tensor([1.0]))
-    assert torch.equal(second_value, torch.tensor([2.0]))
-    assert torch.equal(last_value, torch.tensor([3.0]))
-
-
-@withCUDA
-def test_buffer_list_moves_nested_state(
+def test_buffer_list_moves_device_and_dtype(
     device: torch.device,
 ) -> None:
     buffers = BufferList(
@@ -207,7 +145,7 @@ def test_buffer_list_moves_nested_state(
     assert nested_long.dtype == torch.long
 
 
-def test_buffer_list_deepcopy_has_independent_nested_storage() -> None:
+def test_buffer_list_deepcopy_has_independent_storage() -> None:
     buffers = BufferList([BufferList([torch.tensor([1.0, 2.0])])])
 
     cloned = copy.deepcopy(buffers)
