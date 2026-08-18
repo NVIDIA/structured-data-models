@@ -150,6 +150,107 @@ def test_align_categories_orders_joint_vocabulary(
 
 
 @withCUDA
+def test_align_categories_orders_appearance_before_filtering(
+    device: torch.device,
+) -> None:
+    context = _table(
+        [[-1], [2], [1], [2], [0], [3], [1], [0]],
+        categories=(("alpha", "beta", "gamma", "rare", "unused"),),
+        device=device,
+    )
+    query = _table(
+        [[3], [0], [2], [1], [4], [-1]],
+        categories=(("gamma", "other", "alpha", "beta", "rare"),),
+        device=device,
+    )
+
+    processor = AlignCategories(sort_by="appearance", min_frequency=2)
+    context_output = processor.fit_transform(context)
+    query_output = processor.transform(query)
+
+    assert context_output.categorical.categories[0].tolist() == [
+        "gamma",
+        "beta",
+        "alpha",
+    ]
+    assert context_output.categorical.code.squeeze(-1).tolist() == [
+        -1,
+        0,
+        1,
+        0,
+        2,
+        -1,
+        1,
+        2,
+    ]
+    assert query_output.categorical.code.squeeze(-1).tolist() == [
+        1,
+        0,
+        2,
+        -1,
+        -1,
+        -1,
+    ]
+
+
+@withCUDA
+def test_align_categories_orders_appearance_per_ensemble_member(
+    device: torch.device,
+) -> None:
+    categories = (
+        torch.tensor([10, 20, 30], dtype=torch.uint64, device=device),
+    )
+
+    def table(codes: list[int]) -> TableTensor:
+        return TableTensor(
+            columns={"categorical": ("value",)},
+            categorical=CategoricalTensor(
+                code=torch.tensor(
+                    codes,
+                    dtype=torch.int32,
+                    device=device,
+                ).unsqueeze(-1),
+                categories=categories,
+            ),
+        )
+
+    first = table([2, 0, -1, 1])
+    second = table([1, -1, 0, 2])
+    context = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1),
+    )
+    processor = AlignCategories(sort_by="appearance")
+
+    context_output = processor.fit_transform_ensemble(context)
+
+    assert [
+        (
+            context_output.table(i).categorical.categories[0].tolist(),
+            context_output.table(i).categorical.code.squeeze(-1).tolist(),
+        )
+        for i in range(2)
+    ] == [
+        ([30, 10, 20], [0, 1, -1, 2]),
+        ([20, 10, 30], [0, -1, 1, 2]),
+    ]
+
+
+def test_align_categories_can_filter_all_unsigned_categories() -> None:
+    table = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(torch.tensor([10, 20], dtype=torch.uint64),),
+        ),
+    )
+
+    output = AlignCategories(min_frequency=3).fit_transform(table)
+
+    assert output.categorical.categories[0].numel() == 0
+    assert output.categorical.code.eq(-1).all()
+
+
+@withCUDA
 def test_align_categories_orders_values(
     device: torch.device,
 ) -> None:
@@ -383,6 +484,14 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
 
     with pytest.raises(NotImplementedError):
         processor.transform(query)
+
+
+@pytest.mark.parametrize("min_frequency", [0, -1])
+def test_align_categories_rejects_non_positive_min_frequency(
+    min_frequency: int,
+) -> None:
+    with pytest.raises(ValueError, match="min_frequency must be positive"):
+        AlignCategories(min_frequency=min_frequency)
 
 
 @withCUDA
