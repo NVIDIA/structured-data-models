@@ -34,17 +34,17 @@ from sdm.evaluation import to_class_indices
 
 DATASET_REPO = "inria-soda/STRABLE-benchmark"
 DATASET_NAMES = (
-    "clear-corpus",
-    "mercari",
-    "financial-product-complaint",
-    "kickstarter-projects",
+    # "clear-corpus",
+    # "mercari",
+    # "financial-product-complaint",
+    # "kickstarter-projects",
     "covid-clinical-trials",
 )
 MAX_ROWS = 4096
 BATCH_SIZE = 32
 NUM_ESTIMATORS = 8
 SEED = 0
-OUTPUT = Path("text_model_performance.csv")
+OUTPUT = Path("modernbert_covid.csv")
 
 Task = Literal["regression", "m-classification", "b-classification"]
 ProcessorKind = Literal["none", "tfidf", "embedding"]
@@ -59,38 +59,42 @@ class ProcessorSpec:
 
 
 PROCESSORS = (
-    ProcessorSpec(name="none", kind="none", tokenizer="n/a"),
-    ProcessorSpec(name="tfidf", kind="tfidf", tokenizer="character n-gram"),
-    ProcessorSpec(
-        name="all-MiniLM-L6-v2",
-        kind="embedding",
-        tokenizer="WordPiece",
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-    ),
-    ProcessorSpec(
-        name="bge-base-en-v1.5",
-        kind="embedding",
-        tokenizer="WordPiece",
-        model_name="BAAI/bge-base-en-v1.5",
-    ),
-    ProcessorSpec(
-        name="all-distilroberta-v1",
-        kind="embedding",
-        tokenizer="BPE",
-        model_name="sentence-transformers/all-distilroberta-v1",
-    ),
+    # ProcessorSpec(name="none", kind="none", tokenizer="n/a"),
+    # ProcessorSpec(
+    #     name="tfidf",
+    #     kind="tfidf",
+    #     tokenizer="character n-gram",
+    # ),
+    # ProcessorSpec(
+    #     name="all-MiniLM-L6-v2",
+    #     kind="embedding",
+    #     tokenizer="WordPiece",
+    #     model_name="sentence-transformers/all-MiniLM-L6-v2",
+    # ),
+    # ProcessorSpec(
+    #     name="bge-base-en-v1.5",
+    #     kind="embedding",
+    #     tokenizer="WordPiece",
+    #     model_name="BAAI/bge-base-en-v1.5",
+    # ),
+    # ProcessorSpec(
+    #     name="all-distilroberta-v1",
+    #     kind="embedding",
+    #     tokenizer="BPE",
+    #     model_name="sentence-transformers/all-distilroberta-v1",
+    # ),
     ProcessorSpec(
         name="modernbert-embed-base",
         kind="embedding",
         tokenizer="BPE",
         model_name="nomic-ai/modernbert-embed-base",
     ),
-    ProcessorSpec(
-        name="Qwen3-Embedding-0.6B",
-        kind="embedding",
-        tokenizer="BPE",
-        model_name="Qwen/Qwen3-Embedding-0.6B",
-    ),
+    # ProcessorSpec(
+    #     name="Qwen3-Embedding-0.6B",
+    #     kind="embedding",
+    #     tokenizer="BPE",
+    #     model_name="Qwen/Qwen3-Embedding-0.6B",
+    # ),
 )
 
 
@@ -439,7 +443,7 @@ def main() -> None:
             _write_results(results)
             reduction = result.error_reduction_vs_none_pct
             reduction_text = (
-                "baseline" if reduction is None else f"{reduction:+.1f}%"
+                "n/a" if reduction is None else f"{reduction:+.1f}%"
             )
             print(
                 f"  {dataset.name}: {result.primary_metric} "
@@ -451,7 +455,7 @@ def main() -> None:
         gc.collect()
         torch.cuda.empty_cache()
 
-    _print_results(results)
+    # _print_results(results)
     print(f"\nResults written to {OUTPUT}")
 
 
