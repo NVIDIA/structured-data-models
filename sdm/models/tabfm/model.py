@@ -32,7 +32,7 @@ class TabFM(ICLModel):
     def __init__(
         self,
         task: Literal["classification", "regression"],
-        checkpoint_path: str | Path | None = None,
+        checkpoint_path: str | Path | None,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__()
