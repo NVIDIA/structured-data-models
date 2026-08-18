@@ -45,23 +45,20 @@ class CellEmbedding(torch.nn.Module):
 
         # Compute Fourier features per semantic type:
         grouped_mask = categorical_mask[..., index]  # [..., C, G]
+        grouped_mask = grouped_mask.unsqueeze(-1)
+        grouped_mask = grouped_mask.unsqueeze(-4)  # [..., 1, C, G, 1]
         freq = torch.where(
-            grouped_mask.unsqueeze(-1),  # [..., C, G, 1]
+            grouped_mask,  # [..., 1, C, G, 1]
             self.cat_freq.to(torch.float32),  # [G, F]
             self.num_freq.to(torch.float32),  # [G, F]
-        ).unsqueeze(-4)  # [..., 1, C, G, F]
+        )  # [..., 1, C, G, F]
         angle = x.unsqueeze(-1).to(torch.float32) * freq  # [..., R, C, G, F]
         fourier = torch.cat([angle.sin(), angle.cos()], dim=-1)
         fourier = fourier.to(self.num_lin.weight.dtype)
 
         # Project Fourier features per semantic type:
-        output = torch.where(
-            grouped_mask.unsqueeze(-3).unsqueeze(-1),  # [..., 1, C, G, 1]
+        return torch.where(
+            grouped_mask,  # [..., 1, C, G, 1]
             self.cat_lin(fourier),  # [..., R, C, G, D]
             self.num_lin(fourier),  # [..., R, C, G, D]
         ).sum(dim=-2)  # [..., R, C, D]
-        if active_features is None:
-            return output
-
-        active = torch.arange(C, device=x.device) < active_features[..., None]
-        return output.masked_fill(~active[..., None, :, None], 0)
