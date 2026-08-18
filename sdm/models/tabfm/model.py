@@ -38,7 +38,7 @@ class TabFM(ICLModel):
         77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__.
         Users are expected to download the
         `checkpoint <https://huggingface.co/google/tabfm-1.0.0-pytorch>`__
-        manually and use it in accordance with its non-commerical license.
+        manually and use it in accordance with its license.
 
     Args:
         task: The prediction task.
