@@ -18,7 +18,6 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
-import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
@@ -39,7 +38,6 @@ DATASETS = (
     "clear-corpus",
     "financial-product-complaint",
 )
-MAX_ROWS = 2048
 BATCH_SIZE = 32
 WARMUP_RUNS = 1
 RUNS = 3
@@ -96,16 +94,7 @@ def _load_dataset(name: str) -> tuple[pa.Table, int, list[str]]:
         column for column, stype in stypes.items() if stype == Stype.text
     ]
 
-    table = full_table
-    if len(table) > MAX_ROWS:
-        indices = np.linspace(
-            0,
-            len(table) - 1,
-            num=MAX_ROWS,
-            dtype=np.int64,
-        )
-        table = table.take(pa.array(indices))
-    return table, len(full_table), text_columns
+    return full_table, len(full_table), text_columns
 
 
 def _count_non_ascii(
