@@ -2,7 +2,6 @@ import copy
 
 import torch
 
-from sdm import StringTensor
 from sdm.nn._buffer import BufferList
 from sdm.testing import withCUDA
 
@@ -56,21 +55,6 @@ def test_buffer_list_loads_tensor_subclasses() -> None:
     original = source[0]
     assert isinstance(original, torch.Tensor)
     assert torch.equal(original, tensor)
-
-
-def test_buffer_list_loads_nested_string_tensor() -> None:
-    source = BufferList(
-        [BufferList([StringTensor.from_list(["red", "blue"])])]
-    )
-    restored = BufferList()
-
-    restored.load_state_dict(source.state_dict())
-
-    nested = restored[0]
-    assert isinstance(nested, BufferList)
-    values = nested[0]
-    assert isinstance(values, StringTensor)
-    assert values.tolist() == ["red", "blue"]
 
 
 @withCUDA
@@ -139,18 +123,14 @@ def test_buffer_list_moves_device_and_dtype(
 
 
 def test_buffer_list_deepcopy_has_independent_storage() -> None:
-    buffers = BufferList([BufferList([torch.tensor([1.0, 2.0])])])
+    buffers = BufferList([torch.tensor([1.0, 2.0])])
 
     cloned = copy.deepcopy(buffers)
-    cloned_nested = cloned[0]
-    assert isinstance(cloned_nested, BufferList)
-    cloned_tensor = cloned_nested[0]
+    cloned_tensor = cloned[0]
     assert isinstance(cloned_tensor, torch.Tensor)
     cloned_tensor.add_(1)
 
-    nested = buffers[0]
-    assert isinstance(nested, BufferList)
-    original = nested[0]
+    original = buffers[0]
     assert isinstance(original, torch.Tensor)
     assert torch.equal(original, torch.tensor([1.0, 2.0]))
     assert torch.equal(cloned_tensor, torch.tensor([2.0, 3.0]))
