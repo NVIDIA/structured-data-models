@@ -69,14 +69,24 @@ class TabFM(ICLModel):
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__()
-        assert checkpoint_path is None
 
         self.task = task
+        if checkpoint_path is None:
+            self.model = _TabFM(
+                num_classes=10 if task == "classification" else 0,
+                device=device,
+            )
+        else:
+            # Avoid an import cycle while keeping checkpoint details private.
+            from sdm.models.tabfm.checkpoint import (  # noqa: PLC0415
+                _load_tabfm_v1_0_0,
+            )
 
-        self.model = _TabFM(
-            num_classes=10 if task == "classification" else 0,
-            device=device,
-        )
+            self.model = _load_tabfm_v1_0_0(
+                checkpoint_path,
+                task=task,
+                device=device,
+            )
 
         self.eval()
 
