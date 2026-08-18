@@ -1,40 +1,62 @@
+import functools
+
 import pytest
 import torch
 
-from sdm.cache import Cache
-from sdm.models.tabfm.model import _TabFM
+from sdm.models import TabFM
+from sdm.models.tabfm import model as tabfm_module
 from sdm.testing import withCUDA
 
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
-def test_forward(device: torch.device, dtype: torch.dtype) -> None:
-    model = _TabFM(
-        num_classes=0 if dtype.is_floating_point else 10,
-        channels=64,
-        num_inducing_points=128,
-        num_readout_tokens=4,
-        num_icl_layers=4,
-        device=device,
+def test_forward(
+    device: torch.device,
+    dtype: torch.dtype,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        tabfm_module,
+        "_TabFM",
+        functools.partial(
+            tabfm_module._TabFM,
+            channels=64,
+            num_inducing_points=128,
+            num_readout_tokens=4,
+            num_icl_layers=4,
+        ),
     )
 
-    x = torch.randn(8, 6, device=device)
-    categorical_mask = torch.tensor([True, False] * 3, device=device)
-    if dtype.is_floating_point:
-        y = torch.randn(5, device=device)
+    model = TabFM(
+        task="regression" if dtype.is_floating_point else "classification",
+        checkpoint_path=None,
+        device=device,
+    )
+    if device.type == "cpu":
+        assert repr(model) == "TabFM()"
     else:
-        y = torch.randint(0, 10, (5,), device=device)
+        assert repr(model) == "TabFM(device=cuda:0)"
 
-    out1 = model(x, y, categorical_mask)
-    assert out1.dtype == x.dtype
-    assert out1.device == device
+    x_context = torch.randn(5, 6, device=device)
+    x_query = torch.randn(3, 6, device=device)
     if dtype.is_floating_point:
-        assert out1.size() == (3, 1)
+        y_context = torch.randn(5, 1, device=device)
     else:
-        assert out1.size() == (3, 10)
+        y_context = torch.tensor([0, 1, 0, 1, 0], device=device).unsqueeze(-1)
 
-    cache = Cache()
-    model(x[: y.size(0)], y, categorical_mask, cache=cache)
-    cache.freeze()
-    out2 = model(x[y.size(0) :], y[:0], categorical_mask, cache=cache)
-    torch.testing.assert_close(out1, out2)
+    torch.manual_seed(1)
+    out = model(x_context, y_context, x_query)
+    assert out.dtype == x_context.dtype
+    assert out.device == device
+    assert torch.is_inference(out)
+    if dtype.is_floating_point:
+        assert out.size() == (1, 3, 1)
+    else:
+        assert out.size() == (1, 3, 2)
+
+    torch.manual_seed(1)
+    model.fit(x_context, y_context)
+    assert model._cache is not None
+    assert model._cache.size() > 0
+    assert model.predict(x_query).allclose(out)
+    model.clear()
