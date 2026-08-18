@@ -1,0 +1,8 @@
+﻿SwiGLU
+======
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: SwiGLU
+   :members:
+   :show-inheritance:
