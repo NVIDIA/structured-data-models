@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from typing import Any, cast
+from typing import Any, Generic, TypeVar, cast
 
 import torch
 from torch import Tensor
 
+T = TypeVar("T", bound="Tensor | BufferList[Any]")
 
-class BufferList(torch.nn.Module):
+
+class BufferList(torch.nn.Module, Generic[T]):
     """Ordered list of tensors registered as PyTorch module state.
 
     Args:
@@ -16,7 +18,7 @@ class BufferList(torch.nn.Module):
 
     def __init__(
         self,
-        buffers: Iterable[Tensor | BufferList] = (),
+        buffers: Iterable[T] = (),
     ) -> None:
         super().__init__()
         for index, item in enumerate(buffers):
@@ -63,13 +65,13 @@ class BufferList(torch.nn.Module):
             if key in missing_keys:
                 missing_keys.remove(key)
 
-    def __getitem__(self, index: int) -> Tensor | BufferList:
+    def __getitem__(self, index: int) -> T:
         name = str(index)
         if name in self._modules:
-            return cast(BufferList, self.get_submodule(name))
-        return self.get_buffer(name)
+            return cast(T, self.get_submodule(name))
+        return cast(T, self.get_buffer(name))
 
-    def __iter__(self) -> Iterator[Tensor | BufferList]:
+    def __iter__(self) -> Iterator[T]:
         return (self[index] for index in range(len(self)))
 
     def __len__(self) -> int:
