@@ -74,7 +74,11 @@ def test_rotary_embedding_compile(
         rotary_channels=rotary_channels,
         device=device,
     )
-    x = torch.randn(2, 5, 3, 16, device=device)
+    x = torch.arange(
+        2 * 5 * 3 * 16,
+        device=device,
+        dtype=torch.float32,
+    ).reshape(2, 5, 3, 16)
 
     expected = module(x)
     out = fullgraph(module)(x)

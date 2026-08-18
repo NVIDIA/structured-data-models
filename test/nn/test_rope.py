@@ -77,7 +77,11 @@ def test_rope_partial_channels(
         theta=100,
         device=device,
     )
-    x = torch.randn(2, 5, 3, 16, device=device)
+    x = torch.arange(
+        2 * 5 * 3 * 16,
+        device=device,
+        dtype=torch.float32,
+    ).reshape(2, 5, 3, 16)
 
     output = partial(x)
     expected_prefix = reference(x[..., :4])
