@@ -61,11 +61,12 @@ class RandomProjection(EnsembleProcessor):
         groups = []
         for i in range(ensemble_table.num_groups):
             group = ensemble_table.expanded_group(i)
+            weight = cast(torch.Tensor, self._weights[i])
             projected = TableTensor(
                 columns={
                     Stype.numerical: [f"rp_{i}" for i in range(self.channels)]
                 },
-                numerical=group.numerical @ self._weights[i].transpose(-1, -2),
+                numerical=group.numerical @ weight.transpose(-1, -2),
             )
             group = cast(
                 TableTensor,
