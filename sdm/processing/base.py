@@ -37,7 +37,16 @@ class Processor(torch.nn.Module, abc.ABC):
     def __init__(self) -> None:
         super().__init__()
         self.register_buffer("_fitted_state", torch.tensor(False))
-        self._fitted = False
+        self.__fitted = False
+
+    @property
+    def _fitted(self) -> bool:
+        return self.__fitted
+
+    @_fitted.setter
+    def _fitted(self, value: bool) -> None:
+        self.__fitted = value
+        self._fitted_state.fill_(value)
 
     @property
     def is_fitted(self) -> bool:
@@ -95,11 +104,10 @@ class Processor(torch.nn.Module, abc.ABC):
             unexpected_keys,
             error_msgs,
         )
-        self._fitted = bool(self._fitted_state)
+        self.__fitted = bool(self._fitted_state)
 
     def _set_fitted(self, device: torch.device) -> None:
         self._fitted_state = self._fitted_state.to(device=device)
-        self._fitted_state.fill_(True)
         self._fitted = True
 
     def _check_is_fitted(self) -> None:

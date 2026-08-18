@@ -46,7 +46,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), processor)
 
         self.requires_fit = any(child.requires_fit for child in self)
-        self._fitted_state.fill_(False)
         self._fitted = False
         return self
 
@@ -70,7 +69,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), child)
 
         self.requires_fit = any(child.requires_fit for child in self)
-        self._fitted_state.fill_(False)
         self._fitted = False
         return self
 
