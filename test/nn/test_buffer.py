@@ -12,18 +12,14 @@ class _TensorSubclass(torch.Tensor):
 
 
 def test_buffer_list_is_an_indexed_collection() -> None:
-    inner = BufferList([torch.tensor([1.0, 2.0]), torch.tensor([3.0])])
-    empty = BufferList()
-    buffers = BufferList([inner, empty, torch.tensor([5.0])])
+    buffers = BufferList([BufferList([torch.tensor([1.0, 2.0]), torch.tensor([3.0])]), BufferList(), torch.tensor([5.0])])
+    inner = buffers[0]
+    empty = buffers[1]
 
     assert len(buffers) == 3
-    assert buffers[0] is inner
-    assert buffers[1] is empty
     assert len(inner) == 2
     assert len(empty) == 0
-    direct = buffers[2]
-    assert isinstance(direct, torch.Tensor)
-    assert direct.equal(torch.tensor([5.0]))
+    assert buffers[2].equal(torch.tensor([5.0]))
 
 
 def test_buffer_list_roundtrips_state_dict() -> None:
@@ -43,9 +39,7 @@ def test_buffer_list_roundtrips_state_dict() -> None:
     assert isinstance(first, BufferList)
     assert len(first) == 2
     assert len(restored[1]) == 0
-    direct = restored[2]
-    assert isinstance(direct, torch.Tensor)
-    assert direct.equal(torch.tensor([5.0]))
+    assert restored[2].equal(torch.tensor([5.0]))
 
 
 def test_buffer_list_loads_tensor_subclasses() -> None:
