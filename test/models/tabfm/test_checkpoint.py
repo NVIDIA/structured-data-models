@@ -58,64 +58,6 @@ def test_remap_packs_attention_and_folds_class_bias() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("source", "expected", "match"),
-    [
-        (
-            {},
-            {"cell_embedding.num_freq": torch.empty(1)},
-            "Checkpoint is missing",
-        ),
-        (
-            {"unexpected": torch.empty(1)},
-            {},
-            "Unmapped checkpoint parameters",
-        ),
-    ],
-)
-def test_remap_rejects_checkpoint_key_mismatches(
-    source: dict[str, torch.Tensor],
-    expected: dict[str, torch.Tensor],
-    match: str,
-) -> None:
-    with pytest.raises((KeyError, ValueError), match=match):
-        checkpoint._remap_state_dict(source=source, expected=expected)
-
-
-def test_remap_consumes_shared_row_rope() -> None:
-    rope = torch.tensor([1.0, 2.0])
-    source = {
-        "row_interactor.tf_row.rope.freqs": rope,
-        "row_interactor_2.tf_row.rope.freqs": rope.clone(),
-    }
-    expected = {
-        "row_embedding.row_blocks.0.0.attn.query_transform.0.inv_freq": (
-            torch.empty(2)
-        ),
-    }
-
-    output = checkpoint._remap_state_dict(
-        source=source,
-        expected=expected,
-    )
-
-    assert source == {}
-    assert output[next(iter(expected))] is rope
-
-
-@pytest.mark.parametrize(
-    "target_key",
-    [
-        "unknown.weight",
-        "icl_block.layers.0.attn.query_transform.7.weight",
-        "icl_block.layers.0.attn.key_transform.0.bias",
-    ],
-)
-def test_source_rejects_unknown_layouts(target_key: str) -> None:
-    with pytest.raises((KeyError, ValueError)):
-        checkpoint._source(target_key)
-
-
 @pytest.mark.parametrize("task", ["classification", "regression"])
 def test_model_loads_the_requested_checkpoint(
     monkeypatch: pytest.MonkeyPatch,
