@@ -3,6 +3,7 @@ import functools
 import pytest
 import torch
 
+from sdm import CategoricalTensor, TableTensor
 from sdm.models import TabFM
 from sdm.models.tabfm import model as tabfm_module
 from sdm.testing import withCUDA
@@ -37,8 +38,14 @@ def test_forward(
     else:
         assert repr(model) == "TabFM(device=cuda:0)"
 
-    x_context = torch.randn(5, 6, device=device)
-    x_query = torch.randn(3, 6, device=device)
+    x = TableTensor(
+        numerical=torch.randn(8, 3, device=device),
+        categorical=CategoricalTensor.from_tensor(
+            torch.randint(0, 2, (8, 3), device=device)
+        ),
+    )
+    x_context, x_query = x.split(5, dim=0)
+
     if dtype.is_floating_point:
         y_context = torch.randn(5, 1, device=device)
     else:
