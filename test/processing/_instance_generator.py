@@ -111,39 +111,39 @@ def _make_reduction_inputs(
 
 @dataclass(frozen=True)
 class ProcessorCase:
-    factory: Callable[[], sp.Processor]
+    processor: sp.Processor
     make_inputs: InputFactory = make_mixed_inputs
 
 
 PROCESSOR_CASES = (
-    ProcessorCase(sp.Identity),
-    ProcessorCase(lambda: sp.Callable(lambda table: table)),
-    ProcessorCase(lambda: sp.DropStypes(Stype.id)),
-    ProcessorCase(sp.ToNumerical),
-    ProcessorCase(sp.ShuffleColumns),
-    ProcessorCase(lambda: sp.SelectColumns(2)),
-    ProcessorCase(lambda: sp.TFIDF(ngram_range=(2, 2))),
-    ProcessorCase(lambda: sp.Clip(-2.0, 6.0)),
-    ProcessorCase(sp.ClipQuantiles),
-    ProcessorCase(sp.ClipSigma),
-    ProcessorCase(sp.ImputeMean, _make_impute_mean_inputs),
-    ProcessorCase(sp.PowerTransform),
+    ProcessorCase(sp.Identity()),
+    ProcessorCase(sp.Callable(lambda table: table)),
+    ProcessorCase(sp.DropStypes(Stype.id)),
+    ProcessorCase(sp.ToNumerical()),
+    ProcessorCase(sp.ShuffleColumns()),
+    ProcessorCase(sp.SelectColumns(2)),
+    ProcessorCase(sp.TFIDF(ngram_range=(2, 2))),
+    ProcessorCase(sp.Clip(-2.0, 6.0)),
+    ProcessorCase(sp.ClipQuantiles()),
+    ProcessorCase(sp.ClipSigma()),
+    ProcessorCase(sp.ImputeMean(), _make_impute_mean_inputs),
+    ProcessorCase(sp.PowerTransform()),
     ProcessorCase(
-        lambda: sp.QuantileTransform(n_quantiles=4, subsample=None),
+        sp.QuantileTransform(n_quantiles=4, subsample=None),
     ),
-    ProcessorCase(sp.Standardize),
-    ProcessorCase(sp.DropConstantColumns),
-    ProcessorCase(lambda: sp.PCA(2)),
-    ProcessorCase(lambda: sp.RandomProjection(2)),
-    ProcessorCase(sp.AlignCategories, _make_align_categories_inputs),
-    ProcessorCase(sp.ShuffleCategories),
-    ProcessorCase(sp.ImputeMode),
-    ProcessorCase(lambda: sp.AddCalendarFields(["month"])),
-    ProcessorCase(sp.Softmax),
-    ProcessorCase(sp.ReduceEstimators, _make_reduction_inputs),
-    ProcessorCase(lambda: sp.EnsembleProcessorAdapter(sp.Standardize())),
+    ProcessorCase(sp.Standardize()),
+    ProcessorCase(sp.DropConstantColumns()),
+    ProcessorCase(sp.PCA(2)),
+    ProcessorCase(sp.RandomProjection(2)),
+    ProcessorCase(sp.AlignCategories(), _make_align_categories_inputs),
+    ProcessorCase(sp.ShuffleCategories()),
+    ProcessorCase(sp.ImputeMode()),
+    ProcessorCase(sp.AddCalendarFields(["month"])),
+    ProcessorCase(sp.Softmax()),
+    ProcessorCase(sp.ReduceEstimators(), _make_reduction_inputs),
+    ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(
-        lambda: sp.Sequential(
+        sp.Sequential(
             sp.StypeDispatch(
                 numerical=sp.Choice(
                     sp.Standardize(),
@@ -155,13 +155,13 @@ PROCESSOR_CASES = (
         ),
     ),
     ProcessorCase(
-        lambda: sp.StypeDispatch(
+        sp.StypeDispatch(
             numerical=sp.Standardize(),
             categorical=sp.Identity(),
         ),
     ),
     ProcessorCase(
-        lambda: sp.Choice(
+        sp.Choice(
             sp.Standardize(),
             sp.ShuffleColumns(),
             method="round_robin",

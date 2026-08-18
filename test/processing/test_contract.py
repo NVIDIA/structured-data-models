@@ -1,5 +1,6 @@
 import inspect
 import io
+from copy import deepcopy
 from typing import cast
 
 import pytest
@@ -27,7 +28,7 @@ def test_public_processors_are_registered_or_scoped() -> None:
         and issubclass(value, sp.Processor)
         and not inspect.isabstract(value)
     }
-    registered = {type(case.factory()) for case in PROCESSOR_CASES}
+    registered = {type(case.processor) for case in PROCESSOR_CASES}
     containers = {sp.TaskDispatch, sp.TableDispatch}
     processor_specific = {sp.SentenceTransformer}
     assert public == registered | containers | processor_specific
@@ -126,7 +127,8 @@ def _serialized_state(processor: sp.Processor) -> dict[str, object]:
 
 def _check_state_dict_restoration(case: ProcessorCase) -> None:
     inputs = case.make_inputs(torch.device("cpu"), torch.float32)
-    fitted, restored = case.factory(), case.factory()
+    fitted = deepcopy(case.processor)
+    restored = deepcopy(case.processor)
     fit_data = _data(fitted, inputs)
     query_data = _data(fitted, inputs, query=True)
     _fit(fitted, fit_data)
@@ -138,13 +140,14 @@ def _check_state_dict_restoration(case: ProcessorCase) -> None:
 @pytest.mark.parametrize(
     "case",
     PROCESSOR_CASES,
-    ids=lambda case: type(case.factory()).__name__,
+    ids=lambda case: type(case.processor).__name__,
 )
 def test_fit_transform_matches_fit_then_transform(
     case: ProcessorCase,
 ) -> None:
     inputs = case.make_inputs(torch.device("cpu"), torch.float32)
-    split, fused = case.factory(), case.factory()
+    split = deepcopy(case.processor)
+    fused = deepcopy(case.processor)
     data = _data(split, inputs)
     _fit(split, data)
     if isinstance(fused, sp.EnsembleProcessor):
@@ -161,14 +164,14 @@ def test_fit_transform_matches_fit_then_transform(
 
 
 FITTED_CASES = tuple(
-    case for case in PROCESSOR_CASES if case.factory().requires_fit
+    case for case in PROCESSOR_CASES if case.processor.requires_fit
 )
 
 
 @pytest.mark.parametrize(
     "case",
     FITTED_CASES,
-    ids=lambda case: type(case.factory()).__name__,
+    ids=lambda case: type(case.processor).__name__,
 )
 def test_state_dict_restores_fitted_processor(
     case: ProcessorCase,
@@ -197,7 +200,7 @@ class _BrokenFittedProcessor(sp.Processor):
 
 
 def test_state_dict_contract_rejects_unregistered_fitted_state() -> None:
-    broken = ProcessorCase(_BrokenFittedProcessor, make_mixed_inputs)
+    broken = ProcessorCase(_BrokenFittedProcessor(), make_mixed_inputs)
     with pytest.raises(RuntimeError):
         _check_state_dict_restoration(broken)
 
@@ -205,18 +208,18 @@ def test_state_dict_contract_rejects_unregistered_fitted_state() -> None:
 INVERTIBLE_CASES = tuple(
     case
     for case in PROCESSOR_CASES
-    if isinstance(case.factory(), sp.InvertibleMixin)
+    if isinstance(case.processor, sp.InvertibleMixin)
 )
 
 
 @pytest.mark.parametrize(
     "case",
     INVERTIBLE_CASES,
-    ids=lambda case: type(case.factory()).__name__,
+    ids=lambda case: type(case.processor).__name__,
 )
 def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
     inputs = case.make_inputs(torch.device("cpu"), torch.float32)
-    processor = case.factory()
+    processor = deepcopy(case.processor)
     transformed = processor.fit_transform(
         inputs.context,
         generator=torch.Generator().manual_seed(0),
@@ -244,13 +247,13 @@ def _assert_unhandled_stypes_pass_through(
 @pytest.mark.parametrize(
     "case",
     PROCESSOR_CASES,
-    ids=lambda case: type(case.factory()).__name__,
+    ids=lambda case: type(case.processor).__name__,
 )
 def test_preserves_rows_and_unhandled_stypes(
     case: ProcessorCase,
 ) -> None:
     inputs = case.make_inputs(torch.device("cpu"), torch.float32)
-    processor = case.factory()
+    processor = deepcopy(case.processor)
     data = _data(processor, inputs)
     if isinstance(processor, sp.EnsembleProcessor):
         output = processor.fit_transform_ensemble(
@@ -270,14 +273,14 @@ def test_preserves_rows_and_unhandled_stypes(
 @pytest.mark.parametrize(
     "case",
     PROCESSOR_CASES,
-    ids=lambda case: type(case.factory()).__name__,
+    ids=lambda case: type(case.processor).__name__,
 )
 def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
     device = torch.device("cpu")
     dtype = torch.float64
     source = case.make_inputs(torch.device("cpu"), torch.float32)
     target = case.make_inputs(device, dtype)
-    processor = case.factory()
+    processor = deepcopy(case.processor)
     _fit(processor, _data(processor, source))
     expected = _transform(processor, _data(processor, source, query=True))
     processor.to(device=device, dtype=dtype)
@@ -293,14 +296,14 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
 @pytest.mark.parametrize(
     "case",
     PROCESSOR_CASES,
-    ids=lambda case: type(case.factory()).__name__,
+    ids=lambda case: type(case.processor).__name__,
 )
 def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
     device = torch.device("cuda")
     dtype = torch.float32
     source = case.make_inputs(torch.device("cpu"), torch.float32)
     target = case.make_inputs(device, dtype)
-    processor = case.factory()
+    processor = deepcopy(case.processor)
     _fit(processor, _data(processor, source))
     expected = _transform(processor, _data(processor, source, query=True))
     processor.to(device=device, dtype=dtype)
