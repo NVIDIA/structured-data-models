@@ -7,12 +7,7 @@ import torch
 from torch import Tensor
 from torch.nn import ModuleList, RMSNorm, Sequential
 
-from sdm.nn import (
-    RotaryEmbedding,
-    SoftplusScale,
-    SwiGLU,
-    TransformerBlock,
-)
+from sdm.nn import RotaryEmbedding, SoftplusScale, SwiGLU, TransformerBlock
 
 
 class TabFMTransformerBlock(TransformerBlock):
@@ -48,11 +43,7 @@ class TabFMTransformerBlock(TransformerBlock):
             num_query_heads=num_heads,
             mlp=Sequential(
                 RMSNorm(channels, eps=1e-6, **factory_kwargs),
-                SwiGLU(
-                    channels=channels,
-                    hidden_channels=hidden_channels,
-                    **factory_kwargs,
-                ),
+                SwiGLU(channels, hidden_channels, **factory_kwargs),
                 RMSNorm(channels, eps=1e-6, **factory_kwargs),
             ),
             query_norm=norm,
