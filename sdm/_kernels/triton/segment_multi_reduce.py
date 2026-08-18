@@ -1,9 +1,14 @@
+import sys
 from typing import Any, cast
 
 import torch
+from torch import Tensor
+
+if sys.platform != "linux":
+    raise ImportError("Triton kernels are only available on Linux")
+
 import triton
 import triton.language as tl
-from torch import Tensor
 
 
 @triton.jit
