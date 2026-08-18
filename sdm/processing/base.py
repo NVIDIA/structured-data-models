@@ -32,9 +32,17 @@ class Processor(torch.nn.Module, abc.ABC):
     #: Whether this processor requires fitting.
     requires_fit: bool
 
+    _fitted_state: torch.Tensor
+
     def __init__(self) -> None:
         super().__init__()
+        self.register_buffer("_fitted_state", torch.tensor(False))
         self._fitted = False
+
+    @property
+    def is_fitted(self) -> bool:
+        """Whether the processor has all state required for transformation."""
+        return not self.requires_fit or self._fitted
 
     @staticmethod
     def as_processor(processor: object) -> Processor:
@@ -87,9 +95,15 @@ class Processor(torch.nn.Module, abc.ABC):
             unexpected_keys,
             error_msgs,
         )
+        self._fitted = bool(self._fitted_state)
+
+    def _set_fitted(self, device: torch.device) -> None:
+        self._fitted_state = self._fitted_state.to(device=device)
+        self._fitted_state.fill_(True)
+        self._fitted = True
 
     def _check_is_fitted(self) -> None:
-        if self.requires_fit and not self._fitted:
+        if not self.is_fitted:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} is not fitted; "
                 "call 'fit()' before."
@@ -133,7 +147,7 @@ class Processor(torch.nn.Module, abc.ABC):
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
-            self._fitted = True
+            self._set_fitted(table.device)
         return self
 
     def transform(self, table: TableTensor) -> TableTensor:
@@ -173,7 +187,7 @@ class Processor(torch.nn.Module, abc.ABC):
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:
-            self._fitted = True
+            self._set_fitted(table.device)
         return out
 
     def __add__(self, other: object) -> Sequential:

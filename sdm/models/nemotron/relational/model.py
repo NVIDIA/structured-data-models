@@ -579,7 +579,7 @@ class _NemotronRelational(torch.nn.Module):
         rel_time = rel_time.flatten(-2) / (24 * 60 * 60 * 1_000_000)
         rel_time = rel_time.sign() * rel_time.abs().log1p()
 
-        if not standardizer._fitted:
+        if not standardizer.is_fitted:
             rel_time[na_mask] = float("NaN")
             rel_time = torch.where(
                 na_mask,
