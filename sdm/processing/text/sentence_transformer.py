@@ -191,6 +191,49 @@ class _BPETokenizer:
             storage_offset=int(words_tensor.storage_offset()),
         ).to_cudf()
 
+    def _pre_tokenize(
+        self,
+        text_series: cudf.Series,
+    ) -> tuple[cudf.Series, Tensor]:
+        """Apply ByteLevel pre-tokenization to a cuDF string Series."""
+        word_lists = text_series.reset_index(drop=True).str.findall(
+            self._BYTE_LEVEL_PAT
+        )
+        flat_words = word_lists.explode()
+        flat_words = flat_words.loc[flat_words.notna()]
+        words = flat_words.reset_index(name="word").rename(
+            columns={"index": "string"}
+        )
+
+        # ByteLevel leaves the final character of an internal whitespace run
+        # for the next regex match. libcudf does not support the lookahead in
+        # the canonical expression, so repair those boundaries on device.
+        same_string = (words["string"] == words["string"].shift(-1)).fillna(
+            False
+        )
+        split_whitespace = (
+            words["word"].str.isspace()
+            & (words["word"].str.len() > 1)
+            & same_string
+        )
+        next_word = split_whitespace.shift(1, fill_value=False)
+        carried_whitespace = words["word"].shift(1).str.slice(-1)
+        sources = words["word"].where(
+            ~split_whitespace,
+            words["word"].str.slice(stop=-1),
+        )
+        sources = sources.where(
+            ~next_word,
+            carried_whitespace + words["word"],
+        )
+        words["word"] = sources.str.findall(self._BYTE_LEVEL_PAT)
+        words = words.explode(
+            "word",
+            ignore_index=True,
+        )
+        word_to_string = torch.from_dlpack(words["string"].to_cupy()).long()
+        return words["word"], word_to_string
+
     def tokenize(
         self,
         text_series: cudf.Series,
@@ -207,9 +250,7 @@ class _BPETokenizer:
         num_strings = len(text_series)
 
         # ByteLevel pre-tokenization on GPU
-        word_lists = text_series.str.findall(self._BYTE_LEVEL_PAT)
-        flat_words = word_lists.explode().reset_index(drop=True)
-        flat_words = flat_words.loc[flat_words.notna()].reset_index(drop=True)
+        flat_words, word_to_string = self._pre_tokenize(text_series)
         flat_words = self._translate_bytes(flat_words)
 
         # BPE encode each word independently (no space delimiter ambiguity)
@@ -228,16 +269,9 @@ class _BPETokenizer:
         )
 
         # Sum per-word counts back to per-string counts via scatter_add
-        words_per_string = torch.from_dlpack(
-            word_lists.list.len().to_cupy(),
-        )
-        word_to_string = torch.arange(
-            num_strings,
-            device=words_per_string.device,
-        ).repeat_interleave(words_per_string)
         raw_lengths = torch.zeros(
             num_strings,
-            device=words_per_string.device,
+            device=word_to_string.device,
             dtype=subtokens_per_word_t.dtype,
         )
         raw_lengths.scatter_add_(0, word_to_string, subtokens_per_word_t)

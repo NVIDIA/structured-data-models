@@ -34,6 +34,68 @@ def test_bpe_pre_tokenize_unicode() -> None:
 
 
 @onlyCUDA
+def test_bpe_pre_tokenize_repeated_whitespace() -> None:
+    cudf = pytest.importorskip("cudf")
+    tokenizer = _BPETokenizer(
+        encoder=cast(Any, None),
+        vocab=cast(Any, None),
+        bos_id=0,
+        eos_id=1,
+        pad_id=2,
+        unk_id=3,
+        max_length=512,
+    )
+    text = cudf.Series(
+        [
+            "a  word",
+            "a  's",
+            "a \nB",
+            "a \n B",
+            "a  ",
+        ]
+    )
+
+    words, word_to_string = tokenizer._pre_tokenize(text)
+
+    assert words.to_arrow().to_pylist() == [
+        "a",
+        " ",
+        " word",
+        "a",
+        " ",
+        " '",
+        "s",
+        "a",
+        " ",
+        "\n",
+        "B",
+        "a",
+        " \n",
+        " B",
+        "a",
+        "  ",
+    ]
+    assert word_to_string.tolist() == [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        4,
+        4,
+    ]
+
+
+@onlyCUDA
 def test_bpe_translate_utf8_bytes() -> None:
     cudf = pytest.importorskip("cudf")
     tokenizer = _BPETokenizer(
