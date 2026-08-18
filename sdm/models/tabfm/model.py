@@ -64,7 +64,6 @@ class _TabFM(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, 1 or num_classes]
-
         x = self.cell_embedding(x, categorical_mask)
         x = self.row_embedding(x, y, cache=cache)
         return self.icl_block(x, y, cache=cache)
