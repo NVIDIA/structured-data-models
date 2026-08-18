@@ -4,12 +4,14 @@ from typing import Any, ClassVar, Literal, cast
 import torch
 from torch import Tensor
 
+import sdm.processing as sp
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.row_embedding import RowEmbedding
+from sdm.tensor.table import TableSchema
 
 
 class TabFM(ICLModel):
@@ -50,7 +52,28 @@ class TabFM(ICLModel):
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return Recipe()
+        return Recipe(
+            features=[
+                sp.StypeDispatch(categorical=sp.ToNumerical()),
+                sp.ShuffleColumns(),
+            ]
+        )
+
+    def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
+        r""":meta private:"""  # noqa: D415
+        x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
+        if not isinstance(x_context, TableTensor):
+            x_context = TableTensor.from_tensor(x_context)
+        kwargs["_schema"] = x_context.schema
+        return super().forward(*args, **kwargs)
+
+    def fit(self, *args: Any, **kwargs: Any) -> None:
+        r""":meta private:"""  # noqa: D415
+        x = kwargs["x"] if "x" in kwargs else args[0]
+        if not isinstance(x, TableTensor):
+            x = TableTensor.from_tensor(x)
+        kwargs["_schema"] = x.schema
+        return super().fit(*args, **kwargs)
 
     def _forward(
         self,
@@ -105,14 +128,25 @@ class TabFM(ICLModel):
                 dtype=torch.int64 if classes is not None else x.dtype,
             )
 
-        out = self.model(
-            x=x,
-            y=y,
-            categorical_mask=x.new_zeros(  # TODO
-                *x.size()[:-2], x.size(-1), dtype=torch.bool
-            ),
-            cache=cache,
-        )
+        if cache is None or cache.is_recording:
+            assert x_context is not None
+            schema: TableSchema = kwargs["_schema"]
+            categorical_columns = set(schema.columns[Stype.categorical])
+            categorical_mask = torch.tensor(
+                [
+                    column in categorical_columns
+                    for column in x_context.columns[Stype.numerical]
+                ],
+                device=x.device,
+                dtype=torch.bool,
+            )
+            if cache is not None:
+                cache["categorical_mask"] = categorical_mask
+        else:
+            categorical_mask = cast(Tensor, cache["categorical_mask"])
+        categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
+
+        out = self.model(x, y, categorical_mask, cache=cache)
 
         if classes is None:
             return TableTensor(
