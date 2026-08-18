@@ -69,6 +69,7 @@ class Processor(torch.nn.Module, abc.ABC):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
+        # Resize dynamically shaped buffers before PyTorch copies saved values.
         for name, buffer in self._buffers.items():
             state = state_dict.get(f"{prefix}{name}")
             if (
