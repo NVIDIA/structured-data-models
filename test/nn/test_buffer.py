@@ -4,7 +4,7 @@ import torch
 
 from sdm import StringTensor
 from sdm.nn._buffer import BufferList
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import withCUDA
 
 
 class _TensorSubclass(torch.Tensor):
@@ -21,14 +21,21 @@ def test_buffer_list_is_an_indexed_collection() -> None:
     )
 
     assert len(buffers) == 3
-    assert isinstance(buffers[0], BufferList)
-    assert isinstance(buffers[1], BufferList)
-    assert isinstance(buffers[2], torch.Tensor)
-    assert len(buffers[0]) == 2
-    assert len(buffers[1]) == 0
-    assert buffers[0][0].equal(torch.tensor([1.0, 2.0]))
-    assert buffers[0][1].equal(torch.tensor([3.0]))
-    assert buffers[2].equal(torch.tensor([5.0]))
+    first = buffers[0]
+    empty = buffers[1]
+    direct = buffers[2]
+    assert isinstance(first, BufferList)
+    assert isinstance(empty, BufferList)
+    assert isinstance(direct, torch.Tensor)
+    assert len(first) == 2
+    assert len(empty) == 0
+    first_a = first[0]
+    first_b = first[1]
+    assert isinstance(first_a, torch.Tensor)
+    assert isinstance(first_b, torch.Tensor)
+    assert first_a.equal(torch.tensor([1.0, 2.0]))
+    assert first_b.equal(torch.tensor([3.0]))
+    assert direct.equal(torch.tensor([5.0]))
 
 
 def test_buffer_list_roundtrips_state_dict() -> None:
@@ -43,12 +50,20 @@ def test_buffer_list_roundtrips_state_dict() -> None:
 
     restored.load_state_dict(source.state_dict())
 
-    assert isinstance(restored[0], BufferList)
-    assert isinstance(restored[1], BufferList)
-    assert isinstance(restored[2], torch.Tensor)
-    assert restored[0][0].equal(source[0][0])
-    assert restored[0][1].equal(source[0][1])
-    assert restored[2].equal(source[2])
+    first = restored[0]
+    empty = restored[1]
+    direct = restored[2]
+    assert isinstance(first, BufferList)
+    assert isinstance(empty, BufferList)
+    assert isinstance(direct, torch.Tensor)
+    assert len(empty) == 0
+    first_a = first[0]
+    first_b = first[1]
+    assert isinstance(first_a, torch.Tensor)
+    assert isinstance(first_b, torch.Tensor)
+    assert first_a.equal(torch.tensor([1.0]))
+    assert first_b.equal(torch.tensor([2.0]))
+    assert direct.equal(torch.tensor([5.0]))
 
 
 def test_buffer_list_loads_tensor_subclasses() -> None:
@@ -62,7 +77,9 @@ def test_buffer_list_loads_tensor_subclasses() -> None:
     assert type(loaded) is _TensorSubclass
     assert torch.equal(loaded, tensor)
     loaded.add_(1)
-    assert torch.equal(source[0], tensor)
+    original = source[0]
+    assert isinstance(original, torch.Tensor)
+    assert torch.equal(original, tensor)
 
 
 def test_buffer_list_loads_nested_string_tensor() -> None:
@@ -101,16 +118,16 @@ def test_buffer_list_preserves_existing_buffer_on_load(
 
 def test_buffer_list_registers_as_a_nested_module() -> None:
     module = torch.nn.Module()
-    module.buffer_list = BufferList(
-        [BufferList([torch.tensor([1.0])])]
-    )
+    module.buffer_list = BufferList([BufferList([torch.tensor([1.0])])])
 
     restored = torch.nn.Module()
     restored.buffer_list = BufferList()
     restored.load_state_dict(module.state_dict())
     nested = restored.buffer_list[0]
     assert isinstance(nested, BufferList)
-    assert torch.equal(nested[0], torch.tensor([1.0]))
+    value = nested[0]
+    assert isinstance(value, torch.Tensor)
+    assert torch.equal(value, torch.tensor([1.0]))
 
 
 @withCUDA
