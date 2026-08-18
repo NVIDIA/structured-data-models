@@ -1,5 +1,6 @@
 import abc
 import contextlib
+import contextvars
 import copy
 from collections.abc import Iterator
 from typing import Any, ClassVar, cast
@@ -14,6 +15,24 @@ from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
+_EXPLANATION_MODE: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "sdm_explanation_mode",
+    default=False,
+)
+
+
+def _is_explaining() -> bool:
+    return _EXPLANATION_MODE.get()
+
+
+@contextlib.contextmanager
+def _explanation_mode() -> Iterator[None]:
+    token = _EXPLANATION_MODE.set(True)
+    try:
+        yield
+    finally:
+        _EXPLANATION_MODE.reset(token)
+
 
 @contextlib.contextmanager
 def _maybe_inference_mode() -> Iterator[None]:
@@ -22,7 +41,7 @@ def _maybe_inference_mode() -> Iterator[None]:
     # https://github.com/pytorch/pytorch/issues/180823
     # FIXME: Come up with a solution to use torch.compile under
     # torch.inference_mode and remove this workaround.
-    if torch.compiler.is_compiling():
+    if torch.compiler.is_compiling() or _is_explaining():
         context_fn = contextlib.nullcontext
     else:
         context_fn = torch.inference_mode

@@ -6,6 +6,7 @@ from torch import Tensor
 
 from sdm import Recipe, RelatedTables, TableTensor
 from sdm.models import ICLModel
+from sdm.models.base import _explanation_mode
 
 T = TypeVar("T", covariant=True)
 
@@ -35,6 +36,7 @@ class ICLExplainer(abc.ABC, Generic[T]):  # noqa: D101
     ) -> T: ...
 
     @final
+    @_explanation_mode()
     def explain(  # noqa: D102
         self,
         model: ICLModel,
