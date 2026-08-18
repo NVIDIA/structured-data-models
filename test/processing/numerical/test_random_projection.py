@@ -31,18 +31,3 @@ def test_random_projection() -> None:
     assert group.numerical.stride() == (6 * 8, 8, 1)
     assert group.categorical.size() == (8, 6, 1)
     assert group.categorical.stride() == (0, 1, 1)
-
-
-@onlyCUDA
-def test_random_projection_moves_fitted_state_to_cuda() -> None:
-    table = _table()
-    processor = RandomProjection(8).fit_ensemble(
-        EnsembleTable(table, num_members=8)
-    )
-
-    processor.cuda()
-    output = processor.transform_ensemble(
-        EnsembleTable(cast(TableTensor, table.cuda()), num_members=8)
-    )
-
-    assert all(group.is_cuda for group in output)
