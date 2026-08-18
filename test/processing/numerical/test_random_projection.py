@@ -5,7 +5,6 @@ import torch
 from sdm import CategoricalTensor, TableTensor
 from sdm.processing import RandomProjection
 from sdm.tensor import EnsembleTable
-from sdm.testing import onlyCUDA
 
 
 def _table() -> TableTensor:
