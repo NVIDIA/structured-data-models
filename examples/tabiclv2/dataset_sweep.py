@@ -18,77 +18,59 @@ from sklearn.model_selection import train_test_split
 
 import sdm
 
-# (data_id, target_column, task_type)
+# (data_id, task_type)
 # Classification: span easy binary through hard multi-class.
 # Regression: span easy through hard.
-DATASETS: list[tuple[int, str, str]] = [
+DATASETS: list[tuple[int, str]] = [
     # --- Classification ---
     # Binary
-    (31, "class", "classification"),  # credit-g (1000x20, 2 classes)
-    (37, "Class", "classification"),  # diabetes (768x8, 2 classes)
-    (
-        1462,
-        "Class",
-        "classification",
-    ),  # banknote-authentication (1372x4, 2 classes)
-    (1510, "Class", "classification"),  # wdbc (569x30, 2 classes)
-    (1489, "Class", "classification"),  # phoneme (5404x5, 2 classes)
-    (1461, "Class", "classification"),  # bank-marketing (45211x16, 2 classes)
+    (31, "classification"),  # credit-g
+    (37, "classification"),  # diabetes
+    (1462, "classification"),  # banknote-authentication
+    (1510, "classification"),  # wdbc
+    (1489, "classification"),  # phoneme
+    (1461, "classification"),  # bank-marketing
     # Multi-class
-    (23, "Class", "classification"),  # cmc (1473x9, 3 classes)
-    (188, "Type", "classification"),  # eucalyptus (736x19, 5 classes)
-    (12, "class", "classification"),  # mfeat-factors (2000x216, 10 classes)
-    (14, "class", "classification"),  # mfeat-fourier (2000x76, 10 classes)
-    (
-        40691,
-        "class",
-        "classification",
-    ),  # wine-quality-white (4898x11, 7 classes)
-    (181, "Class", "classification"),  # yeast (1484x8, 10 classes)
-    (
-        1466,
-        "Class",
-        "classification",
-    ),  # cardiotocography (2126x35, 10 classes)
-    (40975, "Target", "classification"),  # car (1728x6, 4 classes)
-    (
-        40496,
-        "binaryClass",
-        "classification",
-    ),  # LED-display (500x7, 10 classes)
-    (1476, "Class", "classification"),  # gas-drift (13910x128, 6 classes)
-    (40668, "class", "classification"),  # connect-4 (67557x42, 3 classes)
-    (6, "class", "classification"),  # letter (20000x16, 26 classes)
-    (554, "class", "classification"),  # mnist_784 (70000x784, 10 classes)
-    (40685, "class", "classification"),  # shuttle (58000x9, 7 classes)
+    (23, "classification"),  # cmc
+    (188, "classification"),  # eucalyptus
+    (12, "classification"),  # mfeat-factors
+    (14, "classification"),  # mfeat-fourier
+    (40691, "classification"),  # wine-quality-white
+    (181, "classification"),  # yeast
+    (1466, "classification"),  # cardiotocography
+    (40975, "classification"),  # car
+    (40496, "classification"),  # LED-display
+    (1476, "classification"),  # gas-drift
+    (40668, "classification"),  # connect-4
+    (6, "classification"),  # letter
+    (554, "classification"),  # mnist_784
+    (40685, "classification"),  # shuttle
     # --- Regression ---
-    (531, "MEDV", "regression"),  # boston (506x13)
-    (507, "oz1", "regression"),  # space_ga (3107x6)
-    (422, "median_house_value", "regression"),  # california housing (20640x8)
-    (546, "shares", "regression"),  # pol (15000x26)
-    (41021, "y", "regression"),  # Moneyball (1232x14)
-    (41540, "HousePrice", "regression"),  # house_prices_nominal (1460x79)
-    (42225, "FloodProbability", "regression"),  # flood (776666x20)
-    (42570, "critical_temp", "regression"),  # superconductor (21263x81)
-    (42571, "Hardness", "regression"),  # concrete (1030x8)
-    (41980, "unit_sales", "regression"),  # particulate-matter-ukair (394x7)
+    (531, "regression"),  # boston
+    (507, "regression"),  # space_ga
+    (422, "regression"),  # california housing
+    (546, "regression"),  # pol
+    (41021, "regression"),  # Moneyball
+    (41540, "regression"),  # house_prices_nominal
+    (42225, "regression"),  # flood
+    (42570, "regression"),  # superconductor
+    (42571, "regression"),  # concrete
+    (41980, "regression"),  # particulate-matter-ukair
 ]
 
 
 def run_dataset(
     data_id: int,
-    target: str,
     task: str,
     device: torch.device,
     context_fraction: float = 0.7,
     seed: int = 42,
 ) -> dict[str, object]:
-    df = fetch_openml(data_id=data_id, as_frame=True, parser="auto").frame
-
-    if target not in df.columns:
-        raise ValueError(
-            f"Target '{target}' not in columns: {list(df.columns)}"
-        )
+    bunch = fetch_openml(data_id=data_id, as_frame=True, parser="auto")
+    df = bunch.frame
+    target = bunch.target_names
+    if isinstance(target, list):
+        target = target[0]
 
     df = df.dropna(subset=[target])
 
@@ -180,14 +162,14 @@ def main() -> None:
 
     results: list[dict[str, object]] = []
 
-    for data_id, target, task in DATASETS:
+    for data_id, task in DATASETS:
         name = f"openml-{data_id}"
         print(f"\n{'=' * 60}")
         print(f"Running {name} ({task})...")
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                result = run_dataset(data_id, target, task, device)
+                result = run_dataset(data_id, task, device)
             result["name"] = name
             result["status"] = "ok"
             results.append(result)
