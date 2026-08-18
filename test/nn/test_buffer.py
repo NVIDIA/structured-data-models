@@ -45,6 +45,12 @@ def test_buffer_list_roundtrips_state_dict() -> None:
     first = restored[0]
     assert isinstance(first, BufferList)
     assert len(first) == 2
+    first_value = first[0]
+    second_value = first[1]
+    assert isinstance(first_value, torch.Tensor)
+    assert isinstance(second_value, torch.Tensor)
+    assert first_value.equal(torch.tensor([1.0]))
+    assert second_value.equal(torch.tensor([2.0]))
     assert len(restored[1]) == 0
     direct = restored[2]
     assert isinstance(direct, torch.Tensor)
@@ -64,7 +70,8 @@ def test_buffer_list_loads_tensor_subclasses() -> None:
     loaded.add_(1)
     original = source[0]
     assert isinstance(original, torch.Tensor)
-    assert torch.equal(original, tensor)
+    assert loaded.equal(torch.tensor([2.0]))
+    assert original.equal(torch.tensor([1.0]))
 
 
 @withCUDA
