@@ -21,6 +21,14 @@ class TabFM(ICLModel):
     Zero-shot Foundation Model for Tabular Data" <https://research.google/blog/
     introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
 
+    .. figure:: /images/tabfm_light.png
+        :figclass: light-only
+        :width: 100%
+
+    .. figure:: /images/tabfm_dark.png
+        :figclass: dark-only
+        :width: 100%
+
     Architecturally, :class:`TabFM` can be viewed as a scaled-up
     :class:`TabICLv2`-style model with Fourier cell embeddings, separate
     numerical and categorical cell projections, two repeated column/row
