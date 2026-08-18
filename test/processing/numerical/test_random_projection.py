@@ -1,5 +1,3 @@
-from typing import cast
-
 import torch
 
 from sdm import CategoricalTensor, TableTensor
