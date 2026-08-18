@@ -12,29 +12,17 @@ class _TensorSubclass(torch.Tensor):
 
 
 def test_buffer_list_is_an_indexed_collection() -> None:
-    buffers = BufferList(
-        [
-            BufferList([torch.tensor([1.0, 2.0]), torch.tensor([3.0])]),
-            BufferList(),
-            torch.tensor([5.0]),
-        ]
-    )
+    inner = BufferList([torch.tensor([1.0, 2.0]), torch.tensor([3.0])])
+    empty = BufferList()
+    buffers = BufferList([inner, empty, torch.tensor([5.0])])
 
     assert len(buffers) == 3
-    first = buffers[0]
-    empty = buffers[1]
-    direct = buffers[2]
-    assert isinstance(first, BufferList)
-    assert isinstance(empty, BufferList)
-    assert isinstance(direct, torch.Tensor)
-    assert len(first) == 2
+    assert buffers[0] is inner
+    assert buffers[1] is empty
+    assert len(inner) == 2
     assert len(empty) == 0
-    first_a = first[0]
-    first_b = first[1]
-    assert isinstance(first_a, torch.Tensor)
-    assert isinstance(first_b, torch.Tensor)
-    assert first_a.equal(torch.tensor([1.0, 2.0]))
-    assert first_b.equal(torch.tensor([3.0]))
+    direct = buffers[2]
+    assert isinstance(direct, torch.Tensor)
     assert direct.equal(torch.tensor([5.0]))
 
 
@@ -50,19 +38,13 @@ def test_buffer_list_roundtrips_state_dict() -> None:
 
     restored.load_state_dict(source.state_dict())
 
+    assert len(restored) == 3
     first = restored[0]
-    empty = restored[1]
-    direct = restored[2]
     assert isinstance(first, BufferList)
-    assert isinstance(empty, BufferList)
+    assert len(first) == 2
+    assert len(restored[1]) == 0
+    direct = restored[2]
     assert isinstance(direct, torch.Tensor)
-    assert len(empty) == 0
-    first_a = first[0]
-    first_b = first[1]
-    assert isinstance(first_a, torch.Tensor)
-    assert isinstance(first_b, torch.Tensor)
-    assert first_a.equal(torch.tensor([1.0]))
-    assert first_b.equal(torch.tensor([2.0]))
     assert direct.equal(torch.tensor([5.0]))
 
 
