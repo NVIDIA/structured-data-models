@@ -239,6 +239,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
+        **kwargs: Any,
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""Predict unseen query examples.
 
@@ -250,6 +251,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             x: The feature tensor of query examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
             related_tables: Related context for query examples.
+            kwargs: Additional model keyword arguments for this prediction.
+                A name already supplied to :meth:`fit` cannot be repeated.
 
         Returns:
             The processed prediction after applying ``recipe.output`` to the
@@ -336,6 +339,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     cache=cache,
                     generator=None,
                     **cast(dict[str, Any], self._cache["kwargs"]),
+                    **kwargs,
                 )
 
                 if x.is_cuda:
