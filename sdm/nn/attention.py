@@ -384,6 +384,7 @@ class Attention(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
+        bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
     """
@@ -397,6 +398,7 @@ class Attention(torch.nn.Module):
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
+        bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -419,7 +421,7 @@ class Attention(torch.nn.Module):
         self.kv_dim = num_key_value_heads * self.head_dim
 
         self.qkv_lin = Linear(
-            channels, self.q_dim + 2 * self.kv_dim, **factory_kwargs
+            channels, self.q_dim + 2 * self.kv_dim, bias=bias, **factory_kwargs
         )
         self.query_transform = query_transform
         self.key_transform = key_transform
@@ -429,10 +431,11 @@ class Attention(torch.nn.Module):
             query_scaling=query_scaling,
             scale=scale,
         )
-        self.out_lin = Linear(channels, channels, **factory_kwargs)
+        self.out_lin = Linear(channels, channels, bias=bias, **factory_kwargs)
 
         torch.nn.init.zeros_(self.out_lin.weight)
-        torch.nn.init.zeros_(self.out_lin.bias)
+        if self.out_lin.bias is not None:
+            torch.nn.init.zeros_(self.out_lin.bias)
 
     @overload
     def forward(
@@ -521,9 +524,13 @@ class Attention(torch.nn.Module):
                 return chunked_result
 
         if isinstance(key_value, KVCacheEntry):
-            q_weight = self.qkv_lin.weight[: self.q_dim]
-            q_bias = self.qkv_lin.bias[: self.q_dim]
-            query = F.linear(query, q_weight, q_bias)
+            query = F.linear(
+                query,
+                weight=self.qkv_lin.weight[: self.q_dim],
+                bias=self.qkv_lin.bias[: self.q_dim]
+                if self.qkv_lin.bias is not None
+                else None,
+            )
             if (
                 key_value.key.dtype != query.dtype
                 or key_value.value.dtype != query.dtype
@@ -542,7 +549,9 @@ class Attention(torch.nn.Module):
         else:
             sections = [self.q_dim, 2 * self.kv_dim]
             q_weight, kv_weight = self.qkv_lin.weight.split(sections, dim=0)
-            q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
+            q_bias = kv_bias = None
+            if self.qkv_lin.bias is not None:
+                q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
             query = F.linear(query, q_weight, q_bias)
             key, value = F.linear(key_value, kv_weight, kv_bias).chunk(2, -1)
 
@@ -601,6 +610,7 @@ class TransformerBlock(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
+        bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
     """
@@ -618,6 +628,7 @@ class TransformerBlock(torch.nn.Module):
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
+        bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -637,6 +648,7 @@ class TransformerBlock(torch.nn.Module):
             key_transform=key_transform,
             query_scaling=query_scaling,
             scale=scale,
+            bias=bias,
             **factory_kwargs,
         )
 
