@@ -93,6 +93,12 @@ class TabFM(ICLModel):
         elif cache is not None:
             classes = cast(Tensor | None, cache["classes"])
 
+        if classes is not None and len(classes) > 10:
+            raise ValueError(
+                f"{self.__class__.__name__!r} only supports up to 10 classes "
+                f"(got {len(classes)})"
+            )
+
         if y is None:
             y = x.new_empty(
                 (*x.size()[:-2], 0),
