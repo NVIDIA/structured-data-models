@@ -5,8 +5,8 @@ from typing import cast
 import pytest
 import torch
 from test.processing._instance_generator import (
-    PROCESSOR_CONTRACT_CASES,
-    ProcessorContractCase,
+    PROCESSOR_CASES,
+    ProcessorCase,
     ProcessorInputs,
     make_mixed_inputs,
 )
@@ -19,10 +19,6 @@ from sdm.testing import onlyCUDA
 ProcessorData = TableTensor | EnsembleTable
 
 
-def _case_id(case: ProcessorContractCase) -> str:
-    return case.name
-
-
 def test_public_processors_are_registered_or_scoped() -> None:
     public = {
         value
@@ -31,19 +27,15 @@ def test_public_processors_are_registered_or_scoped() -> None:
         and issubclass(value, sp.Processor)
         and not inspect.isabstract(value)
     }
-    registered = {type(case.factory()) for case in PROCESSOR_CONTRACT_CASES}
+    registered = {type(case.factory()) for case in PROCESSOR_CASES}
     containers = {sp.TaskDispatch, sp.TableDispatch}
     processor_specific = {sp.SentenceTransformer}
     assert public == registered | containers | processor_specific
 
 
-def _generator() -> torch.Generator:
-    return torch.Generator().manual_seed(0)
-
-
 def _ensemble(inputs: ProcessorInputs) -> EnsembleTable:
     return EnsembleTable.from_tables(
-        tables=(inputs.fit, inputs.query), member_table_ids=(1, 0, 1, 0)
+        tables=(inputs.context, inputs.query), member_table_ids=(1, 0, 1, 0)
     )
 
 
@@ -55,34 +47,26 @@ def _data(
 ) -> ProcessorData:
     if isinstance(processor, sp.EnsembleProcessor):
         return _ensemble(inputs)
-    return inputs.query if query else inputs.fit
+    return inputs.query if query else inputs.context
 
 
 def _fit(processor: sp.Processor, data: ProcessorData) -> None:
     if isinstance(processor, sp.EnsembleProcessor):
         processor.fit_ensemble(
-            cast(EnsembleTable, data), generator=_generator()
+            cast(EnsembleTable, data),
+            generator=torch.Generator().manual_seed(0),
         )
     else:
-        processor.fit(cast(TableTensor, data), generator=_generator())
+        processor.fit(
+            cast(TableTensor, data),
+            generator=torch.Generator().manual_seed(0),
+        )
 
 
 def _transform(processor: sp.Processor, data: ProcessorData) -> ProcessorData:
     if isinstance(processor, sp.EnsembleProcessor):
         return processor.transform_ensemble(cast(EnsembleTable, data))
     return processor.transform(cast(TableTensor, data))
-
-
-def _fit_transform(
-    processor: sp.Processor, data: ProcessorData
-) -> ProcessorData:
-    if isinstance(processor, sp.EnsembleProcessor):
-        return processor.fit_transform_ensemble(
-            cast(EnsembleTable, data), generator=_generator()
-        )
-    return processor.fit_transform(
-        cast(TableTensor, data), generator=_generator()
-    )
 
 
 def _tables(data: ProcessorData) -> tuple[TableTensor, ...]:
@@ -140,7 +124,7 @@ def _serialized_state(processor: sp.Processor) -> dict[str, object]:
     return torch.load(stream, weights_only=False)
 
 
-def _check_state_dict_restoration(case: ProcessorContractCase) -> None:
+def _check_state_dict_restoration(case: ProcessorCase) -> None:
     inputs = case.make_inputs(torch.device("cpu"), torch.float32)
     fitted, restored = case.factory(), case.factory()
     fit_data = _data(fitted, inputs)
@@ -151,25 +135,43 @@ def _check_state_dict_restoration(case: ProcessorContractCase) -> None:
     _assert_data_close(_transform(restored, query_data), expected)
 
 
-@pytest.mark.parametrize("case", PROCESSOR_CONTRACT_CASES, ids=_case_id)
+@pytest.mark.parametrize(
+    "case",
+    PROCESSOR_CASES,
+    ids=lambda case: type(case.factory()).__name__,
+)
 def test_fit_transform_matches_fit_then_transform(
-    case: ProcessorContractCase,
+    case: ProcessorCase,
 ) -> None:
     inputs = case.make_inputs(torch.device("cpu"), torch.float32)
     split, fused = case.factory(), case.factory()
     data = _data(split, inputs)
     _fit(split, data)
-    _assert_data_close(_fit_transform(fused, data), _transform(split, data))
+    if isinstance(fused, sp.EnsembleProcessor):
+        actual = fused.fit_transform_ensemble(
+            cast(EnsembleTable, data),
+            generator=torch.Generator().manual_seed(0),
+        )
+    else:
+        actual = fused.fit_transform(
+            cast(TableTensor, data),
+            generator=torch.Generator().manual_seed(0),
+        )
+    _assert_data_close(actual, _transform(split, data))
 
 
 FITTED_CASES = tuple(
-    case for case in PROCESSOR_CONTRACT_CASES if case.factory().requires_fit
+    case for case in PROCESSOR_CASES if case.factory().requires_fit
 )
 
 
-@pytest.mark.parametrize("case", FITTED_CASES, ids=_case_id)
+@pytest.mark.parametrize(
+    "case",
+    FITTED_CASES,
+    ids=lambda case: type(case.factory()).__name__,
+)
 def test_state_dict_restores_fitted_processor(
-    case: ProcessorContractCase,
+    case: ProcessorCase,
 ) -> None:
     _check_state_dict_restoration(case)
 
@@ -195,29 +197,34 @@ class _BrokenFittedProcessor(sp.Processor):
 
 
 def test_state_dict_contract_rejects_unregistered_fitted_state() -> None:
-    broken = ProcessorContractCase(
-        "broken-fitted-state", _BrokenFittedProcessor, make_mixed_inputs
-    )
+    broken = ProcessorCase(_BrokenFittedProcessor, make_mixed_inputs)
     with pytest.raises(RuntimeError):
         _check_state_dict_restoration(broken)
 
 
 INVERTIBLE_CASES = tuple(
     case
-    for case in PROCESSOR_CONTRACT_CASES
+    for case in PROCESSOR_CASES
     if isinstance(case.factory(), sp.InvertibleMixin)
 )
 
 
-@pytest.mark.parametrize("case", INVERTIBLE_CASES, ids=_case_id)
-def test_inverse_transform_round_trip(case: ProcessorContractCase) -> None:
+@pytest.mark.parametrize(
+    "case",
+    INVERTIBLE_CASES,
+    ids=lambda case: type(case.factory()).__name__,
+)
+def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
     inputs = case.make_inputs(torch.device("cpu"), torch.float32)
     processor = case.factory()
-    transformed = processor.fit_transform(inputs.fit, generator=_generator())
+    transformed = processor.fit_transform(
+        inputs.context,
+        generator=torch.Generator().manual_seed(0),
+    )
     restored = cast(sp.InvertibleMixin, processor).inverse_transform(
         transformed
     )
-    _assert_table_close(restored, inputs.fit, atol=1e-3)
+    _assert_table_close(restored, inputs.context, atol=1e-3)
 
 
 def _assert_unhandled_stypes_pass_through(
@@ -234,24 +241,40 @@ def _assert_unhandled_stypes_pass_through(
         )
 
 
-@pytest.mark.parametrize("case", PROCESSOR_CONTRACT_CASES, ids=_case_id)
+@pytest.mark.parametrize(
+    "case",
+    PROCESSOR_CASES,
+    ids=lambda case: type(case.factory()).__name__,
+)
 def test_preserves_rows_and_unhandled_stypes(
-    case: ProcessorContractCase,
+    case: ProcessorCase,
 ) -> None:
     inputs = case.make_inputs(torch.device("cpu"), torch.float32)
     processor = case.factory()
     data = _data(processor, inputs)
-    output = _fit_transform(processor, data)
+    if isinstance(processor, sp.EnsembleProcessor):
+        output = processor.fit_transform_ensemble(
+            cast(EnsembleTable, data),
+            generator=torch.Generator().manual_seed(0),
+        )
+    else:
+        output = processor.fit_transform(
+            cast(TableTensor, data),
+            generator=torch.Generator().manual_seed(0),
+        )
     for before, after in zip(_tables(data), _tables(output)):
         assert after.size()[:-1] == before.size()[:-1]
         _assert_unhandled_stypes_pass_through(processor, before, after)
 
 
-def _check_movement(
-    case: ProcessorContractCase,
-    device: torch.device,
-    dtype: torch.dtype,
-) -> None:
+@pytest.mark.parametrize(
+    "case",
+    PROCESSOR_CASES,
+    ids=lambda case: type(case.factory()).__name__,
+)
+def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
+    device = torch.device("cpu")
+    dtype = torch.float64
     source = case.make_inputs(torch.device("cpu"), torch.float32)
     target = case.make_inputs(device, dtype)
     processor = case.factory()
@@ -266,12 +289,24 @@ def _check_movement(
     _assert_data_close(actual, expected, check_dtype=dtype == torch.float32)
 
 
-@pytest.mark.parametrize("case", PROCESSOR_CONTRACT_CASES, ids=_case_id)
-def test_processor_state_moves_to_dtype(case: ProcessorContractCase) -> None:
-    _check_movement(case, torch.device("cpu"), torch.float64)
-
-
 @onlyCUDA
-@pytest.mark.parametrize("case", PROCESSOR_CONTRACT_CASES, ids=_case_id)
-def test_processor_state_moves_to_cuda(case: ProcessorContractCase) -> None:
-    _check_movement(case, torch.device("cuda"), torch.float32)
+@pytest.mark.parametrize(
+    "case",
+    PROCESSOR_CASES,
+    ids=lambda case: type(case.factory()).__name__,
+)
+def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
+    device = torch.device("cuda")
+    dtype = torch.float32
+    source = case.make_inputs(torch.device("cpu"), torch.float32)
+    target = case.make_inputs(device, dtype)
+    processor = case.factory()
+    _fit(processor, _data(processor, source))
+    expected = _transform(processor, _data(processor, source, query=True))
+    processor.to(device=device, dtype=dtype)
+    actual = _transform(processor, _data(processor, target, query=True))
+    assert all(
+        table.device.type == device.type and table.dtype == dtype
+        for table in _tables(actual)
+    )
+    _assert_data_close(actual, expected)
