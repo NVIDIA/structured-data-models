@@ -159,7 +159,7 @@ class RowEmbedding(torch.nn.Module):
                 else:
                     x = result
 
-            x = col_proj(x)
+            x = col_proj(x.transpose(-2, -3))  # [..., R, C, D]
 
             if i == 0:  # Prepend readout tokens before row-wise attention.
                 x = torch.cat(
@@ -167,12 +167,10 @@ class RowEmbedding(torch.nn.Module):
                         self.readout_token.to(x.dtype)
                         .view(*(1,) * len(B), 1, K, D)
                         .expand(*B, R, K, D),
-                        x.transpose(-2, -3),  # [..., R, C, D]
+                        x,  # [..., R, C, D]
                     ],
                     dim=-2,
                 )  # [..., R, K + C, D]
-            else:
-                x = x.transpose(-2, -3).contiguous()  # [..., R, K + C, D]
 
             # Row-wise attention (B * R as the batch axis).
             for j, row_layer in enumerate(row_layers):
