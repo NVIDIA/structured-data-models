@@ -41,7 +41,7 @@ class TabFMTransformerBlock(TransformerBlock):
             num_query_heads=num_heads,
             mlp=Sequential(
                 RMSNorm(channels, eps=1e-6, **factory_kwargs),
-                SwiGLU(channels, 4 * channels, bias=False, **factory_kwargs),
+                SwiGLU(channels, 4 * channels, **factory_kwargs),
                 RMSNorm(channels, eps=1e-6, **factory_kwargs),
             ),
             query_norm=norm,
@@ -50,6 +50,5 @@ class TabFMTransformerBlock(TransformerBlock):
             query_transform=Sequential(*query_transforms),
             key_transform=Sequential(*key_transforms),
             scale=1.0,
-            bias=False,
             **factory_kwargs,
         )
