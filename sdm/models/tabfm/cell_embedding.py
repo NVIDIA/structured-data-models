@@ -34,35 +34,13 @@ class CellEmbedding(torch.nn.Module):
         self,
         x: Tensor,  # [..., R, C],
         categorical_mask: Tensor,  # [..., C],
-        active_features: Tensor | None = None,  # [...],
     ) -> Tensor:  # [..., R, C, D]
         C = x.size(-1)
 
         # Feature grouping:
         index = torch.arange(C, device=x.device)
         shift = 2 ** torch.arange(self.group_size, device=x.device) - 1
-        index = index.view(C, 1) + shift.view(1, self.group_size)
-        if active_features is None:
-            index = index % C
-            x = x[..., index]  # [..., R, C, G]
-            grouped_mask = categorical_mask[..., index]  # [..., C, G]
-        else:
-            index = index % active_features.clamp_min(1)[..., None, None]
-            x = (
-                x.unsqueeze(-1)
-                .expand(*x.shape, self.group_size)
-                .gather(
-                    -2,
-                    index.unsqueeze(-3).expand(
-                        *x.shape[:-2], x.size(-2), C, self.group_size
-                    ),
-                )
-            )
-            grouped_mask = (
-                categorical_mask.unsqueeze(-1)
-                .expand(*categorical_mask.shape, self.group_size)
-                .gather(-2, index)
-            )
+        index = (index.view(C, 1) + shift.view(1, self.group_size)) % C
 
         # Compute Fourier features per semantic type:
         grouped_mask = categorical_mask[..., index]  # [..., C, G]
@@ -83,8 +61,3 @@ class CellEmbedding(torch.nn.Module):
             self.cat_lin(fourier),  # [..., R, C, G, D]
             self.num_lin(fourier),  # [..., R, C, G, D]
         ).sum(dim=-2)  # [..., R, C, D]
-        if active_features is None:
-            return output
-
-        active = torch.arange(C, device=x.device) < active_features[..., None]
-        return output.masked_fill(~active[..., None, :, None], 0)
