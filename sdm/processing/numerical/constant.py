@@ -13,9 +13,8 @@ class DropConstantColumns(EnsembleProcessor):
     """Remove non-informative numerical columns learned during fit.
 
     With ``method="unique"``, columns are retained when they have more than
-    ``threshold`` distinct observed values. NaN values are ignored. When
-    the number of samples is less than or equal to ``threshold``, all columns
-    with an observed value are preserved.
+    ``threshold`` distinct values. When the number of samples is less than or
+    equal to ``threshold``, all columns are preserved.
 
     With ``method="variance"``, columns are retained when their sample
     standard deviation is greater than ``tolerance``.
@@ -29,10 +28,10 @@ class DropConstantColumns(EnsembleProcessor):
     the selection fitted for the corresponding member.
 
     Args:
-        method: Filtering rule. ``"unique"`` uses distinct observed-value
-            counts; ``"variance"`` uses sample standard deviation.
+        method: Filtering rule. ``"unique"`` uses distinct-value counts;
+            ``"variance"`` uses sample standard deviation.
         threshold: With ``method="unique"``, columns with at most this many
-            distinct observed values are removed. Must be positive.
+            unique values are removed. Must be positive.
         tolerance: With ``method="variance"``, columns with sample standard
             deviation at most this value are removed.
     """
@@ -75,28 +74,19 @@ class DropConstantColumns(EnsembleProcessor):
             return data.std(dim=-2) > self.tolerance
 
         assert self.method == "unique"
-        # Preserve observed columns when too few rows can exceed the threshold.
+        # Preserve the schema when too few rows can exceed the threshold.
         if data.size(-2) <= self.threshold:
-            return (~data.isnan()).any(dim=-2)
+            return data.new_ones(
+                (*data.shape[:-2], data.size(-1)),
+                dtype=torch.bool,
+            )
         if self.threshold == 1:
-            # Any observed mismatch with the first observation proves a
-            # second unique value.
-            observed = ~data.isnan()
-            first_index = observed.max(
-                dim=-2,
-                keepdim=True,
-            ).indices
-            first_observed = data.gather(dim=-2, index=first_index)
-            return (observed & (data != first_observed)).any(dim=-2)
+            # Any mismatch with the first row proves a second unique value.
+            return (data != data[..., :1, :]).any(dim=-2)
 
         # A sorted column with k unique values has k - 1 transitions.
         values = data.sort(dim=-2).values
-        adjacent_observed = ~(
-            values[..., 1:, :].isnan() | values[..., :-1, :].isnan()
-        )
-        changed = (
-            values[..., 1:, :] != values[..., :-1, :]
-        ) & adjacent_observed
+        changed = values[..., 1:, :] != values[..., :-1, :]
         return changed.sum(dim=-2) >= self.threshold
 
     @staticmethod

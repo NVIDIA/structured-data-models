@@ -41,6 +41,7 @@ class CellEmbedding(torch.nn.Module):
         index = torch.arange(C, device=x.device)
         shift = 2 ** torch.arange(self.group_size, device=x.device) - 1
         index = (index.view(C, 1) + shift.view(1, self.group_size)) % C
+        x = x[..., index]  # [..., R, C, G]
 
         # Compute Fourier features per semantic type:
         grouped_mask = categorical_mask[..., index]  # [..., C, G]

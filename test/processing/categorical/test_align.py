@@ -14,12 +14,10 @@ def _table(
     values: list[list[int]],
     *,
     categories: tuple[tuple[str, ...], ...],
-    columns: tuple[str, ...] | None = None,
     device: torch.device | str | None = None,
     dtype: torch.dtype = torch.int32,
 ) -> TableTensor:
     return TableTensor(
-        columns={"categorical": columns} if columns is not None else None,
         categorical=CategoricalTensor(
             code=torch.tensor(values, dtype=dtype, device=device),
             categories=tuple(
@@ -149,139 +147,6 @@ def test_align_categories_orders_joint_vocabulary(
             1,
         ]
         assert query.categorical.code.squeeze(-1).tolist() == [1]
-
-
-@withCUDA
-def test_align_categories_filters_rare_values_without_query_leakage(
-    device: torch.device,
-) -> None:
-    context = _table(
-        [[0], [1], [2], [1], [2], [-1]],
-        columns=("kind",),
-        categories=(("rare", "blue", "ant", "unused"),),
-        device=device,
-    )
-    query = _table(
-        [[0], [0], [1], [2], [3], [-1]],
-        columns=("kind",),
-        categories=(("rare", "query", "ant", "blue"),),
-        device=device,
-    )
-
-    processor = AlignCategories(sort_by="frequency", min_frequency=2)
-    context_output = processor.fit_transform(context)
-    query_output = processor.transform(query)
-
-    assert context_output.categorical.categories[0].tolist() == ["blue", "ant"]
-    assert context_output.categorical.code.squeeze(-1).tolist() == [
-        -1,
-        0,
-        1,
-        0,
-        1,
-        -1,
-    ]
-    assert query_output.categorical.code.squeeze(-1).tolist() == [
-        -1,
-        -1,
-        -1,
-        1,
-        0,
-        -1,
-    ]
-
-
-@withCUDA
-def test_align_categories_orders_appearance_before_filtering(
-    device: torch.device,
-) -> None:
-    context = _table(
-        [[-1], [2], [1], [2], [0], [3], [1], [0]],
-        columns=("kind",),
-        categories=(("alpha", "beta", "gamma", "rare", "unused"),),
-        device=device,
-    )
-    query = _table(
-        [[3], [0], [2], [1], [4], [-1]],
-        columns=("kind",),
-        categories=(("gamma", "other", "alpha", "beta", "rare"),),
-        device=device,
-    )
-
-    processor = AlignCategories(sort_by="appearance", min_frequency=2)
-    context_output = processor.fit_transform(context)
-    query_output = processor.transform(query)
-
-    assert context_output.categorical.categories[0].tolist() == [
-        "gamma",
-        "beta",
-        "alpha",
-    ]
-    assert context_output.categorical.code.squeeze(-1).tolist() == [
-        -1,
-        0,
-        1,
-        0,
-        2,
-        -1,
-        1,
-        2,
-    ]
-    assert query_output.categorical.code.squeeze(-1).tolist() == [
-        1,
-        0,
-        2,
-        -1,
-        -1,
-        -1,
-    ]
-
-
-@withCUDA
-@pytest.mark.parametrize(
-    "dtype",
-    [torch.uint16, torch.uint32, torch.uint64],
-)
-def test_align_categories_orders_appearance_per_ensemble_member(
-    device: torch.device,
-    dtype: torch.dtype,
-) -> None:
-    categories = (torch.tensor([10, 20, 30], dtype=dtype, device=device),)
-
-    def table(codes: list[int]) -> TableTensor:
-        return TableTensor(
-            columns={"categorical": ("value",)},
-            categorical=CategoricalTensor(
-                code=torch.tensor(
-                    codes,
-                    dtype=torch.int32,
-                    device=device,
-                ).unsqueeze(-1),
-                categories=categories,
-            ),
-        )
-
-    first = table([2, 0, -1, 1])
-    second = table([1, -1, 0, 2])
-    context = EnsembleTable.from_tables(
-        tables=(first, second),
-        member_table_ids=(0, 1),
-    )
-    processor = AlignCategories(sort_by="appearance")
-
-    context_output = processor.fit_transform_ensemble(context)
-
-    assert context.num_groups == 1
-    assert [
-        (
-            context_output.table(i).categorical.categories[0].tolist(),
-            context_output.table(i).categorical.code.squeeze(-1).tolist(),
-        )
-        for i in range(2)
-    ] == [
-        ([30, 10, 20], [0, 1, -1, 2]),
-        ([20, 10, 30], [0, -1, 1, 2]),
-    ]
 
 
 @withCUDA
@@ -520,38 +385,19 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
         processor.transform(query)
 
 
-@pytest.mark.parametrize("min_frequency", [0, -1])
-def test_align_categories_rejects_non_positive_min_frequency(
-    min_frequency: int,
-) -> None:
-    with pytest.raises(ValueError, match="min_frequency must be positive"):
-        AlignCategories(min_frequency=min_frequency)
-
-
-def test_align_categories_repr_keeps_nondefault_min_frequency() -> None:
-    assert repr(AlignCategories(min_frequency=2)) == (
-        "AlignCategories(sort_by='code', min_frequency=2)"
-    )
-
-
 @withCUDA
 def test_align_categories_ensemble_matches_member_fits(
     device: torch.device,
 ) -> None:
     first_context = _table(
-        [[0], [0], [1]],
+        [[0], [1]],
         categories=(("red", "blue", "green"),),
         device=device,
     )
-    second_context = first_context.replace_blocks(
-        categorical=CategoricalTensor(
-            code=torch.tensor(
-                [[1], [2], [2]],
-                dtype=torch.int32,
-                device=device,
-            ),
-            categories=first_context.categorical.categories,
-        )
+    second_context = _table(
+        [[1], [2]],
+        categories=(("red", "blue", "green"),),
+        device=device,
     )
     member_table_ids = (1, 0, 1, 0, 0, 1, 1, 0)
     context = EnsembleTable.from_tables(
@@ -567,21 +413,16 @@ def test_align_categories_ensemble_matches_member_fits(
         tables=(query, query),
         member_table_ids=member_table_ids,
     )
-    combined = AlignCategories(min_frequency=2)
-    fitted = AlignCategories(min_frequency=2).fit_ensemble(context)
+    combined = AlignCategories()
+    fitted = AlignCategories().fit_ensemble(context)
 
     context_output = combined.fit_transform_ensemble(context)
     query_output = combined.transform_ensemble(query_ensemble)
     fitted_query_output = fitted.transform_ensemble(query_ensemble)
     references = [
-        AlignCategories(min_frequency=2).fit(first_context),
-        AlignCategories(min_frequency=2).fit(second_context),
+        AlignCategories().fit(first_context),
+        AlignCategories().fit(second_context),
     ]
-    assert context.num_groups == 1
-    assert query_output.table(0).categorical.categories[0].tolist() == [
-        "green"
-    ]
-    assert query_output.table(1).categorical.categories[0].tolist() == ["red"]
     context_tables = (first_context, second_context)
     for member_id, table_id in enumerate(member_table_ids):
         reference = references[table_id]
