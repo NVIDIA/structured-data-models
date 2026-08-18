@@ -14,7 +14,6 @@ class TabFMTransformerBlock(TransformerBlock):
         self,
         channels: int,
         num_heads: int,
-        hidden_channels: int,
         rope: RotaryEmbedding | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -42,12 +41,7 @@ class TabFMTransformerBlock(TransformerBlock):
             num_query_heads=num_heads,
             mlp=Sequential(
                 RMSNorm(channels, eps=1e-6, **factory_kwargs),
-                SwiGLU(
-                    channels,
-                    hidden_channels,
-                    bias=False,
-                    **factory_kwargs,
-                ),
+                SwiGLU(channels, 4 * channels, bias=False, **factory_kwargs),
                 RMSNorm(channels, eps=1e-6, **factory_kwargs),
             ),
             query_norm=norm,
@@ -59,45 +53,3 @@ class TabFMTransformerBlock(TransformerBlock):
             bias=False,
             **factory_kwargs,
         )
-
-
-class Encoder(torch.nn.Module):
-    def __init__(
-        self,
-        num_blocks: int,
-        channels: int,
-        num_heads: int,
-        hidden_channels: int,
-        rope_theta: float | None = 100_000.0,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        self.blocks = ModuleList(
-            TabFMTransformerBlock(
-                channels=channels,
-                num_heads=num_heads,
-                hidden_channels=hidden_channels,
-                rope=None
-                if rope_theta is None
-                else RotaryEmbedding(
-                    channels=channels // num_heads,
-                    layout="interleaved",
-                    theta=rope_theta,
-                    requires_grad=False,
-                    **factory_kwargs,
-                ),
-                **factory_kwargs,
-            )
-            for _ in range(num_blocks)
-        )
-
-    def forward(
-        self,
-        tensor: Tensor,
-        attn_mask: Tensor | None = None,
-    ) -> Tensor:
-        for block in self.blocks:
-            tensor = block(query=tensor, attn_mask=attn_mask)
-        return tensor
