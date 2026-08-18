@@ -1,0 +1,34 @@
+﻿TabFM
+=====
+
+.. currentmodule:: sdm.models
+
+.. autoclass:: TabFM
+   :members:
+   :show-inheritance:
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supports_related_tables
+
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Input Semantic Types**
+     - ``numerical``
+   * - **Supported Target Semantic Types**
+     - ``categorical``, ``numerical``
+   * - **Related Table Support**
+     - ❌
+
+Default Recipe
+--------------
+
+.. code-block:: python
+
+   Recipe(
+     features=Identity(),
+     target=Identity(),
+     output=Identity(),
+   )
