@@ -65,13 +65,11 @@ class RowEmbedding(torch.nn.Module):
                     inducing_block=TabFMTransformerBlock(
                         channels=channels,
                         num_heads=num_col_heads,
-                        hidden_channels=4 * channels,
                         **factory_kwargs,
                     ),
                     output_block=TabFMTransformerBlock(
                         channels=channels,
                         num_heads=num_col_heads,
-                        hidden_channels=4 * channels,
                         **factory_kwargs,
                     ),
                     **factory_kwargs,
@@ -84,7 +82,6 @@ class RowEmbedding(torch.nn.Module):
                 TabFMTransformerBlock(
                     channels=channels,
                     num_heads=num_row_heads,
-                    hidden_channels=4 * channels,
                     rope=rope,
                     **factory_kwargs,
                 )
