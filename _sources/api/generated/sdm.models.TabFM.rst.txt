@@ -28,7 +28,12 @@ Default Recipe
 .. code-block:: python
 
    Recipe(
-     features=Identity(),
+     features=Sequential(
+       StypeDispatch(
+         categorical=ToNumerical(),
+       ),
+       ShuffleColumns(method='shift'),
+     ),
      target=Identity(),
      output=Identity(),
    )
