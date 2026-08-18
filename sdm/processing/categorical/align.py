@@ -71,7 +71,7 @@ class AlignCategories(EnsembleProcessor):
     ) -> None:
         super().__init__()
         self.sort_by = sort_by
-        self._categories = BufferList()
+        self._categories: BufferList[BufferList[Tensor]] = BufferList()
 
     def _fit_column(
         self,

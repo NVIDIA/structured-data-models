@@ -1,5 +1,3 @@
-from typing import cast
-
 import torch
 
 from sdm import CategoricalTensor, Stype, TableTensor
@@ -30,7 +28,7 @@ class ImputeMode(Processor):
         super().__init__()
         # TODO: Add a separate processor that encodes missing values as their
         # own category instead of imputing an observed one.
-        self._categories = BufferList()
+        self._categories: BufferList[torch.Tensor] = BufferList()
         self.register_buffer(
             "_fill_values",
             torch.empty(0, dtype=torch.long),
@@ -114,7 +112,7 @@ class ImputeMode(Processor):
         for index, (actual, expected) in enumerate(
             zip(table.categorical.categories, self._categories)
         ):
-            expected = cast(torch.Tensor, expected).to(device=actual.device)
+            expected = expected.to(device=actual.device)
             if not actual.equal(expected):
                 raise ValueError(
                     "Expected the category vocabulary for categorical column "

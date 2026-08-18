@@ -1,4 +1,4 @@
-from typing import Literal, cast
+from typing import Literal
 
 import torch
 from torch import Tensor
@@ -36,7 +36,7 @@ class ShuffleCategories(EnsembleProcessor):
     ) -> None:
         super().__init__()
         self.method = method
-        self._permutations = BufferList()
+        self._permutations: BufferList[BufferList[Tensor]] = BufferList()
         self._permutation_ids: tuple[int, ...] = ()
 
     def _draw_permutations(
@@ -126,10 +126,7 @@ class ShuffleCategories(EnsembleProcessor):
         if len(member_ids_by_permutation) == ensemble_table.num_members:
             member_tables: list[TableTensor] = []
             for member_id, permutation_id in enumerate(self._permutation_ids):
-                permutations = cast(
-                    BufferList,
-                    self._permutations[permutation_id],
-                )
+                permutations = self._permutations[permutation_id]
                 member_tables.append(
                     self._permute(
                         ensemble_table.table(member_id),
@@ -144,10 +141,7 @@ class ShuffleCategories(EnsembleProcessor):
         outputs: dict[int, EnsembleTable] = {}
         for permutation_id, member_ids in member_ids_by_permutation.items():
             selected = ensemble_table.select_members(member_ids)
-            permutations = cast(
-                BufferList,
-                self._permutations[permutation_id],
-            )
+            permutations = self._permutations[permutation_id]
             outputs[permutation_id] = selected.replace_groups(
                 [self._permute(group, permutations) for group in selected]
             )
@@ -169,7 +163,7 @@ class ShuffleCategories(EnsembleProcessor):
     @staticmethod
     def _permute(
         table: TableTensor,
-        permutations: BufferList,
+        permutations: BufferList[Tensor],
     ) -> TableTensor:
         code = table.categorical.code.clone()
         valid_mask = table.categorical.isfinite()
@@ -177,7 +171,6 @@ class ShuffleCategories(EnsembleProcessor):
         for index, (category, permutation) in enumerate(
             zip(table.categorical.categories, permutations, strict=True)
         ):
-            permutation = cast(Tensor, permutation)
             codes = code[..., index]
             valid = valid_mask[..., index]
             valid_codes = codes[valid].to(torch.long)

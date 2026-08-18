@@ -31,7 +31,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> None:
         super().__init__()
         self.method = method
-        self._permutations = BufferList()
+        self._permutations: BufferList[Tensor] = BufferList()
         self._orders: tuple[tuple[int, ...], ...] = ()
 
     @property
@@ -41,7 +41,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             raise RuntimeError(
                 "'ShuffleColumns' has no single fitted permutation."
             )
-        return cast(Tensor, self._permutations[0])
+        return self._permutations[0]
 
     def _draw_permutation(
         self,
@@ -118,7 +118,6 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         for member_id, (fitted_permutation, fitted_order) in enumerate(
             zip(self._permutations, self._orders, strict=True)
         ):
-            fitted_permutation = cast(Tensor, fitted_permutation)
             permutation = (
                 fitted_permutation.argsort() if inverse else fitted_permutation
             )
