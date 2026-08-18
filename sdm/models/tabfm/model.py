@@ -1,3 +1,5 @@
+# ruff: noqa: D205
+
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
@@ -15,7 +17,9 @@ from sdm.tensor.table import TableSchema
 
 
 class TabFM(ICLModel):
-    r"""The Google TabFM tabular foundation model.
+    r"""The tabular foundation model as introduced in `"Introducing TabFM: A
+    Zero-shot Foundation Model for Tabular Data" <https://research.google/blog/
+    introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
 
     Architecturally, :class:`TabFM` can be viewed as a scaled-up
     :class:`TabICLv2`-style model with Fourier cell embeddings, separate
