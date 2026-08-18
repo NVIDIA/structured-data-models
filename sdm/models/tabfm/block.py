@@ -1,4 +1,4 @@
-# ruff: noqa: D101, D102
+# ruff: noqa: D101
 
 import math
 from typing import Any
