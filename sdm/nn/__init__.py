@@ -1,6 +1,5 @@
 """Neural network modules for structured data models."""
 
-from sdm.nn.feedforward import ChunkedFeedForward, SwiGLUFeedForward
 from sdm.nn.rope import RotaryEmbedding
 from sdm.nn.glu import SwiGLU
 from sdm.nn.softplus import SoftplusScale
@@ -10,8 +9,6 @@ from sdm.nn.set_transformer import InducedTransformerBlock
 
 
 __all__ = [
-    "SwiGLUFeedForward",
-    "ChunkedFeedForward",
     "RotaryEmbedding",
     "SwiGLU",
     "SoftplusScale",
