@@ -52,10 +52,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         fitted, num_groups = cast(tuple[bool, int], state)
         super().set_extra_state(fitted)
         self._group_processors = ModuleList(
-            [
-                self.processor if index == 0 else copy.deepcopy(self.processor)
-                for index in range(num_groups)
-            ]
+            [copy.deepcopy(self.processor) for _ in range(num_groups)]
         )
 
     @property
