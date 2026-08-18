@@ -37,10 +37,7 @@ class BufferList(torch.nn.Module, Generic[T]):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
-        layout = cast(
-            tuple[bool, ...],
-            state_dict[f"{prefix}_extra_state"],
-        )
+        layout = state_dict[f"{prefix}_extra_state"]
         materialized_keys = []
         for index, is_nested in enumerate(layout):
             if is_nested:
