@@ -97,17 +97,15 @@ class TaskDispatch(EnsembleProcessor):
             return ensemble_table
         return self.processors[self._task].transform_ensemble(ensemble_table)
 
-    def get_extra_state(self) -> tuple[bool, str | None]:
+    def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415
-        return self._fitted, self._task
+        return self._task
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        fitted, task = cast(tuple[bool, str | None], state)
-        super().set_extra_state(fitted)
         self._task = cast(
             Literal["classification", "regression"] | None,
-            task,
+            state,
         )
 
     def __repr__(self, *, indent: int = 0) -> str:

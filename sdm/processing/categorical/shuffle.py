@@ -41,21 +41,13 @@ class ShuffleCategories(EnsembleProcessor):
 
     def get_extra_state(
         self,
-    ) -> tuple[bool, tuple[int, ...]]:
+    ) -> tuple[int, ...]:
         r""":meta private:"""  # noqa: D415
-        return (
-            self._fitted,
-            self._permutation_ids,
-        )
+        return self._permutation_ids
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        fitted, permutation_ids = cast(
-            tuple[bool, tuple[int, ...]],
-            state,
-        )
-        super().set_extra_state(fitted)
-        self._permutation_ids = permutation_ids
+        self._permutation_ids = cast(tuple[int, ...], state)
 
     def _draw_permutations(
         self,

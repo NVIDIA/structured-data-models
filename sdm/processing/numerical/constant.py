@@ -68,18 +68,13 @@ class DropConstantColumns(EnsembleProcessor):
         # verify that the numerical schema and order match fit.
         self._kept_indices: tuple[tuple[int, ...], ...] = ()
 
-    def get_extra_state(self) -> tuple[bool, tuple[tuple[int, ...], ...]]:
+    def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
         r""":meta private:"""  # noqa: D415
-        return self._fitted, self._kept_indices
+        return self._kept_indices
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        fitted, kept_indices = cast(
-            tuple[bool, tuple[tuple[int, ...], ...]],
-            state,
-        )
-        super().set_extra_state(fitted)
-        self._kept_indices = kept_indices
+        self._kept_indices = cast(tuple[tuple[int, ...], ...], state)
 
     def _keep_mask(self, data: torch.Tensor) -> torch.Tensor:
         # [N, C] or [..., N, C] -> [C] or [..., C].

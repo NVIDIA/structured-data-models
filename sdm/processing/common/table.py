@@ -93,15 +93,13 @@ class TableDispatch(EnsembleProcessor):
             return ensemble_table
         return self.processors[self._route].transform_ensemble(ensemble_table)
 
-    def get_extra_state(self) -> tuple[bool, str | None]:
+    def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415
-        return self._fitted, self._route
+        return self._route
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        fitted, route = cast(tuple[bool, str | None], state)
-        super().set_extra_state(fitted)
-        self._route = cast(Literal["task", "related"] | None, route)
+        self._route = cast(Literal["task", "related"] | None, state)
 
     def __repr__(self, *, indent: int = 0) -> str:
         if len(self.processors) == 0:

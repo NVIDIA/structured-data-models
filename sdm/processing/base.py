@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import TYPE_CHECKING, Any, Self
 
 import torch
 
@@ -58,14 +58,6 @@ class Processor(torch.nn.Module, abc.ABC):
             f"Input must be a 'Processor', callable, or sequence of them "
             f"(got '{type(processor).__name__}')"
         )
-
-    def get_extra_state(self) -> object:
-        r""":meta private:"""  # noqa: D415
-        return self._fitted
-
-    def set_extra_state(self, state: object) -> None:
-        r""":meta private:"""  # noqa: D415
-        self._fitted = cast(bool, state)
 
     def _load_from_state_dict(
         self,

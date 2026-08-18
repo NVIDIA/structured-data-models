@@ -40,17 +40,13 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
 
         self._group_processors: ModuleList[Processor] = ModuleList()
 
-    def get_extra_state(self) -> tuple[bool, int]:
+    def get_extra_state(self) -> int:
         r""":meta private:"""  # noqa: D415
-        return (
-            self._fitted,
-            len(self._group_processors),
-        )
+        return len(self._group_processors)
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        fitted, num_groups = cast(tuple[bool, int], state)
-        super().set_extra_state(fitted)
+        num_groups = cast(int, state)
         self._group_processors = ModuleList(
             [copy.deepcopy(self.processor) for _ in range(num_groups)]
         )
