@@ -1,34 +1,12 @@
-from typing import Literal, cast
+from typing import Literal
 
 import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, Stype, TableTensor
+from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.tensor import EnsembleTable
-
-
-class _CategoryPermutations(torch.nn.Module):
-    """Store fitted categorical code permutations."""
-
-    permutations: Tensor
-    offsets: Tensor
-
-    def __init__(
-        self,
-        permutations: Tensor,
-        offsets: tuple[int, ...],
-    ) -> None:
-        super().__init__()
-        self.register_buffer("permutations", permutations)
-        self.register_buffer(
-            "offsets",
-            torch.tensor(
-                offsets,
-                dtype=torch.long,
-                device=permutations.device,
-            ),
-        )
 
 
 class ShuffleCategories(EnsembleProcessor):
@@ -58,7 +36,7 @@ class ShuffleCategories(EnsembleProcessor):
     ) -> None:
         super().__init__()
         self.method = method
-        self._permutations = torch.nn.ModuleList()
+        self._permutations: BufferList[BufferList[Tensor]] = BufferList()
         self._permutation_ids: tuple[int, ...] = ()
 
     def _draw_permutations(
@@ -66,10 +44,9 @@ class ShuffleCategories(EnsembleProcessor):
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
-    ) -> tuple[Tensor, tuple[int, ...]]:
+    ) -> list[Tensor]:
         device = table.categorical.device
         permutations: list[Tensor] = []
-        offsets = [0]
         for category in table.categorical.categories:
             n_classes = category.numel()
             if n_classes <= 1:
@@ -92,14 +69,7 @@ class ShuffleCategories(EnsembleProcessor):
                     device=device,
                 )
             permutations.append(permutation)
-            offsets.append(offsets[-1] + n_classes)
-
-        permutation = (
-            torch.cat(permutations)
-            if len(permutations) > 0
-            else torch.empty(0, dtype=torch.long, device=device)
-        )
-        return permutation, tuple(offsets)
+        return permutations
 
     def _fit_ensemble(
         self,
@@ -108,31 +78,33 @@ class ShuffleCategories(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> None:
 
-        self._permutations = torch.nn.ModuleList()
+        permutations_by_id = []
         permutation_ids = []
         permutation_id_by_key: dict[
-            tuple[torch.device, tuple[int, ...], tuple[int, ...]], int
+            tuple[torch.device, tuple[tuple[int, ...], ...]], int
         ] = {}
 
         for member_id in range(ensemble_table.num_members):
-            permutations, offsets = self._draw_permutations(
+            permutations = self._draw_permutations(
                 ensemble_table.table(member_id),
                 generator=generator,
             )
             key = (
-                permutations.device,
-                offsets,
-                tuple(permutations.tolist()),
+                ensemble_table.table(member_id).categorical.device,
+                tuple(
+                    tuple(permutation.tolist()) for permutation in permutations
+                ),
             )
             permutation_id = permutation_id_by_key.get(key)
             if permutation_id is None:
-                permutation_id = len(self._permutations)
+                permutation_id = len(permutations_by_id)
                 permutation_id_by_key[key] = permutation_id
-                self._permutations.append(
-                    _CategoryPermutations(permutations, offsets)
-                )
+                permutations_by_id.append(permutations)
             permutation_ids.append(permutation_id)
 
+        self._permutations = BufferList(
+            BufferList(permutations) for permutations in permutations_by_id
+        )
         self._permutation_ids = tuple(permutation_ids)
 
     def _transform_ensemble(
@@ -154,10 +126,7 @@ class ShuffleCategories(EnsembleProcessor):
         if len(member_ids_by_permutation) == ensemble_table.num_members:
             member_tables: list[TableTensor] = []
             for member_id, permutation_id in enumerate(self._permutation_ids):
-                permutations = cast(
-                    _CategoryPermutations,
-                    self._permutations[permutation_id],
-                )
+                permutations = self._permutations[permutation_id]
                 member_tables.append(
                     self._permute(
                         ensemble_table.table(member_id),
@@ -172,10 +141,7 @@ class ShuffleCategories(EnsembleProcessor):
         outputs: dict[int, EnsembleTable] = {}
         for permutation_id, member_ids in member_ids_by_permutation.items():
             selected = ensemble_table.select_members(member_ids)
-            permutations = cast(
-                _CategoryPermutations,
-                self._permutations[permutation_id],
-            )
+            permutations = self._permutations[permutation_id]
             outputs[permutation_id] = selected.replace_groups(
                 [self._permute(group, permutations) for group in selected]
             )
@@ -197,16 +163,14 @@ class ShuffleCategories(EnsembleProcessor):
     @staticmethod
     def _permute(
         table: TableTensor,
-        permutations: _CategoryPermutations,
+        permutations: BufferList[Tensor],
     ) -> TableTensor:
-        offsets = permutations.offsets.tolist()
         code = table.categorical.code.clone()
         valid_mask = table.categorical.isfinite()
         categories: list[Tensor] = []
-        for index, category in enumerate(table.categorical.categories):
-            permutation = permutations.permutations[
-                offsets[index] : offsets[index + 1]
-            ]
+        for index, (category, permutation) in enumerate(
+            zip(table.categorical.categories, permutations, strict=True)
+        ):
             codes = code[..., index]
             valid = valid_mask[..., index]
             valid_codes = codes[valid].to(torch.long)

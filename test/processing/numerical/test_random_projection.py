@@ -5,13 +5,17 @@ from sdm.processing import RandomProjection
 from sdm.tensor import EnsembleTable
 
 
-def test_random_projection() -> None:
-    table = TableTensor(
+def _table() -> TableTensor:
+    return TableTensor(
         numerical=torch.randn(6, 4),
         categorical=CategoricalTensor(
             torch.randint(0, 2, (6, 1)), categories=(torch.arange(2),)
         ),
     )
+
+
+def test_random_projection() -> None:
+    table = _table()
 
     inp = EnsembleTable(table, num_members=8)
     out = RandomProjection(8).fit_transform_ensemble(inp)
