@@ -23,11 +23,11 @@ scripts cap the number of test rows.
 import argparse
 from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 import relarena
 import relbench
 import torch
-import torchmetrics
 import tqdm
 
 import sdm
@@ -142,20 +142,27 @@ def run_task(dataset_name: str, task_name: str) -> None:
 
     train_df = task.get_table("train", mask_input_cols=False).df
     val_df = task.get_table("val", mask_input_cols=False).df
-    test_df = task.get_table("test", mask_input_cols=False).df.copy()
+    test_table = task.get_table("test", mask_input_cols=False)
     context_df = pd.concat([train_df, val_df], ignore_index=True)
     if binary:
         # Normalize 0/1, Boolean, and f/t labels so AUROC scores True.
         labels = sorted(context_df[task.target_col].dropna().unique())
         context_df[task.target_col] = context_df[task.target_col] == labels[-1]
-        test_df[task.target_col] = test_df[task.target_col] == labels[-1]
-    stypes = {
-        task.entity_col: "id",
-        task.time_col: "datetime",
-        task.target_col: "categorical" if binary else "numerical",
-    }
-    context = sdm.TableTensor.from_pandas(df=context_df, stypes=stypes)
-    test = sdm.TableTensor.from_pandas(df=test_df, stypes=stypes)
+    context = sdm.TableTensor.from_pandas(
+        df=context_df,
+        stypes={
+            task.entity_col: "id",
+            task.time_col: "datetime",
+            task.target_col: "categorical" if binary else "numerical",
+        },
+    )
+    query = sdm.TableTensor.from_pandas(
+        df=test_table.df[[task.entity_col, task.time_col]].copy(),
+        stypes={
+            task.entity_col: "id",
+            task.time_col: "datetime",
+        },
+    )
     context = context[torch.randperm(len(context))[:context_size]]
 
     model = sdm.models.NemotronRelational(device=device)
@@ -171,7 +178,11 @@ def run_task(dataset_name: str, task_name: str) -> None:
         "task_time_column": task.time_col,
     }
     context, related_tables = sampler(context, **kwargs).to(device)
-    with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
+    with torch.amp.autocast(
+        device.type,
+        torch.bfloat16,
+        enabled=device.type == "cuda",
+    ):
         model.fit(
             x=context.drop_columns(task.target_col),
             y=context[task.target_col],
@@ -180,36 +191,27 @@ def run_task(dataset_name: str, task_name: str) -> None:
         )
 
     predictions = []
-    targets = []
     for batch in tqdm.tqdm(
-        test.split(args.batch_size),
+        query.split(args.batch_size),
         desc=f"{dataset_name}/{task_name}",
     ):
-        y_query = batch[task.target_col].to(device)
-        query = batch.drop_columns(task.target_col)
-        with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
-            out = model.predict(*sampler(query, **kwargs).to(device))
-        if binary:
-            pred, target = sdm.evaluation.to_binary_class(
-                out,
-                y_query,
-                positive_class=True,
-            )
-        else:
-            pred = out["q500"].numerical.squeeze(-1)
-            target = y_query.numerical.squeeze(-1)
-        predictions.append(pred.cpu())
-        targets.append(target.cpu())
+        with torch.amp.autocast(
+            device.type,
+            torch.bfloat16,
+            enabled=device.type == "cuda",
+        ):
+            out = model.predict(*sampler(batch, **kwargs).to(device))
+        pred = (
+            out["True"].numerical.squeeze(-1)
+            if binary
+            else out["q500"].numerical.squeeze(-1)
+        )
+        predictions.append(pred.float().cpu().numpy())
 
-    pred = torch.cat(predictions)
-    target = torch.cat(targets)
-    name = "AUROC" if binary else "MAE"
-    score = (
-        torchmetrics.classification.BinaryAUROC()(pred, target)
-        if binary
-        else torchmetrics.regression.MeanAbsoluteError()(pred, target)
-    )
-    print(f"{dataset_name}/{task_name} {name}: {score:.4f}")
+    pred = np.concatenate(predictions)
+    metrics = task.evaluate(pred, test_table, metrics=list(task.metrics))
+    for name, score in metrics.items():
+        print(f"{dataset_name}/{task_name} {name}: {score:.4f}")
 
 
 datasets = (
