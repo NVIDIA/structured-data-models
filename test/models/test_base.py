@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -18,7 +17,6 @@ class _Call:
     x_query: TableTensor | None
     related_context_tables: RelatedTables | None
     related_query_tables: RelatedTables | None
-    callbacks: Sequence[Callback]
 
 
 class _RecordingModel(ICLModel):
@@ -47,10 +45,6 @@ class _RecordingModel(ICLModel):
                 x_query=x_query,
                 related_context_tables=related_context_tables,
                 related_query_tables=related_query_tables,
-                callbacks=cast(
-                    Sequence[Callback],
-                    kwargs.get("callbacks", ()),
-                ),
             )
         )
         table = x_query if x_query is not None else x_context
@@ -219,9 +213,13 @@ def test_callback() -> None:
         def __init__(
             self,
             name: str,
+            scale: float,
+            offset: float,
             events: list[str],
         ) -> None:
             self.name = name
+            self.scale = scale
+            self.offset = offset
             self.events = events
 
         def _record(self, event: str) -> None:
@@ -249,13 +247,28 @@ def test_callback() -> None:
         ) -> None:
             self._record("predict_end")
 
+        def on_after_preprocessing(
+            self,
+            model: torch.nn.Module,
+            x: TableTensor,
+            related_tables: RelatedTables | None,
+            /,
+        ) -> tuple[TableTensor, RelatedTables | None]:
+            self._record("after_preprocessing")
+            return (
+                x.replace_blocks(
+                    numerical=x.numerical * self.scale + self.offset
+                ),
+                related_tables,
+            )
+
     x_context = torch.tensor([[0.0], [2.0]])
     y_context = torch.tensor([[0.0], [1.0]])
     x_query = torch.tensor([[3.0]])
     events: list[str] = []
     callbacks = (
-        _Callback("first", events=events),
-        _Callback("second", events=events),
+        _Callback("first", scale=1.0, offset=1.0, events=events),
+        _Callback("second", scale=2.0, offset=0.0, events=events),
     )
     model = _RecordingModel()
 
@@ -267,20 +280,19 @@ def test_callback() -> None:
     with pytest.raises(RuntimeError, match="not yet fitted"):
         _RecordingModel().predict(x_query, callbacks=callbacks)
 
-    torch.testing.assert_close(output.numerical, torch.tensor([[[3.0]]]))
+    torch.testing.assert_close(output.numerical, torch.tensor([[[8.0]]]))
     torch.testing.assert_close(prediction.numerical, output.numerical)
-    assert [call.callbacks for call in model.calls] == [
-        callbacks,
-        (),
-        callbacks,
-    ]
     assert events == [
         "first_forward_start",
         "second_forward_start",
+        "first_after_preprocessing",
+        "second_after_preprocessing",
         "first_forward_end",
         "second_forward_end",
         "first_predict_start",
         "second_predict_start",
+        "first_after_preprocessing",
+        "second_after_preprocessing",
         "first_predict_end",
         "second_predict_end",
         "first_predict_start",

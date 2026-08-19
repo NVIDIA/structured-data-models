@@ -1,6 +1,6 @@
 import torch
 
-from sdm import TableTensor
+from sdm import RelatedTables, TableTensor
 
 
 class Callback:
@@ -54,3 +54,22 @@ class Callback:
             prediction: Fully processed value returned by the public
                 :meth:`~sdm.models.ICLModel.predict` call.
         """
+
+    def on_after_preprocessing(
+        self,
+        model: torch.nn.Module,
+        x: TableTensor,
+        related_tables: RelatedTables | None,
+        /,
+    ) -> tuple[TableTensor, RelatedTables | None]:
+        """Run after preprocessing and before each model execution.
+
+        Args:
+            model: Model receiving the callback.
+            x: Preprocessed query table.
+            related_tables: Preprocessed related query tables, if any.
+
+        Returns:
+            Query inputs passed to the next callback or model.
+        """
+        return x, related_tables
