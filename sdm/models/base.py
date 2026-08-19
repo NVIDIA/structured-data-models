@@ -421,6 +421,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         for callback in callbacks:
             callback.on_forward_end(self, prediction)
+
         return prediction
 
     def clear(self) -> None:
