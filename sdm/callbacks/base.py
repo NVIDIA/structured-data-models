@@ -6,13 +6,16 @@ from sdm import RelatedTables, TableTensor
 
 
 class Callback:
-    """Base class for callbacks attached to one model call.
+    """Base class for callbacks applied to one model call.
 
     Lifecycle hooks run automatically around
     :meth:`~sdm.models.ICLModel.forward` and
-    :meth:`~sdm.models.ICLModel.predict`.
+    :meth:`~sdm.models.ICLModel.predict`. The start hook runs once per
+    attempted call, the end hook runs once after a successful call, and
+    preprocessing hooks run once per ensemble member.
 
-    Callbacks supplied together run in sequence order.
+    Callbacks supplied together run in sequence order, and each preprocessing
+    result is passed to the next callback.
     """
 
     def on_forward_start(
@@ -21,12 +24,13 @@ class Callback:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        """Run before a model forward or prediction pass.
+        """Run before input validation and preprocessing.
 
         Args:
             model: Model receiving the callback.
-            args: Positional inputs to the public model call.
-            kwargs: Keyword inputs to the public model call.
+            args: Model inputs in public signature order, including defaulted
+                values.
+            kwargs: Model options by name, including defaulted values.
         """
 
     def on_forward_end(
@@ -34,12 +38,12 @@ class Callback:
         model: torch.nn.Module,
         prediction: TableTensor,
     ) -> None:
-        """Run after a successful model forward or prediction pass.
+        """Run after successful output postprocessing.
 
         Args:
             model: Model receiving the callback.
-            prediction: Fully processed value returned by the public model
-                call.
+            prediction: Fully processed prediction returned by the public
+                model call.
         """
 
     def on_preprocessing_end(
@@ -48,14 +52,16 @@ class Callback:
         x: TableTensor,
         related_tables: RelatedTables | None,
     ) -> tuple[TableTensor, RelatedTables | None]:
-        """Run after preprocessing and before each model execution.
+        """Transform one ensemble member after preprocessing.
 
         Args:
             model: Model receiving the callback.
-            x: Preprocessed query table.
-            related_tables: Preprocessed related query tables, if any.
+            x: Preprocessed query table for the ensemble member.
+            related_tables: Preprocessed related query tables for the ensemble
+                member, if any.
 
         Returns:
-            Query inputs passed to the next callback or model.
+            Query table and related tables passed to the next callback or the
+            model.
         """
         return x, related_tables

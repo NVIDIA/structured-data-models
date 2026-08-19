@@ -70,7 +70,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             num_estimators: The number of estimators ``E`` for ensembling.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
-            callbacks: Callbacks invoked in sequence during model execution.
+            callbacks: Callbacks applied in sequence to this model call.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
@@ -285,7 +285,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             x: The feature tensor of query examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
             related_tables: Related context for query examples.
-            callbacks: Callbacks invoked in sequence during model execution.
+            callbacks: Callbacks applied in sequence to this model call.
 
         Returns:
             The processed prediction after applying ``recipe.output`` to the
