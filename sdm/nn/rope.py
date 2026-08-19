@@ -1,3 +1,5 @@
+# ruff: noqa: D205
+
 from typing import Any, Literal
 
 import torch
@@ -5,7 +7,9 @@ from torch import Tensor
 
 
 class RotaryEmbedding(torch.nn.Module):
-    r"""RoPE from the `"RoFormer" <https://arxiv.org/abs/2104.09864>`_ paper.
+    r"""Rotary Positional Embedding (RoPE) from the `"RoFormer: Enhanced
+    Transformer with Rotary Position Embedding"
+    <https://arxiv.org/abs/2104.09864>`_ paper.
 
     Args:
         channels: The number of channels per attention head.
@@ -14,10 +18,10 @@ class RotaryEmbedding(torch.nn.Module):
             adjacent even and odd channels.
         theta: The base frequency used to initialize inverse frequencies.
         requires_grad: Whether inverse frequencies are learnable.
+        partial_rotary_factor: The fraction of leading channels to which RoPE
+            is applied.
         device: The device.
         dtype: The dtype.
-        rotary_channels: The number of leading channels to rotate. ``None``
-            rotates all channels. Remaining channels pass through unchanged.
     """
 
     def __init__(
@@ -26,28 +30,27 @@ class RotaryEmbedding(torch.nn.Module):
         layout: Literal["split_half", "interleaved"],
         theta: float = 100_000,
         requires_grad: bool = True,
+        partial_rotary_factor: float = 1.0,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        rotary_channels: int | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
         self.layout = layout
         self.channels = channels
-        self.rotary_channels = (
-            channels if rotary_channels is None else rotary_channels
-        )
+        self.rotary_channels = int(channels * partial_rotary_factor)
 
-        if channels % 2 != 0:
-            raise ValueError(f"'channels' must be even (got {channels})")
+        if self.channels % 2 != 0:
+            raise ValueError(f"'channels' must be even (got {self.channels})")
         if (
             self.rotary_channels < 2
             or self.rotary_channels > channels
             or self.rotary_channels % 2 != 0
         ):
             raise ValueError(
-                "'rotary_channels' must be an even number between 2 and "
-                f"'channels' (got {self.rotary_channels})"
+                f"'partial_rotary_factor' must produce an even number between "
+                f"2 and {self.channels} (got {self.rotary_channels})"
             )
 
         arange = torch.arange(0, self.rotary_channels, 2, **factory_kwargs)
@@ -76,10 +79,9 @@ class RotaryEmbedding(torch.nn.Module):
                 f"Expected {self.channels} channels (got {x.size(-1)})"
             )
         seq = torch.arange(x.size(-3), device=x.device, dtype=torch.float32)
-        freq = seq.view(-1, 1) * self.inv_freq.view(1, -1)
-        # [S, C_rotary // 2]
-        sin = freq.sin()[:, None, :].to(x.dtype)
-        cos = freq.cos()[:, None, :].to(x.dtype)
+        freq = seq.view(-1, 1) * self.inv_freq.view(1, -1)  # [S, C // 2]
+        sin = freq.sin()[:, None, :].to(x.dtype)  # [S, C // 2]
+        cos = freq.cos()[:, None, :].to(x.dtype)  # [S, C // 2]
 
         rotary = x[..., : self.rotary_channels]
         if self.layout == "interleaved":
@@ -94,6 +96,7 @@ class RotaryEmbedding(torch.nn.Module):
         if self.layout == "interleaved":
             rotary = torch.stack((out1, out2), dim=-1).flatten(-2)
         else:
+            assert self.layout == "split_half"
             rotary = torch.cat((out1, out2), dim=-1)
 
         if self.rotary_channels == self.channels:

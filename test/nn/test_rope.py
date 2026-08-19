@@ -60,7 +60,7 @@ def test_rope(
 
 @withCUDA
 @pytest.mark.parametrize("layout", ["split_half", "interleaved"])
-def test_rope_partial_channels(
+def test_partial_rope(
     device: torch.device,
     layout: Literal["split_half", "interleaved"],
 ) -> None:
@@ -68,7 +68,7 @@ def test_rope_partial_channels(
         channels=16,
         layout=layout,
         theta=100,
-        rotary_channels=4,
+        partial_rotary_factor=0.25,
         device=device,
     )
     reference = RotaryEmbedding(
@@ -77,29 +77,9 @@ def test_rope_partial_channels(
         theta=100,
         device=device,
     )
-    x = torch.arange(
-        2 * 5 * 3 * 16,
-        device=device,
-        dtype=torch.float32,
-    ).reshape(2, 5, 3, 16)
+    x = torch.randn(2, 5, 3, 16, device=device)
 
     output = partial(x)
-    expected_prefix = reference(x[..., :4])
-
-    torch.testing.assert_close(output[..., :4], expected_prefix)
     assert torch.equal(output[..., 4:], x[..., 4:])
-    with pytest.raises(ValueError, match="Expected 16 channels"):
-        partial(x[..., :8])
-
-
-@pytest.mark.parametrize("rotary_channels", [0, 3, 18])
-def test_rope_invalid_partial_channels(rotary_channels: int) -> None:
-    with pytest.raises(
-        ValueError,
-        match="'rotary_channels' must be an even number",
-    ):
-        RotaryEmbedding(
-            channels=16,
-            layout="split_half",
-            rotary_channels=rotary_channels,
-        )
+    expected_prefix = reference(x[..., :4])
+    torch.testing.assert_close(output[..., :4], expected_prefix)

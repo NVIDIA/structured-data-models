@@ -63,22 +63,18 @@ def test_qassmax_compile(
 
 
 @withCUDA
-@pytest.mark.parametrize("rotary_channels", [None, 4])
+@pytest.mark.parametrize("partial_rotary_factor", [1.0, 0.25])
 def test_rotary_embedding_compile(
     device: torch.device,
-    rotary_channels: int | None,
+    partial_rotary_factor: float,
 ) -> None:
     module = RotaryEmbedding(
         channels=16,
         layout="split_half",
-        rotary_channels=rotary_channels,
+        partial_rotary_factor=partial_rotary_factor,
         device=device,
     )
-    x = torch.arange(
-        2 * 5 * 3 * 16,
-        device=device,
-        dtype=torch.float32,
-    ).reshape(2, 5, 3, 16)
+    x = torch.randn(2, 5, 3, 4, device=device)
 
     expected = module(x)
     out = fullgraph(module)(x)
