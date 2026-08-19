@@ -136,8 +136,8 @@ class NemotronRelational(ICLModel):
     supports_related_tables: ClassVar[bool] = True
 
     _checkpoint_filenames: ClassVar[dict[str, str]] = {
-        "classifier": "cls-model.pt",
-        "regressor": "reg-model.pt",
+        "classifier": "classifier.pt",
+        "regressor": "regressor.pt",
     }
 
     def __init__(
