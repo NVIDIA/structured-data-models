@@ -1,14 +1,30 @@
-from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
-from typing import cast
+from __future__ import annotations
 
-import torch
-from typing_extensions import Self
+from collections.abc import (
+    Callable,
+    Collection,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
+from dataclasses import dataclass
+from html import escape
+from typing import TYPE_CHECKING, Any, Self, cast
+
+from torch import Tensor
 
 from sdm import TableTensor
-from sdm.relational import Relationship
-from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
+from sdm.relational import RelationalData, Relationship
+from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID
 from sdm.tensor.mixin import DeviceMixin
+from sdm.tensor.table import TableSchema
+
+if TYPE_CHECKING:
+    import graphviz
+
+
+TASK_TABLE = "__task_table__"
 
 
 @dataclass(frozen=True, repr=False)
@@ -21,9 +37,9 @@ class TaskLink:
         table_columns: Column names in ``table``.
     """
 
-    task_columns: Sequence[str]
+    task_columns: tuple[str, ...]
     table: str
-    table_columns: Sequence[str]
+    table_columns: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if len(self.task_columns) != len(self.table_columns):
@@ -39,10 +55,10 @@ class TaskLink:
             )
 
         for column in (*self.task_columns, *self.table_columns):
-            for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
+            for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
-                        f"Column name '{column}' is reserved for internal "
+                        f"Column name {column!r} is reserved for internal "
                         f"row indexing"
                     )
 
@@ -72,23 +88,60 @@ class TaskLink:
             table_columns = (table_columns,)
 
         return cls(
-            task_columns=task_columns,
+            task_columns=tuple(task_columns),
             table=table,
-            table_columns=table_columns,
+            table_columns=tuple(table_columns),
         )
 
     def _task_columns_repr(self) -> str:
         if len(self.task_columns) == 1:
             return self.task_columns[0]
-        return f"[{', '.join(self.task_columns)}]"
+        return f"[{','.join(self.task_columns)}]"
 
     def _table_columns_repr(self) -> str:
         if len(self.table_columns) == 1:
             return f"{self.table}.{self.table_columns[0]}"
-        return f"{self.table}.[{', '.join(self.table_columns)}]"
+        return f"{self.table}.[{','.join(self.table_columns)}]"
 
     def __repr__(self) -> str:
-        return f"{self._task_columns_repr()}->{self._table_columns_repr()}"
+        return f"{self._task_columns_repr()} > {self._table_columns_repr()}"
+
+
+@dataclass(frozen=True)
+class RelatedTablesSchema:
+    r"""The schema of :class:`RelatedTables`.
+
+    Args:
+        tables: Table schema keyed by table name.
+        relationships: Join relationships among ``tables``.
+        task_links: Links from task columns to related ``tables``.
+    """
+
+    tables: Mapping[str, TableSchema]
+    relationships: tuple[Relationship, ...]
+    task_links: tuple[TaskLink, ...]
+
+    def is_subset_of(self, other: RelatedTablesSchema) -> bool:
+        r"""Whether this schema is an induced subset of ``other``."""
+        for table_name, schema in self.tables.items():
+            if schema != other.tables.get(table_name):
+                return False
+
+        other_relationships = {
+            relationship
+            for relationship in other.relationships
+            if relationship.left_table in self.tables
+            and relationship.right_table in self.tables
+        }
+        if set(self.relationships) != other_relationships:
+            return False
+
+        other_task_links = {
+            task_link
+            for task_link in other.task_links
+            if task_link.table in self.tables
+        }
+        return set(self.task_links) == other_task_links
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -98,31 +151,43 @@ class RelatedTables(DeviceMixin):
     :class:`RelatedTables` store the relational context provided to a model
     for a particular task table.
     It may contain a sampled subset of a larger :class:`RelationalData`.
-    The ``task_link`` describes how rows in the model input match rows in
+    The ``task_links`` describe how rows in the model input match to rows in
     the related tables.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import RelatedTables, TableTensor
 
         data = RelatedTables(
             tables={
-                "users": TableTensor.from_pandas(...),
-                "orders": TableTensor.from_pandas(...),
-                "items": TableTensor.from_pandas(...),
+                "users": TableTensor.from_columns(
+                    {"user_id": [0, 1]},
+                    stypes={"user_id": "id"},
+                ),
+                "orders": TableTensor.from_columns(
+                    {
+                        "user_id": [0, 1],
+                        "item_id": [10, 11],
+                    },
+                    stypes={
+                        "user_id": "id",
+                        "item_id": "id",
+                    },
+                ),
+                "items": TableTensor.from_columns(
+                    {"item_id": [10, 11]},
+                    stypes={"item_id": "id"},
+                ),
             },
             relationships=[
                 # Foreign key from orders to users:
-                dict(left_table="orders", left_column="user_id",
-                     right_table="users", right_column="user_id"),
+                dict(left_table="orders", left_column="user_id", right_table="users", right_column="user_id"),
                 # Foreign key from orders to items:
-                dict(left_table="orders", left_column="item_id",
-                     right_table="items", right_column="item_id"),
+                dict(left_table="orders", left_column="item_id", right_table="items", right_column="item_id"),
             ],
             task_links=[
                 # Foreign key in the task table to users:
-                dict(task_column="ENTITY", table="users",
-                     table_column="user_id")
+                dict(task_column="ENTITY", table="users", table_column="user_id")
             ],
         )
 
@@ -130,7 +195,7 @@ class RelatedTables(DeviceMixin):
         tables: Related tables keyed by table name.
         relationships: Join relationships among ``tables``.
         task_links: Links from task columns to related ``tables``.
-    """
+    """  # noqa: E501
 
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
@@ -162,37 +227,114 @@ class RelatedTables(DeviceMixin):
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", relationships)
         object.__setattr__(self, "task_links", task_links)
-        self.__post_init__()
 
-    def __post_init__(self) -> None:
-        for table in self.tables.values():
-            if table.dim() != 2:
-                raise ValueError("Tables need to be two-dimensional")
+    def _tensors(self) -> Iterator[Tensor]:
+        yield from self.tables.values()
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
         return self.__class__(
             tables={
-                table_name: cast(TableTensor, table.to(device))
-                for table_name, table in self.tables.items()
+                name: cast(TableTensor, fn(table))
+                for name, table in self.tables.items()
             },
             relationships=self.relationships,
             task_links=self.task_links,
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
-        devices = {table.device for table in self.tables.values()}
-        if len(devices) == 0:
-            raise RuntimeError(
-                f"Could not determine 'device' of empty "
-                f"'{self.__class__.__name__}'"
+    def schema(self) -> RelatedTablesSchema:
+        r"""The schema of this related context."""
+        return RelatedTablesSchema(
+            tables={name: table.schema for name, table in self.tables.items()},
+            relationships=self.relationships,
+            task_links=self.task_links,
+        )
+
+    def is_same_schema(self, other: RelatedTables) -> bool:
+        r"""Whether ``other`` has the same schema layout.
+
+        Args:
+            other: The object to compare against.
+        """
+        return self.schema == other.schema
+
+    def select_tables(self, tables: Iterable[str]) -> Self:
+        r"""Return related tables containing only ``tables``.
+
+        Args:
+            tables: The table names to select.
+        """
+        tables = set(tables)
+
+        return self.__class__(
+            tables={
+                table_name: table
+                for table_name, table in self.tables.items()
+                if table_name in tables
+            },
+            relationships=tuple(
+                relationship
+                for relationship in self.relationships
+                if relationship.left_table in tables
+                and relationship.right_table in tables
+            ),
+            task_links=tuple(
+                task_link
+                for task_link in self.task_links
+                if task_link.table in tables
+            ),
+        )
+
+    def replace_tables(self, tables: Mapping[str, TableTensor]) -> Self:
+        r"""Return related tables with replaced table data.
+
+        Args:
+            tables: Related tables keyed by table name.
+        """
+        if tables.keys() != self.tables.keys():
+            raise ValueError("Expected 'tables' to match existing table names")
+
+        return self.__class__(
+            tables=tables,
+            relationships=self.relationships,
+            task_links=self.task_links,
+        )
+
+    def to_graphviz(
+        self,
+        *,
+        hide_columns: bool = False,
+        **kwargs: Any,
+    ) -> graphviz.Graph:
+        r"""Return a task visualization of the relational schema.
+
+        Args:
+            hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments passed to
+                :class:`graphviz.Graph`.
+        """
+        graph = RelationalData(
+            tables=self.tables,
+            relationships=self.relationships,
+        ).to_graphviz(hide_columns=hide_columns, **kwargs)
+
+        graph.node(TASK_TABLE, label="", shape="point")
+
+        for link in self.task_links:
+            label = "\\n".join(
+                f" {task_column} > {table_column} "
+                for task_column, table_column in zip(
+                    link.task_columns, link.table_columns
+                )
             )
-        if len(devices) > 1:
-            raise RuntimeError(
-                f"Expected tables in '{self.__class__.__name__}' to be on "
-                f"the same device (got {list(devices)})"
+            graph.edge(
+                TASK_TABLE,
+                link.table,
+                label=label,
+                fontsize="11pt",
             )
-        return next(iter(devices))
+
+        return graph
 
     def __repr__(self) -> str:
         out = f"{self.__class__.__name__}(\n"
@@ -221,8 +363,6 @@ class RelatedTables(DeviceMixin):
         return out
 
     def _repr_html_(self) -> str:
-        from html import escape
-
         import pandas as pd
 
         rows = [
@@ -231,7 +371,7 @@ class RelatedTables(DeviceMixin):
                 table.size(-2),
                 table.size(-1),
                 ", ".join(
-                    stype.value
+                    str(stype)
                     for stype, tensor in table.items()
                     if tensor.size(-1) > 0
                 ),

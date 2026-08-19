@@ -10,6 +10,7 @@ Follow these best practices up front to keep docstrings consistent across the co
 
 ## General Principles
 
+- Keep docstrings as minimal as possible and avoid documenting implementation details.
 - Do not add module-level docstrings to individual modules; keep only a short package summary in the package `__init__.py`.
 - Every public class and function has a docstring, a one-line summary, then an `Args:` section.
 - When a class or function implements functionality proposed in an academic paper, cite it in the first sentence of its docstring.
@@ -92,7 +93,7 @@ r"""
   (e.g., dtypes like ``torch.int32`` resolve to the ``dtype-doc`` label).
   Never guess label names: search the linked documentation for a fitting
   target by dumping the project's inventory, e.g.
-  ``uv run --extra doc python -m sphinx.ext.intersphinx https://docs.pytorch.org/docs/stable/objects.inv | grep -i dtype``.
+  ``uv run --no-default-groups --group doc python -m sphinx.ext.intersphinx https://docs.pytorch.org/docs/stable/objects.inv | grep -i dtype``.
 """
 ```
 

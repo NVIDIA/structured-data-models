@@ -38,11 +38,11 @@ import argparse
 import json
 import os
 import time
+from typing import Any
 
 import torch
 import torch.distributed as dist
-from sdm.models import TabICLv2
-from sdm.nn import InducedTransformerBlock, TransformerBlock
+from torch import Tensor
 
 from benchmark_tabiclv2 import (
     ROW_BUCKETS,
@@ -50,6 +50,33 @@ from benchmark_tabiclv2 import (
     pad_to_buckets,
     reachable_buckets,
 )
+from sdm import Recipe
+from sdm.models import TabICLv2
+from sdm.nn import (
+    InducedTransformerBlock,
+    TransformerBlock,
+    enable_cudnn_varlen,
+)
+
+
+def call(model: TabICLv2, x: Tensor, y: Tensor, **kwargs: Any) -> Tensor:
+    """Run the model on a concatenated context+query table.
+
+    ``x`` holds the in-context rows followed by the query rows; ``y`` holds
+    the in-context targets. A pass-through recipe keeps the ensemble
+    dimension and is required by the padded cells: fitted pre-processing
+    would derive its state from the padded rows, violating the
+    ``seqused_*`` contract.
+    """
+    num_train = y.size(-1)
+    out = model(
+        x[..., :num_train, :],
+        y.unsqueeze(-1),
+        x[..., num_train:, :],
+        recipe=Recipe(),
+        **kwargs,
+    )
+    return out.numerical[0]
 
 
 def init_distributed() -> tuple[int, int, torch.device]:
@@ -95,8 +122,6 @@ def prepare_model(
     timings["load_s"] = time.perf_counter() - start
 
     if use_varlen:
-        from sdm.nn import enable_cudnn_varlen
-
         # Record only: the inert-path abort happens in ``main`` after a
         # cross-rank reduction, so a rank missing the optional wheel
         # cannot abort alone and strand the others at a collective.
@@ -106,10 +131,10 @@ def prepare_model(
     for module in model.cls_model.modules():
         if isinstance(module, (TransformerBlock, InducedTransformerBlock)):
             module.compile(fullgraph=True, dynamic=True)
-    model.cls_model.head.compile(fullgraph=True, dynamic=True)
+    model.cls_model.icl_block.head.compile(fullgraph=True, dynamic=True)
     x, y = make_table("large", "cls", seed=0, device=device)
     with torch.inference_mode():
-        model(x.to(torch.bfloat16), y)
+        call(model, x.to(torch.bfloat16), y)
     torch.cuda.synchronize()
     timings["compile_s"] = time.perf_counter() - start
 
@@ -129,7 +154,8 @@ def prepare_model(
             )
             yw = torch.zeros(train_bucket, dtype=torch.long, device=device)
             for _ in range(2):
-                model(
+                call(
+                    model,
                     xw,
                     yw,
                     seqused_train=torch.tensor(
@@ -169,7 +195,9 @@ def rank_agreement_gate(
     # seqused kwargs and would silently gate the unmasked path again.
     assert seqused
     with torch.inference_mode():
-        out = model(x_padded, y_padded, **seqused)[..., :num_test, :].float()
+        out = call(model, x_padded, y_padded, **seqused)[
+            ..., :num_test, :
+        ].float()
     if world == 1:
         return True, [[0.0, 0.0, 1.0]]
     reference = out.clone()
@@ -222,7 +250,7 @@ def serve_tables(
             x_p, y_p, seqused, num_test = pad_to_buckets(
                 x.to(torch.bfloat16), y
             )
-            model(x_p, y_p, **seqused)[..., :num_test, :]
+            call(model, x_p, y_p, **seqused)[..., :num_test, :]
             count += 1
     torch.cuda.synchronize()
     return count, time.perf_counter() - start

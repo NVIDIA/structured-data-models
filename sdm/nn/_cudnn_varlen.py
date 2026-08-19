@@ -100,10 +100,16 @@ def eligible(
     num_key_value_heads: int,
 ) -> bool:
     """Return whether this call can take the variable-length path."""
+    # The graph derives its dtype and device from ``query`` alone and then
+    # binds ``key``/``value`` to whatever arrives, so a mismatched key
+    # would be reinterpreted instead of rejected. The boolean-mask path
+    # raises in that case; keep the two consistent.
     return (
         _enabled
         and _cudnn_fe is not None
         and query.is_cuda
+        and key.dtype == query.dtype
+        and key.device == query.device
         and not torch.is_grad_enabled()
         and _shape_eligible(query, num_query_heads, num_key_value_heads)
     )

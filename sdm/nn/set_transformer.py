@@ -2,6 +2,7 @@ r"""Set-transformer modules for structured tensor models."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal, overload
 
 import torch
@@ -38,8 +39,14 @@ class InducedTransformerBlock(torch.nn.Module):
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         num_inducing_points: The number of learned inducing points :math:`M`.
+        norm: The normalization layer name or a callable returning the
+            normalization layer. The callable is invoked once per norm site,
+            so each site gets a fresh instance. A module instance is shared
+            across all norm sites.
+        norm_kwargs: Additional keyword arguments passed to the normalization
+            layer constructor. Takes precedence over ``device`` and
+            ``dtype``.
         qassmax: Whether to scale induced vectors with :class:`QASSMax`.
-        norm_bias: Whether :class:`~torch.nn.LayerNorm` uses a learnable bias.
         device: The device.
         dtype: The dtype.
     """
@@ -51,8 +58,9 @@ class InducedTransformerBlock(torch.nn.Module):
         feedforward_channels: int,
         num_key_value_heads: int | None = None,
         num_inducing_points: int = 16,
+        norm: str | Callable[..., torch.nn.Module] = "layer_norm",
+        norm_kwargs: dict[str, Any] | None = None,
         qassmax: bool = False,
-        norm_bias: bool = True,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -64,8 +72,9 @@ class InducedTransformerBlock(torch.nn.Module):
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
             feedforward_channels=feedforward_channels,
+            norm=norm,
+            norm_kwargs=norm_kwargs,
             qassmax=qassmax,
-            norm_bias=norm_bias,
             **factory_kwargs,
         )
         self.transformer_2 = TransformerBlock(
@@ -73,7 +82,8 @@ class InducedTransformerBlock(torch.nn.Module):
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
             feedforward_channels=feedforward_channels,
-            norm_bias=norm_bias,
+            norm=norm,
+            norm_kwargs=norm_kwargs,
             **factory_kwargs,
         )
 
@@ -143,13 +153,10 @@ class InducedTransformerBlock(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., KV]``.
                 Entries set to ``True`` participate in attention.
-            batch_size_limit: If set, run each inner block in chunks of at most
-                this many broadcasted batch elements to cap peak memory for
-                very large batches. Only active in inference (gradients
-                disabled) and eager (non-compiled) mode; nested tensor inputs
-                execute unchunked. ``None`` disables it.
             return_key_value: Whether to return the computed key and value
                 projections for the final attention site alongside the output.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is

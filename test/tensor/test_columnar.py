@@ -3,7 +3,13 @@ import io
 import pyarrow as pa
 import pytest
 import torch
-from sdm import CategoricalTensor, ColumnarTensor, StringTensor
+
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    NullableIntTensor,
+    StringTensor,
+)
 from sdm.testing import onlyCUDA
 
 
@@ -26,7 +32,7 @@ def test_init() -> None:
         ColumnarTensor(
             (
                 CategoricalTensor(
-                    data=torch.randint(0, 2, (2, 1)),
+                    code=torch.randint(0, 2, (2, 1)),
                     categories=(torch.arange(2),),
                 ),
             )
@@ -56,8 +62,26 @@ def test_from_arrow() -> None:
     assert isinstance(tensor._columns[0], StringTensor)
     assert tensor.tolist() == [["a"], ["bb"], [""]]
 
-    with pytest.raises(ValueError, match="cannot represent null integer"):
-        ColumnarTensor.from_arrow(pa.array([1, None, 3]))
+    tensor = ColumnarTensor.from_arrow(pa.array([1, None, 3]))
+    assert isinstance(tensor._columns[0], NullableIntTensor)
+    assert tensor.tolist() == [[1], [None], [3]]
+    assert tensor.to_arrow().to_pydict() == {"0": [1, None, 3]}
+
+
+def test_from_arrow_chunked_string() -> None:
+    tensor = ColumnarTensor.from_arrow(
+        pa.chunked_array([pa.array(["a", "b"]), pa.array(["c"])]),
+    )
+
+    assert tensor.to_arrow().column(0).type == pa.large_string()
+    assert tensor.to_arrow().to_pydict() == {"0": ["a", "b", "c"]}
+
+
+@onlyCUDA
+def test_from_arrow_cuda() -> None:
+    tensor = ColumnarTensor.from_arrow(pa.array([1, 2, 3]), device="cuda")
+    assert tensor.is_cuda
+    assert tensor[:, 0].equal(torch.tensor([1, 2, 3], device=tensor.device))
 
 
 @onlyCUDA
@@ -90,10 +114,12 @@ def test_from_cudf() -> None:
     assert isinstance(tensor._columns[0], StringTensor)
     assert tensor.tolist() == [["a"], ["bb"], [""]]
 
-    with pytest.raises(ValueError, match="cannot represent null integer"):
-        ColumnarTensor.from_cudf(
-            cudf.Series([1, None, 3], dtype="int64"),
-        )
+    tensor = ColumnarTensor.from_cudf(
+        cudf.Series([1, None, 3], dtype="int64"),
+    )
+    assert isinstance(tensor._columns[0], NullableIntTensor)
+    assert tensor.tolist() == [[1], [None], [3]]
+    assert tensor.to_cudf().to_arrow().to_pydict() == {"0": [1, None, 3]}
 
 
 def test_to_arrow() -> None:
@@ -104,6 +130,24 @@ def test_to_arrow() -> None:
     table = tensor.to_arrow()
     assert table.column_names == ["0", "1"]
     assert table.to_pydict() == {
+        "0": [0, 1, 2, 3, 4, 5],
+        "1": ["a", "b", "c", "d", "e", "f"],
+    }
+
+
+@onlyCUDA
+def test_to_cudf() -> None:
+    pytest.importorskip("cudf")
+
+    column1 = torch.arange(6, device="cuda").view(2, 3)
+    column2 = StringTensor.from_list(
+        [["a", "b", "c"], ["d", "e", "f"]], device="cuda"
+    )
+    tensor = ColumnarTensor((column1, column2))
+
+    df = tensor.to_cudf()
+    assert df.columns.tolist() == ["0", "1"]
+    assert df.to_arrow().to_pydict() == {
         "0": [0, 1, 2, 3, 4, 5],
         "1": ["a", "b", "c", "d", "e", "f"],
     }
@@ -146,6 +190,31 @@ def test_to_copy() -> None:
 
     with pytest.raises(TypeError, match="convert"):
         tensor.to(torch.float32)
+
+
+def test_empty_clone_preserves_device() -> None:
+    tensor = ColumnarTensor((), size=(2, 3), device="meta")
+
+    out = tensor.clone()
+
+    assert type(out) is ColumnarTensor
+    assert out.size() == tensor.size()
+    assert out.device == tensor.device
+
+
+@onlyCUDA
+def test_to_cuda() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.arange(3),
+            StringTensor.from_list(["a", "bb", "c"]),
+        )
+    )
+
+    out = tensor.to("cuda")
+    assert isinstance(out, ColumnarTensor)
+    assert out.device.type == "cuda"
+    assert out.tolist() == tensor.tolist()
 
 
 def test_view_ops() -> None:
@@ -347,8 +416,18 @@ def test_pin_memory() -> None:
     )
 
     assert not tensor.is_pinned()
-    if torch.cuda.is_available():
-        assert tensor.pin_memory().is_pinned()
+
+
+@onlyCUDA
+def test_pin_memory_cuda() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.randn(2, 3),
+            torch.arange(6).view(2, 3),
+        )
+    )
+
+    assert tensor.pin_memory().is_pinned()
 
 
 def test_share_memory() -> None:

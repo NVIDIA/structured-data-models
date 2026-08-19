@@ -1,74 +1,14 @@
+from __future__ import annotations
+
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Self
 
-from typing_extensions import Self
-
-from sdm.processing.base import InvertibleMixin, Processor
-from sdm.processing.sequential import Sequential
-from sdm.processing.task_dispatch import TaskDispatch
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+import sdm.processing as sp
+from sdm.processing import EnsembleProcessor, Processor
 
 
-class _TaskResolver(Processor, InvertibleMixin):
-    """Resolve linked output dispatchers while fitting a recipe target.
-
-    The wrapped target processor is a registered child module. Output
-    dispatchers stay in a plain tuple so they remain registered only under
-    ``Recipe.output``.
-    """
-
-    supported_stypes = frozenset(Stype)
-
-    def __init__(
-        self,
-        processor: Processor,
-        task_dispatchers: tuple[TaskDispatch, ...],
-    ) -> None:
-        super().__init__()
-        self.processor = processor
-        self._task_dispatchers = task_dispatchers
-
-    def fit(self, input: TableTensor) -> Self:
-        self.fit_transform(input)
-        return self
-
-    def fit_transform(self, input: TableTensor) -> TableTensor:
-        self._check_supported_stypes(input)
-        self._fitted = False
-        for task_dispatcher in self._task_dispatchers:
-            task_dispatcher._reset()
-
-        succeeded = False
-        try:
-            target = self.processor.fit_transform(input)
-            for task_dispatcher in self._task_dispatchers:
-                task_dispatcher._resolve(target)
-            self._fitted = True
-            succeeded = True
-            return target
-        finally:
-            if not succeeded:
-                for task_dispatcher in self._task_dispatchers:
-                    task_dispatcher._reset()
-
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return self.processor.transform(input)
-
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        fn = getattr(self.processor, "inverse_transform", None)
-        if not callable(fn):
-            raise AttributeError(
-                f"'{self.processor.__class__.__name__}' object has no "
-                "attribute 'inverse_transform'"
-            )
-        return fn(input)
-
-    def __repr__(self, *, indent: int = 0) -> str:
-        return self.processor.__repr__(indent=indent)
-
-
-@dataclass(frozen=True, init=False, repr=False)
+@dataclass(init=False, repr=False)
 class Recipe:
     """Processing contract around an external model boundary.
 
@@ -76,30 +16,35 @@ class Recipe:
     relative to the model:
 
     - ``features``: model inputs, transformed before the model.
-    - ``target``: labels, transformed forward before the model and inverted
-      after it (predictions back to the original space).
-    - ``output``: shape-preserving cleanup of the model output.
+    - ``target``: labels transformed forward before the model. Regression
+      predictions are inverted through this pipeline; classification outputs
+      are reconstructed from the fitted target categories instead.
+    - ``output``: transforms member outputs after they have been mapped to a
+      common class or target space and stacked as ``[E, ..., R, O]``. An
+      explicit dimension-changing step such as
+      :class:`~sdm.processing.ReduceEstimators` removes ``E``; without one,
+      the output remains stacked. Steps before the reducer must support
+      stacked outputs, while steps after it receive already-reduced outputs.
 
     Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
     steps are invertible, ``inverse_transform``. Call them directly, e.g.
     ``recipe.features.transform(table)`` or
-    ``recipe.target.inverse_transform(prediction)``. When ``output`` contains
-    :class:`~sdm.processing.TaskDispatch`, fitting ``target`` also selects its
-    task-specific output route.
-
-    Copy a task-aware recipe as a whole so its target remains connected to the
-    output dispatchers.
+    ``recipe.target.inverse_transform(prediction)``. Recipes do not infer each
+    step's non-finite input contract; order steps so values are imputed before
+    processors that do not explicitly document non-finite support.
 
     Args:
         features: Steps applied to model inputs before the model.
-        target: Steps applied to labels; transformed forward before the model
-            and inverted after it.
-        output: Steps applied to model output after the target inverse.
+        target: Steps applied to labels. Invertible numerical target steps map
+            regression output back to the original space.
+        output: Steps applied to stacked member outputs after member-local
+            mappings. Estimator reduction, when desired, is an explicit step
+            in this pipeline.
     """
 
-    features: Processor
-    target: Processor
-    output: Processor
+    features: EnsembleProcessor
+    target: EnsembleProcessor
+    output: EnsembleProcessor
 
     def __init__(
         self,
@@ -108,81 +53,70 @@ class Recipe:
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
 
-        if features is None:
-            features = Sequential()
-        elif not isinstance(features, Processor):
-            features = Sequential(*features)
-
-        if target is None:
-            target = Sequential()
-        elif not isinstance(target, Processor):
-            target = Sequential(*target)
-
-        if output is None:
-            output = Sequential()
-        elif not isinstance(output, Processor):
-            output = Sequential(*output)
-
-        # TODO: Support TaskDispatch in features after defining task-aware
-        # feature fit ordering.
-        for role, processor in (
-            ("features", features),
-            ("target", target),
-        ):
-            if any(
-                isinstance(module, TaskDispatch)
-                for module in processor.modules()
-            ):
-                raise ValueError(
-                    f"'TaskDispatch' is only supported in 'Recipe.output' "
-                    f"(found in '{role}')."
-                )
-
-        # Common output steps can remain adjacent; nesting would require
-        # defining whether dispatchers in inactive branches are resolved.
-        task_dispatcher_entries = tuple(
-            (path, module)
-            for path, module in output.named_modules(remove_duplicate=False)
-            if isinstance(module, TaskDispatch)
+        self.features = EnsembleProcessor.as_processor(
+            sp.Identity() if features is None else features
         )
-        if isinstance(output, TaskDispatch):
-            direct_paths = {""}
-        elif isinstance(output, Sequential):
-            direct_paths = {
-                str(index)
-                for index, step in enumerate(output.steps)
-                if isinstance(step, TaskDispatch)
-            }
-        else:
-            direct_paths = set()
-
-        nested_paths = tuple(
-            path
-            for path, _ in task_dispatcher_entries
-            if path not in direct_paths
+        self.target = EnsembleProcessor.as_processor(
+            sp.Identity() if target is None else target
         )
-        if len(nested_paths) > 0:
-            locations = ", ".join(repr(path) for path in nested_paths)
+        self.output = EnsembleProcessor.as_processor(
+            sp.Identity() if output is None else output
+        )
+
+        self._validate_target()
+        self._validate_output()
+
+    def prepend_features(self, processor: object) -> Self:
+        """Prepend a processor to the feature pipeline."""
+        self.features = processor + self.features
+        return self
+
+    def append_features(self, processor: object) -> Self:
+        """Append a processor to the feature pipeline."""
+        self.features = self.features + processor
+        return self
+
+    def prepend_target(self, processor: object) -> Self:
+        """Prepend a processor to the target pipeline."""
+        self.target = processor + self.target
+        self._validate_target()
+        return self
+
+    def append_target(self, processor: object) -> Self:
+        """Append a processor to the target pipeline."""
+        self.target = self.target + processor
+        self._validate_target()
+        return self
+
+    def prepend_output(self, processor: object) -> Self:
+        """Prepend a processor to the output pipeline."""
+        self.output = processor + self.output
+        self._validate_output()
+        return self
+
+    def append_output(self, processor: object) -> Self:
+        """Append a processor to the output pipeline."""
+        self.output = self.output + processor
+        self._validate_output()
+        return self
+
+    def _validate_target(self) -> None:
+        if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
             raise ValueError(
-                "'TaskDispatch' must be a direct step in 'Recipe.output'; "
-                f"nested task dispatch was found at {locations}."
+                "'TaskDispatch' is not supported in 'Recipe.target'"
+            )
+        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+            raise ValueError(
+                "'TableDispatch' is not supported in 'Recipe.target'"
             )
 
-        task_dispatchers = tuple(
-            module
-            for path, module in task_dispatcher_entries
-            if path in direct_paths
-        )
-
-        if len(task_dispatchers) > 0:
-            target = _TaskResolver(
-                processor=target,
-                task_dispatchers=task_dispatchers,
+    def _validate_output(self) -> None:
+        if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
+            raise ValueError(
+                "'TableDispatch' is not supported in 'Recipe.output'"
             )
-
-        object.__setattr__(self, "features", features)
-        object.__setattr__(self, "target", target)
-        object.__setattr__(self, "output", output)
+        if self.output.requires_fit:
+            raise ValueError("'Recipe.output' should not require fitting")
 
     def __repr__(self) -> str:
         return (

@@ -1,119 +1,55 @@
 """Attention modules for structured tensor models."""
 
-from collections.abc import Callable, Iterator
-from itertools import product
+from collections.abc import Callable
+from math import prod
 from typing import Any, Literal, cast, overload
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import GELU, LayerNorm, Linear, Sequential
+from torch.nn import GELU, Linear, Sequential
 
 from sdm.cache import KVCacheEntry
-from sdm.nn import RotaryEmbedding, _cudnn_varlen
-
-_BatchTile = tuple[slice, ...]
-
-
-def _is_nested(*tensors: Tensor | None) -> bool:
-    """Return whether any present tensor uses a nested layout."""
-    return any(x is not None and x.is_nested for x in tensors)
+from sdm.nn import _cudnn_varlen
+from sdm.nn.resolver import normalization_resolver
 
 
-def _batch_shape(x: Tensor, tail_dims: int) -> torch.Size:
-    """Return the batch shape before ``tail_dims`` non-batch dimensions."""
-    if tail_dims == 0:
-        return x.shape
-    return x.shape[:-tail_dims]
+def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
+    if batch_size_limit is None:
+        return 65_535
+    return min(batch_size_limit, 65_535)
 
 
-def _broadcast_batch_shape(
-    *operands: tuple[Tensor | None, int],
-) -> torch.Size:
-    """Return the broadcast batch shape of ``(tensor, tail_dims)`` operands."""
-    shapes = [
-        _batch_shape(x, tail_dims)
-        for x, tail_dims in operands
-        if x is not None
-    ]
-    return torch.broadcast_shapes(*shapes) if shapes else torch.Size()
-
-
-def _tile_sizes(batch_shape: torch.Size, limit: int) -> tuple[int, ...]:
-    """Choose a rectangular tile whose number of batch elements is bounded."""
-    sizes = [1] * len(batch_shape)
-    remaining = limit
-    for dim in range(len(batch_shape) - 1, -1, -1):
-        sizes[dim] = min(batch_shape[dim], remaining)
-        remaining = max(1, remaining // max(1, sizes[dim]))
-    return tuple(sizes)
-
-
-def _batch_tiles(batch_shape: torch.Size, limit: int) -> Iterator[_BatchTile]:
-    """Yield rectangular slices with at most ``limit`` batch elements."""
-    if batch_shape.numel() == 0:
-        return
-    if len(batch_shape) == 0:
-        yield ()
-        return
-
-    sizes = _tile_sizes(batch_shape, limit)
-    ranges = [range(0, size, step) for size, step in zip(batch_shape, sizes)]
-    for starts in product(*ranges):
-        yield tuple(
-            slice(start, min(start + step, size))
-            for start, step, size in zip(starts, sizes, batch_shape)
-        )
-
-
-def _slice_batch(
-    x: Tensor,
+def _batch_chunk(
+    tensor: Tensor,
     batch_shape: torch.Size,
-    tile: _BatchTile,
-    tail_dims: int,
+    trailing_dims: int,
+    start: int,
+    end: int,
 ) -> Tensor:
-    """Slice one broadcast tile without expanding the complete batch.
+    trailing_shape = tensor.size()[-trailing_dims:] if trailing_dims else ()
+    tensor = tensor.expand(batch_shape + trailing_shape)
+    if len(batch_shape) == 1:
+        return tensor.narrow(0, start, end - start)
 
-    Missing leading batch dimensions and singleton batch dimensions remain
-    singleton so the inner operation broadcasts only the current tile.
-    """
-    source_shape = _batch_shape(x, tail_dims)
-    num_leading = len(batch_shape) - len(source_shape)
-    if num_leading < 0:
-        raise ValueError(
-            f"Cannot broadcast batch shape {tuple(source_shape)} to "
-            f"{tuple(batch_shape)}"
-        )
-
-    for _ in range(num_leading):
-        x = x.unsqueeze(0)
-    padded_shape = (1,) * num_leading + tuple(source_shape)
-    index: list[slice] = []
-    for source_size, output_size, output_slice in zip(
-        padded_shape, batch_shape, tile
-    ):
-        if source_size == 1:
-            index.append(slice(0, 1))
-        elif source_size == output_size:
-            index.append(output_slice)
-        else:
-            raise ValueError(
-                f"Cannot broadcast batch shape {tuple(source_shape)} to "
-                f"{tuple(batch_shape)}"
-            )
-    index.extend([slice(None)] * tail_dims)
-    return x[tuple(index)]
+    flat_index = torch.arange(start, end, device=tensor.device)
+    batch_indices: list[Tensor] = []
+    for size in reversed(batch_shape):
+        batch_indices.append(flat_index % size)
+        flat_index = flat_index // size
+    return tensor[tuple(reversed(batch_indices))]
 
 
-def _copy_batch_tile(
-    out: Tensor,
-    value: Tensor,
-    tile: _BatchTile,
-    tail_dims: int,
-) -> None:
-    """Copy ``value`` into a batch tile of a preallocated output."""
-    index = tile + (slice(None),) * tail_dims
-    out[index].copy_(value)
+def _optional_batch_chunk(
+    tensor: Tensor | None,
+    batch_shape: torch.Size,
+    trailing_dims: int,
+    start: int,
+    end: int,
+) -> Tensor | None:
+    if tensor is None:
+        return None
+    return _batch_chunk(tensor, batch_shape, trailing_dims, start, end)
 
 
 def _attention_batch_shape(
@@ -122,49 +58,134 @@ def _attention_batch_shape(
     seqused_key_value: Tensor | None,
     attn_mask: Tensor | None,
 ) -> torch.Size:
-    """Return the output batch shape for an attention invocation."""
-    operands: list[tuple[Tensor | None, int]] = [(query, 2)]
+    batch_shapes = [query.size()[:-2]]
+    if isinstance(key_value, Tensor):
+        batch_shapes.append(key_value.size()[:-2])
+    elif isinstance(key_value, KVCacheEntry):
+        batch_shapes.extend(
+            [key_value.key.size()[:-3], key_value.value.size()[:-3]]
+        )
+    if seqused_key_value is not None:
+        batch_shapes.append(seqused_key_value.size())
+    if attn_mask is not None:
+        batch_shapes.append(attn_mask.size()[:-2])
+    return torch.broadcast_shapes(*batch_shapes)
+
+
+def _chunk_key_value(
+    key_value: Tensor | KVCacheEntry | None,
+    batch_shape: torch.Size,
+    start: int,
+    end: int,
+) -> Tensor | KVCacheEntry | None:
+    if isinstance(key_value, Tensor):
+        return _batch_chunk(key_value, batch_shape, 2, start, end)
     if isinstance(key_value, KVCacheEntry):
-        operands.extend([(key_value.key, 3), (key_value.value, 3)])
-    elif isinstance(key_value, Tensor):
-        operands.append((key_value, 2))
-    else:
-        operands.append((query, 2))
-    operands.extend([(seqused_key_value, 0), (attn_mask, 2)])
-    return _broadcast_batch_shape(*operands)
+        return KVCacheEntry(
+            key=_batch_chunk(key_value.key, batch_shape, 3, start, end),
+            value=_batch_chunk(key_value.value, batch_shape, 3, start, end),
+        )
+    return None
 
 
-def _slice_attention_inputs(
+def _chunk_attention(
+    forward: Callable[..., object],
     query: Tensor,
     key_value: Tensor | KVCacheEntry | None,
     seqused_key_value: Tensor | None,
     attn_mask: Tensor | None,
-    batch_shape: torch.Size,
-    tile: _BatchTile,
-) -> tuple[
-    Tensor,
-    Tensor | KVCacheEntry | None,
-    Tensor | None,
-    Tensor | None,
-]:
-    """Slice all operands for one broadcast attention tile."""
-    query = _slice_batch(query, batch_shape, tile, tail_dims=2)
-    if isinstance(key_value, KVCacheEntry):
-        key_value = KVCacheEntry(
-            key=_slice_batch(key_value.key, batch_shape, tile, tail_dims=3),
-            value=_slice_batch(
-                key_value.value, batch_shape, tile, tail_dims=3
+    return_key_value: bool,
+    batch_size_limit: int,
+) -> Tensor | tuple[Tensor, KVCacheEntry] | None:
+    batch_shape = _attention_batch_shape(
+        query=query,
+        key_value=key_value,
+        seqused_key_value=seqused_key_value,
+        attn_mask=attn_mask,
+    )
+    batch_size = prod(batch_shape)
+    if batch_size <= batch_size_limit:
+        return None
+
+    # SDPA returns an empty query before broadcasting its batch dimensions.
+    # Preserve that behavior when another input would otherwise expand them.
+    if query.size(-2) == 0 and query.size()[:-2] != batch_shape:
+        return None
+
+    if return_key_value:
+        if isinstance(key_value, KVCacheEntry):
+            return None
+        cache_batch_shape = (
+            query.size()[:-2] if key_value is None else key_value.size()[:-2]
+        )
+        if cache_batch_shape != batch_shape:
+            return None
+
+    query_size = query.size()[-2:]
+    out: Tensor | None = None
+    out_key: Tensor | None = None
+    out_value: Tensor | None = None
+    key_size: tuple[int, ...] | None = None
+    value_size: tuple[int, ...] | None = None
+    for start in range(0, batch_size, batch_size_limit):
+        end = min(start + batch_size_limit, batch_size)
+        chunk_result = forward(
+            query=_batch_chunk(query, batch_shape, 2, start, end),
+            key_value=_chunk_key_value(key_value, batch_shape, start, end),
+            seqused_key_value=_optional_batch_chunk(
+                seqused_key_value, batch_shape, 0, start, end
             ),
+            attn_mask=_optional_batch_chunk(
+                attn_mask, batch_shape, 2, start, end
+            ),
+            return_key_value=return_key_value,
+            batch_size_limit=batch_size_limit,
         )
-    elif isinstance(key_value, Tensor):
-        key_value = _slice_batch(key_value, batch_shape, tile, tail_dims=2)
-    if seqused_key_value is not None:
-        seqused_key_value = _slice_batch(
-            seqused_key_value, batch_shape, tile, tail_dims=0
-        )
-    if attn_mask is not None:
-        attn_mask = _slice_batch(attn_mask, batch_shape, tile, tail_dims=2)
-    return query, key_value, seqused_key_value, attn_mask
+        if return_key_value:
+            assert isinstance(chunk_result, tuple)
+            chunk, chunk_key_value = chunk_result
+            assert isinstance(chunk_key_value, KVCacheEntry)
+        else:
+            assert isinstance(chunk_result, Tensor)
+            chunk = chunk_result
+        assert isinstance(chunk, Tensor)
+        if out is None:
+            out = chunk.new_empty((batch_size, *query_size))
+        out[start:end].copy_(chunk.reshape(end - start, *query_size))
+        del chunk
+
+        if return_key_value:
+            key_size = chunk_key_value.key.size()[-3:]
+            value_size = chunk_key_value.value.size()[-3:]
+            if out_key is None:
+                out_key = chunk_key_value.key.new_empty(
+                    (batch_size, *key_size)
+                )
+                out_value = chunk_key_value.value.new_empty(
+                    (batch_size, *value_size)
+                )
+            assert out_value is not None
+            out_key[start:end].copy_(
+                chunk_key_value.key.reshape(end - start, *key_size)
+            )
+            out_value[start:end].copy_(
+                chunk_key_value.value.reshape(end - start, *value_size)
+            )
+            del chunk_key_value
+        del chunk_result
+    assert out is not None
+    out = out.view(batch_shape + query_size)
+    if not return_key_value:
+        return out
+
+    assert out_key is not None
+    assert out_value is not None
+    assert key_size is not None
+    assert value_size is not None
+    return out, KVCacheEntry(
+        key=out_key.view(batch_shape + key_size),
+        value=out_value.view(batch_shape + value_size),
+    )
 
 
 class QASSMax(torch.nn.Module):
@@ -265,8 +286,9 @@ class SDPA(torch.nn.Module):
     r"""Scaled Dot-Product Attention (SDPA).
 
     This module wraps :func:`torch.nn.functional.scaled_dot_product_attention`
-    and extends it by arbitrary batch dimensions, :class:`QASSMax`-based
-    temperature-scaling, and padding support for key/value pairs.
+    and extends it by arbitrary batch dimensions, optional inference-time
+    batch chunking, :class:`QASSMax`-based temperature-scaling, and padding
+    support for key/value pairs.
 
     Args:
         channels: The number of channels per attention head.
@@ -277,6 +299,9 @@ class SDPA(torch.nn.Module):
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries via :class:`QASSMax`.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
+            ``None`` uses the default value of ``1 / sqrt(channels)``.
         device: The device.
         dtype: The dtype.
     """
@@ -287,6 +312,7 @@ class SDPA(torch.nn.Module):
         num_query_heads: int,
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
+        scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -303,6 +329,7 @@ class SDPA(torch.nn.Module):
 
         self.num_query_heads = num_query_heads
         self.num_key_value_heads = num_key_value_heads
+        self.scale = scale
         self.qassmax: QASSMax | None = None
         if qassmax:
             self.qassmax = QASSMax(
@@ -336,49 +363,14 @@ class SDPA(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
-            batch_size_limit: If set, run SDPA in rectangular broadcast-batch
-                tiles containing at most this many elements. Only active when
-                gradients are disabled and execution is not compiled. Nested
-                tensor inputs currently execute unchunked.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
         """
-        if batch_size_limit is not None and batch_size_limit <= 0:
-            raise ValueError(
-                f"`batch_size_limit` ({batch_size_limit}) must be positive"
-            )
-        # Preserve the established empty-query behavior without attempting to
-        # broadcast it against non-empty key/value batch dimensions.
-        if query.numel() == 0:
-            return query
-        if (
-            batch_size_limit is not None
-            and not _is_nested(query, key, value, attn_mask)
-            and not torch.is_grad_enabled()
-            and not torch.compiler.is_compiling()
-        ):
-            chunked = self._chunked_forward(
-                query,
-                key,
-                value,
-                seqused_key_value,
-                attn_mask,
-                batch_size_limit,
-            )
-            if chunked is not None:
-                return chunked
+        batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
 
-        return self._forward(query, key, value, seqused_key_value, attn_mask)
-
-    def _forward(
-        self,
-        query: Tensor,  # [..., Q, Hq, C]
-        key: Tensor,  # [..., KV, Hkv, C]
-        value: Tensor,  # [..., KV, Hkv, C]
-        seqused_key_value: Tensor | None,
-        attn_mask: Tensor | None,
-    ) -> Tensor:  # [..., Q, Hq, C]
         if query.numel() == 0:
             return query
 
@@ -395,6 +387,41 @@ class SDPA(torch.nn.Module):
         if attn_mask is not None and attn_mask.dtype != torch.bool:
             raise ValueError("`attn_mask` must have dtype torch.bool")
 
+        batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
+        if seqused_key_value is not None:
+            batch_shapes.append(seqused_key_value.size())
+        if attn_mask is not None:
+            batch_shapes.append(attn_mask.size()[:-2])
+        batch_shape = torch.broadcast_shapes(*batch_shapes)
+
+        if not self.training and not torch.compiler.is_compiling():
+            batch_size = prod(batch_shape)
+            if batch_size > batch_size_limit:
+                query_size = query.size()[-3:]
+                out: Tensor | None = None
+                for start in range(0, batch_size, batch_size_limit):
+                    end = min(start + batch_size_limit, batch_size)
+                    chunk = self.forward(
+                        query=_batch_chunk(query, batch_shape, 3, start, end),
+                        key=_batch_chunk(key, batch_shape, 3, start, end),
+                        value=_batch_chunk(value, batch_shape, 3, start, end),
+                        seqused_key_value=_optional_batch_chunk(
+                            seqused_key_value, batch_shape, 0, start, end
+                        ),
+                        attn_mask=_optional_batch_chunk(
+                            attn_mask, batch_shape, 2, start, end
+                        ),
+                        batch_size_limit=batch_size_limit,
+                    )
+                    if out is None:
+                        out = chunk.new_empty((batch_size, *query_size))
+                    out[start:end].copy_(
+                        chunk.reshape(end - start, *query_size)
+                    )
+                    del chunk
+                assert out is not None
+                return out.view(batch_shape + query_size)
+
         if self.qassmax is not None:
             if seqused_key_value is not None:
                 key_len = seqused_key_value.unsqueeze(-1)
@@ -404,17 +431,14 @@ class SDPA(torch.nn.Module):
                 key_len = key.size(-3)
             query = self.qassmax(query, key_len=key_len)
 
-        batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
-        if seqused_key_value is not None:
-            batch_shapes.append(seqused_key_value.size())
-        if attn_mask is not None:
-            batch_shapes.append(attn_mask.size()[:-2])
-        batch_shape = torch.broadcast_shapes(*batch_shapes)
-
         # Broadcast and flatten batch dimensions => [B, S, H, C].
         query_size = query.size()[-3:]
         key_size = key.size()[-3:]
         value_size = value.size()[-3:]
+
+        if key_size[0] == 0:  # No key/value pairs - abort early:
+            return query.new_zeros(batch_shape + query_size)
+
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
@@ -426,7 +450,10 @@ class SDPA(torch.nn.Module):
         if seqused_key_value is not None:
             seqused_key_value = seqused_key_value.expand(batch_shape)
             seqused_key_value = seqused_key_value.reshape(-1)
-            if _cudnn_varlen.eligible(
+            # The variable-length op bakes in the default ``1 / sqrt(C)``
+            # attention scale, so a custom `scale` stays on the
+            # boolean-mask path rather than being silently ignored.
+            if self.scale is None and _cudnn_varlen.eligible(
                 query,
                 key,
                 num_query_heads=self.num_query_heads,
@@ -436,11 +463,18 @@ class SDPA(torch.nn.Module):
                 # the valid key/value region instead of masking it: 3.1-5.5x
                 # over the boolean-mask kernels at D=64 ICL shapes and
                 # ~2.0-2.4x at D=16 sites (see sdm/nn/_cudnn_varlen.py).
+                # Counts are clamped rather than validated: the model
+                # contract accepts out-of-range values and degrades
+                # instead of raising, which the boolean mask below honors
+                # implicitly. cuDNN binds the count as a raw sequence
+                # length, so bound it here to keep the same contract.
                 out = _cudnn_varlen.cudnn_varlen_sdpa(
                     query.contiguous(),
                     key.contiguous(),
                     value.contiguous(),
-                    seqused_key_value.contiguous(),
+                    seqused_key_value.clamp(
+                        min=0, max=key.size(-3)
+                    ).contiguous(),
                 )
                 return out.view(batch_shape + out.size()[-3:])
             seqused_key_value = seqused_key_value.unsqueeze(-1)
@@ -456,56 +490,10 @@ class SDPA(torch.nn.Module):
             if attn_mask is not None
             else None,
             enable_gqa=self.num_query_heads != self.num_key_value_heads,
+            scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
-
-    def _chunked_forward(
-        self,
-        query: Tensor,  # [..., Q, Hq, C]
-        key: Tensor,  # [..., KV, Hkv, C]
-        value: Tensor,  # [..., KV, Hkv, C]
-        seqused_key_value: Tensor | None,
-        attn_mask: Tensor | None,
-        limit: int,
-    ) -> Tensor | None:
-        """Run SDPA over bounded rectangular broadcast-batch tiles."""
-        batch_shape = _broadcast_batch_shape(
-            (query, 3),
-            (key, 3),
-            (value, 3),
-            (seqused_key_value, 0),
-            (attn_mask, 2),
-        )
-        if batch_shape.numel() <= limit:
-            return None
-
-        out: Tensor | None = None
-        for tile in _batch_tiles(batch_shape, limit):
-            query_tile = _slice_batch(query, batch_shape, tile, tail_dims=3)
-            key_tile = _slice_batch(key, batch_shape, tile, tail_dims=3)
-            value_tile = _slice_batch(value, batch_shape, tile, tail_dims=3)
-            seq_tile = (
-                None
-                if seqused_key_value is None
-                else _slice_batch(
-                    seqused_key_value, batch_shape, tile, tail_dims=0
-                )
-            )
-            mask_tile = (
-                None
-                if attn_mask is None
-                else _slice_batch(attn_mask, batch_shape, tile, tail_dims=2)
-            )
-            out_tile = self._forward(
-                query_tile, key_tile, value_tile, seq_tile, mask_tile
-            )
-            if out is None:
-                out = out_tile.new_empty((*batch_shape, *out_tile.shape[-3:]))
-            _copy_batch_tile(out, out_tile, tile, tail_dims=3)
-
-        assert out is not None
-        return out
 
 
 class Attention(torch.nn.Module):
@@ -525,6 +513,13 @@ class Attention(torch.nn.Module):
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
+        query_transform: Transformation applied to projected query heads before
+            scaled dot-product attention.
+        key_transform: Transformation applied to projected key heads before
+            scaled dot-product attention.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
+            ``None`` uses ``1 / sqrt(channels_per_head)``.
         device: The device.
         dtype: The dtype.
     """
@@ -535,6 +530,9 @@ class Attention(torch.nn.Module):
         num_query_heads: int,
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
+        query_transform: torch.nn.Module | None = None,
+        key_transform: torch.nn.Module | None = None,
+        scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -559,11 +557,14 @@ class Attention(torch.nn.Module):
         self.qkv_lin = Linear(
             channels, self.q_dim + 2 * self.kv_dim, **factory_kwargs
         )
+        self.query_transform = query_transform
+        self.key_transform = key_transform
         self.sdpa = SDPA(
             channels=self.head_dim,
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
             qassmax=qassmax,
+            scale=scale,
             **factory_kwargs,
         )
         self.out_lin = Linear(channels, channels, **factory_kwargs)
@@ -578,7 +579,6 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | None = None,
@@ -591,7 +591,6 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[True],
         batch_size_limit: int | None = None,
@@ -604,7 +603,6 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: bool,
         batch_size_limit: int | None = None,
@@ -616,7 +614,6 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None = None,
         return_key_value: bool = False,
         *,
         batch_size_limit: int | None = None,
@@ -636,17 +633,10 @@ class Attention(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
-            rope: Rotary Positional Embedding applied after query/key
-                projection.
-            batch_size_limit: If set, run the full attention (query/key/value
-                projections included) in chunks of at most this many
-                broadcasted batch elements, writing into a preallocated
-                output, to cap peak memory for very large batches. Only active
-                in inference (gradients disabled) and eager (non-compiled)
-                mode; nested tensor inputs execute unchunked. ``None`` disables
-                it.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -654,162 +644,61 @@ class Attention(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        if batch_size_limit is not None and batch_size_limit <= 0:
-            raise ValueError(
-                f"`batch_size_limit` ({batch_size_limit}) must be positive"
+        batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
+        if not self.training and not torch.compiler.is_compiling():
+            chunked_result = _chunk_attention(
+                forward=self.forward,
+                query=query,
+                key_value=key_value,
+                seqused_key_value=seqused_key_value,
+                attn_mask=attn_mask,
+                return_key_value=return_key_value,
+                batch_size_limit=batch_size_limit,
             )
-        if (
-            batch_size_limit is not None
-            and not _is_nested(
-                query,
-                key_value.key
-                if isinstance(key_value, KVCacheEntry)
-                else key_value,
-                key_value.value
-                if isinstance(key_value, KVCacheEntry)
-                else None,
-                attn_mask,
-            )
-            and not torch.is_grad_enabled()
-            and not torch.compiler.is_compiling()
-        ):
-            chunked = self._chunked_attend(
-                query,
-                key_value,
-                seqused_key_value,
-                attn_mask,
-                rope,
-                batch_size_limit,
-                return_key_value,
-            )
-            if chunked is not None:
-                return chunked
+            if chunked_result is not None:
+                return chunked_result
 
-        out, key, value = self._attend(
-            query, key_value, seqused_key_value, attn_mask, rope
-        )
-        if return_key_value:
-            return out, KVCacheEntry(key=key, value=value)
-        return out
-
-    def _project_query(
-        self,
-        query: Tensor,
-        rope: RotaryEmbedding | None,
-    ) -> Tensor:
-        """Project query channels and split them into attention heads."""
-        q_weight = self.qkv_lin.weight[: self.q_dim]
-        q_bias = self.qkv_lin.bias[: self.q_dim]
-        query = F.linear(query, q_weight, q_bias)
-        query = query.unflatten(-1, [self.num_query_heads, self.head_dim])
-        return rope(query) if rope is not None else query
-
-    def _project_key_value(
-        self,
-        key_value: Tensor,
-        rope: RotaryEmbedding | None,
-    ) -> KVCacheEntry:
-        """Project compact native-shape key/value tensors for cache use."""
-        kv_weight = self.qkv_lin.weight[self.q_dim :]
-        kv_bias = self.qkv_lin.bias[self.q_dim :]
-        key, value = F.linear(key_value, kv_weight, kv_bias).chunk(2, -1)
-        key = key.unflatten(-1, [self.num_key_value_heads, self.head_dim])
-        value = value.unflatten(-1, [self.num_key_value_heads, self.head_dim])
-        if rope is not None:
-            key = rope(key)
-        return KVCacheEntry(key=key, value=value)
-
-    def _build_cache(
-        self,
-        source: Tensor,
-        rope: RotaryEmbedding | None,
-        limit: int,
-        source_transform: Callable[[Tensor], Tensor] | None = None,
-    ) -> KVCacheEntry:
-        """Project K/V in native-batch tiles and preserve compact shape."""
-        batch_shape = source.shape[:-2]
-        if batch_shape.numel() <= limit:
-            if source_transform is not None:
-                source = source_transform(source)
-            return self._project_key_value(source, rope)
-
-        key_out: Tensor | None = None
-        value_out: Tensor | None = None
-        for tile in _batch_tiles(batch_shape, limit):
-            source_tile = _slice_batch(source, batch_shape, tile, tail_dims=2)
-            if source_transform is not None:
-                source_tile = source_transform(source_tile)
-            projected = self._project_key_value(source_tile, rope)
-            if key_out is None:
-                key_out = projected.key.new_empty(
-                    (*batch_shape, *projected.key.shape[-3:])
-                )
-                value_out = projected.value.new_empty(
-                    (*batch_shape, *projected.value.shape[-3:])
-                )
-            _copy_batch_tile(key_out, projected.key, tile, tail_dims=3)
-            assert value_out is not None
-            _copy_batch_tile(value_out, projected.value, tile, tail_dims=3)
-
-        assert key_out is not None
-        assert value_out is not None
-        return KVCacheEntry(key=key_out, value=value_out)
-
-    def _attend(
-        self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None,  # [..., KV, C]
-        seqused_key_value: Tensor | None,  # [...]
-        attn_mask: Tensor | None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None,
-    ) -> tuple[Tensor, Tensor, Tensor]:  # out [..., Q, C]; key/value heads
         if isinstance(key_value, KVCacheEntry):
-            query = self._project_query(query, rope)
+            q_weight = self.qkv_lin.weight[: self.q_dim]
+            q_bias = self.qkv_lin.bias[: self.q_dim]
+            query = F.linear(query, q_weight, q_bias)
             if (
                 key_value.key.dtype != query.dtype
                 or key_value.value.dtype != query.dtype
             ):
-                # Compare against the projected query so autocast runs (which
-                # cast at the projection) validate correctly.
                 raise ValueError(
                     f"Key/value projections were cached under dtypes "
                     f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
-                    f"the query projects to dtype '{query.dtype}'. Re-run "
-                    f"the caching step under the current dtype "
-                    f"configuration, or restore the configuration that was "
-                    f"active when caching."
+                    f"the query has dtype '{query.dtype}'"
                 )
             key = key_value.key
             value = key_value.value
+        elif key_value is None:
+            query, key, value = self.qkv_lin(query).split(
+                [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
+            )
         else:
-            if key_value is None:
-                query, key, value = self.qkv_lin(query).split(
-                    [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
-                )
-            else:
-                sections = [self.q_dim, 2 * self.kv_dim]
-                q_weight, kv_weight = self.qkv_lin.weight.split(
-                    sections, dim=0
-                )
-                q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
-                query = F.linear(query, q_weight, q_bias)
-                key, value = F.linear(key_value, kv_weight, kv_bias).chunk(
-                    2, -1
-                )
+            sections = [self.q_dim, 2 * self.kv_dim]
+            q_weight, kv_weight = self.qkv_lin.weight.split(sections, dim=0)
+            q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
+            query = F.linear(query, q_weight, q_bias)
+            key, value = F.linear(key_value, kv_weight, kv_bias).chunk(2, -1)
 
-            # [..., S, C] -> [..., S, H, C // H].
-            query = query.unflatten(-1, [self.num_query_heads, self.head_dim])
+        # [..., S, C] -> [..., S, H, C // H], with separate query/kv heads.
+        query = query.unflatten(-1, [self.num_query_heads, self.head_dim])
+        if not isinstance(key_value, KVCacheEntry):
             key = key.unflatten(-1, [self.num_key_value_heads, self.head_dim])
             value = value.unflatten(
                 -1, [self.num_key_value_heads, self.head_dim]
             )
 
-            if rope is not None:
-                query = rope(query)
-                key = rope(key)
-
-        if rope is not None:
-            assert query.dtype == key.dtype == value.dtype
+        if self.query_transform is not None:
+            query = self.query_transform(query)
+        if (
+            not isinstance(key_value, KVCacheEntry)
+            and self.key_transform is not None
+        ):
+            key = self.key_transform(key)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
@@ -817,73 +706,13 @@ class Attention(torch.nn.Module):
             value=value,  # [..., KV, Hkv, C // Hq]
             seqused_key_value=seqused_key_value,  # [...]
             attn_mask=attn_mask,  # [..., Q, KV]
+            batch_size_limit=batch_size_limit,
         )  # [..., Q, Hq, C // Hq]
 
         out = out.flatten(-2, -1)  # [..., Q, C]
         out = self.out_lin(out)  # [..., Q, C]
-        return out, key, value
-
-    def _chunked_attend(
-        self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None,  # [..., KV, C]
-        seqused_key_value: Tensor | None,  # [...]
-        attn_mask: Tensor | None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None,
-        limit: int,
-        return_key_value: bool,
-    ) -> Tensor | tuple[Tensor, KVCacheEntry] | None:
-        r"""Run full attention over bounded rectangular broadcast tiles."""
-        batch_shape = _attention_batch_shape(
-            query, key_value, seqused_key_value, attn_mask
-        )
-        if batch_shape.numel() <= limit:
-            return None
-
-        if query.numel() == 0:
-            if not return_key_value:
-                return None
-            if isinstance(key_value, KVCacheEntry):
-                cache = key_value
-            else:
-                cache_source = query if key_value is None else key_value
-                cache = self._build_cache(cache_source, rope, limit)
-            out, _, _ = self._attend(
-                query, cache, seqused_key_value, attn_mask, rope
-            )
-            return out, cache
-
-        cache: KVCacheEntry | None = None
-        tiled_key_value = key_value
         if return_key_value:
-            if isinstance(key_value, KVCacheEntry):
-                cache = key_value
-            else:
-                cache_source = query if key_value is None else key_value
-                cache = self._build_cache(cache_source, rope, limit)
-            tiled_key_value = cache
-
-        out: Tensor | None = None
-        for tile in _batch_tiles(batch_shape, limit):
-            query_tile, kv_tile, seq_tile, mask_tile = _slice_attention_inputs(
-                query,
-                tiled_key_value,
-                seqused_key_value,
-                attn_mask,
-                batch_shape,
-                tile,
-            )
-            out_tile, _, _ = self._attend(
-                query_tile, kv_tile, seq_tile, mask_tile, rope
-            )
-            if out is None:
-                out = out_tile.new_empty((*batch_shape, *out_tile.shape[-2:]))
-            _copy_batch_tile(out, out_tile, tile, tail_dims=2)
-
-        assert out is not None
-        if return_key_value:
-            assert cache is not None
-            return out, cache
+            return out, KVCacheEntry(key=key, value=value)
         return out
 
 
@@ -899,8 +728,21 @@ class TransformerBlock(torch.nn.Module):
         feedforward_channels: The hidden width of the MLP.
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
+        norm: The normalization layer name or a callable returning the
+            normalization layer. The callable is invoked once per norm site,
+            so each of the three sites gets a fresh instance. A module
+            instance is shared across all three sites.
+        norm_kwargs: Additional keyword arguments passed to the normalization
+            layer constructor. Takes precedence over ``device`` and
+            ``dtype``.
         qassmax: Whether to scale queries with :class:`QASSMax`.
-        norm_bias: Whether :class:`~torch.nn.LayerNorm` uses a learnable bias.
+        query_transform: Transformation applied to projected query heads before
+            scaled dot-product attention.
+        key_transform: Transformation applied to projected key heads before
+            scaled dot-product attention.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
+            ``None`` uses ``1 / sqrt(channels_per_head)``.
         device: The device.
         dtype: The dtype.
     """
@@ -911,25 +753,34 @@ class TransformerBlock(torch.nn.Module):
         num_query_heads: int,
         feedforward_channels: int,
         num_key_value_heads: int | None = None,
+        norm: str | Callable[..., torch.nn.Module] = "layer_norm",
+        norm_kwargs: dict[str, Any] | None = None,
         qassmax: bool = False,
-        norm_bias: bool = True,
+        query_transform: torch.nn.Module | None = None,
+        key_transform: torch.nn.Module | None = None,
+        scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        # User `norm_kwargs` win; `device`/`dtype` fill unspecified keys.
+        norm_kwargs = {**factory_kwargs, **(norm_kwargs or {})}
 
-        self.q_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
-        self.kv_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
+        self.q_norm = normalization_resolver(norm, channels, **norm_kwargs)
+        self.kv_norm = normalization_resolver(norm, channels, **norm_kwargs)
         self.attn = Attention(
             channels=channels,
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
             qassmax=qassmax,
+            query_transform=query_transform,
+            key_transform=key_transform,
+            scale=scale,
             **factory_kwargs,
         )
         self.mlp = Sequential(
-            LayerNorm(channels, bias=norm_bias, **factory_kwargs),
+            normalization_resolver(norm, channels, **norm_kwargs),
             Linear(channels, feedforward_channels, **factory_kwargs),
             GELU(),
             Linear(feedforward_channels, channels, **factory_kwargs),
@@ -945,7 +796,6 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | None = None,
@@ -958,7 +808,6 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[True],
         batch_size_limit: int | None = None,
@@ -971,7 +820,6 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
         *,
         return_key_value: bool,
         batch_size_limit: int | None = None,
@@ -983,7 +831,6 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None = None,
         return_key_value: bool = False,
         *,
         batch_size_limit: int | None = None,
@@ -1003,16 +850,10 @@ class TransformerBlock(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
-            rope: Rotary Positional Embedding applied after query/key
-                projection.
-            batch_size_limit: If set, run the whole block (attention and the
-                feed-forward MLP) in chunks of at most this many broadcasted
-                batch elements, writing into a preallocated output, to cap
-                peak memory for very large batches. Only active in inference
-                (gradients disabled) and eager (non-compiled) mode; nested
-                tensor inputs execute unchunked. ``None`` disables it.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -1020,36 +861,19 @@ class TransformerBlock(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        if batch_size_limit is not None and batch_size_limit <= 0:
-            raise ValueError(
-                f"`batch_size_limit` ({batch_size_limit}) must be positive"
+        batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
+        if not self.training and not torch.compiler.is_compiling():
+            chunked_result = _chunk_attention(
+                forward=self.forward,
+                query=query,
+                key_value=key_value,
+                seqused_key_value=seqused_key_value,
+                attn_mask=attn_mask,
+                return_key_value=return_key_value,
+                batch_size_limit=batch_size_limit,
             )
-        if (
-            batch_size_limit is not None
-            and not _is_nested(
-                query,
-                key_value.key
-                if isinstance(key_value, KVCacheEntry)
-                else key_value,
-                key_value.value
-                if isinstance(key_value, KVCacheEntry)
-                else None,
-                attn_mask,
-            )
-            and not torch.is_grad_enabled()
-            and not torch.compiler.is_compiling()
-        ):
-            chunked = self._chunked_forward(
-                query,
-                key_value,
-                seqused_key_value,
-                attn_mask,
-                rope,
-                batch_size_limit,
-                return_key_value,
-            )
-            if chunked is not None:
-                return chunked
+            if chunked_result is not None:
+                return chunked_result
 
         if isinstance(key_value, Tensor):
             key_value = self.kv_norm(key_value)
@@ -1058,7 +882,7 @@ class TransformerBlock(torch.nn.Module):
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
-            rope=rope,
+            batch_size_limit=batch_size_limit,
             return_key_value=return_key_value,
         )
         if return_key_value:
@@ -1070,110 +894,4 @@ class TransformerBlock(torch.nn.Module):
         out = out + self.mlp(out)
         if return_key_value:
             return out, kv
-        return out
-
-    def _block(
-        self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None,  # [..., KV, C]
-        seqused_key_value: Tensor | None,  # [...]
-        attn_mask: Tensor | None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None,
-    ) -> Tensor:  # [..., Q, C]
-        normed_kv = key_value
-        if isinstance(normed_kv, Tensor):
-            normed_kv = self.kv_norm(normed_kv)
-        attn_out = self.attn(
-            query=self.q_norm(query),
-            key_value=normed_kv,
-            seqused_key_value=seqused_key_value,
-            attn_mask=attn_mask,
-            rope=rope,
-        )
-        out = query + attn_out
-        return out + self.mlp(out)
-
-    def _chunked_forward(
-        self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None,  # [..., KV, C]
-        seqused_key_value: Tensor | None,  # [...]
-        attn_mask: Tensor | None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None,
-        limit: int,
-        return_key_value: bool,
-    ) -> Tensor | tuple[Tensor, KVCacheEntry] | None:
-        r"""Run the whole block over bounded rectangular broadcast tiles."""
-        batch_shape = _attention_batch_shape(
-            query, key_value, seqused_key_value, attn_mask
-        )
-        if batch_shape.numel() <= limit:
-            return None
-
-        if query.numel() == 0:
-            if not return_key_value:
-                return None
-            if isinstance(key_value, KVCacheEntry):
-                cache = key_value
-            else:
-                cache_source = query if key_value is None else key_value
-                source_transform = (
-                    self.q_norm if key_value is None else self.kv_norm
-                )
-                cache = self.attn._build_cache(
-                    cache_source,
-                    rope,
-                    limit,
-                    source_transform=source_transform,
-                )
-            return (
-                self._block(
-                    query,
-                    cache,
-                    seqused_key_value,
-                    attn_mask,
-                    rope,
-                ),
-                cache,
-            )
-
-        cache: KVCacheEntry | None = None
-        tiled_key_value = key_value
-        if return_key_value:
-            if isinstance(key_value, KVCacheEntry):
-                cache = key_value
-            else:
-                cache_source = query if key_value is None else key_value
-                source_transform = (
-                    self.q_norm if key_value is None else self.kv_norm
-                )
-                cache = self.attn._build_cache(
-                    cache_source,
-                    rope,
-                    limit,
-                    source_transform=source_transform,
-                )
-            tiled_key_value = cache
-
-        out: Tensor | None = None
-        for tile in _batch_tiles(batch_shape, limit):
-            query_tile, kv_tile, seq_tile, mask_tile = _slice_attention_inputs(
-                query,
-                tiled_key_value,
-                seqused_key_value,
-                attn_mask,
-                batch_shape,
-                tile,
-            )
-            out_tile = self._block(
-                query_tile, kv_tile, seq_tile, mask_tile, rope
-            )
-            if out is None:
-                out = out_tile.new_empty((*batch_shape, *out_tile.shape[-2:]))
-            _copy_batch_tile(out, out_tile, tile, tail_dims=2)
-
-        assert out is not None
-        if return_key_value:
-            assert cache is not None
-            return out, cache
         return out

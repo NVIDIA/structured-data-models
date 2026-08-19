@@ -1,0 +1,61 @@
+import torch
+from sklearn.datasets import load_breast_cancer
+from torch import Tensor
+
+import sdm
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+torch.set_float32_matmul_precision("high")
+df = load_breast_cancer(as_frame=True).frame
+
+table = sdm.TableTensor.from_pandas(
+    df=df,
+    stypes=sdm.infer_stypes(df, overrides={"target": "categorical"}),
+    device=device,
+)
+model = sdm.models.TabICLv2(device=device)
+
+# For latency-sensitive serving, compile the model once via
+# `model.cls_model.compile(fullgraph=True)` and pad inputs to a fixed set of
+# shapes: `seqused_train`/`seqused_cols` mask the padded rows/columns out, so
+# every call re-uses the same compiled graph instead of recompiling. Padding
+# requires a pass-through `recipe=sdm.processing.Recipe()`, since fitted
+# pre-processing would derive its state from the padded rows.
+# See `examples/benchmark_tabiclv2.py` for measured bucketed/regional recipes.
+
+# Default in-context learning forward pass:
+with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
+    model(
+        x_context=table[:300].drop_columns("target"),
+        y_context=table[:300, "target"],
+        x_query=table[300:].drop_columns("target"),
+        num_estimators=2,
+    )
+
+# Fit + Predict forward pass via key/value caching for fast inference:
+with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
+    model.fit(
+        x=table[:300].drop_columns("target"),
+        y=table[:300, "target"],
+        num_estimators=2,
+    )
+    model.predict(table[300:].drop_columns("target"))
+
+model.clear()
+
+# Capturing embeddings:
+embeddings: list[Tensor] = []
+
+
+def _embedding(module: torch.nn.Module, args: tuple[Tensor, ...]) -> None:
+    embeddings.append(args[0])
+
+
+handle = model.cls_model.icl_block.head.register_forward_pre_hook(_embedding)
+with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
+    model(
+        x_context=table[:300].drop_columns("target"),
+        y_context=table[:300, "target"],
+        x_query=table[300:].drop_columns("target"),
+    )
+handle.remove()
