@@ -63,6 +63,60 @@ class _UnsupportedRecordingModel(_RecordingModel):
     supports_related_tables = False
 
 
+class MyCallback(Callback):
+    """Callback used by callback lifecycle tests."""
+
+    def __init__(
+        self,
+        name: str,
+        scale: float,
+        offset: float,
+        events: list[str],
+    ) -> None:
+        self.name = name
+        self.scale = scale
+        self.offset = offset
+        self.events = events
+
+    def _record(self, event: str) -> None:
+        self.events.append(f"{self.name}_{event}")
+
+    def on_forward_start(self, model: torch.nn.Module, /) -> None:
+        self._record("forward_start")
+
+    def on_forward_end(
+        self,
+        model: torch.nn.Module,
+        prediction: TableTensor,
+        /,
+    ) -> None:
+        self._record("forward_end")
+
+    def on_predict_start(self, model: torch.nn.Module, /) -> None:
+        self._record("predict_start")
+
+    def on_predict_end(
+        self,
+        model: torch.nn.Module,
+        prediction: TableTensor,
+        /,
+    ) -> None:
+        self._record("predict_end")
+
+    def on_after_preprocessing(
+        self,
+        model: torch.nn.Module,
+        x: TableTensor,
+        related_tables: RelatedTables | None,
+        /,
+    ) -> tuple[TableTensor, RelatedTables | None]:
+        self._record("after_preprocessing")
+        return (
+            x.replace_blocks(numerical=x.numerical * self.scale + self.offset),
+            related_tables,
+        )
+
+
 class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
     handles_stypes = frozenset(Stype)
     requires_fit = True
@@ -210,92 +264,51 @@ def test_model_recipe_generator_does_not_advance_global_rng(
 
 
 def test_callback() -> None:
-    class _Callback(Callback):
-        def __init__(
-            self,
-            name: str,
-            scale: float,
-            offset: float,
-            events: list[str],
-        ) -> None:
-            self.name = name
-            self.scale = scale
-            self.offset = offset
-            self.events = events
-
-        def _record(self, event: str) -> None:
-            self.events.append(f"{self.name}_{event}")
-
-        def on_forward_start(self, model: torch.nn.Module, /) -> None:
-            self._record("forward_start")
-
-        def on_forward_end(
-            self,
-            model: torch.nn.Module,
-            prediction: TableTensor,
-            /,
-        ) -> None:
-            self._record("forward_end")
-
-        def on_predict_start(self, model: torch.nn.Module, /) -> None:
-            self._record("predict_start")
-
-        def on_predict_end(
-            self,
-            model: torch.nn.Module,
-            prediction: TableTensor,
-            /,
-        ) -> None:
-            self._record("predict_end")
-
-        def on_after_preprocessing(
-            self,
-            model: torch.nn.Module,
-            x: TableTensor,
-            related_tables: RelatedTables | None,
-            /,
-        ) -> tuple[TableTensor, RelatedTables | None]:
-            self._record("after_preprocessing")
-            return (
-                x.replace_blocks(
-                    numerical=x.numerical * self.scale + self.offset
-                ),
-                related_tables,
-            )
-
-    x_context = torch.tensor([[0.0], [2.0]])
-    y_context = torch.tensor([[0.0], [1.0]])
-    x_query = torch.tensor([[3.0]])
     events: list[str] = []
     callbacks = (
-        _Callback("first", scale=1.0, offset=1.0, events=events),
-        _Callback("second", scale=2.0, offset=0.0, events=events),
+        MyCallback("1", scale=1.0, offset=1.0, events=events),
+        MyCallback("2", scale=2.0, offset=0.0, events=events),
     )
     model = _RecordingModel()
 
-    output = model(x_context, y_context, x_query, callbacks=callbacks)
-    model.fit(x_context, y_context, callbacks=callbacks)
-    prediction = model.predict(x_query, callbacks=callbacks)
+    output = model(
+        torch.tensor([[0.0], [2.0]]),
+        torch.tensor([[0.0], [1.0]]),
+        torch.tensor([[3.0]]),
+        callbacks=callbacks,
+    )
+    model.fit(
+        torch.tensor([[0.0], [2.0]]),
+        torch.tensor([[0.0], [1.0]]),
+        callbacks=callbacks,
+    )
+    prediction = model.predict(
+        torch.tensor([[3.0]]),
+        callbacks=callbacks,
+    )
     with pytest.raises(RuntimeError, match="not yet fitted"):
-        _RecordingModel().predict(x_query, callbacks=callbacks)
+        _RecordingModel().predict(
+            torch.tensor([[3.0]]),
+            callbacks=callbacks,
+        )
 
     torch.testing.assert_close(output.numerical, torch.tensor([[[8.0]]]))
     torch.testing.assert_close(prediction.numerical, output.numerical)
     assert events == [
-        "first_forward_start",
-        "second_forward_start",
-        "first_after_preprocessing",
-        "second_after_preprocessing",
-        "first_forward_end",
-        "second_forward_end",
-        "first_predict_start",
-        "second_predict_start",
-        "first_after_preprocessing",
-        "second_after_preprocessing",
-        "first_predict_end",
-        "second_predict_end",
-        "first_predict_start",
-        "second_predict_start",
+        "1_forward_start",
+        "2_forward_start",
+        "1_after_preprocessing",
+        "2_after_preprocessing",
+        "1_forward_end",
+        "2_forward_end",
+        "1_predict_start",
+        "2_predict_start",
+        "1_after_preprocessing",
+        "2_after_preprocessing",
+        "1_predict_end",
+        "2_predict_end",
+        "1_predict_start",
+        "2_predict_start",
     ]
 
 
