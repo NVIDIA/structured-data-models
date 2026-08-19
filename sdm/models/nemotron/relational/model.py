@@ -170,9 +170,9 @@ class NemotronRelational(ICLModel):
 
         for variant, filename in self._checkpoint_filenames.items():
             path = download_checkpoint(
-                repo_id="nvidia/nemotron_relational",
+                repo_id="nvidia/Nemotron-Relational",
                 filename=filename,
-                revision="v2.1.0",
+                revision="v2.1.1",
             )
             checkpoint = torch.load(
                 path,
