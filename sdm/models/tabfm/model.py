@@ -1,5 +1,7 @@
 # ruff: noqa: D205
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
@@ -41,7 +43,7 @@ class TabFM(ICLModel):
 
     .. note::
         :class:`TabFM` model weights are distributed under a
-        `non-commerical license <https://huggingface.co/google/
+        `non-commercial license <https://huggingface.co/google/
         tabfm-1.0.0-pytorch/blob/
         77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__.
         Users are expected to download the
@@ -69,14 +71,15 @@ class TabFM(ICLModel):
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__()
-        assert checkpoint_path is None
 
         self.task = task
-
         self.model = _TabFM(
             num_classes=10 if task == "classification" else 0,
             device=device,
         )
+
+        if checkpoint_path is not None:
+            self._load_from_pretrained(checkpoint_path)
 
         self.eval()
 
@@ -89,6 +92,20 @@ class TabFM(ICLModel):
                 sp.ShuffleColumns(),
             ]
         )
+
+    def _load_from_pretrained(self, checkpoint_path: str | Path) -> TabFM:
+        from safetensors.torch import load_file  # noqa: PLC0415
+
+        from sdm.models.tabfm.ckpt import remap_ckpt  # noqa: PLC0415
+
+        device = next(self.parameters()).device
+        ckpt = remap_ckpt(
+            ckpt=load_file(checkpoint_path, device=str(device)),
+            is_classifier=self.task == "classification",
+        )
+        self.model.load_state_dict(ckpt, strict=True)
+
+        return self
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415
