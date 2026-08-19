@@ -150,13 +150,13 @@ class NemotronRelational(ICLModel):
         self.cls_model = _NemotronRelational(
             num_classes=10,
             num_quantiles=0,
-            norm_bias=True,
+            norm_bias=False,
             device=device,
         )
         self.reg_model = _NemotronRelational(
             num_classes=0,
             num_quantiles=999,
-            norm_bias=True,
+            norm_bias=False,
             device=device,
         )
 
