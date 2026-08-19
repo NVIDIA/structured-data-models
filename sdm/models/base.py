@@ -79,7 +79,19 @@ class ICLModel(torch.nn.Module, abc.ABC):
         """
         callbacks = () if callbacks is None else callbacks
         for callback in callbacks:
-            callback.on_forward_start(self)
+            callback.on_forward_start(
+                self,
+                x_context,
+                y_context,
+                x_query,
+                related_context_tables,
+                related_query_tables,
+                recipe=recipe,
+                num_estimators=num_estimators,
+                generator=generator,
+                callbacks=callbacks,
+                **kwargs,
+            )
 
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -128,12 +140,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
             query_x = query.x
             query_related_tables = query.related_tables
             for callback in callbacks:
-                query_x, query_related_tables = (
-                    callback.on_after_preprocessing(
-                        self,
-                        query_x,
-                        query_related_tables,
-                    )
+                query_x, query_related_tables = callback.on_preprocessing_end(
+                    self,
+                    query_x,
+                    query_related_tables,
                 )
             self._validate_query(
                 x_context=context.x.schema,
@@ -282,7 +292,12 @@ class ICLModel(torch.nn.Module, abc.ABC):
         """
         callbacks = () if callbacks is None else callbacks
         for callback in callbacks:
-            callback.on_predict_start(self)
+            callback.on_forward_start(
+                self,
+                x,
+                related_tables,
+                callbacks=callbacks,
+            )
 
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
@@ -343,7 +358,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 query_related_tables = query.related_tables
                 for callback in callbacks:
                     query_x, query_related_tables = (
-                        callback.on_after_preprocessing(
+                        callback.on_preprocessing_end(
                             self,
                             query_x,
                             query_related_tables,
@@ -404,7 +419,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             prediction = recipe_execution.transform_output(outs)
 
         for callback in callbacks:
-            callback.on_predict_end(self, prediction)
+            callback.on_forward_end(self, prediction)
         return prediction
 
     def clear(self) -> None:
