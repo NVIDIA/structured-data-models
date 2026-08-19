@@ -187,7 +187,7 @@ def run_experiment(data_id, task, device, seed=42, num_rounds=NUM_ROUNDS):
                     device,
                 )
             # Concatenate original context with pseudo-labeled rows.
-            augmented_context = context.cat([context, pseudo_context])
+            augmented_context = torch.cat([context, pseudo_context], dim=0)
 
         prev_embeddings = embeddings
 
