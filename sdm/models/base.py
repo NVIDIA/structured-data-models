@@ -1,34 +1,17 @@
 import abc
-import contextlib
 import copy
-from collections.abc import Iterator
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
-
-
-@contextlib.contextmanager
-def _maybe_inference_mode() -> Iterator[None]:
-    # `torch.inference_mode` is not supported inside a compiled region, so do
-    # not enter it when this function is already being compiled.
-    # https://github.com/pytorch/pytorch/issues/180823
-    # FIXME: Come up with a solution to use torch.compile under
-    # torch.inference_mode and remove this workaround.
-    if torch.compiler.is_compiling():
-        context_fn = contextlib.nullcontext
-    else:
-        context_fn = torch.inference_mode
-
-    with context_fn():
-        yield
 
 
 class ICLModel(torch.nn.Module, abc.ABC):
@@ -54,7 +37,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self._cache: Cache | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
-    @_maybe_inference_mode()
+    @inference_mode()
     def forward(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
@@ -163,7 +146,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         with torch.amp.autocast(x_query.device.type, enabled=False):
             return recipe_execution.transform_output(outs)
 
-    @_maybe_inference_mode()
+    @inference_mode()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
@@ -251,7 +234,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         self._cache = cache.freeze()
 
-    @_maybe_inference_mode()
+    @inference_mode()
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
