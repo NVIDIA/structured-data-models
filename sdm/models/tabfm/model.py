@@ -1,19 +1,54 @@
+# ruff: noqa: D205
+
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
 
+import sdm.processing as sp
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.row_embedding import RowEmbedding
+from sdm.tensor.table import TableSchema
 
 
 class TabFM(ICLModel):
-    r"""The Google TabFM tabular foundation model.
+    r"""The tabular foundation model as introduced in `"Introducing TabFM: A
+    Zero-shot Foundation Model for Tabular Data" <https://research.google/blog/
+    introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
+
+    .. figure:: /images/tabfm_light.png
+        :figclass: light-only
+        :width: 100%
+
+    .. figure:: /images/tabfm_dark.png
+        :figclass: dark-only
+        :width: 100%
+
+    Architecturally, :class:`TabFM` can be viewed as a scaled-up
+    :class:`TabICLv2`-style model with Fourier cell embeddings, separate
+    numerical and categorical cell projections, two repeated column/row
+    interaction stages, :class:`~torch.nn.RMSNorm`-based transformer blocks and
+    :class:`~sdm.nn.SwiGLU` feed-forward blocks.
+
+    Due to the size of its checkpoints (~1.6B parameters), each :class:`TabFM`
+    instance is responsible for a single task only: classification or
+    regression.
+
+    .. note::
+        :class:`TabFM` model weights are distributed under a
+        `non-commercial license <https://huggingface.co/google/
+        tabfm-1.0.0-pytorch/blob/
+        77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__.
+        Users are expected to download the
+        `checkpoint <https://huggingface.co/google/tabfm-1.0.0-pytorch>`__
+        manually and use it in accordance with its license.
 
     Args:
         task: The prediction task.
@@ -36,21 +71,57 @@ class TabFM(ICLModel):
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__()
-        assert checkpoint_path is None
 
         self.task = task
-
         self.model = _TabFM(
             num_classes=10 if task == "classification" else 0,
             device=device,
         )
+
+        if checkpoint_path is not None:
+            self._load_from_pretrained(checkpoint_path)
 
         self.eval()
 
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return Recipe()
+        return Recipe(  # TODO Replace with final recipe.
+            features=[
+                sp.StypeDispatch(categorical=sp.ToNumerical()),
+                sp.ShuffleColumns(),
+            ]
+        )
+
+    def _load_from_pretrained(self, checkpoint_path: str | Path) -> TabFM:
+        from safetensors.torch import load_file  # noqa: PLC0415
+
+        from sdm.models.tabfm.ckpt import remap_ckpt  # noqa: PLC0415
+
+        device = next(self.parameters()).device
+        ckpt = remap_ckpt(
+            ckpt=load_file(checkpoint_path, device=str(device)),
+            is_classifier=self.task == "classification",
+        )
+        self.model.load_state_dict(ckpt, strict=True)
+
+        return self
+
+    def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
+        r""":meta private:"""  # noqa: D415
+        x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
+        if not isinstance(x_context, TableTensor):
+            x_context = TableTensor.from_tensor(x_context)
+        kwargs["_schema"] = x_context.schema
+        return super().forward(*args, **kwargs)
+
+    def fit(self, *args: Any, **kwargs: Any) -> None:
+        r""":meta private:"""  # noqa: D415
+        x = kwargs["x"] if "x" in kwargs else args[0]
+        if not isinstance(x, TableTensor):
+            x = TableTensor.from_tensor(x)
+        kwargs["_schema"] = x.schema
+        return super().fit(*args, **kwargs)
 
     def _forward(
         self,
@@ -105,14 +176,25 @@ class TabFM(ICLModel):
                 dtype=torch.int64 if classes is not None else x.dtype,
             )
 
-        out = self.model(
-            x=x,
-            y=y,
-            categorical_mask=x.new_zeros(  # TODO
-                *x.size()[:-2], x.size(-1), dtype=torch.bool
-            ),
-            cache=cache,
-        )
+        if cache is None or cache.is_recording:
+            assert x_context is not None
+            schema: TableSchema = kwargs["_schema"]
+            categorical_columns = set(schema.columns[Stype.categorical])
+            categorical_mask = torch.tensor(
+                [
+                    column in categorical_columns
+                    for column in x_context.columns[Stype.numerical]
+                ],
+                device=x.device,
+                dtype=torch.bool,
+            )
+            if cache is not None:
+                cache["categorical_mask"] = categorical_mask
+        else:
+            categorical_mask = cast(Tensor, cache["categorical_mask"])
+        categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
+
+        out = self.model(x, y, categorical_mask, cache=cache)
 
         if classes is None:
             return TableTensor(
