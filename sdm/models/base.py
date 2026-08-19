@@ -137,33 +137,33 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 y=context.y,
                 related_tables=context.related_tables,
             )
-            query_x = query.x
-            query_related_tables = query.related_tables
+            x_query = query.x
+            related_query_tables = query.related_tables
             for callback in callbacks:
-                query_x, query_related_tables = callback.on_preprocessing_end(
+                x_query, related_query_tables = callback.on_preprocessing_end(
                     self,
-                    query_x,
-                    query_related_tables,
+                    x_query,
+                    related_query_tables,
                 )
             self._validate_query(
                 x_context=context.x.schema,
-                x_query=query_x,
+                x_query=x_query,
                 related_context_tables=context.related_tables.schema
                 if context.related_tables is not None
                 else None,
-                related_query_tables=query_related_tables,
+                related_query_tables=related_query_tables,
             )
             out = self._forward(
                 x_context=context.x,
                 y_context=context.y,
-                x_query=query_x,
+                x_query=x_query,
                 related_context_tables=context.related_tables,
-                related_query_tables=query_related_tables,
+                related_query_tables=related_query_tables,
                 cache=None,
                 generator=generator,
                 **kwargs,
             )
-            out = cast(TableTensor, out.to(query_x.dtype))
+            out = cast(TableTensor, out.to(x_query.dtype))
             outs.append(out)
 
         # Regression: invert target before stacking estimator outputs.
@@ -354,24 +354,24 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 cache, next_cache = next_cache, None
                 assert cache is not None
 
-                query_x = query.x
-                query_related_tables = query.related_tables
+                x_query = query.x
+                related_query_tables = query.related_tables
                 for callback in callbacks:
-                    query_x, query_related_tables = (
+                    x_query, related_query_tables = (
                         callback.on_preprocessing_end(
                             self,
-                            query_x,
-                            query_related_tables,
+                            x_query,
+                            related_query_tables,
                         )
                     )
                 self._validate_query(
                     x_context=cast(TableSchema, cache["x_schema"]),
-                    x_query=query_x,
+                    x_query=x_query,
                     related_context_tables=cast(
                         RelatedTablesSchema,
                         cache["related_tables_schema"],
                     ),
-                    related_query_tables=query_related_tables,
+                    related_query_tables=related_query_tables,
                 )
 
                 if i + 1 < num_estimators:
@@ -384,9 +384,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 out = self._forward(
                     x_context=None,
                     y_context=None,
-                    x_query=query_x,
+                    x_query=x_query,
                     related_context_tables=None,
-                    related_query_tables=query_related_tables,
+                    related_query_tables=related_query_tables,
                     cache=cache,
                     generator=None,
                     **cast(dict[str, Any], self._cache["kwargs"]),
@@ -397,7 +397,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     for tensor in cache._tensors():
                         tensor.record_stream(compute_stream)
 
-                out = cast(TableTensor, out.to(query_x.dtype))
+                out = cast(TableTensor, out.to(x_query.dtype))
                 outs.append(out)
 
                 if x.is_cuda and next_cache is not None:
