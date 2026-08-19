@@ -74,7 +74,7 @@ def test_rotary_embedding_compile(
         partial_rotary_factor=partial_rotary_factor,
         device=device,
     )
-    x = torch.randn(2, 5, 3, 4, device=device)
+    x = torch.randn(2, 5, 3, 16, device=device)
 
     expected = module(x)
     out = fullgraph(module)(x)

@@ -80,8 +80,8 @@ class RotaryEmbedding(torch.nn.Module):
             )
         seq = torch.arange(x.size(-3), device=x.device, dtype=torch.float32)
         freq = seq.view(-1, 1) * self.inv_freq.view(1, -1)  # [S, C // 2]
-        sin = freq.sin()[:, None, :].to(x.dtype)  # [S, C // 2]
-        cos = freq.cos()[:, None, :].to(x.dtype)  # [S, C // 2]
+        sin = freq.sin()[:, None, :].to(x.dtype)  # [S, 1, C // 2]
+        cos = freq.cos()[:, None, :].to(x.dtype)  # [S, 1, C // 2]
 
         rotary = x[..., : self.rotary_channels]
         if self.layout == "interleaved":
