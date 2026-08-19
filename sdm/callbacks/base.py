@@ -1,13 +1,9 @@
 import contextlib
-import functools
-from collections.abc import Callable, Sequence
-from typing import Any, TypeVar, cast
+from typing import Any
 
 import torch
 
 from sdm import RelatedTables, TableTensor
-
-_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 class Callback:
@@ -21,7 +17,7 @@ class Callback:
 
     Callbacks supplied together run in sequence order, each preprocessing
     result is passed to the next callback, and their execution contexts enter
-    in sequence order and exit in reverse order.
+    before preprocessing in sequence order and exit in reverse order.
     """
 
     def execution_context(
@@ -31,8 +27,8 @@ class Callback:
     ) -> contextlib.AbstractContextManager[None]:
         """Return a fresh context manager for one model call.
 
-        The context encloses all callback hooks and model execution and must
-        not suppress exceptions.
+        The context encloses preprocessing, model execution, output
+        postprocessing, and end hooks, and must not suppress exceptions.
 
         Args:
             model: Model receiving the callback.
@@ -89,21 +85,3 @@ class Callback:
             model.
         """
         return x, related_tables
-
-
-def _callback_contexts(function: _F) -> _F:
-    @functools.wraps(function)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        callbacks = kwargs.get("callbacks")
-        if not callbacks:
-            return function(*args, **kwargs)
-
-        callbacks = tuple(cast(Sequence[Callback], callbacks))
-        kwargs["callbacks"] = callbacks
-        model = cast(torch.nn.Module, args[0])
-        with contextlib.ExitStack() as stack:
-            for callback in callbacks:
-                stack.enter_context(callback.execution_context(model))
-            return function(*args, **kwargs)
-
-    return cast(_F, wrapper)
