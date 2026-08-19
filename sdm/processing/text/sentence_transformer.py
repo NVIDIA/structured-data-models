@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 @dataclasses.dataclass
 class _WordPieceTokenizer:
-    wpt: WordPieceVocabulary
+    wordpiece_vocab: WordPieceVocabulary
     normalizer: CharacterNormalizer
     cls_token_id: int
     sep_token_id: int
@@ -66,7 +66,7 @@ class _WordPieceTokenizer:
         )
         max_length = model.max_seq_length or tokenizer.model_max_length
         return cls(
-            wpt=WordPieceVocabulary(cudf.Series(vocab_tokens)),
+            wordpiece_vocab=WordPieceVocabulary(cudf.Series(vocab_tokens)),
             normalizer=CharacterNormalizer(
                 do_lower=tokenizer.do_lower_case,
                 special_tokens=cudf.Series(tokenizer.all_special_tokens),
@@ -80,11 +80,9 @@ class _WordPieceTokenizer:
     def tokenize(self, text: StringTensor) -> tuple[Tensor, Tensor]:
         """Produce model-ready inputs from raw strings on GPU.
 
-        Perform raw tokenization via
-        :meth:`sentence_transformers.SentenceTransformer.encode()
-        <sentence_transformers.sentence_transformer.model.SentenceTransformer.encode>`.
-        Subsequently, frame the raw tokens to produce BERT-ready
-        (input_ids, attention_mask) tensors.
+        Tokenize via cuDF's
+        :class:`~cudf.core.wordpiece_tokenize.WordPieceVocabulary` and frame
+        the raw tokens into BERT-ready (input_ids, attention_mask) tensors.
         Null strings are treated as empty.
 
         Args:
@@ -101,7 +99,7 @@ class _WordPieceTokenizer:
             text_series = text_series.fillna("")
 
         normalized = self.normalizer.normalize(text_series)
-        token_lists = self.wpt.tokenize(normalized)
+        token_lists = self.wordpiece_vocab.tokenize(normalized)
 
         flat_values = torch.from_dlpack(token_lists.list.leaves.to_cupy())
         raw_lengths = torch.from_dlpack(token_lists.list.len().to_cupy()).to(
@@ -113,10 +111,9 @@ class _WordPieceTokenizer:
         torch.cumsum(raw_lengths, dim=0, out=offsets[1:])
 
         lengths = raw_lengths.clamp(max=self.max_length - 2)
-        seq_len = self.max_length
 
         input_ids = torch.full(
-            (num_strings, seq_len),
+            (num_strings, self.max_length),
             self.pad_token_id,
             device=device,
             dtype=torch.long,
@@ -208,6 +205,8 @@ class SentenceTransformer(Processor):
                 self._word_piece_tokenizer = _WordPieceTokenizer.build(
                     self._model.module
                 )
+                if self._word_piece_tokenizer is not None:
+                    self._model.module.eval()
             self._wp_tokenizer_initialized = True
 
         if table.text.numel() == 0:
@@ -284,7 +283,6 @@ class SentenceTransformer(Processor):
             device=device,
             dtype=torch.float,
         )
-        self._model.module.eval()
         for i, batch_start in enumerate(
             range(0, num_strings, self.batch_size)
         ):
@@ -298,8 +296,7 @@ class SentenceTransformer(Processor):
                     batch_start:batch_end, :batch_seq_len
                 ],
             }
-            for module in self._model.module:
-                features = module(features)
+            features = self._model.module(features)
             embeddings[sort_idx[batch_start:batch_end]] = features[
                 "sentence_embedding"
             ]
