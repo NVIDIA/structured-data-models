@@ -170,7 +170,7 @@ class NemotronRelational(ICLModel):
 
         for variant, filename in self._checkpoint_filenames.items():
             path = download_checkpoint(
-                repo_id="nvidia/NemotronRelational",
+                repo_id="nvidia/nemotron_relational",
                 filename=filename,
                 revision="v2.1.0",
             )
