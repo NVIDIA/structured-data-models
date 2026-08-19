@@ -250,6 +250,25 @@ def test_concatenate_columns_regroups_different_layouts() -> None:
     assert output.table(2).equal(output.table(0))
 
 
+def test_concatenate_columns_skips_empty_tables() -> None:
+    tables = tuple(
+        TableTensor.from_tensor(
+            torch.tensor([[value]], dtype=torch.float32),
+            columns=("value",),
+        )
+        for value in range(2)
+    )
+    nonempty = EnsembleTable.from_tables(
+        tables=tables,
+        member_table_ids=(0, 1, 0),
+    )
+    empty = EnsembleTable(tables[0].select_columns(()), num_members=3)
+
+    output = EnsembleTable.concatenate_columns((empty, nonempty, empty))
+
+    assert output is nonempty
+
+
 def test_concatenate_columns_rejects_different_member_counts() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
 

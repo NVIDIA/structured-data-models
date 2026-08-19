@@ -332,6 +332,9 @@ class EnsembleTable:
     def concatenate_columns(cls, tables: Sequence[Self]) -> Self:
         r"""Concatenate ensemble tables column-wise by logical member.
 
+        Ensemble tables without columns do not affect the result when at
+        least one input contains columns.
+
         Args:
             tables: Ensemble tables with the same number of logical members.
 
@@ -347,6 +350,15 @@ class EnsembleTable:
                 "Cannot concatenate ensemble tables with different member "
                 "counts"
             )
+
+        nonempty_tables = tuple(
+            table
+            for table in tables
+            if any(group.size(-1) > 0 for group in table)
+        )
+        if len(nonempty_tables) > 0:
+            tables = nonempty_tables
+            first = tables[0]
         if len(tables) == 1:
             return first
 
