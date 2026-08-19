@@ -1,8 +1,8 @@
-"""Benchmark NemotronRelational with RelArena.
+"""Benchmark NemotronRelational on RelArena's RelBench v1 task grid.
 
-Without arguments, this runs every task in the seven RelBench v1 datasets
-covered by RelArena. Pass ``--dataset`` to run one dataset or both
-``--dataset`` and ``--task`` to run one task.
+Without arguments, this runs every supported binary classification and
+regression task. Pass ``--dataset`` to run one dataset or both ``--dataset``
+and ``--task`` to run one task.
 
 Examples:
     python rel_arena.py
@@ -12,19 +12,49 @@ Examples:
 
 Each ``--num_neighbors`` value configures one hop: ``32`` is one hop,
 ``16 16`` is two hops, and ``16 16 8`` is three hops.
+
+The default context caps match Kumo RFM for shared classification tasks;
+regression and RelArena-only tasks use 5,000 rows. This follows
+``rel_bench.py`` by using seeded random context samples and every test row.
+Kumo's classification script instead varies sampling by task, and both Kumo
+scripts cap the number of test rows.
 """
 
 import argparse
 from typing import Any, cast
 
-import numpy as np
+import pandas as pd
 import relarena
+import relbench
 import torch
+import torchmetrics
 import tqdm
-from relarena.search_space import SearchSpace
-from relbench.base import Database, EntityTask, Table, TaskType
 
 import sdm
+
+CONTEXT_SIZE = {
+    ("rel-amazon", "item-churn"): 10_000,
+    ("rel-amazon", "item-ltv"): 5_000,
+    ("rel-amazon", "user-churn"): 5_000,
+    ("rel-amazon", "user-ltv"): 5_000,
+    ("rel-avito", "ad-ctr"): 5_000,
+    ("rel-avito", "user-clicks"): 5_000,
+    ("rel-avito", "user-visits"): 5_000,
+    ("rel-event", "user-attendance"): 5_000,
+    ("rel-event", "user-ignore"): 3_000,
+    ("rel-event", "user-repeat"): 3_000,
+    ("rel-f1", "driver-dnf"): 5_000,
+    ("rel-f1", "driver-position"): 5_000,
+    ("rel-f1", "driver-top3"): 5_000,
+    ("rel-hm", "item-sales"): 5_000,
+    ("rel-hm", "user-churn"): 10_000,
+    ("rel-stack", "post-votes"): 5_000,
+    ("rel-stack", "user-badge"): 5_000,
+    ("rel-stack", "user-engagement"): 3_000,
+    ("rel-trial", "site-success"): 5_000,
+    ("rel-trial", "study-adverse"): 5_000,
+    ("rel-trial", "study-outcome"): 5_000,
+}
 
 parser = argparse.ArgumentParser(
     description=__doc__,
@@ -32,173 +62,156 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("--dataset", choices=relarena.RELBENCH_V1_DATASETS)
 parser.add_argument("--task")
-parser.add_argument("--context_size", type=int, default=10_000)
+parser.add_argument(
+    "--context_size",
+    type=int,
+    help="override the task-specific context cap",
+)
 parser.add_argument("--batch_size", type=int, default=1000)
 parser.add_argument("--num_neighbors", type=int, nargs="+", default=[16, 16])
 parser.add_argument("--num_estimators", type=int, default=1)
 parser.add_argument("--seed", type=int, default=0)
-parser.add_argument(
-    "--no_test",
-    action="store_true",
-    help="only fit on train and evaluate on validation",
-)
 args = parser.parse_args()
 if args.task and not args.dataset:
     parser.error("'--task' requires '--dataset'")
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class NemotronRelationalModel(relarena.RelArenaModel):
-    """Adapt NemotronRelational to RelArena's model interface."""
 
-    name = "nemotron-relational"
+def run_task(dataset_name: str, task_name: str) -> None:
+    task = relbench.tasks.get_task(dataset_name, task_name, download=True)
+    if not isinstance(task, relbench.base.EntityTask):
+        print(f"{dataset_name}/{task_name}: skipped (not an entity task)")
+        return
+    if task.task_type not in {
+        relbench.base.TaskType.BINARY_CLASSIFICATION,
+        relbench.base.TaskType.REGRESSION,
+    }:
+        print(f"{dataset_name}/{task_name}: skipped ({task.task_type.value})")
+        return
 
-    def fit(
-        self,
-        task: EntityTask,
-        db: Database,
-        train_table: Table,
-        val_table: Table | None,
-        *,
-        seed: int,
-        time_limit: float | None = None,
-    ) -> None:
-        """Fit on the labels and censored database supplied by RelArena."""
-        torch.manual_seed(seed)
-        self._device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
+    pair = (dataset_name, task_name)
+    if pair not in CONTEXT_SIZE:
+        print(f"{dataset_name}/{task_name}: skipped (no context cap)")
+        return
+
+    torch.manual_seed(args.seed)
+    binary = task.task_type == relbench.base.TaskType.BINARY_CLASSIFICATION
+    context_size = (
+        CONTEXT_SIZE[pair] if args.context_size is None else args.context_size
+    )
+
+    # Use the full relational database, matching the existing RelBench example.
+    db = task.dataset.get_db(upto_test_timestamp=False)
+    tables = {}
+    for name, table in db.table_dict.items():
+        tables[name] = sdm.TableTensor.from_pandas(
+            df=table.df,
+            stypes=sdm.infer_stypes(
+                table.df.head(10_000),
+                overrides={
+                    cast(str, table.pkey_col): "id",
+                    **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
+                },
+                text="drop",
+                unsupported="drop",
+            ),
         )
-        self._binary = task.task_type == TaskType.BINARY_CLASSIFICATION
 
-        tables = {}
-        for name, table in db.table_dict.items():
-            overrides = dict.fromkeys(table.fkey_col_to_pkey_table, "id")
-            if table.pkey_col is not None:
-                overrides[table.pkey_col] = "id"
-            tables[name] = sdm.TableTensor.from_pandas(
-                df=table.df,
-                stypes=sdm.infer_stypes(
-                    table.df.head(10_000),
-                    overrides=overrides,
-                    text="drop",
-                    unsupported="drop",
-                ),
+    data = sdm.RelationalData(
+        tables=tables,
+        relationships=[
+            {
+                "left_table": left_table,
+                "left_column": left_column,
+                "right_table": right_table,
+                "right_column": cast(str, db.table_dict[right_table].pkey_col),
+            }
+            for left_table, table in db.table_dict.items()
+            for left_column, right_table in (
+                table.fkey_col_to_pkey_table.items()
             )
+        ],
+    )
+    time_columns = {
+        name: table.time_col
+        for name, table in db.table_dict.items()
+        if table.time_col is not None
+    }
+    sampler = data.sampler(time_columns)
 
-        data = sdm.RelationalData(
-            tables=tables,
-            relationships=[
-                {
-                    "left_table": left_table,
-                    "left_column": left_column,
-                    "right_table": right_table,
-                    "right_column": cast(
-                        str, db.table_dict[right_table].pkey_col
-                    ),
-                }
-                for left_table, table in db.table_dict.items()
-                for left_column, right_table in (
-                    table.fkey_col_to_pkey_table.items()
-                )
-            ],
+    train_df = task.get_table("train", mask_input_cols=False).df
+    val_df = task.get_table("val", mask_input_cols=False).df
+    test_df = task.get_table("test", mask_input_cols=False).df.copy()
+    context_df = pd.concat([train_df, val_df], ignore_index=True)
+    if binary:
+        # Normalize 0/1, Boolean, and f/t labels so AUROC scores True.
+        labels = sorted(context_df[task.target_col].dropna().unique())
+        context_df[task.target_col] = context_df[task.target_col] == labels[-1]
+        test_df[task.target_col] = test_df[task.target_col] == labels[-1]
+    stypes = {
+        task.entity_col: "id",
+        task.time_col: "datetime",
+        task.target_col: "categorical" if binary else "numerical",
+    }
+    context = sdm.TableTensor.from_pandas(df=context_df, stypes=stypes)
+    test = sdm.TableTensor.from_pandas(df=test_df, stypes=stypes)
+    context = context[torch.randperm(len(context))[:context_size]]
+
+    model = sdm.models.NemotronRelational(device=device)
+    kwargs: dict[str, Any] = {
+        "task_link": {
+            "task_column": task.entity_col,
+            "table": task.entity_table,
+            "table_column": cast(
+                str, db.table_dict[task.entity_table].pkey_col
+            ),
+        },
+        "num_neighbors": args.num_neighbors,
+        "task_time_column": task.time_col,
+    }
+    context, related_tables = sampler(context, **kwargs).to(device)
+    with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
+        model.fit(
+            x=context.drop_columns(task.target_col),
+            y=context[task.target_col],
+            related_tables=related_tables,
+            num_estimators=args.num_estimators,
         )
-        time_columns = {
-            name: table.time_col
-            for name, table in db.table_dict.items()
-            if table.time_col is not None
-        }
-        self._sampler = data.sampler(time_columns)
-        self._sample_kwargs: dict[str, Any] = {
-            "task_link": {
-                "task_column": task.entity_col,
-                "table": task.entity_table,
-                "table_column": cast(
-                    str, db.table_dict[task.entity_table].pkey_col
-                ),
-            },
-            "num_neighbors": self.config["num_neighbors"],
-            "task_time_column": task.time_col,
-        }
 
-        context_df = train_table.df.copy()
-        if self._binary:
-            labels = sorted(context_df[task.target_col].dropna().unique())
-            context_df[task.target_col] = (
-                context_df[task.target_col] == labels[-1]
+    predictions = []
+    targets = []
+    for batch in tqdm.tqdm(
+        test.split(args.batch_size),
+        desc=f"{dataset_name}/{task_name}",
+    ):
+        y_query = batch[task.target_col].to(device)
+        query = batch.drop_columns(task.target_col)
+        with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
+            out = model.predict(*sampler(query, **kwargs).to(device))
+        if binary:
+            pred, target = sdm.evaluation.to_binary_class(
+                out,
+                y_query,
+                positive_class=True,
             )
-        context = sdm.TableTensor.from_pandas(
-            df=context_df,
-            stypes={
-                task.entity_col: "id",
-                task.time_col: "datetime",
-                task.target_col: (
-                    "categorical" if self._binary else "numerical"
-                ),
-            },
-        )
-        context = context[
-            torch.randperm(len(context))[: self.config["context_size"]]
-        ]
+        else:
+            pred = out["q500"].numerical.squeeze(-1)
+            target = y_query.numerical.squeeze(-1)
+        predictions.append(pred.cpu())
+        targets.append(target.cpu())
 
-        self._model = sdm.models.NemotronRelational(device=self._device)
-        context, related_tables = self._sampler(
-            context,
-            **self._sample_kwargs,
-        ).to(self._device)
-        with torch.amp.autocast(
-            self._device.type,
-            torch.bfloat16,
-            enabled=self._device.type == "cuda",
-        ):
-            self._model.fit(
-                x=context.drop_columns(task.target_col),
-                y=context[task.target_col],
-                related_tables=related_tables,
-                num_estimators=self.config["num_estimators"],
-            )
-
-    def predict(
-        self,
-        task: EntityTask,
-        db: Database,
-        table: Table,
-    ) -> np.ndarray:
-        """Predict in batches and return RelArena's one-dimensional output."""
-        query = sdm.TableTensor.from_pandas(
-            df=table.df[[task.entity_col, task.time_col]],
-            stypes={
-                task.entity_col: "id",
-                task.time_col: "datetime",
-            },
-        )
-        predictions = []
-        for batch in tqdm.tqdm(query.split(self.config["batch_size"])):
-            with torch.amp.autocast(
-                self._device.type,
-                torch.bfloat16,
-                enabled=self._device.type == "cuda",
-            ):
-                out = self._model.predict(
-                    *self._sampler(
-                        batch,
-                        **self._sample_kwargs,
-                    ).to(self._device)
-                )
-            pred = (
-                out["True"].numerical.squeeze(-1)
-                if self._binary
-                else out["q500"].numerical.squeeze(-1)
-            )
-            predictions.append(pred.float().cpu().numpy())
-        return np.concatenate(predictions)
+    pred = torch.cat(predictions)
+    target = torch.cat(targets)
+    name = "AUROC" if binary else "MAE"
+    score = (
+        torchmetrics.classification.BinaryAUROC()(pred, target)
+        if binary
+        else torchmetrics.regression.MeanAbsoluteError()(pred, target)
+    )
+    print(f"{dataset_name}/{task_name} {name}: {score:.4f}")
 
 
-config = {
-    "context_size": args.context_size,
-    "batch_size": args.batch_size,
-    "num_neighbors": args.num_neighbors,
-    "num_estimators": args.num_estimators,
-}
-search_space = SearchSpace(default_overrides=config)
 datasets = (
     [args.dataset] if args.dataset else list(relarena.RELBENCH_V1_DATASETS)
 )
@@ -207,25 +220,7 @@ if args.task:
     specs = [spec for spec in specs if spec.task == args.task]
 
 for spec in specs:
-    summary = relarena.run_experiment(
-        NemotronRelationalModel,
-        spec.dataset,
-        spec.task,
-        search_space=search_space,
-        seed=args.seed,
-        n_trials=0,
-        cache_predictions=False,
-        evaluate_test=not args.no_test,
-    )
-    trial = cast(relarena.TrialResult, summary.tuned)
-    if not args.no_test and trial.test_score is None:
-        raise RuntimeError(f"{spec.dataset}/{spec.task}: test refit failed")
-    test_score = (
-        f"{trial.test_score:.4f}"
-        if trial.test_score is not None
-        else "not evaluated"
-    )
-    print(
-        f"{spec.dataset}/{spec.task} {summary.metric_name}: "
-        f"val={trial.val_score:.4f}, test={test_score}"
-    )
+    run_task(spec.dataset, spec.task)
+    relbench.base.Dataset.get_db.cache_clear()
+    relbench.tasks.get_task.cache_clear()
+    relbench.datasets.get_dataset.cache_clear()
