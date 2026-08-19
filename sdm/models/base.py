@@ -1,5 +1,6 @@
 import abc
 import copy
+from collections.abc import Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -9,6 +10,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
+from sdm.models.callback import Callback
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -49,6 +51,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe: Recipe | None = None,
         num_estimators: int = 1,
         generator: torch.Generator | None = None,
+        callbacks: Sequence[Callback] = (),
         **kwargs: Any,
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""The in-context learning forward pass.
@@ -67,12 +70,17 @@ class ICLModel(torch.nn.Module, abc.ABC):
             num_estimators: The number of estimators ``E`` for ensembling.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            callbacks: Callbacks invoked in sequence during model execution.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
+        callbacks = tuple(callbacks)
+        for callback in callbacks:
+            callback.on_forward_start(self)
+
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
         if not isinstance(x_context, TableTensor):
@@ -110,6 +118,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables=related_query_tables,
             )
 
+        model_kwargs = kwargs
+        if callbacks:
+            model_kwargs = {**kwargs, "callbacks": callbacks}
         outs: list[TableTensor] = []
         for context, query in zip(contexts, queries):
             self._validate_context(
@@ -133,7 +144,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_query_tables=query.related_tables,
                 cache=None,
                 generator=generator,
-                **kwargs,
+                **model_kwargs,
             )
             out = cast(TableTensor, out.to(query.x.dtype))
             outs.append(out)
@@ -144,7 +155,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
         with torch.amp.autocast(x_query.device.type, enabled=False):
-            return recipe_execution.transform_output(outs)
+            prediction = recipe_execution.transform_output(outs)
+
+        for callback in callbacks:
+            callback.on_forward_end(self, prediction)
+        return prediction
 
     @inference_mode()
     def fit(
@@ -175,6 +190,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
+        if "callbacks" in kwargs:
+            raise TypeError("Callbacks are not supported by 'fit()'")
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
         if not isinstance(x, TableTensor):
@@ -239,7 +256,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
-        **kwargs: Any,
+        *,
+        callbacks: Sequence[Callback] = (),
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""Predict unseen query examples.
 
@@ -251,13 +269,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
             x: The feature tensor of query examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
             related_tables: Related context for query examples.
-            kwargs: Additional model keyword arguments for this prediction.
-                A name already supplied to :meth:`fit` cannot be repeated.
+            callbacks: Callbacks invoked in sequence during model execution.
 
         Returns:
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        callbacks = tuple(callbacks)
+        for callback in callbacks:
+            callback.on_predict_start(self)
+
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
 
@@ -309,6 +330,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 compute_stream.wait_stream(transfer_stream)
 
             outs: list[TableTensor] = []
+            model_kwargs = cast(dict[str, Any], self._cache["kwargs"])
+            if callbacks:
+                model_kwargs = {**model_kwargs, "callbacks": callbacks}
             for i, query in enumerate(queries):
                 cache, next_cache = next_cache, None
                 assert cache is not None
@@ -338,8 +362,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     related_query_tables=query.related_tables,
                     cache=cache,
                     generator=None,
-                    **cast(dict[str, Any], self._cache["kwargs"]),
-                    **kwargs,
+                    **model_kwargs,
                 )
 
                 if x.is_cuda:
@@ -366,7 +389,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
         with torch.amp.autocast(x.device.type, enabled=False):
-            return recipe_execution.transform_output(outs)
+            prediction = recipe_execution.transform_output(outs)
+
+        for callback in callbacks:
+            callback.on_predict_end(self, prediction)
+        return prediction
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""

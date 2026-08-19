@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -7,7 +8,7 @@ import torch
 import sdm.processing as sp
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.models import ICLModel
+from sdm.models import Callback, ICLModel
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -17,6 +18,7 @@ class _Call:
     x_query: TableTensor | None
     related_context_tables: RelatedTables | None
     related_query_tables: RelatedTables | None
+    callbacks: Sequence[Callback]
 
 
 class _RecordingModel(ICLModel):
@@ -45,6 +47,10 @@ class _RecordingModel(ICLModel):
                 x_query=x_query,
                 related_context_tables=related_context_tables,
                 related_query_tables=related_query_tables,
+                callbacks=cast(
+                    Sequence[Callback],
+                    kwargs.get("callbacks", ()),
+                ),
             )
         )
         table = x_query if x_query is not None else x_context
@@ -206,6 +212,80 @@ def test_model_recipe_generator_does_not_advance_global_rng(
     _fit_draws(seed=0, cached=cached)
 
     assert torch.equal(torch.get_rng_state(), state)
+
+
+def test_callback() -> None:
+    class _Callback(Callback):
+        def __init__(
+            self,
+            name: str,
+            events: list[str],
+        ) -> None:
+            self.name = name
+            self.events = events
+
+        def _record(self, event: str) -> None:
+            self.events.append(f"{self.name}_{event}")
+
+        def on_forward_start(self, model: torch.nn.Module, /) -> None:
+            self._record("forward_start")
+
+        def on_forward_end(
+            self,
+            model: torch.nn.Module,
+            prediction: TableTensor,
+            /,
+        ) -> None:
+            self._record("forward_end")
+
+        def on_predict_start(self, model: torch.nn.Module, /) -> None:
+            self._record("predict_start")
+
+        def on_predict_end(
+            self,
+            model: torch.nn.Module,
+            prediction: TableTensor,
+            /,
+        ) -> None:
+            self._record("predict_end")
+
+    x_context = torch.tensor([[0.0], [2.0]])
+    y_context = torch.tensor([[0.0], [1.0]])
+    x_query = torch.tensor([[3.0]])
+    events: list[str] = []
+    callbacks = (
+        _Callback("first", events=events),
+        _Callback("second", events=events),
+    )
+    model = _RecordingModel()
+
+    output = model(x_context, y_context, x_query, callbacks=callbacks)
+    with pytest.raises(TypeError, match="not supported"):
+        model.fit(x_context, y_context, callbacks=callbacks)
+    model.fit(x_context, y_context)
+    prediction = model.predict(x_query, callbacks=callbacks)
+    with pytest.raises(RuntimeError, match="not yet fitted"):
+        _RecordingModel().predict(x_query, callbacks=callbacks)
+
+    torch.testing.assert_close(output.numerical, torch.tensor([[[3.0]]]))
+    torch.testing.assert_close(prediction.numerical, output.numerical)
+    assert [call.callbacks for call in model.calls] == [
+        callbacks,
+        (),
+        callbacks,
+    ]
+    assert events == [
+        "first_forward_start",
+        "second_forward_start",
+        "first_forward_end",
+        "second_forward_end",
+        "first_predict_start",
+        "second_predict_start",
+        "first_predict_end",
+        "second_predict_end",
+        "first_predict_start",
+        "second_predict_start",
+    ]
 
 
 def test_related_table_preprocessing_forward_and_cache() -> None:
