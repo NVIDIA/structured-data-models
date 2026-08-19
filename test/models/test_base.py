@@ -81,25 +81,23 @@ class MyCallback(Callback):
     def _record(self, event: str) -> None:
         self.events.append(f"{self.name}_{event}")
 
-    def on_forward_start(self, model: torch.nn.Module, /) -> None:
+    def on_forward_start(self, model: torch.nn.Module) -> None:
         self._record("forward_start")
 
     def on_forward_end(
         self,
         model: torch.nn.Module,
         prediction: TableTensor,
-        /,
     ) -> None:
         self._record("forward_end")
 
-    def on_predict_start(self, model: torch.nn.Module, /) -> None:
+    def on_predict_start(self, model: torch.nn.Module) -> None:
         self._record("predict_start")
 
     def on_predict_end(
         self,
         model: torch.nn.Module,
         prediction: TableTensor,
-        /,
     ) -> None:
         self._record("predict_end")
 
@@ -108,7 +106,6 @@ class MyCallback(Callback):
         model: torch.nn.Module,
         x: TableTensor,
         related_tables: RelatedTables | None,
-        /,
     ) -> tuple[TableTensor, RelatedTables | None]:
         self._record("after_preprocessing")
         return (
