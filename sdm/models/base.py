@@ -10,7 +10,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.models.callback import Callback
+from sdm.callbacks import Callback
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -197,8 +197,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
-        if "callbacks" in kwargs:
-            raise TypeError("Callbacks are not supported by 'fit()'")
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
         if not isinstance(x, TableTensor):
