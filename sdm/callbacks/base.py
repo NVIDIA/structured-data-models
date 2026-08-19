@@ -1,8 +1,13 @@
-from typing import Any
+import contextlib
+import functools
+from collections.abc import Callable, Sequence
+from typing import Any, TypeVar, cast
 
 import torch
 
 from sdm import RelatedTables, TableTensor
+
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 class Callback:
@@ -14,9 +19,28 @@ class Callback:
     attempted call, the end hook runs once after a successful call, and
     preprocessing hooks run once per ensemble member.
 
-    Callbacks supplied together run in sequence order, and each preprocessing
-    result is passed to the next callback.
+    Callbacks supplied together run in sequence order, each preprocessing
+    result is passed to the next callback, and their execution contexts enter
+    in sequence order and exit in reverse order.
     """
+
+    def execution_context(
+        self,
+        model: torch.nn.Module,
+        /,
+    ) -> contextlib.AbstractContextManager[None]:
+        """Return a fresh context manager for one model call.
+
+        The context encloses all callback hooks and model execution and must
+        not suppress exceptions.
+
+        Args:
+            model: Model receiving the callback.
+
+        Returns:
+            Context manager for the public model call.
+        """
+        return contextlib.nullcontext()
 
     def on_forward_start(
         self,
@@ -65,3 +89,21 @@ class Callback:
             model.
         """
         return x, related_tables
+
+
+def _callback_contexts(function: _F) -> _F:
+    @functools.wraps(function)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        callbacks = kwargs.get("callbacks")
+        if not callbacks:
+            return function(*args, **kwargs)
+
+        callbacks = tuple(cast(Sequence[Callback], callbacks))
+        kwargs["callbacks"] = callbacks
+        model = cast(torch.nn.Module, args[0])
+        with contextlib.ExitStack() as stack:
+            for callback in callbacks:
+                stack.enter_context(callback.execution_context(model))
+            return function(*args, **kwargs)
+
+    return cast(_F, wrapper)

@@ -11,6 +11,7 @@ from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.callbacks import Callback
+from sdm.callbacks.base import _callback_contexts
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -40,6 +41,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     @inference_mode()
+    @_callback_contexts
     def forward(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
@@ -179,7 +181,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         return prediction
 
-    @inference_mode()
+    @inference_mode(False)
+    @torch.no_grad()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
@@ -268,6 +271,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self._cache = cache.freeze()
 
     @inference_mode()
+    @_callback_contexts
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
