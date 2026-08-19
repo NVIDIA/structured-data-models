@@ -23,16 +23,17 @@ from torch.nn.functional import cosine_similarity
 
 import sdm
 
-DATASETS: list[tuple[int, str]] = [
+# (name, data_id, task_type)
+DATASETS: list[tuple[str, int, str]] = [
     # Classification
-    (23, "classification"),  # cmc (1.4K rows, 3 classes)
-    (181, "classification"),  # yeast (1.5K rows, 10 classes)
-    (40691, "classification"),  # wine-quality-white (1.6K rows, 6 classes)
-    (31, "classification"),  # credit-g (1K rows, 2 classes)
+    ("cmc", 23, "classification"),
+    ("yeast", 181, "classification"),
+    ("wine-quality-white", 40691, "classification"),
+    ("credit-g", 31, "classification"),
     # Regression
-    (546, "regression"),  # pol (576 rows)
-    (42570, "regression"),  # superconductor (4.2K rows)
-    (41540, "regression"),  # house_prices (166K rows)
+    ("pol", 546, "regression"),
+    ("superconductor", 42570, "regression"),
+    ("house_prices", 41540, "regression"),
 ]
 
 COMPRESSION_METHODS = ["mean_pool", "top_k", "no_compress"]
@@ -267,12 +268,9 @@ def main() -> None:
 
     all_results: list[dict[str, object]] = []
 
-    for data_id, task in DATASETS:
-        name = f"openml-{data_id}"
+    for name, data_id, task in DATASETS:
         print(f"\n{'=' * 70}")
         print(f"=== {name} ({task}) ===")
-
-        context_query_cache = None
 
         for compression in COMPRESSION_METHODS:
             print(f"\nCompression: {compression}")
