@@ -26,6 +26,9 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 # Testing
 
 - Tests should be sensitive to behavior changes and insensitive to structure changes. Prefer asserting public observable behavior over private state, helper layout, call counts, or incidental repr formatting.
+- Before writing a test, decide the assertion first: assert on output shape, values, device, or dtype. If the assertion references internal attributes, mock call counts, or kwargs dicts, rewrite it to assert on the output. Remove tests for error paths the base class or type system already enforces.
+- Prefer real objects over complex mocks. If a test requires a multi-method fake plus monkeypatching, that usually signals you're testing internals rather than behavior.
+- Use the simplest possible test data. Prefer inline construction (`torch.eye(...)`, `TableTensor.from_tensor(...)`) over custom builder helpers.
 - Do not set seeds in tests unless they must require them.
 
 # PR / GitHub Metadata
@@ -73,6 +76,7 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 # Python/PyTorch Coding Style
 
 - Keep Python code typed at function and method boundaries.
+- Before adding a constructor parameter, verify the implementation cannot derive the value from what it already has. Before adding a validation check, name the specific bad input that would be silently accepted with wrong semantics without it — if you cannot name one, the check is redundant.
 - Keep argument validation minimal. Prefer type annotations and clear downstream failures over defensive checks.
 - Do not validate `Literal` (or equivalent closed string sets) at construction; type checkers catch invalid values. When dispatching on a `Literal`, use `assert` / `raise` only in the unreachable `else` branch for exhaustiveness.
 - Add an explicit runtime check only when a bad value could otherwise be silently accepted with wrong semantics (e.g. a count mismatch that remaps members incorrectly). Do not add positivity, finiteness, range, or shape checks that fail on first use anyway.
@@ -85,6 +89,9 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - Add short tensor shape comments for complex tensor operations.
 - Document public constructor parameters.
 - Docs, errors, and reprs should describe public operations, inputs, outputs, and values rather than incidental implementation details.
+- Before implementing an operation (a `__torch_dispatch__` op, a processor `_transform`, a library wrapper), read neighboring implementations in the same file or module. If the codebase already has an established pattern (e.g., `decompose()` for composite dispatch ops, library-native batching for embedding), use it rather than reimplementing the same logic.
+- When building an output tensor column-by-column or block-by-block, pre-allocate with `torch.empty` and slice-assign rather than appending to a list and calling `torch.cat`.
+- Use Sphinx `:class:` and `:meth:` cross-references for types and methods in docstrings rather than inline code or URLs.
 - Keep code direct and use the narrowest practical scope. Introduce abstractions only when they encapsulate behavior or invariants, define a public interface, or serve established reuse.
 - In `__init__.py`, order imports and `__all__` in dependency order: base classes/mixins first, then concrete; never alphabetically.
 
