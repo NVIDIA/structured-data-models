@@ -77,8 +77,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
-        if callbacks is None:
-            callbacks = ()
+        callbacks = () if callbacks is None else callbacks
         for callback in callbacks:
             callback.on_forward_start(self)
 
@@ -283,8 +282,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
-        if callbacks is None:
-            callbacks = ()
+        callbacks = () if callbacks is None else callbacks
         for callback in callbacks:
             callback.on_predict_start(self)
 
