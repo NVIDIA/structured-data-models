@@ -332,9 +332,6 @@ class EnsembleTable:
     def concatenate_columns(cls, tables: Sequence[Self]) -> Self:
         r"""Concatenate ensemble tables column-wise by logical member.
 
-        Ensemble tables without columns do not affect the result when at
-        least one input contains columns.
-
         Args:
             tables: Ensemble tables with the same number of logical members.
 
