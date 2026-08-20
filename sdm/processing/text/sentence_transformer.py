@@ -11,6 +11,7 @@ import torch
 from torch import Tensor
 
 from sdm import StringTensor, Stype, TableTensor
+from sdm._warnings import warn_once
 from sdm.processing import Processor
 
 if TYPE_CHECKING:
@@ -36,25 +37,22 @@ class _WordPieceTokenizer:
         cls,
         model: sentence_transformers.SentenceTransformer,
     ) -> _WordPieceTokenizer | None:
-        """Build a GPU-compatible tokenizer from a
-        :class:`sentence_transformers.SentenceTransformer
-        <sentence_transformers.sentence_transformer.model.SentenceTransformer>`
-        WordPiece model.
-
-        Args:
-            model: :class:`sentence_transformers.SentenceTransformer
-                <sentence_transformers.sentence_transformer.model.SentenceTransformer>`
-                model whose tokenizer and vocabulary are extracted.
-        """
-        if importlib.util.find_spec("cudf") is None:
-            return None
-
         from transformers import PreTrainedTokenizerFast  # noqa: PLC0415
 
         tokenizer = model.tokenizer
         if not isinstance(tokenizer, PreTrainedTokenizerFast):
             return None
         if tokenizer.backend_tokenizer.model.__class__.__name__ != "WordPiece":
+            return None
+        if importlib.util.find_spec("cudf") is None:
+            warn_once(
+                key="on-device-tokenization-available-but-cudf-unavailable",
+                message=(
+                    "cuDF supports accelerating tokenization of the specified "
+                    "model's tokenizer. However, cuDF is not installed. "
+                    "To enable on-device tokenization, install cuDF."
+                ),
+            )
             return None
 
         import cudf
@@ -78,19 +76,6 @@ class _WordPieceTokenizer:
         )
 
     def tokenize(self, text: StringTensor) -> tuple[Tensor, Tensor]:
-        """Produce model-ready inputs from raw strings on GPU.
-
-        Tokenize via cuDF's
-        :class:`~cudf.core.wordpiece_tokenize.WordPieceVocabulary` and frame
-        the raw tokens into BERT-ready (input_ids, attention_mask) tensors.
-        Null strings are treated as empty.
-
-        Args:
-            text: Flat :class:`~sdm.StringTensor` on a CUDA device.
-
-        Returns:
-            ``(input_ids, attention_mask)`` with shape ``[N, max_length]``.
-        """
         device = text.device
         num_strings = text.numel()
 
