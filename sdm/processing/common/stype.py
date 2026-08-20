@@ -77,6 +77,16 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         )
         self._active_routes: tuple[str, ...] | None = None
 
+    def get_extra_state(
+        self,
+    ) -> tuple[str, ...] | None:
+        r""":meta private:"""  # noqa: D415
+        return self._active_routes
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        self._active_routes = cast(tuple[str, ...] | None, state)
+
     def _find_active_routes(
         self,
         ensemble_table: EnsembleTable,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 import torch
 
@@ -57,6 +57,35 @@ class Processor(torch.nn.Module, abc.ABC):
         raise TypeError(
             f"Input must be a 'Processor', callable, or sequence of them "
             f"(got '{type(processor).__name__}')"
+        )
+
+    def _load_from_state_dict(
+        self,
+        state_dict: dict[str, Any],
+        prefix: str,
+        local_metadata: dict[str, Any],
+        strict: bool,
+        missing_keys: list[str],
+        unexpected_keys: list[str],
+        error_msgs: list[str],
+    ) -> None:
+        # Resize dynamically shaped buffers before PyTorch copies saved values.
+        for name, buffer in self._buffers.items():
+            state = state_dict.get(f"{prefix}{name}")
+            if (
+                buffer is not None
+                and isinstance(state, torch.Tensor)
+                and buffer.shape != state.shape
+            ):
+                buffer.resize_(state.shape)
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
         )
 
     def _check_is_fitted(self) -> None:
