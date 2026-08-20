@@ -28,7 +28,7 @@ class Callback:
         self,
         model: torch.nn.Module,
     ) -> contextlib.AbstractContextManager[None]:
-        """Return a fresh context manager for one model call.
+        """Return a context manager for one model call.
 
         The context encloses all callback hooks and model execution and must
         not suppress exceptions.
