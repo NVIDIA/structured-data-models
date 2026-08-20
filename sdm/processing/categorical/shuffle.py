@@ -39,9 +39,7 @@ class ShuffleCategories(EnsembleProcessor):
         self._permutations: BufferList[BufferList[Tensor]] = BufferList()
         self._permutation_ids: tuple[int, ...] = ()
 
-    def get_extra_state(
-        self,
-    ) -> tuple[int, ...]:
+    def get_extra_state(self) -> tuple[int, ...]:
         r""":meta private:"""  # noqa: D415
         return self._permutation_ids
 

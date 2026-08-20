@@ -66,15 +66,23 @@ class TFIDF(EnsembleProcessor):
         self.ngram_range = ngram_range
         self.max_features = max_features
         self.lowercase = lowercase
+        self.register_buffer(
+            "_idf_template",
+            torch.empty(0),
+            persistent=False,
+        )
         self._states = torch.nn.ModuleList()
         self._member_state_ids: tuple[int, ...] = ()
 
     def get_extra_state(
         self,
-    ) -> tuple[tuple[tuple[pa.Array, ...], ...], tuple[int, ...]]:
+    ) -> tuple[tuple[tuple[tuple[str, ...], ...], ...], tuple[int, ...]]:
         r""":meta private:"""  # noqa: D415
         vocabularies = tuple(
-            tuple(cast(_TFIDFState, state).vocabularies)
+            tuple(
+                tuple(cast(list[str], vocabulary.to_pylist()))
+                for vocabulary in cast(_TFIDFState, state).vocabularies
+            )
             for state in self._states
         )
         return (
@@ -86,7 +94,7 @@ class TFIDF(EnsembleProcessor):
         r""":meta private:"""  # noqa: D415
         vocabularies, member_state_ids = cast(
             tuple[
-                tuple[tuple[pa.Array, ...], ...],
+                tuple[tuple[tuple[str, ...], ...], ...],
                 tuple[int, ...],
             ],
             state,
@@ -94,9 +102,12 @@ class TFIDF(EnsembleProcessor):
         self._states = torch.nn.ModuleList(
             [
                 _TFIDFState(
-                    list(state_vocabularies),
                     [
-                        torch.empty(len(vocabulary))
+                        pa.array(vocabulary, type=pa.large_string())
+                        for vocabulary in state_vocabularies
+                    ],
+                    [
+                        self._idf_template.new_empty(len(vocabulary))
                         for vocabulary in state_vocabularies
                     ],
                 )
@@ -299,6 +310,8 @@ class TFIDF(EnsembleProcessor):
             vocabularies.append(vocabulary)
             idfs.append(idf)
 
+        if idfs:
+            self._idf_template = idfs[0].new_empty(0)
         return _TFIDFState(vocabularies, idfs)
 
     def _fit_ensemble(

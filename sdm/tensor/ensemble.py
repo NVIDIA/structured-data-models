@@ -347,6 +347,15 @@ class EnsembleTable:
                 "Cannot concatenate ensemble tables with different member "
                 "counts"
             )
+
+        nonempty_tables = tuple(
+            table
+            for table in tables
+            if any(group.size(-1) > 0 for group in table)
+        )
+        if len(nonempty_tables) > 0:
+            tables = nonempty_tables
+            first = tables[0]
         if len(tables) == 1:
             return first
 
