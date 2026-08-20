@@ -138,3 +138,24 @@ Variance:
 Fix the seed before each forward pass — call torch.manual_seed(seed) and torch.cuda.manual_seed(seed) before every forward pass. This handles PyTorch-level randomness but won't fix CUDA non-determinism from parallel reductions.
 
 Run multiple seeds and average — run each experiment 3-5 times with different train/test splits, report mean and standard deviation. This doesn't eliminate variance but tells you whether a result is real or noise. It's the standard approach in ML benchmarking.
+
+Seeds = [42, 123, 456]
+
+SUMMARY: Mean accuracy/R² per round (averaged across seeds)
+
+cmc R0: 0.446±0.017 | R1: 0.405±0.051 | R2: 0.403±0.060 | R3: 0.416±0.027 | R4: 0.388±0.022 gain: -0.059
+yeast R0: 0.475±0.057 | R1: 0.327±0.011 | R2: 0.379±0.068 | R3: 0.345±0.059 | R4: 0.327±0.030 gain: -0.148
+wine-quality-white R0: 0.681±0.004 | R1: 0.552±0.030 | R2: 0.605±0.012 | R3: 0.571±0.027 | R4: 0.595±0.012 gain: -0.085
+credit-g R0: 0.724±0.034 | R1: 0.591±0.130 | R2: 0.630±0.116 | R3: 0.569±0.077 | R4: 0.572±0.039 gain: -0.152
+pol R0: 0.305±0.086 | R1: 0.305±0.089 | R2: 0.302±0.091 | R3: 0.301±0.091 | R4: 0.300±0.091 gain: -0.005
+superconductor R0: 0.563±0.056 | R1: 0.562±0.056 | R2: 0.562±0.055 | R3: 0.562±0.055 | R4: 0.563±0.054 gain: -0.000
+house_prices R0: 0.492±0.004 | R1: 0.509±0.007 | R2: 0.511±0.005 | R3: 0.506±0.005 | R4: 0.511±0.001 gain: +0.019
+
+Result:
+Classification got worse across the board. Every dataset degraded, some significantly — yeast dropped from 0.475 to 0.327, credit-g from 0.724 to 0.572. Adding pseudo-labeled rows is actively hurting. The model's incorrect predictions become "ground truth" in the next round, reinforcing its mistakes. Classic self-training failure mode — errors compound.
+
+Regression is flat or slightly positive. pol and superconductor didn't move. house_prices showed a small gain (+0.019) that stabilized across rounds — but it's modest relative to the seed variance.
+
+Is this bc the model is confidently learning maybe wrong predictions? The model was never trained with "wrong" labels so it doesn't know how to handle labeles that are wrong.
+
+## Experiment 3: Train nano-TabICLv2 with CoT in jana-test repo
