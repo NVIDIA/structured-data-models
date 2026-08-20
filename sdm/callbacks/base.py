@@ -1,13 +1,9 @@
 import contextlib
-import functools
-from collections.abc import Callable, Sequence
-from typing import Any, TypeVar, cast
+from typing import Any
 
 import torch
 
 from sdm import RelatedTables, TableTensor
-
-_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 class Callback:
@@ -88,22 +84,3 @@ class Callback:
             model.
         """
         return x, related_tables
-
-
-def _callback_contexts(function: _F) -> _F:
-    @functools.wraps(function)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        callbacks = cast(
-            Sequence[Callback] | None,
-            kwargs.get("callbacks"),
-        )
-        if not callbacks:
-            return function(*args, **kwargs)
-
-        model = cast(torch.nn.Module, args[0])
-        with contextlib.ExitStack() as stack:
-            for callback in callbacks:
-                stack.enter_context(callback.execution_context(model))
-            return function(*args, **kwargs)
-
-    return cast(_F, wrapper)

@@ -1,4 +1,5 @@
 import abc
+import contextlib
 import copy
 from collections.abc import Sequence
 from typing import Any, ClassVar, cast
@@ -11,7 +12,6 @@ from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.callbacks import Callback
-from sdm.callbacks.base import _callback_contexts
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -40,9 +40,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self._cache: Cache | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
-    @inference_mode()
-    @_callback_contexts
-    def forward(
+    def _forward_call(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
         y_context: Tensor | TableTensor,  # [..., R_context, 1]
@@ -53,33 +51,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe: Recipe | None = None,
         num_estimators: int = 1,
         generator: torch.Generator | None = None,
-        callbacks: Sequence[Callback] | None = None,
+        callbacks: Sequence[Callback],
         **kwargs: Any,
     ) -> TableTensor:  # Recipe-defined output shape.
-        r"""The in-context learning forward pass.
-
-        Args:
-            x_context: The feature tensor of in-context examples with shape
-                ``[..., R_context, D]`` with ``R_context`` rows and ``D``
-                columns.
-            y_context: The targets of in-context examples with shape
-                ``[..., R_context, 1]``.
-            x_query: The feature tensor of query examples with shape
-                ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
-            related_context_tables: Related context for in-context examples.
-            related_query_tables: Related context for query examples.
-            recipe: The custom recipe for pre- and post-processing.
-            num_estimators: The number of estimators ``E`` for ensembling.
-            generator: Pseudorandom number generator used for sampling during
-                pre-processing and model execution.
-            callbacks: Callbacks applied in sequence to this model call.
-            kwargs: Additional keyword arguments passed to the model.
-
-        Returns:
-            The processed prediction after applying ``recipe.output`` to the
-            stacked estimator outputs with shape ``[E, ..., R_query, *]``.
-        """
-        callbacks = () if callbacks is None else callbacks
         for callback in callbacks:
             callback.on_forward_start(
                 self,
@@ -181,6 +155,61 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         return prediction
 
+    @inference_mode()
+    def forward(
+        self,
+        x_context: Tensor | TableTensor,  # [..., R_context, D]
+        y_context: Tensor | TableTensor,  # [..., R_context, 1]
+        x_query: Tensor | TableTensor,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None = None,
+        related_query_tables: RelatedTables | None = None,
+        *,
+        recipe: Recipe | None = None,
+        num_estimators: int = 1,
+        generator: torch.Generator | None = None,
+        callbacks: Sequence[Callback] | None = None,
+        **kwargs: Any,
+    ) -> TableTensor:  # Recipe-defined output shape.
+        r"""The in-context learning forward pass.
+
+        Args:
+            x_context: The feature tensor of in-context examples with shape
+                ``[..., R_context, D]`` with ``R_context`` rows and ``D``
+                columns.
+            y_context: The targets of in-context examples with shape
+                ``[..., R_context, 1]``.
+            x_query: The feature tensor of query examples with shape
+                ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
+            related_context_tables: Related context for in-context examples.
+            related_query_tables: Related context for query examples.
+            recipe: The custom recipe for pre- and post-processing.
+            num_estimators: The number of estimators ``E`` for ensembling.
+            generator: Pseudorandom number generator used for sampling during
+                pre-processing and model execution.
+            callbacks: Callbacks applied in sequence to this model call.
+            kwargs: Additional keyword arguments passed to the model.
+
+        Returns:
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R_query, *]``.
+        """
+        callbacks = () if callbacks is None else callbacks
+        with contextlib.ExitStack() as stack:
+            for callback in callbacks:
+                stack.enter_context(callback.execution_context(self))
+            return self._forward_call(
+                x_context=x_context,
+                y_context=y_context,
+                x_query=x_query,
+                related_context_tables=related_context_tables,
+                related_query_tables=related_query_tables,
+                recipe=recipe,
+                num_estimators=num_estimators,
+                generator=generator,
+                callbacks=callbacks,
+                **kwargs,
+            )
+
     @inference_mode(False)
     @torch.no_grad()
     def fit(
@@ -270,32 +299,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         self._cache = cache.freeze()
 
-    @inference_mode()
-    @_callback_contexts
-    def predict(
+    def _predict_call(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
         *,
-        callbacks: Sequence[Callback] | None = None,
+        callbacks: Sequence[Callback],
     ) -> TableTensor:  # Recipe-defined output shape.
-        r"""Predict unseen query examples.
-
-        .. note::
-
-            This method requires a prior call to :meth:`fit`.
-
-        Args:
-            x: The feature tensor of query examples with shape
-                ``[..., R, D]`` with ``R`` rows and ``D`` columns.
-            related_tables: Related context for query examples.
-            callbacks: Callbacks applied in sequence to this model call.
-
-        Returns:
-            The processed prediction after applying ``recipe.output`` to the
-            stacked estimator outputs with shape ``[E, ..., R, *]``.
-        """
-        callbacks = () if callbacks is None else callbacks
         for callback in callbacks:
             callback.on_forward_start(
                 self,
@@ -427,6 +437,40 @@ class ICLModel(torch.nn.Module, abc.ABC):
             callback.on_forward_end(self, prediction)
 
         return prediction
+
+    @inference_mode()
+    def predict(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
+    ) -> TableTensor:  # Recipe-defined output shape.
+        r"""Predict unseen query examples.
+
+        .. note::
+
+            This method requires a prior call to :meth:`fit`.
+
+        Args:
+            x: The feature tensor of query examples with shape
+                ``[..., R, D]`` with ``R`` rows and ``D`` columns.
+            related_tables: Related context for query examples.
+            callbacks: Callbacks applied in sequence to this model call.
+
+        Returns:
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R, *]``.
+        """
+        callbacks = () if callbacks is None else callbacks
+        with contextlib.ExitStack() as stack:
+            for callback in callbacks:
+                stack.enter_context(callback.execution_context(self))
+            return self._predict_call(
+                x=x,
+                related_tables=related_tables,
+                callbacks=callbacks,
+            )
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""

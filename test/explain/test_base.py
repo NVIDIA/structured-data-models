@@ -16,7 +16,6 @@ class _AutogradCallback(Callback):
     def execution_context(
         self,
         model: torch.nn.Module,
-        /,
     ) -> contextlib.AbstractContextManager[None]:
         return torch.inference_mode(False)
 
