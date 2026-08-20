@@ -25,16 +25,14 @@ class _AutogradCallback(Callback):
         x: TableTensor,
         related_tables: RelatedTables | None,
     ) -> tuple[TableTensor, RelatedTables | None]:
-        assert torch.is_inference_mode_enabled()
-        self.input = x.numerical.detach().requires_grad_()
-        return x.replace_blocks(numerical=self.input), related_tables
+        self.input = x.numerical.requires_grad_()
+        return x, related_tables
 
     def on_forward_end(
         self,
         model: torch.nn.Module,
         prediction: TableTensor,
     ) -> None:
-        assert not torch.is_inference_mode_enabled()
         torch.autograd.grad(prediction.numerical.sum(), self.input)
         self.completed = True
 

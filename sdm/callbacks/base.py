@@ -17,7 +17,7 @@ class Callback:
 
     Callbacks supplied together run in sequence order, each preprocessing
     result is passed to the next callback, and their execution contexts enter
-    after preprocessing hooks.
+    before lifecycle hooks in sequence order and exit in reverse order.
     """
 
     def execution_context(
@@ -26,14 +26,14 @@ class Callback:
     ) -> contextlib.AbstractContextManager[None]:
         """Return a context manager for one model call.
 
-        The context encloses model execution, output postprocessing, and end
-        hooks.
+        The context encloses all callback hooks and model execution and must
+        not suppress exceptions.
 
         Args:
             model: Model receiving the callback.
 
         Returns:
-            Context manager for model execution.
+            Context manager for the public model call.
         """
         return contextlib.nullcontext()
 
