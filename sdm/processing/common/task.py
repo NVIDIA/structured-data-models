@@ -101,7 +101,7 @@ class TaskDispatch(EnsembleProcessor):
         r""":meta private:"""  # noqa: D415
         return self._task
 
-    def set_extra_state(self, state: str | None) -> None:
+    def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
         self._task = cast(
             Literal["classification", "regression"] | None,

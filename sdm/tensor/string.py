@@ -35,6 +35,7 @@ class StringTensor(VarLenTensor):
 
     # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
+    __hash__ = Tensor.__hash__
 
     @override
     @classmethod

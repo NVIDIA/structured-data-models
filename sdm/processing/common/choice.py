@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch.nn import ModuleList
@@ -39,6 +39,14 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         )
         self.method = method
         self._option_ids: tuple[int, ...] = ()
+
+    def get_extra_state(self) -> tuple[int, ...]:
+        r""":meta private:"""  # noqa: D415
+        return self._option_ids
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        self._option_ids = cast(tuple[int, ...], state)
 
     def _draw_option_ids(
         self,
