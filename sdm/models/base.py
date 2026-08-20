@@ -1,5 +1,4 @@
 import abc
-import contextlib
 import copy
 from collections.abc import Sequence
 from typing import Any, ClassVar, cast
@@ -12,6 +11,7 @@ from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.callbacks import Callback
+from sdm.callbacks.base import _callback_contexts
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -41,6 +41,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     @inference_mode()
+    @_callback_contexts
     def forward(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
@@ -96,99 +97,89 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
+        if not isinstance(x_context, TableTensor):
+            x_context = TableTensor.from_tensor(x_context)
+        if not isinstance(y_context, TableTensor):
+            y_context = TableTensor.from_tensor(y_context)
+        if not isinstance(x_query, TableTensor):
+            x_query = TableTensor.from_tensor(x_query)
+
         if (related_context_tables is None) != (related_query_tables is None):
             raise ValueError(
                 "Expected 'related_context_tables' and 'related_query_tables' "
                 "to be provided together"
             )
 
-        with contextlib.ExitStack() as stack:
-            for callback in callbacks:
-                stack.enter_context(callback.execution_context(self))
-
-            if not isinstance(x_context, TableTensor):
-                x_context = TableTensor.from_tensor(x_context)
-            if not isinstance(y_context, TableTensor):
-                y_context = TableTensor.from_tensor(y_context)
-            if not isinstance(x_query, TableTensor):
-                x_query = TableTensor.from_tensor(x_query)
-
-            if related_query_tables is not None:
-                assert related_context_tables is not None
-                related_query_tables = related_query_tables.select_tables(
-                    tables=related_context_tables.tables
-                )
-
-            recipe_execution = RecipeExecution(
-                self.default_recipe()
-                if recipe is None
-                else copy.deepcopy(recipe)
+        if related_query_tables is not None:
+            assert related_context_tables is not None
+            related_query_tables = related_query_tables.select_tables(
+                tables=related_context_tables.tables
             )
-            with torch.amp.autocast(x_query.device.type, enabled=False):
-                contexts = recipe_execution.fit_transform(
-                    x=x_context,
-                    y=y_context,
-                    related_tables=related_context_tables,
-                    num_members=num_estimators,
-                    generator=generator,
-                )
-                queries = recipe_execution.transform(
-                    x=x_query,
-                    related_tables=related_query_tables,
-                )
 
-            outs: list[TableTensor] = []
-            for context, query in zip(contexts, queries):
-                self._validate_context(
-                    x=context.x,
-                    y=context.y,
-                    related_tables=context.related_tables,
-                )
-                x_query = query.x
-                related_query_tables = query.related_tables
-                for callback in callbacks:
-                    x_query, related_query_tables = (
-                        callback.on_preprocessing_end(
-                            self,
-                            x_query,
-                            related_query_tables,
-                        )
-                    )
-                self._validate_query(
-                    x_context=context.x.schema,
-                    x_query=x_query,
-                    related_context_tables=context.related_tables.schema
-                    if context.related_tables is not None
-                    else None,
-                    related_query_tables=related_query_tables,
-                )
-                out = self._forward(
-                    x_context=context.x,
-                    y_context=context.y,
-                    x_query=x_query,
-                    related_context_tables=context.related_tables,
-                    related_query_tables=related_query_tables,
-                    cache=None,
-                    generator=generator,
-                    **kwargs,
-                )
-                out = cast(TableTensor, out.to(x_query.dtype))
-                outs.append(out)
+        recipe_execution = RecipeExecution(
+            self.default_recipe() if recipe is None else copy.deepcopy(recipe)
+        )
+        with torch.amp.autocast(x_query.device.type, enabled=False):
+            contexts = recipe_execution.fit_transform(
+                x=x_context,
+                y=y_context,
+                related_tables=related_context_tables,
+                num_members=num_estimators,
+                generator=generator,
+            )
+            queries = recipe_execution.transform(
+                x=x_query,
+                related_tables=related_query_tables,
+            )
 
-            # Regression: invert target before stacking estimator outputs.
-            if contexts[0].y.numerical.size(-1) > 0:
-                with torch.amp.autocast(x_query.device.type, enabled=False):
-                    outs = list(
-                        recipe_execution.inverse_transform_target(outs)
-                    )
-
-            with torch.amp.autocast(x_query.device.type, enabled=False):
-                prediction = recipe_execution.transform_output(outs)
-
+        outs: list[TableTensor] = []
+        for context, query in zip(contexts, queries):
+            self._validate_context(
+                x=context.x,
+                y=context.y,
+                related_tables=context.related_tables,
+            )
+            x_query = query.x
+            related_query_tables = query.related_tables
             for callback in callbacks:
-                callback.on_forward_end(self, prediction)
+                x_query, related_query_tables = callback.on_preprocessing_end(
+                    self,
+                    x_query,
+                    related_query_tables,
+                )
+            self._validate_query(
+                x_context=context.x.schema,
+                x_query=x_query,
+                related_context_tables=context.related_tables.schema
+                if context.related_tables is not None
+                else None,
+                related_query_tables=related_query_tables,
+            )
+            out = self._forward(
+                x_context=context.x,
+                y_context=context.y,
+                x_query=x_query,
+                related_context_tables=context.related_tables,
+                related_query_tables=related_query_tables,
+                cache=None,
+                generator=generator,
+                **kwargs,
+            )
+            out = cast(TableTensor, out.to(x_query.dtype))
+            outs.append(out)
 
-            return prediction
+        # Regression: invert target before stacking estimator outputs.
+        if contexts[0].y.numerical.size(-1) > 0:
+            with torch.amp.autocast(x_query.device.type, enabled=False):
+                outs = list(recipe_execution.inverse_transform_target(outs))
+
+        with torch.amp.autocast(x_query.device.type, enabled=False):
+            prediction = recipe_execution.transform_output(outs)
+
+        for callback in callbacks:
+            callback.on_forward_end(self, prediction)
+
+        return prediction
 
     @inference_mode(False)
     @torch.no_grad()
@@ -280,6 +271,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self._cache = cache.freeze()
 
     @inference_mode()
+    @_callback_contexts
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
@@ -312,141 +304,129 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 callbacks=callbacks,
             )
 
+        if not isinstance(x, TableTensor):
+            x = TableTensor.from_tensor(x)
+
         if self._cache is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} not yet fitted. Make sure to "
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
-        with contextlib.ExitStack() as stack:
-            for callback in callbacks:
-                stack.enter_context(callback.execution_context(self))
+        if related_tables is not None:
+            if cast(Cache, self._cache[0])["related_tables_schema"] is None:
+                raise ValueError(
+                    "Expected related tables to be provided together"
+                )
+            related_tables = related_tables.select_tables(
+                tables=cast(
+                    RelatedTablesSchema,
+                    cast(Cache, self._cache[0])["related_tables_schema"],
+                ).tables,
+            )
 
-            if not isinstance(x, TableTensor):
-                x = TableTensor.from_tensor(x)
+        num_estimators = cast(int, self._cache["num_estimators"])
+        caches = [cast(Cache, self._cache[i]) for i in range(num_estimators)]
+        next_cache = caches[0]
 
-            if related_tables is not None:
-                if (
-                    cast(Cache, self._cache[0])["related_tables_schema"]
-                    is None
-                ):
-                    raise ValueError(
-                        "Expected related tables to be provided together"
+        compute_stream: torch.cuda.Stream | None = None
+        transfer_stream: torch.cuda.Stream | None = None
+        try:
+            if x.is_cuda:
+                compute_stream = torch.cuda.current_stream(x.device)
+                if x.device not in self._transfer_streams:
+                    transfer_stream = torch.cuda.Stream(x.device)
+                    self._transfer_streams[x.device] = transfer_stream
+                else:
+                    transfer_stream = self._transfer_streams[x.device]
+                with torch.cuda.stream(transfer_stream):
+                    next_cache = next_cache.to(x.device, non_blocking=True)
+
+            recipe_execution = cast(
+                RecipeExecution,
+                self._cache["recipe_execution"],
+            )
+            with torch.amp.autocast(x.device.type, enabled=False):
+                queries = recipe_execution.transform(x, related_tables)
+
+            if x.is_cuda:
+                assert compute_stream is not None
+                assert transfer_stream is not None
+                compute_stream.wait_stream(transfer_stream)
+
+            outs: list[TableTensor] = []
+            for i, query in enumerate(queries):
+                cache, next_cache = next_cache, None
+                assert cache is not None
+
+                x_query = query.x
+                related_query_tables = query.related_tables
+                for callback in callbacks:
+                    x_query, related_query_tables = (
+                        callback.on_preprocessing_end(
+                            self,
+                            x_query,
+                            related_query_tables,
+                        )
                     )
-                related_tables = related_tables.select_tables(
-                    tables=cast(
+                self._validate_query(
+                    x_context=cast(TableSchema, cache["x_schema"]),
+                    x_query=x_query,
+                    related_context_tables=cast(
                         RelatedTablesSchema,
-                        cast(Cache, self._cache[0])["related_tables_schema"],
-                    ).tables,
+                        cache["related_tables_schema"],
+                    ),
+                    related_query_tables=related_query_tables,
                 )
 
-            num_estimators = cast(int, self._cache["num_estimators"])
-            caches = [
-                cast(Cache, self._cache[i]) for i in range(num_estimators)
-            ]
-            next_cache = caches[0]
-
-            compute_stream: torch.cuda.Stream | None = None
-            transfer_stream: torch.cuda.Stream | None = None
-            try:
-                if x.is_cuda:
-                    compute_stream = torch.cuda.current_stream(x.device)
-                    if x.device not in self._transfer_streams:
-                        transfer_stream = torch.cuda.Stream(x.device)
-                        self._transfer_streams[x.device] = transfer_stream
-                    else:
-                        transfer_stream = self._transfer_streams[x.device]
+                if i + 1 < num_estimators:
+                    next_cache = caches[i + 1]
+                if x.is_cuda and next_cache is not None:
+                    assert transfer_stream is not None
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
-                recipe_execution = cast(
-                    RecipeExecution,
-                    self._cache["recipe_execution"],
+                out = self._forward(
+                    x_context=None,
+                    y_context=None,
+                    x_query=x_query,
+                    related_context_tables=None,
+                    related_query_tables=related_query_tables,
+                    cache=cache,
+                    generator=None,
+                    **cast(dict[str, Any], self._cache["kwargs"]),
                 )
-                with torch.amp.autocast(x.device.type, enabled=False):
-                    queries = recipe_execution.transform(x, related_tables)
 
                 if x.is_cuda:
+                    assert compute_stream is not None
+                    for tensor in cache._tensors():
+                        tensor.record_stream(compute_stream)
+
+                out = cast(TableTensor, out.to(x_query.dtype))
+                outs.append(out)
+
+                if x.is_cuda and next_cache is not None:
                     assert compute_stream is not None
                     assert transfer_stream is not None
                     compute_stream.wait_stream(transfer_stream)
 
-                outs: list[TableTensor] = []
-                for i, query in enumerate(queries):
-                    cache, next_cache = next_cache, None
-                    assert cache is not None
+        except BaseException:
+            if transfer_stream is not None:
+                transfer_stream.synchronize()
+            raise
 
-                    x_query = query.x
-                    related_query_tables = query.related_tables
-                    for callback in callbacks:
-                        x_query, related_query_tables = (
-                            callback.on_preprocessing_end(
-                                self,
-                                x_query,
-                                related_query_tables,
-                            )
-                        )
-                    self._validate_query(
-                        x_context=cast(TableSchema, cache["x_schema"]),
-                        x_query=x_query,
-                        related_context_tables=cast(
-                            RelatedTablesSchema,
-                            cache["related_tables_schema"],
-                        ),
-                        related_query_tables=related_query_tables,
-                    )
-
-                    if i + 1 < num_estimators:
-                        next_cache = caches[i + 1]
-                    if x.is_cuda and next_cache is not None:
-                        dev = x.device
-                        assert transfer_stream is not None
-                        with torch.cuda.stream(transfer_stream):
-                            next_cache = next_cache.to(dev, non_blocking=True)
-
-                    out = self._forward(
-                        x_context=None,
-                        y_context=None,
-                        x_query=x_query,
-                        related_context_tables=None,
-                        related_query_tables=related_query_tables,
-                        cache=cache,
-                        generator=None,
-                        **cast(dict[str, Any], self._cache["kwargs"]),
-                    )
-
-                    if x.is_cuda:
-                        assert compute_stream is not None
-                        for tensor in cache._tensors():
-                            tensor.record_stream(compute_stream)
-
-                    out = cast(TableTensor, out.to(x_query.dtype))
-                    outs.append(out)
-
-                    if x.is_cuda and next_cache is not None:
-                        assert compute_stream is not None
-                        assert transfer_stream is not None
-                        compute_stream.wait_stream(transfer_stream)
-
-            except BaseException:
-                if transfer_stream is not None:
-                    transfer_stream.synchronize()
-                raise
-
-            # Regression: invert target before stacking estimator outputs.
-            if cast(Cache, self._cache[0])["classes"] is None:
-                with torch.amp.autocast(x.device.type, enabled=False):
-                    outs = list(
-                        recipe_execution.inverse_transform_target(outs)
-                    )
-
+        # Regression: invert target before stacking estimator outputs.
+        if cast(Cache, self._cache[0])["classes"] is None:
             with torch.amp.autocast(x.device.type, enabled=False):
-                prediction = recipe_execution.transform_output(outs)
+                outs = list(recipe_execution.inverse_transform_target(outs))
 
-            for callback in callbacks:
-                callback.on_forward_end(self, prediction)
+        with torch.amp.autocast(x.device.type, enabled=False):
+            prediction = recipe_execution.transform_output(outs)
 
-            return prediction
+        for callback in callbacks:
+            callback.on_forward_end(self, prediction)
+
+        return prediction
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""

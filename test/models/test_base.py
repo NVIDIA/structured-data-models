@@ -261,10 +261,10 @@ def test_model_recipe_generator_does_not_advance_global_rng(
 
 def test_callback() -> None:
     events: list[str] = []
-    callbacks = (
+    callbacks = [
         MyCallback("1", scale=1.0, offset=1.0, events=events),
         MyCallback("2", scale=2.0, offset=0.0, events=events),
-    )
+    ]
     model = _RecordingModel()
     x_context = torch.tensor([[0.0], [2.0]])
     y_context = torch.tensor([[0.0], [1.0]])
