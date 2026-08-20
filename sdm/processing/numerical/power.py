@@ -127,6 +127,79 @@ def _yeojohnson_log_likelihood(
     )
 
 
+def _optimize_lambdas(
+    inp: Tensor,
+    constant_features: Tensor,
+) -> Tensor:
+    # Reuse the sign-specific log terms across all likelihood evaluations;
+    # the golden-section search only changes the per-feature lambdas.
+    positive_log = inp.clamp_min(0).log1p()
+    negative_log = (-inp).clamp_min(0).log1p()
+    log_jacobian = torch.where(inp >= 0, positive_log, -negative_log).sum(
+        dim=-2,
+        keepdim=True,
+    )
+
+    left, right = _yeojohnson_bounds(inp)
+    identity = torch.ones_like(left)
+    left = torch.where(constant_features, identity, left)
+    right = torch.where(constant_features, identity, right)
+
+    invphi = (math.sqrt(5) - 1) / 2
+    c = right - invphi * (right - left)
+    d = left + invphi * (right - left)
+    fc = _yeojohnson_log_likelihood(
+        inp,
+        c,
+        positive_log,
+        negative_log,
+        log_jacobian,
+    )
+    fd = _yeojohnson_log_likelihood(
+        inp,
+        d,
+        positive_log,
+        negative_log,
+        log_jacobian,
+    )
+
+    for _ in range(_YEOJOHNSON_OPTIMIZATION_STEPS):
+        choose_right = fc < fd
+        old_fc = fc
+        old_fd = fd
+        # Keep the search fully vectorized: each feature independently
+        # chooses its next interval without per-column Python branching.
+        left_next = torch.where(choose_right, c, left)
+        right_next = torch.where(choose_right, right, d)
+        c_next = torch.where(
+            choose_right,
+            d,
+            right_next - invphi * (right_next - left_next),
+        )
+        d_next = torch.where(
+            choose_right,
+            left_next + invphi * (right_next - left_next),
+            c,
+        )
+        new_point = torch.where(choose_right, d_next, c_next)
+        new_score = _yeojohnson_log_likelihood(
+            inp,
+            new_point,
+            positive_log,
+            negative_log,
+            log_jacobian,
+        )
+        fc = torch.where(choose_right, old_fd, new_score)
+        fd = torch.where(choose_right, new_score, old_fc)
+        left = left_next
+        right = right_next
+        c = c_next
+        d = d_next
+
+    lambdas = (left + right) / 2
+    return torch.where(constant_features, identity, lambdas)
+
+
 class PowerTransform(Processor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
@@ -156,73 +229,7 @@ class PowerTransform(Processor, InvertibleMixin):
         inp: Tensor,
         constant_features: Tensor,
     ) -> Tensor:
-        # Reuse the sign-specific log terms across all likelihood evaluations;
-        # the golden-section search only changes the per-feature lambdas.
-        positive_log = inp.clamp_min(0).log1p()
-        negative_log = (-inp).clamp_min(0).log1p()
-        log_jacobian = torch.where(inp >= 0, positive_log, -negative_log).sum(
-            dim=-2,
-            keepdim=True,
-        )
-
-        left, right = _yeojohnson_bounds(inp)
-        identity = torch.ones_like(left)
-        left = torch.where(constant_features, identity, left)
-        right = torch.where(constant_features, identity, right)
-
-        invphi = (math.sqrt(5) - 1) / 2
-        c = right - invphi * (right - left)
-        d = left + invphi * (right - left)
-        fc = _yeojohnson_log_likelihood(
-            inp,
-            c,
-            positive_log,
-            negative_log,
-            log_jacobian,
-        )
-        fd = _yeojohnson_log_likelihood(
-            inp,
-            d,
-            positive_log,
-            negative_log,
-            log_jacobian,
-        )
-
-        for _ in range(_YEOJOHNSON_OPTIMIZATION_STEPS):
-            choose_right = fc < fd
-            old_fc = fc
-            old_fd = fd
-            # Keep the search fully vectorized: each feature independently
-            # chooses its next interval without per-column Python branching.
-            left_next = torch.where(choose_right, c, left)
-            right_next = torch.where(choose_right, right, d)
-            c_next = torch.where(
-                choose_right,
-                d,
-                right_next - invphi * (right_next - left_next),
-            )
-            d_next = torch.where(
-                choose_right,
-                left_next + invphi * (right_next - left_next),
-                c,
-            )
-            new_point = torch.where(choose_right, d_next, c_next)
-            new_score = _yeojohnson_log_likelihood(
-                inp,
-                new_point,
-                positive_log,
-                negative_log,
-                log_jacobian,
-            )
-            fc = torch.where(choose_right, old_fd, new_score)
-            fd = torch.where(choose_right, new_score, old_fc)
-            left = left_next
-            right = right_next
-            c = c_next
-            d = d_next
-
-        lambdas = (left + right) / 2
-        return torch.where(constant_features, identity, lambdas)
+        return _optimize_lambdas(inp, constant_features)
 
     def _fit(
         self,

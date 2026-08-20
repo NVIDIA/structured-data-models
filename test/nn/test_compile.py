@@ -63,9 +63,18 @@ def test_qassmax_compile(
 
 
 @withCUDA
-def test_rotary_embedding_compile(device: torch.device) -> None:
-    module = RotaryEmbedding(channels=4, layout="split_half", device=device)
-    x = torch.randn(2, 5, 3, 4, device=device)
+@pytest.mark.parametrize("partial_rotary_factor", [1.0, 0.25])
+def test_rotary_embedding_compile(
+    device: torch.device,
+    partial_rotary_factor: float,
+) -> None:
+    module = RotaryEmbedding(
+        channels=16,
+        layout="split_half",
+        partial_rotary_factor=partial_rotary_factor,
+        device=device,
+    )
+    x = torch.randn(2, 5, 3, 16, device=device)
 
     expected = module(x)
     out = fullgraph(module)(x)
@@ -92,11 +101,15 @@ def test_sdpa_compile(
     channels = 4
     num_query_heads = 4
     module = SDPA(
-        channels=channels,
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
-        qassmax=qassmax,
-        device=device,
+        query_scaling=QASSMax(
+            channels,
+            num_query_heads,
+            device=device,
+        )
+        if qassmax
+        else None,
     )
 
     kv_heads = num_key_value_heads or num_query_heads
@@ -150,7 +163,9 @@ def test_attention_compile(
         channels=channels,
         num_query_heads=4,
         num_key_value_heads=num_key_value_heads,
-        qassmax=qassmax,
+        query_scaling=QASSMax(channels // 4, num_heads=4, device=device)
+        if qassmax
+        else None,
         device=device,
     )
     query = torch.randn(2, 3, channels, device=device)
@@ -206,8 +221,10 @@ def test_transformer_block_compile(
     module = TransformerBlock(
         channels=channels,
         num_query_heads=2,
-        feedforward_channels=16,
-        qassmax=qassmax,
+        mlp=torch.nn.Identity(),
+        query_scaling=QASSMax(channels // 2, num_heads=2, device=device)
+        if qassmax
+        else None,
         device=device,
     )
     query = torch.randn(2, 3, channels, device=device)
@@ -251,10 +268,20 @@ def test_induced_transformer_block_compile(
     channels = 8
     module = InducedTransformerBlock(
         channels=channels,
-        num_query_heads=2,
-        feedforward_channels=16,
         num_inducing_points=4,
-        qassmax=True,
+        inducing_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            mlp=torch.nn.Identity(),
+            query_scaling=QASSMax(channels // 2, num_heads=2, device=device),
+            device=device,
+        ),
+        output_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            mlp=torch.nn.Identity(),
+            device=device,
+        ),
         device=device,
     )
     query = torch.randn(2, 6, channels, device=device)

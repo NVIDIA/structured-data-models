@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sdm.nn import InducedTransformerBlock
+from sdm.nn import InducedTransformerBlock, TransformerBlock
 from sdm.testing import withCUDA
 
 
@@ -9,21 +9,25 @@ def _randomize_residual_exits(module: InducedTransformerBlock) -> None:
     # The production modules intentionally start as residual identities. Make
     # attention and MLP outputs non-zero so equivalence exercises cache data.
     with torch.no_grad():
-        for block in (module.transformer_1, module.transformer_2):
+        for block in (module.inducing_block, module.output_block):
             block.attn.out_lin.weight.normal_(std=0.05)
             block.attn.out_lin.bias.normal_(std=0.05)
-            mlp_out = block.mlp[-1]
-            assert isinstance(mlp_out, torch.nn.Linear)
-            mlp_out.weight.normal_(std=0.05)
-            mlp_out.bias.normal_(std=0.05)
+            # `mlp` is caller-injected, so find its last Linear (if any)
+            # rather than assuming a Sequential.
+            linears = [
+                m
+                for m in block.mlp.modules()
+                if isinstance(m, torch.nn.Linear)
+            ]
+            if linears:
+                linears[-1].weight.normal_(std=0.05)
+                linears[-1].bias.normal_(std=0.05)
 
 
 @withCUDA
 @pytest.mark.parametrize("num_key_value_heads", [None, 1])
-@pytest.mark.parametrize("qassmax", [False, True])
 def test_induced_transformer_block(
     device: torch.device,
-    qassmax: bool,
     num_key_value_heads: int | None,
 ) -> None:
     batch_size = 2
@@ -31,11 +35,21 @@ def test_induced_transformer_block(
     channels = 8
     module = InducedTransformerBlock(
         channels=channels,
-        num_query_heads=2,
-        num_key_value_heads=num_key_value_heads,
-        feedforward_channels=16,
         num_inducing_points=4,
-        qassmax=qassmax,
+        inducing_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            num_key_value_heads=num_key_value_heads,
+            mlp=torch.nn.Identity(),
+            device=device,
+        ),
+        output_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            num_key_value_heads=num_key_value_heads,
+            mlp=torch.nn.Identity(),
+            device=device,
+        ),
         device=device,
     )
     query = torch.randn(batch_size, set_size, channels, device=device)
@@ -73,9 +87,17 @@ def test_induced_transformer_block_kv_cache() -> None:
     num_inducing_points = 4
     module = InducedTransformerBlock(
         channels=channels,
-        num_query_heads=num_heads,
-        feedforward_channels=16,
         num_inducing_points=num_inducing_points,
+        inducing_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=num_heads,
+            mlp=torch.nn.Identity(),
+        ),
+        output_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=num_heads,
+            mlp=torch.nn.Identity(),
+        ),
     )
 
     query = torch.randn(batch_size, set_size, channels)
@@ -172,9 +194,25 @@ def test_induced_transformer_block_batch_size_limit(
     dtype = torch.float64
     module = InducedTransformerBlock(
         channels=channels,
-        num_query_heads=num_heads,
-        feedforward_channels=16,
         num_inducing_points=num_inducing_points,
+        inducing_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=num_heads,
+            mlp=torch.nn.Linear(
+                channels, channels, device=device, dtype=dtype
+            ),
+            device=device,
+            dtype=dtype,
+        ),
+        output_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=num_heads,
+            mlp=torch.nn.Linear(
+                channels, channels, device=device, dtype=dtype
+            ),
+            device=device,
+            dtype=dtype,
+        ),
         device=device,
         dtype=dtype,
     ).eval()

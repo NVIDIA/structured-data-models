@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
+from typing import Literal
 
+import pytest
 import torch
 
 from sdm import NaT, Stype, TableTensor
@@ -11,7 +13,8 @@ def _timestamp(value: datetime) -> int:
     return int(value.timestamp() * 1_000_000)
 
 
-def test_add_calendar_fields_channels_and_missing_values() -> None:
+@pytest.mark.parametrize("encoding", ["raw", "cyclic"])
+def test_add_calendar_fields(encoding: Literal["raw", "cyclic"]) -> None:
     table = TableTensor(
         datetime=torch.tensor(
             [
@@ -23,27 +26,44 @@ def test_add_calendar_fields_channels_and_missing_values() -> None:
         ),
     )
 
-    output = AddCalendarFields(
-        fields=["minute", "hour", "weekday", "day_of_month", "month"]
-    ).transform(table)
+    encoder = AddCalendarFields(
+        fields=["minute", "hour", "weekday", "day_of_month", "month"],
+        encoding=encoding,
+    )
+    output = encoder.transform(table)
 
-    assert output.columns[Stype.datetime] == ("dt_0",)
-    assert output.columns[Stype.numerical] == (
-        "dt_0__minute",
-        "dt_0__hour",
-        "dt_0__weekday",
-        "dt_0__day_of_month",
-        "dt_0__month",
-    )
-    torch.testing.assert_close(
-        output.numerical,
-        torch.tensor(
-            [
-                [59, 23, 3, 28, 1],
-                [0, 0, 2, 0, 2],
-                [1, 23, 2, 30, 11],
-                [float("NaN")] * 5,
-            ]
-        ),
-        equal_nan=True,
-    )
+    if encoding == "raw":
+        assert output.columns[Stype.datetime] == ("dt_0",)
+        assert output.columns[Stype.numerical] == (
+            "dt_0__minute",
+            "dt_0__hour",
+            "dt_0__weekday",
+            "dt_0__day_of_month",
+            "dt_0__month",
+        )
+        torch.testing.assert_close(
+            output.numerical,
+            torch.tensor(
+                [
+                    [59, 23, 3, 28, 1],
+                    [0, 0, 2, 0, 2],
+                    [1, 23, 2, 30, 11],
+                    [float("NaN")] * 5,
+                ]
+            ),
+            equal_nan=True,
+        )
+    else:
+        assert output.columns[Stype.datetime] == ("dt_0",)
+        assert output.columns[Stype.numerical] == (
+            "dt_0__minute__sin",
+            "dt_0__minute__cos",
+            "dt_0__hour__sin",
+            "dt_0__hour__cos",
+            "dt_0__weekday__sin",
+            "dt_0__weekday__cos",
+            "dt_0__day_of_month__sin",
+            "dt_0__day_of_month__cos",
+            "dt_0__month__sin",
+            "dt_0__month__cos",
+        )

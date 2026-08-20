@@ -14,10 +14,10 @@ from typing_extensions import override
 from sdm.tensor import StringTensor, VarLenTensor
 from sdm.tensor.io import (
     arrow_as_tensor,
+    combine_arrow_chunks,
     to_arrow,
     to_cudf,
 )
-from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 if TYPE_CHECKING:
     import cudf
@@ -157,7 +157,7 @@ class CategoricalTensor(Tensor):
         device = torch.device("cpu" if device is None else device)
 
         if isinstance(array, pa.ChunkedArray):
-            array = _combine_arrow_chunks(array)
+            array = combine_arrow_chunks(array)
 
         encoded = array.dictionary_encode()
         code = arrow_as_tensor(
@@ -443,6 +443,13 @@ def _isfinite(inp: CategoricalTensor) -> Tensor:
 @preserve_view_inference_mode
 def _alias(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(aten.alias.default(inp._code), inp._categories)
+
+
+@CategoricalTensor.implements(aten.record_stream.default)
+def _record_stream(inp: CategoricalTensor, stream: torch.Stream) -> None:
+    inp._code.record_stream(stream)
+    for category in inp._categories:
+        category.record_stream(stream)
 
 
 @CategoricalTensor.implements(aten.to.dtype_layout)

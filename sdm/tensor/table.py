@@ -986,6 +986,12 @@ def _alias(inp: TableTensor) -> TableTensor:
     )
 
 
+@TableTensor.implements(aten.record_stream.default)
+def _record_stream(inp: TableTensor, stream: torch.Stream) -> None:
+    for _, tensor in inp.items():
+        tensor.record_stream(stream)
+
+
 @TableTensor.implements(aten.to.dtype_layout)
 def _to_dtype_layout(
     inp: TableTensor,
