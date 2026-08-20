@@ -173,6 +173,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.processing.base.Processor"><code class="docutils literal notranslate"><span class="pre">Processor</span></code></a><ul>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.handles_stypes"><code class="docutils literal notranslate"><span class="pre">Processor.handles_stypes</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.requires_fit"><code class="docutils literal notranslate"><span class="pre">Processor.requires_fit</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.base.Processor.is_fitted"><code class="docutils literal notranslate"><span class="pre">Processor.is_fitted</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.as_processor"><code class="docutils literal notranslate"><span class="pre">Processor.as_processor()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.fit"><code class="docutils literal notranslate"><span class="pre">Processor.fit()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.transform"><code class="docutils literal notranslate"><span class="pre">Processor.transform()</span></code></a></li>
@@ -241,6 +242,12 @@ stypes outside of <a class="reference internal" href="#sdm.processing.base.Proce
 <dt class="sig sig-object py" id="sdm.processing.base.Processor.requires_fit">
 <span class="sig-name descname"><span class="pre">requires_fit</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><a class="headerlink" href="#sdm.processing.base.Processor.requires_fit" title="Link to this definition">#</a></dt>
 <dd><p>Whether this processor requires fitting.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.processing.base.Processor.is_fitted">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_fitted</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><a class="headerlink" href="#sdm.processing.base.Processor.is_fitted" title="Link to this definition">#</a></dt>
+<dd><p>Whether the processor has all state required for transformation.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -356,7 +363,7 @@ and a sequence of processor-like objects is normalized to
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=905ba679"></script>
+      <script src="../../_static/documentation_options.js?v=c03c314b"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
