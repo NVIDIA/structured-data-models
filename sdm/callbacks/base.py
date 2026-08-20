@@ -27,7 +27,6 @@ class Callback:
     def execution_context(
         self,
         model: torch.nn.Module,
-        /,
     ) -> contextlib.AbstractContextManager[None]:
         """Return a fresh context manager for one model call.
 
