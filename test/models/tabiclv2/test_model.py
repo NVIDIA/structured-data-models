@@ -30,10 +30,16 @@ def _randomize_residual_exits(model: torch.nn.Module) -> None:
                 continue
             block.attn.out_lin.weight.normal_(std=0.05)
             block.attn.out_lin.bias.normal_(std=0.05)
-            mlp_out = block.mlp[-1]
-            assert isinstance(mlp_out, torch.nn.Linear)
-            mlp_out.weight.normal_(std=0.05)
-            mlp_out.bias.normal_(std=0.05)
+            # `mlp` is caller-injected, so find its last Linear (if any)
+            # rather than assuming a Sequential.
+            linears = [
+                m
+                for m in block.mlp.modules()
+                if isinstance(m, torch.nn.Linear)
+            ]
+            if linears:
+                linears[-1].weight.normal_(std=0.05)
+                linears[-1].bias.normal_(std=0.05)
 
 
 @withCUDA

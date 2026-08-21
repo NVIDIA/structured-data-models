@@ -7,7 +7,7 @@ from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.tensor import (
     VarLenTensor,
     StringTensor,
-    NullableIntTensor,
+    NullableTensor,
     CategoricalTensor,
     ColumnarTensor,
     TableTensor,
@@ -19,7 +19,7 @@ from sdm.relational import (
     RelatedTables,
 )
 from sdm.processing import Recipe
-from sdm import evaluation, models
+from sdm import models, evaluation, explain
 
 try:
     __version__ = version("structured-data-models")
@@ -33,7 +33,7 @@ __all__ = [
     "infer_stypes",
     "VarLenTensor",
     "StringTensor",
-    "NullableIntTensor",
+    "NullableTensor",
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
@@ -42,7 +42,8 @@ __all__ = [
     "TaskLink",
     "RelatedTables",
     "Recipe",
-    "evaluation",
     "models",
+    "evaluation",
+    "explain",
     "__version__",
 ]

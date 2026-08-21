@@ -11,8 +11,12 @@ from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import override
 
-from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
-from sdm.tensor.io.arrow import _combine_arrow_chunks
+from sdm.tensor.io import (
+    ARROW_TORCH_DTYPES,
+    arrow_as_tensor,
+    combine_arrow_chunks,
+    to_arrow,
+)
 
 aten = torch.ops.aten
 
@@ -282,7 +286,7 @@ class VarLenTensor(Tensor):
             device: The device.
         """
         if isinstance(array, pa.ChunkedArray):
-            array = _combine_arrow_chunks(array)
+            array = combine_arrow_chunks(array)
 
         if size is None:
             size = (len(array),)
@@ -311,9 +315,16 @@ class VarLenTensor(Tensor):
 
         buffer = array.values.buffers()[1]
         if buffer is not None and buffer.size > 0:
-            data = torch.frombuffer(buffer, dtype=dtype)
-            start = array.values.offset
-            data = data[start : start + len(array.values)].to(device)
+            if dtype == torch.bool:
+                data = arrow_as_tensor(
+                    array.values,
+                    dtype=dtype,
+                    device=device,
+                )
+            else:
+                data = torch.frombuffer(buffer, dtype=dtype)
+                start = array.values.offset
+                data = data[start : start + len(array.values)].to(device)
         else:
             data = torch.empty(0, dtype=dtype, device=device)
 
@@ -692,6 +703,14 @@ def _alias(inp: VarLenTensor) -> VarLenTensor:
     )
 
 
+@VarLenTensor.implements(aten.record_stream.default)
+def _record_stream(inp: VarLenTensor, stream: torch.Stream) -> None:
+    inp._data.record_stream(stream)
+    inp._offset.record_stream(stream)
+    if inp._valid is not None:
+        inp._valid.record_stream(stream)
+
+
 @VarLenTensor.implements(aten.to.dtype_layout)
 def _to_dtype_layout(
     inp: VarLenTensor,
@@ -951,7 +970,7 @@ def _isfinite(inp: VarLenTensor) -> Tensor:
             dtype=torch.bool,
             device=inp.device,
         )
-    return valid
+    return valid.clone()
 
 
 @VarLenTensor.implements(aten.equal.default)

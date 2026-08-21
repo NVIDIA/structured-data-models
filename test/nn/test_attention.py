@@ -58,40 +58,6 @@ def test_attention_transforms(device: torch.device) -> None:
 
 @withCUDA
 @pytest.mark.parametrize(
-    "key_len_fn",
-    [
-        lambda: 4,
-        lambda: torch.tensor([[1, 2, 0], [3, 4, 1]]),
-        lambda: torch.tensor([[4], [1]], dtype=torch.int32),
-    ],
-)
-def test_qassmax(
-    device: torch.device,
-    key_len_fn: Callable[[], Tensor | int],
-) -> None:
-    channels = 2
-    num_heads = 3
-    module = QASSMax(
-        channels=channels,
-        num_heads=num_heads,
-        hidden_channels=4,
-        device=device,
-    )
-
-    query = torch.randn(2, 3, num_heads, channels, device=device)
-
-    key_len = key_len_fn()
-    if isinstance(key_len, Tensor):
-        key_len = key_len.to(device)
-
-    out = module(query, key_len)
-    assert out.shape == query.shape
-    assert out.dtype == query.dtype
-    assert out.device == query.device
-
-
-@withCUDA
-@pytest.mark.parametrize(
     "num_key_value_heads",
     [
         pytest.param(None, id="mha"),
@@ -106,7 +72,6 @@ def test_sdpa(
     channels = 3
     num_query_heads = 4
     module = SDPA(
-        channels=channels,
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
     )
@@ -248,12 +213,7 @@ def test_sdpa_scale(device: torch.device) -> None:
     channels = 4
     num_heads = 2
     scale = 1.0
-    module = SDPA(
-        channels=channels,
-        num_query_heads=num_heads,
-        scale=scale,
-        device=device,
-    )
+    module = SDPA(num_query_heads=num_heads, scale=scale)
     query = torch.randn(2, 3, num_heads, channels, device=device)
     key = torch.randn(2, 5, num_heads, channels, device=device)
     value = torch.randn(2, 5, num_heads, channels, device=device)
@@ -272,7 +232,7 @@ def test_sdpa_scale(device: torch.device) -> None:
 def test_sdpa_errors() -> None:
     channels = 3
     num_heads = 2
-    module = SDPA(channels=channels, num_query_heads=num_heads)
+    module = SDPA(num_query_heads=num_heads)
 
     query = torch.randn(1, 2, num_heads, channels)
     key = torch.randn(1, 2, num_heads, channels)
@@ -311,7 +271,7 @@ def test_sdpa_errors() -> None:
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
-        SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
+        SDPA(num_query_heads=4, num_key_value_heads=3)
 
 
 def test_sdpa_batch_size_limit() -> None:
@@ -319,7 +279,6 @@ def test_sdpa_batch_size_limit() -> None:
     num_query_heads = 4
     num_key_value_heads = 2
     module = SDPA(
-        channels=channels,
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
     ).eval()
@@ -369,7 +328,7 @@ def test_sdpa_batch_size_limit() -> None:
 
 
 def test_batch_size_limit_autocast_dtype() -> None:
-    sdpa = SDPA(channels=3, num_query_heads=2).eval()
+    sdpa = SDPA(num_query_heads=2).eval()
     query = torch.randn(5, 3, 2, 3)
     key = torch.randn(5, 4, 2, 3)
     value = torch.randn(5, 4, 2, 3)
@@ -416,7 +375,7 @@ def test_sdpa_batch_size_limit_bypass(
     compiling: bool,
     batch_size_limit: int | None,
 ) -> None:
-    module = SDPA(channels=3, num_query_heads=2)
+    module = SDPA(num_query_heads=2)
     module.train(training)
     query = torch.randn(5, 3, 2, 3)
     key = torch.randn(5, 4, 2, 3)
@@ -458,14 +417,18 @@ def test_attention(
 ) -> None:
     channels = 8
     num_query_heads = 4
-    dtype = torch.float32
     module = Attention(
         channels=channels,
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
-        qassmax=qassmax,
+        query_scaling=QASSMax(
+            channels // num_query_heads,
+            num_query_heads,
+            device=device,
+        )
+        if qassmax
+        else None,
         device=device,
-        dtype=dtype,
     )
     if num_key_value_heads is None:
         num_key_value_heads = num_query_heads
@@ -473,8 +436,8 @@ def test_attention(
     expected_qkv = (num_query_heads + 2 * num_key_value_heads) * head_dim
     assert module.qkv_lin.out_features == expected_qkv
 
-    query = torch.randn(2, 4, channels, dtype=dtype, device=device)
-    key_value = torch.randn(2, 5, channels, dtype=dtype, device=device)
+    query = torch.randn(2, 4, channels, device=device)
+    key_value = torch.randn(2, 5, channels, device=device)
     attn_mask = torch.randint(0, 2, (2, 4, 5), dtype=torch.bool, device=device)
 
     out = module(query=query, key_value=None)
@@ -491,7 +454,7 @@ def test_attention(
     assert out.dtype == query.dtype
     assert out.device == query.device
 
-    query = torch.randn(2, 4, channels, dtype=dtype, device=device)
+    query = torch.randn(2, 4, channels, device=device)
     out = module(query=query, key_value=query)
     assert out.shape == query.shape
     assert out.dtype == query.dtype
@@ -505,7 +468,9 @@ def test_attention_kv_cache(qassmax: bool) -> None:
     module = Attention(
         channels=channels,
         num_query_heads=num_heads,
-        qassmax=qassmax,
+        query_scaling=QASSMax(channels // num_heads, num_heads)
+        if qassmax
+        else None,
     )
 
     with torch.no_grad():
@@ -600,7 +565,7 @@ def test_attention_empty_query_chunked_kv_cache() -> None:
         lambda: TransformerBlock(
             channels=8,
             num_query_heads=2,
-            feedforward_channels=16,
+            mlp=torch.nn.Identity(),
         ),
     ],
     ids=["attention", "transformer-block"],
@@ -695,7 +660,8 @@ def test_attention_batch_size_limit_propagation() -> None:
         TransformerBlock(
             channels=channels,
             num_query_heads=num_heads,
-            feedforward_channels=16,
+            mlp=torch.nn.Identity(),
+            query_norm=torch.nn.LayerNorm(channels),
         ),
     )
 
@@ -708,8 +674,11 @@ def test_attention_batch_size_limit_propagation() -> None:
         expected = module(query=query)
 
         outer_module = (
-            module.qkv_lin if isinstance(module, Attention) else module.q_norm
+            module.qkv_lin
+            if isinstance(module, Attention)
+            else module.query_norm
         )
+        assert outer_module is not None
         outer_batch_sizes: list[int] = []
         handle = outer_module.register_forward_pre_hook(
             lambda _module, args, batch_sizes=outer_batch_sizes: (
@@ -746,12 +715,14 @@ def test_transformer_block_batch_size_limit_bypass(
     module = TransformerBlock(
         channels=8,
         num_query_heads=2,
-        feedforward_channels=16,
+        mlp=torch.nn.Identity(),
+        query_norm=torch.nn.LayerNorm(8),
     )
     module.train(training)
     query = torch.randn(5, 3, 8)
     batch_sizes: list[int] = []
-    handle = module.q_norm.register_forward_pre_hook(
+    assert module.query_norm is not None
+    handle = module.query_norm.register_forward_pre_hook(
         lambda _module, args: batch_sizes.append(args[0].size(0))
     )
 
@@ -774,7 +745,7 @@ def test_return_key_value_positional_compatibility() -> None:
         TransformerBlock(
             channels=channels,
             num_query_heads=2,
-            feedforward_channels=16,
+            mlp=torch.nn.Identity(),
         ),
     )
 
@@ -786,25 +757,26 @@ def test_return_key_value_positional_compatibility() -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("norm", ["layer_norm", "rms_norm"])
 @pytest.mark.parametrize("qassmax", [False, True])
-def test_transformer_block(
-    device: torch.device,
-    norm: str,
-    qassmax: bool,
-) -> None:
+def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     batch_size = 2
     query_len = 3
     key_value_len = 5
     channels = 8
     num_heads = 2
-    feedforward_channels = 16
     module = TransformerBlock(
         channels=channels,
         num_query_heads=num_heads,
-        feedforward_channels=feedforward_channels,
-        qassmax=qassmax,
-        norm=norm,
+        mlp=torch.nn.Sequential(
+            torch.nn.Linear(channels, 16, device=device),
+            torch.nn.ReLU(),
+            torch.nn.Linear(16, channels, device=device),
+        ),
+        query_norm=torch.nn.LayerNorm(channels, device=device),
+        key_value_norm=torch.nn.LayerNorm(channels, device=device),
+        query_scaling=QASSMax(channels // num_heads, num_heads, device=device)
+        if qassmax
+        else None,
         device=device,
     )
     query = torch.randn(batch_size, query_len, channels, device=device)
@@ -873,52 +845,6 @@ def test_transformer_block(
     torch.testing.assert_close(out1, out3)
 
 
-def test_transformer_block_norm_kwargs_precedence() -> None:
-    # User-provided `norm_kwargs` win over the `device`/`dtype` arguments.
-    module = TransformerBlock(
-        channels=8,
-        num_query_heads=2,
-        feedforward_channels=16,
-        norm_kwargs={"dtype": torch.float64},
-    )
-    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
-        assert next(norm.parameters()).dtype == torch.float64
-
-    # The `dtype` argument still applies when `norm_kwargs` does not set it.
-    module = TransformerBlock(
-        channels=8,
-        num_query_heads=2,
-        feedforward_channels=16,
-        norm_kwargs={"eps": 1e-6},
-        dtype=torch.float64,
-    )
-    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
-        assert next(norm.parameters()).dtype == torch.float64
-
-
-def test_transformer_block_norm_callable() -> None:
-    # A norm class is instantiated per site, so no site shares an instance.
-    module = TransformerBlock(
-        channels=8,
-        num_query_heads=2,
-        feedforward_channels=16,
-        norm=torch.nn.RMSNorm,
-        norm_kwargs={"eps": 1e-6, "dtype": torch.float64},
-    )
-    norms = (module.q_norm, module.kv_norm, module.mlp[0])
-    for norm in norms:
-        assert isinstance(norm, torch.nn.RMSNorm)
-        assert norm.normalized_shape == (8,)
-        assert norm.eps == 1e-6
-        assert next(norm.parameters()).dtype == torch.float64
-    assert len({id(norm) for norm in norms}) == 3
-
-    param_ids = [{id(param) for param in norm.parameters()} for norm in norms]
-    assert param_ids[0].isdisjoint(param_ids[1])
-    assert param_ids[0].isdisjoint(param_ids[2])
-    assert param_ids[1].isdisjoint(param_ids[2])
-
-
 def test_transformer_block_kv_cache() -> None:
     batch_size = 2
     query_len = 3
@@ -928,7 +854,7 @@ def test_transformer_block_kv_cache() -> None:
     module = TransformerBlock(
         channels=channels,
         num_query_heads=num_heads,
-        feedforward_channels=16,
+        mlp=torch.nn.Identity(),
     )
     with torch.no_grad():
         module.attn.out_lin.weight.copy_(torch.eye(channels))
