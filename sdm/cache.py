@@ -38,19 +38,6 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         return self.__class__(key=fn(self.key), value=fn(self.value))
 
 
-def _iter_cache_tensors(value: object) -> Iterator[Tensor]:
-    if isinstance(value, Tensor):
-        yield value
-    elif isinstance(value, DeviceMixin):
-        yield from value._tensors()
-    elif isinstance(value, list | tuple):
-        for item in value:
-            yield from _iter_cache_tensors(item)
-    elif isinstance(value, Mapping):
-        for item in value.values():
-            yield from _iter_cache_tensors(item)
-
-
 def _apply_cache_value(
     value: object,
     fn: Callable[[Tensor], Tensor],
@@ -159,8 +146,20 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         return repr(self._items)
 
     def _tensors(self) -> Iterator[Tensor]:
+        def _iter_tensors(value: object) -> Iterator[Tensor]:
+            if isinstance(value, Tensor):
+                yield value
+            elif isinstance(value, DeviceMixin):
+                yield from value._tensors()
+            elif isinstance(value, list | tuple):
+                for item in value:
+                    yield from _iter_tensors(item)
+            elif isinstance(value, Mapping):
+                for item in value.values():
+                    yield from _iter_tensors(item)
+
         for value in self.values():
-            yield from _iter_cache_tensors(value)
+            yield from _iter_tensors(value)
 
     def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
         out = self.__class__(
