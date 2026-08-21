@@ -142,15 +142,19 @@ def test_autocast_output_is_float32(
 
 
 # @pytest.mark.parametrize("batch_shape", [(), (2,)])  # TODO Reenable
+@withCUDA
 @pytest.mark.parametrize("batch_shape", [()])
-def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
-    model = TabICLv2(pretrained=False)
+def test_num_estimators(
+    device: torch.device,
+    batch_shape: tuple[int, ...],
+) -> None:
+    model = TabICLv2(pretrained=False, device=device)
 
     R_context, R_query, C = 5, 3, 6
 
-    x_context = torch.randn(*batch_shape, R_context, C)
-    x_query = torch.randn(*batch_shape, R_query, C)
-    y_context = torch.randn(*batch_shape, R_context, 1)
+    x_context = torch.randn(*batch_shape, R_context, C, device=device)
+    x_query = torch.randn(*batch_shape, R_query, C, device=device)
+    y_context = torch.randn(*batch_shape, R_context, 1, device=device)
 
     out = model(x_context, y_context, x_query, num_estimators=2)
     assert out.size() == (*batch_shape, R_query, 999)
@@ -164,6 +168,7 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
 
     out = model.predict(x_query)
     assert out.size() == (*batch_shape, R_query, 999)
+    assert model.predict(x_query).allclose(out)
     model.clear()
 
 

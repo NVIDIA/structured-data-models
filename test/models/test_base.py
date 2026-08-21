@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -464,6 +465,44 @@ def test_predict_validates_cached_input_schema() -> None:
 
     with pytest.raises(ValueError, match="same schema"):
         model.predict(torch.randn(2, 3, 4))
+
+
+def test_repeated_predict_and_deepcopy() -> None:
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    model.fit(x_context, y_context, num_estimators=3)
+    expected = model.predict(x_query)
+
+    first = model.predict(x_query)
+    cloned = copy.deepcopy(model)
+    second = model.predict(x_query)
+
+    assert first.allclose(expected)
+    assert second.allclose(expected)
+    assert cloned.predict(x_query).allclose(expected)
+
+
+def test_predict_cache_manager_reusable_after_error() -> None:
+    class FailingCallback(Callback):
+        def on_preprocessing_end(
+            self,
+            model: torch.nn.Module,
+            x: TableTensor,
+            related_tables: RelatedTables | None,
+        ) -> tuple[TableTensor, RelatedTables | None]:
+            raise RuntimeError("callback failure")
+
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    model.fit(x_context, y_context, num_estimators=2)
+
+    with pytest.raises(RuntimeError, match="callback failure"):
+        model.predict(x_query, callbacks=[FailingCallback()])
+    model.predict(x_query)
 
 
 def test_related_table_validation() -> None:
