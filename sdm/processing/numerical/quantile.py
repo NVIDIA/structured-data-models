@@ -113,12 +113,10 @@ class QuantileTransform(Processor, InvertibleMixin):
         self.register_buffer(
             "_quantiles",
             torch.empty(0),
-            persistent=False,
         )
         self.register_buffer(
             "_references",
             torch.empty(0),
-            persistent=False,
         )
 
     def _subsample_indices(

@@ -117,7 +117,7 @@ class EnsembleProcessor(Processor):
             return self
         if self.requires_fit:
             self._fit_ensemble(ensemble_table, generator=generator)
-            self._fitted = True
+            self._set_fitted(ensemble_table.table(0).device)
         return self
 
     def transform_ensemble(
@@ -165,7 +165,7 @@ class EnsembleProcessor(Processor):
             generator=generator,
         )
         if self.requires_fit:
-            self._fitted = True
+            self._set_fitted(ensemble_table.table(0).device)
         return output
 
 

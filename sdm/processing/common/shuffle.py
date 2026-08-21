@@ -34,6 +34,14 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         self._permutations: BufferList[Tensor] = BufferList()
         self._orders: tuple[tuple[int, ...], ...] = ()
 
+    def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
+        r""":meta private:"""  # noqa: D415
+        return self._orders
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        self._orders = cast(tuple[tuple[int, ...], ...], state)
+
     @property
     def permutation(self) -> Tensor:
         """Return the fitted permutation for a single table."""

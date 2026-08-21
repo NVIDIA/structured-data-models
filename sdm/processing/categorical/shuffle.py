@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
@@ -38,6 +38,14 @@ class ShuffleCategories(EnsembleProcessor):
         self.method = method
         self._permutations: BufferList[BufferList[Tensor]] = BufferList()
         self._permutation_ids: tuple[int, ...] = ()
+
+    def get_extra_state(self) -> tuple[int, ...]:
+        r""":meta private:"""  # noqa: D415
+        return self._permutation_ids
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        self._permutation_ids = cast(tuple[int, ...], state)
 
     def _draw_permutations(
         self,
