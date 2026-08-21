@@ -141,18 +141,17 @@ class NemotronRelational(ICLModel):
     ) -> None:
         super().__init__()
 
-        model_device = "meta" if pretrained else device
         self.cls_model = _NemotronRelational(
             num_classes=10,
             num_quantiles=0,
             norm_bias=True,
-            device=model_device,
+            device="meta" if pretrained else device,
         )
         self.reg_model = _NemotronRelational(
             num_classes=0,
             num_quantiles=999,
             norm_bias=False,
-            device=model_device,
+            device="meta" if pretrained else device,
         )
 
         if pretrained:
@@ -162,14 +161,9 @@ class NemotronRelational(ICLModel):
 
     def _load_from_pretrained(
         self,
-        *,
         device: torch.device | str | None,
     ) -> "NemotronRelational":
-        target_device = (
-            torch.get_default_device()
-            if device is None
-            else torch.device(device)
-        )
+        device = torch.get_default_device() if device is None else device
 
         for variant in ["classifier", "regressor"]:
             path = download_checkpoint(
@@ -177,11 +171,7 @@ class NemotronRelational(ICLModel):
                 filename=f"{variant}.pt",
                 revision="v2.1.1",
             )
-            ckpt = torch.load(
-                path,
-                map_location=target_device,
-                weights_only=True,
-            )
+            ckpt = torch.load(path, map_location=device, weights_only=True)
 
             if variant == "classifier":
                 self.cls_model.load_state_dict(ckpt, assign=True)

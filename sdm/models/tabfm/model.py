@@ -73,10 +73,9 @@ class TabFM(ICLModel):
         super().__init__()
 
         self.task = task
-        model_device = "meta" if checkpoint_path is not None else device
         self.model = _TabFM(
             num_classes=10 if task == "classification" else 0,
-            device=model_device,
+            device="meta" if checkpoint_path is not None else device,
         )
 
         if checkpoint_path is not None:
@@ -97,20 +96,15 @@ class TabFM(ICLModel):
     def _load_from_pretrained(
         self,
         checkpoint_path: str | Path,
-        *,
         device: torch.device | str | None,
     ) -> TabFM:
         from safetensors.torch import load_file  # noqa: PLC0415
 
         from sdm.models.tabfm.ckpt import remap_ckpt  # noqa: PLC0415
 
-        target_device = (
-            torch.get_default_device()
-            if device is None
-            else torch.device(device)
-        )
+        device = torch.get_default_device() if device is None else device
         ckpt = remap_ckpt(
-            ckpt=load_file(checkpoint_path, device=str(target_device)),
+            ckpt=load_file(checkpoint_path, device=str(device)),
             is_classifier=self.task == "classification",
         )
         self.model.load_state_dict(ckpt, strict=True, assign=True)

@@ -122,18 +122,17 @@ class TabICLv2(ICLModel):
     ) -> None:
         super().__init__()
 
-        model_device = "meta" if pretrained else device
         self.cls_model = _TabICLv2(
             num_classes=10,
             num_quantiles=0,
             norm_bias=True,
-            device=model_device,
+            device="meta" if pretrained else device,
         )
         self.reg_model = _TabICLv2(
             num_classes=0,
             num_quantiles=999,
             norm_bias=False,
-            device=model_device,
+            device="meta" if pretrained else device,
         )
 
         if pretrained:
@@ -148,16 +147,11 @@ class TabICLv2(ICLModel):
 
     def _load_from_pretrained(
         self,
-        *,
         device: torch.device | str | None,
     ) -> TabICLv2:
         from sdm.models.tabiclv2.ckpt import remap_ckpt  # noqa: PLC0415
 
-        target_device = (
-            torch.get_default_device()
-            if device is None
-            else torch.device(device)
-        )
+        device = torch.get_default_device() if device is None else device
 
         for variant in ["classifier", "regressor"]:
             path = download_checkpoint(
@@ -166,7 +160,7 @@ class TabICLv2(ICLModel):
             )
             ckpt = torch.load(
                 path,
-                map_location=target_device,
+                map_location=device,
                 weights_only=True,
             )["state_dict"]
 
