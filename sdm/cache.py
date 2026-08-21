@@ -1,14 +1,18 @@
 from collections.abc import (
     Callable,
+    Generator,
     Hashable,
     Iterable,
     Iterator,
     Mapping,
     MutableMapping,
+    Sequence,
 )
+from contextlib import contextmanager
 from enum import StrEnum
 from typing import NamedTuple, Self
 
+import torch
 from torch import Tensor
 
 from sdm.tensor.mixin import DeviceMixin
@@ -158,3 +162,90 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         )
         out._mode = self._mode
         return out
+
+
+class CacheManager:  # noqa: D101
+    def __init__(self) -> None:
+        self._streams: dict[torch.device, torch.cuda.Stream] = {}
+
+    def store(  # noqa: D102
+        self,
+        cache: Cache,
+        *,
+        num_estimators: int,
+        device: torch.device,
+    ) -> Cache:
+        if num_estimators == 1 or device.type != "cuda":
+            return cache
+        return cache.cpu().pin_memory()
+
+    @contextmanager
+    def load(  # noqa: D102
+        self,
+        caches: Sequence[Cache],
+        device: torch.device,
+    ) -> Iterator[Iterator[Cache]]:
+        if device.type != "cuda":
+            yield iter(caches)
+            return
+
+        compute_stream = torch.cuda.current_stream(device)
+        transfer_stream = self._stream(device)
+        loaded_caches: Generator[Cache, None, None] | None = None
+        try:
+            with torch.cuda.stream(transfer_stream):
+                first_cache = caches[0].to(device, non_blocking=True)
+            loaded_caches = self._load_cuda(
+                caches=caches,
+                next_cache=first_cache,
+                device=device,
+                compute_stream=compute_stream,
+                transfer_stream=transfer_stream,
+            )
+            yield loaded_caches
+        except BaseException:
+            if loaded_caches is not None:
+                loaded_caches.close()
+            transfer_stream.synchronize()
+            raise
+        finally:
+            if loaded_caches is not None:
+                loaded_caches.close()
+
+    def _load_cuda(
+        self,
+        caches: Sequence[Cache],
+        next_cache: Cache,
+        device: torch.device,
+        compute_stream: torch.cuda.Stream,
+        transfer_stream: torch.cuda.Stream,
+    ) -> Generator[Cache, None, None]:
+        for index in range(len(caches)):
+            compute_stream.wait_stream(transfer_stream)
+            cache = next_cache
+            if index + 1 < len(caches):
+                with torch.cuda.stream(transfer_stream):
+                    next_cache = caches[index + 1].to(
+                        device,
+                        non_blocking=True,
+                    )
+            try:
+                yield cache
+            finally:
+                for tensor in cache._tensors():
+                    tensor.record_stream(compute_stream)
+
+    def _stream(self, device: torch.device) -> torch.cuda.Stream:
+        stream = self._streams.get(device)
+        if stream is None:
+            stream = torch.cuda.Stream(device)
+            self._streams[device] = stream
+        return stream
+
+    def __getstate__(self) -> dict[str, object]:
+        for stream in self._streams.values():
+            stream.synchronize()
+        return {}
+
+    def __setstate__(self, state: dict[str, object]) -> None:
+        self._streams = {}
