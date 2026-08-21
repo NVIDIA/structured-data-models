@@ -371,3 +371,11 @@ def test_cudf_null_handling() -> None:
     assert (tensor != "hi").equal(
         torch.tensor([False, False, True], device="cuda")
     )
+
+
+def test_registers_as_a_pytorch_buffer() -> None:
+    tensor = StringTensor.from_list(["a", "b"])
+    module = torch.nn.Module()
+    module.register_buffer("value", tensor)
+
+    assert tuple(module.buffers()) == (tensor,)

@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 
@@ -67,6 +67,14 @@ class DropConstantColumns(EnsembleProcessor):
         # TODO: Consider recording the fitted column names if transforms should
         # verify that the numerical schema and order match fit.
         self._kept_indices: tuple[tuple[int, ...], ...] = ()
+
+    def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
+        r""":meta private:"""  # noqa: D415
+        return self._kept_indices
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        self._kept_indices = cast(tuple[tuple[int, ...], ...], state)
 
     def _keep_mask(self, data: torch.Tensor) -> torch.Tensor:
         # [N, C] or [..., N, C] -> [C] or [..., C].

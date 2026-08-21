@@ -97,7 +97,7 @@ class TableDispatch(EnsembleProcessor):
         r""":meta private:"""  # noqa: D415
         return self._route
 
-    def set_extra_state(self, state: str | None) -> None:
+    def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
         self._route = cast(Literal["task", "related"] | None, state)
 
