@@ -17,12 +17,12 @@ if TYPE_CHECKING:
     import sentence_transformers
     from cudf.core.character_normalizer import CharacterNormalizer
     from cudf.core.wordpiece_tokenize import WordPieceVocabulary
+    from transformers import PreTrainedTokenizerBase
 
 
-class _WordPieceTokenizer:
+class _CuDFTokenizer:
     def __init__(
         self,
-        model: sentence_transformers.SentenceTransformer,
         vocabulary: WordPieceVocabulary,
         normalizer: CharacterNormalizer,
         cls_token_id: int,
@@ -30,7 +30,6 @@ class _WordPieceTokenizer:
         pad_token_id: int,
         max_length: int,
     ) -> None:
-        self._model = model
         self._vocabulary = vocabulary
         self._normalizer = normalizer
         self._cls_token_id = cls_token_id
@@ -38,21 +37,18 @@ class _WordPieceTokenizer:
         self._pad_token_id = pad_token_id
         self._max_length = max_length
 
-    def __deepcopy__(self, memo: dict[int, Any]) -> _WordPieceTokenizer:
-        return self
-
     @classmethod
     def build(
         cls,
-        model: sentence_transformers.SentenceTransformer,
-    ) -> _WordPieceTokenizer | None:
+        tokenizer: PreTrainedTokenizerBase,
+    ) -> _CuDFTokenizer | None:
+        import tokenizers
+        from transformers import PreTrainedTokenizerFast
 
-        from transformers import PreTrainedTokenizerFast  # noqa: PLC0415
-
-        tokenizer = model.tokenizer
         if not isinstance(tokenizer, PreTrainedTokenizerFast):
             return None
-        if tokenizer.backend_tokenizer.model.__class__.__name__ != "WordPiece":
+        backend = tokenizer.backend_tokenizer
+        if not isinstance(backend.model, tokenizers.models.WordPiece):
             return None
         if importlib.util.find_spec("cudf") is None:
             warn_once(
@@ -70,10 +66,9 @@ class _WordPieceTokenizer:
         from cudf.core.wordpiece_tokenize import WordPieceVocabulary
 
         vocab_tokens = tokenizer.convert_ids_to_tokens(
-            range(tokenizer.vocab_size)
+            list(range(tokenizer.vocab_size))
         )
         return cls(
-            model=model,
             vocabulary=WordPieceVocabulary(cudf.Series(vocab_tokens)),
             normalizer=CharacterNormalizer(
                 do_lower=tokenizer.do_lower_case,
@@ -82,31 +77,32 @@ class _WordPieceTokenizer:
             cls_token_id=tokenizer.cls_token_id,
             sep_token_id=tokenizer.sep_token_id,
             pad_token_id=tokenizer.pad_token_id,
-            max_length=model.max_seq_length or tokenizer.model_max_length,
+            max_length=tokenizer.model_max_length,
         )
 
     def tokenize(self, text: StringTensor) -> tuple[Tensor, Tensor]:
         device = text.device
+        if device.type != "cuda":
+            raise RuntimeError(
+                f"Non-CPU tensor is passed to cuDF tokenizer: {device}"
+            )
+
+        ser = text.to_cudf()
+        ser = ser.fillna("") if text.is_nullable else ser
+        ser = self._normalizer.normalize(ser)
+        ser = self._vocabulary.tokenize(ser)
+
+        flat_values = torch.from_dlpack(ser.list.leaves.to_cupy())
+        lengths = torch.from_dlpack(ser.list.len().to_cupy())
+
         num_strings = text.numel()
-
-        text_series = text.to_cudf()
-        if text.is_nullable:
-            text_series = text_series.fillna("")
-
-        normalized = self._normalizer.normalize(text_series)
-        token_lists = self._vocabulary.tokenize(normalized)
-
-        flat_values = torch.from_dlpack(token_lists.list.leaves.to_cupy())
-        raw_lengths = torch.from_dlpack(token_lists.list.len().to_cupy()).to(
-            torch.long
+        offsets = torch.zeros(
+            num_strings + 1,
+            device=device,
+            dtype=torch.int32,
         )
-
-        # Source offsets into the flat token buffer
-        offsets = torch.zeros(num_strings + 1, device=device, dtype=torch.long)
-        torch.cumsum(raw_lengths, dim=0, out=offsets[1:])
-
-        lengths = raw_lengths.clamp(max=self._max_length - 2)
-
+        torch.cumsum(lengths, dim=0, out=offsets[1:])
+        lengths.clamp_(max=self._max_length - 2)
         input_ids = torch.full(
             (num_strings, self._max_length),
             self._pad_token_id,
@@ -117,9 +113,13 @@ class _WordPieceTokenizer:
 
         if flat_values.numel() > 0:
             max_content = self._max_length - 2
-            col_idx = torch.arange(max_content, device=device)
-            mask = col_idx.unsqueeze(0) < lengths.unsqueeze(1)
-            src = col_idx.unsqueeze(0) + offsets[:-1].unsqueeze(1)
+            col_idx = torch.arange(
+                max_content,
+                device=device,
+                dtype=torch.int32,
+            ).unsqueeze(0)
+            mask = col_idx < lengths.unsqueeze(1)
+            src = col_idx + offsets[:-1].unsqueeze(1)
             safe_src = torch.where(mask, src, torch.zeros_like(src))
             input_ids[:, 1 : max_content + 1] = torch.where(
                 mask,
@@ -135,27 +135,40 @@ class _WordPieceTokenizer:
         return input_ids, attention_mask
 
 
-class _Encoder:
+class _Model(torch.nn.Module):
     def __init__(
         self,
         model: sentence_transformers.SentenceTransformer,
         batch_size: int,
         embedding_dim: int,
     ) -> None:
+        super().__init__()
         self._model = model
         self._batch_size = batch_size
         self._embedding_dim = embedding_dim
-        self._tokenizer: _WordPieceTokenizer | None = None
-        self._gpu_resolved = False
+        self._cudf_tokenizer: _CuDFTokenizer | None = None
+        self._cudf_tokenizer_supported: bool | None = None
 
-    def __deepcopy__(self, memo: dict[int, Any]) -> _Encoder:
+    def __deepcopy__(self, memo: dict[int, Any]) -> _Model:
         return self
 
-    def _encode_gpu(self, text: StringTensor) -> Tensor:
-        assert self._tokenizer is not None
-        device = text.device
-        num_strings = text.numel()
-        input_ids, attention_mask = self._tokenizer.tokenize(text)
+    def _forward_cpu(self, text: StringTensor) -> Tensor:
+        array = text.to_arrow()
+        if text.is_nullable:
+            array = pc.fill_null(array, "")
+        emb = self._model.encode(
+            array.to_pylist(),
+            show_progress_bar=False,
+            convert_to_tensor=True,
+            device=str(text.device),
+            batch_size=self._batch_size,
+        )
+        assert isinstance(emb, Tensor)
+        return emb
+
+    def _forward_cudf(self, text: StringTensor) -> Tensor:
+        assert self._cudf_tokenizer is not None
+        input_ids, attention_mask = self._cudf_tokenizer.tokenize(text)
 
         seq_lengths = attention_mask.sum(dim=1)
         sort_idx = seq_lengths.argsort()
@@ -163,15 +176,16 @@ class _Encoder:
         sorted_attention_mask = attention_mask[sort_idx]
         sorted_seq_lengths = seq_lengths[sort_idx]
 
-        batch_ends = (
-            torch.arange(
-                self._batch_size,
-                num_strings + self._batch_size,
-                self._batch_size,
-                device=device,
-            ).clamp(max=num_strings)
-            - 1
+        device = text.device
+        num_strings = text.numel()
+        batch_ends = torch.arange(
+            self._batch_size,
+            num_strings + self._batch_size,
+            self._batch_size,
+            device=device,
         )
+        batch_ends.clamp_(max=num_strings)
+        batch_ends -= 1
         batch_max_lengths = sorted_seq_lengths[batch_ends].tolist()
 
         embeddings = torch.empty(
@@ -200,65 +214,29 @@ class _Encoder:
 
         return embeddings
 
-    def encode(self, text: StringTensor) -> Tensor:
-        """Encode text into embeddings.
+    def forward(self, text: StringTensor) -> Tensor:
+        if text.device.type == "cpu":
+            return self._forward_cpu(text)
 
-        On the first call, lazily checks whether GPU WordPiece tokenization
-        is available. Uses the GPU path if so, otherwise falls back to
-        CPU-based :meth:`SentenceTransformer.encode`.
+        if self._cudf_tokenizer_supported is None:
+            self._cudf_tokenizer = _CuDFTokenizer.build(self._model.tokenizer)
+            self._cudf_tokenizer_supported = self._cudf_tokenizer is not None
 
-        Args:
-            text: Flat :class:`~sdm.StringTensor`.
-        """
-        if not self._gpu_resolved:
-            self._gpu_resolved = True
-            if text.device.type == "cuda":
-                self._tokenizer = _WordPieceTokenizer.build(self._model)
-                if self._tokenizer is not None:
-                    self._model.eval()
+        if self._cudf_tokenizer_supported:
+            return self._forward_cudf(text)
 
-        if self._tokenizer is not None:
-            return self._encode_gpu(text)
-
-        array = text.to_arrow()
-        if text.is_nullable:
-            array = pc.fill_null(array, "")
-        emb = self._model.encode(
-            array.to_pylist(),
-            show_progress_bar=False,
-            convert_to_tensor=True,
-            device=str(text.device),
-            batch_size=self._batch_size,
-        )
-        assert isinstance(emb, Tensor)
-        return emb
-
-
-class _ModuleReference(torch.nn.Module):
-    def __init__(
-        self,
-        module: sentence_transformers.SentenceTransformer,
-    ) -> None:
-        super().__init__()
-        self.module = module
-
-    def __deepcopy__(self, memo: dict[int, Any]) -> _ModuleReference:
-        return type(self)(self.module)
+        return self._forward_cpu(text)
 
 
 class SentenceTransformer(Processor):
     r"""Transform text columns with a
-    :class:`sentence_transformers.SentenceTransformer
-    <sentence_transformers.sentence_transformer.model.SentenceTransformer>`
-    model.
+    :class:`sentence_transformers.SentenceTransformer` model.
 
     Args:
         model_name: Model name or local path passed to
-            :class:`sentence_transformers.SentenceTransformer
-            <sentence_transformers.sentence_transformer.model.SentenceTransformer>`.
+            :class:`sentence_transformers.SentenceTransformer`
         batch_size: Batch size passed to
-            :meth:`sentence_transformers.SentenceTransformer.encode()
-            <sentence_transformers.sentence_transformer.model.SentenceTransformer.encode>`.
+            :meth:`sentence_transformers.SentenceTransformer.encode`.
             Adjusting the batch size can significantly improve processing
             speed. The optimal value depends on your hardware, model size,
             precision, and input length.
@@ -281,8 +259,7 @@ class SentenceTransformer(Processor):
         embedding_dim = model.get_embedding_dimension()
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim
-        self._model = _ModuleReference(model)
-        self._encoder = _Encoder(model, batch_size, embedding_dim)
+        self._model = _Model(model, batch_size, embedding_dim)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         columns = table.columns[Stype.text]
@@ -301,7 +278,7 @@ class SentenceTransformer(Processor):
             )
         else:
             text = cast(StringTensor, table.text.movedim(-1, 0).reshape(-1))
-            emb = self._encoder.encode(text)
+            emb = self._model(text)
             emb = emb.to(device=table.device, dtype=table.dtype)
             numerical = (
                 emb.reshape(len(columns), *batch_shape, self._embedding_dim)
@@ -309,14 +286,16 @@ class SentenceTransformer(Processor):
                 .reshape(*batch_shape, len(output_columns))
             )
 
-        out = torch.cat(
-            [
-                table.drop_stypes(Stype.text),
-                TableTensor(
-                    columns={Stype.numerical: output_columns},
-                    numerical=numerical,
-                ),
-            ],
-            dim=-1,
+        return cast(
+            TableTensor,
+            torch.cat(
+                [
+                    table.drop_stypes(Stype.text),
+                    TableTensor(
+                        columns={Stype.numerical: output_columns},
+                        numerical=numerical,
+                    ),
+                ],
+                dim=-1,
+            ),
         )
-        return cast(TableTensor, out)
