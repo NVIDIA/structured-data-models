@@ -286,16 +286,14 @@ class SentenceTransformer(Processor):
                 .reshape(*batch_shape, len(output_columns))
             )
 
-        return cast(
-            TableTensor,
-            torch.cat(
-                [
-                    table.drop_stypes(Stype.text),
-                    TableTensor(
-                        columns={Stype.numerical: output_columns},
-                        numerical=numerical,
-                    ),
-                ],
-                dim=-1,
-            ),
+        out = torch.cat(
+            [
+                table.drop_stypes(Stype.text),
+                TableTensor(
+                    columns={Stype.numerical: output_columns},
+                    numerical=numerical,
+                ),
+            ],
+            dim=-1,
         )
+        return cast(TableTensor, out)
