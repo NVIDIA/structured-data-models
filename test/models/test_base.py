@@ -1,3 +1,5 @@
+import copy
+import weakref
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -10,6 +12,7 @@ from sdm.cache import Cache
 from sdm.callbacks import Callback
 from sdm.models import ICLModel
 from sdm.processing import InvertibleMixin, Processor
+from sdm.testing import onlyCUDA
 
 
 @dataclass
@@ -331,6 +334,113 @@ def test_callback() -> None:
         "1_forward_start",
         "2_forward_start",
     ]
+
+
+def test_model_copy_has_fresh_cache_manager() -> None:
+    class _Stream:
+        def __init__(self) -> None:
+            self.synchronized = False
+
+        def synchronize(self) -> None:
+            self.synchronized = True
+
+    model = _RecordingModel()
+    stream = _Stream()
+    model._cache_manager._streams[torch.device("cuda")] = cast(
+        torch.cuda.Stream,
+        stream,
+    )
+
+    copied = copy.copy(model)
+
+    assert stream.synchronized
+    assert copied._cache_manager is not model._cache_manager
+    assert copied._cache_manager._streams == {}
+
+
+@onlyCUDA
+def test_cache_loading_preserves_prediction_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    device = torch.device("cuda")
+    events: list[str] = []
+    model = _RecordingModel()
+    model_forward = model._forward
+
+    def record_forward(**kwargs: Any) -> TableTensor:
+        x_context = cast(TableTensor | None, kwargs["x_context"])
+        if x_context is not None:
+            cache = cast(Cache, kwargs["cache"])
+            cache["tensor"] = x_context.numerical
+        else:
+            events.append("forward")
+        return model_forward(**kwargs)
+
+    monkeypatch.setattr(model, "_forward", record_forward)
+    model.fit(
+        torch.randn(4, 3, device=device),
+        torch.randn(4, 1, device=device),
+        num_estimators=4,
+    )
+
+    cache_to = Cache.to
+    loaded_refs: list[weakref.ReferenceType[Cache]] = []
+    active_counts: list[int] = []
+
+    def record_cache_load(
+        cache: Cache,
+        device: torch.device | str | None,
+        *,
+        non_blocking: bool = False,
+    ) -> Cache:
+        loaded = cache_to(
+            cache,
+            device,
+            non_blocking=non_blocking,
+        )
+        loaded_refs.append(weakref.ref(loaded))
+        active_counts.append(sum(ref() is not None for ref in loaded_refs))
+        events.append("load")
+        return loaded
+
+    monkeypatch.setattr(Cache, "to", record_cache_load)
+    callback = MyCallback(
+        "callback",
+        scale=1.0,
+        offset=0.0,
+        events=events,
+    )
+
+    model.predict(
+        torch.randn(2, 3, device=device),
+        callbacks=(callback,),
+    )
+
+    expected_events = ["callback_forward_start", "load"]
+    for index in range(4):
+        expected_events.append("callback_preprocessing_end")
+        if index < 3:
+            expected_events.append("load")
+        expected_events.append("forward")
+    expected_events.append("callback_forward_end")
+    assert events == expected_events
+    assert active_counts == [1, 2, 2, 2]
+
+    events.clear()
+    loaded_refs.clear()
+    active_counts.clear()
+    with pytest.raises(ValueError, match="share the same schema"):
+        model.predict(
+            torch.randn(2, 4, device=device),
+            callbacks=(callback,),
+        )
+
+    assert events == [
+        "callback_forward_start",
+        "load",
+        "callback_preprocessing_end",
+    ]
+    assert active_counts == [1]
 
 
 def test_related_table_preprocessing_forward_and_cache() -> None:

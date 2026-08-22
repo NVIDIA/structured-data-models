@@ -1,6 +1,5 @@
 from collections.abc import (
     Callable,
-    Generator,
     Hashable,
     Iterable,
     Iterator,
@@ -164,6 +163,41 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         return out
 
 
+class _CacheLoader(Iterator[Cache]):
+    def __init__(
+        self,
+        caches: Sequence[Cache],
+        device: torch.device,
+        compute_stream: torch.cuda.Stream | None,
+        transfer_stream: torch.cuda.Stream | None,
+    ) -> None:
+        self._caches = caches
+        self._device = device
+        self._compute_stream = compute_stream
+        self._transfer_stream = transfer_stream
+        self._index = 0
+
+    def __next__(self) -> Cache:
+        if self._index == len(self._caches):
+            raise StopIteration
+        cache = self._caches[self._index]
+        self._index += 1
+        if self._transfer_stream is None:
+            return cache
+        with torch.cuda.stream(self._transfer_stream):
+            return cache.to(self._device, non_blocking=True)
+
+    def wait(self) -> None:
+        if self._compute_stream is not None:
+            assert self._transfer_stream is not None
+            self._compute_stream.wait_stream(self._transfer_stream)
+
+    def record(self, cache: Cache) -> None:
+        if self._compute_stream is not None:
+            for tensor in cache._tensors():
+                tensor.record_stream(self._compute_stream)
+
+
 class CacheManager:  # noqa: D101
     def __init__(self) -> None:
         self._streams: dict[torch.device, torch.cuda.Stream] = {}
@@ -184,56 +218,23 @@ class CacheManager:  # noqa: D101
         self,
         caches: Sequence[Cache],
         device: torch.device,
-    ) -> Iterator[Iterator[Cache]]:
-        if device.type != "cuda":
-            yield iter(caches)
-            return
-
-        compute_stream = torch.cuda.current_stream(device)
-        transfer_stream = self._stream(device)
-        loaded_caches: Generator[Cache, None, None] | None = None
+    ) -> Iterator[_CacheLoader]:
+        compute_stream: torch.cuda.Stream | None = None
+        transfer_stream: torch.cuda.Stream | None = None
         try:
-            with torch.cuda.stream(transfer_stream):
-                first_cache = caches[0].to(device, non_blocking=True)
-            loaded_caches = self._load_cuda(
+            if device.type == "cuda":
+                compute_stream = torch.cuda.current_stream(device)
+                transfer_stream = self._stream(device)
+            yield _CacheLoader(
                 caches=caches,
-                next_cache=first_cache,
                 device=device,
                 compute_stream=compute_stream,
                 transfer_stream=transfer_stream,
             )
-            yield loaded_caches
         except BaseException:
-            if loaded_caches is not None:
-                loaded_caches.close()
-            transfer_stream.synchronize()
+            if transfer_stream is not None:
+                transfer_stream.synchronize()
             raise
-        finally:
-            if loaded_caches is not None:
-                loaded_caches.close()
-
-    def _load_cuda(
-        self,
-        caches: Sequence[Cache],
-        next_cache: Cache,
-        device: torch.device,
-        compute_stream: torch.cuda.Stream,
-        transfer_stream: torch.cuda.Stream,
-    ) -> Generator[Cache, None, None]:
-        for index in range(len(caches)):
-            compute_stream.wait_stream(transfer_stream)
-            cache = next_cache
-            if index + 1 < len(caches):
-                with torch.cuda.stream(transfer_stream):
-                    next_cache = caches[index + 1].to(
-                        device,
-                        non_blocking=True,
-                    )
-            try:
-                yield cache
-            finally:
-                for tensor in cache._tensors():
-                    tensor.record_stream(compute_stream)
 
     def _stream(self, device: torch.device) -> torch.cuda.Stream:
         stream = self._streams.get(device)
@@ -242,9 +243,12 @@ class CacheManager:  # noqa: D101
             self._streams[device] = stream
         return stream
 
-    def __getstate__(self) -> dict[str, object]:
+    def _synchronize(self) -> None:
         for stream in self._streams.values():
             stream.synchronize()
+
+    def __getstate__(self) -> dict[str, object]:
+        self._synchronize()
         return {}
 
     def __setstate__(self, state: dict[str, object]) -> None:

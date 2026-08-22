@@ -326,6 +326,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_estimators = cast(int, self._cache["num_estimators"])
         caches = [cast(Cache, self._cache[i]) for i in range(num_estimators)]
         with self._cache_manager.load(caches, x.device) as loaded_caches:
+            next_cache: Cache | None = next(loaded_caches)
+
             recipe_execution = cast(
                 RecipeExecution,
                 self._cache["recipe_execution"],
@@ -333,8 +335,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
             with torch.amp.autocast(x.device.type, enabled=False):
                 queries = recipe_execution.transform(x, related_tables)
 
+            loaded_caches.wait()
+
             outs: list[TableTensor] = []
-            for query, cache in zip(queries, loaded_caches):
+            for i, query in enumerate(queries):
+                cache, next_cache = next_cache, None
+                assert cache is not None
+
                 x_query = query.x
                 related_query_tables = query.related_tables
                 for callback in callbacks:
@@ -355,6 +362,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     related_query_tables=related_query_tables,
                 )
 
+                if i + 1 < num_estimators:
+                    next_cache = next(loaded_caches)
+
                 out = self._forward(
                     x_context=None,
                     y_context=None,
@@ -365,8 +375,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     generator=None,
                     **cast(dict[str, Any], self._cache["kwargs"]),
                 )
+                loaded_caches.record(cache)
+
                 out = cast(TableTensor, out.to(x_query.dtype))
                 outs.append(out)
+
+                if next_cache is not None:
+                    loaded_caches.wait()
 
         # Regression: invert target before stacking estimator outputs.
         if cast(Cache, self._cache[0])["classes"] is None:
@@ -385,10 +400,15 @@ class ICLModel(torch.nn.Module, abc.ABC):
         r"""Clear cached context state created by :meth:`fit`."""
         self._cache = None
 
+    def __getstate__(self) -> dict[str, object]:
+        self._cache_manager._synchronize()
+        state = super().__getstate__()
+        state.pop("_cache_manager", None)
+        return state
+
     def __setstate__(self, state: dict[str, object]) -> None:
         super().__setstate__(state)
-        if not hasattr(self, "_cache_manager"):
-            self._cache_manager = CacheManager()
+        self._cache_manager = CacheManager()
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
