@@ -196,10 +196,10 @@ class _Model(torch.nn.Module):
         )
         for i, start in enumerate(range(0, num_strings, self._batch_size)):
             end = min(start + self._batch_size, num_strings)
-            seq_len = batch_max_lengths[i]
+            max_len = batch_max_lengths[i]
             features: dict[str, Tensor] = {
-                "input_ids": sorted_input_ids[start:end, :seq_len],
-                "attention_mask": sorted_attention_mask[start:end, :seq_len],
+                "input_ids": sorted_input_ids[start:end, :max_len],
+                "attention_mask": sorted_attention_mask[start:end, :max_len],
             }
             features = self._model(features)
             embeddings[sort_idx[start:end]] = features["sentence_embedding"]
