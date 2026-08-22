@@ -252,7 +252,7 @@ class SentenceTransformer(Processor):
         batch_size: int = 32,
     ) -> None:
         super().__init__()
-        import sentence_transformers  # noqa: PLC0415
+        import sentence_transformers
 
         self.batch_size = batch_size
         model = sentence_transformers.SentenceTransformer(model_name)
