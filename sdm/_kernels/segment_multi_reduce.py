@@ -18,7 +18,7 @@ else:
     _triton_segment_multi_reduce = _triton_segment_multi_reduce_impl
 
 
-def _torch_segment_multi_reduce(
+def _eager_segment_multi_reduce(
     src: Tensor,
     offsets: Tensor,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
@@ -86,4 +86,4 @@ def segment_multi_reduce(
         and offsets.dtype in {torch.int32, torch.int64}
     ):
         return _triton_segment_multi_reduce(src, offsets)
-    return _torch_segment_multi_reduce(src, offsets)
+    return _eager_segment_multi_reduce(src, offsets)

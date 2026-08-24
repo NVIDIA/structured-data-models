@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from sdm._kernels import segment_multi_reduce
-from sdm._kernels.segment_multi_reduce import _torch_segment_multi_reduce
+from sdm._kernels.segment_multi_reduce import _eager_segment_multi_reduce
 from sdm.testing import onlyCUDA
 
 
@@ -43,7 +43,7 @@ def test_segment_multi_reduce(
     with torch.inference_mode():
         actual = module.segment_multi_reduce(src, offsets)
 
-    expected = _torch_segment_multi_reduce(src, offsets)
+    expected = _eager_segment_multi_reduce(src, offsets)
     for result, reference in zip(actual, expected, strict=True):
         assert result.shape == (len(degrees), num_channels)
         assert result.is_contiguous()
@@ -122,7 +122,7 @@ def test_segment_multi_reduce_nonfinite() -> None:
 
     for result, reference in zip(
         actual,
-        _torch_segment_multi_reduce(src, offsets),
+        _eager_segment_multi_reduce(src, offsets),
         strict=True,
     ):
         torch.testing.assert_close(result, reference, equal_nan=True)
@@ -154,7 +154,7 @@ def test_segment_multi_reduce_noncontiguous() -> None:
 
     for result, reference in zip(
         actual,
-        _torch_segment_multi_reduce(src, offsets),
+        _eager_segment_multi_reduce(src, offsets),
         strict=True,
     ):
         torch.testing.assert_close(result, reference)
@@ -169,7 +169,7 @@ def test_segment_multi_reduce_torch(dtype: torch.dtype) -> None:
 
     for result, reference in zip(
         actual,
-        _torch_segment_multi_reduce(src, offsets),
+        _eager_segment_multi_reduce(src, offsets),
         strict=True,
     ):
         torch.testing.assert_close(result, reference)
@@ -189,7 +189,7 @@ def test_segment_multi_reduce_compile() -> None:
 
     for result, reference in zip(
         actual,
-        _torch_segment_multi_reduce(src, offsets),
+        _eager_segment_multi_reduce(src, offsets),
         strict=True,
     ):
         torch.testing.assert_close(result, reference)
