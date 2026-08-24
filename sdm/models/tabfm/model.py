@@ -87,11 +87,48 @@ class TabFM(ICLModel):
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return Recipe(  # TODO Replace with final recipe.
+        return Recipe(
             features=[
-                sp.StypeDispatch(categorical=sp.ToNumerical()),
-                sp.ShuffleColumns(),
-            ]
+                sp.StypeDispatch(
+                    categorical=[
+                        # TODO: Sort by appearance and filter rare categories.
+                        sp.AlignCategories(),
+                        sp.ToNumerical(),
+                    ],
+                ),
+                sp.StypeDispatch(
+                    numerical=[
+                        sp.DropConstantColumns(),
+                        sp.ImputeMean(),
+                        sp.Standardize(epsilon=1e-6),
+                        sp.Clip(min_value=-100.0, max_value=100.0),
+                        sp.Choice(
+                            sp.Identity(),
+                            sp.PowerTransform(),
+                            method="round_robin",
+                        ),
+                        sp.ClipSigma(threshold=4.0),
+                        sp.ShuffleColumns(method="random"),
+                        sp.SelectColumns(
+                            max_columns=500,
+                            method="round_robin",
+                        ),
+                    ],
+                ),
+            ],
+            target=sp.StypeDispatch(
+                categorical=[
+                    sp.AlignCategories(sort_by="value"),
+                    sp.ShuffleCategories(method="shift"),
+                ],
+                numerical=sp.Standardize(),
+            ),
+            output=[
+                sp.ReduceEstimators(method="mean"),
+                sp.TaskDispatch(
+                    classification=sp.Softmax(temperature=0.9),
+                ),
+            ],
         )
 
     def _load_from_pretrained(
