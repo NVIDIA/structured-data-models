@@ -230,23 +230,23 @@ categories not seen during fitting receive code <code class="docutils literal no
 </span><span data-line="2"><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">sdm</span>
 </span><span data-line="3"><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AlignCategories</span>
 </span><span data-line="4"><span class="gp">&gt;&gt;&gt; </span><span class="n">table1</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">TableTensor</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span>
-</span><span data-line="5"><span class="gp">... </span>    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="s2">&quot;blue&quot;</span><span class="p">,</span> <span class="s2">&quot;red&quot;</span><span class="p">]}),</span>
-</span><span data-line="6"><span class="gp">... </span>    <span class="n">stypes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;categorical&quot;</span><span class="p">},</span>
+</span><span data-line="5"><span class="gp">... </span>    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"color"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"red"</span><span class="p">,</span> <span class="s2">"blue"</span><span class="p">,</span> <span class="s2">"red"</span><span class="p">]}),</span>
+</span><span data-line="6"><span class="gp">... </span>    <span class="n">stypes</span><span class="o">=</span><span class="p">{</span><span class="s2">"color"</span><span class="p">:</span> <span class="s2">"categorical"</span><span class="p">},</span>
 </span><span data-line="7"><span class="gp">... </span><span class="p">)</span>
 </span><span data-line="8"><span class="gp">&gt;&gt;&gt; </span><span class="n">table2</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">TableTensor</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span>
-</span><span data-line="9"><span class="gp">... </span>    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;blue&quot;</span><span class="p">,</span> <span class="s2">&quot;green&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">]}),</span>
-</span><span data-line="10"><span class="gp">... </span>    <span class="n">stypes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;categorical&quot;</span><span class="p">},</span>
+</span><span data-line="9"><span class="gp">... </span>    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"color"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"blue"</span><span class="p">,</span> <span class="s2">"green"</span><span class="p">,</span> <span class="kc">None</span><span class="p">]}),</span>
+</span><span data-line="10"><span class="gp">... </span>    <span class="n">stypes</span><span class="o">=</span><span class="p">{</span><span class="s2">"color"</span><span class="p">:</span> <span class="s2">"categorical"</span><span class="p">},</span>
 </span><span data-line="11"><span class="gp">... </span><span class="p">)</span>
 </span><span data-line="12"><span class="gp">&gt;&gt;&gt; </span><span class="n">table1</span><span class="o">.</span><span class="n">categorical</span><span class="o">.</span><span class="n">categories</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-</span><span data-line="13"><span class="go">[&#39;red&#39;, &#39;blue&#39;]</span>
+</span><span data-line="13"><span class="go">['red', 'blue']</span>
 </span><span data-line="14"><span class="gp">&gt;&gt;&gt; </span><span class="n">table2</span><span class="o">.</span><span class="n">categorical</span><span class="o">.</span><span class="n">categories</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-</span><span data-line="15"><span class="go">[&#39;blue&#39;, &#39;green&#39;]</span>
+</span><span data-line="15"><span class="go">['blue', 'green']</span>
 </span><span data-line="16"><span class="gp">&gt;&gt;&gt; </span><span class="n">table2</span><span class="o">.</span><span class="n">categorical</span><span class="o">.</span><span class="n">code</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
 </span><span data-line="17"><span class="go">[0, 1, -1]</span>
 </span><span data-line="18"><span class="gp">&gt;&gt;&gt; </span><span class="n">processor</span> <span class="o">=</span> <span class="n">AlignCategories</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">table1</span><span class="p">)</span>
 </span><span data-line="19"><span class="gp">&gt;&gt;&gt; </span><span class="n">table2</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">table2</span><span class="p">)</span>
 </span><span data-line="20"><span class="gp">&gt;&gt;&gt; </span><span class="n">table2</span><span class="o">.</span><span class="n">categorical</span><span class="o">.</span><span class="n">categories</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-</span><span data-line="21"><span class="go">[&#39;red&#39;, &#39;blue&#39;]</span>
+</span><span data-line="21"><span class="go">['red', 'blue']</span>
 </span><span data-line="22"><span class="gp">&gt;&gt;&gt; </span><span class="n">table2</span><span class="o">.</span><span class="n">categorical</span><span class="o">.</span><span class="n">code</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
 </span><span data-line="23"><span class="go">[1, -1, -1]</span>
 </span></pre></div>
@@ -296,7 +296,7 @@ categories not seen during fitting receive code <code class="docutils literal no
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=185f38c3"></script>
+      <script src="../../_static/documentation_options.js?v=a08fbc39"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

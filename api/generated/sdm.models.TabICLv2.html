@@ -261,33 +261,33 @@ quantile predictions for regression.</p></li>
 </span><span data-line="3">
 </span><span data-line="4"><span class="n">table</span> <span class="o">=</span> <span class="n">TableTensor</span><span class="o">.</span><span class="n">from_columns</span><span class="p">(</span>
 </span><span data-line="5">    <span class="p">{</span>
-</span><span data-line="6">        <span class="s2">&quot;col0&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">7.0</span><span class="p">],</span>
-</span><span data-line="7">        <span class="s2">&quot;col1&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span>
-</span><span data-line="8">        <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;t&quot;</span><span class="p">,</span> <span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="s2">&quot;t&quot;</span><span class="p">,</span> <span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="s2">&quot;t&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+</span><span data-line="6">        <span class="s2">"col0"</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">7.0</span><span class="p">],</span>
+</span><span data-line="7">        <span class="s2">"col1"</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span>
+</span><span data-line="8">        <span class="s2">"target"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"t"</span><span class="p">,</span> <span class="s2">"f"</span><span class="p">,</span> <span class="s2">"t"</span><span class="p">,</span> <span class="s2">"f"</span><span class="p">,</span> <span class="s2">"t"</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
 </span><span data-line="9">    <span class="p">},</span>
 </span><span data-line="10">    <span class="n">stypes</span><span class="o">=</span><span class="p">{</span>
-</span><span data-line="11">        <span class="s2">&quot;col0&quot;</span><span class="p">:</span> <span class="s2">&quot;numerical&quot;</span><span class="p">,</span>
-</span><span data-line="12">        <span class="s2">&quot;col1&quot;</span><span class="p">:</span> <span class="s2">&quot;numerical&quot;</span><span class="p">,</span>
-</span><span data-line="13">        <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;categorical&quot;</span><span class="p">,</span>
+</span><span data-line="11">        <span class="s2">"col0"</span><span class="p">:</span> <span class="s2">"numerical"</span><span class="p">,</span>
+</span><span data-line="12">        <span class="s2">"col1"</span><span class="p">:</span> <span class="s2">"numerical"</span><span class="p">,</span>
+</span><span data-line="13">        <span class="s2">"target"</span><span class="p">:</span> <span class="s2">"categorical"</span><span class="p">,</span>
 </span><span data-line="14">    <span class="p">},</span>
-</span><span data-line="15">    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+</span><span data-line="15">    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">,</span>
 </span><span data-line="16"><span class="p">)</span>
-</span><span data-line="17"><span class="n">model</span> <span class="o">=</span> <span class="n">TabICLv2</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+</span><span data-line="17"><span class="n">model</span> <span class="o">=</span> <span class="n">TabICLv2</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
 </span><span data-line="18">
 </span><span data-line="19"><span class="c1"># Default in-context learning forward pass:</span>
 </span><span data-line="20"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
-</span><span data-line="21">    <span class="n">x_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">),</span>
-</span><span data-line="22">    <span class="n">y_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">5</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">],</span>
-</span><span data-line="23">    <span class="n">x_query</span><span class="o">=</span><span class="n">table</span><span class="p">[</span><span class="mi">5</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">),</span>
+</span><span data-line="21">    <span class="n">x_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">"target"</span><span class="p">),</span>
+</span><span data-line="22">    <span class="n">y_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">5</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">],</span>
+</span><span data-line="23">    <span class="n">x_query</span><span class="o">=</span><span class="n">table</span><span class="p">[</span><span class="mi">5</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">"target"</span><span class="p">),</span>
 </span><span data-line="24"><span class="p">)</span>
 </span><span data-line="25"><span class="k">assert</span> <span class="n">out</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 </span><span data-line="26">
 </span><span data-line="27"><span class="c1"># Fit+Predict forward pass via key/value caching:</span>
 </span><span data-line="28"><span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
-</span><span data-line="29">    <span class="n">x</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">),</span>
-</span><span data-line="30">    <span class="n">y</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">5</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">],</span>
+</span><span data-line="29">    <span class="n">x</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">"target"</span><span class="p">),</span>
+</span><span data-line="30">    <span class="n">y</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">5</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">],</span>
 </span><span data-line="31"><span class="p">)</span>
-</span><span data-line="32"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="mi">5</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">))</span>
+</span><span data-line="32"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="mi">5</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">"target"</span><span class="p">))</span>
 </span><span data-line="33"><span class="k">assert</span> <span class="n">out</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 </span></pre></div>
 </div>
@@ -325,7 +325,7 @@ quantile predictions for regression.</p></li>
 </span><span data-line="2">  <span class="n">features</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
 </span><span data-line="3">    <span class="n">StypeDispatch</span><span class="p">(</span>
 </span><span data-line="4">      <span class="n">categorical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="5">        <span class="n">AlignCategories</span><span class="p">(</span><span class="n">sort_by</span><span class="o">=</span><span class="s1">&#39;value&#39;</span><span class="p">),</span>
+</span><span data-line="5">        <span class="n">AlignCategories</span><span class="p">(</span><span class="n">sort_by</span><span class="o">=</span><span class="s1">'value'</span><span class="p">),</span>
 </span><span data-line="6">        <span class="n">ToNumerical</span><span class="p">(),</span>
 </span><span data-line="7">      <span class="p">),</span>
 </span><span data-line="8">    <span class="p">),</span>
@@ -338,10 +338,10 @@ quantile predictions for regression.</p></li>
 </span><span data-line="15">        <span class="n">Choice</span><span class="p">(</span>
 </span><span data-line="16">          <span class="n">Identity</span><span class="p">(),</span>
 </span><span data-line="17">          <span class="n">PowerTransform</span><span class="p">(),</span>
-</span><span data-line="18">          <span class="n">method</span><span class="o">=</span><span class="s1">&#39;round_robin&#39;</span><span class="p">,</span>
+</span><span data-line="18">          <span class="n">method</span><span class="o">=</span><span class="s1">'round_robin'</span><span class="p">,</span>
 </span><span data-line="19">        <span class="p">),</span>
 </span><span data-line="20">        <span class="n">ClipSigma</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">4.0</span><span class="p">),</span>
-</span><span data-line="21">        <span class="n">ShuffleColumns</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">&#39;shift&#39;</span><span class="p">),</span>
+</span><span data-line="21">        <span class="n">ShuffleColumns</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'shift'</span><span class="p">),</span>
 </span><span data-line="22">      <span class="p">),</span>
 </span><span data-line="23">    <span class="p">),</span>
 </span><span data-line="24">  <span class="p">),</span>
@@ -350,12 +350,12 @@ quantile predictions for regression.</p></li>
 </span><span data-line="27">      <span class="n">numerical</span><span class="o">=</span><span class="n">Standardize</span><span class="p">(),</span>
 </span><span data-line="28">      <span class="n">categorical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
 </span><span data-line="29">        <span class="n">AlignCategories</span><span class="p">(),</span>
-</span><span data-line="30">        <span class="n">ShuffleCategories</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">&#39;shift&#39;</span><span class="p">),</span>
+</span><span data-line="30">        <span class="n">ShuffleCategories</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'shift'</span><span class="p">),</span>
 </span><span data-line="31">      <span class="p">),</span>
 </span><span data-line="32">    <span class="p">),</span>
 </span><span data-line="33">  <span class="p">),</span>
 </span><span data-line="34">  <span class="n">output</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="35">    <span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">&#39;mean&#39;</span><span class="p">),</span>
+</span><span data-line="35">    <span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'mean'</span><span class="p">),</span>
 </span><span data-line="36">    <span class="n">TaskDispatch</span><span class="p">(</span>
 </span><span data-line="37">      <span class="n">classification</span><span class="o">=</span><span class="n">Softmax</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mf">0.9</span><span class="p">),</span>
 </span><span data-line="38">    <span class="p">),</span>
@@ -390,7 +390,7 @@ quantile predictions for regression.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=185f38c3"></script>
+      <script src="../../_static/documentation_options.js?v=a08fbc39"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
