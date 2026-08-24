@@ -156,6 +156,7 @@ class TabICLv2(ICLModel):
             path = download_checkpoint(
                 repo_id="jingang/TabICL",
                 filename=f"tabicl-{variant}-v2-20260212.ckpt",
+                revision="4dcd344ece2c00be9e831fdd35bed57b5ad83e19",
             )
             ckpt = torch.load(
                 path,
