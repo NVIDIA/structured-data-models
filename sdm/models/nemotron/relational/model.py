@@ -1,4 +1,6 @@
 # ruff: noqa: D205
+from __future__ import annotations
+
 from collections.abc import Sequence
 from typing import Any, ClassVar, cast
 
@@ -162,7 +164,7 @@ class NemotronRelational(ICLModel):
     def _load_from_pretrained(
         self,
         device: torch.device | str | None,
-    ) -> "NemotronRelational":
+    ) -> NemotronRelational:
         device = torch.get_default_device() if device is None else device
 
         for variant in ["classifier", "regressor"]:
