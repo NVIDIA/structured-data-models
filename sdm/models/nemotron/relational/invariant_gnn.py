@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import LayerNorm, Linear
 
+from sdm._kernels import segment_multi_reduce
 from sdm.cache import Cache
 from sdm.models.nemotron.relational.graph import HomogeneousGraph
 from sdm.nn.memory import cuda_memory_availability
@@ -265,39 +266,15 @@ class InvariantGNN(torch.nn.Module):
         colptr: Tensor,
         skip_x: Tensor,
     ) -> Tensor:
-        h = torch.segment_reduce(
+        total, mean, std, minimum, maximum = segment_multi_reduce(
             src_x,
-            offsets=colptr,
-            reduce="sum",
-            unsafe=True,
-            initial=0,
+            colptr,
         )
-        out = skip_x + self.sum_lin(h)
-
-        h = h / colptr.diff().clamp(min=1).view(-1, 1)
-        out = out + self.avg_lin(h)
-
-        h = (
-            torch.segment_reduce(
-                src_x.square(),
-                offsets=colptr,
-                reduce="mean",
-                unsafe=True,
-                initial=0,
-            )
-            - h.square()
+        return (
+            skip_x
+            + self.sum_lin(total)
+            + self.avg_lin(mean)
+            + self.std_lin(std)
+            + self.min_lin(minimum)
+            + self.max_lin(maximum)
         )
-        h = torch.where(h <= 1e-5, 0.0, h.clamp(min=1e-5).sqrt())
-        out = out + self.std_lin(h)
-
-        h = torch.segment_reduce(
-            src_x, offsets=colptr, reduce="min", unsafe=True
-        )
-        h = torch.where(h.isinf(), 0.0, h)
-        out = out + self.min_lin(h)
-
-        h = torch.segment_reduce(
-            src_x, offsets=colptr, reduce="max", unsafe=True
-        )
-        h = torch.where(h.isinf(), 0.0, h)
-        return out + self.max_lin(h)

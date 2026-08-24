@@ -1381,7 +1381,7 @@ def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
         valid=inp._valid,
         size=view.size(),
         stride=view.stride(),
-        storage_offset=int(view.storage_offset()),
+        storage_offset=0 if view.numel() == 0 else int(view.storage_offset()),
     )
 
 

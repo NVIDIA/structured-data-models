@@ -1,5 +1,7 @@
 # ruff: noqa: D205
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
@@ -11,14 +13,15 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.cell_embedding import CellEmbedding
+from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.row_embedding import RowEmbedding
 from sdm.tensor.table import TableSchema
 
 
 class TabFM(ICLModel):
-    r"""The tabular foundation model as introduced in `"Introducing TabFM: A
-    Zero-shot Foundation Model for Tabular Data" <https://research.google/blog/
+    r"""The tabular foundation model from `"Introducing TabFM: A Zero-shot
+    Foundation Model for Tabular Data" <https://research.google/blog/
     introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
 
     .. figure:: /images/tabfm_light.png
@@ -41,7 +44,7 @@ class TabFM(ICLModel):
 
     .. note::
         :class:`TabFM` model weights are distributed under a
-        `non-commerical license <https://huggingface.co/google/
+        `non-commercial license <https://huggingface.co/google/
         tabfm-1.0.0-pytorch/blob/
         77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__.
         Users are expected to download the
@@ -71,22 +74,13 @@ class TabFM(ICLModel):
         super().__init__()
 
         self.task = task
-        if checkpoint_path is None:
-            self.model = _TabFM(
-                num_classes=10 if task == "classification" else 0,
-                device=device,
-            )
-        else:
-            # Avoid an import cycle while keeping checkpoint details private.
-            from sdm.models.tabfm.checkpoint import (  # noqa: PLC0415
-                _load_tabfm_v1_0_0,
-            )
+        self.model = _TabFM(
+            num_classes=10 if task == "classification" else 0,
+            device="meta" if checkpoint_path is not None else device,
+        )
 
-            self.model = _load_tabfm_v1_0_0(
-                checkpoint_path,
-                task=task,
-                device=device,
-            )
+        if checkpoint_path is not None:
+            self._load_from_pretrained(checkpoint_path, device=device)
 
         self.eval()
 
@@ -99,6 +93,22 @@ class TabFM(ICLModel):
                 sp.ShuffleColumns(),
             ]
         )
+
+    def _load_from_pretrained(
+        self,
+        checkpoint_path: str | Path,
+        device: torch.device | str | None,
+    ) -> TabFM:
+        from safetensors.torch import load_file  # noqa: PLC0415
+
+        device = torch.get_default_device() if device is None else device
+        ckpt = remap_ckpt(
+            ckpt=load_file(checkpoint_path, device=str(device)),
+            is_classifier=self.task == "classification",
+        )
+        self.model.load_state_dict(ckpt, strict=True, assign=True)
+
+        return self
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415

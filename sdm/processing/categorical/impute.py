@@ -1,6 +1,7 @@
 import torch
 
 from sdm import CategoricalTensor, Stype, TableTensor
+from sdm.nn._buffer import BufferList
 from sdm.processing import Processor
 from sdm.processing.categorical._categorical import _check_categorical_codes
 
@@ -27,7 +28,7 @@ class ImputeMode(Processor):
         super().__init__()
         # TODO: Add a separate processor that encodes missing values as their
         # own category instead of imputing an observed one.
-        self._categories: tuple[torch.Tensor, ...] = ()
+        self._categories: BufferList[torch.Tensor] = BufferList()
         self.register_buffer(
             "_fill_values",
             torch.empty(0, dtype=torch.long),
@@ -71,7 +72,7 @@ class ImputeMode(Processor):
             if len(fill_values) > 0
             else torch.empty(0, dtype=torch.long, device=data.device)
         )
-        self._categories = table.categorical.categories
+        self._categories = BufferList(table.categorical.categories)
 
     def _fit_transform(
         self,
