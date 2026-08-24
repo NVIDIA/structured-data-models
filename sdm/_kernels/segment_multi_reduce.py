@@ -77,6 +77,7 @@ def segment_multi_reduce(
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
     if (
         _triton_segment_multi_reduce is not None
+        and not (src.requires_grad and torch.is_grad_enabled())
         and src.is_cuda
         and src.dtype in {torch.float16, torch.bfloat16, torch.float32}
         and src.is_contiguous()

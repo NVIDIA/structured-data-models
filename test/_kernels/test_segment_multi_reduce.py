@@ -193,3 +193,22 @@ def test_segment_multi_reduce_compile() -> None:
         strict=True,
     ):
         torch.testing.assert_close(result, reference)
+
+
+@onlyCUDA
+def test_segment_multi_reduce_grad() -> None:
+    src = torch.randn(7, 8, device="cuda", requires_grad=True)
+    offsets = torch.tensor([0, 2, 2, 7], device="cuda")
+
+    total, mean, _, _, _ = segment_multi_reduce(src, offsets)
+
+    (total_grad,) = torch.autograd.grad(total.sum(), src, retain_graph=True)
+    torch.testing.assert_close(total_grad, torch.ones_like(src))
+
+    # Segments hold 2, 0 and 5 rows, so each row is averaged over its degree.
+    (mean_grad,) = torch.autograd.grad(mean.sum(), src)
+    degree = torch.tensor([2.0, 2, 5, 5, 5, 5, 5], device="cuda")
+    torch.testing.assert_close(
+        mean_grad,
+        degree.reciprocal().unsqueeze(1).expand_as(src),
+    )
