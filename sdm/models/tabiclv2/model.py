@@ -11,6 +11,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.tabiclv2.ckpt import remap_ckpt
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -149,8 +150,6 @@ class TabICLv2(ICLModel):
         self,
         device: torch.device | str | None,
     ) -> TabICLv2:
-        from sdm.models.tabiclv2.ckpt import remap_ckpt  # noqa: PLC0415
-
         device = torch.get_default_device() if device is None else device
 
         for variant in ["classifier", "regressor"]:

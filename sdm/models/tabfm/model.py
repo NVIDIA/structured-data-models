@@ -13,14 +13,15 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.cell_embedding import CellEmbedding
+from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.row_embedding import RowEmbedding
 from sdm.tensor.table import TableSchema
 
 
 class TabFM(ICLModel):
-    r"""The tabular foundation model as introduced in `"Introducing TabFM: A
-    Zero-shot Foundation Model for Tabular Data" <https://research.google/blog/
+    r"""The tabular foundation model from `"Introducing TabFM: A Zero-shot
+    Foundation Model for Tabular Data" <https://research.google/blog/
     introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
 
     .. figure:: /images/tabfm_light.png
@@ -99,8 +100,6 @@ class TabFM(ICLModel):
         device: torch.device | str | None,
     ) -> TabFM:
         from safetensors.torch import load_file  # noqa: PLC0415
-
-        from sdm.models.tabfm.ckpt import remap_ckpt  # noqa: PLC0415
 
         device = torch.get_default_device() if device is None else device
         ckpt = remap_ckpt(
