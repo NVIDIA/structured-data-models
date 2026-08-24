@@ -20,8 +20,8 @@ from sdm.tensor.table import TableSchema
 
 
 class TabFM(ICLModel):
-    r"""The tabular foundation model from `"Introducing TabFM: A
-    Zero-shot Foundation Model for Tabular Data" <https://research.google/blog/
+    r"""The tabular foundation model from `"Introducing TabFM: A Zero-shot
+    Foundation Model for Tabular Data" <https://research.google/blog/
     introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
 
     .. figure:: /images/tabfm_light.png
