@@ -30,10 +30,39 @@ Default Recipe
    Recipe(
      features=Sequential(
        StypeDispatch(
-         categorical=ToNumerical(),
+         categorical=Sequential(
+           AlignCategories(),
+           ToNumerical(),
+         ),
        ),
-       ShuffleColumns(method='shift'),
+       StypeDispatch(
+         numerical=Sequential(
+           DropConstantColumns(),
+           ImputeMean(),
+           Standardize(),
+           Clip(-100.0, 100.0),
+           Choice(
+             Identity(),
+             PowerTransform(),
+             method='round_robin',
+           ),
+           ClipSigma(threshold=4.0),
+           ShuffleColumns(method='random'),
+           SelectColumns(),
+         ),
+       ),
      ),
-     target=Identity(),
-     output=Identity(),
+     target=StypeDispatch(
+       numerical=Standardize(),
+       categorical=Sequential(
+         AlignCategories(sort_by='value'),
+         ShuffleCategories(method='shift'),
+       ),
+     ),
+     output=Sequential(
+       ReduceEstimators(method='mean'),
+       TaskDispatch(
+         classification=Softmax(temperature=0.9),
+       ),
+     ),
    )
