@@ -1,14 +1,14 @@
 import torch
 from torch.nn import RMSNorm, Sequential
 
-from sdm.models.nemotron.tabular.block import NemotronTabularTransformerBlock
+from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.nn import SwiGLU
 from sdm.testing import withCUDA
 
 
 @withCUDA
 def test_transformer_block_initialization(device: torch.device) -> None:
-    block = NemotronTabularTransformerBlock(
+    block = KumoTabularTransformerBlock(
         channels=32,
         num_heads=4,
         device=device,

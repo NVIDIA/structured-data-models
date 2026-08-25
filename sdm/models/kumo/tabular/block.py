@@ -8,8 +8,8 @@ from torch.nn import RMSNorm, Sequential
 from sdm.nn import RotaryEmbedding, SoftplusScale, SwiGLU, TransformerBlock
 
 
-class NemotronTabularTransformerBlock(TransformerBlock):
-    """Transformer block used by Nemotron Tabular.
+class KumoTabularTransformerBlock(TransformerBlock):
+    """Transformer block used by Kumo Tabular.
 
     Args:
         channels: Number of input and output channels.
@@ -37,11 +37,7 @@ class NemotronTabularTransformerBlock(TransformerBlock):
             key_transforms.append(rope)
         query_transforms.extend(
             [
-                RMSNorm(
-                    normalized_shape=head_channels,
-                    eps=1e-6,
-                    **factory_kwargs,
-                ),
+                RMSNorm(head_channels, eps=1e-6, **factory_kwargs),
                 SoftplusScale(
                     channels=head_channels,
                     multiplier=1.442695041 / math.sqrt(head_channels),
@@ -50,11 +46,7 @@ class NemotronTabularTransformerBlock(TransformerBlock):
             ]
         )
         key_transforms.append(
-            RMSNorm(
-                normalized_shape=head_channels,
-                eps=1e-6,
-                **factory_kwargs,
-            )
+            RMSNorm(head_channels, eps=1e-6, **factory_kwargs)
         )
 
         post_attn_norm = RMSNorm(channels, **factory_kwargs)
