@@ -284,6 +284,13 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         num_estimators=2,
     )
     assert model._cache is not None
+    model._cache = Cache(
+        {
+            key: value
+            for key, value in model._cache.items()
+            if key != "task_feature_state"
+        }
+    ).freeze()
 
     prediction = model.predict(x_query, related_query)
 

@@ -13,9 +13,14 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.nemotron.relational.invariant_gnn import InvariantGNN
 from sdm.models.nemotron.relational.recipe import default_recipe
 from sdm.models.nemotron.relational.task import TaskGraph
+from sdm.models.nemotron.relational.training_free_gnn import (
+    _fit_transform_training_free_gnn,
+    _transform_training_free_gnn,
+)
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
+from sdm.tensor.mixin import DeviceMixin
 
 
 class NemotronRelational(ICLModel):
@@ -125,6 +130,17 @@ class NemotronRelational(ICLModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+        training_free_gnn_features: Whether to add the deterministic,
+            training-free heterogeneous GNN features inspired by KumoRFM-2.
+            This SDM-native approximation uses joins induced by the provided
+            context and query tables separately, not Kumo's combined sampled
+            batch with retained edge ordering. It encodes numerical,
+            categorical, and datetime columns; identifiers remain structural
+            and text features are ignored. Each categorical column retains at
+            most 1,024 context values plus an unknown bucket. Each ordered
+            relationship uses ``[sum, mean, min, max, std]`` from left to
+            right and a deterministic mean from right to left, equal to a
+            gather when each left row matches at most one right row.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -144,8 +160,12 @@ class NemotronRelational(ICLModel):
         self,
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        *,
+        training_free_gnn_features: bool = False,
     ) -> None:
         super().__init__()
+
+        self.training_free_gnn_features = training_free_gnn_features
 
         self.cls_model = _NemotronRelational(
             num_classes=10,
@@ -239,6 +259,50 @@ class NemotronRelational(ICLModel):
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
+
+    def _supported_feature_stypes(self) -> frozenset[Stype]:
+        feature_stypes = super()._supported_feature_stypes()
+        if getattr(self, "training_free_gnn_features", False):
+            feature_stypes = feature_stypes | {Stype.categorical}
+        return feature_stypes
+
+    def _fit_task_features(
+        self,
+        x: TableTensor,
+        related_tables: RelatedTables | None,
+        **kwargs: Any,
+    ) -> tuple[TableTensor | None, DeviceMixin | None]:
+        if not getattr(self, "training_free_gnn_features", False):
+            return None, None
+        if related_tables is None:
+            raise ValueError(
+                f"{self.__class__.__name__!r} requires related tables"
+            )
+        return _fit_transform_training_free_gnn(
+            x=x,
+            related_tables=related_tables,
+            num_hops=cast(int | None, kwargs.get("num_hops")),
+        )
+
+    def _transform_task_features(
+        self,
+        x: TableTensor,
+        related_tables: RelatedTables | None,
+        state: DeviceMixin | None,
+        **kwargs: Any,
+    ) -> TableTensor | None:
+        if not getattr(self, "training_free_gnn_features", False):
+            return None
+        if related_tables is None:
+            raise ValueError(
+                f"{self.__class__.__name__!r} requires related tables"
+            )
+        assert isinstance(state, Cache)
+        return _transform_training_free_gnn(
+            x=x,
+            related_tables=related_tables,
+            state=state,
+        )
 
 
 class _NemotronRelational(torch.nn.Module):
@@ -359,8 +423,6 @@ class _NemotronRelational(torch.nn.Module):
                 ),
                 num_hops=num_hops,
             )
-
-        # TODO Inject random heterogeneous GNN.
 
         # Reason within each Table ############################################
         if context is not None:
