@@ -78,10 +78,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
-        with (
-            inference_mode(not requires_grad),
-            torch.set_grad_enabled(requires_grad),
-        ):
+        with inference_mode(not requires_grad):
             return self._forward_call(
                 x_context=x_context,
                 y_context=y_context,
@@ -324,10 +321,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
-        with (
-            inference_mode(not requires_grad),
-            torch.set_grad_enabled(requires_grad),
-        ):
+        with inference_mode(not requires_grad):
             return self._predict_call(
                 x=x,
                 related_tables=related_tables,
