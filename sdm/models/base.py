@@ -39,6 +39,62 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self._cache: Cache | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
+    def forward(
+        self,
+        x_context: Tensor | TableTensor,  # [..., R_context, D]
+        y_context: Tensor | TableTensor,  # [..., R_context, 1]
+        x_query: Tensor | TableTensor,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None = None,
+        related_query_tables: RelatedTables | None = None,
+        *,
+        recipe: Recipe | None = None,
+        num_estimators: int = 1,
+        generator: torch.Generator | None = None,
+        callbacks: Sequence[Callback] | None = None,
+        **kwargs: Any,
+    ) -> TableTensor:  # Recipe-defined output shape.
+        r"""The in-context learning forward pass.
+
+        Args:
+            x_context: The feature tensor of in-context examples with shape
+                ``[..., R_context, D]`` with ``R_context`` rows and ``D``
+                columns.
+            y_context: The targets of in-context examples with shape
+                ``[..., R_context, 1]``.
+            x_query: The feature tensor of query examples with shape
+                ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
+            related_context_tables: Related context for in-context examples.
+            related_query_tables: Related context for query examples.
+            recipe: The custom recipe for pre- and post-processing.
+            num_estimators: The number of estimators ``E`` for ensembling.
+            generator: Pseudorandom number generator used for sampling during
+                pre-processing and model execution.
+            callbacks: Callbacks applied in sequence to this model call.
+            kwargs: Additional keyword arguments passed to the model.
+
+        Returns:
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R_query, *]``.
+        """
+        callbacks = () if callbacks is None else callbacks
+        requires_grad = any(callback.requires_grad for callback in callbacks)
+        with (
+            inference_mode(not requires_grad),
+            torch.set_grad_enabled(requires_grad),
+        ):
+            return self._forward_call(
+                x_context=x_context,
+                y_context=y_context,
+                x_query=x_query,
+                related_context_tables=related_context_tables,
+                related_query_tables=related_query_tables,
+                recipe=recipe,
+                num_estimators=num_estimators,
+                generator=generator,
+                callbacks=callbacks,
+                **kwargs,
+            )
+
     def _forward_call(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
@@ -154,62 +210,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         return prediction
 
-    def forward(
-        self,
-        x_context: Tensor | TableTensor,  # [..., R_context, D]
-        y_context: Tensor | TableTensor,  # [..., R_context, 1]
-        x_query: Tensor | TableTensor,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None = None,
-        related_query_tables: RelatedTables | None = None,
-        *,
-        recipe: Recipe | None = None,
-        num_estimators: int = 1,
-        generator: torch.Generator | None = None,
-        callbacks: Sequence[Callback] | None = None,
-        **kwargs: Any,
-    ) -> TableTensor:  # Recipe-defined output shape.
-        r"""The in-context learning forward pass.
-
-        Args:
-            x_context: The feature tensor of in-context examples with shape
-                ``[..., R_context, D]`` with ``R_context`` rows and ``D``
-                columns.
-            y_context: The targets of in-context examples with shape
-                ``[..., R_context, 1]``.
-            x_query: The feature tensor of query examples with shape
-                ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
-            related_context_tables: Related context for in-context examples.
-            related_query_tables: Related context for query examples.
-            recipe: The custom recipe for pre- and post-processing.
-            num_estimators: The number of estimators ``E`` for ensembling.
-            generator: Pseudorandom number generator used for sampling during
-                pre-processing and model execution.
-            callbacks: Callbacks applied in sequence to this model call.
-            kwargs: Additional keyword arguments passed to the model.
-
-        Returns:
-            The processed prediction after applying ``recipe.output`` to the
-            stacked estimator outputs with shape ``[E, ..., R_query, *]``.
-        """
-        callbacks = () if callbacks is None else callbacks
-        set_grad = any(callback.requires_grad for callback in callbacks)
-        with (
-            inference_mode(not set_grad),
-            torch.set_grad_enabled(set_grad),
-        ):
-            return self._forward_call(
-                x_context=x_context,
-                y_context=y_context,
-                x_query=x_query,
-                related_context_tables=related_context_tables,
-                related_query_tables=related_query_tables,
-                recipe=recipe,
-                num_estimators=num_estimators,
-                generator=generator,
-                callbacks=callbacks,
-                **kwargs,
-            )
-
     @inference_mode(False)
     @torch.no_grad()
     def fit(
@@ -298,6 +298,41 @@ class ICLModel(torch.nn.Module, abc.ABC):
             cache[i] = estimator_cache
 
         self._cache = cache.freeze()
+
+    def predict(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
+    ) -> TableTensor:  # Recipe-defined output shape.
+        r"""Predict unseen query examples.
+
+        .. note::
+
+            This method requires a prior call to :meth:`fit`.
+
+        Args:
+            x: The feature tensor of query examples with shape
+                ``[..., R, D]`` with ``R`` rows and ``D`` columns.
+            related_tables: Related context for query examples.
+            callbacks: Callbacks applied in sequence to this model call.
+
+        Returns:
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R, *]``.
+        """
+        callbacks = () if callbacks is None else callbacks
+        requires_grad = any(callback.requires_grad for callback in callbacks)
+        with (
+            inference_mode(not requires_grad),
+            torch.set_grad_enabled(requires_grad),
+        ):
+            return self._predict_call(
+                x=x,
+                related_tables=related_tables,
+                callbacks=callbacks,
+            )
 
     def _predict_call(
         self,
@@ -437,41 +472,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             callback.on_forward_end(self, prediction)
 
         return prediction
-
-    def predict(
-        self,
-        x: Tensor | TableTensor,  # [..., R, D]
-        related_tables: RelatedTables | None = None,
-        *,
-        callbacks: Sequence[Callback] | None = None,
-    ) -> TableTensor:  # Recipe-defined output shape.
-        r"""Predict unseen query examples.
-
-        .. note::
-
-            This method requires a prior call to :meth:`fit`.
-
-        Args:
-            x: The feature tensor of query examples with shape
-                ``[..., R, D]`` with ``R`` rows and ``D`` columns.
-            related_tables: Related context for query examples.
-            callbacks: Callbacks applied in sequence to this model call.
-
-        Returns:
-            The processed prediction after applying ``recipe.output`` to the
-            stacked estimator outputs with shape ``[E, ..., R, *]``.
-        """
-        callbacks = () if callbacks is None else callbacks
-        set_grad = any(callback.requires_grad for callback in callbacks)
-        with (
-            inference_mode(not set_grad),
-            torch.set_grad_enabled(set_grad),
-        ):
-            return self._predict_call(
-                x=x,
-                related_tables=related_tables,
-                callbacks=callbacks,
-            )
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
