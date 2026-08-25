@@ -93,15 +93,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 **kwargs,
             )
 
-        if num_estimators < 1:
-            raise ValueError("'num_estimators' needs to be positive")
-        if not isinstance(x_context, TableTensor):
-            x_context = TableTensor.from_tensor(x_context)
-        if not isinstance(y_context, TableTensor):
-            y_context = TableTensor.from_tensor(y_context)
-        if not isinstance(x_query, TableTensor):
-            x_query = TableTensor.from_tensor(x_query)
-
         if (related_context_tables is None) != (related_query_tables is None):
             raise ValueError(
                 "Expected 'related_context_tables' and 'related_query_tables' "
@@ -208,13 +199,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
-        if num_estimators < 1:
-            raise ValueError("'num_estimators' needs to be positive")
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        if not isinstance(y, TableTensor):
-            y = TableTensor.from_tensor(y)
-
         self.clear()
 
         recipe_execution = RecipeExecution(
@@ -299,9 +283,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables,
                 callbacks=callbacks,
             )
-
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
 
         if self._cache is None:
             raise RuntimeError(
