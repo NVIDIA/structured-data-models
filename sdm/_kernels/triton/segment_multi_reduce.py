@@ -14,6 +14,8 @@ import triton.language as tl
 @triton.jit
 def _segment_multi_reduce_kernel(
     src_ptr,
+    index_ptr,
+    edge_attr_ptr,
     offsets_ptr,
     sum_ptr,
     mean_ptr,
@@ -37,8 +39,14 @@ def _segment_multi_reduce_kernel(
 
     edge = start
     while edge < end:
+        row = tl.load(index_ptr + edge)
         value = tl.load(
-            src_ptr + edge.to(tl.int64) * num_channels + channels,
+            src_ptr + row.to(tl.int64) * num_channels + channels,
+            mask=channel_mask,
+            other=0.0,
+        ).to(tl.float32)
+        value += tl.load(
+            edge_attr_ptr + edge.to(tl.int64) * num_channels + channels,
             mask=channel_mask,
             other=0.0,
         ).to(tl.float32)
@@ -76,10 +84,23 @@ def _segment_multi_reduce_kernel(
 
 def segment_multi_reduce(
     src: Tensor,
+    index: Tensor,
+    edge_attr: Tensor,
     offsets: Tensor,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-    if not src.is_contiguous() or not offsets.is_contiguous():
-        raise ValueError("src and offsets must be contiguous")
+    if (
+        not src.is_contiguous()
+        or not index.is_contiguous()
+        or not edge_attr.is_contiguous()
+        or not offsets.is_contiguous()
+    ):
+        raise ValueError(
+            "src, index, edge_attr, and offsets must be contiguous"
+        )
+    if edge_attr.shape != (index.numel(), src.size(1)):
+        raise ValueError(
+            "edge_attr must have shape (index.numel(), src.size(1))"
+        )
 
     shape = (offsets.numel() - 1, src.size(1))
     outputs = (
@@ -103,6 +124,8 @@ def segment_multi_reduce(
     with torch.cuda.device(src.device):
         cast(Any, _segment_multi_reduce_kernel)[grid](
             src,
+            index,
+            edge_attr,
             offsets,
             *outputs,
             num_channels=shape[1],
