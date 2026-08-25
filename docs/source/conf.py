@@ -64,9 +64,22 @@ doctest_global_setup = """
 from unittest.mock import patch
 
 import sdm.models
+import torch
 
 
-def _skip_pretrained(self):
+def _reset_parameters(module):
+    reset_parameters = getattr(module, "reset_parameters", None)
+    if reset_parameters is not None:
+        reset_parameters()
+
+
+def _skip_pretrained(self, *_args, device=None, **_kwargs):
+    if not any(parameter.is_meta for parameter in self.parameters()):
+        return self
+
+    target_device = torch.get_default_device() if device is None else device
+    self.to_empty(device=target_device)
+    self.apply(_reset_parameters)
     return self
 
 
