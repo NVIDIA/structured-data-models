@@ -1,0 +1,1 @@
+"""Kumo Tabular model components."""
