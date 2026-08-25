@@ -1,5 +1,4 @@
-import contextlib
-from typing import Any
+from typing import Any, ClassVar
 
 import torch
 
@@ -15,27 +14,14 @@ class Callback:
     attempted call, the end hook runs once after a successful call, and
     preprocessing hooks run once per ensemble member.
 
-    Callbacks supplied together run in sequence order, each preprocessing
-    result is passed to the next callback, and their execution contexts enter
-    before lifecycle hooks in sequence order and exit in reverse order.
+    Callbacks supplied together run in sequence order, and each preprocessing
+    result is passed to the next callback. Subclasses that use autograd set
+    :attr:`requires_grad` to ``True``. Gradient calculation is enabled for the
+    model call when any supplied callback requires it.
     """
 
-    def execution_context(
-        self,
-        model: torch.nn.Module,
-    ) -> contextlib.AbstractContextManager[None]:
-        """Return a context manager for one model call.
-
-        The context encloses all callback hooks and model execution and must
-        not suppress exceptions.
-
-        Args:
-            model: Model receiving the callback.
-
-        Returns:
-            Context manager for the public model call.
-        """
-        return contextlib.nullcontext()
+    #: Whether this callback requires gradient calculation during model calls.
+    requires_grad: ClassVar[bool] = False
 
     def on_forward_start(
         self,

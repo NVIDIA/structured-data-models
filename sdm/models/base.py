@@ -1,5 +1,4 @@
 import abc
-import contextlib
 import copy
 from collections.abc import Sequence
 from typing import Any, ClassVar, cast
@@ -155,7 +154,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         return prediction
 
-    @inference_mode()
     def forward(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
@@ -194,9 +192,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
-        with contextlib.ExitStack() as stack:
-            for callback in callbacks:
-                stack.enter_context(callback.execution_context(self))
+        set_grad = any(callback.requires_grad for callback in callbacks)
+        with (
+            inference_mode(not set_grad),
+            torch.set_grad_enabled(set_grad),
+        ):
             return self._forward_call(
                 x_context=x_context,
                 y_context=y_context,
@@ -438,7 +438,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         return prediction
 
-    @inference_mode()
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
@@ -463,9 +462,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
         callbacks = () if callbacks is None else callbacks
-        with contextlib.ExitStack() as stack:
-            for callback in callbacks:
-                stack.enter_context(callback.execution_context(self))
+        set_grad = any(callback.requires_grad for callback in callbacks)
+        with (
+            inference_mode(not set_grad),
+            torch.set_grad_enabled(set_grad),
+        ):
             return self._predict_call(
                 x=x,
                 related_tables=related_tables,
