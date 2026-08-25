@@ -108,7 +108,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         generator: torch.Generator | None = None,
         callbacks: Sequence[Callback],
         **kwargs: Any,
-    ) -> TableTensor:  # Recipe-defined output shape.
+    ) -> TableTensor:
         for callback in callbacks:
             callback.on_forward_start(
                 self,
@@ -340,7 +340,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         related_tables: RelatedTables | None = None,
         *,
         callbacks: Sequence[Callback],
-    ) -> TableTensor:  # Recipe-defined output shape.
+    ) -> TableTensor:
         for callback in callbacks:
             callback.on_forward_start(
                 self,

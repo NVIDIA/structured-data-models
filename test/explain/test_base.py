@@ -7,7 +7,7 @@ from sdm.callbacks import Callback
 from sdm.models import TabICLv2
 
 
-class _AutogradCallback(Callback):
+class MyCallback(Callback):
     requires_grad = True
     input: Tensor
     completed: bool = False
@@ -34,7 +34,7 @@ class _AutogradCallback(Callback):
 @pytest.mark.parametrize("fitted", [False, True])
 def test_callback_requires_grad_supports_autograd(fitted: bool) -> None:
     model = TabICLv2(pretrained=False)
-    callback = _AutogradCallback()
+    callback = MyCallback()
     callbacks = (Callback(), callback)
     x_context = torch.eye(2)
     y_context = torch.arange(2)[:, None]
