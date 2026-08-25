@@ -214,7 +214,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
 
         cache = Cache(
-            num_estimators=num_estimators,
+            num_estimators=len(contexts),
             recipe_execution=recipe_execution,
             kwargs=kwargs,
         )
@@ -245,7 +245,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 generator=generator,
                 **kwargs,
             )
-            if x.is_cuda and num_estimators > 1:
+            if x.is_cuda and len(contexts) > 1:
                 estimator_cache = estimator_cache.cpu().pin_memory()
             cache[i] = estimator_cache
 
