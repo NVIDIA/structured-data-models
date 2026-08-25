@@ -1,10 +1,12 @@
 from collections.abc import Callable
+from typing import TypeAlias
 
 import torch
 from torch import Tensor
 
-_SegmentMultiReduce = Callable[
-    [Tensor, Tensor], tuple[Tensor, Tensor, Tensor, Tensor, Tensor]
+_SegmentMultiReduce: TypeAlias = Callable[
+    [Tensor, Tensor, Tensor, Tensor],
+    tuple[Tensor, Tensor, Tensor, Tensor, Tensor],
 ]
 
 _triton_segment_multi_reduce: _SegmentMultiReduce | None = None
@@ -20,11 +22,15 @@ else:
 
 def _eager_segment_multi_reduce(
     src: Tensor,
+    index: Tensor,
+    edge_x: Tensor,
     offsets: Tensor,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-    values = (
-        src.float() if src.dtype in {torch.float16, torch.bfloat16} else src
-    )
+    values = src[index]
+    if src.dtype in {torch.float16, torch.bfloat16}:
+        values = values.float() + edge_x.float()
+    else:
+        values = values + edge_x
     total = torch.segment_reduce(
         values,
         offsets=offsets,
@@ -73,17 +79,29 @@ def _eager_segment_multi_reduce(
 
 def segment_multi_reduce(
     src: Tensor,
+    index: Tensor,
+    edge_x: Tensor,
     offsets: Tensor,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
     if (
         _triton_segment_multi_reduce is not None
-        and not (src.requires_grad and torch.is_grad_enabled())
+        and not (
+            (src.requires_grad or edge_x.requires_grad)
+            and torch.is_grad_enabled()
+        )
         and src.is_cuda
         and src.dtype in {torch.float16, torch.bfloat16, torch.float32}
+        and edge_x.dtype == src.dtype
         and src.is_contiguous()
+        and index.is_contiguous()
+        and edge_x.is_contiguous()
         and offsets.is_contiguous()
+        and index.device == src.device
+        and edge_x.device == src.device
         and offsets.device == src.device
+        and index.dtype in {torch.int32, torch.int64}
         and offsets.dtype in {torch.int32, torch.int64}
+        and edge_x.shape == (index.numel(), src.size(1))
     ):
-        return _triton_segment_multi_reduce(src, offsets)
-    return _eager_segment_multi_reduce(src, offsets)
+        return _triton_segment_multi_reduce(src, index, edge_x, offsets)
+    return _eager_segment_multi_reduce(src, index, edge_x, offsets)

@@ -224,25 +224,26 @@ class InvariantGNN(torch.nn.Module):
         )
 
         for i in range(num_hops):
+            src_x = self.src_lin(x)
+            skip_x = self.skip_lin(x)
             if aggregation_slices is None:
                 assert edge_emb is not None
                 x = self._aggregate(
-                    src_x=self.src_lin(x)[graph.row] + edge_emb,
+                    src_x=src_x,
+                    index=graph.row,
+                    edge_x=edge_emb,
                     colptr=graph.colptr,
-                    skip_x=self.skip_lin(x),
+                    skip_x=skip_x,
                 )
             else:
-                src_x = self.src_lin(x)
-                skip_x = self.skip_lin(x)
                 out = torch.empty_like(skip_x)
                 for start, end, edge_start, edge_end in aggregation_slices:
                     out[start:end] = self._aggregate(
-                        src_x=(
-                            src_x[graph.row[edge_start:edge_end]]
-                            + edge_type_emb[
-                                graph.edge_type[edge_start:edge_end]
-                            ]
-                        ),
+                        src_x=src_x,
+                        index=graph.row[edge_start:edge_end],
+                        edge_x=edge_type_emb[
+                            graph.edge_type[edge_start:edge_end]
+                        ],
                         colptr=(
                             graph.colptr[start : end + 1] - graph.colptr[start]
                         ),
@@ -263,12 +264,16 @@ class InvariantGNN(torch.nn.Module):
         self,
         *,
         src_x: Tensor,
+        index: Tensor,
+        edge_x: Tensor,
         colptr: Tensor,
         skip_x: Tensor,
     ) -> Tensor:
         total, mean, std, minimum, maximum = segment_multi_reduce(
-            src_x,
-            colptr,
+            src=src_x,
+            index=index,
+            edge_x=edge_x,
+            offsets=colptr,
         )
         return (
             skip_x
