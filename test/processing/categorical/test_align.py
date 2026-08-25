@@ -150,6 +150,102 @@ def test_align_categories_orders_joint_vocabulary(
 
 
 @withCUDA
+def test_align_categories_filters_rare_categories(
+    device: torch.device,
+) -> None:
+    context = _table(
+        [[-1], [2], [1], [2], [0], [3], [1], [0]],
+        categories=(("alpha", "beta", "gamma", "rare", "unused"),),
+        device=device,
+    )
+    query = _table(
+        [[3], [0], [2], [1], [4], [-1]],
+        categories=(("gamma", "other", "alpha", "beta", "rare"),),
+        device=device,
+    )
+
+    processor = AlignCategories(min_frequency=2)
+    context_output = processor.fit_transform(context)
+    query_output = processor.transform(query)
+
+    assert context_output.categorical.categories[0].tolist() == [
+        "alpha",
+        "beta",
+        "gamma",
+    ]
+    assert context_output.categorical.code.squeeze(-1).tolist() == [
+        -1,
+        2,
+        1,
+        2,
+        0,
+        -1,
+        1,
+        0,
+    ]
+    assert query_output.categorical.code.squeeze(-1).tolist() == [
+        1,
+        2,
+        0,
+        -1,
+        -1,
+        -1,
+    ]
+
+
+@withCUDA
+def test_align_categories_filters_per_ensemble_member(
+    device: torch.device,
+) -> None:
+    first = _table(
+        [[0], [0], [1]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    second = _table(
+        [[1], [1], [2]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    context = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1),
+    )
+
+    output = AlignCategories(min_frequency=2).fit_transform_ensemble(context)
+
+    assert output.table(0).categorical.categories[0].tolist() == ["red"]
+    assert output.table(0).categorical.code.squeeze(-1).tolist() == [0, 0, -1]
+    assert output.table(1).categorical.categories[0].tolist() == ["blue"]
+    assert output.table(1).categorical.code.squeeze(-1).tolist() == [0, 0, -1]
+
+
+@pytest.mark.parametrize(
+    ("min_frequency", "expected_categories", "expected_codes"),
+    [
+        (2, [10], [0, 0, -1]),
+        (3, [], [-1, -1, -1]),
+    ],
+)
+def test_align_categories_filters_unsigned_categories(
+    min_frequency: int,
+    expected_categories: list[int],
+    expected_codes: list[int],
+) -> None:
+    table = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [0], [1]], dtype=torch.int32),
+            categories=(torch.tensor([10, 20], dtype=torch.uint64),),
+        ),
+    )
+
+    output = AlignCategories(min_frequency=min_frequency).fit_transform(table)
+
+    assert output.categorical.categories[0].tolist() == expected_categories
+    assert output.categorical.code.squeeze(-1).tolist() == expected_codes
+
+
+@withCUDA
 def test_align_categories_orders_values(
     device: torch.device,
 ) -> None:
@@ -383,6 +479,27 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
 
     with pytest.raises(NotImplementedError):
         processor.transform(query)
+
+
+@pytest.mark.parametrize("min_frequency", [0, -1])
+def test_align_categories_rejects_non_positive_min_frequency(
+    min_frequency: int,
+) -> None:
+    with pytest.raises(ValueError, match="min_frequency must be positive"):
+        AlignCategories(min_frequency=min_frequency)
+
+
+def test_align_categories_repr_omits_default_arguments() -> None:
+    assert repr(AlignCategories()) == "AlignCategories()"
+    assert repr(AlignCategories(sort_by="frequency")) == (
+        "AlignCategories(sort_by='frequency')"
+    )
+    assert repr(AlignCategories(min_frequency=2)) == (
+        "AlignCategories(min_frequency=2)"
+    )
+    assert repr(AlignCategories(sort_by="frequency", min_frequency=2)) == (
+        "AlignCategories(sort_by='frequency', min_frequency=2)"
+    )
 
 
 @withCUDA
