@@ -235,3 +235,32 @@ def test_power_transform_fits_leading_batches_independently(
         rtol=2e-5,
         atol=2e-5,
     )
+
+
+@withCUDA
+def test_power_transform_clips_only_overflowing_query_batches(
+    device: torch.device,
+) -> None:
+    context = (
+        torch.tensor(
+            [0.0, 0.0, 0.0, 0.0, 0.01],
+            dtype=torch.float64,
+            device=device,
+        )
+        .view(1, 5, 1)
+        .expand(2, -1, -1)
+    )
+    query = torch.tensor(
+        [[[-100.0], [0.02]], [[0.0], [0.02]]],
+        dtype=torch.float64,
+        device=device,
+    )
+    processor = PowerTransform().fit(TableTensor.from_tensor(context))
+
+    output = processor.transform(TableTensor.from_tensor(query)).numerical
+    clipped = query.clone()
+    clipped[0].clamp_(0.0, 0.01)
+    expected = processor.transform(TableTensor.from_tensor(clipped)).numerical
+
+    assert torch.isfinite(output).all()
+    torch.testing.assert_close(output, expected)
