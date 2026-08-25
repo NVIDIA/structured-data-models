@@ -217,7 +217,7 @@ class InvariantGNN(torch.nn.Module):
                     work_byte_limit=work_byte_limit,
                     value_bytes=x.size(-1) * max(x.element_size(), 4),
                 )
-        edge_emb = (
+        edge_attr = (
             edge_type_emb[graph.edge_type]
             if aggregation_slices is None
             else None
@@ -227,11 +227,11 @@ class InvariantGNN(torch.nn.Module):
             src_x = self.src_lin(x)
             skip_x = self.skip_lin(x)
             if aggregation_slices is None:
-                assert edge_emb is not None
+                assert edge_attr is not None
                 x = self._aggregate(
                     src_x=src_x,
                     index=graph.row,
-                    edge_x=edge_emb,
+                    edge_attr=edge_attr,
                     colptr=graph.colptr,
                     skip_x=skip_x,
                 )
@@ -241,7 +241,7 @@ class InvariantGNN(torch.nn.Module):
                     out[start:end] = self._aggregate(
                         src_x=src_x,
                         index=graph.row[edge_start:edge_end],
-                        edge_x=edge_type_emb[
+                        edge_attr=edge_type_emb[
                             graph.edge_type[edge_start:edge_end]
                         ],
                         colptr=(
@@ -265,14 +265,14 @@ class InvariantGNN(torch.nn.Module):
         *,
         src_x: Tensor,
         index: Tensor,
-        edge_x: Tensor,
+        edge_attr: Tensor,
         colptr: Tensor,
         skip_x: Tensor,
     ) -> Tensor:
         total, mean, std, minimum, maximum = segment_multi_reduce(
             src=src_x,
             index=index,
-            edge_x=edge_x,
+            edge_attr=edge_attr,
             offsets=colptr,
         )
         return (
