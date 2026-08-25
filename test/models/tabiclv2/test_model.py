@@ -63,6 +63,7 @@ def test_row_embedding_automatic_batch_size_limit(
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+# @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])  # TODO Reenable
 @pytest.mark.parametrize("batch_shape", [()])
 def test_forward(
     device: torch.device,
