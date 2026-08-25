@@ -2,60 +2,10 @@ import importlib
 
 import pytest
 import torch
-from torch import Tensor
 
+from sdm._kernels import segment_multi_reduce
+from sdm._kernels.segment_multi_reduce import _eager_segment_multi_reduce
 from sdm.testing import onlyCUDA
-
-
-def _reference(
-    src: Tensor,
-    offsets: Tensor,
-) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-    values = src.float()
-    total = torch.segment_reduce(
-        values,
-        offsets=offsets,
-        reduce="sum",
-        unsafe=True,
-        initial=0,
-    )
-    mean = total / offsets.diff().clamp(min=1).view(-1, 1)
-    variance = (
-        torch.segment_reduce(
-            values.square(),
-            offsets=offsets,
-            reduce="mean",
-            unsafe=True,
-            initial=0,
-        )
-        - mean.square()
-    )
-    std = torch.where(
-        variance <= 1e-5,
-        0.0,
-        variance.clamp(min=1e-5).sqrt(),
-    )
-    minimum = torch.segment_reduce(
-        values,
-        offsets=offsets,
-        reduce="min",
-        unsafe=True,
-    )
-    maximum = torch.segment_reduce(
-        values,
-        offsets=offsets,
-        reduce="max",
-        unsafe=True,
-    )
-    minimum = torch.where(minimum.isinf(), 0.0, minimum)
-    maximum = torch.where(maximum.isinf(), 0.0, maximum)
-    return (
-        total.to(src.dtype),
-        mean.to(src.dtype),
-        std.to(src.dtype),
-        minimum.to(src.dtype),
-        maximum.to(src.dtype),
-    )
 
 
 @onlyCUDA
@@ -90,11 +40,10 @@ def test_segment_multi_reduce(
     module = importlib.import_module(
         "sdm._kernels.triton.segment_multi_reduce"
     )
-
     with torch.inference_mode():
         actual = module.segment_multi_reduce(src, offsets)
 
-    expected = _reference(src, offsets)
+    expected = _eager_segment_multi_reduce(src, offsets)
     for result, reference in zip(actual, expected, strict=True):
         assert result.shape == (len(degrees), num_channels)
         assert result.is_contiguous()
@@ -173,14 +122,14 @@ def test_segment_multi_reduce_nonfinite() -> None:
 
     for result, reference in zip(
         actual,
-        _reference(src, offsets),
+        _eager_segment_multi_reduce(src, offsets),
         strict=True,
     ):
         torch.testing.assert_close(result, reference, equal_nan=True)
 
 
 @onlyCUDA
-def test_segment_multi_reduce_requires_contiguous_inputs() -> None:
+def test_segment_multi_reduce_triton_requires_contiguous_inputs() -> None:
     src = torch.randn(7, 6, device="cuda")
     offsets = torch.tensor([0, -1, 2, -1, 7, -1], device="cuda")
     module = importlib.import_module(
@@ -192,3 +141,74 @@ def test_segment_multi_reduce_requires_contiguous_inputs() -> None:
 
     with pytest.raises(ValueError, match="src and offsets must be contiguous"):
         module.segment_multi_reduce(src[:, ::2].contiguous(), offsets[::2])
+
+
+@onlyCUDA
+def test_segment_multi_reduce_noncontiguous() -> None:
+    src = torch.randn(7, 6, device="cuda")
+    offsets = torch.tensor([0, -1, 2, -1, 7, -1], device="cuda")
+    src = src[:, ::2]
+    offsets = offsets[::2]
+
+    actual = segment_multi_reduce(src, offsets)
+
+    for result, reference in zip(
+        actual,
+        _eager_segment_multi_reduce(src, offsets),
+        strict=True,
+    ):
+        torch.testing.assert_close(result, reference)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_segment_multi_reduce_torch(dtype: torch.dtype) -> None:
+    src = torch.arange(18, dtype=dtype).reshape(6, 3)
+    offsets = torch.tensor([0, 0, 2, 6])
+
+    actual = segment_multi_reduce(src, offsets)
+
+    for result, reference in zip(
+        actual,
+        _eager_segment_multi_reduce(src, offsets),
+        strict=True,
+    ):
+        torch.testing.assert_close(result, reference)
+
+
+@onlyCUDA
+def test_segment_multi_reduce_compile() -> None:
+    src = torch.randn(7, 8, device="cuda", dtype=torch.bfloat16)
+    offsets = torch.tensor([0, 2, 2, 7], device="cuda")
+    compiled = torch.compile(
+        segment_multi_reduce,
+        fullgraph=True,
+        backend="eager",
+    )
+
+    actual = compiled(src, offsets)
+
+    for result, reference in zip(
+        actual,
+        _eager_segment_multi_reduce(src, offsets),
+        strict=True,
+    ):
+        torch.testing.assert_close(result, reference)
+
+
+@onlyCUDA
+def test_segment_multi_reduce_grad() -> None:
+    src = torch.randn(7, 8, device="cuda", requires_grad=True)
+    offsets = torch.tensor([0, 2, 2, 7], device="cuda")
+
+    total, mean, _, _, _ = segment_multi_reduce(src, offsets)
+
+    (total_grad,) = torch.autograd.grad(total.sum(), src, retain_graph=True)
+    torch.testing.assert_close(total_grad, torch.ones_like(src))
+
+    # Segments hold 2, 0 and 5 rows, so each row is averaged over its degree.
+    (mean_grad,) = torch.autograd.grad(mean.sum(), src)
+    degree = torch.tensor([2.0, 2, 5, 5, 5, 5, 5], device="cuda")
+    torch.testing.assert_close(
+        mean_grad,
+        degree.reciprocal().unsqueeze(1).expand_as(src),
+    )
