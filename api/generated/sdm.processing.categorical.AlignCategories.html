@@ -210,20 +210,25 @@ data-aria-dark="Switch to auto color mode">
 <h1>AlignCategories<a class="headerlink" href="#aligncategories" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.processing.categorical.AlignCategories">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.categorical.</span></span><span class="sig-name descname"><span class="pre">AlignCategories</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sort_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'code'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'frequency'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'value'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'code'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.categorical.AlignCategories" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.categorical.</span></span><span class="sig-name descname"><span class="pre">AlignCategories</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sort_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'code'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'frequency'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'value'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'code'</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_frequency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.categorical.AlignCategories" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a></p>
 <p>Align categorical columns to categories observed during fitting.</p>
 <p>A categorical column stores each value as an integer code indexing an
 ordered list of categories. Separately created tables can use different
 codes for the same value. Fitting learns the category list for each column,
 and transforming remaps another table to use it. Missing values and
-categories not seen during fitting receive code <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p>
+categories not retained during fitting receive code <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>sort_by</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'code'</em><em>, </em><em>'frequency'</em><em>, </em><em>'value'</em><em>]</em>) – How to order fitted categories.
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sort_by</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'code'</em><em>, </em><em>'frequency'</em><em>, </em><em>'value'</em><em>]</em>) – How to order fitted categories.
 <code class="docutils literal notranslate"><span class="pre">&quot;code&quot;</span></code> keeps observed categories in original order.
 <code class="docutils literal notranslate"><span class="pre">&quot;frequency&quot;</span></code> orders observed categories by descending frequency.
-<code class="docutils literal notranslate"><span class="pre">&quot;value&quot;</span></code> orders observed categories by ascending value.</p>
+<code class="docutils literal notranslate"><span class="pre">&quot;value&quot;</span></code> orders observed categories by ascending value.</p></li>
+<li><p><strong>min_frequency</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Minimum number of observations required to retain a
+category. Values of rarer categories receive code <code class="docutils literal notranslate"><span class="pre">-1</span></code>.
+Must be positive.</p></li>
+</ul>
 </dd>
 </dl>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
@@ -296,7 +301,7 @@ categories not seen during fitting receive code <code class="docutils literal no
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=be609aac"></script>
+      <script src="../../_static/documentation_options.js?v=e635225a"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
