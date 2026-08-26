@@ -411,8 +411,6 @@ def test_align_categories_orders_unsigned_pandas_values(
     assert output.categorical.categories[0].tolist() == [1, largest]
 
 
-# CPU only: PyTorch has no CPU indexing kernels for these dtypes, so the
-# unsigned code path is unreachable on CUDA.
 @pytest.mark.parametrize("dtype", [torch.uint16, torch.uint32, torch.uint64])
 @pytest.mark.parametrize(
     ("codes", "expected_categories", "expected_codes"),
