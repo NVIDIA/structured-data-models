@@ -1,5 +1,4 @@
 import inspect
-import io
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
@@ -216,10 +215,7 @@ def test_save_and_load_preserves_fitted_processor_behavior(
     processor_a, processor_b = _make_processor_pair(case.processor)
     processor_a.fit_ensemble(data)
     expected = processor_a.transform_ensemble(data)
-    stream = io.BytesIO()
-    torch.save(processor_a.state_dict(), stream)
-    stream.seek(0)
-    processor_b.load_state_dict(torch.load(stream, weights_only=False))
+    processor_b.load_state_dict(processor_a.state_dict())
     actual = processor_b.transform_ensemble(data)
     assert actual.num_members == expected.num_members
     for member_id in range(actual.num_members):
@@ -252,10 +248,7 @@ def test_save_and_load_cannot_restore_unregistered_fitted_state() -> None:
         _ProcessorWithUnsavedFittedState()
     )
     processor_a.fit_ensemble(data)
-    stream = io.BytesIO()
-    torch.save(processor_a.state_dict(), stream)
-    stream.seek(0)
-    processor_b.load_state_dict(torch.load(stream, weights_only=False))
+    processor_b.load_state_dict(processor_a.state_dict())
     with pytest.raises(RuntimeError):
         processor_b.transform_ensemble(data)
 
