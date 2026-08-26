@@ -133,11 +133,14 @@ class NemotronRelational(ICLModel):
         training_free_gnn_features: Whether to add the deterministic,
             training-free heterogeneous GNN features inspired by KumoRFM-2.
             The feature projects the first recipe member's processed numerical
-            inputs to 64 channels, applies fixed random heterogeneous message
-            passing, and shares the normalized readout across estimators.
-            It uses joins induced from the provided tables and processes
-            context and query as separate graph components with cached random
-            state, rather than retaining Kumo's combined sampled graph.
+            inputs only to 64 channels, applies fixed random heterogeneous
+            message passing, and shares the normalized readout across
+            estimators. Calendar fields already materialized as numerical by
+            the recipe are included; Kumo's typed, relative-time, and cyclic
+            timestamp encoders are not reproduced. It uses induced joins,
+            retains all 64 channels including context-constant channels, and
+            processes context and query as separate graph components with
+            cached state rather than retaining Kumo's combined sampled graph.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(

@@ -84,18 +84,26 @@ def _input(
     )
 
 
-def _reverse_features(table: TableTensor) -> TableTensor:
+def _reverse_numerical(table: TableTensor) -> TableTensor:
     columns = dict(table.columns)
     columns[Stype.numerical] = tuple(reversed(columns[Stype.numerical]))
-    columns[Stype.datetime] = tuple(reversed(columns[Stype.datetime]))
     return TableTensor(
         columns=columns,
         numerical=table.numerical.flip(-1),
         categorical=table.categorical,
-        datetime=table.datetime.flip(-1),
+        datetime=table.datetime,
         text=table.text,
         id=table.id,
     )
+
+
+def _shift_datetime(table: TableTensor) -> TableTensor:
+    datetime = torch.where(
+        table.datetime == NaT,
+        table.datetime,
+        table.datetime + 31 * 24 * 60 * 60 * 1_000_000,
+    )
+    return table.replace_blocks(datetime=datetime)
 
 
 def test_directional_operators_and_empty_projection() -> None:
@@ -231,6 +239,7 @@ def test_determinism_canonicalization_and_readout(
     assert expected.dtype == torch.float32
     assert expected.numerical.isfinite().all()
     assert expected.numerical.abs().max() <= 15
+    assert "relative_time_states" not in state
 
     reversed_tables = RelatedTables(
         tables=dict(reversed(list(related_tables.tables.items()))),
@@ -238,10 +247,10 @@ def test_determinism_canonicalization_and_readout(
         task_links=related_tables.task_links,
     )
     actual, actual_state = _fit_transform_training_free_gnn(
-        x=_reverse_features(x),
+        x=_shift_datetime(_reverse_numerical(x)),
         related_tables=RelatedTables(
             tables={
-                name: _reverse_features(table)
+                name: _shift_datetime(_reverse_numerical(table))
                 for name, table in reversed_tables.tables.items()
             },
             relationships=reversed_tables.relationships,
@@ -253,10 +262,10 @@ def test_determinism_canonicalization_and_readout(
     assert actual_state.size() == state.size()
 
     reordered = _transform_training_free_gnn(
-        x=_reverse_features(x),
+        x=_shift_datetime(_reverse_numerical(x)),
         related_tables=RelatedTables(
             tables={
-                name: _reverse_features(table)
+                name: _shift_datetime(_reverse_numerical(table))
                 for name, table in related_tables.tables.items()
             },
             relationships=related_tables.relationships,

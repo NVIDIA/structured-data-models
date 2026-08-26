@@ -7,10 +7,9 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
+from sdm import RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models.nemotron.relational.task import TaskGraph
-from sdm.processing import Standardize
 from sdm.relational.join import join_index
 
 _CHANNELS = 64
@@ -75,15 +74,13 @@ def _linear_state(
 def _fit_projection(
     table: TableTensor,
     *,
-    extra_channels: int = 0,
     generator: torch.Generator,
 ) -> Cache:
     columns = tuple(sorted(table.columns[Stype.numerical]))
-    in_channels = len(columns) + extra_channels
+    in_channels = len(columns)
     if in_channels == 0:
         return Cache(
             columns=columns,
-            extra_channels=extra_channels,
             weight=torch.empty(
                 (_CHANNELS, 0),
                 dtype=torch.float32,
@@ -97,19 +94,12 @@ def _fit_projection(
         device=table.device,
     )
     state["columns"] = columns
-    state["extra_channels"] = extra_channels
     return state
 
 
-def _project(
-    table: TableTensor,
-    state: Cache,
-    *,
-    extra: Tensor | None = None,
-) -> Tensor:
+def _project(table: TableTensor, state: Cache) -> Tensor:
     columns = cast(tuple[str, ...], state["columns"])
-    extra_channels = cast(int, state["extra_channels"])
-    if len(columns) + extra_channels == 0:
+    if len(columns) == 0:
         return torch.ones(
             (table.size(-2), _CHANNELS),
             dtype=torch.float32,
@@ -120,108 +110,11 @@ def _project(
         table.columns[Stype.numerical].index(column) for column in columns
     ]
     x = table.numerical[..., indices].float()
-    if extra is not None:
-        x = torch.cat((x, extra.float()), dim=-1)
     return F.linear(
         x,
         cast(Tensor, state["weight"]),
         cast(Tensor, state["bias"]),
     )
-
-
-def _relative_time_values(
-    *,
-    table: TableTensor,
-    seed: TableTensor,
-    task_row: Tensor,
-    columns: Sequence[str],
-    seed_columns: Sequence[str],
-) -> tuple[Tensor | None, Tensor | None]:
-    if len(columns) == 0 or len(seed_columns) == 0:
-        return None, None
-
-    datetime = table.datetime[
-        ...,
-        [table.columns[Stype.datetime].index(column) for column in columns],
-    ]
-    seed_datetime = seed.datetime[
-        ...,
-        [
-            seed.columns[Stype.datetime].index(column)
-            for column in seed_columns
-        ],
-    ]
-
-    seed_datetime = seed_datetime[task_row]
-    na_mask = (task_row < 0).unsqueeze(-1) | (seed_datetime == NaT)
-    na_mask = na_mask.unsqueeze(-2) | (datetime == NaT).unsqueeze(-1)
-    na_mask = na_mask.flatten(-2)
-
-    relative_time = seed_datetime.unsqueeze(-2) - datetime.unsqueeze(-1)
-    relative_time = relative_time.flatten(-2) / (24 * 60 * 60 * 1_000_000)
-    relative_time = (
-        relative_time.sign() * relative_time.abs().log1p()
-    ).float()
-    return relative_time, na_mask
-
-
-def _fit_relative_time(
-    *,
-    table: TableTensor,
-    seed: TableTensor,
-    task_row: Tensor,
-) -> Cache | None:
-    columns = tuple(sorted(table.columns[Stype.datetime]))
-    seed_columns = tuple(sorted(seed.columns[Stype.datetime]))
-    relative_time, na_mask = _relative_time_values(
-        table=table,
-        seed=seed,
-        task_row=task_row,
-        columns=columns,
-        seed_columns=seed_columns,
-    )
-    if relative_time is None:
-        return None
-    assert na_mask is not None
-    relative_time[na_mask] = float("NaN")
-    relative_time = torch.where(
-        na_mask,
-        relative_time.nanmean(dim=-2, keepdim=True).nan_to_num(0.0),
-        relative_time,
-    )
-    standardizer = Standardize()
-    standardizer.fit(TableTensor.from_tensor(relative_time))
-    return Cache(
-        columns=columns,
-        seed_columns=seed_columns,
-        mean=standardizer.mean,
-        scale=standardizer.scale,
-    )
-
-
-def _transform_relative_time(
-    *,
-    table: TableTensor,
-    seed: TableTensor,
-    task_row: Tensor,
-    state: Cache | None,
-) -> Tensor | None:
-    if state is None:
-        return None
-    relative_time, na_mask = _relative_time_values(
-        table=table,
-        seed=seed,
-        task_row=task_row,
-        columns=cast(tuple[str, ...], state["columns"]),
-        seed_columns=cast(tuple[str, ...], state["seed_columns"]),
-    )
-    assert relative_time is not None
-    assert na_mask is not None
-    relative_time = (relative_time - cast(Tensor, state["mean"])) / cast(
-        Tensor, state["scale"]
-    )
-    relative_time[na_mask] = 0.0
-    return relative_time
 
 
 def _aggregate_stats(
@@ -405,21 +298,9 @@ def _fit_state(
         _RANDOM_SEED
     )
     table_projections = Cache()
-    relative_time_states = Cache()
     for name, table in task_graph.related_tables.tables.items():
-        relative_time_state = _fit_relative_time(
-            table=table,
-            seed=x,
-            task_row=task_graph.task_row_by_table[name],
-        )
-        relative_time_states[name] = relative_time_state
         table_projections[name] = _fit_projection(
             table,
-            extra_channels=(
-                0
-                if relative_time_state is None
-                else cast(Tensor, relative_time_state["mean"]).size(-1)
-            ),
             generator=projection_generator,
         )
     task_projection = _fit_projection(
@@ -430,7 +311,6 @@ def _fit_state(
         relationships=tuple(task_graph.related_tables.relationships),
         num_hops=task_graph.num_hops,
         table_projections=table_projections,
-        relative_time_states=relative_time_states,
         task_projection=task_projection,
         layers=_fit_gnn_state(
             num_layers=task_graph.num_hops,
@@ -447,17 +327,10 @@ def _embed(
     state: Cache,
 ) -> Tensor:
     table_projections = cast(Cache, state["table_projections"])
-    relative_time_states = cast(Cache, state["relative_time_states"])
     table_embeddings = [
         _project(
             task_graph.related_tables.tables[name],
             cast(Cache, table_projections[name]),
-            extra=_transform_relative_time(
-                table=task_graph.related_tables.tables[name],
-                seed=x,
-                task_row=task_graph.task_row_by_table[name],
-                state=cast(Cache | None, relative_time_states[name]),
-            ),
         )
         for name in task_graph.related_tables.tables
     ]
