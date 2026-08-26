@@ -1,3 +1,5 @@
+# ruff: noqa: D101, D102
+
 from typing import Any, cast
 
 import torch
@@ -10,19 +12,6 @@ from sdm.nn import InducedTransformerBlock, RotaryEmbedding
 
 
 class TableEncoder(torch.nn.Module):
-    """Encode table cells into row representations for Kumo Tabular.
-
-    Args:
-        channels: Number of channels per cell token.
-        num_col_heads: Number of column-attention heads.
-        num_row_heads: Number of row-attention heads.
-        num_inducing_points: Number of inducing points in each column block.
-        num_cls_tokens: Number of classification tokens per row.
-        num_stages: Number of alternating column and row stages.
-        device: Device of the parameters.
-        dtype: Data type of the parameters.
-    """
-
     def __init__(
         self,
         channels: int = 128,
@@ -100,19 +89,6 @@ class TableEncoder(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
-        """Encode table cells into row representations.
-
-        Args:
-            x: Cell tokens with shape ``[..., R, C, D]``, where ``R`` is the
-                number of rows, ``C`` is the number of columns, and ``D`` is
-                the number of channels.
-            num_context_rows: Number of context rows at the start of ``R``.
-            cache: Optional key/value cache for context reuse.
-
-        Returns:
-            Row representations with shape ``[..., R, K * D]``, where ``K``
-            is the number of classification tokens.
-        """
         *batch, num_rows, _, channels = x.size()
         num_cls_tokens = self.num_cls_tokens
 
