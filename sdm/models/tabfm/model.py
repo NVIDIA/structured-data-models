@@ -98,8 +98,8 @@ class TabFM(ICLModel):
                 ),
                 sp.StypeDispatch(
                     numerical=[
-                        sp.DropConstantColumns(),
                         sp.ImputeMean(),
+                        sp.DropConstantColumns(),
                         sp.Standardize(epsilon=1e-6),
                         sp.Clip(min_value=-100.0, max_value=100.0),
                         sp.Choice(
