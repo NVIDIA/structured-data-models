@@ -1,15 +1,16 @@
 from dataclasses import dataclass
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import pytest
 import torch
 
 import sdm.processing as sp
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
-from sdm.cache import Cache
+from sdm.cache import Cache, KVCacheEntry, KVCacheStrategy
 from sdm.callbacks import Callback
 from sdm.models import ICLModel
 from sdm.processing import InvertibleMixin, Processor
+from sdm.testing import withCUDA
 
 
 @dataclass
@@ -61,6 +62,43 @@ class _UnsupportedRecordingModel(_RecordingModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_related_tables = False
+
+
+class _KVRecordingModel(_RecordingModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.recorded_placements: list[tuple[torch.device, bool]] = []
+
+    def _forward(
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> TableTensor:
+        out = super()._forward(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_context_tables,
+            related_query_tables=related_query_tables,
+            cache=cache,
+            generator=generator,
+            **kwargs,
+        )
+        if cache is not None and cache.is_recording:
+            value = out.numerical.unsqueeze(-2)
+            cache["key_value"] = KVCacheEntry(key=value, value=value)
+            entry = cast(KVCacheEntry, cache["key_value"])
+            self.recorded_placements.append(
+                (entry.key.device, entry.key.is_pinned())
+            )
+            cache["other"] = value
+        return out
 
 
 class MyCallback(Callback):
@@ -421,6 +459,62 @@ def test_model_input_validation() -> None:
         model(x_context, torch.randn(3, 1), x_query)
     with pytest.raises(ValueError, match="same schema"):
         model(x_context, y_context, torch.randn(2, 4))
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    ("strategy", "num_estimators"),
+    [
+        ("auto", 1),
+        ("auto", 2),
+        ("device", 2),
+        ("estimator", 1),
+        ("layer", 1),
+    ],
+)
+def test_fit_kv_cache_strategy(
+    device: torch.device,
+    strategy: Literal["auto"] | KVCacheStrategy,
+    num_estimators: int,
+) -> None:
+    model = _KVRecordingModel()
+    model.fit(
+        torch.arange(32, device=device, dtype=torch.float32).view(4, 8),
+        torch.arange(4, device=device, dtype=torch.float32).view(4, 1),
+        num_estimators=num_estimators,
+        kv_cache_strategy=strategy,
+    )
+
+    assert len(model.recorded_placements) == num_estimators
+    if device.type == "cuda":
+        for recorded_device, pinned in model.recorded_placements:
+            assert (recorded_device.type == "cpu") == (strategy == "layer")
+            assert pinned == (strategy == "layer")
+
+    assert model._cache is not None
+    estimator_cache = cast(Cache, model._cache[0])
+    entry = cast(KVCacheEntry, estimator_cache["key_value"])
+    other = cast(torch.Tensor, estimator_cache["other"])
+    offloaded = device.type == "cuda" and (
+        strategy in ("estimator", "layer")
+        or (strategy == "auto" and num_estimators > 1)
+    )
+    if offloaded:
+        assert entry.key.is_cpu
+        assert entry.value.is_cpu
+        assert other.is_cpu
+        assert entry.key.is_pinned()
+        assert entry.value.is_pinned()
+        assert other.is_pinned()
+    else:
+        assert entry.key.device == device
+        assert entry.value.device == device
+        assert other.device == device
+
+    prediction = model.predict(
+        torch.arange(16, device=device, dtype=torch.float32).view(2, 8)
+    )
+    assert prediction.device == device
 
 
 def test_predict_validates_cached_input_schema() -> None:

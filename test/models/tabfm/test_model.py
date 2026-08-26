@@ -62,7 +62,12 @@ def test_forward(
         assert out.size() == (3, 2)
 
     generator = torch.Generator(device=device).manual_seed(1)
-    model.fit(x_context, y_context, generator=generator)
+    model.fit(
+        x_context,
+        y_context,
+        generator=generator,
+        kv_cache_strategy="layer",
+    )
     assert model._cache is not None
     assert model._cache.size() > 0
     assert model.predict(x_query).allclose(out)

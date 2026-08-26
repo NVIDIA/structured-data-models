@@ -435,7 +435,7 @@ class _KumoRelational(torch.nn.Module):
             )
 
         # Inter-Message Passing ###############################################
-        gnn_cache = cache or Cache()
+        gnn_cache = cache if cache is not None else Cache()
         if context is not None:
             x_context: Tensor = torch.cat(
                 [xs_context[name] for name in context.related_tables.tables],
@@ -500,7 +500,7 @@ class _KumoRelational(torch.nn.Module):
         # by distributing them to related tables via task-row assignment:
         _cache: Cache | None = None
         if cache is not None and cache.is_recording:
-            _cache = Cache()
+            _cache = cache.new_empty()
         elif cache is not None:
             _cache = cast(Cache, cache[cache_key])
 
