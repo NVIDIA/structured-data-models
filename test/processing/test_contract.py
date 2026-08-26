@@ -17,7 +17,7 @@ from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA
 
 
-def test_public_processors_are_registered_or_scoped() -> None:
+def test_all_public_processors_have_contract_cases() -> None:
     public = {
         value
         for name in sp.__all__
