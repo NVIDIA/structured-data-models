@@ -11,15 +11,15 @@ from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.nemotron.relational.invariant_gnn import InvariantGNN
-from sdm.models.nemotron.relational.recipe import default_recipe
-from sdm.models.nemotron.relational.task import TaskGraph
+from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
+from sdm.models.kumo.relational.recipe import default_recipe
+from sdm.models.kumo.relational.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
 
 
-class NemotronRelational(ICLModel):
+class KumoRelational(ICLModel):
     r"""An adapted version of the relational foundation model
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
@@ -32,7 +32,7 @@ class NemotronRelational(ICLModel):
         :figclass: dark-only
         :width: 100%
 
-    :class:`NemotronRelational` extends the in-context learning structure of
+    :class:`KumoRelational` extends the in-context learning structure of
     tabular foundation models from single tables to relational, multi-table
     inputs.
     It processes task rows together with one or more related tables, avoiding
@@ -57,7 +57,7 @@ class NemotronRelational(ICLModel):
     .. testcode::
 
         from sdm import RelatedTables, TableTensor
-        from sdm.models import NemotronRelational
+        from sdm.models import KumoRelational
 
         task_table = TableTensor.from_columns(
             {"user_id": [0, 1, 2, 3], "churn": [True, False, True, False]},
@@ -107,7 +107,7 @@ class NemotronRelational(ICLModel):
             "orders": related_tables.tables["orders"][3:],
         })
 
-        model = NemotronRelational(device="cuda")
+        model = KumoRelational(device="cuda")
 
         # Default in-context learning forward pass:
         out = model(
@@ -143,13 +143,13 @@ class NemotronRelational(ICLModel):
     ) -> None:
         super().__init__()
 
-        self.cls_model = _NemotronRelational(
+        self.cls_model = _KumoRelational(
             num_classes=10,
             num_quantiles=0,
             norm_bias=True,
             device="meta" if pretrained else device,
         )
-        self.reg_model = _NemotronRelational(
+        self.reg_model = _KumoRelational(
             num_classes=0,
             num_quantiles=999,
             norm_bias=False,
@@ -164,7 +164,7 @@ class NemotronRelational(ICLModel):
     def _load_from_pretrained(
         self,
         device: torch.device | str | None,
-    ) -> NemotronRelational:
+    ) -> KumoRelational:
         device = torch.get_default_device() if device is None else device
 
         for variant in ["classifier", "regressor"]:
@@ -230,7 +230,7 @@ class NemotronRelational(ICLModel):
         return default_recipe()
 
 
-class _NemotronRelational(torch.nn.Module):
+class _KumoRelational(torch.nn.Module):
     def __init__(
         self,
         num_classes: int,

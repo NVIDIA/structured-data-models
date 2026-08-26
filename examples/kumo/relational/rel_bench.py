@@ -1,4 +1,4 @@
-"""Benchmark NemotronRelational on RelBench entity tasks.
+"""Benchmark KumoRelational on RelBench entity tasks.
 
 Without arguments, this runs every supported entity task in the public
 ``rel-*`` datasets except MIMIC-IV and SALT. Pass ``--dataset`` to run one
@@ -128,7 +128,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
     context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
     context = context[torch.randperm(len(context))[: args.context_size]]
 
-    model = sdm.models.NemotronRelational(device=device)
+    model = sdm.models.KumoRelational(device=device)
     kwargs: dict[str, Any] = {
         "task_link": {
             "task_column": task.entity_col,
