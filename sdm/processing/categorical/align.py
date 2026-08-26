@@ -33,9 +33,9 @@ class AlignCategories(EnsembleProcessor):
             ``"code"`` keeps observed categories in original order.
             ``"frequency"`` orders observed categories by descending frequency.
             ``"value"`` orders observed categories by ascending value.
-        min_frequency: Minimum number of fitted observations per ensemble
-            member required to retain a category. Rarer categories receive
-            code ``-1``. Must be positive.
+        min_frequency: Minimum number of observations required to retain a
+            category. Values of rarer categories receive code ``-1``.
+            Must be positive.
 
     >>> import pandas as pd
     >>> import sdm
