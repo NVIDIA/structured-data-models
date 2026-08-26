@@ -16,8 +16,6 @@ from sdm import Stype, TableTensor
 from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA
 
-ProcessorData = TableTensor | EnsembleTable
-
 
 def test_public_processors_are_registered_or_scoped() -> None:
     public = {
@@ -31,31 +29,6 @@ def test_public_processors_are_registered_or_scoped() -> None:
     containers = {sp.TaskDispatch, sp.TableDispatch}
     processor_specific = {sp.SentenceTransformer}
     assert public == registered | containers | processor_specific
-
-
-def _fit(processor: sp.Processor, data: ProcessorData) -> None:
-    if isinstance(processor, sp.EnsembleProcessor):
-        processor.fit_ensemble(
-            cast(EnsembleTable, data),
-            generator=torch.Generator().manual_seed(0),
-        )
-    else:
-        processor.fit(
-            cast(TableTensor, data),
-            generator=torch.Generator().manual_seed(0),
-        )
-
-
-def _transform(processor: sp.Processor, data: ProcessorData) -> ProcessorData:
-    if isinstance(processor, sp.EnsembleProcessor):
-        return processor.transform_ensemble(cast(EnsembleTable, data))
-    return processor.transform(cast(TableTensor, data))
-
-
-def _tables(data: ProcessorData) -> tuple[TableTensor, ...]:
-    if isinstance(data, EnsembleTable):
-        return tuple(data.table(i) for i in range(data.num_members))
-    return (data,)
 
 
 def _assert_table_close(
@@ -84,41 +57,39 @@ def _assert_table_close(
 
 
 def _assert_data_close(
-    actual: ProcessorData,
-    expected: ProcessorData,
+    actual: EnsembleTable,
+    expected: EnsembleTable,
     *,
     atol: float = 1e-5,
     check_dtype: bool = True,
 ) -> None:
-    actual_tables, expected_tables = _tables(actual), _tables(expected)
-    assert len(actual_tables) == len(expected_tables)
-    for actual_table, expected_table in zip(
-        actual_tables, expected_tables, strict=True
-    ):
+    assert actual.num_members == expected.num_members
+    for member_id in range(actual.num_members):
         _assert_table_close(
-            actual_table, expected_table, atol=atol, check_dtype=check_dtype
+            actual.table(member_id),
+            expected.table(member_id),
+            atol=atol,
+            check_dtype=check_dtype,
         )
 
 
 def _check_state_dict_restoration(case: ProcessorCase) -> None:
     context, query = case.make_inputs()
-    fitted = deepcopy(case.processor)
-    restored = deepcopy(case.processor)
-    if isinstance(fitted, sp.EnsembleProcessor):
-        fit_data: ProcessorData = EnsembleTable.from_tables(
-            tables=(context, query), member_table_ids=(1, 0, 1, 0)
-        )
-        query_data = fit_data
-    else:
-        fit_data = context
-        query_data = query
-    _fit(fitted, fit_data)
-    expected = _transform(fitted, query_data)
+    fitted = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    restored = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    data = EnsembleTable.from_tables(
+        tables=(context, query), member_table_ids=(1, 0, 1, 0)
+    )
+    fitted.fit_ensemble(
+        data,
+        generator=torch.Generator().manual_seed(0),
+    )
+    expected = fitted.transform_ensemble(data)
     stream = io.BytesIO()
     torch.save(fitted.state_dict(), stream)
     stream.seek(0)
     restored.load_state_dict(torch.load(stream, weights_only=False))
-    _assert_data_close(_transform(restored, query_data), expected)
+    _assert_data_close(restored.transform_ensemble(data), expected)
 
 
 @pytest.mark.parametrize(
@@ -130,27 +101,20 @@ def test_fit_transform_matches_fit_then_transform(
     case: ProcessorCase,
 ) -> None:
     context, query = case.make_inputs()
-    split = deepcopy(case.processor)
-    fused = deepcopy(case.processor)
-    data: ProcessorData = (
-        EnsembleTable.from_tables(
-            tables=(context, query), member_table_ids=(1, 0, 1, 0)
-        )
-        if isinstance(split, sp.EnsembleProcessor)
-        else context
+    split = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    fused = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    data = EnsembleTable.from_tables(
+        tables=(context, query), member_table_ids=(1, 0, 1, 0)
     )
-    _fit(split, data)
-    if isinstance(fused, sp.EnsembleProcessor):
-        actual = fused.fit_transform_ensemble(
-            cast(EnsembleTable, data),
-            generator=torch.Generator().manual_seed(0),
-        )
-    else:
-        actual = fused.fit_transform(
-            cast(TableTensor, data),
-            generator=torch.Generator().manual_seed(0),
-        )
-    _assert_data_close(actual, _transform(split, data))
+    split.fit_ensemble(
+        data,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = fused.fit_transform_ensemble(
+        data,
+        generator=torch.Generator().manual_seed(0),
+    )
+    _assert_data_close(actual, split.transform_ensemble(data))
 
 
 FITTED_CASES = tuple(
@@ -209,15 +173,16 @@ INVERTIBLE_CASES = tuple(
 )
 def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
     context, _ = case.make_inputs()
-    processor = deepcopy(case.processor)
-    transformed = processor.fit_transform(
-        context,
+    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    data = EnsembleTable(context, num_members=2)
+    transformed = processor.fit_transform_ensemble(
+        data,
         generator=torch.Generator().manual_seed(0),
     )
-    restored = cast(sp.InvertibleMixin, processor).inverse_transform(
-        transformed
-    )
-    _assert_table_close(restored, context, atol=1e-3)
+    restored = cast(
+        sp.EnsembleInvertibleMixin, processor
+    ).inverse_transform_ensemble(transformed)
+    _assert_data_close(restored, data, atol=1e-3)
 
 
 @pytest.mark.parametrize(
@@ -229,25 +194,17 @@ def test_preserves_rows_and_unhandled_stypes(
     case: ProcessorCase,
 ) -> None:
     context, query = case.make_inputs()
-    processor = deepcopy(case.processor)
-    data: ProcessorData = (
-        EnsembleTable.from_tables(
-            tables=(context, query), member_table_ids=(1, 0, 1, 0)
-        )
-        if isinstance(processor, sp.EnsembleProcessor)
-        else context
+    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    data = EnsembleTable.from_tables(
+        tables=(context, query), member_table_ids=(1, 0, 1, 0)
     )
-    if isinstance(processor, sp.EnsembleProcessor):
-        output = processor.fit_transform_ensemble(
-            cast(EnsembleTable, data),
-            generator=torch.Generator().manual_seed(0),
-        )
-    else:
-        output = processor.fit_transform(
-            cast(TableTensor, data),
-            generator=torch.Generator().manual_seed(0),
-        )
-    for before, after in zip(_tables(data), _tables(output)):
+    output = processor.fit_transform_ensemble(
+        data,
+        generator=torch.Generator().manual_seed(0),
+    )
+    for member_id in range(output.num_members):
+        before = data.table(member_id)
+        after = output.table(member_id)
         assert after.size()[:-1] == before.size()[:-1]
         for stype in before.active_stypes - processor.handles_stypes:
             columns = before.columns[stype]
@@ -270,25 +227,25 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
         numerical=context.numerical.to(dtype)
     )
     target_query = query.replace_blocks(numerical=query.numerical.to(dtype))
-    processor = deepcopy(case.processor)
-    if isinstance(processor, sp.EnsembleProcessor):
-        source: ProcessorData = EnsembleTable.from_tables(
-            tables=(context, query), member_table_ids=(1, 0, 1, 0)
-        )
-        target: ProcessorData = EnsembleTable.from_tables(
-            tables=(target_context, target_query),
-            member_table_ids=(1, 0, 1, 0),
-        )
-        query_data = source
-    else:
-        source = context
-        target = target_query
-        query_data = query
-    _fit(processor, source)
-    expected = _transform(processor, query_data)
+    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    source = EnsembleTable.from_tables(
+        tables=(context, query), member_table_ids=(1, 0, 1, 0)
+    )
+    target = EnsembleTable.from_tables(
+        tables=(target_context, target_query),
+        member_table_ids=(1, 0, 1, 0),
+    )
+    processor.fit_ensemble(
+        source,
+        generator=torch.Generator().manual_seed(0),
+    )
+    expected = processor.transform_ensemble(source)
     processor.to(dtype=dtype)
-    actual = _transform(processor, target)
-    assert all(table.dtype == dtype for table in _tables(actual))
+    actual = processor.transform_ensemble(target)
+    assert all(
+        actual.table(member_id).dtype == dtype
+        for member_id in range(actual.num_members)
+    )
     _assert_data_close(actual, expected, check_dtype=False)
 
 
@@ -301,25 +258,22 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
 def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
     device = torch.device("cuda")
     context, query = case.make_inputs()
-    target_context = cast(TableTensor, context.to(device))
-    target_query = cast(TableTensor, query.to(device))
-    processor = deepcopy(case.processor)
-    if isinstance(processor, sp.EnsembleProcessor):
-        source: ProcessorData = EnsembleTable.from_tables(
-            tables=(context, query), member_table_ids=(1, 0, 1, 0)
-        )
-        target: ProcessorData = EnsembleTable.from_tables(
-            tables=(target_context, target_query),
-            member_table_ids=(1, 0, 1, 0),
-        )
-        query_data = source
-    else:
-        source = context
-        target = target_query
-        query_data = query
-    _fit(processor, source)
-    expected = _transform(processor, query_data)
+    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    source = EnsembleTable.from_tables(
+        tables=(context, query), member_table_ids=(1, 0, 1, 0)
+    )
+    target = source.replace_groups(
+        [cast(TableTensor, group.to(device)) for group in source]
+    )
+    processor.fit_ensemble(
+        source,
+        generator=torch.Generator().manual_seed(0),
+    )
+    expected = processor.transform_ensemble(source)
     processor.to(device=device)
-    actual = _transform(processor, target)
-    assert all(table.device.type == device.type for table in _tables(actual))
+    actual = processor.transform_ensemble(target)
+    assert all(
+        actual.table(member_id).device.type == device.type
+        for member_id in range(actual.num_members)
+    )
     _assert_data_close(actual, expected)

@@ -22,13 +22,10 @@ def make_mixed_inputs() -> tuple[TableTensor, TableTensor]:
     context = TableTensor(
         numerical=numerical,
         categorical=CategoricalTensor(
-            code=torch.tensor(
-                [[0], [0], [1], [-1]], dtype=torch.int32
-            ),
+            code=torch.tensor([[0], [0], [1], [-1]], dtype=torch.int32),
             categories=categories,
         ),
-        datetime=torch.arange(4, dtype=torch.int64)[:, None]
-        * 86_400_000_000,
+        datetime=torch.arange(4, dtype=torch.int64)[:, None] * 86_400_000_000,
         text=StringTensor.from_list(
             [["alpha beta"], ["beta"], ["gamma"], ["alpha"]],
         ),
@@ -37,9 +34,7 @@ def make_mixed_inputs() -> tuple[TableTensor, TableTensor]:
     query = TableTensor(
         numerical=numerical + 2,
         categorical=CategoricalTensor(
-            code=torch.tensor(
-                [[-1], [1], [0], [-1]], dtype=torch.int32
-            ),
+            code=torch.tensor([[-1], [1], [0], [-1]], dtype=torch.int32),
             categories=categories,
         ),
         datetime=context.datetime + 60_000_000,
@@ -61,9 +56,7 @@ def _make_impute_mean_inputs() -> tuple[TableTensor, TableTensor]:
 def _make_align_categories_inputs() -> tuple[TableTensor, TableTensor]:
     context, query = make_mixed_inputs()
     categorical = CategoricalTensor(
-        code=torch.tensor(
-            [[0], [1], [-1], [0]], dtype=torch.int32
-        ),
+        code=torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32),
         categories=(StringTensor.from_list(["b", "c"]),),
     )
     return context, query.replace_blocks(categorical=categorical)
