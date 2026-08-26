@@ -14,7 +14,7 @@ from torch import Tensor
 
 from sdm.tensor.mixin import DeviceMixin
 
-KVCacheStrategy: TypeAlias = Literal["device", "estimator", "layer"]
+KVCacheOffload: TypeAlias = Literal["none", "estimator", "layer"]
 
 
 class _KVCacheEntry(NamedTuple):
@@ -43,7 +43,9 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
 
     Args:
         args: Initial cache data as a mapping or iterable of key/value pairs.
-        kv_cache_strategy: Placement strategy for key/value entries.
+        kv_cache_offload: Offloading policy for key/value entries. ``"none"``
+            retains entries on their input device, ``"estimator"`` leaves
+            entries unchanged for the owning model to offload together, and
             ``"layer"`` synchronously moves each entry to pinned CPU memory
             when recorded.
         kwargs: Additional initial cache data.
@@ -68,11 +70,11 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
     def __init__(
         self,
         *args: Mapping[Hashable, object] | Iterable[tuple[Hashable, object]],
-        kv_cache_strategy: KVCacheStrategy = "device",
+        kv_cache_offload: KVCacheOffload = "none",
         **kwargs: object,
     ) -> None:
         self._mode = Cache.Mode.record
-        self._kv_cache_strategy = kv_cache_strategy
+        self._kv_cache_offload = kv_cache_offload
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
 
     @property
@@ -169,20 +171,18 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
             return value
 
         out = self.new_empty()
-        out._items.update(
-            {key: _apply(value) for key, value in self.items()}
-        )
+        out._items.update({key: _apply(value) for key, value in self.items()})
         out._mode = self._mode
         return out
 
     def new_empty(self) -> Self:
         """Return an empty recording cache with the same configuration."""
-        return self.__class__(kv_cache_strategy=self._kv_cache_strategy)
+        return self.__class__(kv_cache_offload=self._kv_cache_offload)
 
     def _store_key_value(self, entry: KVCacheEntry) -> DeviceMixin:
         # Representation transforms, such as quantization, precede placement.
         stored: DeviceMixin = entry
-        if self._kv_cache_strategy == "layer" and any(
+        if self._kv_cache_offload == "layer" and any(
             tensor.is_cuda for tensor in stored._tensors()
         ):
             stored = stored._apply_tensor(_to_pinned_cpu)

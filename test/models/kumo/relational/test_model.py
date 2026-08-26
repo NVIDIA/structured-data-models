@@ -293,7 +293,7 @@ def test_many_classes_forward_and_cache(
         expected.new_ones(2),
     )
 
-    cache = Cache(classes=classes, kv_cache_strategy="layer")
+    cache = Cache(classes=classes, kv_cache_offload="layer")
     recorded = model(
         x_context=task,
         y_context=target,

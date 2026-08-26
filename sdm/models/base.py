@@ -9,7 +9,7 @@ from torch import Tensor
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
-from sdm.cache import Cache, KVCacheStrategy
+from sdm.cache import Cache, KVCacheOffload
 from sdm.callbacks import Callback
 from sdm.processing.execution import (
     MemberContext,
@@ -225,7 +225,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_estimators: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
-        kv_cache_strategy: Literal["auto"] | KVCacheStrategy = "auto",
+        kv_cache_offload: Literal["auto"] | KVCacheOffload = "auto",
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -248,12 +248,12 @@ class ICLModel(torch.nn.Module, abc.ABC):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
-            kv_cache_strategy: Placement strategy for key/value projections.
-                ``"device"`` retains them on the compute device,
+            kv_cache_offload: Offloading policy for key/value projections.
+                ``"none"`` retains them on the compute device,
                 ``"estimator"`` moves the completed estimator cache to CPU,
                 and ``"layer"`` synchronously moves each key/value entry to
                 pinned CPU memory as soon as it is recorded. ``"auto"`` uses
-                ``"estimator"`` for CUDA ensembles and ``"device"``
+                ``"estimator"`` for CUDA ensembles and ``"none"``
                 otherwise.
             kwargs: Additional keyword arguments passed to the model.
         """
@@ -276,18 +276,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 generator=generator,
             )
 
-        cache_strategy: KVCacheStrategy
-        if kv_cache_strategy == "auto":
-            cache_strategy = (
-                "estimator" if x.is_cuda and len(contexts) > 1 else "device"
+        cache_offload: KVCacheOffload
+        if kv_cache_offload == "auto":
+            cache_offload = (
+                "estimator" if x.is_cuda and len(contexts) > 1 else "none"
             )
         else:
-            cache_strategy = kv_cache_strategy
+            cache_offload = kv_cache_offload
 
         cache = Cache(
             recipe_execution=recipe_execution,
             kwargs=kwargs,
-            kv_cache_strategy=cache_strategy,
+            kv_cache_offload=cache_offload,
         )
         for i, context in enumerate(contexts):
             for callback in callbacks:
@@ -309,7 +309,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     if context.y.categorical.size(-1) > 0
                     else None
                 ),
-                kv_cache_strategy=cache_strategy,
+                kv_cache_offload=cache_offload,
             )
             with inference_mode("no_grad"):
                 self._forward(
@@ -323,7 +323,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     **kwargs,
                 )
 
-            if x.is_cuda and cache_strategy in ("estimator", "layer"):
+            if x.is_cuda and cache_offload in ("estimator", "layer"):
                 estimator_cache = estimator_cache.cpu().pin_memory()
             cache[i] = estimator_cache
 

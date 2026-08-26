@@ -6,7 +6,7 @@ import torch
 
 import sdm.processing as sp
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
-from sdm.cache import Cache, KVCacheEntry, KVCacheStrategy
+from sdm.cache import Cache, KVCacheEntry, KVCacheOffload
 from sdm.callbacks import Callback
 from sdm.models import ICLModel
 from sdm.processing import InvertibleMixin, Processor
@@ -463,18 +463,18 @@ def test_model_input_validation() -> None:
 
 @withCUDA
 @pytest.mark.parametrize(
-    ("strategy", "num_estimators"),
+    ("offload", "num_estimators"),
     [
         ("auto", 1),
         ("auto", 2),
-        ("device", 2),
+        ("none", 2),
         ("estimator", 1),
         ("layer", 1),
     ],
 )
-def test_fit_kv_cache_strategy(
+def test_fit_kv_cache_offload(
     device: torch.device,
-    strategy: Literal["auto"] | KVCacheStrategy,
+    offload: Literal["auto"] | KVCacheOffload,
     num_estimators: int,
 ) -> None:
     model = _KVRecordingModel()
@@ -482,22 +482,22 @@ def test_fit_kv_cache_strategy(
         torch.arange(32, device=device, dtype=torch.float32).view(4, 8),
         torch.arange(4, device=device, dtype=torch.float32).view(4, 1),
         num_estimators=num_estimators,
-        kv_cache_strategy=strategy,
+        kv_cache_offload=offload,
     )
 
     assert len(model.recorded_placements) == num_estimators
     if device.type == "cuda":
         for recorded_device, pinned in model.recorded_placements:
-            assert (recorded_device.type == "cpu") == (strategy == "layer")
-            assert pinned == (strategy == "layer")
+            assert (recorded_device.type == "cpu") == (offload == "layer")
+            assert pinned == (offload == "layer")
 
     assert model._cache is not None
     estimator_cache = cast(Cache, model._cache[0])
     entry = cast(KVCacheEntry, estimator_cache["key_value"])
     other = cast(torch.Tensor, estimator_cache["other"])
     offloaded = device.type == "cuda" and (
-        strategy in ("estimator", "layer")
-        or (strategy == "auto" and num_estimators > 1)
+        offload in ("estimator", "layer")
+        or (offload == "auto" and num_estimators > 1)
     )
     if offloaded:
         assert entry.key.is_cpu

@@ -2,7 +2,7 @@ from typing import cast
 
 import torch
 
-from sdm.cache import Cache, KVCacheEntry, KVCacheStrategy
+from sdm.cache import Cache, KVCacheEntry, KVCacheOffload
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -46,7 +46,7 @@ def test_cache_size() -> None:
 
 @withCUDA
 def test_cache_new_empty(device: torch.device) -> None:
-    cache = Cache(existing="value", kv_cache_strategy="layer").freeze()
+    cache = Cache(existing="value", kv_cache_offload="layer").freeze()
 
     empty = cache.new_empty()
 
@@ -67,8 +67,8 @@ def test_cache_new_empty(device: torch.device) -> None:
 
 
 @withCUDA
-def test_layer_kv_cache_strategy(device: torch.device) -> None:
-    cache = Cache(kv_cache_strategy="layer")
+def test_layer_kv_cache_offload(device: torch.device) -> None:
+    cache = Cache(kv_cache_offload="layer")
     other = torch.arange(5, device=device, dtype=torch.float32)
     cache["entry"] = KVCacheEntry(
         key=torch.arange(5, device=device, dtype=torch.float32),
@@ -104,11 +104,11 @@ def test_layer_kv_cache_strategy(device: torch.device) -> None:
 
 
 @onlyCUDA
-def test_layer_kv_cache_strategy_reduces_peak_cuda_memory() -> None:
+def test_layer_kv_cache_offload_reduces_peak_cuda_memory() -> None:
     device = torch.device("cuda")
 
-    def record(strategy: KVCacheStrategy) -> tuple[Cache, int]:
-        cache = Cache(kv_cache_strategy=strategy)
+    def record(offload: KVCacheOffload) -> tuple[Cache, int]:
+        cache = Cache(kv_cache_offload=offload)
         torch.cuda.synchronize(device)
         torch.cuda.reset_peak_memory_stats(device)
         baseline = torch.cuda.memory_allocated(device)
@@ -125,6 +125,6 @@ def test_layer_kv_cache_strategy_reduces_peak_cuda_memory() -> None:
     assert all(tensor.is_cpu for tensor in layer_cache._tensors())
     assert all(tensor.is_pinned() for tensor in layer_cache._tensors())
 
-    device_cache, device_peak = record("device")
-    assert all(tensor.is_cuda for tensor in device_cache._tensors())
-    assert layer_peak < device_peak
+    retained_cache, retained_peak = record("none")
+    assert all(tensor.is_cuda for tensor in retained_cache._tensors())
+    assert layer_peak < retained_peak
