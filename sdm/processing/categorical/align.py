@@ -139,17 +139,7 @@ class AlignCategories(EnsembleProcessor):
                 and input_categories.is_cpu
             ):
                 # PyTorch CPU index_select is not implemented for these dtypes.
-                if selected_indices.numel() == 0:
-                    fitted_categories.append(input_categories[:0])
-                else:
-                    fitted_categories.append(
-                        torch.stack(
-                            [
-                                input_categories[index]
-                                for index in selected_indices.tolist()
-                            ]
-                        )
-                    )
+                fitted_categories.append(input_categories[selected_indices])
             else:
                 fitted_categories.append(
                     input_categories.index_select(0, selected_indices)

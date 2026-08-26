@@ -91,8 +91,8 @@ class TabFM(ICLModel):
             features=[
                 sp.StypeDispatch(
                     categorical=[
-                        # TODO: Sort by appearance and filter rare categories.
-                        sp.AlignCategories(),
+                        # TODO: Sort by appearance.
+                        sp.AlignCategories(min_frequency=2),
                         sp.ToNumerical(),
                     ],
                 ),

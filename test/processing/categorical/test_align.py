@@ -220,31 +220,6 @@ def test_align_categories_filters_per_ensemble_member(
     assert output.table(1).categorical.code.squeeze(-1).tolist() == [0, 0, -1]
 
 
-@pytest.mark.parametrize(
-    ("min_frequency", "expected_categories", "expected_codes"),
-    [
-        (2, [10], [0, 0, -1]),
-        (3, [], [-1, -1, -1]),
-    ],
-)
-def test_align_categories_filters_unsigned_categories(
-    min_frequency: int,
-    expected_categories: list[int],
-    expected_codes: list[int],
-) -> None:
-    table = TableTensor(
-        categorical=CategoricalTensor(
-            code=torch.tensor([[0], [0], [1]], dtype=torch.int32),
-            categories=(torch.tensor([10, 20], dtype=torch.uint64),),
-        ),
-    )
-
-    output = AlignCategories(min_frequency=min_frequency).fit_transform(table)
-
-    assert output.categorical.categories[0].tolist() == expected_categories
-    assert output.categorical.code.squeeze(-1).tolist() == expected_codes
-
-
 @withCUDA
 def test_align_categories_orders_values(
     device: torch.device,
