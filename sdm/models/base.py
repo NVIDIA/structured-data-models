@@ -1,7 +1,7 @@
 import abc
 import copy
 from collections.abc import Sequence
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -9,7 +9,7 @@ from torch import Tensor
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
-from sdm.cache import Cache
+from sdm.cache import Cache, KVCacheStrategy
 from sdm.callbacks import Callback
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
@@ -189,6 +189,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe: Recipe | None = None,
         num_estimators: int = 1,
         generator: torch.Generator | None = None,
+        kv_cache_strategy: Literal["auto"] | KVCacheStrategy = "auto",
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -206,6 +207,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
             num_estimators: The number of estimators for ensembling.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            kv_cache_strategy: Placement strategy for key/value projections.
+                ``"device"`` retains them on the compute device,
+                ``"estimator"`` moves the completed estimator cache to CPU,
+                and ``"layer"`` synchronously moves each key/value entry to
+                pinned CPU memory as soon as it is recorded. ``"auto"`` uses
+                ``"estimator"`` for CUDA ensembles and ``"device"``
+                otherwise.
             kwargs: Additional keyword arguments passed to the model.
         """
         if num_estimators < 1:
@@ -214,6 +222,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
             x = TableTensor.from_tensor(x)
         if not isinstance(y, TableTensor):
             y = TableTensor.from_tensor(y)
+
+        cache_strategy: KVCacheStrategy
+        if kv_cache_strategy == "auto":
+            cache_strategy = (
+                "estimator" if x.is_cuda and num_estimators > 1 else "device"
+            )
+        else:
+            cache_strategy = kv_cache_strategy
 
         self.clear()
 
@@ -233,6 +249,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             num_estimators=num_estimators,
             recipe_execution=recipe_execution,
             kwargs=kwargs,
+            kv_cache_strategy=cache_strategy,
         )
         for i, context in enumerate(contexts):
             self._validate_context(
@@ -250,6 +267,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     if context.y.categorical.size(-1) > 0
                     else None
                 ),
+                kv_cache_strategy=cache_strategy,
             )
             self._forward(
                 x_context=context.x,
@@ -261,7 +279,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 generator=generator,
                 **kwargs,
             )
-            if x.is_cuda and num_estimators > 1:
+            if x.is_cuda and cache_strategy in ("estimator", "layer"):
                 estimator_cache = estimator_cache.cpu().pin_memory()
             cache[i] = estimator_cache
 
