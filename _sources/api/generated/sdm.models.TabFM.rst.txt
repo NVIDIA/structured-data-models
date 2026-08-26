@@ -37,8 +37,8 @@ Default Recipe
        ),
        StypeDispatch(
          numerical=Sequential(
-           DropConstantColumns(),
            ImputeMean(),
+           DropConstantColumns(),
            Standardize(),
            Clip(-100.0, 100.0),
            Choice(
