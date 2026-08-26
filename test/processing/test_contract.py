@@ -96,6 +96,15 @@ class ProcessorCase:
     make_inputs: Callable[[], EnsembleTable] = make_mixed_inputs
 
 
+def _make_processor_pair(
+    processor: sp.Processor,
+) -> tuple[sp.EnsembleProcessor, sp.EnsembleProcessor]:
+    return (
+        sp.EnsembleProcessor.as_processor(deepcopy(processor)),
+        sp.EnsembleProcessor.as_processor(deepcopy(processor)),
+    )
+
+
 PROCESSOR_CASES = (
     ProcessorCase(sp.Identity()),
     ProcessorCase(sp.Callable(lambda table: table)),
@@ -180,18 +189,13 @@ def test_fit_transform_matches_fit_then_transform(
     case: ProcessorCase,
 ) -> None:
     data = case.make_inputs()
-    split_processor = sp.EnsembleProcessor.as_processor(
-        deepcopy(case.processor)
-    )
-    fused_processor = sp.EnsembleProcessor.as_processor(
-        deepcopy(case.processor)
-    )
-    split_processor.fit_ensemble(
+    processor_a, processor_b = _make_processor_pair(case.processor)
+    processor_a.fit_ensemble(
         data,
         generator=torch.Generator().manual_seed(0),
     )
-    actual = split_processor.transform_ensemble(data)
-    expected = fused_processor.fit_transform_ensemble(
+    actual = processor_a.transform_ensemble(data)
+    expected = processor_b.fit_transform_ensemble(
         data,
         generator=torch.Generator().manual_seed(0),
     )
@@ -209,19 +213,14 @@ def test_save_and_load_preserves_fitted_processor_behavior(
     case: ProcessorCase,
 ) -> None:
     data = case.make_inputs()
-    fitted_processor = sp.EnsembleProcessor.as_processor(
-        deepcopy(case.processor)
-    )
-    loaded_processor = sp.EnsembleProcessor.as_processor(
-        deepcopy(case.processor)
-    )
-    fitted_processor.fit_ensemble(data)
-    expected = fitted_processor.transform_ensemble(data)
+    processor_a, processor_b = _make_processor_pair(case.processor)
+    processor_a.fit_ensemble(data)
+    expected = processor_a.transform_ensemble(data)
     stream = io.BytesIO()
-    torch.save(fitted_processor.state_dict(), stream)
+    torch.save(processor_a.state_dict(), stream)
     stream.seek(0)
-    loaded_processor.load_state_dict(torch.load(stream, weights_only=False))
-    actual = loaded_processor.transform_ensemble(data)
+    processor_b.load_state_dict(torch.load(stream, weights_only=False))
+    actual = processor_b.transform_ensemble(data)
     assert actual.num_members == expected.num_members
     for member_id in range(actual.num_members):
         assert actual.table(member_id).equal(expected.table(member_id))
@@ -249,19 +248,16 @@ class _ProcessorWithUnsavedFittedState(sp.Processor):
 
 def test_save_and_load_cannot_restore_unregistered_fitted_state() -> None:
     data = make_mixed_inputs()
-    fitted_processor = sp.EnsembleProcessor.as_processor(
+    processor_a, processor_b = _make_processor_pair(
         _ProcessorWithUnsavedFittedState()
     )
-    loaded_processor = sp.EnsembleProcessor.as_processor(
-        _ProcessorWithUnsavedFittedState()
-    )
-    fitted_processor.fit_ensemble(data)
+    processor_a.fit_ensemble(data)
     stream = io.BytesIO()
-    torch.save(fitted_processor.state_dict(), stream)
+    torch.save(processor_a.state_dict(), stream)
     stream.seek(0)
-    loaded_processor.load_state_dict(torch.load(stream, weights_only=False))
+    processor_b.load_state_dict(torch.load(stream, weights_only=False))
     with pytest.raises(RuntimeError):
-        loaded_processor.transform_ensemble(data)
+        processor_b.transform_ensemble(data)
 
 
 @pytest.mark.parametrize(
