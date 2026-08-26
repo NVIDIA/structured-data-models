@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, cast
 
 import pyarrow.compute as pc
@@ -247,8 +248,10 @@ class _Encoder(torch.nn.Module):
         self._model = model
         self._batch_size = batch_size
         self._embedding_dim = embedding_dim
-        self._cudf_tokenizer: _CuDFTokenizer | None = None
-        self._cudf_tokenizer_supported: bool | None = None
+
+    @cached_property
+    def _cudf_tokenizer(self) -> _CuDFTokenizer | None:
+        return _CuDFTokenizer.build(self._model)
 
     def __deepcopy__(self, memo: dict[int, Any]) -> _Encoder:
         return self
@@ -313,14 +316,10 @@ class _Encoder(torch.nn.Module):
         if text.device.type == "cpu":
             return self._forward_cpu(text)
 
-        if self._cudf_tokenizer_supported is None:
-            self._cudf_tokenizer = _CuDFTokenizer.build(self._model)
-            self._cudf_tokenizer_supported = self._cudf_tokenizer is not None
-        if not self._cudf_tokenizer_supported:
+        tokenizer = self._cudf_tokenizer
+        if tokenizer is None:
             return self._forward_cpu(text)
 
-        assert self._cudf_tokenizer is not None
-        tokenizer = self._cudf_tokenizer
         series = text.to_cudf()
         series = series.fillna("") if text.is_nullable else series
         words = tokenizer._normalizer.normalize(series).str.tokenize()
