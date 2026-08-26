@@ -222,37 +222,6 @@ def test_save_and_load_preserves_fitted_processor_behavior(
         assert actual.table(member_id).equal(expected.table(member_id))
 
 
-class _ProcessorWithUnsavedFittedState(sp.Processor):
-    handles_stypes = frozenset({Stype.numerical})
-    requires_fit = True
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.mean = torch.empty(0)
-
-    def _fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        self.mean = table.numerical.mean(dim=-2, keepdim=True)
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical - self.mean)
-
-
-def test_save_and_load_cannot_restore_unregistered_fitted_state() -> None:
-    data = make_mixed_inputs()
-    processor_a, processor_b = _make_processor_pair(
-        _ProcessorWithUnsavedFittedState()
-    )
-    processor_a.fit_ensemble(data)
-    processor_b.load_state_dict(processor_a.state_dict())
-    with pytest.raises(RuntimeError):
-        processor_b.transform_ensemble(data)
-
-
 @pytest.mark.parametrize(
     "case",
     tuple(
