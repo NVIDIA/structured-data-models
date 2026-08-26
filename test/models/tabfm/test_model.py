@@ -66,7 +66,7 @@ def test_forward(
         x_context,
         y_context,
         generator=generator,
-        kv_cache_strategy="layer",
+        kv_cache_offload="layer",
     )
     assert model._cache is not None
     assert model._cache.size() > 0
