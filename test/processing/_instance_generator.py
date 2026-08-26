@@ -12,101 +12,72 @@ from sdm import (
     TableTensor,
 )
 
-
-@dataclass(frozen=True)
-class ProcessorInputs:
-    context: TableTensor
-    query: TableTensor
+InputFactory = Callable[[], tuple[TableTensor, TableTensor]]
 
 
-InputFactory = Callable[[torch.device, torch.dtype], ProcessorInputs]
-
-
-def make_mixed_inputs(
-    device: torch.device | None = None,
-    dtype: torch.dtype = torch.float32,
-) -> ProcessorInputs:
-    device = device or torch.device("cpu")
-    categories = (StringTensor.from_list(["a", "b"], device=device),)
-    numerical = torch.arange(12, device=device, dtype=dtype).reshape(4, 3)
+def make_mixed_inputs() -> tuple[TableTensor, TableTensor]:
+    categories = (StringTensor.from_list(["a", "b"]),)
+    numerical = torch.arange(12, dtype=torch.float32).reshape(4, 3)
     numerical[:, 1] = 1
     context = TableTensor(
         numerical=numerical,
         categorical=CategoricalTensor(
             code=torch.tensor(
-                [[0], [0], [1], [-1]], dtype=torch.int32, device=device
+                [[0], [0], [1], [-1]], dtype=torch.int32
             ),
             categories=categories,
         ),
-        datetime=torch.arange(4, device=device, dtype=torch.int64)[:, None]
+        datetime=torch.arange(4, dtype=torch.int64)[:, None]
         * 86_400_000_000,
         text=StringTensor.from_list(
             [["alpha beta"], ["beta"], ["gamma"], ["alpha"]],
-            device=device,
         ),
-        id=ColumnarTensor((torch.arange(10, 14, device=device),)),
+        id=ColumnarTensor((torch.arange(10, 14),)),
     )
     query = TableTensor(
         numerical=numerical + 2,
         categorical=CategoricalTensor(
             code=torch.tensor(
-                [[-1], [1], [0], [-1]], dtype=torch.int32, device=device
+                [[-1], [1], [0], [-1]], dtype=torch.int32
             ),
             categories=categories,
         ),
         datetime=context.datetime + 60_000_000,
         text=StringTensor.from_list(
             [["alpha"], ["beta gamma"], ["unseen"], [""]],
-            device=device,
         ),
-        id=ColumnarTensor((torch.arange(20, 24, device=device),)),
+        id=ColumnarTensor((torch.arange(20, 24),)),
     )
-    return ProcessorInputs(context=context, query=query)
+    return context, query
 
 
-def _make_impute_mean_inputs(
-    device: torch.device,
-    dtype: torch.dtype,
-) -> ProcessorInputs:
-    inputs = make_mixed_inputs(device, dtype)
-    numerical = inputs.query.numerical.clone()
+def _make_impute_mean_inputs() -> tuple[TableTensor, TableTensor]:
+    context, query = make_mixed_inputs()
+    numerical = query.numerical.clone()
     numerical[0, 0] = float("nan")
-    return ProcessorInputs(
-        context=inputs.context,
-        query=inputs.query.replace_blocks(numerical=numerical),
-    )
+    return context, query.replace_blocks(numerical=numerical)
 
 
-def _make_align_categories_inputs(
-    device: torch.device,
-    dtype: torch.dtype,
-) -> ProcessorInputs:
-    inputs = make_mixed_inputs(device, dtype)
+def _make_align_categories_inputs() -> tuple[TableTensor, TableTensor]:
+    context, query = make_mixed_inputs()
     categorical = CategoricalTensor(
         code=torch.tensor(
-            [[0], [1], [-1], [0]], dtype=torch.int32, device=device
+            [[0], [1], [-1], [0]], dtype=torch.int32
         ),
-        categories=(StringTensor.from_list(["b", "c"], device=device),),
+        categories=(StringTensor.from_list(["b", "c"]),),
     )
-    return ProcessorInputs(
-        context=inputs.context,
-        query=inputs.query.replace_blocks(categorical=categorical),
-    )
+    return context, query.replace_blocks(categorical=categorical)
 
 
-def _make_reduction_inputs(
-    device: torch.device,
-    dtype: torch.dtype,
-) -> ProcessorInputs:
+def _make_reduction_inputs() -> tuple[TableTensor, TableTensor]:
     context = TableTensor.from_tensor(
         torch.tensor(
             [[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]],
-            device=device,
-            dtype=dtype,
+            dtype=torch.float32,
         )
     )
     query = TableTensor.from_tensor(context.numerical + 1.0)
-    return ProcessorInputs(context=context, query=query)
+    return context, query
 
 
 @dataclass(frozen=True)
