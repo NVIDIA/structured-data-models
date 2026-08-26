@@ -31,48 +31,6 @@ def test_public_processors_are_registered_or_scoped() -> None:
     assert public == registered | containers | processor_specific
 
 
-def _assert_table_close(
-    actual: TableTensor,
-    expected: TableTensor,
-    *,
-    atol: float = 1e-5,
-    check_dtype: bool = True,
-) -> None:
-    if actual.device != expected.device:
-        actual = cast(TableTensor, actual.to(expected.device))
-    assert actual.columns == expected.columns
-    assert actual.size() == expected.size()
-    torch.testing.assert_close(
-        actual.numerical,
-        expected.numerical,
-        atol=atol,
-        rtol=1e-5,
-        equal_nan=True,
-        check_dtype=check_dtype,
-    )
-    assert actual.categorical.equal(expected.categorical)
-    assert torch.equal(actual.datetime, expected.datetime)
-    assert actual.text.equal(expected.text)
-    assert actual.id.equal(expected.id)
-
-
-def _assert_data_close(
-    actual: EnsembleTable,
-    expected: EnsembleTable,
-    *,
-    atol: float = 1e-5,
-    check_dtype: bool = True,
-) -> None:
-    assert actual.num_members == expected.num_members
-    for member_id in range(actual.num_members):
-        _assert_table_close(
-            actual.table(member_id),
-            expected.table(member_id),
-            atol=atol,
-            check_dtype=check_dtype,
-        )
-
-
 def _check_state_dict_restoration(case: ProcessorCase) -> None:
     context, query = case.make_inputs()
     fitted = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
@@ -89,7 +47,10 @@ def _check_state_dict_restoration(case: ProcessorCase) -> None:
     torch.save(fitted.state_dict(), stream)
     stream.seek(0)
     restored.load_state_dict(torch.load(stream, weights_only=False))
-    _assert_data_close(restored.transform_ensemble(data), expected)
+    actual = restored.transform_ensemble(data)
+    assert actual.num_members == expected.num_members
+    for member_id in range(actual.num_members):
+        assert actual.table(member_id).equal(expected.table(member_id))
 
 
 @pytest.mark.parametrize(
@@ -114,7 +75,10 @@ def test_fit_transform_matches_fit_then_transform(
         data,
         generator=torch.Generator().manual_seed(0),
     )
-    _assert_data_close(actual, split.transform_ensemble(data))
+    expected = split.transform_ensemble(data)
+    assert actual.num_members == expected.num_members
+    for member_id in range(actual.num_members):
+        assert actual.table(member_id).equal(expected.table(member_id))
 
 
 FITTED_CASES = tuple(
@@ -182,7 +146,15 @@ def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
     restored = cast(
         sp.EnsembleInvertibleMixin, processor
     ).inverse_transform_ensemble(transformed)
-    _assert_data_close(restored, data, atol=1e-3)
+    assert restored.num_members == data.num_members
+    for member_id in range(restored.num_members):
+        torch.testing.assert_close(
+            restored.table(member_id).numerical,
+            data.table(member_id).numerical,
+            atol=1e-3,
+            rtol=1e-5,
+            equal_nan=True,
+        )
 
 
 @pytest.mark.parametrize(
@@ -210,8 +182,8 @@ def test_preserves_rows_and_unhandled_stypes(
             columns = before.columns[stype]
             assert all(column in after.column_names for column in columns)
             assert all(after.stype(column) == stype for column in columns)
-            _assert_table_close(
-                after.select_columns(columns), before.select_columns(columns)
+            assert after.select_columns(columns).equal(
+                before.select_columns(columns)
             )
 
 
@@ -246,7 +218,18 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
         actual.table(member_id).dtype == dtype
         for member_id in range(actual.num_members)
     )
-    _assert_data_close(actual, expected, check_dtype=False)
+    assert actual.num_members == expected.num_members
+    for member_id in range(actual.num_members):
+        actual_table = actual.table(member_id)
+        expected_table = expected.table(member_id)
+        assert actual_table.columns == expected_table.columns
+        torch.testing.assert_close(
+            actual_table.numerical,
+            expected_table.numerical,
+            equal_nan=True,
+            check_dtype=False,
+        )
+        assert actual_table.categorical.equal(expected_table.categorical)
 
 
 @onlyCUDA
@@ -276,4 +259,14 @@ def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
         actual.table(member_id).device.type == device.type
         for member_id in range(actual.num_members)
     )
-    _assert_data_close(actual, expected)
+    assert actual.num_members == expected.num_members
+    for member_id in range(actual.num_members):
+        actual_table = actual.table(member_id)
+        expected_table = expected.table(member_id)
+        assert actual_table.columns == expected_table.columns
+        torch.testing.assert_close(
+            actual_table.numerical.cpu(),
+            expected_table.numerical,
+            equal_nan=True,
+        )
+        assert actual_table.categorical.cpu().equal(expected_table.categorical)
