@@ -1,9 +1,9 @@
-﻿NemotronRelational
-==================
+﻿KumoRelational
+==============
 
 .. currentmodule:: sdm.models
 
-.. autoclass:: NemotronRelational
+.. autoclass:: KumoRelational
    :members:
    :show-inheritance:
    :exclude-members: supported_feature_stypes, supported_target_stypes, supports_related_tables
