@@ -1,6 +1,6 @@
 # Spec: Geplante Spalten-Shuffles auf gestapelten Tabellen
 
-Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `d2d89895b0540c01b1213ea1accf391db7fb74cd`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bebaef1ccd074a376dd2f4c3e5c0c010fb8d6db3`.
 
 ## Problem
 
@@ -17,13 +17,44 @@ Eine `EnsembleTable` trennt logische Estimatoren von physisch gespeicherten Tabe
 - Ein schmaler interner `EnsembleTable`-Assembly-Pfad übernimmt die fertigen Gruppen und `(group, position)`-Locations direkt. Er erhält logische Reihenfolge und Sharing, führt keine erneute Tensor-Kopie aus und erzeugt keine neue öffentliche Container-Abstraktion.
 - Inkompatible Gruppen werden separat gebatcht. Wenn kein gemeinsames Batch möglich ist, bleibt der bestehende per-Member-Pfad der korrekte Fallback.
 
-```text
-einen gemeinsamen logischen Plan für alle Gruppen lesen
-pro Schema fehlende Spalten entfernen und den lokalen [P,C]-Tensor aus BufferList wählen
-kompatible gespeicherte Tabellen zu [S,R,C] zusammenfassen
-einmal gather auf [P,S,R,C] ausführen
-Ausgabegruppen und logische Locations direkt zusammensetzen
+## Ausführbares Akzeptanzbeispiel
+
+Dieser Draft ist noch spec-only und setzt `method="latin"` aus #619 voraus. Der synchronisierte CUDA-Lauf prüft öffentliche Ergebnisse und misst den Pfad mit 50.000 × 100 Werten.
+
+```python
+import statistics
+import time
+import torch
+import sdm
+from sdm.processing import ShuffleColumns
+from sdm.tensor import EnsembleTable
+
+device = torch.device("cuda")
+tables = tuple(sdm.TableTensor.from_tensor(torch.full((50_000, 100), value, device=device)) for value in (0.0, 1.0))
+ensemble = EnsembleTable.from_tables(tables=tables, member_table_ids=(0, 1) * 4)
+processor = ShuffleColumns(method="latin").fit_ensemble(
+    ensemble, generator=torch.Generator(device=device).manual_seed(7)
+)
+samples = []
+output = None
+for run in range(35):
+    del output
+    torch.cuda.synchronize()
+    start = time.perf_counter()
+    output = processor.transform_ensemble(ensemble)
+    torch.cuda.synchronize()
+    if run >= 5:
+        samples.append((time.perf_counter() - start) * 1_000)
+orders = [output.table(i).columns[sdm.Stype.numerical] for i in range(8)]
+paired = all(orders[i] == orders[i + 1] for i in range(0, 8, 2))
+restored = ShuffleColumns(method="latin")
+restored.load_state_dict(processor.state_dict())
+again = restored.transform_ensemble(ensemble)
+state_ok = all(output.table(i).equal(again.table(i)) for i in range(8))
+print(f"paired={paired}, state_dict={state_ok}, median_ms={statistics.median(samples):.3f}")
 ```
+
+Auf aktuellem `main` und diesem spec-only Draft endet der Lauf noch mit `AssertionError`. Mit #619, aber vor dieser Optimierung, sind auf der gemessenen L4 `paired=True, state_dict=True` bei etwa 8,403 ms Median zu erwarten; nach diesem PR bleiben beide Werte `True` und der Zielwert ist etwa 1,529 ms. Die exakte Nichtregressionsgrenze wird auf derselben GPU aus den 30 Messläufen festgelegt.
 
 ## GPU-Benchmark-Ergebnisse
 
