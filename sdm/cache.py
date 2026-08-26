@@ -193,4 +193,4 @@ def _to_pinned_cpu(tensor: Tensor) -> Tensor:
     if not tensor.is_cuda:
         return tensor
     out = torch.empty_like(tensor, device="cpu", pin_memory=True)
-    return out.copy_(tensor, non_blocking=False)
+    return out.copy_(tensor)
