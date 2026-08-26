@@ -1,4 +1,4 @@
-"""Benchmark NemotronRelational on RelBench SALT autocomplete tasks.
+"""Benchmark KumoRelational on RelBench SALT autocomplete tasks.
 
 Without arguments, this runs all eight SALT tasks. Pass ``--task`` to run one
 task.
@@ -31,7 +31,7 @@ from sdm import (
     TableTensor,
     infer_stypes,
 )
-from sdm.models import NemotronRelational
+from sdm.models import KumoRelational
 
 SALT_DATASET = "rel-salt"
 SALT_PRESETS = {
@@ -148,7 +148,7 @@ def run_task(task_name: str) -> None:
     x_context = context.drop_columns(task.target_col)
     y_context = context[task.target_col]
 
-    model = NemotronRelational(device=device)
+    model = KumoRelational(device=device)
     mrr = MeanMetric().to(device)
     accuracy = MeanMetric().to(device)
     batch_size = args.batch_size or SALT_PRESETS[task_name][1]
