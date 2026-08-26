@@ -77,11 +77,13 @@ class ICLExplainer(abc.ABC, Generic[T]):  # noqa: D101
                 f"'{model.__class__.__name__}.fit()' first."
             )
 
-        num_estimators = cast(int, model._cache["num_estimators"])
+        _, cache = model._cache._state()
+        num_estimators = cast(int, cache["num_estimators"])
         if num_estimators != 1:
             raise RuntimeError(
                 f"{model.__class__.__name__!r} only supports explaining "
-                f"models fitted with a single estimator (got {num_estimators})"
+                f"models fitted with a single estimator "
+                f"(got {num_estimators})"
             )
 
         return self._explain_predict(

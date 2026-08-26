@@ -112,11 +112,10 @@ def test_forward(
         assert out.assert_close(looped)
 
     torch.manual_seed(1)
-    model.fit(x_context, y_context)
-    assert model._cache is not None
-    assert model._cache.size() > 0
-    assert model.predict(x_query).allclose(out)
-    model.clear()
+    context = model.compile_context(x_context, y_context)
+    assert context.placement.total_bytes > 0
+    assert model.predict_context(context, x_query).allclose(out)
+    context.close()
 
 
 @withCUDA
@@ -157,10 +156,8 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
 
     model.fit(x_context, y_context, num_estimators=3)
     assert model._cache is not None
-    assert 0 in model._cache
-    assert 1 in model._cache
-    assert model._cache.size() > 0
-    assert model._cache.is_cpu
+    assert model._cache.placement.total_bytes > 0
+    assert model._cache.placement.device_bytes_by_device == {}
 
     out = model.predict(x_query)
     assert out.size() == (*batch_shape, R_query, 999)

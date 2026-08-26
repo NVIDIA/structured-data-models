@@ -222,8 +222,9 @@ def test_forward(
     )
 
     torch.manual_seed(1)
-    model.fit(x, y, related_tables)
-    assert model.predict(
+    context = model.compile_context(x, y, related_tables)
+    assert model.predict_context(
+        context,
         x=x,
         related_tables=RelatedTables(
             tables=dict(reversed(list(related_tables.tables.items()))),
@@ -231,7 +232,67 @@ def test_forward(
             task_links=related_tables.task_links[::-1],
         ),
     ).allclose(out)
-    model.clear()
+    context.close()
+
+
+@withCUDA
+def test_identity_only_task_and_entity_tables(
+    device: torch.device,
+) -> None:
+    task_table = TableTensor.from_columns(
+        {"user_id": [0, 1, 2, 3]},
+        stypes={"user_id": Stype.id},
+        device=device,
+    )
+    target = TableTensor.from_columns(
+        {"target": [False, True, False, True]},
+        stypes={"target": Stype.categorical},
+        device=device,
+    )
+    related_tables = RelatedTables(
+        tables={
+            "users": TableTensor.from_columns(
+                {"user_id": [0, 1, 2, 3]},
+                stypes={"user_id": Stype.id},
+                device=device,
+            )
+        },
+        relationships=[],
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    model = KumoRelational(pretrained=False, device=device)
+
+    torch.manual_seed(1)
+    expected = model(
+        task_table[:2],
+        target[:2],
+        task_table[2:],
+        related_tables,
+        related_tables,
+        num_hops=0,
+    )
+    torch.manual_seed(1)
+    context = model.compile_context(
+        task_table[:2],
+        target[:2],
+        related_tables,
+        num_hops=0,
+    )
+    actual = model.predict_context(
+        context,
+        task_table[2:],
+        related_tables,
+    )
+
+    assert task_table.numerical.size(-1) == 0
+    assert related_tables.tables["users"].numerical.size(-1) == 0
+    assert actual.allclose(expected)
 
 
 @withCUDA

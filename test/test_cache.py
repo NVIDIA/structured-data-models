@@ -2,6 +2,7 @@ from typing import cast
 
 import torch
 
+from sdm import Stype, TableTensor
 from sdm.cache import Cache, KVCacheEntry
 from sdm.testing import withCUDA
 
@@ -42,3 +43,24 @@ def test_cache_size() -> None:
     )
 
     assert cache.size() == 3 * 4 + 2 * 8 + 5 * 1 + 4 * 2
+
+
+def test_cache_size_deduplicates_shared_storage() -> None:
+    tensor = torch.ones(8)
+    cache = Cache(
+        tensor=tensor,
+        view=tensor[2:],
+        nested=[tensor],
+    )
+
+    assert cache.size() == tensor.untyped_storage().nbytes()
+
+
+def test_cache_size_counts_custom_tensor_storage() -> None:
+    categories = TableTensor.from_columns(
+        {"value": ["a", "bc"]},
+        stypes={"value": Stype.categorical},
+    ).categorical.categories[0]
+    cache = Cache(categories=categories)
+
+    assert cache.size() == 3 + 3 * torch.tensor(0).element_size()

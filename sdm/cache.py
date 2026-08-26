@@ -73,11 +73,16 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         return self._mode == Cache.Mode.replay
 
     def size(self) -> int:
-        r"""The size in bytes of tensor data stored in this cache."""
-        return sum(
-            tensor.numel() * tensor.element_size()
-            for tensor in self._tensors()
-        )
+        r"""Tensor storage bytes, counting shared storage once."""
+        seen: set[tuple[object, int, int]] = set()
+        size = 0
+        for tensor in self._tensors():
+            storage = tensor.untyped_storage()
+            key = (tensor.device, storage.data_ptr(), storage.nbytes())
+            if key not in seen:
+                seen.add(key)
+                size += storage.nbytes()
+        return size
 
     def freeze(self) -> Self:
         r"""Freeze the cache to replay mode."""
@@ -124,9 +129,19 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         return repr(self._items)
 
     def _tensors(self) -> Iterator[Tensor]:
+        seen: set[int] = set()
+
         def _iter_tensors(value: object) -> Iterator[Tensor]:
             if isinstance(value, Tensor):
-                yield value
+                state = vars(value)
+                if len(state) == 0:
+                    yield value
+                    return
+                if id(value) in seen:
+                    return
+                seen.add(id(value))
+                for item in state.values():
+                    yield from _iter_tensors(item)
             elif isinstance(value, DeviceMixin):
                 yield from value._tensors()
             elif isinstance(value, list | tuple):
