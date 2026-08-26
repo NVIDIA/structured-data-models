@@ -11,12 +11,12 @@ from sdm import (
     TableTensor,
 )
 from sdm.cache import Cache
-from sdm.models import NemotronRelational
-from sdm.models.nemotron.relational import invariant_gnn as gnn_module
-from sdm.models.nemotron.relational.graph import HomogeneousGraph
-from sdm.models.nemotron.relational.invariant_gnn import InvariantGNN
-from sdm.models.nemotron.relational.model import (
-    _NemotronRelational,
+from sdm.models import KumoRelational
+from sdm.models.kumo.relational import invariant_gnn as gnn_module
+from sdm.models.kumo.relational.graph import HomogeneousGraph
+from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
+from sdm.models.kumo.relational.model import (
+    _KumoRelational,
 )
 from sdm.testing import withCUDA
 
@@ -151,11 +151,11 @@ def test_forward(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
-    model = NemotronRelational(pretrained=False, device=device)
+    model = KumoRelational(pretrained=False, device=device)
     if device.type == "cpu":
-        assert repr(model) == "NemotronRelational()"
+        assert repr(model) == "KumoRelational()"
     else:
-        assert repr(model) == "NemotronRelational(device=cuda:0)"
+        assert repr(model) == "KumoRelational(device=cuda:0)"
 
     related_tables = RelatedTables(
         tables=relational_data.tables,
@@ -263,7 +263,7 @@ def test_many_classes_forward_and_cache(
             }
         ],
     )
-    model = _NemotronRelational(
+    model = _KumoRelational(
         num_classes=2,
         num_quantiles=0,
         channels=4,

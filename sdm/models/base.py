@@ -39,7 +39,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self._cache: Cache | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
-    @inference_mode()
     def forward(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
@@ -78,6 +77,35 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
+        requires_grad = any(callback.requires_grad for callback in callbacks)
+        with inference_mode(not requires_grad):
+            return self._forward_call(
+                x_context=x_context,
+                y_context=y_context,
+                x_query=x_query,
+                related_context_tables=related_context_tables,
+                related_query_tables=related_query_tables,
+                recipe=recipe,
+                num_estimators=num_estimators,
+                generator=generator,
+                callbacks=callbacks,
+                **kwargs,
+            )
+
+    def _forward_call(
+        self,
+        x_context: Tensor | TableTensor,  # [..., R_context, D]
+        y_context: Tensor | TableTensor,  # [..., R_context, 1]
+        x_query: Tensor | TableTensor,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None = None,
+        related_query_tables: RelatedTables | None = None,
+        *,
+        recipe: Recipe | None = None,
+        num_estimators: int = 1,
+        generator: torch.Generator | None = None,
+        callbacks: Sequence[Callback],
+        **kwargs: Any,
+    ) -> TableTensor:
         for callback in callbacks:
             callback.on_forward_start(
                 self,
@@ -179,7 +207,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         return prediction
 
-    @inference_mode()
+    @inference_mode(False)
+    @torch.no_grad()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
@@ -267,7 +296,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         self._cache = cache.freeze()
 
-    @inference_mode()
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
@@ -292,6 +320,21 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
         callbacks = () if callbacks is None else callbacks
+        requires_grad = any(callback.requires_grad for callback in callbacks)
+        with inference_mode(not requires_grad):
+            return self._predict_call(
+                x=x,
+                related_tables=related_tables,
+                callbacks=callbacks,
+            )
+
+    def _predict_call(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback],
+    ) -> TableTensor:
         for callback in callbacks:
             callback.on_forward_start(
                 self,
