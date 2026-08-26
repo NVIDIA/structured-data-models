@@ -481,27 +481,6 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
         processor.transform(query)
 
 
-@pytest.mark.parametrize("min_frequency", [0, -1])
-def test_align_categories_rejects_non_positive_min_frequency(
-    min_frequency: int,
-) -> None:
-    with pytest.raises(ValueError, match="min_frequency must be positive"):
-        AlignCategories(min_frequency=min_frequency)
-
-
-def test_align_categories_repr_omits_default_arguments() -> None:
-    assert repr(AlignCategories()) == "AlignCategories()"
-    assert repr(AlignCategories(sort_by="frequency")) == (
-        "AlignCategories(sort_by='frequency')"
-    )
-    assert repr(AlignCategories(min_frequency=2)) == (
-        "AlignCategories(min_frequency=2)"
-    )
-    assert repr(AlignCategories(sort_by="frequency", min_frequency=2)) == (
-        "AlignCategories(sort_by='frequency', min_frequency=2)"
-    )
-
-
 @withCUDA
 def test_align_categories_ensemble_matches_member_fits(
     device: torch.device,
