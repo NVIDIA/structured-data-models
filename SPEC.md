@@ -1,6 +1,6 @@
 # Spec: Estimatorgekoppelte Target-Kategorie-Shuffles
 
-Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `d2d89895b0540c01b1213ea1accf391db7fb74cd`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bebaef1ccd074a376dd2f4c3e5c0c010fb8d6db3`.
 
 ## Problem
 
@@ -16,12 +16,40 @@ Der Processor gehört im TabICLv2-Rezept nur in den Target-Pfad. Kategoriale Fea
 - Kompatible Target-Tabellen werden für alle eindeutigen Offsets auf CUDA in einem Durchlauf berechnet: `(code[None] - shifts[:, None, None]) % K`. Ein `where` erhält negative Missing-Codes; die invers verschobenen Kategorie-Vektoren sichern dieselben dekodierten Werte. `random` nutzt weiterhin das allgemeine Mapping.
 - Nach dem Modell wird jede Estimatorausgabe mit ihrem inversen Shift auf den kanonischen Klassenraum abgebildet und erst dann reduziert.
 
-```text
-für jedes Member seine Tabellen-Wiederholung und sein Schema bestimmen
-pro Kombination nur einen Shuffle-Zustand ziehen und in BufferList speichern
-gleiche Zustände gebündelt auf CUDA anwenden und Member-Reihenfolge erhalten
-state_dict lädt Tensorzustand, IDs und Fitted-Status ohne erneutes Fitten
+## Ausführbares Akzeptanzbeispiel
+
+Dieses Beispiel wurde auf CUDA gegen `main` und den implementierten Stand dieses PRs ausgeführt.
+
+```python
+import torch
+import sdm
+from sdm.processing import ShuffleCategories
+from sdm.tensor import EnsembleTable
+
+device = torch.device("cuda")
+def table(start):
+    return sdm.TableTensor(categorical=sdm.CategoricalTensor(
+        code=torch.arange(7, dtype=torch.int32, device=device).unsqueeze(1),
+        categories=(torch.arange(start, start + 7, device=device),),
+    ))
+
+ensemble = EnsembleTable.from_tables(
+    tables=(table(0), table(10)), member_table_ids=(0, 1, 0, 1)
+)
+processor = ShuffleCategories(method="random").fit_ensemble(
+    ensemble, generator=torch.Generator(device=device).manual_seed(7)
+)
+output = processor.transform_ensemble(ensemble)
+restored = ShuffleCategories(method="random")
+restored.load_state_dict(processor.state_dict())
+again = restored.transform_ensemble(ensemble)
+pairs = ((0, 1), (2, 3))
+paired = tuple(torch.equal(output.table(a).categorical.code, output.table(b).categorical.code) for a, b in pairs)
+state_ok = all(output.table(i).equal(again.table(i)) for i in range(4))
+print(f"paired={paired}, state_dict={state_ok}")
 ```
+
+Ausgabe auf `main`: `paired=(False, False), state_dict=True`. Ausgabe nach diesem PR: `paired=(True, True), state_dict=True`.
 
 ## GPU-Benchmark-Ergebnisse
 
