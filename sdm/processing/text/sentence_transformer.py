@@ -326,12 +326,10 @@ class _Encoder(torch.nn.Module):
 
         # CPU rejects long words by Unicode characters, while cuDF uses UTF-8
         # bytes. The following lines find rows where those decisions differ.
-        cpu_rejects = words.str.len() > tokenizer._max_input_chars_per_word
-        cudf_rejects = words.str.byte_count() >= _CUDF_WORDPIECE_MAX_BYTES
-        use_cpu = cpu_rejects != cudf_rejects
-        cpu_indices = torch.from_dlpack(
-            use_cpu[use_cpu].index.unique().values
-        ).long()
+        use_cpu = (words.str.len() > tokenizer._max_input_chars_per_word) != (
+            words.str.byte_count() >= _CUDF_WORDPIECE_MAX_BYTES
+        )
+        cpu_indices = torch.from_dlpack(words[use_cpu].index.unique().values)
 
         num_strings = text.numel()
         if cpu_indices.numel() == 0:
