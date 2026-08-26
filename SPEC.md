@@ -1,23 +1,27 @@
 # Spec: Skalierbare Latin-Spaltenpermutationen
 
-Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bb06773db1b469e027acb385d4fe43dcfe21d2ee`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `d2d89895b0540c01b1213ea1accf391db7fb74cd`.
 
 ## Problem
 
 `ShuffleColumns` ist ein allgemeiner Processor. Seine gewählte Methode darf sich deshalb nicht unbemerkt mit der Spaltenanzahl ändern. TabICLv2 wechselt bei mehr als 4.000 Spalten von `latin` zu `random`; laut [TabICL #9](https://github.com/soda-inria/tabicl/issues/9) schützt diese Grenze die rekursive `O(C²)`-Implementierung. Für genau 4.000 gibt es weder eine Qualitätsmessung noch eine allgemeine algorithmische Begründung.
 
-Die Referenz erzeugt eine zufällige Symbol-, Zeilen- und Spaltenreihenfolge eines zyklischen Latin-Quadrats. Diese Verteilung lässt sich auf CUDA ohne das vollständige Quadrat erzeugen. Für identische TabICLv2-Seeds muss zusätzlich der Python-RNG-Verbrauch exakt reproduziert werden; diese teure Anforderung gehört in den Modellplan, nicht als Sonderregel in den allgemeinen Processor.
+Die Referenz erzeugt eine zufällige Symbol-, Zeilen- und Spaltenreihenfolge eines zyklischen Latin-Quadrats. Diese Verteilung lässt sich auf CUDA ohne das vollständige Quadrat erzeugen. Für identische TabICLv2-Seeds muss zusätzlich der Python-RNG-Verbrauch exakt reproduziert werden; diese teure Anforderung gehört in den Modellplan, nicht als Sonderregel in den allgemeinen Processor. Auf aktuellem `main` wird dynamisch großer Processor-Zustand mit `BufferList` gespeichert und über den normalen PyTorch-`state_dict` wiederhergestellt; der neue Plan muss diesen Vertrag verwenden.
 
 ## Lösung
 
 - `random` wird der Default. Explizites `method="latin"` bleibt bei jeder Spaltenanzahl Latin; ein Ressourcenlimit meldet einen Fehler oder ist explizit konfigurierbar, ändert aber nie die Methode.
-- Der allgemeine CUDA-Pfad zieht Symbol-, Zeilen- und Pattern-Reihenfolge mit dem übergebenen `torch.Generator` direkt auf dem Eingabe-Device. Er hat dieselbe Latin-Verteilung wie die Referenz, materialisiert aber nur `E` Permutationen als einen Tensor `[E, C]`: `base[(pattern[:, None] - rows[None, :]) % C]`.
+- Ein gemeinsamer logischer Plan vergibt mit einem Seed stabile Zufallsränge für die Vereinigungsmenge aller Spalten und Pattern. Für jedes tatsächlich vorkommende Schema werden nicht vorhandene Spalten aus diesen Rangfolgen entfernt, die übrigen lokal neu nummeriert und daraus ein gültiger Latin-Plan erzeugt. Stark überlappende Gruppen bleiben so gekoppelt; konkrete Tensoren bleiben wegen unterschiedlicher Spaltenzahlen schemaspezifisch.
+- Der allgemeine CUDA-Pfad materialisiert pro Schema nur die benötigten `E` Permutationen als Tensor `[E, C]`: `base[(pattern[:, None] - rows[None, :]) % C]`.
 - Der interne TabICLv2-Estimatorplan bildet für exakte Seed-Parität dieselben Python-RNG-Ziehungen ab. Eine Order-Statistic-Struktur dekodiert die Symbolfolge iterativ in `O(C log C)`; anschließend werden nur die ausgewählten Pattern-IDs auf CUDA materialisiert. Der generische Processor erhält fertige IDs/Zustände und kennt keine TabICLv2-Schwelle.
-- Innerhalb eines Zyklus werden Pattern-IDs nicht wiederholt. Bei `E > C` beginnt ein neuer deterministischer Zyklus. Ein Modell, das für einen Estimator Identity benötigt, komponiert `Identity`; `ShuffleColumns` bekommt keine `E=1`-Sonderregel.
+- Die konkreten Permutationstensoren werden in `BufferList` registriert; Schema- und Estimatorzuordnungen liegen als nicht-tensorieller `extra_state` vor. Dadurch stellt `load_state_dict()` einen gefitteten Processor ohne erneutes Fitten vollständig wieder her.
 
 ```text
-allgemein: drei CUDA-Permutationen ziehen -> E Pattern-IDs wählen -> [E,C] gebündelt materialisieren
-TabICLv2: Python-RNG kompakt nachbilden -> ausgewählte IDs übertragen -> dieselbe CUDA-Materialisierung
+alle vorkommenden Spalten sammeln und einmal mit dem Seed ordnen
+für jedes Schema: fehlende Spalten herausfiltern und lokal neu nummerieren
+für dieses Schema nur die benötigten Latin-Patterns als [E,C] auf CUDA erzeugen
+Tensoren in BufferList, Zuordnungen in extra_state speichern
+TabICLv2 verwendet denselben Ablauf, aber bildet vorher den Referenz-RNG exakt nach
 ```
 
 ## GPU-Benchmark-Ergebnisse
@@ -37,4 +41,5 @@ Der Profiler bestätigt die Entscheidung: Bei `C=64.000` sinkt die reine Materia
 
 - Verteilungseigenschaften und Latin-Invarianten des allgemeinen CUDA-Pfads für kleine/große `C`, mehrere `E`, mehrere Zyklen und deterministische `torch.Generator` prüfen.
 - Den internen TabICLv2-Plan bis 4.000 Spalten und über mehrere Seeds exakt vergleichen; oberhalb davon Latin-Invarianten und fehlenden Methodenwechsel prüfen.
-- Inverse Transformation, `random` als Default, bestehende `shift`-/CPU-Pfade und vollständige per-Estimator-Modellinputs abdecken.
+- Überlappende und unterschiedliche Gruppenschemata sowie inverse Transformation und vollständige per-Estimator-Modellinputs abdecken.
+- Nach Fit `state_dict` in einen leeren Processor laden und Transformation, Inverse, Fitted-Status, Member-Zuordnung und Device exakt vergleichen.
