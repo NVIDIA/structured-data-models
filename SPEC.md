@@ -1,6 +1,6 @@
 # Spec: Geplante Spalten-Shuffles auf gestapelten Tabellen
 
-Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bb06773db1b469e027acb385d4fe43dcfe21d2ee`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `d2d89895b0540c01b1213ea1accf391db7fb74cd`.
 
 ## Problem
 
@@ -10,15 +10,18 @@ Eine `EnsembleTable` trennt logische Estimatoren von physisch gespeicherten Tabe
 
 ## Lösung
 
-- Gefittete Spaltenpermutationen werden über ihr exaktes Indextupel dedupliziert; jede logische Estimator-ID verweist auf eine Permutations-ID aus dem gemeinsamen Plan.
+- Der gemeinsame logische Plan aus #619 wird pro tatsächlich vorkommendem Schema materialisiert: nicht vorhandene Spalten werden vor der lokalen Latin-Konstruktion herausgefiltert. Jede logische Estimator-ID verweist anschließend auf eine schemaspezifische Permutations-ID; ein konkreter `[P, C]`-Tensor wird nie zwischen verschiedenen Spaltenzahlen geteilt.
+- Die konkreten Permutationstensoren werden pro Schema in `BufferList` registriert. Permutations-, Schema- und Member-IDs liegen als `extra_state` vor, sodass der vollständige Ausführungsplan über den normalen `state_dict` gespeichert, geladen und auf ein anderes Device verschoben werden kann.
 - Die Eingaben werden nach kompatibler gespeicherter Gruppe und Spaltenzahl partitioniert. Für eine Partition werden die eindeutigen Indizes zu `[P, C]` gestapelt und alle gespeicherten Tabellen mit einem gebündelten CUDA-`gather` verarbeitet.
 - Die Quelltabelle `[S, R, C]` wird nur als View auf `[P, S, R, C]` erweitert; `gather` materialisiert ausschließlich die benötigte Ausgabe. Für TabICLv2 entsteht so ein Tensor `[4, 2, R, C]` statt acht Einzelresultaten plus Restacking.
 - Ein schmaler interner `EnsembleTable`-Assembly-Pfad übernimmt die fertigen Gruppen und `(group, position)`-Locations direkt. Er erhält logische Reihenfolge und Sharing, führt keine erneute Tensor-Kopie aus und erzeugt keine neue öffentliche Container-Abstraktion.
 - Inkompatible Gruppen werden separat gebatcht. Wenn kein gemeinsames Batch möglich ist, bleibt der bestehende per-Member-Pfad der korrekte Fallback.
 
 ```text
-logische Mitglieder nach exakter Permutations-ID und kompatibler Quellgruppe partitionieren
-Permutationstensor [P,C] stapeln -> einmal gather auf [P,S,R,C]
+einen gemeinsamen logischen Plan für alle Gruppen lesen
+pro Schema fehlende Spalten entfernen und den lokalen [P,C]-Tensor aus BufferList wählen
+kompatible gespeicherte Tabellen zu [S,R,C] zusammenfassen
+einmal gather auf [P,S,R,C] ausführen
 Ausgabegruppen und logische Locations direkt zusammensetzen
 ```
 
@@ -38,4 +41,6 @@ Bei 50.000 Zeilen war batched `gather` auch für 1/2/4/8 eindeutige Permutatione
 
 - Daten, Spaltennamen, inverse Transformation und logische Reihenfolge für geteilte Tabellen, zwei Normalisierungen, wiederholte IDs und inkompatible Schemata gegen den bestehenden Pfad vergleichen.
 - Die öffentliche Ausgabe für eine, zwei, vier und acht Permutationen sowie CPU-Fallback und CUDA-Pfad prüfen, ohne private Helper-Struktur festzuschreiben.
+- Unterschiedliche, stark überlappende Schemata prüfen: gemeinsame Spalten behalten die gekoppelte Planung, jedes lokale Ergebnis bleibt eine gültige Permutation und keine falsche Tensorlänge wird wiederverwendet.
+- Nach Fit den `state_dict` in einen leeren Processor laden und Transformation, Inverse, Gruppen-/Member-Zuordnung, Fitted-Status und Device exakt vergleichen.
 - 1.000, 10.000 und 50.000 Zeilen als permanente synchronisierte GPU-Nichtregressionsszenarien behalten; Peak-Speicher zusätzlich für die große Tabelle messen.
