@@ -1,6 +1,6 @@
 # Spec: Estimatorgekoppelte Target-Kategorie-Shuffles
 
-Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bb06773db1b469e027acb385d4fe43dcfe21d2ee`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `d2d89895b0540c01b1213ea1accf391db7fb74cd`.
 
 ## Problem
 
@@ -10,15 +10,17 @@ Der Processor gehört im TabICLv2-Rezept nur in den Target-Pfad. Kategoriale Fea
 
 ## Lösung
 
-- Ein privater, modellseitiger Estimatorplan ordnet jeder globalen Estimator-ID `(feature_pattern_id, class_shift_id, normalization_id)` zu. Er erzeugt die Feature-/Klassen-Kombination und Seed-Mischung exakt wie die Referenz; die Normalisierungsduplizierung geschieht erst danach.
-- `ShuffleCategories` erhält einen schmalen internen Resolver für vorgeplante Permutations-IDs. Ohne Plan bleibt das allgemeine unabhängige Verhalten unverändert; es entsteht kein öffentlicher TabICLv2-Modus.
-- Für `method="shift"` speichert der allgemeine Zustand nur den Offset statt eines materialisierten Mappings der Länge `K`. Gleiche Offsets werden einmal gehalten und von allen zugehörigen Estimatoren referenziert.
+- Die Position eines logischen Members relativ zu seiner gespeicherten Tabelle definiert die Wiederholung. Tabellen mit demselben kategorialen Schema erhalten für dieselbe Wiederholung denselben Zustand; unterschiedliche Kardinalitäten bleiben getrennt. Damit bleibt die Regel allgemein und benötigt keinen öffentlichen TabICLv2-Modus.
+- Für `method="shift"` enthält ein Zustand nur Offsets, inverse Kategorieordnungen, Blockgrenzen und Divisoren statt eines vollständigen Mappings pro Member. `random` behält sein allgemeines Mapping.
+- Alle dynamischen Zustandstensoren liegen als rekursive `BufferList` vor. Die Zuordnung der logischen Member zu Zuständen wird über `get_extra_state()`/`set_extra_state()` gespeichert; Fitted-Status und Device-Transfer folgen dem aktuellen `Processor`-Vertrag. Ein leer konstruierter Processor kann den Zustand daher mit `load_state_dict()` ohne erneutes Fitten rekonstruieren.
 - Kompatible Target-Tabellen werden für alle eindeutigen Offsets auf CUDA in einem Durchlauf berechnet: `(code[None] - shifts[:, None, None]) % K`. Ein `where` erhält negative Missing-Codes; die invers verschobenen Kategorie-Vektoren sichern dieselben dekodierten Werte. `random` nutzt weiterhin das allgemeine Mapping.
 - Nach dem Modell wird jede Estimatorausgabe mit ihrem inversen Shift auf den kanonischen Klassenraum abgebildet und erst dann reduziert.
 
 ```text
-kanonisches Target fitten -> gekoppelte Estimator-IDs planen -> eindeutige Shifts gebündelt anwenden
-Modell pro Estimator -> Klassenachse invers kanonisieren -> Estimatoren reduzieren
+für jedes Member seine Tabellen-Wiederholung und sein Schema bestimmen
+pro Kombination nur einen Shuffle-Zustand ziehen und in BufferList speichern
+gleiche Zustände gebündelt auf CUDA anwenden und Member-Reihenfolge erhalten
+state_dict lädt Tensorzustand, IDs und Fitted-Status ohne erneutes Fitten
 ```
 
 ## GPU-Benchmark-Ergebnisse
@@ -38,4 +40,5 @@ Eine Lookup-Tabelle war bei 50.000 Zeilen/100 Klassen mit 0,800 ms langsamer und
 - Feature-/Klassen-Plan, globale IDs und Seed-Verbrauch für Klassifikation und Regression exakt mit der gepinnten Referenz vergleichen.
 - Gleiche `none`-/`power`-Shifts, Missing-Codes, eine/viele Klassen, deterministische Seeds sowie vektorisierte und sequenzielle Estimatorausführung prüfen.
 - Shift-Arithmetik elementweise gegen das bestehende Mapping vergleichen; `random` und unabhängiges generisches Shuffling unverändert testen.
+- Nach Fit den `state_dict` in einen leeren Processor laden und Fitted-Status sowie alle Member-Ausgaben für `shift` und `random` exakt vergleichen.
 - Per-Estimator-Ausgaben nach kanonischer Rückabbildung, Reduktion, finale Klassenreihenfolge und öffentliche Wahrscheinlichkeiten vergleichen.

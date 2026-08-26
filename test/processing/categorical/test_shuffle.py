@@ -253,16 +253,20 @@ def test_shuffle_categories_uses_schema_compatible_shared_states(
 
 
 @pytest.mark.parametrize("method", ["shift", "random"])
+@withCUDA
 def test_shuffle_categories_restores_ensemble_state(
     method: Literal["shift", "random"],
+    device: torch.device,
 ) -> None:
     first = _table(
         [[0], [1], [2]],
         (("a", "b", "c"),),
+        device=device,
     )
     second = _table(
         [[2], [1], [0]],
         (("x", "y", "z"),),
+        device=device,
     )
     ensemble = EnsembleTable.from_tables(
         tables=(first, second),
@@ -270,7 +274,7 @@ def test_shuffle_categories_restores_ensemble_state(
     )
     processor = ShuffleCategories(method=method).fit_ensemble(
         ensemble,
-        generator=torch.Generator().manual_seed(7),
+        generator=torch.Generator(device=device).manual_seed(7),
     )
     expected = processor.transform_ensemble(ensemble)
 
