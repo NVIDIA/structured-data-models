@@ -1,6 +1,6 @@
 # Spec: Skalierbare Latin-Spaltenpermutationen
 
-Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `d2d89895b0540c01b1213ea1accf391db7fb74cd`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bebaef1ccd074a376dd2f4c3e5c0c010fb8d6db3`.
 
 ## Problem
 
@@ -16,13 +16,36 @@ Die Referenz erzeugt eine zufällige Symbol-, Zeilen- und Spaltenreihenfolge ein
 - Der interne TabICLv2-Estimatorplan bildet für exakte Seed-Parität dieselben Python-RNG-Ziehungen ab. Eine Order-Statistic-Struktur dekodiert die Symbolfolge iterativ in `O(C log C)`; anschließend werden nur die ausgewählten Pattern-IDs auf CUDA materialisiert. Der generische Processor erhält fertige IDs/Zustände und kennt keine TabICLv2-Schwelle.
 - Die konkreten Permutationstensoren werden in `BufferList` registriert; Schema- und Estimatorzuordnungen liegen als nicht-tensorieller `extra_state` vor. Dadurch stellt `load_state_dict()` einen gefitteten Processor ohne erneutes Fitten vollständig wieder her.
 
-```text
-alle vorkommenden Spalten sammeln und einmal mit dem Seed ordnen
-für jedes Schema: fehlende Spalten herausfiltern und lokal neu nummerieren
-für dieses Schema nur die benötigten Latin-Patterns als [E,C] auf CUDA erzeugen
-Tensoren in BufferList, Zuordnungen in extra_state speichern
-TabICLv2 verwendet denselben Ablauf, aber bildet vorher den Referenz-RNG exakt nach
+## Ausführbares Akzeptanzbeispiel
+
+Dieser Draft ist noch spec-only. Der folgende öffentliche CUDA-Test ist das Abnahmekriterium für die spätere Implementierung.
+
+```python
+import torch
+import sdm
+from sdm.processing import ShuffleColumns
+from sdm.tensor import EnsembleTable
+
+device, columns = torch.device("cuda"), ("a", "b", "c", "d")
+table = sdm.TableTensor.from_tensor(
+    torch.arange(8, dtype=torch.float32, device=device).reshape(2, 4),
+    columns=columns,
+)
+ensemble = EnsembleTable(table, num_members=4)
+processor = ShuffleColumns(method="latin")
+output = processor.fit_transform_ensemble(
+    ensemble, generator=torch.Generator(device=device).manual_seed(7)
+)
+orders = [output.table(i).columns[sdm.Stype.numerical] for i in range(4)]
+assert all({order[i] for order in orders} == set(columns) for i in range(4))
+restored = ShuffleColumns(method="latin")
+restored.load_state_dict(processor.state_dict())
+again = restored.transform_ensemble(ensemble)
+assert all(output.table(i).equal(again.table(i)) for i in range(4))
+print("latin=True, state_dict=True")
 ```
+
+Auf aktuellem `main` und diesem spec-only Draft endet der Lauf mit `AssertionError`, weil `latin` noch fehlt. Nach der Implementierung lautet die Ausgabe `latin=True, state_dict=True`.
 
 ## GPU-Benchmark-Ergebnisse
 
