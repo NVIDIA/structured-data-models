@@ -169,7 +169,7 @@ class KumoRelational(ICLModel):
 
         for variant in ["classifier", "regressor"]:
             path = download_checkpoint(
-                repo_id="nvidia/Nemotron-Relational",
+                repo_id="nvidia/Kumo-Relational",
                 filename=f"{variant}.pt",
                 revision="v2.1.1",
             )
