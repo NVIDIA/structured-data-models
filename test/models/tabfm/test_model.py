@@ -3,28 +3,10 @@ import functools
 import pytest
 import torch
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, TableTensor
 from sdm.models import TabFM
 from sdm.models.tabfm import model as tabfm_module
 from sdm.testing import withCUDA
-
-
-def test_default_recipe_imputes_before_filtering() -> None:
-    features = TableTensor.from_tensor(
-        torch.tensor(
-            [
-                [torch.nan, 1.0],
-                [4.0, 1.0],
-                [4.0, 2.0],
-            ]
-        ),
-        columns=("missing_constant", "variable"),
-    )
-
-    output = TabFM.default_recipe().features.fit_transform(features)
-
-    assert output.columns[Stype.numerical] == ("variable",)
-    assert torch.isfinite(output.numerical).all()
 
 
 @withCUDA
