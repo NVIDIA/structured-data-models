@@ -132,15 +132,12 @@ class NemotronRelational(ICLModel):
         device: The device.
         training_free_gnn_features: Whether to add the deterministic,
             training-free heterogeneous GNN features inspired by KumoRFM-2.
-            This SDM-native approximation uses joins induced by the provided
-            context and query tables separately, not Kumo's combined sampled
-            batch with retained edge ordering. It encodes numerical,
-            categorical, and datetime columns; identifiers remain structural
-            and text features are ignored. Each categorical column retains at
-            most 1,024 context values plus an unknown bucket. Each ordered
-            relationship uses ``[sum, mean, min, max, std]`` from left to
-            right and a deterministic mean from right to left, equal to a
-            gather when each left row matches at most one right row.
+            The feature projects the first recipe member's processed numerical
+            inputs to 64 channels, applies fixed random heterogeneous message
+            passing, and shares the normalized readout across estimators.
+            It uses joins induced from the provided tables and processes
+            context and query as separate graph components with cached random
+            state, rather than retaining Kumo's combined sampled graph.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -259,12 +256,6 @@ class NemotronRelational(ICLModel):
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
-
-    def _supported_feature_stypes(self) -> frozenset[Stype]:
-        feature_stypes = super()._supported_feature_stypes()
-        if getattr(self, "training_free_gnn_features", False):
-            feature_stypes = feature_stypes | {Stype.categorical}
-        return feature_stypes
 
     def _fit_task_features(
         self,

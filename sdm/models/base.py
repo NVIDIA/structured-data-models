@@ -2,6 +2,7 @@ import abc
 import contextlib
 import copy
 from collections.abc import Iterator
+from dataclasses import replace
 from typing import Any, ClassVar, cast
 
 import torch
@@ -112,21 +113,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 tables=related_context_tables.tables
             )
 
-        with torch.amp.autocast(x_query.device.type, enabled=False):
-            task_features, task_feature_state = self._fit_task_features(
-                x=x_context,
-                related_tables=related_context_tables,
-                **kwargs,
-            )
-            query_features = self._transform_task_features(
-                x=x_query,
-                related_tables=related_query_tables,
-                state=task_feature_state,
-                **kwargs,
-            )
-            x_context = self._append_task_features(x_context, task_features)
-            x_query = self._append_task_features(x_query, query_features)
-
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
@@ -142,6 +128,40 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 x=x_query,
                 related_tables=related_query_tables,
             )
+
+            task_features, task_feature_state = self._fit_task_features(
+                x=contexts[0].x,
+                related_tables=contexts[0].related_tables,
+                **kwargs,
+            )
+            query_features = self._transform_task_features(
+                x=queries[0].x,
+                related_tables=queries[0].related_tables,
+                state=task_feature_state,
+                **kwargs,
+            )
+            if task_features is not None:
+                contexts = tuple(
+                    replace(
+                        context,
+                        x=self._append_task_features(
+                            context.x,
+                            task_features,
+                        ),
+                    )
+                    for context in contexts
+                )
+            if query_features is not None:
+                queries = tuple(
+                    replace(
+                        query,
+                        x=self._append_task_features(
+                            query.x,
+                            query_features,
+                        ),
+                    )
+                    for query in queries
+                )
 
         outs: list[TableTensor] = []
         for context, query in zip(contexts, queries):
@@ -217,14 +237,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         self.clear()
 
-        with torch.amp.autocast(x.device.type, enabled=False):
-            task_features, task_feature_state = self._fit_task_features(
-                x=x,
-                related_tables=related_tables,
-                **kwargs,
-            )
-            x = self._append_task_features(x, task_features)
-
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
@@ -237,12 +249,30 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 generator=generator,
             )
 
+            task_features, task_feature_state = self._fit_task_features(
+                x=contexts[0].x,
+                related_tables=contexts[0].related_tables,
+                **kwargs,
+            )
+            if task_features is not None:
+                contexts = tuple(
+                    replace(
+                        context,
+                        x=self._append_task_features(
+                            context.x,
+                            task_features,
+                        ),
+                    )
+                    for context in contexts
+                )
+
         cache = Cache(
             num_estimators=num_estimators,
             recipe_execution=recipe_execution,
-            task_feature_state=task_feature_state,
             kwargs=kwargs,
         )
+        if task_feature_state is not None:
+            cache["task_feature_state"] = task_feature_state
         for i, context in enumerate(contexts):
             self._validate_context(
                 x=context.x,
@@ -319,24 +349,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
 
         kwargs = cast(dict[str, Any], self._cache["kwargs"])
-        task_feature_state = cast(
-            DeviceMixin | None,
-            self._cache.get("task_feature_state"),
-        )
-        if (
-            task_feature_state is not None
-            and task_feature_state.device != x.device
-        ):
-            task_feature_state = task_feature_state.to(x.device)
-        with torch.amp.autocast(x.device.type, enabled=False):
-            task_features = self._transform_task_features(
-                x=x,
-                related_tables=related_tables,
-                state=task_feature_state,
-                **kwargs,
-            )
-            x = self._append_task_features(x, task_features)
-
         num_estimators = cast(int, self._cache["num_estimators"])
         caches = [cast(Cache, self._cache[i]) for i in range(num_estimators)]
         next_cache = caches[0]
@@ -360,6 +372,33 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
             with torch.amp.autocast(x.device.type, enabled=False):
                 queries = recipe_execution.transform(x, related_tables)
+
+                task_feature_state = cast(
+                    DeviceMixin | None,
+                    self._cache.get("task_feature_state"),
+                )
+                if (
+                    task_feature_state is not None
+                    and task_feature_state.device != x.device
+                ):
+                    task_feature_state = task_feature_state.to(x.device)
+                task_features = self._transform_task_features(
+                    x=queries[0].x,
+                    related_tables=queries[0].related_tables,
+                    state=task_feature_state,
+                    **kwargs,
+                )
+                if task_features is not None:
+                    queries = tuple(
+                        replace(
+                            query,
+                            x=self._append_task_features(
+                                query.x,
+                                task_features,
+                            ),
+                        )
+                        for query in queries
+                    )
 
             if x.is_cuda:
                 assert compute_stream is not None
@@ -468,9 +507,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     # Helpers #################################################################
 
-    def _supported_feature_stypes(self) -> frozenset[Stype]:
-        return self.supported_feature_stypes
-
     def _fit_task_features(
         self,
         x: TableTensor,
@@ -515,8 +551,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 f"dimensions (got {tuple(x.size()[:-1])} and "
                 f"{tuple(y.size()[:-1])})"
             )
-        supported_feature_stypes = self._supported_feature_stypes()
-        invalid = x.active_stypes - supported_feature_stypes - {Stype.id}
+        invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
         if len(invalid) > 0:
             stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
             warn_once(
@@ -542,7 +577,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     f"tables"
                 )
             for table_name, table in related_tables.tables.items():
-                invalid = table.active_stypes - supported_feature_stypes
+                invalid = table.active_stypes - self.supported_feature_stypes
                 invalid = invalid - {Stype.id}
                 if len(invalid) > 0:
                     stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
