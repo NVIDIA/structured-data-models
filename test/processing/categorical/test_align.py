@@ -411,6 +411,36 @@ def test_align_categories_orders_unsigned_pandas_values(
     assert output.categorical.categories[0].tolist() == [1, largest]
 
 
+# CPU only: PyTorch has no CPU indexing kernels for these dtypes, so the
+# unsigned code path is unreachable on CUDA.
+@pytest.mark.parametrize("dtype", [torch.uint16, torch.uint32, torch.uint64])
+@pytest.mark.parametrize(
+    ("codes", "expected_categories", "expected_codes"),
+    [
+        ([[0], [0], [0]], [10], [0, 0, 0]),
+        ([[-1], [-1], [-1]], [], [-1, -1, -1]),
+    ],
+)
+def test_align_categories_drops_unobserved_unsigned_categories(
+    dtype: torch.dtype,
+    codes: list[list[int]],
+    expected_categories: list[int],
+    expected_codes: list[int],
+) -> None:
+    table = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor(codes, dtype=torch.int32),
+            categories=(torch.tensor([10, 20], dtype=dtype),),
+        ),
+    )
+
+    output = AlignCategories().fit_transform(table)
+
+    assert output.categorical.categories[0].dtype == dtype
+    assert output.categorical.categories[0].tolist() == expected_categories
+    assert output.categorical.code.squeeze(-1).tolist() == expected_codes
+
+
 def test_align_categories_all_missing_context_has_empty_vocabulary() -> None:
     context = _table(
         [[-1], [-1]],

@@ -16,7 +16,13 @@ from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
 from sdm.tensor import EnsembleTable
 
-_UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
+# Same-width signed dtype for each unsigned dtype.
+_SIGNED_DTYPE = {
+    torch.uint16: torch.int16,
+    torch.uint32: torch.int32,
+    torch.uint64: torch.int64,
+}
+_UNSIGNED_DTYPES = frozenset(_SIGNED_DTYPE)
 
 
 class AlignCategories(EnsembleProcessor):
@@ -138,8 +144,14 @@ class AlignCategories(EnsembleProcessor):
                 input_categories.dtype in _UNSIGNED_DTYPES
                 and input_categories.is_cpu
             ):
-                # PyTorch CPU index_select is not implemented for these dtypes.
-                fitted_categories.append(input_categories[selected_indices])
+                # PyTorch CPU indexing is not implemented for these
+                # dtypes, so index a same-width signed reinterpretation.
+                signed = _SIGNED_DTYPE[input_categories.dtype]
+                fitted_categories.append(
+                    input_categories.view(signed)
+                    .index_select(0, selected_indices)
+                    .view(input_categories.dtype)
+                )
             else:
                 fitted_categories.append(
                     input_categories.index_select(0, selected_indices)
