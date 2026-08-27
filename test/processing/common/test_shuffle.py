@@ -3,7 +3,7 @@ from typing import Literal
 import pytest
 import torch
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import Stype, TableTensor
 from sdm.processing import ShuffleColumns
 from sdm.tensor import EnsembleTable
 
