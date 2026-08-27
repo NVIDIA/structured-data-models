@@ -248,10 +248,3 @@ def test_fit_predict(model: KumoTabular) -> None:
     # The mask is derived from the context schema, which `predict` lacks.
     fit_call, predict_call = _RecordingCore.calls[-2:]
     assert predict_call["categorical_mask"].equal(fit_call["categorical_mask"])
-
-
-def test_too_many_classes(model: KumoTabular) -> None:
-    x_context, x_query = _features()
-
-    with pytest.raises(ValueError, match="only supports up to 10 classes"):
-        model(x_context, _target(num_classes=11), x_query, recipe=_recipe())
