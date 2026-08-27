@@ -18,7 +18,7 @@ Capabilities
    * - **Supported Input Semantic Types**
      - ``numerical``
    * - **Supported Target Semantic Types**
-     - ``categorical``
+     - ``categorical``, ``numerical``
    * - **Related Table Support**
      - ❌
 
