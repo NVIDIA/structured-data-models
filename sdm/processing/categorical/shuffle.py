@@ -32,7 +32,7 @@ class ShuffleCategories(EnsembleProcessor):
 
     def __init__(
         self,
-        method: Literal["shift", "random"] = "shift",
+        method: Literal["shift", "random"] = "random",
     ) -> None:
         super().__init__()
         self.method = method
