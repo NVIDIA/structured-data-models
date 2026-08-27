@@ -82,6 +82,9 @@ class _CuDFTokenizer:
         wordpiece = backend.model
         normalizer = backend.normalizer
 
+        # cuDF cannot currently construct an equivalent tokenizer directly
+        # from the Hugging Face tokenizer configuration. Keep these checks
+        # until it can.
         # Require the standard BERT WordPiece pipeline.
         if (
             type(wordpiece) is not tokenizers.models.WordPiece
@@ -338,6 +341,8 @@ class _Encoder(torch.nn.Module):
 
         # CPU rejects long words by Unicode characters, while cuDF uses UTF-8
         # bytes. The following lines find rows where those decisions differ.
+        # Remove this fallback if cuDF exposes the tokenizer's
+        # max_input_chars_per_word setting.
         use_cpu = (words.str.len() > tokenizer._max_input_chars_per_word) != (
             words.str.byte_count() >= _CUDF_WORDPIECE_MAX_BYTES
         )
