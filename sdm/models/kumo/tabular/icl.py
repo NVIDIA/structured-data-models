@@ -26,7 +26,12 @@ class ICLBlock(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_classes = num_classes
-        self.y_lin = Linear(num_classes, channels, **factory_kwargs)
+        self.y_lin = Linear(
+            num_classes or 1,
+            channels,
+            bias=num_classes > 0,
+            **factory_kwargs,
+        )
         self.layers = ModuleList(
             KumoTabularTransformerBlock(
                 channels=channels,
@@ -50,27 +55,31 @@ class ICLBlock(torch.nn.Module):
         cache: Cache | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
-        num_train = y.size(-1)
-        y_one_hot = F.one_hot(
-            y.long(),
-            num_classes=self.num_classes,
-        ).to(self.y_lin.weight.dtype)
-        y_emb = self.y_lin(y_one_hot).to(x.dtype)
-        x = torch.cat(
-            [x[..., :num_train, :] + y_emb, x[..., num_train:, :]],
-            dim=-2,
-        )
+        R_train = y.size(-1)
+        if y.numel() > 0:
+            if self.num_classes > 0:
+                y = F.one_hot(
+                    y.long(),
+                    num_classes=self.num_classes,
+                )
+            else:
+                y = y.unsqueeze(-1)
+            y_emb = self.y_lin(y.to(self.y_lin.weight.dtype)).to(x.dtype)
+            x = torch.cat(
+                [x[..., :R_train, :] + y_emb, x[..., R_train:, :]],
+                dim=-2,
+            )
 
         for i, layer in enumerate(self.layers):
             key = f"icl_block.layer{i}"
             result = layer(
                 query=(
-                    x[..., num_train:, :] if i == len(self.layers) - 1 else x
+                    x[..., R_train:, :] if i == len(self.layers) - 1 else x
                 ),
                 key_value=(
                     cast(KVCacheEntry, cache[key])
                     if cache is not None and cache.is_replaying
-                    else x[..., :num_train, :]
+                    else x[..., :R_train, :]
                 ),
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit=batch_size_limit,
