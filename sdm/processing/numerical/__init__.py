@@ -11,6 +11,7 @@ from sdm.processing.numerical.constant import DropConstantColumns
 from sdm.processing.numerical.pca import PCA
 from sdm.processing.numerical.random_projection import RandomProjection
 from sdm.processing.numerical.cross import CrossFeatures
+from sdm.processing.numerical.svd import TruncatedSVD
 
 __all__ = [
     "Clip",
@@ -24,4 +25,5 @@ __all__ = [
     "PCA",
     "RandomProjection",
     "CrossFeatures",
+    "TruncatedSVD",
 ]

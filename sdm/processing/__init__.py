@@ -32,11 +32,13 @@ from sdm.processing.numerical import (
     PCA,
     RandomProjection,
     CrossFeatures,
+    TruncatedSVD,
 )
 from sdm.processing.categorical import (
     AlignCategories,
     ShuffleCategories,
     ImputeMode,
+    OneHot,
 )
 from sdm.processing.datetime import AddCalendarFields
 from sdm.processing.output import ReduceEstimators, Softmax
@@ -72,9 +74,11 @@ __all__ = [
     "PCA",
     "RandomProjection",
     "CrossFeatures",
+    "TruncatedSVD",
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
+    "OneHot",
     "AddCalendarFields",
     "ReduceEstimators",
     "Softmax",
