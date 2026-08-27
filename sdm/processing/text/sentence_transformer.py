@@ -286,7 +286,6 @@ class _Encoder(torch.nn.Module):
         assert isinstance(emb, Tensor)
         return emb
 
-    @torch.inference_mode()
     def _forward_cudf(self, text: StringTensor) -> Tensor:
         assert self._cudf_tokenizer is not None
         self._model.eval()

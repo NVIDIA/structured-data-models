@@ -8,7 +8,7 @@ import torch
 
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import SentenceTransformer
-from sdm.processing.text.sentence_transformer import _CuDFTokenizer
+from sdm.processing.text.sentence_transformer import _CuDFTokenizer, _Encoder
 from sdm.testing import onlyCUDA, withCUDA
 
 MODEL_NAME = "sentence-transformers-testing/stsb-bert-tiny-safetensors"
@@ -93,6 +93,86 @@ def test_unsupported_tokenizer_does_not_probe_cudf(
     monkeypatch.setattr(importlib.util, "find_spec", fail_if_called)
 
     assert _CuDFTokenizer.build(sentence_transformer_model) is None
+
+
+@onlyCUDA
+def test_cudf_wordpiece_byte_limit() -> None:
+    cudf = pytest.importorskip("cudf")
+    wordpiece = pytest.importorskip("cudf.core.wordpiece_tokenize")
+
+    vocab = [
+        *(f"[unused{i}]" for i in range(100)),
+        "[UNK]",
+        "a",
+        "##a",
+    ]
+    tokenizer = wordpiece.WordPieceVocabulary(cudf.Series(vocab))
+    below_limit, at_limit = (
+        tokenizer.tokenize(cudf.Series(["a" * 199, "a" * 200]))
+        .to_arrow()
+        .to_pylist()
+    )
+
+    assert below_limit == [101] + [102] * 198
+    assert at_limit == [100]
+
+
+@onlyCUDA
+def test_gpu_routes_word_length_mismatches(
+    sentence_transformer_model: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("cudf")
+    device = torch.device("cuda:0")
+    wordpiece = sentence_transformer_model.tokenizer.backend_tokenizer.model
+    monkeypatch.setattr(wordpiece, "max_input_chars_per_word", 128)
+
+    encoder = _Encoder(
+        sentence_transformer_model,
+        batch_size=32,
+        embedding_dim=1,
+    )
+    tokenizer = encoder._cudf_tokenizer
+    assert tokenizer is not None
+    assert tokenizer._max_input_chars_per_word == 128
+
+    def forward_cpu(text: StringTensor) -> torch.Tensor:
+        return torch.full(
+            (text.numel(), 1),
+            -1,
+            dtype=torch.float32,
+            device=text.device,
+        )
+
+    def forward_cudf(text: StringTensor) -> torch.Tensor:
+        return torch.full(
+            (text.numel(), 1),
+            1,
+            dtype=torch.float32,
+            device=text.device,
+        )
+
+    monkeypatch.setattr(encoder, "_forward_cpu", forward_cpu)
+    monkeypatch.setattr(encoder, "_forward_cudf", forward_cudf)
+
+    cpu_rejects = "a" * 129
+    cudf_rejects = "\N{CYRILLIC SMALL LETTER BE}" * 100
+    both_reject = "\N{CYRILLIC SMALL LETTER BE}" * 129
+    cases = [
+        (["short", both_reject], [1, 1]),
+        ([cpu_rejects, cudf_rejects], [-1, -1]),
+        (
+            ["short", cpu_rejects, cudf_rejects, both_reject],
+            [1, -1, -1, 1],
+        ),
+    ]
+
+    for texts, expected in cases:
+        output = encoder(StringTensor.from_list(texts, device=device))
+        torch.testing.assert_close(
+            output.flatten(),
+            torch.tensor(expected, dtype=torch.float32, device=device),
+        )
 
 
 @withCUDA
