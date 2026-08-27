@@ -1145,6 +1145,22 @@ def test_categorical_ingestion_can_use_string_values(source: str) -> None:
     assert table.categorical.categories[0].tolist() == expected_categories
     assert table.categorical.code.squeeze(-1).tolist() == [0, 1, -1, 0]
 
+
+@onlyCUDA
+def test_cudf_categorical_ingestion_can_use_string_values() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    table = TableTensor.from_cudf(
+        df=cudf.DataFrame({"kind": [2, 10, None, 2]}),
+        stypes={"kind": "categorical"},
+        categorical_as_string=True,
+    )
+
+    assert isinstance(table.categorical.categories[0], StringTensor)
+    assert table.categorical.categories[0].tolist() == ["2", "10"]
+    assert table.categorical.code.squeeze(-1).tolist() == [0, 1, -1, 0]
+
+
 @onlyCUDA
 def test_from_pandas_id_cuda() -> None:
     df = pd.DataFrame(
