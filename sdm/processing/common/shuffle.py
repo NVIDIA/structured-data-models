@@ -124,8 +124,8 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             shuffled = table.__class__(
                 columns={
                     Stype.numerical: tuple(
-                        table.columns[Stype.numerical][index]
-                        for index in host_permutation
+                        table.columns[Stype.numerical][i]
+                        for i in host_permutation
                     )
                 },
                 numerical=table.numerical.index_select(
@@ -166,8 +166,8 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             shuffled = table.__class__(
                 columns={
                     Stype.numerical: tuple(
-                        table.columns[Stype.numerical][index]
-                        for index in inverse_host_permutation
+                        table.columns[Stype.numerical][i]
+                        for i in inverse_host_permutation
                     )
                 },
                 numerical=table.numerical.index_select(
@@ -183,7 +183,6 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
                     ),
                 )
             )
-
         return EnsembleTable.from_tables(
             tables=tables,
             member_table_ids=range(len(tables)),

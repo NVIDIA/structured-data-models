@@ -13,6 +13,7 @@ def _table() -> TableTensor:
         torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
     )
 
+
 def test_shuffle_columns_latin_method_rotates() -> None:
     table = _table()
 
@@ -62,8 +63,11 @@ def test_shuffle_columns_is_reproducible_with_generator(
 
     assert first_output.equal(second_output)
 
+
 @pytest.mark.parametrize("method", ["random", "latin"])
-def test_random_ensemble_matches_independent_shuffles(method: Literal["random", "latin"]) -> None:
+def test_random_ensemble_matches_independent_shuffles(
+    method: Literal["random", "latin"],
+) -> None:
     context = _table()
     query = context.replace_blocks(numerical=context.numerical + 10)
     ensemble = ShuffleColumns(method=method)
