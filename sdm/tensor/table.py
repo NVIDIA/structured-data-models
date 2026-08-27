@@ -9,6 +9,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import torch
 from torch import Tensor
 from typing_extensions import override
@@ -283,6 +284,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        categorical_missing_value: Any | None = None,
     ) -> Self:
         r"""Create a tensor from a :class:`pyarrow.Table`.
 
@@ -305,6 +307,8 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``table`` but not included in ``stypes`` will be ignored.
             device: The device.
+            categorical_missing_value: Value used to replace missing
+                categorical entries. ``None`` preserves them as missing.
         """
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
@@ -321,6 +325,14 @@ class TableTensor(Tensor):
                         dtype=torch.get_default_dtype(),
                     ).unsqueeze(-1)
                 elif stype == Stype.categorical:
+                    if categorical_missing_value is not None:
+                        array = pc.fill_null(
+                            values=array,
+                            fill_value=pa.scalar(
+                                value=categorical_missing_value,
+                                type=array.type,
+                            ),
+                        )
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.datetime:
                     array = array.cast(pa.timestamp("us"))
@@ -378,6 +390,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        categorical_missing_value: Any | None = None,
     ) -> Self:
         r"""Create a tensor from a :class:`pandas.DataFrame`.
 
@@ -386,6 +399,8 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``df`` but not included in ``stypes`` will be ignored.
             device: The device.
+            categorical_missing_value: Value used to replace missing
+                categorical entries. ``None`` preserves them as missing.
         """
         return cls.from_arrow(
             table=pa.Table.from_pandas(
@@ -393,6 +408,7 @@ class TableTensor(Tensor):
             ),
             stypes=stypes,
             device=device,
+            categorical_missing_value=categorical_missing_value,
         )
 
     @classmethod
@@ -402,6 +418,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        categorical_missing_value: Any | None = None,
     ) -> Self:
         r"""Create a tensor from column data.
 
@@ -410,6 +427,8 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``data`` but not included in ``stypes`` will be ignored.
             device: The device.
+            categorical_missing_value: Value used to replace missing
+                categorical entries. ``None`` preserves them as missing.
         """
         import pandas as pd
 
@@ -417,6 +436,7 @@ class TableTensor(Tensor):
             df=pd.DataFrame(data),
             stypes=stypes,
             device=device,
+            categorical_missing_value=categorical_missing_value,
         )
 
     def to_pandas(self) -> pd.DataFrame:
@@ -467,6 +487,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        categorical_missing_value: Any | None = None,
     ) -> Self:
         r"""Create a tensor from a :class:`cudf.DataFrame`.
 
@@ -475,6 +496,8 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``df`` but not included in ``stypes`` will be ignored.
             device: The device.
+            categorical_missing_value: Value used to replace missing
+                categorical entries. ``None`` preserves them as missing.
         """
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
@@ -492,6 +515,8 @@ class TableTensor(Tensor):
                     tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
                     tensor = tensor.to(device)
                 elif stype == Stype.categorical:
+                    if categorical_missing_value is not None:
+                        ser = ser.fillna(categorical_missing_value)
                     tensor = CategoricalTensor.from_cudf(ser, device=device)
                 elif stype == Stype.datetime:
                     ser = ser.astype("datetime64[us]", copy=False)

@@ -25,8 +25,9 @@ class AlignCategories(EnsembleProcessor):
     A categorical column stores each value as an integer code indexing an
     ordered list of categories. Separately created tables can use different
     codes for the same value. Fitting learns the category list for each column,
-    and transforming remaps another table to use it. Missing values and
-    categories not retained during fitting receive code ``-1``.
+    and transforming remaps another table to use it. Missing values receive
+    code ``-1``. Categories not retained during fitting use the configured
+    unseen-value policy.
 
     Args:
         sort_by: How to order fitted categories.
@@ -36,6 +37,10 @@ class AlignCategories(EnsembleProcessor):
         min_frequency: Minimum number of observations required to retain a
             category. Values of rarer categories receive code ``-1``.
             Must be positive.
+        unseen: How to encode transform values outside the fitted vocabulary.
+            ``"missing"`` uses code ``-1``. ``"mode"`` uses the most
+            frequent retained context category, with ties resolved by the
+            input category order.
 
     >>> import pandas as pd
     >>> import sdm
@@ -73,13 +78,16 @@ class AlignCategories(EnsembleProcessor):
         sort_by: Literal["code", "frequency", "value"] = "code",
         *,
         min_frequency: int = 1,
+        unseen: Literal["missing", "mode"] = "missing",
     ) -> None:
         super().__init__()
         if min_frequency <= 0:
             raise ValueError("min_frequency must be positive")
         self.sort_by = sort_by
         self.min_frequency = min_frequency
+        self.unseen = unseen
         self._categories: BufferList[BufferList[Tensor]] = BufferList()
+        self._fallback_codes: BufferList[Tensor] = BufferList()
 
     def _fit_column(
         self,
@@ -87,11 +95,16 @@ class AlignCategories(EnsembleProcessor):
         codes: Tensor,
         *,
         align_codes: bool,
-    ) -> tuple[tuple[Tensor, ...], Tensor | None]:
+    ) -> tuple[tuple[Tensor, ...], Tensor | None, Tensor]:
         batch_size = codes.size(0)
         if input_categories.numel() == 0:
             aligned_codes = torch.full_like(codes, -1) if align_codes else None
-            return (input_categories,) * batch_size, aligned_codes
+            fallback_codes = codes.new_full((batch_size,), -1)
+            return (
+                (input_categories,) * batch_size,
+                aligned_codes,
+                fallback_codes,
+            )
 
         mask = codes >= 0
         indices = codes.clamp_min(0).long()
@@ -145,25 +158,35 @@ class AlignCategories(EnsembleProcessor):
                     input_categories.index_select(0, selected_indices)
                 )
 
-        if not align_codes:
-            return tuple(fitted_categories), None
-
         rank = observed.cumsum(dim=1, dtype=codes.dtype) - 1
         lookup = torch.full_like(counts, -1)
         lookup.scatter_(1, order, torch.where(observed, rank, -1))
-        aligned_codes = torch.where(mask, lookup.gather(1, indices), -1)
-        return tuple(fitted_categories), aligned_codes
+        retained = counts >= self.min_frequency
+        mode_input = counts.masked_fill(~retained, -1).argmax(dim=1)
+        fallback_codes = lookup.gather(1, mode_input.unsqueeze(1)).squeeze(1)
+        fallback_codes = torch.where(
+            retained.any(dim=1),
+            fallback_codes,
+            fallback_codes.new_full((), -1),
+        )
+        aligned_codes = (
+            torch.where(mask, lookup.gather(1, indices), -1)
+            if align_codes
+            else None
+        )
+        return tuple(fitted_categories), aligned_codes, fallback_codes
 
     def _fit_columns(
         self,
         table: TableTensor,
         *,
         align_codes: bool,
-    ) -> tuple[tuple[tuple[Tensor, ...], ...], Tensor | None]:
+    ) -> tuple[tuple[tuple[Tensor, ...], ...], Tensor | None, Tensor]:
         codes = table.categorical.code
         if codes.dim() == 2:
             codes = codes.unsqueeze(0)
         aligned_codes = torch.full_like(codes, -1) if align_codes else None
+        fallback_codes = codes.new_full((codes.size(0), codes.size(-1)), -1)
 
         # Accumulate ragged vocabularies in batch-major order: [batch][column].
         categories_by_batch: list[list[Tensor]] = [
@@ -172,11 +195,16 @@ class AlignCategories(EnsembleProcessor):
         for column_index, input_categories in enumerate(
             table.categorical.categories
         ):
-            fitted_categories, aligned_column_codes = self._fit_column(
+            (
+                fitted_categories,
+                aligned_column_codes,
+                column_fallback_codes,
+            ) = self._fit_column(
                 input_categories=input_categories,
                 codes=codes[..., column_index],
                 align_codes=align_codes,
             )
+            fallback_codes[..., column_index] = column_fallback_codes
             if aligned_codes is not None:
                 assert aligned_column_codes is not None
                 aligned_codes[..., column_index] = aligned_column_codes
@@ -190,14 +218,18 @@ class AlignCategories(EnsembleProcessor):
         fitted_categories = tuple(
             tuple(batch_categories) for batch_categories in categories_by_batch
         )
-        return fitted_categories, aligned_codes
+        return fitted_categories, aligned_codes, fallback_codes
 
     def _fit_and_align(
         self,
         table: TableTensor,
-    ) -> tuple[tuple[tuple[Tensor, ...], ...], tuple[TableTensor, ...]]:
+    ) -> tuple[
+        tuple[tuple[Tensor, ...], ...],
+        tuple[TableTensor, ...],
+        Tensor,
+    ]:
         single_table = table.categorical.code.dim() == 2
-        fitted_categories, aligned_codes = self._fit_columns(
+        fitted_categories, aligned_codes, fallback_codes = self._fit_columns(
             table,
             align_codes=True,
         )
@@ -211,7 +243,19 @@ class AlignCategories(EnsembleProcessor):
             )
             for batch_index, batch_categories in enumerate(fitted_categories)
         )
-        return fitted_categories, aligned_tables
+        return fitted_categories, aligned_tables, fallback_codes
+
+    def _set_fitted_categories(
+        self,
+        fitted_categories: Sequence[Sequence[Tensor]],
+        fallback_codes: Tensor,
+    ) -> None:
+        self._categories = BufferList(
+            BufferList(categories) for categories in fitted_categories
+        )
+        self._fallback_codes = BufferList(
+            fallback_codes.unbind(0) if self.unseen == "mode" else ()
+        )
 
     def _fit(
         self,
@@ -219,13 +263,11 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        fitted_categories, _ = self._fit_columns(
+        fitted_categories, _, fallback_codes = self._fit_columns(
             table,
             align_codes=False,
         )
-        self._categories = BufferList(
-            BufferList(categories) for categories in fitted_categories
-        )
+        self._set_fitted_categories(fitted_categories, fallback_codes)
 
     def _fit_transform(
         self,
@@ -233,16 +275,17 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        fitted_categories, aligned_tables = self._fit_and_align(table)
-        self._categories = BufferList(
-            BufferList(categories) for categories in fitted_categories
+        fitted_categories, aligned_tables, fallback_codes = (
+            self._fit_and_align(table)
         )
+        self._set_fitted_categories(fitted_categories, fallback_codes)
         return aligned_tables[0]
 
     def _transform(self, table: TableTensor) -> TableTensor:
         return self._align_to_categories(
             table,
             cast(Sequence[Sequence[Tensor]], self._categories),
+            cast(Sequence[Tensor], self._fallback_codes),
         )[0]
 
     @staticmethod
@@ -269,14 +312,17 @@ class AlignCategories(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> None:
         fitted_categories = []
+        fallback_codes = []
         for group in ensemble_table:
-            group_categories, _ = self._fit_columns(
+            group_categories, _, group_fallback_codes = self._fit_columns(
                 group,
                 align_codes=False,
             )
             fitted_categories.extend(group_categories)
-        self._categories = BufferList(
-            BufferList(categories) for categories in fitted_categories
+            fallback_codes.extend(group_fallback_codes.unbind(0))
+        self._set_fitted_categories(
+            fitted_categories,
+            torch.stack(fallback_codes),
         )
 
     def _fit_transform_ensemble(
@@ -286,10 +332,14 @@ class AlignCategories(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         fitted_categories = []
+        fallback_codes = []
         aligned_tables = []
         for group in ensemble_table:
-            group_categories, group_tables = self._fit_and_align(group)
+            group_categories, group_tables, group_fallback_codes = (
+                self._fit_and_align(group)
+            )
             fitted_categories.extend(group_categories)
+            fallback_codes.extend(group_fallback_codes.unbind(0))
             aligned_tables.extend(group_tables)
 
         member_table_ids = self._member_table_ids(ensemble_table)
@@ -297,8 +347,9 @@ class AlignCategories(EnsembleProcessor):
             tables=aligned_tables,
             member_table_ids=member_table_ids,
         )
-        self._categories = BufferList(
-            BufferList(categories) for categories in fitted_categories
+        self._set_fitted_categories(
+            fitted_categories,
+            torch.stack(fallback_codes),
         )
         return output
 
@@ -318,6 +369,12 @@ class AlignCategories(EnsembleProcessor):
                         cast(Sequence[Tensor], self._categories[index])
                         for index in range(offset, end)
                     ),
+                    tuple(
+                        self._fallback_codes[index]
+                        for index in range(offset, end)
+                    )
+                    if self.unseen == "mode"
+                    else (),
                 )
             )
             offset = end
@@ -422,6 +479,7 @@ class AlignCategories(EnsembleProcessor):
         self,
         table: TableTensor,
         fitted_categories: Sequence[Sequence[Tensor]],
+        fallback_codes: Sequence[Tensor],
     ) -> tuple[TableTensor, ...]:
         codes = table.categorical.code
         single_table = codes.dim() == 2
@@ -508,9 +566,21 @@ class AlignCategories(EnsembleProcessor):
             mask = column_codes >= 0
             lookup = torch.stack(lookups)
             indices = column_codes.clamp_min(0).long()
+            aligned_column_codes = lookup.gather(1, indices)
+            if self.unseen == "mode":
+                fallback = torch.stack(
+                    [codes[column_index] for codes in fallback_codes]
+                ).unsqueeze(-1)
+                aligned_column_codes = torch.where(
+                    aligned_column_codes >= 0,
+                    aligned_column_codes,
+                    fallback,
+                )
+            else:
+                assert self.unseen == "missing"
             aligned_codes[..., column_index] = torch.where(
                 mask,
-                lookup.gather(1, indices),
+                aligned_column_codes,
                 -1,
             )
 
@@ -530,6 +600,8 @@ class AlignCategories(EnsembleProcessor):
             arguments.append(f"sort_by={self.sort_by!r}")
         if self.min_frequency != 1:
             arguments.append(f"min_frequency={self.min_frequency!r}")
+        if self.unseen != "missing":
+            arguments.append(f"unseen={self.unseen!r}")
         if not arguments:
             return super().__repr__(indent=indent)
         return (
