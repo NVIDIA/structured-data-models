@@ -41,9 +41,16 @@ def test_shuffle_columns_scalar_fit_transform_and_inverse(
     transformed = processor.transform(table)
     restored = processor.inverse_transform(transformed)
 
+    name_to_index = {
+        name: index
+        for index, name in enumerate(table.columns[Stype.numerical])
+    }
+    order = [
+        name_to_index[name] for name in transformed.columns[Stype.numerical]
+    ]
     assert torch.equal(
         transformed.numerical,
-        table.numerical.index_select(-1, processor.permutation),
+        table.numerical.index_select(-1, torch.tensor(order)),
     )
     assert restored.equal(table)
 
@@ -65,8 +72,7 @@ def test_shuffle_columns_is_reproducible_with_generator(
         generator=torch.Generator().manual_seed(0),
     )
 
-    assert torch.equal(first.permutation, second.permutation)
-    assert torch.equal(first_output.numerical, second_output.numerical)
+    assert first_output.equal(second_output)
 
 
 @pytest.mark.parametrize("method", ["shift", "random"])

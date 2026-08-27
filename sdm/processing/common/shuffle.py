@@ -42,15 +42,6 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         r""":meta private:"""  # noqa: D415
         self._host_permutations = cast(tuple[tuple[int, ...], ...], state)
 
-    @property
-    def permutation(self) -> Tensor:
-        """Return the fitted permutation for a single table."""
-        if len(self._permutations) != 1:
-            raise RuntimeError(
-                "'ShuffleColumns' has no single fitted permutation."
-            )
-        return self._permutations[0]
-
     def _draw_permutation(
         self,
         table: TableTensor,
