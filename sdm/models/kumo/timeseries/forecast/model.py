@@ -133,6 +133,10 @@ class KumoForecast(ICLModel):
         **kwargs: Any,
     ) -> TableTensor:
         r""":meta private:"""  # noqa: D415
+        self._validate_seqused(
+            seqused_train=kwargs.get("seqused_train"),
+            seqused_cols=kwargs.get("seqused_cols"),
+        )
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(x_query, TableTensor):
