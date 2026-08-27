@@ -181,6 +181,10 @@ class TabICLv2(ICLModel):
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
         generator: torch.Generator | None,
+        *,
+        seqused_train: Tensor | None = None,  # [...]
+        seqused_cols: Tensor | None = None,  # []
+        batch_size_limit: int | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -210,7 +214,14 @@ class TabICLv2(ICLModel):
             )
 
         if classes is None:
-            out = self.reg_model(x, y, cache=cache)
+            out = self.reg_model(
+                x,
+                y,
+                seqused_train=seqused_train,
+                seqused_cols=seqused_cols,
+                cache=cache,
+                batch_size_limit=batch_size_limit,
+            )
             return TableTensor(
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
@@ -218,7 +229,15 @@ class TabICLv2(ICLModel):
                 numerical=out.sort(dim=-1)[0],
             )
 
-        out = self.cls_model(x, y, cache=cache, num_classes=len(classes))
+        out = self.cls_model(
+            x,
+            y,
+            seqused_train=seqused_train,
+            seqused_cols=seqused_cols,
+            cache=cache,
+            num_classes=len(classes),
+            batch_size_limit=batch_size_limit,
+        )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
             numerical=out[..., : len(classes)],
@@ -272,16 +291,39 @@ class _TabICLv2(torch.nn.Module):
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
         *,
+        seqused_train: Tensor | None = None,  # [...]
+        seqused_cols: Tensor | None = None,  # []
         cache: Cache | None = None,
         num_classes: int | None = None,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if not y.is_floating_point():
             assert num_classes is not None
 
-        x = self.row_embedding(x, y, num_classes=num_classes, cache=cache)
+        # Only forward the padding/chunking keywords when set, so that the
+        # unpadded path keeps the plain sub-module call signature.
+        row_kwargs: dict[str, Any] = {}
+        icl_kwargs: dict[str, Any] = {}
+        if seqused_train is not None:
+            row_kwargs["seqused_train"] = seqused_train
+            icl_kwargs["seqused_train"] = seqused_train
+        if seqused_cols is not None:
+            row_kwargs["seqused_cols"] = seqused_cols
+        if batch_size_limit is not None:
+            row_kwargs["batch_size_limit"] = batch_size_limit
+            icl_kwargs["batch_size_limit"] = batch_size_limit
+
+        x = self.row_embedding(
+            x,
+            y,
+            num_classes=num_classes,
+            cache=cache,
+            **row_kwargs,
+        )
         return self.icl_block(
             x=x,
             y=y,
             num_classes=num_classes,
             cache=cache,
+            **icl_kwargs,
         )

@@ -68,6 +68,7 @@ class ICLBlock(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         num_classes: int | None = None,
+        seqused_train: Tensor | None = None,  # [...]
         cache: Cache | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
@@ -75,6 +76,7 @@ class ICLBlock(torch.nn.Module):
             return self._forward(
                 x=x,
                 y=y,
+                seqused_train=seqused_train,
                 cache=cache,
                 cache_prefix="icl_block",
                 batch_size_limit=batch_size_limit,
@@ -84,6 +86,16 @@ class ICLBlock(torch.nn.Module):
             raise ValueError(
                 "Hierarchical classification requires 'num_classes' to be "
                 "at least two"
+            )
+
+        if seqused_train is not None:
+            # Hierarchical nodes re-group the in-context rows by class, so
+            # the "only the first `seqused_train` rows are valid" contract
+            # no longer describes any node and padded rows would leak into
+            # the class hierarchy.
+            raise ValueError(
+                "`seqused_train` padding is not supported for hierarchical "
+                f"classification with more than {self.num_classes} classes"
             )
 
         return self._forward_hierarchical(
@@ -99,6 +111,7 @@ class ICLBlock(torch.nn.Module):
         x: Tensor,  # [..., R, D]
         y: Tensor,  # [..., R_train]
         *,
+        seqused_train: Tensor | None,  # [...]
         cache: Cache | None,
         cache_prefix: str,
         batch_size_limit: int | None,
@@ -147,6 +160,7 @@ class ICLBlock(torch.nn.Module):
             result = layer(
                 query=query,
                 key_value=key_value,  # [..., R_train, D]
+                seqused_key_value=seqused_train,  # [...]
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit=icl_batch_size_limit,
             )
@@ -402,6 +416,9 @@ class ICLBlock(torch.nn.Module):
         logits = self._forward(
             x=x,
             y=y,
+            # Hierarchical nodes hold exactly their own rows, so there is no
+            # padding to mask (`forward` rejects `seqused_train` here).
+            seqused_train=None,
             cache=cache,
             cache_prefix=cache_prefix,
             batch_size_limit=batch_size_limit,

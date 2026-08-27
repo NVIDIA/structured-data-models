@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, ClassVar, cast
 
 import pytest
@@ -18,6 +18,7 @@ class _Call:
     x_query: TableTensor | None
     related_context_tables: RelatedTables | None
     related_query_tables: RelatedTables | None
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 class _RecordingModel(ICLModel):
@@ -46,6 +47,7 @@ class _RecordingModel(ICLModel):
                 x_query=x_query,
                 related_context_tables=related_context_tables,
                 related_query_tables=related_query_tables,
+                kwargs=dict(kwargs),
             )
         )
         table = x_query if x_query is not None else x_context
@@ -111,6 +113,37 @@ class MyCallback(Callback):
             x.replace_blocks(numerical=x.numerical * self.scale + self.offset),
             related_tables,
         )
+
+
+class _LegacyModel(ICLModel):
+    """Model implementing the private hook without keyword passthrough."""
+
+    supported_feature_stypes = frozenset({Stype.numerical})
+    supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
+    supports_related_tables: ClassVar[bool] = False
+
+    # Deliberately narrower than `ICLModel._forward`: this model predates the
+    # optional `seqused_train`/`seqused_cols`/`batch_size_limit` keywords and
+    # pins down that they are only forwarded when the caller asks for them.
+    def _forward(  # ty: ignore[invalid-method-override]
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+    ) -> TableTensor:
+        del y_context, related_context_tables, related_query_tables
+        del cache, generator
+        table = x_query if x_query is not None else x_context
+        assert table is not None
+        return table.select_stypes(Stype.numerical)
+
+    @classmethod
+    def default_recipe(cls) -> sp.Recipe:
+        return sp.Recipe()
 
 
 class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
@@ -531,3 +564,88 @@ def test_ensemble_output_reduces_with_reduce_estimators() -> None:
     )
 
     assert out.size() == (2, 3)
+
+
+def test_legacy_model_forward_compatibility() -> None:
+    """The default path does not pass new keywords to existing subclasses."""
+    model = _LegacyModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    out = model(x_context, y_context, x_query)
+    torch.testing.assert_close(out.numerical, x_query.unsqueeze(0))
+
+    model.fit(x_context, y_context)
+    prediction = model.predict(x_query)
+    torch.testing.assert_close(prediction.numerical, x_query.unsqueeze(0))
+
+    # Opting into the padding/chunking keywords surfaces a hard error on
+    # subclasses that do not implement them instead of silently dropping them.
+    with pytest.raises(TypeError, match="batch_size_limit"):
+        model(x_context, y_context, x_query, batch_size_limit=2)
+    with pytest.raises(TypeError, match="batch_size_limit"):
+        model.fit(x_context, y_context, batch_size_limit=2)
+
+
+def test_forward_forwards_padding_keywords() -> None:
+    """Padding keywords reach the model only when explicitly requested."""
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    seqused_train = torch.tensor(3, dtype=torch.int32)
+    seqused_cols = torch.tensor(2, dtype=torch.int32)
+
+    model(x_context, y_context, x_query)
+
+    assert len(model.calls) == 1
+    assert model.calls[0].kwargs == {}
+
+    model.calls.clear()
+    model(
+        x_context,
+        y_context,
+        x_query,
+        seqused_train=seqused_train,
+        seqused_cols=seqused_cols,
+        batch_size_limit=2,
+    )
+
+    assert len(model.calls) == 1
+    kwargs = model.calls[0].kwargs
+    assert kwargs["batch_size_limit"] == 2
+    assert torch.equal(kwargs["seqused_train"], seqused_train)
+    assert torch.equal(kwargs["seqused_cols"], seqused_cols)
+    assert kwargs["seqused_train"].dtype == torch.int32
+    assert kwargs["seqused_cols"].dtype == torch.int32
+
+
+def test_fit_caches_padding_keywords_for_predict() -> None:
+    """Padding counts given to ``fit`` are replayed by ``predict``."""
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    seqused_train = torch.tensor(3, dtype=torch.int32)
+    seqused_cols = torch.tensor(2, dtype=torch.int32)
+
+    model.fit(
+        x_context,
+        y_context,
+        seqused_train=seqused_train,
+        seqused_cols=seqused_cols,
+    )
+
+    assert len(model.calls) == 1
+    fit_kwargs = model.calls[0].kwargs
+    assert torch.equal(fit_kwargs["seqused_train"], seqused_train)
+    assert torch.equal(fit_kwargs["seqused_cols"], seqused_cols)
+
+    model.calls.clear()
+    model.predict(x_query)
+
+    assert len(model.calls) == 1
+    predict_kwargs = model.calls[0].kwargs
+    assert torch.equal(predict_kwargs["seqused_train"], seqused_train)
+    assert torch.equal(predict_kwargs["seqused_cols"], seqused_cols)

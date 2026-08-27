@@ -100,10 +100,17 @@ class RowEmbedding(torch.nn.Module):
         train_mask: Tensor | None = None,  # [R],
         max_keys: int | None = None,
         num_classes: int | None = None,
+        seqused_train: Tensor | None = None,  # [...]
+        seqused_cols: Tensor | None = None,  # []
         cache: Cache | None = None,
         batch_size_limit: int | None = None,
         generator: torch.Generator | None = None,
     ) -> Tensor:  # [..., R, K * D]
+        if max_keys is not None and seqused_train is not None:
+            raise ValueError(
+                "`max_keys` subsampling permutes key rows and is not "
+                "supported together with `seqused_train` padding"
+            )
         *B, R, C = x.size()
         R_train = y.size(-1)
         G, D = self.lin.in_features, self.lin.out_features
@@ -115,10 +122,22 @@ class RowEmbedding(torch.nn.Module):
             and not torch.is_grad_enabled()
             and not torch.compiler.is_compiling()
         )
-        # Feature grouping: gather G columns into each token.
+        # Feature grouping: gather G columns into each token. With padded
+        # columns, groups wrap modulo the true column count (kept as tensor
+        # data so compiled graphs do not specialize on it): tokens at true
+        # positions gather exactly the columns they would gather unpadded,
+        # while tokens at padded positions produce values that the row-wise
+        # attention mask below excludes.
         shift = 2 ** torch.arange(G, device=x.device)
         index = torch.arange(C, device=x.device)
-        index = (index.view(C, 1) + shift.view(1, G)) % C  # [C, G]
+        # Clamping keeps gather indices in bounds for (documented as
+        # invalid) non-positive or over-C counts, avoiding device-side
+        # undefined reads; over-counts degrade to full-width grouping,
+        # consistent with the saturating row-attention key mask below.
+        num_cols = (
+            C if seqused_cols is None else seqused_cols.clamp(min=1, max=C)
+        )
+        index = (index.view(C, 1) + shift.view(1, G)) % num_cols  # [C, G]
         x = x[..., index]  # [..., R, C, G]
         x = self.lin(x)  # [..., R, C, D]
 
@@ -149,6 +168,16 @@ class RowEmbedding(torch.nn.Module):
         # Column-wise induced set attention (B * C as the batch axis).
         # Materialize once to avoid repeated copies in the column layers.
         x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
+        # Valid train-row counts broadcast over the column batch axis.
+        # Clamped like `seqused_cols`: a non-positive count would mask out
+        # every in-context row and silently return degenerate numbers, and
+        # rejecting it would require reading the values off the device on
+        # every call.
+        seqused_col = (
+            seqused_train.clamp(min=1).unsqueeze(-1)
+            if seqused_train is not None
+            else None
+        )
         col_batch_size_limit = batch_size_limit
         for i, col_layer in enumerate(self.col_layers):
             key = f"row_embedding.col_layer{i}"
@@ -180,6 +209,7 @@ class RowEmbedding(torch.nn.Module):
             result = col_layer(
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
+                seqused_key_value=seqused_col,
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit=col_batch_size_limit,
             )  # [..., C, R, D]
@@ -202,6 +232,13 @@ class RowEmbedding(torch.nn.Module):
             dim=-2,
         )  # [..., R, K + C, D]
 
+        # Padded column tokens participate only as queries over their own
+        # garbage; as keys they are masked so real tokens never read them.
+        attn_mask = None
+        if seqused_cols is not None:
+            key_index = torch.arange(K + C, device=x.device)
+            attn_mask = (key_index < K + seqused_cols).view(1, K + C)
+
         # Row-wise attention (B * R as the batch axis).
         row_batch_size_limit = attention_batch_size_limit(
             requested_limit=batch_size_limit,
@@ -219,6 +256,9 @@ class RowEmbedding(torch.nn.Module):
             x = row_layer(
                 query=query,  # [..., R, K + C, D] or [..., R, K, D]
                 key_value=x,  # [..., R, K + C, D]
+                # RoPE is applied inside the block via `query_transform` /
+                # `key_transform`; only the column mask is passed here.
+                attn_mask=attn_mask,  # [1, K + C]
                 batch_size_limit=row_batch_size_limit,
             )  # [..., R, K + C, D] or [..., R, K, D]
 

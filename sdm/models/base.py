@@ -51,6 +51,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_estimators: int = 1,
         generator: torch.Generator | None = None,
         callbacks: Sequence[Callback] | None = None,
+        seqused_train: Tensor | None = None,  # [...]
+        seqused_cols: Tensor | None = None,  # []
         **kwargs: Any,
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""The in-context learning forward pass.
@@ -70,6 +72,42 @@ class ICLModel(torch.nn.Module, abc.ABC):
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             callbacks: Callbacks applied in sequence to this model call.
+            seqused_train: Valid in-context example counts with shape
+                ``[...]`` and :external+torch:ref:`torch.int32 <dtype-doc>`
+                dtype.
+                Out-of-range counts are clamped and produce degenerate
+                predictions rather than errors. When set, only the first
+                ``seqused_train`` of the ``R_context`` in-context rows act as
+                context, and the remaining rows are treated as padding: they
+                are masked from every attention key/value stream and cannot
+                influence any prediction, provided the padded feature
+                entries are finite and of moderate magnitude (``0`` is
+                recommended - masking adds ``-inf`` to attention logits
+                after the query/key product, so non-finite or overflowing
+                padded values poison the softmax with ``NaN``).
+                Padded ``y_context`` entries must still be valid targets (for
+                example ``0``). Together with padded query rows (whose extra
+                outputs callers simply discard), this lets streams of varying
+                table sizes be padded to a small set of bucketed shapes so
+                compiled graphs and per-shape kernel selection are reused
+                across tables. Pass a tensor rather than a Python integer so
+                compiled graphs treat the count as data instead of a
+                constant to specialize on.
+                Requires a pass-through ``recipe`` since fitted pre-processing
+                would derive its state from the padded rows.
+            seqused_cols: Valid column count as a positive scalar tensor with
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
+                When set, only the first ``seqused_cols`` columns act as
+                features; the remaining columns are padding, excluded from
+                feature grouping and masked from row-wise attention. The
+                count refers to the numerical block handed to the model
+                (``x.numerical.size(-1)``), not the table width -
+                non-numerical columns are removed before masking applies.
+                The same finite-values contract as ``seqused_train``
+                applies; out-of-range counts are clamped and produce
+                degenerate predictions rather than errors.
+                Unlike ``seqused_train``, the count is shared across batch
+                elements.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
@@ -123,6 +161,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
+
+        self._validate_seqused(seqused_train, seqused_cols)
+        self._warn_seqused_cols_table(x_context, seqused_cols)
+        self._validate_seqused_recipe(recipe, seqused_train, seqused_cols)
+
+        # Only forward the padding keywords when set so that subclasses
+        # implementing a narrower private hook keep working.
+        if seqused_train is not None:
+            kwargs["seqused_train"] = seqused_train
+        if seqused_cols is not None:
+            kwargs["seqused_cols"] = seqused_cols
+
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(y_context, TableTensor):
@@ -218,6 +268,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe: Recipe | None = None,
         num_estimators: int = 1,
         generator: torch.Generator | None = None,
+        seqused_train: Tensor | None = None,  # [...]
+        seqused_cols: Tensor | None = None,  # []
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -235,10 +287,38 @@ class ICLModel(torch.nn.Module, abc.ABC):
             num_estimators: The number of estimators for ensembling.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
-            kwargs: Additional keyword arguments passed to the model.
+            seqused_train: Valid in-context example counts with shape
+                ``[...]`` and :external+torch:ref:`torch.int32 <dtype-doc>`
+                dtype.
+                When set, rows beyond the per-element count are padding and
+                are masked from the cached key/value projections; subsequent
+                :meth:`predict` calls reuse the count automatically. See
+                :meth:`forward` for the padding contract.
+            seqused_cols: Valid column count as a scalar tensor with
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
+                When set, columns beyond the count are padding; subsequent
+                :meth:`predict` calls reuse the count and must pass ``x``
+                padded to the same number of columns. See :meth:`forward`
+                for the padding contract.
+            kwargs: Additional keyword arguments passed to the model. They
+                are cached and re-applied by :meth:`predict`.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
+
+        self._validate_seqused(seqused_train, seqused_cols)
+        self._warn_seqused_cols_table(x, seqused_cols)
+        self._validate_seqused_recipe(recipe, seqused_train, seqused_cols)
+
+        # Only forward the padding keywords when set so that subclasses
+        # implementing a narrower private hook keep working. The counts
+        # become part of the cached keyword arguments, so :meth:`predict`
+        # replays them alongside the cached key/value projections.
+        if seqused_train is not None:
+            kwargs["seqused_train"] = seqused_train
+        if seqused_cols is not None:
+            kwargs["seqused_cols"] = seqused_cols
+
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
         if not isinstance(y, TableTensor):
@@ -312,6 +392,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
         Args:
             x: The feature tensor of query examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
+                If :meth:`fit` was called with ``seqused_train`` or
+                ``seqused_cols``, the cached counts are replayed so padded
+                in-context rows stay masked; with ``seqused_cols``, ``x``
+                must be padded to the same number of columns as the fitted
+                rows.
             related_tables: Related context for query examples.
             callbacks: Callbacks applied in sequence to this model call.
 
@@ -501,6 +586,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
         generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
+        # Padding keywords such as `seqused_train`/`seqused_cols` (and model
+        # specific ones such as `batch_size_limit`) only reach `kwargs` when
+        # the caller sets them, so subclasses that do not consume them keep
+        # working.
         pass
 
     @classmethod
@@ -594,3 +683,75 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     "Expected related context and query tables to share the "
                     "same schema"
                 )
+
+    def _validate_seqused(
+        self,
+        seqused_train: Tensor | None,
+        seqused_cols: Tensor | None = None,
+    ) -> None:
+        # Only dtypes are checked. Validating the counts themselves would
+        # read them off the device on every call, and that synchronization
+        # would land directly in the serving latencies this padding exists
+        # to improve. Out-of-range counts are clamped where they are
+        # consumed instead, matching `seqused_cols`.
+        if seqused_train is not None and seqused_train.dtype != torch.int32:
+            raise ValueError(
+                f"'seqused_train' must have dtype torch.int32 "
+                f"(got {seqused_train.dtype})"
+            )
+        if seqused_cols is not None:
+            if seqused_cols.dtype != torch.int32:
+                raise ValueError(
+                    f"'seqused_cols' must have dtype torch.int32 "
+                    f"(got {seqused_cols.dtype})"
+                )
+            if seqused_cols.dim() != 0:
+                raise ValueError(
+                    f"'seqused_cols' must be a scalar tensor "
+                    f"(got shape {tuple(seqused_cols.size())})"
+                )
+
+    def _validate_seqused_recipe(
+        self,
+        recipe: Recipe | None,
+        seqused_train: Tensor | None,
+        seqused_cols: Tensor | None = None,
+    ) -> None:
+        if seqused_train is None and seqused_cols is None:
+            return
+
+        # A fitted recipe derives its state from every context row and
+        # column, including the padded ones, which lets padding influence
+        # predictions in violation of the seqused contract. Only
+        # pass-through pre-processing may be combined with padded inputs.
+        effective = self.default_recipe() if recipe is None else recipe
+        if effective.features.requires_fit or effective.target.requires_fit:
+            raise ValueError(
+                "Recipe pre-processing fits its state on the padded rows "
+                "and targets, letting padding influence predictions in "
+                "violation of the seqused contract; pass a pass-through "
+                "recipe such as 'sdm.processing.Recipe()' together with "
+                "'seqused_train'/'seqused_cols'"
+            )
+
+    def _warn_seqused_cols_table(
+        self,
+        x: Tensor | TableTensor,
+        seqused_cols: Tensor | None,
+    ) -> None:
+        if (
+            seqused_cols is not None
+            and isinstance(x, TableTensor)
+            and x.size(-1) != x.numerical.size(-1)
+        ):
+            warn_once(
+                key="model-seqused-cols-table-columns",
+                message=(
+                    f"'seqused_cols' counts columns of the extracted "
+                    f"numerical block ({x.numerical.size(-1)} columns), but "
+                    f"'x' has {x.size(-1)} table columns; non-numerical "
+                    f"columns (including id data) are removed before "
+                    f"masking applies."
+                ),
+                stacklevel=3,
+            )
