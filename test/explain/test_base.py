@@ -12,7 +12,7 @@ class MyCallback(Callback):
     input: Tensor
     completed: bool = False
 
-    def on_preprocessing_end(
+    def on_query_preprocessing_end(
         self,
         model: torch.nn.Module,
         x: TableTensor,
@@ -22,13 +22,14 @@ class MyCallback(Callback):
         self.input = x.numerical.requires_grad_()
         return x, related_tables
 
-    def on_forward_end(
+    def on_model_forward_end(
         self,
         model: torch.nn.Module,
-        prediction: TableTensor,
-    ) -> None:
-        torch.autograd.grad(prediction.numerical.sum(), self.input)
+        out: TableTensor,
+    ) -> TableTensor:
+        torch.autograd.grad(out.numerical.sum(), self.input)
         self.completed = True
+        return out
 
 
 @pytest.mark.parametrize("fitted", [False, True])
