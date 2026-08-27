@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import ClassVar, Literal
 
 import pytest
@@ -71,6 +72,43 @@ def recording_model(monkeypatch: pytest.MonkeyPatch) -> KumoTabular:
     _RecordingCore.calls.clear()
     monkeypatch.setattr(model_module, "_KumoTabular", _RecordingCore)
     return KumoTabular()
+
+
+def test_checkpoint_path_uses_meta_core_and_requested_device(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[Path, str, torch.device | str | None]] = []
+    monkeypatch.setattr(model_module, "_KumoTabular", _RecordingCore)
+
+    def fake_load_checkpoint(
+        model: _RecordingCore,
+        checkpoint_path: str | Path,
+        *,
+        task: Literal["classification", "regression"],
+        device: torch.device | str | None,
+    ) -> _RecordingCore:
+        assert model.anchor.device.type == "meta"
+        calls.append((Path(checkpoint_path), task, device))
+        return _RecordingCore(
+            num_classes=model.num_classes,
+            num_quantiles=model.num_quantiles,
+            device=device,
+        ).eval()
+
+    monkeypatch.setattr(model_module, "load_checkpoint", fake_load_checkpoint)
+    path = tmp_path / "regression.pt"
+
+    model = KumoTabular(
+        "cpu",
+        task="regression",
+        checkpoint_path=path,
+    )
+
+    assert calls == [(path, "regression", "cpu")]
+    assert model.model.anchor.device.type == "cpu"
+    assert not model.training
+    assert not model.model.training
 
 
 def _features() -> tuple[TableTensor, TableTensor]:

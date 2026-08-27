@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -11,6 +12,7 @@ import sdm.processing as sp
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
+from sdm.models.kumo.tabular.ckpt import load_checkpoint
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.table_encoder import TableEncoder
 from sdm.models.tabfm.cell_embedding import CellEmbedding
@@ -27,6 +29,9 @@ class KumoTabular(ICLModel):
     Args:
         device: Device of the model parameters.
         task: Prediction task.
+        checkpoint_path: Local checkpoint path matching ``task``. ``None``
+            leaves the model randomly initialized; checkpoints are not
+            downloaded automatically.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -42,6 +47,7 @@ class KumoTabular(ICLModel):
         device: torch.device | str | None = None,
         *,
         task: Literal["classification", "regression"] = "classification",
+        checkpoint_path: str | Path | None = None,
     ) -> None:
         super().__init__()
         self.task = task
@@ -53,8 +59,15 @@ class KumoTabular(ICLModel):
         self.model = _KumoTabular(
             num_classes=num_classes,
             num_quantiles=num_quantiles,
-            device=device,
+            device="meta" if checkpoint_path is not None else device,
         )
+        if checkpoint_path is not None:
+            self.model = load_checkpoint(
+                self.model,
+                checkpoint_path,
+                task=task,
+                device=device,
+            )
         self.eval()
 
     @classmethod
@@ -196,6 +209,7 @@ class _KumoTabular(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_classes = num_classes
+        self.num_quantiles = num_quantiles
 
         self.cell_embedding = CellEmbedding(
             channels=128,
