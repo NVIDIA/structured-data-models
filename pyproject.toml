@@ -13,7 +13,7 @@ license-files = [
     "LICENSE",
     "sdm/models/tabiclv2/LICENSE",
     "sdm/models/tabfm/LICENSE",
-    "sdm/models/nemotron/relational/NOTICE",
+    "sdm/models/kumo/relational/NOTICE",
 ]
 authors = [
     { name = "NVIDIA" },

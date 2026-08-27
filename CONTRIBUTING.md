@@ -41,6 +41,12 @@ into three categories:
 
 Remember, if you are unsure about anything, don't hesitate to comment on issues and ask for clarifications!
 
+#### DCO Sign-Off
+
+Every commit in a pull request must include a [Developer Certificate of Origin](https://developercertificate.org/) sign-off.
+
+Use `git commit -s` when you create commits, or add a `Signed-off-by:` trailer manually if you are fixing an older commit before review.
+
 ### Managing PR labels
 
 Each PR must be labeled according to whether it is a "breaking" or "non-breaking" change (using GitHub labels). This is used to highlight changes that users should know about when upgrading.
