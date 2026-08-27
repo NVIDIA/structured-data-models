@@ -124,6 +124,26 @@ def test_align_categories_can_map_unseen_values_to_context_mode() -> None:
     assert output.categorical.code.squeeze(-1).tolist() == [1, 0, -1]
 
 
+def test_mode_fallback_is_consistent_during_fit_transform() -> None:
+    context = _table(
+        [[0], [0], [1]],
+        categories=(("blue", "red"),),
+    )
+
+    fit_transform = AlignCategories(
+        min_frequency=2,
+        unseen="mode",
+    ).fit_transform(context)
+    fit_then_transform = (
+        AlignCategories(min_frequency=2, unseen="mode")
+        .fit(context)
+        .transform(context)
+    )
+
+    assert fit_transform.equal(fit_then_transform)
+    assert fit_transform.categorical.code.squeeze(-1).tolist() == [0, 0, 0]
+
+
 @pytest.mark.parametrize("sort_by", ["code", "frequency", "value"])
 def test_align_categories_orders_joint_vocabulary(
     sort_by: Literal["code", "frequency", "value"],

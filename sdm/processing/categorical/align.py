@@ -169,11 +169,22 @@ class AlignCategories(EnsembleProcessor):
             fallback_codes,
             fallback_codes.new_full((), -1),
         )
-        aligned_codes = (
-            torch.where(mask, lookup.gather(1, indices), -1)
-            if align_codes
-            else None
-        )
+        aligned_codes = None
+        if align_codes:
+            aligned_codes = lookup.gather(dim=1, index=indices)
+            if self.unseen == "mode":
+                aligned_codes = torch.where(
+                    condition=aligned_codes >= 0,
+                    input=aligned_codes,
+                    other=fallback_codes.unsqueeze(1),
+                )
+            else:
+                assert self.unseen == "missing"
+            aligned_codes = torch.where(
+                condition=mask,
+                input=aligned_codes,
+                other=-1,
+            )
         return tuple(fitted_categories), aligned_codes, fallback_codes
 
     def _fit_columns(
