@@ -4,7 +4,7 @@ Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseli
 
 ## Problem
 
-`ShuffleColumns` kennt auf `main` nur `shift` und `random`. TabICLv2 verwendet Latin-Permutationen, fällt aber oberhalb von 4.000 Spalten auf `random` zurück. Diese Grenze schützt nur die rekursive `O(C²)`-Referenzimplementierung; sie ist keine allgemeine Qualitäts- oder Bibliotheksregel. Ein explizites `method="latin"` darf deshalb nicht still seine Semantik ändern.
+`ShuffleColumns` unterstützt `random` und `latin`. TabICLv2 verwendet Latin-Permutationen, fiel zuvor aber oberhalb von 4.000 Spalten auf `random` zurück. Diese Grenze schützt nur die rekursive `O(C²)`-Referenzimplementierung; sie ist keine allgemeine Qualitäts- oder Bibliotheksregel. Ein explizites `method="latin"` darf deshalb nicht still seine Semantik ändern.
 
 Gruppen einer `EnsembleTable` können unterschiedlich viele, aber stark überlappende Spalten haben. Sie sollen denselben **logischen** Zufallsplan verwenden, ohne einen falsch dimensionierten Permutationstensor zu teilen.
 

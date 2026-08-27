@@ -17,8 +17,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     :class:`~sdm.processing.ToNumerical`.
 
     Args:
-        method: Permutation strategy. ``"shift"`` cyclically shifts the
-            columns by a drawn offset, ``"random"`` (the default) draws
+        method: Permutation strategy. ``"random"`` (the default) draws
             independent permutations, and ``"latin"`` draws coupled Latin
             permutations.
     """
@@ -28,7 +27,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
 
     def __init__(
         self,
-        method: Literal["shift", "random", "latin"] = "random",
+        method: Literal["random", "latin"] = "random",
     ) -> None:
         super().__init__()
         self.method = method
@@ -86,16 +85,6 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
                 device = devices[schema_id]
                 if n_features <= 1:
                     permutation = torch.arange(n_features, device=device)
-                elif self.method == "shift":
-                    offset = torch.randint(
-                        n_features,
-                        (1,),
-                        generator=generator,
-                        device=device,
-                    )
-                    permutation = (
-                        torch.arange(n_features, device=device) + offset
-                    ) % n_features
                 else:
                     assert self.method == "random"
                     permutation = torch.randperm(
@@ -230,11 +219,12 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             permutation = (
                 fitted_permutation.argsort() if inverse else fitted_permutation
             )
-            host_permutation = (
-                tuple(permutation.tolist())
-                if inverse
-                else fitted_host_permutation
-            )
+            if inverse:
+                host_permutation = [0] * len(fitted_host_permutation)
+                for destination, source in enumerate(fitted_host_permutation):
+                    host_permutation[source] = destination
+            else:
+                host_permutation = fitted_host_permutation
             numerical = table.__class__(
                 columns={
                     Stype.numerical: tuple(
