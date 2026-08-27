@@ -1,6 +1,6 @@
 """Kumo Tabular."""
 
-from sdm.models.kumo.tabular.wrapper import KumoTabular
+from sdm.models.kumo.tabular.model import KumoTabular
 
 
 __all__ = [

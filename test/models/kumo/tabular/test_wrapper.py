@@ -7,7 +7,7 @@ import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import KumoTabular
-from sdm.models.kumo.tabular import wrapper as wrapper_module
+from sdm.models.kumo.tabular import model as model_module
 
 
 class _RecordingCore(torch.nn.Module):
@@ -55,7 +55,7 @@ class _RecordingCore(torch.nn.Module):
 @pytest.fixture
 def recording_model(monkeypatch: pytest.MonkeyPatch) -> KumoTabular:
     _RecordingCore.calls.clear()
-    monkeypatch.setattr(wrapper_module, "_KumoTabular", _RecordingCore)
+    monkeypatch.setattr(model_module, "_KumoTabular", _RecordingCore)
     return KumoTabular()
 
 
