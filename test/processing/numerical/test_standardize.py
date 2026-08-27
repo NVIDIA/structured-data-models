@@ -86,6 +86,38 @@ def test_standardize_single_sample_uses_unit_scale(
 
 
 @withCUDA
+def test_standardize_constant_threshold_uses_unit_scale(
+    device: torch.device,
+) -> None:
+    inp = TableTensor.from_tensor(
+        torch.tensor(
+            [[0.0], [1e-9], [2e-9]],
+            dtype=torch.float64,
+            device=device,
+        )
+    )
+
+    processor = Standardize(constant_threshold=1e-8).fit(inp)
+    transformed = processor.transform(inp)
+
+    assert torch.equal(processor.scale, torch.ones_like(processor.scale))
+    torch.testing.assert_close(
+        transformed.numerical,
+        inp.numerical - inp.numerical.mean(dim=-2, keepdim=True),
+    )
+    torch.testing.assert_close(
+        processor.inverse_transform(transformed).numerical,
+        inp.numerical,
+    )
+
+    single = Standardize(
+        constant_threshold=1e-8,
+        epsilon=0.5,
+    ).fit(inp[:1])
+    assert torch.equal(single.scale, single.scale.new_tensor([[1.5]]))
+
+
+@withCUDA
 def test_standardize_fits_leading_batches_independently(
     device: torch.device,
 ) -> None:
