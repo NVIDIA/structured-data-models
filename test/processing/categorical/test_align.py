@@ -108,6 +108,42 @@ def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     assert query.categorical.code.squeeze(-1).tolist() == [-1, 1]
 
 
+def test_align_categories_can_map_unseen_values_to_context_mode() -> None:
+    context = _table(
+        [[0], [1], [1]],
+        categories=(("blue", "red"),),
+    )
+    query = _table(
+        [[0], [1], [-1]],
+        categories=(("green", "blue"),),
+    )
+
+    output = AlignCategories(unseen="mode").fit(context).transform(query)
+
+    assert output.categorical.categories[0].tolist() == ["blue", "red"]
+    assert output.categorical.code.squeeze(-1).tolist() == [1, 0, -1]
+
+
+def test_mode_fallback_is_consistent_during_fit_transform() -> None:
+    context = _table(
+        [[0], [0], [1]],
+        categories=(("blue", "red"),),
+    )
+
+    fit_transform = AlignCategories(
+        min_frequency=2,
+        unseen="mode",
+    ).fit_transform(context)
+    fit_then_transform = (
+        AlignCategories(min_frequency=2, unseen="mode")
+        .fit(context)
+        .transform(context)
+    )
+
+    assert fit_transform.equal(fit_then_transform)
+    assert fit_transform.categorical.code.squeeze(-1).tolist() == [0, 0, 0]
+
+
 @pytest.mark.parametrize("sort_by", ["code", "frequency", "value"])
 def test_align_categories_orders_joint_vocabulary(
     sort_by: Literal["code", "frequency", "value"],
@@ -456,8 +492,10 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
 
 
 @withCUDA
+@pytest.mark.parametrize("unseen", ["missing", "mode"])
 def test_align_categories_ensemble_matches_member_fits(
     device: torch.device,
+    unseen: Literal["missing", "mode"],
 ) -> None:
     first_context = _table(
         [[0], [1]],
@@ -483,15 +521,15 @@ def test_align_categories_ensemble_matches_member_fits(
         tables=(query, query),
         member_table_ids=member_table_ids,
     )
-    combined = AlignCategories()
-    fitted = AlignCategories().fit_ensemble(context)
+    combined = AlignCategories(unseen=unseen)
+    fitted = AlignCategories(unseen=unseen).fit_ensemble(context)
 
     context_output = combined.fit_transform_ensemble(context)
     query_output = combined.transform_ensemble(query_ensemble)
     fitted_query_output = fitted.transform_ensemble(query_ensemble)
     references = [
-        AlignCategories().fit(first_context),
-        AlignCategories().fit(second_context),
+        AlignCategories(unseen=unseen).fit(first_context),
+        AlignCategories(unseen=unseen).fit(second_context),
     ]
     context_tables = (first_context, second_context)
     for member_id, table_id in enumerate(member_table_ids):

@@ -34,6 +34,12 @@ def test_clip_sigma_two_stage_outlier_behavior(
         torch.log1p(torch.tensor(100.0, dtype=dtype, device=device)) + 2.0,
     )
 
+    hard = ClipSigma(threshold=1.0, method="hard").fit(
+        TableTensor.from_tensor(inp)
+    )
+    hard_out = hard.transform(TableTensor.from_tensor(inp)).numerical
+    assert torch.equal(hard_out[-1], hard.upper_bound.squeeze(-2))
+
 
 def test_clip_sigma_matches_tabicl_reference_values() -> None:
     dtype = torch.float64

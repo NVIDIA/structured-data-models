@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -7,9 +8,11 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
+import sdm.processing as sp
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
+from sdm.models.kumo.tabular.ckpt import load_checkpoint
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.table_encoder import TableEncoder
 from sdm.models.tabfm.cell_embedding import CellEmbedding
@@ -31,6 +34,7 @@ class KumoTabular(ICLModel):  # noqa: D101
         device: torch.device | str | None = None,
         *,
         task: Literal["classification", "regression"] = "classification",
+        checkpoint_path: str | Path | None = None,
     ) -> None:
         super().__init__()
 
@@ -43,15 +47,58 @@ class KumoTabular(ICLModel):  # noqa: D101
         self.model = _KumoTabular(
             num_classes=num_classes,
             num_quantiles=num_quantiles,
-            device=device,
+            device="meta" if checkpoint_path is not None else device,
         )
+        if checkpoint_path is not None:
+            self.model = load_checkpoint(
+                self.model,
+                checkpoint_path,
+                task=task,
+                device=device,
+            )
         self.eval()
 
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        # TODO: Define the default recipe.
-        return Recipe()
+        return Recipe(
+            features=[
+                sp.StypeDispatch(
+                    numerical=[
+                        sp.ImputeMean(nonfinite=True),
+                        sp.ClipSigma(threshold=4.0, method="hard"),
+                    ],
+                ),
+                sp.AddCalendarFields(
+                    fields=("month", "day_of_month", "hour", "weekday"),
+                    encoding="cyclic",
+                ),
+                sp.DropStypes(Stype.datetime, Stype.text, Stype.id),
+                sp.StypeDispatch(
+                    numerical=sp.Identity(),
+                    categorical=[
+                        sp.AlignCategories(
+                            sort_by="value",
+                            unseen="mode",
+                        ),
+                        sp.ToNumerical(),
+                        sp.ClipSigma(threshold=4.0, method="hard"),
+                    ],
+                ),
+                sp.ImputeMean(nonfinite=True),
+                sp.Standardize(correction=1, min_scale=1e-6),
+                sp.Clip(min_value=-100.0, max_value=100.0),
+            ],
+            target=sp.StypeDispatch(
+                numerical=sp.Standardize(constant_threshold=1e-8),
+            ),
+            output=[
+                sp.ReduceEstimators(method="mean"),
+                sp.TaskDispatch(
+                    classification=sp.Softmax(),
+                ),
+            ],
+        )
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415
@@ -90,6 +137,9 @@ class KumoTabular(ICLModel):  # noqa: D101
             assert x_query is not None
             x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
+        model_dtype = next(self.model.parameters()).dtype
+        x = x.to(dtype=model_dtype)
+
         classes: Tensor | None = None
         if y_context is not None and y_context.categorical.size(-1) > 0:
             if self.task != "classification":
@@ -106,6 +156,7 @@ class KumoTabular(ICLModel):  # noqa: D101
                     f"{self.task!r}, but received a numerical target"
                 )
             y = y_context.numerical.squeeze(-1)
+            y = y.to(dtype=model_dtype)
         else:
             assert cache is not None
             if self.task == "classification":
@@ -173,6 +224,7 @@ class _KumoTabular(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_classes = num_classes
+        self.num_quantiles = num_quantiles
 
         self.cell_embedding = CellEmbedding(
             channels=128,

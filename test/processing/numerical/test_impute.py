@@ -51,3 +51,31 @@ def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
             device=device,
         ),
     )
+
+
+@withCUDA
+def test_impute_mean_can_treat_infinity_as_missing(
+    device: torch.device,
+) -> None:
+    context = TableTensor.from_tensor(
+        torch.tensor(
+            [[1.0, torch.inf], [3.0, -torch.inf], [torch.nan, torch.nan]],
+            device=device,
+        )
+    )
+    query = TableTensor.from_tensor(
+        torch.tensor(
+            [[torch.inf, -torch.inf], [5.0, torch.nan]], device=device
+        )
+    )
+
+    out = ImputeMean(nonfinite=True).fit(context).transform(query)
+
+    assert torch.equal(
+        out.numerical,
+        torch.tensor([[2.0, 0.0], [5.0, 0.0]], device=device),
+    )
+    assert repr(ImputeMean()) == "ImputeMean()"
+    assert repr(ImputeMean(fill_value=-1.0, nonfinite=True)) == (
+        "ImputeMean(fill_value=-1.0, nonfinite=True)"
+    )

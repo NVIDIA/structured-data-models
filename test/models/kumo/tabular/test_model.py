@@ -1,14 +1,77 @@
-from typing import Literal
+from pathlib import Path
+from typing import ClassVar, Literal
 
 import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, NaT, StringTensor, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import KumoTabular
 from sdm.models.kumo.tabular import model as model_module
 from sdm.models.kumo.tabular.model import _KumoTabular
+
+
+class _RecordingCore(torch.nn.Module):
+    calls: ClassVar[
+        list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, int | None]]
+    ] = []
+
+    def __init__(
+        self,
+        num_classes: int,
+        num_quantiles: int,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.num_classes = num_classes
+        self.num_quantiles = num_quantiles
+        self.anchor = torch.nn.Parameter(
+            torch.empty((), device=device, dtype=dtype)
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        categorical_mask: torch.Tensor,
+        *,
+        cache: Cache | None = None,
+        batch_size_limit: int | None = None,
+    ) -> torch.Tensor:
+        type(self).calls.append(
+            (
+                x.clone(),
+                y.clone(),
+                categorical_mask.clone(),
+                cache is not None and cache.is_replaying,
+                batch_size_limit,
+            )
+        )
+        query = x[..., y.size(-1) :, :]
+        if self.num_classes > 0:
+            offsets = torch.arange(
+                self.num_classes,
+                device=x.device,
+                dtype=x.dtype,
+            )
+        else:
+            offsets = torch.linspace(
+                1.0,
+                3.0,
+                self.num_quantiles,
+                device=x.device,
+                dtype=x.dtype,
+            )
+        return query.sum(dim=-1, keepdim=True) + offsets
+
+
+@pytest.fixture
+def recording_model(monkeypatch: pytest.MonkeyPatch) -> KumoTabular:
+    _RecordingCore.calls.clear()
+    monkeypatch.setattr(model_module, "_KumoTabular", _RecordingCore)
+    return KumoTabular()
 
 
 def test_parameter_count() -> None:
@@ -21,6 +84,58 @@ def test_parameter_count() -> None:
     assert sum(parameter.numel() for parameter in model.parameters()) == (
         34_188_428
     )
+
+
+def test_checkpoint_path_uses_meta_core_and_requested_device(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class RecordingCore(torch.nn.Module):
+        def __init__(
+            self,
+            num_classes: int,
+            num_quantiles: int,
+            device: torch.device | str | None = None,
+            dtype: torch.dtype | None = None,
+        ) -> None:
+            super().__init__()
+            self.num_classes = num_classes
+            self.num_quantiles = num_quantiles
+            self.anchor = torch.nn.Parameter(
+                torch.empty((), device=device, dtype=dtype)
+            )
+
+    calls: list[tuple[Path, str, torch.device | str | None]] = []
+    monkeypatch.setattr(model_module, "_KumoTabular", RecordingCore)
+
+    def fake_load_checkpoint(
+        model: RecordingCore,
+        checkpoint_path: str | Path,
+        *,
+        task: Literal["classification", "regression"],
+        device: torch.device | str | None,
+    ) -> RecordingCore:
+        assert model.anchor.device.type == "meta"
+        calls.append((Path(checkpoint_path), task, device))
+        return RecordingCore(
+            num_classes=model.num_classes,
+            num_quantiles=model.num_quantiles,
+            device=device,
+        ).eval()
+
+    monkeypatch.setattr(model_module, "load_checkpoint", fake_load_checkpoint)
+    path = tmp_path / "regression.pt"
+
+    model = KumoTabular(
+        "cpu",
+        task="regression",
+        checkpoint_path=path,
+    )
+
+    assert calls == [(path, "regression", "cpu")]
+    assert model.model.anchor.device.type == "cpu"
+    assert not model.training
+    assert not model.model.training
 
 
 @pytest.mark.parametrize(
@@ -177,6 +292,36 @@ def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
     return x.split(3, dim=0)
 
 
+def _mixed_features() -> tuple[TableTensor, TableTensor]:
+    context = TableTensor(
+        columns={
+            Stype.numerical: ("num",),
+            Stype.datetime: ("when",),
+            Stype.categorical: ("cat",),
+        },
+        numerical=torch.tensor([[1.0], [torch.inf], [-torch.inf]]),
+        datetime=torch.tensor([[0], [NaT], [2 * 86_400_000_000]]),
+        categorical=CategoricalTensor(
+            code=torch.full((3, 1), -1),
+            categories=(StringTensor.from_list(["unused"]),),
+        ),
+    )
+    query = TableTensor(
+        columns={
+            Stype.numerical: ("num",),
+            Stype.datetime: ("when",),
+            Stype.categorical: ("cat",),
+        },
+        numerical=torch.tensor([[5.0], [torch.nan]]),
+        datetime=torch.tensor([[3 * 86_400_000_000], [NaT]]),
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [-1]]),
+            categories=(StringTensor.from_list(["unseen"]),),
+        ),
+    )
+    return context, query
+
+
 def _cls_target() -> TableTensor:
     return TableTensor(
         columns={Stype.categorical: ("target",)},
@@ -198,6 +343,145 @@ def _recipe() -> sp.Recipe:
         target=sp.StypeDispatch(numerical=sp.Standardize()),
         output=[sp.ReduceEstimators(method="mean")],
     )
+
+
+def test_default_recipe_reduces_and_applies_classification_softmax(
+    recording_model: KumoTabular,
+) -> None:
+    context, query = _features()
+
+    out = recording_model(context.numerical, _cls_target(), query.numerical)
+
+    assert out.size() == (2, 3)
+    torch.testing.assert_close(out.numerical.sum(dim=-1), torch.ones(2))
+    x, _, categorical_mask, _, _ = _RecordingCore.calls[0]
+    torch.testing.assert_close(
+        x[:3],
+        torch.tensor([[-1.0, -1.0], [0.0, 0.0], [1.0, 1.0]]),
+    )
+    assert not categorical_mask.any()
+
+
+def test_default_recipe_handles_missing_values_and_preserves_feature_roles(
+    recording_model: KumoTabular,
+) -> None:
+    context, query = _mixed_features()
+    features = KumoTabular.default_recipe().features
+
+    transformed = features.fit_transform(context)
+    assert transformed.columns[Stype.numerical] == (
+        "num",
+        "when__month__sin",
+        "when__month__cos",
+        "when__day_of_month__sin",
+        "when__day_of_month__cos",
+        "when__hour__sin",
+        "when__hour__cos",
+        "when__weekday__sin",
+        "when__weekday__cos",
+        "cat",
+    )
+
+    recording_model(context, _cls_target(), query)
+
+    x, _, categorical_mask, _, _ = _RecordingCore.calls[0]
+    assert x.isfinite().all()
+    assert categorical_mask.tolist() == [False] * 9 + [True]
+    # An all-missing context has no fitted mode, so both context and query
+    # retain the finite alignment sentinel through standardization.
+    assert x[..., -1].equal(torch.zeros(5))
+
+
+def test_default_recipe_distinguishes_missing_and_unseen_categories() -> None:
+    context = TableTensor.from_columns(
+        {"cat": ["b", None, "b", "a"]},
+        {"cat": "categorical"},
+        categorical_as_string=True,
+        categorical_missing_value="___missing___",
+    )
+    query = TableTensor.from_columns(
+        {"cat": ["unseen", None]},
+        {"cat": "categorical"},
+        categorical_as_string=True,
+        categorical_missing_value="___missing___",
+    )
+    features = KumoTabular.default_recipe().features
+
+    transformed_context = features.fit_transform(context).numerical
+    transformed_query = features.transform(query).numerical
+
+    assert transformed_query[0].equal(transformed_context[0])
+    assert transformed_query[1].equal(transformed_context[1])
+
+
+def test_default_recipe_clips_categories_but_not_datetime_fields() -> None:
+    num_rows = 20
+    hours = torch.zeros(num_rows, dtype=torch.long)
+    hours[-1] = 12
+    categories = torch.arange(1001)
+    codes = torch.cat((torch.arange(19), torch.tensor([1000]))).unsqueeze(-1)
+    context = TableTensor(
+        columns={Stype.datetime: ("when",), Stype.categorical: ("cat",)},
+        datetime=hours.mul(3_600_000_000).unsqueeze(-1),
+        categorical=CategoricalTensor(
+            code=codes,
+            categories=(categories,),
+        ),
+    )
+
+    transformed = KumoTabular.default_recipe().features.fit_transform(context)
+
+    hour_cos = transformed.columns[Stype.numerical].index("when__hour__cos")
+    cat = transformed.columns[Stype.numerical].index("cat")
+    assert transformed.numerical[-1, hour_cos] < -4
+    assert transformed.numerical[-1, cat] < 3.5
+
+
+def test_default_recipe_fits_numerical_state_only_on_context() -> None:
+    context = TableTensor.from_tensor(torch.arange(20.0).unsqueeze(-1))
+    fixed_query = torch.tensor([[10.5]])
+    query_a = TableTensor.from_tensor(
+        torch.cat((fixed_query, torch.tensor([[1e20]])))
+    )
+    query_b = TableTensor.from_tensor(
+        torch.cat((fixed_query, torch.tensor([[-1e20]])))
+    )
+    features = KumoTabular.default_recipe().features.fit(context)
+
+    out_a = features.transform(query_a).numerical
+    out_b = features.transform(query_b).numerical
+
+    assert out_a.isfinite().all()
+    assert out_b.isfinite().all()
+    assert out_a[0].equal(out_b[0])
+    assert not out_a[1].equal(out_b[1])
+
+
+def test_default_recipe_preserves_precision_before_model_cast(
+    recording_model: KumoTabular,
+) -> None:
+    context = TableTensor.from_columns(
+        {"value": (1e12 + torch.arange(16, dtype=torch.float64)).tolist()},
+        {"value": "numerical"},
+        numerical_dtype=torch.float64,
+    )
+    query = TableTensor.from_columns(
+        {"value": [1e12 + 16]},
+        {"value": "numerical"},
+        numerical_dtype=torch.float64,
+    )
+    target = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.arange(16).remainder(3).unsqueeze(-1),
+            categories=(torch.arange(3).mul(10),),
+        )
+    )
+
+    recording_model(context, target, query)
+
+    x, _, _, _, _ = _RecordingCore.calls[0]
+    assert x.dtype == torch.float32
+    assert x[:16].unique().numel() == 16
 
 
 def test_forward(
