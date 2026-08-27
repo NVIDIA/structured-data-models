@@ -11,6 +11,7 @@ from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.callbacks import Callback
+from sdm.models.context import CompiledContext
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -36,7 +37,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def __init__(self) -> None:
         super().__init__()
-        self._cache: Cache | None = None
+        self._cache: CompiledContext | None = None
+        self._context_owner_token = object()
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     def forward(
@@ -211,6 +213,37 @@ class ICLModel(torch.nn.Module, abc.ABC):
     @torch.no_grad()
     def fit(
         self,
+        x: Tensor | TableTensor,
+        y: Tensor | TableTensor,
+        related_tables: RelatedTables | None = None,
+        *,
+        recipe: Recipe | None = None,
+        num_estimators: int = 1,
+        generator: torch.Generator | None = None,
+        **kwargs: Any,
+    ) -> None:
+        r"""Fit context into the model's backward-compatible cache slot.
+
+        Existing context state is replaced only after compilation succeeds.
+        Use :meth:`compile_context` to retain multiple independent contexts.
+        """
+        replacement = self.compile_context(
+            x=x,
+            y=y,
+            related_tables=related_tables,
+            recipe=recipe,
+            num_estimators=num_estimators,
+            generator=generator,
+            **kwargs,
+        )
+        previous, self._cache = self._cache, replacement
+        if previous is not None:
+            previous.close()
+
+    @inference_mode(False)
+    @torch.no_grad()
+    def compile_context(
+        self,
         x: Tensor | TableTensor,  # [..., R, D]
         y: Tensor | TableTensor,  # [..., R, 1]
         related_tables: RelatedTables | None = None,
@@ -219,10 +252,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_estimators: int = 1,
         generator: torch.Generator | None = None,
         **kwargs: Any,
-    ) -> None:
-        r"""Fit and cache in-context examples.
+    ) -> CompiledContext:
+        r"""Compile reusable context state without changing the model.
 
-        Repeated calls to :meth:`predict` can then reuse the same in-context
+        Repeated calls to :meth:`predict_context` can reuse the same in-context
         examples while only providing new query examples.
 
         Args:
@@ -231,7 +264,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             y: The targets of in-context examples with shape
                 ``[..., R, 1]``.
             related_tables: Related context for in-context examples.
-            recipe: The custom recipe for pre- and post-processing.
+            recipe: The recipe for pre- and post-processing. If ``None``, the
+                model's default recipe is applied.
             num_estimators: The number of estimators for ensembling.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -243,8 +277,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             x = TableTensor.from_tensor(x)
         if not isinstance(y, TableTensor):
             y = TableTensor.from_tensor(y)
-
-        self.clear()
 
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
@@ -260,7 +292,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         cache = Cache(
             num_estimators=num_estimators,
-            recipe_execution=recipe_execution,
             kwargs=kwargs,
         )
         for i, context in enumerate(contexts):
@@ -294,22 +325,53 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 estimator_cache = estimator_cache.cpu().pin_memory()
             cache[i] = estimator_cache
 
-        self._cache = cache.freeze()
+        cache = cache.freeze()
+        first_cache = cache[0]
+        assert isinstance(first_cache, Cache)
+        task = (
+            "classification"
+            if first_cache["classes"] is not None
+            else "regression"
+        )
+        return CompiledContext(
+            recipe_execution=recipe_execution,
+            cache=cache,
+            owner_token=self._context_owner_token,
+            weight_versions=self._weight_versions(),
+            submodel_token=self._submodel_token(task),
+            task=task,
+        )
 
     def predict(
         self,
-        x: Tensor | TableTensor,  # [..., R, D]
+        x: Tensor | TableTensor,
         related_tables: RelatedTables | None = None,
         *,
         callbacks: Sequence[Callback] | None = None,
-    ) -> TableTensor:  # Recipe-defined output shape.
-        r"""Predict unseen query examples.
+    ) -> TableTensor:
+        r"""Predict with context stored by :meth:`fit`."""
+        callbacks = () if callbacks is None else callbacks
+        requires_grad = any(callback.requires_grad for callback in callbacks)
+        with inference_mode(not requires_grad):
+            return self._predict_context_call(
+                context=self._cache,
+                x=x,
+                related_tables=related_tables,
+                callbacks=callbacks,
+            )
 
-        .. note::
-
-            This method requires a prior call to :meth:`fit`.
+    def predict_context(
+        self,
+        context: CompiledContext,
+        x: Tensor | TableTensor,
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
+    ) -> TableTensor:
+        r"""Predict unseen query examples with a compiled context.
 
         Args:
+            context: Compiled context returned by :meth:`compile_context`.
             x: The feature tensor of query examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
             related_tables: Related context for query examples.
@@ -322,14 +384,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
         with inference_mode(not requires_grad):
-            return self._predict_call(
+            return self._predict_context_call(
+                context=context,
                 x=x,
                 related_tables=related_tables,
                 callbacks=callbacks,
             )
 
-    def _predict_call(
+    def _predict_context_call(
         self,
+        context: CompiledContext | None,
         x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
         *,
@@ -342,30 +406,35 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables,
                 callbacks=callbacks,
             )
+        if context is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} not yet fitted. Make sure to "
+                f"call {self.__class__.__name__}.fit() before."
+            )
+        self._validate_compiled_context(context)
+        recipe_execution, compiled_cache = context._state()
 
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
 
-        if self._cache is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} not yet fitted. Make sure to "
-                f"call '{self.__class__.__name__}.fit()' before."
-            )
-
         if related_tables is not None:
-            if cast(Cache, self._cache[0])["related_tables_schema"] is None:
+            first_cache = compiled_cache[0]
+            assert isinstance(first_cache, Cache)
+            if first_cache["related_tables_schema"] is None:
                 raise ValueError(
                     "Expected related tables to be provided together"
                 )
             related_tables = related_tables.select_tables(
                 tables=cast(
                     RelatedTablesSchema,
-                    cast(Cache, self._cache[0])["related_tables_schema"],
+                    first_cache["related_tables_schema"],
                 ).tables,
             )
 
-        num_estimators = cast(int, self._cache["num_estimators"])
-        caches = [cast(Cache, self._cache[i]) for i in range(num_estimators)]
+        num_estimators = cast(int, compiled_cache["num_estimators"])
+        caches = [
+            cast(Cache, compiled_cache[i]) for i in range(num_estimators)
+        ]
         next_cache = caches[0]
 
         compute_stream: torch.cuda.Stream | None = None
@@ -381,10 +450,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 with torch.cuda.stream(transfer_stream):
                     next_cache = next_cache.to(x.device, non_blocking=True)
 
-            recipe_execution = cast(
-                RecipeExecution,
-                self._cache["recipe_execution"],
-            )
             with torch.amp.autocast(x.device.type, enabled=False):
                 queries = recipe_execution.transform(x, related_tables)
 
@@ -433,7 +498,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     related_query_tables=related_query_tables,
                     cache=cache,
                     generator=None,
-                    **cast(dict[str, Any], self._cache["kwargs"]),
+                    **cast(dict[str, Any], compiled_cache["kwargs"]),
                 )
 
                 if x.is_cuda:
@@ -455,7 +520,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
             raise
 
         # Regression: invert target before stacking estimator outputs.
-        if cast(Cache, self._cache[0])["classes"] is None:
+        first_cache = compiled_cache[0]
+        assert isinstance(first_cache, Cache)
+        if first_cache["classes"] is None:
             with torch.amp.autocast(x.device.type, enabled=False):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
@@ -468,8 +535,51 @@ class ICLModel(torch.nn.Module, abc.ABC):
         return prediction
 
     def clear(self) -> None:
-        r"""Clear cached context state created by :meth:`fit`."""
-        self._cache = None
+        r"""Close and clear context state created by :meth:`fit`."""
+        if self._cache is not None:
+            self._cache.close()
+            self._cache = None
+
+    def _weight_versions(self) -> tuple[tuple[object, ...], ...]:
+        tensors = (
+            (f"parameter:{name}", tensor)
+            for name, tensor in self.named_parameters()
+        )
+        buffers = (
+            (f"buffer:{name}", tensor) for name, tensor in self.named_buffers()
+        )
+        return tuple(
+            (
+                name,
+                id(tensor),
+                tensor._version,
+                tensor.device,
+                tensor.dtype,
+            )
+            for name, tensor in (*tensors, *buffers)
+        )
+
+    def _submodel_token(self, task: str) -> int:
+        if task == "classification":
+            return id(getattr(self, "cls_model", self))
+        assert task == "regression"
+        return id(getattr(self, "reg_model", self))
+
+    def _validate_compiled_context(self, context: CompiledContext) -> None:
+        context._state()
+        if context._owner_token is not self._context_owner_token:
+            raise ValueError(
+                "Compiled context belongs to a different model instance"
+            )
+        if context._weight_versions != self._weight_versions():
+            raise RuntimeError(
+                "Compiled context is stale because model weights or placement "
+                "changed"
+            )
+        if context._submodel_token != self._submodel_token(context._task):
+            raise RuntimeError(
+                "Compiled context targets a different model submodel"
+            )
 
     def __getstate__(self) -> dict[str, object]:
         for stream in self._transfer_streams.values():

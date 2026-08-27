@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import cast
 
 import torch
+from torch import Tensor
 
 import sdm.processing as sp
 from sdm import Recipe, RelatedTables, TableTensor
@@ -219,3 +220,52 @@ class RecipeExecution:
             out = torch.stack(list(outputs), dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
+
+    def _tensors(self) -> Iterator[Tensor]:
+        yield from _iter_tensors(self)
+
+
+def _iter_tensors(value: object) -> Iterator[Tensor]:
+    seen: set[int] = set()
+
+    def _iter(item: object) -> Iterator[Tensor]:
+        if isinstance(item, Tensor):
+            state = vars(item)
+            if len(state) == 0:
+                yield item
+                return
+            if id(item) in seen:
+                return
+            seen.add(id(item))
+            for child in state.values():
+                yield from _iter(child)
+            return
+        if isinstance(item, str | bytes | int | float | bool | type(None)):
+            return
+        if id(item) in seen:
+            return
+        seen.add(id(item))
+
+        if isinstance(item, torch.nn.Module):
+            yield from item.parameters(recurse=False)
+            yield from item.buffers(recurse=False)
+            for child in item.children():
+                yield from _iter(child)
+            excluded = {"_parameters", "_buffers", "_modules"}
+            for name, child in vars(item).items():
+                if name not in excluded:
+                    yield from _iter(child)
+            return
+        if isinstance(item, Mapping):
+            for child in item.values():
+                yield from _iter(child)
+            return
+        if isinstance(item, list | tuple):
+            for child in item:
+                yield from _iter(child)
+            return
+        if isinstance(item, RecipeExecution | Recipe):
+            for child in vars(item).values():
+                yield from _iter(child)
+
+    yield from _iter(value)

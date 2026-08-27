@@ -67,6 +67,30 @@ for batch in table[300:].drop_columns("target").split(batch_size):
 model.clear()
 ```
 
+For applications that retain several contexts against one resident model, use {py:meth}`~sdm.models.ICLModel.compile_context` and {py:meth}`~sdm.models.ICLModel.predict_context`. Compilation returns an independent {py:class}`~sdm.models.CompiledContext` without changing the model's compatibility cache:
+
+```python
+context_a = model.compile_context(
+    x=table_a[:300].drop_columns("target"),
+    y=table_a[:300, "target"],
+)
+context_b = model.compile_context(
+    x=table_b[:300].drop_columns("target"),
+    y=table_b[:300, "target"],
+)
+
+out_a = model.predict_context(context_a, table_a[300:].drop_columns("target"))
+out_b = model.predict_context(context_b, table_b[300:].drop_columns("target"))
+out_a_again = model.predict_context(context_a, table_a[300:].drop_columns("target"))
+
+context_a.close()
+context_b.close()
+```
+
+A compiled context owns fitted recipe state and reusable model intermediates, but does not copy model parameters. It is process-local and tied to the exact model instance, selected classifier or regressor, weights, device, and dtype that created it. Loading or mutating weights, or moving the model after compilation, makes the context stale. {py:attr}`~sdm.models.CompiledContext.placement` reports persistent pageable-host, pinned-host, and per-device storage with shared storage counted once. Compile a context from inputs on the device where it will be used.
+
+Prediction treats compiled state as read-only, but SDM does not add a model or device execution lock. Callers must serialize concurrent predictions when required by the selected model or runtime. {py:meth}`~sdm.models.CompiledContext.close` is idempotent and deterministically releases fitted state; using a closed context fails.
+
 The cached interface has the same prediction contract as the one-shot call.
 Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls when tasks change frequently, and use the {py:meth}`~sdm.models.ICLModel.fit`+{py:meth}`~sdm.models.ICLModel.predict` flow for large batch predictions over a single fixed task.
 

@@ -27,6 +27,7 @@ class _RecordingModel(ICLModel):
 
     def __init__(self) -> None:
         super().__init__()
+        self.weight = torch.nn.Parameter(torch.ones(()))
         self.calls: list[_Call] = []
 
     def _forward(
@@ -464,6 +465,124 @@ def test_predict_validates_cached_input_schema() -> None:
 
     with pytest.raises(ValueError, match="same schema"):
         model.predict(torch.randn(2, 3, 4))
+
+
+def test_compiled_contexts_are_independent_and_interleavable() -> None:
+    model = _RecordingModel()
+    parameter_ids = tuple(id(parameter) for parameter in model.parameters())
+    y_context = torch.tensor([[0.0], [1.0]])
+    context_a = model.compile_context(
+        torch.tensor([[0.0], [2.0]]),
+        y_context,
+        recipe=_recipe(),
+    )
+    context_b = model.compile_context(
+        torch.tensor([[10.0], [20.0]]),
+        y_context,
+        recipe=_recipe(),
+    )
+    classification_context = model.compile_context(
+        torch.tensor([[0.0], [2.0]]),
+        TableTensor.from_columns(
+            {"target": ["a", "b"]},
+            stypes={"target": Stype.categorical},
+        ),
+        recipe=_recipe(),
+    )
+    query = torch.tensor([[3.0]])
+
+    out_a = model.predict_context(context_a, query)
+    out_b = model.predict_context(context_b, query)
+    model.predict_context(classification_context, query)
+    out_a_again = model.predict_context(context_a, query)
+
+    torch.testing.assert_close(out_a.numerical, out_a_again.numerical)
+    torch.testing.assert_close(out_a.numerical.squeeze(), torch.tensor(2.0))
+    torch.testing.assert_close(out_b.numerical.squeeze(), torch.tensor(-2.4))
+    assert (
+        tuple(id(parameter) for parameter in model.parameters())
+        == parameter_ids
+    )
+    assert context_a.placement.total_bytes > 0
+    assert context_a.placement.host_bytes == context_a.placement.total_bytes
+
+
+def test_compiled_context_lifecycle() -> None:
+    model = _RecordingModel()
+    context = model.compile_context(
+        torch.tensor([[0.0], [2.0]]),
+        torch.tensor([[0.0], [1.0]]),
+        recipe=_recipe(),
+    )
+    model.predict_context(context, torch.tensor([[3.0]]))
+    context.close()
+    context.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        model.predict_context(context, torch.tensor([[3.0]]))
+
+
+def test_compiled_context_rejects_foreign_and_stale_models() -> None:
+    model = _RecordingModel()
+    context = model.compile_context(
+        torch.tensor([[0.0], [2.0]]),
+        torch.tensor([[0.0], [1.0]]),
+        recipe=_recipe(),
+    )
+
+    with pytest.raises(ValueError, match="different model instance"):
+        _RecordingModel().predict_context(context, torch.tensor([[3.0]]))
+
+    with torch.no_grad():
+        model.weight.add_(1)
+    with pytest.raises(RuntimeError, match="stale"):
+        model.predict_context(context, torch.tensor([[3.0]]))
+
+    loaded_model = _RecordingModel()
+    loaded_context = loaded_model.compile_context(
+        torch.tensor([[0.0], [2.0]]),
+        torch.tensor([[0.0], [1.0]]),
+        recipe=_recipe(),
+    )
+    loaded_model.load_state_dict(loaded_model.state_dict())
+    with pytest.raises(RuntimeError, match="stale"):
+        loaded_model.predict_context(
+            loaded_context,
+            torch.tensor([[3.0]]),
+        )
+
+    moved_model = _RecordingModel()
+    moved_context = moved_model.compile_context(
+        torch.tensor([[0.0], [2.0]]),
+        torch.tensor([[0.0], [1.0]]),
+        recipe=_recipe(),
+    )
+    moved_model.to(dtype=torch.float64)
+    with pytest.raises(RuntimeError, match="stale"):
+        moved_model.predict_context(
+            moved_context,
+            torch.tensor([[3.0]]),
+        )
+
+
+def test_failed_fit_preserves_existing_context() -> None:
+    model = _RecordingModel()
+    model.fit(
+        torch.tensor([[0.0], [2.0]]),
+        torch.tensor([[0.0], [1.0]]),
+        recipe=_recipe(),
+    )
+    existing = model._cache
+
+    with pytest.raises(ValueError, match="one column"):
+        model.fit(
+            torch.tensor([[0.0], [2.0]]),
+            torch.randn(2, 2),
+            recipe=_recipe(),
+        )
+
+    assert model._cache is existing
+    assert existing is not None
+    model.predict(torch.tensor([[3.0]]))
 
 
 def test_related_table_validation() -> None:
