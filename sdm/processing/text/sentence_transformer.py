@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from cudf.core.wordpiece_tokenize import WordPieceVocabulary
 
 
+# Hugging Face treats words with more than 100 Unicode characters as [UNK],
+# while cuDF does so for words with 200 or more UTF-8 bytes.
 _CUDF_WORDPIECE_MAX_BYTES = 200
 
 
