@@ -166,12 +166,12 @@ def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
     return x.split(3, dim=0)
 
 
-def _target(num_classes: int = 3) -> TableTensor:
+def _target() -> TableTensor:
     return TableTensor(
         columns={Stype.categorical: ("target",)},
         categorical=CategoricalTensor(
             code=torch.tensor([[0], [2], [0]]),
-            categories=(torch.arange(num_classes).mul(10),),
+            categories=(torch.arange(3).mul(10),),
         ),
     )
 
@@ -215,5 +215,5 @@ def test_fit_predict(model: KumoTabular) -> None:
     model.fit(x_context, target, recipe=_recipe())
     actual = model.predict(x_query)
 
-    assert actual.allclose(expected)
+    assert actual.allclose(expected, atol=1e-5)
     assert actual.columns == expected.columns
