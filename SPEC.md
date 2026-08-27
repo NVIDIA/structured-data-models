@@ -1,24 +1,26 @@
 # Spec: Skalierbare Latin-Spaltenpermutationen
 
-Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bebaef1ccd074a376dd2f4c3e5c0c010fb8d6db3`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `2a73246320ea4188d8b8791e136ac8f111e112d6`.
 
 ## Problem
 
-`ShuffleColumns` ist ein allgemeiner Processor. Seine gewählte Methode darf sich deshalb nicht unbemerkt mit der Spaltenanzahl ändern. TabICLv2 wechselt bei mehr als 4.000 Spalten von `latin` zu `random`; laut [TabICL #9](https://github.com/soda-inria/tabicl/issues/9) schützt diese Grenze die rekursive `O(C²)`-Implementierung. Für genau 4.000 gibt es weder eine Qualitätsmessung noch eine allgemeine algorithmische Begründung.
+`ShuffleColumns` kennt auf `main` nur `shift` und `random`. TabICLv2 verwendet Latin-Permutationen, fällt aber oberhalb von 4.000 Spalten auf `random` zurück. Diese Grenze schützt nur die rekursive `O(C²)`-Referenzimplementierung; sie ist keine allgemeine Qualitäts- oder Bibliotheksregel. Ein explizites `method="latin"` darf deshalb nicht still seine Semantik ändern.
 
-Die Referenz erzeugt eine zufällige Symbol-, Zeilen- und Spaltenreihenfolge eines zyklischen Latin-Quadrats. Diese Verteilung lässt sich auf CUDA ohne das vollständige Quadrat erzeugen. Für identische TabICLv2-Seeds muss zusätzlich der Python-RNG-Verbrauch exakt reproduziert werden; diese teure Anforderung gehört in den Modellplan, nicht als Sonderregel in den allgemeinen Processor. Auf aktuellem `main` wird dynamisch großer Processor-Zustand mit `BufferList` gespeichert und über den normalen PyTorch-`state_dict` wiederhergestellt; der neue Plan muss diesen Vertrag verwenden.
+Gruppen einer `EnsembleTable` können unterschiedlich viele, aber stark überlappende Spalten haben. Sie sollen denselben **logischen** Zufallsplan verwenden, ohne einen falsch dimensionierten Permutationstensor zu teilen.
 
 ## Lösung
 
-- `random` wird der Default. Explizites `method="latin"` bleibt bei jeder Spaltenanzahl Latin; ein Ressourcenlimit meldet einen Fehler oder ist explizit konfigurierbar, ändert aber nie die Methode.
-- Ein gemeinsamer logischer Plan vergibt mit einem Seed stabile Zufallsränge für die Vereinigungsmenge aller Spalten und Pattern. Für jedes tatsächlich vorkommende Schema werden nicht vorhandene Spalten aus diesen Rangfolgen entfernt, die übrigen lokal neu nummeriert und daraus ein gültiger Latin-Plan erzeugt. Stark überlappende Gruppen bleiben so gekoppelt; konkrete Tensoren bleiben wegen unterschiedlicher Spaltenzahlen schemaspezifisch.
-- Der allgemeine CUDA-Pfad materialisiert pro Schema nur die benötigten `E` Permutationen als Tensor `[E, C]`: `base[(pattern[:, None] - rows[None, :]) % C]`.
-- Der interne TabICLv2-Estimatorplan bildet für exakte Seed-Parität dieselben Python-RNG-Ziehungen ab. Eine Order-Statistic-Struktur dekodiert die Symbolfolge iterativ in `O(C log C)`; anschließend werden nur die ausgewählten Pattern-IDs auf CUDA materialisiert. Der generische Processor erhält fertige IDs/Zustände und kennt keine TabICLv2-Schwelle.
-- Die konkreten Permutationstensoren werden in `BufferList` registriert; Schema- und Estimatorzuordnungen liegen als nicht-tensorieller `extra_state` vor. Dadurch stellt `load_state_dict()` einen gefitteten Processor ohne erneutes Fitten vollständig wieder her.
+- `random` bleibt Default; `latin` ist explizit. Ressourcenlimits melden einen Fehler, wechseln aber nie automatisch die Methode.
+- Der Modell-/Recipe-Plan wird erst erzeugt, wenn Estimatoranzahl und Schemata bekannt sind. Vereinfacht:
+  1. Erzeuge eine gemeinsame zufällige Reihenfolge aller bekannten Spalten und Latin-Pattern-IDs.
+  2. Entferne für jede Gruppe die Spalten, die dort nicht existieren.
+  3. Nummeriere die übrigen Positionen lokal von `0…C-1`.
+  4. Materialisiere nur die benötigten Zeilen: `perm[p,j] = symbols[(pattern[p] - column_order[j]) % C]`.
+- Damit bleiben gemeinsame Spalten logisch gekoppelt; konkrete `[P,C]`-Tensoren bleiben schemaspezifisch.
+- Für exakte TabICLv2-Seeds dekodiert ein interner Order-Statistic-Plan die Python-RNG-Ziehungen in `O(C log C)`. Der generische CUDA-Pfad kennt weder TabICL noch die 4.000er-Grenze.
+- Tensorzustand liegt in `BufferList`, logische IDs in `extra_state`; `state_dict` stellt einen gefitteten Processor ohne erneutes Fitten wieder her.
 
 ## Ausführbares Akzeptanzbeispiel
-
-Dieser Draft ist noch spec-only. Der folgende öffentliche CUDA-Test ist das Abnahmekriterium für die spätere Implementierung.
 
 ```python
 import torch
@@ -26,43 +28,42 @@ import sdm
 from sdm.processing import ShuffleColumns
 from sdm.tensor import EnsembleTable
 
-device, columns = torch.device("cuda"), ("a", "b", "c", "d")
-table = sdm.TableTensor.from_tensor(
-    torch.arange(8, dtype=torch.float32, device=device).reshape(2, 4),
-    columns=columns,
+columns = ("a", "b", "c", "d")
+x = sdm.TableTensor.from_tensor(
+    torch.arange(8, dtype=torch.float32, device="cuda").reshape(2, 4), columns=columns
 )
-ensemble = EnsembleTable(table, num_members=4)
-processor = ShuffleColumns(method="latin")
-output = processor.fit_transform_ensemble(
-    ensemble, generator=torch.Generator(device=device).manual_seed(7)
+p = ShuffleColumns(method="latin").fit_ensemble(
+    EnsembleTable(x, num_members=4),
+    generator=torch.Generator(device="cuda").manual_seed(7),
 )
-orders = [output.table(i).columns[sdm.Stype.numerical] for i in range(4)]
-assert all({order[i] for order in orders} == set(columns) for i in range(4))
+out = p.transform_ensemble(EnsembleTable(x, num_members=4))
+orders = [out.table(i).columns[sdm.Stype.numerical] for i in range(4)]
+assert all({row[i] for row in orders} == set(columns) for i in range(4))
 restored = ShuffleColumns(method="latin")
-restored.load_state_dict(processor.state_dict())
-again = restored.transform_ensemble(ensemble)
-assert all(output.table(i).equal(again.table(i)) for i in range(4))
-print("latin=True, state_dict=True")
+restored.load_state_dict(p.state_dict())
+again = restored.transform_ensemble(EnsembleTable(x, num_members=4))
+assert all(out.table(i).equal(again.table(i)) for i in range(4))
 ```
 
-Auf aktuellem `main` und diesem spec-only Draft endet der Lauf mit `AssertionError`, weil `latin` noch fehlt. Nach der Implementierung lautet die Ausgabe `latin=True, state_dict=True`.
+Auf `main` scheitert bereits `method="latin"`; nach der Implementierung bestehen Latin-Invariante und `state_dict`-Roundtrip.
 
 ## GPU-Benchmark-Ergebnisse
 
-NVIDIA L4, PyTorch 2.13/CUDA 13, acht Patterns, synchronisierte End-to-End-Wall-Time nach Warm-up; Median/p95 über 10–20 Läufe. Der exakte kompakte Plan stimmt für vier Seeds und `C=1…100` elementweise mit der gepinnten Referenz überein.
+NVIDIA L4 (23,66 GB), PyTorch `2.9.1+cu128`, CUDA 12.8; 5 Warm-ups, 30 Wiederholungen (Plan-Gesamtzeit: 10), CUDA-synchronisierte Wall-Time, Peak-Allokation über dem Ausgangswert. Der kompakte exakte Plan stimmt in **400/400 Fällen** (`seed=0…3`, `C=1…100`) elementweise mit der gepinnten Referenz überein.
 
-| Spalten | Exakt: Host-Materialisierung | Exakt: CUDA-Materialisierung | Allgemeines CUDA-Latin | Peak exakt auf CUDA |
-| ------: | ---------------------------: | ---------------------------: | ---------------------: | ------------------: |
-|     100 |               0,307/0,330 ms |               0,377/0,568 ms |         0,236/0,289 ms |            0,02 MiB |
-|   4.000 |             11,771/12,315 ms |             11,553/12,042 ms |         0,335/0,470 ms |            0,55 MiB |
-|  16.000 |             53,036/58,404 ms |             52,462/65,316 ms |         0,347/0,388 ms |            2,20 MiB |
-|  64.000 |           251,510/260,869 ms |           244,946/249,433 ms |         0,352/0,392 ms |            8,79 MiB |
+| Spalten | Exakter Plan + CUDA, K=8 Median/p95 | CUDA-Materialisierung | State K=8 |
+| ------: | ----------------------------------: | --------------------: | --------: |
+|     100 |                      0,621/0,655 ms |              0,380 ms |  0,02 MiB |
+|   4.000 |                    14,194/16,401 ms |              1,325 ms |  0,55 MiB |
+|  16.000 |                    62,488/69,416 ms |              4,163 ms |  2,20 MiB |
+|  64.000 |                  286,924/329,393 ms |             16,790 ms |  8,79 MiB |
 
-Der Profiler bestätigt die Entscheidung: Bei `C=64.000` sinkt die reine Materialisierung von 6,09 ms auf 0,097 ms; der verbleibende exakte Aufwand kommt fast vollständig vom seriellen Python-RNG-Plan. Das CUDA-Latin ist rund 696-mal schneller als der exakte Lauf, ist aber wegen anderer Seed-Samples kein Ersatz für TabICLv2-Ausführungsparität.
+Es gibt keinen Laufzeitsprung bei 4.000. Der serielle, exakt reproduzierte RNG-Plan dominiert; die CUDA-Materialisierung skaliert annähernd linear. Beim allgemeinen zyklischen CUDA-Plan kosten K=4 und K=8 bei 64.000 Spalten beide ≈0,20 ms, aber der Zustand verdoppelt sich von 3,91 auf 7,81 MiB. Weniger Permutationen sparen hier Speicher, nicht messbar Rechenzeit.
 
-## Teststrategie
+Reproduktion und Rohdaten: [`benchmark/ensemble_permutation_gpu.py`](https://github.com/NVIDIA/structured-data-models/blob/agent/spec-tabiclv2-grouped-shuffles/benchmark/ensemble_permutation_gpu.py) und [JSON](https://github.com/NVIDIA/structured-data-models/blob/agent/spec-tabiclv2-grouped-shuffles/benchmark/results/ensemble_permutation_gpu.json), Aufruf: `python benchmark/ensemble_permutation_gpu.py --output benchmark/results/ensemble_permutation_gpu.json`.
 
-- Verteilungseigenschaften und Latin-Invarianten des allgemeinen CUDA-Pfads für kleine/große `C`, mehrere `E`, mehrere Zyklen und deterministische `torch.Generator` prüfen.
-- Den internen TabICLv2-Plan bis 4.000 Spalten und über mehrere Seeds exakt vergleichen; oberhalb davon Latin-Invarianten und fehlenden Methodenwechsel prüfen.
-- Überlappende und unterschiedliche Gruppenschemata sowie inverse Transformation und vollständige per-Estimator-Modellinputs abdecken.
-- Nach Fit `state_dict` in einen leeren Processor laden und Transformation, Inverse, Fitted-Status, Member-Zuordnung und Device exakt vergleichen.
+## Testing
+
+- Latin-Invarianten, Seeds, kleine/große `C`, unterschiedliche und überlappende Schemata.
+- Exakte Referenzparität des internen TabICLv2-Plans; kein Methodenwechsel oberhalb 4.000.
+- Transformation, Inverse, Device-Wechsel und leerer `state_dict`-Roundtrip.
