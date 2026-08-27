@@ -37,7 +37,8 @@ def enable_cudnn_varlen(enabled: bool = True) -> bool:
     :class:`~sdm.nn.SDPA`: instead of materializing a mask and routing
     to the masked kernels, attention runs on cuDNN's native
     padding-mask support with per-batch valid lengths (``seq_len_kv``),
-    which bounds the computation to the valid region.
+    which bounds the computation to the valid region (measured as the
+    ``c20`` configuration of ``examples/benchmark_tabiclv2.py``).
 
     When cuDNN cannot build a plan for a shape, the op degrades to an
     equivalent masked fallback at runtime (probed once per shape,
