@@ -155,3 +155,42 @@ def test_induced_transformer_block_kv_cache() -> None:
     assert self_kv.value.size() == self_kv.key.size()
     torch.testing.assert_close(self_cache_out, self_out)
     torch.testing.assert_close(self_cached_out, self_out)
+
+
+def test_induced_transformer_block_builds_final_key_value() -> None:
+    module = InducedTransformerBlock(
+        channels=8,
+        num_inducing_points=4,
+        inducing_block=TransformerBlock(
+            channels=8,
+            num_query_heads=2,
+            mlp=torch.nn.Identity(),
+        ),
+        output_block=TransformerBlock(
+            channels=8,
+            num_query_heads=2,
+            mlp=torch.nn.Identity(),
+        ),
+    ).eval()
+    context = torch.randn(3, 5, 8)
+    query = torch.randn(3, 7, 8)
+
+    expected, expected_key_value = module(
+        query=query,
+        key_value=context,
+        return_key_value=True,
+        batch_size_limit=1,
+    )
+    key_value = module.induced_key_value(
+        context,
+        batch_size_limit=1,
+    )
+    actual = module(
+        query=query,
+        key_value=key_value,
+        batch_size_limit=1,
+    )
+
+    torch.testing.assert_close(key_value.key, expected_key_value.key)
+    torch.testing.assert_close(key_value.value, expected_key_value.value)
+    torch.testing.assert_close(actual, expected)
