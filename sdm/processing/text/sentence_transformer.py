@@ -55,7 +55,8 @@ class _CuDFTokenizer:
         module = model[0]
         tokenizer = model.tokenizer
 
-        # cuDF only reproduces a plain BERT transformer with a fast tokenizer.
+        # Fall back to CPU tokenization unless this is a standard BERT
+        # Transformer module with a fast tokenizer.
         if (
             type(module) is not Transformer
             or module.config.model_type != "bert"
@@ -63,12 +64,46 @@ class _CuDFTokenizer:
         ):
             return False
 
+        if (
+            model.modalities != ["text"]
+            or model.default_prompt_name is not None
+            or model.truncate_dim is not None
+            or module.transformer_task != "feature-extraction"
+            or module.backend != "torch"
+            or module.processing_kwargs
+            or module.can_flatten_inputs
+            or module.unpad_inputs
+        ):
+            return False
+
         backend = tokenizer.backend_tokenizer
         wordpiece = backend.model
         normalizer = backend.normalizer
+
+        # Require the standard BERT WordPiece pipeline.
+        if (
+            type(wordpiece) is not tokenizers.models.WordPiece
+            or type(normalizer) is not tokenizers.normalizers.BertNormalizer
+            or type(backend.pre_tokenizer)
+            is not tokenizers.pre_tokenizers.BertPreTokenizer
+            or type(backend.post_processor)
+            is not tokenizers.processors.TemplateProcessing
+            or (
+                normalizer.clean_text,
+                normalizer.handle_chinese_chars,
+                normalizer.strip_accents,
+            )
+            != (True, True, None)
+            or (wordpiece.unk_token, wordpiece.continuing_subword_prefix)
+            != ("[UNK]", "##")
+            or (tokenizer.padding_side, tokenizer.truncation_side)
+            != ("right", "right")
+            or tokenizer.model_max_length != module.max_seq_length
+        ):
+            return False
+
         vocab = backend.get_vocab(with_added_tokens=False)
         added_tokens = tuple(backend.get_added_tokens_decoder().values())
-        encoded = backend.encode(tokenizer.unk_token, add_special_tokens=True)
         special_tokens = (
             (tokenizer.cls_token, tokenizer.cls_token_id),
             (tokenizer.sep_token, tokenizer.sep_token_id),
@@ -76,43 +111,17 @@ class _CuDFTokenizer:
             (tokenizer.unk_token, tokenizer.unk_token_id),
         )
 
-        # These options, tokenizer stages, IDs, and special-token rules must
-        # match because the cuDF path bypasses SentenceTransformer.encode().
-        return (
-            model.modalities == ["text"]
-            and model.default_prompt_name is None
-            and model.truncate_dim is None
-            and module.transformer_task == "feature-extraction"
-            and module.backend == "torch"
-            and not module.processing_kwargs
-            and not module.can_flatten_inputs
-            and not module.unpad_inputs
-            and type(wordpiece) is tokenizers.models.WordPiece
-            and type(normalizer) is tokenizers.normalizers.BertNormalizer
-            and type(backend.pre_tokenizer)
-            is tokenizers.pre_tokenizers.BertPreTokenizer
-            and type(backend.post_processor)
-            is tokenizers.processors.TemplateProcessing
-            and (
-                normalizer.clean_text,
-                normalizer.handle_chinese_chars,
-                normalizer.strip_accents,
-            )
-            == (True, True, None)
-            and (wordpiece.unk_token, wordpiece.continuing_subword_prefix)
-            == ("[UNK]", "##")
-            and (tokenizer.padding_side, tokenizer.truncation_side)
-            == ("right", "right")
-            and tokenizer.model_max_length == module.max_seq_length
-            and backend.get_vocab_size(with_added_tokens=True) == len(vocab)
-            and set(vocab.values()) == set(range(len(vocab)))
-            and all(
+        # Vocabulary IDs and added-token behavior must match cuDF's lookup.
+        if (
+            backend.get_vocab_size(with_added_tokens=True) != len(vocab)
+            or set(vocab.values()) != set(range(len(vocab)))
+            or not all(
                 vocab.get(token) == token_id
                 for token, token_id in special_tokens
             )
-            and {token.content for token in added_tokens}
-            == set(tokenizer.all_special_tokens)
-            and all(
+            or {token.content for token in added_tokens}
+            != set(tokenizer.all_special_tokens)
+            or not all(
                 token.special
                 and not token.normalized
                 and not token.lstrip
@@ -120,7 +129,12 @@ class _CuDFTokenizer:
                 and not token.single_word
                 for token in added_tokens
             )
-            and backend.encode(
+        ):
+            return False
+
+        encoded = backend.encode(tokenizer.unk_token, add_special_tokens=True)
+        return (
+            backend.encode(
                 tokenizer.unk_token,
                 add_special_tokens=False,
             ).ids
