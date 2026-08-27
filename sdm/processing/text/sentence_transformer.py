@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, cast
 
 import pyarrow.compute as pc
@@ -17,7 +18,11 @@ if TYPE_CHECKING:
     import sentence_transformers
     from cudf.core.character_normalizer import CharacterNormalizer
     from cudf.core.wordpiece_tokenize import WordPieceVocabulary
-    from transformers import PreTrainedTokenizerBase
+
+
+# Hugging Face treats words with more than 100 Unicode characters as [UNK],
+# while cuDF does so for words with 200 or more UTF-8 bytes.
+_CUDF_WORDPIECE_MAX_BYTES = 200
 
 
 class _CuDFTokenizer:
@@ -29,6 +34,7 @@ class _CuDFTokenizer:
         sep_token_id: int,
         pad_token_id: int,
         max_length: int,
+        max_input_chars_per_word: int,
     ) -> None:
         self._vocabulary = vocabulary
         self._normalizer = normalizer
@@ -36,27 +42,135 @@ class _CuDFTokenizer:
         self._sep_token_id = sep_token_id
         self._pad_token_id = pad_token_id
         self._max_length = max_length
+        self._max_input_chars_per_word = max_input_chars_per_word
+
+    @staticmethod
+    def _is_supported(
+        model: sentence_transformers.SentenceTransformer,
+    ) -> bool:
+        import tokenizers
+        from sentence_transformers.sentence_transformer.modules import (
+            Transformer,
+        )
+        from transformers import PreTrainedTokenizerFast
+
+        module = model[0]
+        tokenizer = model.tokenizer
+
+        # Fall back to CPU tokenization unless this is a standard BERT
+        # Transformer module with a fast tokenizer.
+        if (
+            type(module) is not Transformer
+            or module.config.model_type != "bert"
+            or not isinstance(tokenizer, PreTrainedTokenizerFast)
+        ):
+            return False
+
+        if (
+            model.modalities != ["text"]
+            or model.default_prompt_name is not None
+            or model.truncate_dim is not None
+            or module.transformer_task != "feature-extraction"
+            or module.backend != "torch"
+            or module.processing_kwargs
+            or module.can_flatten_inputs
+            or module.unpad_inputs
+        ):
+            return False
+
+        backend = tokenizer.backend_tokenizer
+        wordpiece = backend.model
+        normalizer = backend.normalizer
+
+        # Require the standard BERT WordPiece pipeline.
+        if (
+            type(wordpiece) is not tokenizers.models.WordPiece
+            or type(normalizer) is not tokenizers.normalizers.BertNormalizer
+            or type(backend.pre_tokenizer)
+            is not tokenizers.pre_tokenizers.BertPreTokenizer
+            or type(backend.post_processor)
+            is not tokenizers.processors.TemplateProcessing
+            or (
+                normalizer.clean_text,
+                normalizer.handle_chinese_chars,
+                normalizer.strip_accents,
+            )
+            != (True, True, None)
+            or (wordpiece.unk_token, wordpiece.continuing_subword_prefix)
+            != ("[UNK]", "##")
+            or (tokenizer.padding_side, tokenizer.truncation_side)
+            != ("right", "right")
+            or tokenizer.model_max_length != module.max_seq_length
+        ):
+            return False
+
+        vocab = backend.get_vocab(with_added_tokens=False)
+        added_tokens = tuple(backend.get_added_tokens_decoder().values())
+        special_tokens = (
+            (tokenizer.cls_token, tokenizer.cls_token_id),
+            (tokenizer.sep_token, tokenizer.sep_token_id),
+            (tokenizer.pad_token, tokenizer.pad_token_id),
+            (tokenizer.unk_token, tokenizer.unk_token_id),
+        )
+
+        # Vocabulary IDs and added-token behavior must match cuDF's lookup.
+        if (
+            backend.get_vocab_size(with_added_tokens=True) != len(vocab)
+            or set(vocab.values()) != set(range(len(vocab)))
+            or not all(
+                vocab.get(token) == token_id
+                for token, token_id in special_tokens
+            )
+            or {token.content for token in added_tokens}
+            != set(tokenizer.all_special_tokens)
+            or not all(
+                token.special
+                and not token.normalized
+                and not token.lstrip
+                and not token.rstrip
+                and not token.single_word
+                for token in added_tokens
+            )
+        ):
+            return False
+
+        encoded = backend.encode(tokenizer.unk_token, add_special_tokens=True)
+        return (
+            backend.encode(
+                tokenizer.unk_token,
+                add_special_tokens=False,
+            ).ids
+            == [tokenizer.unk_token_id]
+            and encoded.ids
+            == [
+                tokenizer.cls_token_id,
+                tokenizer.unk_token_id,
+                tokenizer.sep_token_id,
+            ]
+            and not any(encoded.type_ids)
+        )
 
     @classmethod
     def build(
         cls,
-        tokenizer: PreTrainedTokenizerBase,
+        model: sentence_transformers.SentenceTransformer,
     ) -> _CuDFTokenizer | None:
-        import tokenizers
-        from transformers import PreTrainedTokenizerFast
+        if not cls._is_supported(model):
+            return None
 
-        if not isinstance(tokenizer, PreTrainedTokenizerFast):
-            return None
+        tokenizer = model.tokenizer
         backend = tokenizer.backend_tokenizer
-        if not isinstance(backend.model, tokenizers.models.WordPiece):
-            return None
+        wordpiece = backend.model
+        normalizer = backend.normalizer
+        vocab = backend.get_vocab(with_added_tokens=False)
+
         if importlib.util.find_spec("cudf") is None:
             warn_once(
                 key="on-device-tokenization-available-but-cudf-unavailable",
                 message=(
-                    "cuDF supports accelerating tokenization of the specified "
-                    "model's tokenizer. However, cuDF is not installed. "
-                    "To enable on-device tokenization, install cuDF."
+                    "Falling back to CPU-based tokenization because cuDF is "
+                    "not installed. Install cuDF to enable faster CUDA-based "
+                    "tokenization without device synchronization."
                 ),
             )
             return None
@@ -65,19 +179,20 @@ class _CuDFTokenizer:
         from cudf.core.character_normalizer import CharacterNormalizer
         from cudf.core.wordpiece_tokenize import WordPieceVocabulary
 
-        vocab_tokens = tokenizer.convert_ids_to_tokens(
-            list(range(tokenizer.vocab_size))
-        )
+        vocab_tokens = [
+            token for token, _ in sorted(vocab.items(), key=lambda x: x[1])
+        ]
         return cls(
             vocabulary=WordPieceVocabulary(cudf.Series(vocab_tokens)),
             normalizer=CharacterNormalizer(
-                do_lower=tokenizer.do_lower_case,
+                do_lower=normalizer.lowercase,
                 special_tokens=cudf.Series(tokenizer.all_special_tokens),
             ),
             cls_token_id=tokenizer.cls_token_id,
             sep_token_id=tokenizer.sep_token_id,
             pad_token_id=tokenizer.pad_token_id,
             max_length=tokenizer.model_max_length,
+            max_input_chars_per_word=wordpiece.max_input_chars_per_word,
         )
 
     def tokenize(self, text: StringTensor) -> tuple[Tensor, Tensor]:
@@ -130,12 +245,15 @@ class _CuDFTokenizer:
         input_ids[torch.arange(num_strings, device=device), lengths + 1] = (
             self._sep_token_id
         )
-        attention_mask = (input_ids != self._pad_token_id).to(torch.int32)
+        attention_mask = (
+            torch.arange(self._max_length, device=device).unsqueeze(0)
+            < (lengths + 2).unsqueeze(1)
+        ).to(torch.int32)
 
         return input_ids, attention_mask
 
 
-class _Model(torch.nn.Module):
+class _Encoder(torch.nn.Module):
     def __init__(
         self,
         model: sentence_transformers.SentenceTransformer,
@@ -146,10 +264,12 @@ class _Model(torch.nn.Module):
         self._model = model
         self._batch_size = batch_size
         self._embedding_dim = embedding_dim
-        self._cudf_tokenizer: _CuDFTokenizer | None = None
-        self._cudf_tokenizer_supported: bool | None = None
 
-    def __deepcopy__(self, memo: dict[int, Any]) -> _Model:
+    @cached_property
+    def _cudf_tokenizer(self) -> _CuDFTokenizer | None:
+        return _CuDFTokenizer.build(self._model)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> _Encoder:
         return self
 
     def _forward_cpu(self, text: StringTensor) -> Tensor:
@@ -168,6 +288,7 @@ class _Model(torch.nn.Module):
 
     def _forward_cudf(self, text: StringTensor) -> Tensor:
         assert self._cudf_tokenizer is not None
+        self._model.eval()
         input_ids, attention_mask = self._cudf_tokenizer.tokenize(text)
 
         seq_lengths = attention_mask.sum(dim=1)
@@ -212,14 +333,48 @@ class _Model(torch.nn.Module):
         if text.device.type == "cpu":
             return self._forward_cpu(text)
 
-        if self._cudf_tokenizer_supported is None:
-            self._cudf_tokenizer = _CuDFTokenizer.build(self._model.tokenizer)
-            self._cudf_tokenizer_supported = self._cudf_tokenizer is not None
+        tokenizer = self._cudf_tokenizer
+        if tokenizer is None:
+            return self._forward_cpu(text)
 
-        if self._cudf_tokenizer_supported:
+        series = text.to_cudf()
+        series = series.fillna("") if text.is_nullable else series
+        words = tokenizer._normalizer.normalize(series).str.tokenize()
+
+        # CPU rejects long words by Unicode characters, while cuDF uses UTF-8
+        # bytes. The following lines find rows where those decisions differ.
+        use_cpu = (words.str.len() > tokenizer._max_input_chars_per_word) != (
+            words.str.byte_count() >= _CUDF_WORDPIECE_MAX_BYTES
+        )
+        cpu_indices = torch.from_dlpack(words[use_cpu].index.unique().values)
+
+        num_strings = text.numel()
+        if cpu_indices.numel() == 0:
             return self._forward_cudf(text)
+        if cpu_indices.numel() == num_strings:
+            return self._forward_cpu(text)
 
-        return self._forward_cpu(text)
+        use_cudf = torch.ones(
+            num_strings,
+            device=text.device,
+            dtype=torch.bool,
+        )
+        use_cudf[cpu_indices] = False
+        cudf_indices = use_cudf.nonzero().flatten()
+
+        # Tokenize each subset with the matching path, then restore the
+        # original input order through indexed assignment.
+        embeddings = torch.empty(
+            num_strings,
+            self._embedding_dim,
+            device=text.device,
+            dtype=torch.float32,
+        )
+        cudf_text = cast(StringTensor, text[cudf_indices])
+        cpu_text = cast(StringTensor, text[cpu_indices])
+        embeddings[cudf_indices] = self._forward_cudf(cudf_text)
+        embeddings[cpu_indices] = self._forward_cpu(cpu_text)
+        return embeddings
 
 
 class SentenceTransformer(Processor):
@@ -253,7 +408,7 @@ class SentenceTransformer(Processor):
         embedding_dim = model.get_embedding_dimension()
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim
-        self._model = _Model(model, batch_size, embedding_dim)
+        self._model = _Encoder(model, batch_size, embedding_dim)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         columns = table.columns[Stype.text]
