@@ -1,7 +1,10 @@
 import pytest
 import torch
 
+import sdm.processing as sp
+from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.cache import Cache
+from sdm.models import KumoTabular
 from sdm.models.kumo.tabular import model as model_module
 from sdm.models.kumo.tabular.model import _KumoTabular
 
@@ -124,3 +127,93 @@ def test_forward_does_not_mutate_input(
         TableEncoder.seen[..., :2, :, :],
         expected_context,
     )
+
+
+@pytest.fixture
+def model() -> KumoTabular:
+    model = KumoTabular()
+    # Residual branches are zero-initialized, so an untrained model maps every
+    # row onto the same constant. Randomize them to make the prediction depend
+    # on the features it is given.
+    for parameter in model.parameters():
+        if not parameter.any():
+            torch.nn.init.normal_(parameter, std=0.02)
+    return model
+
+
+def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
+    numerical = torch.tensor(
+        [
+            [100.0, 200.0],
+            [101.0, 201.0],
+            [102.0, 202.0],
+            [103.0, 203.0],
+            [104.0, 204.0],
+        ]
+    )
+    label = torch.tensor([[0], [1], [0], [0], [1]])
+    if stype == Stype.categorical:
+        x = TableTensor(
+            columns={Stype.numerical: ("n0", "n1"), Stype.categorical: ("c",)},
+            numerical=numerical,
+            categorical=CategoricalTensor.from_tensor(label),
+        )
+    else:
+        x = TableTensor(
+            columns={Stype.numerical: ("n0", "n1", "c")},
+            numerical=torch.cat((numerical, label.float()), dim=-1),
+        )
+    return x.split(3, dim=0)
+
+
+def _target() -> TableTensor:
+    return TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [2], [0]]),
+            categories=(torch.arange(3).mul(10),),
+        ),
+    )
+
+
+def _recipe() -> sp.Recipe:
+    return sp.Recipe(
+        features=[sp.ToNumerical()],
+        output=[sp.ReduceEstimators(method="mean")],
+    )
+
+
+def test_forward(model: KumoTabular) -> None:
+    x_context, x_query = _features()
+
+    out = model(x_context, _target(), x_query, recipe=_recipe())
+
+    assert out.size() == (2, 3)
+    assert out.columns[Stype.numerical] == ("0", "10", "20")
+    assert out.dtype == x_query.dtype
+    assert torch.is_inference(out)
+
+
+def test_categorical_features_are_marked(model: KumoTabular) -> None:
+    target = _target()
+
+    x_context, x_query = _features(Stype.categorical)
+    categorical = model(x_context, target, x_query, recipe=_recipe())
+    # Declaring the same column numerical leaves the features handed to the
+    # model untouched, so only the stype it embeds them with differs.
+    x_context, x_query = _features(Stype.numerical)
+    numerical = model(x_context, target, x_query, recipe=_recipe())
+
+    assert not categorical.allclose(numerical)
+
+
+def test_fit_predict(model: KumoTabular) -> None:
+    x_context, x_query = _features()
+    target = _target()
+
+    expected = model(x_context, target, x_query, recipe=_recipe())
+    model.fit(x_context, target, recipe=_recipe())
+    actual = model.predict(x_query)
+
+    assert actual.allclose(expected, atol=1e-5)
+    assert actual.columns == expected.columns
