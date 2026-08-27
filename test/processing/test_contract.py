@@ -158,6 +158,10 @@ PROCESSOR_CASES = (
     ),
 )
 
+FITTED_PROCESSOR_CASES = tuple(
+    case for case in PROCESSOR_CASES if case.processor.requires_fit
+)
+
 
 def test_all_public_processors_have_contract_cases() -> None:
     public_processors = set()
@@ -171,6 +175,7 @@ def test_all_public_processors_have_contract_cases() -> None:
             public_processors.add(value)
 
     covered_processors = {type(case.processor) for case in PROCESSOR_CASES}
+    # Their specialized behavior is covered in their dedicated test modules.
     specialized_processors = {
         sp.TaskDispatch,
         sp.TableDispatch,
@@ -193,8 +198,8 @@ def test_fit_transform_matches_fit_then_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
-    actual = processor_a.transform_ensemble(table)
-    expected = processor_b.fit_transform_ensemble(
+    expected = processor_a.transform_ensemble(table)
+    actual = processor_b.fit_transform_ensemble(
         table,
         generator=torch.Generator().manual_seed(0),
     )
@@ -205,7 +210,7 @@ def test_fit_transform_matches_fit_then_transform(
 
 @pytest.mark.parametrize(
     "case",
-    tuple(case for case in PROCESSOR_CASES if case.processor.requires_fit),
+    FITTED_PROCESSOR_CASES,
     ids=lambda case: type(case.processor).__name__,
 )
 def test_save_and_load_preserves_fitted_processor_behavior(
@@ -322,11 +327,12 @@ def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
     target = source.replace_groups(
         [cast(TableTensor, group.to(device)) for group in source]
     )
-    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
-    processor.fit_ensemble(source)
-    expected = processor.transform_ensemble(source)
-    processor.to(device=device)
-    actual = processor.transform_ensemble(target)
+    processor_a, processor_b = _make_processor_pair(case.processor)
+    processor_a.fit_ensemble(source)
+    expected = processor_a.transform_ensemble(source)
+    processor_b.load_state_dict(processor_a.state_dict())
+    processor_b.to(device=device)
+    actual = processor_b.transform_ensemble(target)
     assert all(
         actual.table(member_id).device.type == device.type
         for member_id in range(actual.num_members)
