@@ -14,6 +14,8 @@ table = sdm.TableTensor.from_pandas(
 )
 model = sdm.models.TabICLv2(device=device)
 
+# Serving recipes (compile, bucketed padding): see benchmark_tabiclv2.py.
+
 # Default in-context learning forward pass:
 with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
     model(
