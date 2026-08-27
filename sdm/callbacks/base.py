@@ -55,8 +55,8 @@ class Callback:
         self,
         model: torch.nn.Module,
         x: TableTensor,
-        related_tables: RelatedTables | None,
-    ) -> tuple[TableTensor, RelatedTables | None]:
+        related_tables: RelatedTables[TableTensor] | None,
+    ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
         """Transform one ensemble member after preprocessing.
 
         Args:

@@ -12,7 +12,7 @@ from sdm.relational.join import join_index
 @dataclass(frozen=True)
 class TaskGraph:  # noqa: D101
     x: TableTensor
-    related_tables: RelatedTables
+    related_tables: RelatedTables[TableTensor]
     graph: HomogeneousGraph
     readout_table: str
     readout_index: Tensor  # Entity-table rows ordered by task row.
@@ -23,7 +23,7 @@ class TaskGraph:  # noqa: D101
     def from_input(  # noqa: D102
         cls,
         x: TableTensor,
-        related_tables: RelatedTables,
+        related_tables: RelatedTables[TableTensor],
         num_hops: int | None = None,
     ) -> Self:
 
