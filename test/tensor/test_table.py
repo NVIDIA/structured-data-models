@@ -1115,6 +1115,36 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+@pytest.mark.parametrize("source", ["arrow", "pandas", "columns"])
+def test_categorical_ingestion_can_use_string_values(source: str) -> None:
+    values = [2, 10, None, 2]
+    stypes = {"kind": "categorical"}
+
+    if source == "arrow":
+        table = TableTensor.from_arrow(
+            pa.table({"kind": values}),
+            stypes,
+            categorical_as_string=True,
+        )
+    elif source == "pandas":
+        table = TableTensor.from_pandas(
+            pd.DataFrame({"kind": values}),
+            stypes,
+            categorical_as_string=True,
+        )
+    else:
+        assert source == "columns"
+        table = TableTensor.from_columns(
+            {"kind": values},
+            stypes,
+            categorical_as_string=True,
+        )
+
+    assert isinstance(table.categorical.categories[0], StringTensor)
+    expected_categories = ["2", "10"] if source == "arrow" else ["2.0", "10.0"]
+    assert table.categorical.categories[0].tolist() == expected_categories
+    assert table.categorical.code.squeeze(-1).tolist() == [0, 1, -1, 0]
+
 @onlyCUDA
 def test_from_pandas_id_cuda() -> None:
     df = pd.DataFrame(
