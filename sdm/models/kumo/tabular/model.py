@@ -13,6 +13,7 @@ from sdm.models import ICLModel
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.table_encoder import TableEncoder
 from sdm.models.tabfm.cell_embedding import CellEmbedding
+from sdm.tensor.table import TableSchema
 
 
 # TODO: Add model documentation.
@@ -49,9 +50,7 @@ class KumoTabular(ICLModel):  # noqa: D101
         x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
-        kwargs["_categorical_columns"] = frozenset(
-            x_context.columns[Stype.categorical]
-        )
+        kwargs["_schema"] = x_context.schema
         return super().forward(*args, **kwargs)
 
     def fit(self, *args: Any, **kwargs: Any) -> None:
@@ -59,9 +58,7 @@ class KumoTabular(ICLModel):  # noqa: D101
         x = kwargs["x"] if "x" in kwargs else args[0]
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
-        kwargs["_categorical_columns"] = frozenset(
-            x.columns[Stype.categorical]
-        )
+        kwargs["_schema"] = x.schema
         return super().fit(*args, **kwargs)
 
     def _forward(
@@ -76,13 +73,14 @@ class KumoTabular(ICLModel):  # noqa: D101
         batch_size_limit: int | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes]
-        if x_query is None:
-            assert x_context is not None
+        if x_query is None and x_context is not None:
             x = x_context.numerical
-        elif x_context is None:
+        elif x_context is None and x_query is not None:
             x = x_query.numerical
         else:
-            x = torch.cat((x_context.numerical, x_query.numerical), dim=-2)
+            assert x_context is not None
+            assert x_query is not None
+            x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
         if y_context is not None:
             y = y_context.categorical.code.squeeze(-1)
@@ -100,9 +98,8 @@ class KumoTabular(ICLModel):  # noqa: D101
 
         if cache is None or cache.is_recording:
             assert x_context is not None
-            categorical_columns = cast(
-                frozenset[str], kwargs["_categorical_columns"]
-            )
+            schema: TableSchema = kwargs["_schema"]
+            categorical_columns = set(schema.columns[Stype.categorical])
             categorical_mask = torch.tensor(
                 [
                     column in categorical_columns
