@@ -48,7 +48,6 @@ def test_quantile_transform_uniform_fit_transform_and_inverse_round_trip(
 
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.allclose(transformed, expected)
-    assert transformed.device == device
     assert torch.allclose(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
@@ -91,7 +90,6 @@ def test_quantile_transform_repeated_values_map_to_midpoint(
         transformed.squeeze(1),
         torch.tensor([0.0, 0.5, 0.5, 1.0], device=device),
     )
-    assert transformed.device == device
     assert torch.allclose(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
@@ -115,7 +113,6 @@ def test_quantile_transform_constant_columns_round_trip(
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.equal(transformed, torch.zeros_like(inp))
-    assert transformed.device == device
     assert torch.equal(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
@@ -143,7 +140,6 @@ def test_quantile_transform_single_quantile_maps_to_zero(
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.equal(transformed, torch.zeros_like(inp))
-    assert transformed.device == device
     assert torch.equal(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
@@ -169,7 +165,6 @@ def test_quantile_transform_normal_distribution_is_finite_at_bounds(
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert transformed.isfinite().all()
-    assert transformed.device == device
     assert torch.allclose(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)

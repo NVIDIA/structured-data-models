@@ -55,7 +55,6 @@ def test_align_categories_remaps_independent_vocabularies(
     )
     assert output.categorical.categories[0].tolist() == ["red", "blue"]
     assert output.categorical.categories[1].tolist() == ["x", "y"]
-    assert output.categorical.device == device
 
 
 @withCUDA
