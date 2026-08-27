@@ -161,6 +161,11 @@ PROCESSOR_CASES = (
 FITTED_PROCESSOR_CASES = tuple(
     case for case in PROCESSOR_CASES if case.processor.requires_fit
 )
+INVERTIBLE_PROCESSOR_CASES = tuple(
+    case
+    for case in PROCESSOR_CASES
+    if isinstance(case.processor, sp.InvertibleMixin)
+)
 
 
 def test_all_public_processors_have_contract_cases() -> None:
@@ -229,11 +234,7 @@ def test_save_and_load_preserves_fitted_processor_behavior(
 
 @pytest.mark.parametrize(
     "case",
-    tuple(
-        case
-        for case in PROCESSOR_CASES
-        if isinstance(case.processor, sp.InvertibleMixin)
-    ),
+    INVERTIBLE_PROCESSOR_CASES,
     ids=lambda case: type(case.processor).__name__,
 )
 def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
