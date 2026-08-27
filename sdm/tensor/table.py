@@ -36,8 +36,7 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
-def _resolve_numerical_dtype(dtype: torch.dtype | None) -> torch.dtype:
-    dtype = torch.get_default_dtype() if dtype is None else dtype
+def _validate_numerical_dtype(dtype: torch.dtype) -> torch.dtype:
     if dtype not in (torch.float32, torch.float64):
         raise ValueError(
             "Expected 'numerical_dtype' to be torch.float32 or "
@@ -319,10 +318,17 @@ class TableTensor(Tensor):
             numerical_dtype: Floating-point dtype for numerical columns.
                 ``None`` uses :func:`torch.get_default_dtype`.
         """
-        numerical_dtype = _resolve_numerical_dtype(numerical_dtype)
+        if numerical_dtype is not None:
+            _validate_numerical_dtype(numerical_dtype)
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
             columns[Stype(stype)].append(column)
+        if Stype.numerical in columns:
+            numerical_dtype = _validate_numerical_dtype(
+                torch.get_default_dtype()
+                if numerical_dtype is None
+                else numerical_dtype
+            )
 
         blocks: dict[Stype, Tensor] = {}
         for stype in columns:
@@ -330,6 +336,7 @@ class TableTensor(Tensor):
             for column in columns[stype]:
                 array = table.column(column)
                 if stype == Stype.numerical:
+                    assert numerical_dtype is not None
                     tensor = arrow_as_tensor(
                         array,
                         dtype=numerical_dtype,
@@ -499,12 +506,17 @@ class TableTensor(Tensor):
                 in ``df`` but not included in ``stypes`` will be ignored.
             device: The device.
             numerical_dtype: Floating-point dtype for numerical columns.
-                ``None`` uses :func:`torch.get_default_dtype`.
+                ``None`` preserves the existing ``float32`` conversion.
         """
-        numerical_dtype = _resolve_numerical_dtype(numerical_dtype)
+        if numerical_dtype is not None:
+            _validate_numerical_dtype(numerical_dtype)
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
             columns[Stype(stype)].append(column)
+        if Stype.numerical in columns:
+            numerical_dtype = (
+                torch.float32 if numerical_dtype is None else numerical_dtype
+            )
 
         blocks: dict[Stype, Tensor] = {}
         for stype in columns:
@@ -512,6 +524,7 @@ class TableTensor(Tensor):
             for column in columns[stype]:
                 ser = df[column]
                 if stype == Stype.numerical:
+                    assert numerical_dtype is not None
                     ser = ser.astype(
                         str(numerical_dtype).removeprefix("torch."),
                         copy=False,
