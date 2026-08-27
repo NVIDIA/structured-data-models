@@ -15,8 +15,7 @@ from sdm.models.kumo.tabular.table_encoder import TableEncoder
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 
 
-# TODO: Add model documentation once the architecture and checkpoints are
-# final.
+# TODO: Add model documentation.
 class KumoTabular(ICLModel):  # noqa: D101
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
@@ -41,8 +40,7 @@ class KumoTabular(ICLModel):  # noqa: D101
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        # TODO: Define the recipe once the architecture and checkpoints are
-        # final.
+        # TODO: Define the default recipe.
         return Recipe()
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
