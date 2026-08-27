@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import torch
@@ -9,7 +8,6 @@ from torch import Tensor
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models.base import ICLModel
-from sdm.models.kumo.tabular.ckpt import load_checkpoint
 from sdm.models.kumo.tabular.model import _KumoTabular
 from sdm.models.kumo.tabular.recipe import default_recipe
 
@@ -21,12 +19,7 @@ class KumoTabular(ICLModel):
     otherwise preprocessed, finite features. The model supports at most ten
     declared target classes, including classes absent from the context rows.
 
-    SDM does not bundle or download KumoTabular weights. Pass a local
-    ``checkpoint_path`` to load pretrained weights.
-
     Args:
-        checkpoint_path: Local classification checkpoint path. If ``None``,
-            initialize the model without pretrained weights.
         device: Device of the model parameters.
     """
 
@@ -40,28 +33,15 @@ class KumoTabular(ICLModel):
 
     def __init__(
         self,
-        checkpoint_path: str | Path | None = None,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__()
         self.model = _KumoTabular(
-            device="meta" if checkpoint_path is not None else device,
-        )
-        if checkpoint_path is not None:
-            self._load_from_pretrained(checkpoint_path, device=device)
-        self.eval()
-
-    def _load_from_pretrained(
-        self,
-        checkpoint_path: str | Path,
-        device: torch.device | str | None,
-    ) -> KumoTabular:
-        self.model = load_checkpoint(
-            self.model,
-            checkpoint_path,
+            num_classes=10,
+            num_quantiles=0,
             device=device,
         )
-        return self
+        self.eval()
 
     @classmethod
     def default_recipe(cls) -> Recipe:

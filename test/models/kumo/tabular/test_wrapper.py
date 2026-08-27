@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import ClassVar
 
 import pytest
@@ -18,10 +17,14 @@ class _RecordingCore(torch.nn.Module):
 
     def __init__(
         self,
+        num_classes: int,
+        num_quantiles: int,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        assert num_classes == 10
+        assert num_quantiles == 0
         self.anchor = torch.nn.Parameter(
             torch.empty((), device=device, dtype=dtype)
         )
@@ -176,31 +179,3 @@ def test_class_limit_uses_declared_vocabulary(
 
     with pytest.raises(ValueError, match="only supports up to 10 classes"):
         recording_model(context, _target(num_classes=11), query)
-
-
-def test_checkpoint_loader_constructs_public_model(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    loaded = _RecordingCore()
-    calls: list[
-        tuple[torch.nn.Module, str | Path, torch.device | str | None]
-    ] = []
-
-    def load_checkpoint(
-        model: torch.nn.Module,
-        checkpoint_path: str | Path,
-        device: torch.device | str | None = None,
-    ) -> _RecordingCore:
-        calls.append((model, checkpoint_path, device))
-        return loaded
-
-    monkeypatch.setattr(wrapper_module, "load_checkpoint", load_checkpoint)
-    model = KumoTabular(checkpoint_path="checkpoint.pt", device="cpu")
-
-    assert model.model is loaded
-    assert len(calls) == 1
-    allocated, checkpoint_path, device = calls[0]
-    assert next(allocated.parameters()).is_meta
-    assert checkpoint_path == "checkpoint.pt"
-    assert device == "cpu"
-    assert not model.training
