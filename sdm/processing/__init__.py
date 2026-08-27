@@ -31,6 +31,7 @@ from sdm.processing.numerical import (
     DropConstantColumns,
     PCA,
     RandomProjection,
+    CrossFeatures,
 )
 from sdm.processing.categorical import (
     AlignCategories,
@@ -70,6 +71,7 @@ __all__ = [
     "DropConstantColumns",
     "PCA",
     "RandomProjection",
+    "CrossFeatures",
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",

@@ -111,6 +111,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ToNumerical()),
     ProcessorCase(sp.ShuffleColumns()),
     ProcessorCase(sp.SelectColumns(2)),
+    ProcessorCase(sp.CrossFeatures(2)),
     ProcessorCase(sp.TFIDF(ngram_range=(2, 2))),
     ProcessorCase(sp.Clip(-2.0, 6.0)),
     ProcessorCase(sp.ClipQuantiles()),

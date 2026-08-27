@@ -10,6 +10,7 @@ from sdm.processing.numerical.standardize import Standardize
 from sdm.processing.numerical.constant import DropConstantColumns
 from sdm.processing.numerical.pca import PCA
 from sdm.processing.numerical.random_projection import RandomProjection
+from sdm.processing.numerical.cross import CrossFeatures
 
 __all__ = [
     "Clip",
@@ -22,4 +23,5 @@ __all__ = [
     "DropConstantColumns",
     "PCA",
     "RandomProjection",
+    "CrossFeatures",
 ]
