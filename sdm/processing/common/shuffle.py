@@ -49,11 +49,9 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         permutations = []
-        host_permutations = []
+        device = next(iter(ensemble_table)).device
         for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
-            n_features = table.numerical.size(-1)
-            device = table.numerical.device
+            n_features = ensemble_table.table(member_id).numerical.size(-1)
             if n_features <= 1:
                 permutation = torch.arange(n_features, device=device)
             elif self.method == "shift":
@@ -74,8 +72,20 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
                     device=device,
                 )
             permutations.append(permutation)
-            host_permutations.append(tuple(permutation.tolist()))
         self._permutations = BufferList(permutations)
+        # TODO: Add to EnsembleTable directly.
+        member_ids_by_group: list[list[int]] = [
+            [] for _ in range(ensemble_table.num_groups)
+        ]
+        for member_id, (group_id, _) in enumerate(ensemble_table._locations):
+            member_ids_by_group[group_id].append(member_id)
+        host_permutations = [()] * len(permutations)
+        for member_ids in member_ids_by_group:
+            host_rows = torch.stack(
+                [permutations[member_id] for member_id in member_ids]
+            ).tolist()
+            for member_id, host_row in zip(member_ids, host_rows, strict=True):
+                host_permutations[member_id] = tuple(host_row)
         self._host_permutations = tuple(host_permutations)
 
     def _transform_ensemble(
@@ -91,21 +101,25 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         tables: list[TableTensor] = []
         for member_id in range(ensemble_table.num_members):
             table = ensemble_table.table(member_id)
-            permutation = self._permutations[member_id]
             host_permutation = self._host_permutations[member_id]
-            out = table.__class__(
+            shuffled = table.__class__(
                 columns={
                     Stype.numerical: tuple(
                         table.columns[Stype.numerical][i]
                         for i in host_permutation
                     )
                 },
-                numerical=table.numerical.index_select(-1, permutation),
+                numerical=table.numerical.index_select(
+                    -1, self._permutations[member_id]
+                ),
             )
             tables.append(
                 cast(
                     TableTensor,
-                    torch.cat((table.drop_stypes(Stype.numerical), out), dim=-1),
+                    torch.cat(
+                        (table.drop_stypes(Stype.numerical), shuffled),
+                        dim=-1,
+                    ),
                 )
             )
         return EnsembleTable.from_tables(
@@ -130,20 +144,24 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             inverse_host_permutation = [0] * len(host_permutation)
             for destination, source in enumerate(host_permutation):
                 inverse_host_permutation[source] = destination
-            permutation = self._permutations[member_id].argsort()
-            out = table.__class__(
+            shuffled = table.__class__(
                 columns={
                     Stype.numerical: tuple(
                         table.columns[Stype.numerical][i]
                         for i in inverse_host_permutation
                     )
                 },
-                numerical=table.numerical.index_select(-1, permutation),
+                numerical=table.numerical.index_select(
+                    -1, self._permutations[member_id].argsort()
+                ),
             )
             tables.append(
                 cast(
                     TableTensor,
-                    torch.cat((table.drop_stypes(Stype.numerical), out), dim=-1),
+                    torch.cat(
+                        (table.drop_stypes(Stype.numerical), shuffled),
+                        dim=-1,
+                    ),
                 )
             )
         return EnsembleTable.from_tables(
