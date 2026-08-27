@@ -67,3 +67,36 @@ def test_add_calendar_fields(encoding: Literal["raw", "cyclic"]) -> None:
             "dt_0__month__sin",
             "dt_0__month__cos",
         )
+
+
+def test_add_calendar_year() -> None:
+    timestamps = torch.tensor(
+        [
+            [_timestamp(datetime(2024, 2, 29, tzinfo=UTC))],
+            [_timestamp(datetime(1969, 12, 31, tzinfo=UTC))],
+            [NaT],
+        ]
+    )
+    table = TableTensor(datetime=timestamps)
+
+    output = AddCalendarFields(
+        fields=["year"],
+    ).transform(table)
+
+    assert output.columns[Stype.numerical] == ("dt_0__year",)
+    torch.testing.assert_close(
+        output.numerical,
+        torch.tensor(
+            [
+                [2024],
+                [1969],
+                [float("nan")],
+            ],
+        ),
+        equal_nan=True,
+    )
+
+
+def test_add_year_rejects_cyclic_encoding() -> None:
+    with pytest.raises(ValueError, match="does not have a fixed cycle"):
+        AddCalendarFields(fields=["year"], encoding="cyclic")

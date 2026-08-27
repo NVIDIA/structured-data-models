@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sdm import TableTensor
+from sdm import NaT, TableTensor
 from sdm.processing import ImputeMean
 from sdm.testing import withCUDA
 
@@ -51,3 +51,23 @@ def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
             device=device,
         ),
     )
+
+
+@withCUDA
+def test_impute_mean_datetime(device: torch.device) -> None:
+    first = 1_577_836_800_000_000
+    second = 1_578_009_600_000_000
+    table = TableTensor(
+        datetime=torch.tensor(
+            [[first, NaT], [second, NaT], [NaT, NaT]],
+            device=device,
+        )
+    )
+
+    output = ImputeMean().fit_transform(table)
+
+    assert output.datetime.tolist() == [
+        [first, NaT],
+        [second, NaT],
+        [(first + second) // 2, NaT],
+    ]
