@@ -19,11 +19,11 @@ from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA
 
 
-def make_mixed_inputs() -> EnsembleTable:
+def make_table() -> EnsembleTable:
     categories = (StringTensor.from_list(["a", "b"]),)
     numerical = torch.arange(12, dtype=torch.float32).reshape(4, 3)
     numerical[:, 1] = 1
-    context = TableTensor(
+    table_a = TableTensor(
         numerical=numerical,
         categorical=CategoricalTensor(
             code=torch.tensor([[0], [0], [1], [-1]], dtype=torch.int32),
@@ -35,64 +35,64 @@ def make_mixed_inputs() -> EnsembleTable:
         ),
         id=ColumnarTensor((torch.arange(10, 14),)),
     )
-    query = TableTensor(
+    table_b = TableTensor(
         numerical=numerical + 2,
         categorical=CategoricalTensor(
             code=torch.tensor([[-1], [1], [0], [-1]], dtype=torch.int32),
             categories=categories,
         ),
-        datetime=context.datetime + 60_000_000,
+        datetime=table_a.datetime + 60_000_000,
         text=StringTensor.from_list(
             [["alpha"], ["beta gamma"], ["unseen"], [""]],
         ),
         id=ColumnarTensor((torch.arange(20, 24),)),
     )
     return EnsembleTable.from_tables(
-        tables=(context, query), member_table_ids=(0, 1, 0, 1)
+        tables=(table_a, table_b), member_table_ids=(0, 1, 0, 1)
     )
 
 
-def _make_impute_mean_inputs() -> EnsembleTable:
-    data = make_mixed_inputs()
-    context, query = data.table(0), data.table(1)
-    numerical = query.numerical.clone()
+def _make_impute_mean_table() -> EnsembleTable:
+    table = make_table()
+    table_a, table_b = table.table(0), table.table(1)
+    numerical = table_b.numerical.clone()
     numerical[0, 0] = float("nan")
     return EnsembleTable.from_tables(
-        tables=(context, query.replace_blocks(numerical=numerical)),
+        tables=(table_a, table_b.replace_blocks(numerical=numerical)),
         member_table_ids=(0, 1, 0, 1),
     )
 
 
-def _make_align_categories_inputs() -> EnsembleTable:
-    data = make_mixed_inputs()
-    context, query = data.table(0), data.table(1)
+def _make_align_categories_table() -> EnsembleTable:
+    table = make_table()
+    table_a, table_b = table.table(0), table.table(1)
     categorical = CategoricalTensor(
         code=torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32),
         categories=(StringTensor.from_list(["b", "c"]),),
     )
     return EnsembleTable.from_tables(
-        tables=(context, query.replace_blocks(categorical=categorical)),
+        tables=(table_a, table_b.replace_blocks(categorical=categorical)),
         member_table_ids=(0, 1, 0, 1),
     )
 
 
-def _make_reduction_inputs() -> EnsembleTable:
-    context = TableTensor.from_tensor(
+def _make_reduction_table() -> EnsembleTable:
+    table_a = TableTensor.from_tensor(
         torch.tensor(
             [[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]],
             dtype=torch.float32,
         )
     )
-    query = TableTensor.from_tensor(context.numerical + 1.0)
+    table_b = TableTensor.from_tensor(table_a.numerical + 1.0)
     return EnsembleTable.from_tables(
-        tables=(context, query), member_table_ids=(0, 1, 0, 1)
+        tables=(table_a, table_b), member_table_ids=(0, 1, 0, 1)
     )
 
 
 @dataclass(frozen=True)
 class ProcessorCase:
     processor: sp.Processor
-    make_inputs: Callable[[], EnsembleTable] = make_mixed_inputs
+    make_table: Callable[[], EnsembleTable] = make_table
 
 
 def _make_processor_pair(
@@ -115,7 +115,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.Clip(-2.0, 6.0)),
     ProcessorCase(sp.ClipQuantiles()),
     ProcessorCase(sp.ClipSigma()),
-    ProcessorCase(sp.ImputeMean(), _make_impute_mean_inputs),
+    ProcessorCase(sp.ImputeMean(), _make_impute_mean_table),
     ProcessorCase(sp.PowerTransform()),
     ProcessorCase(
         sp.QuantileTransform(n_quantiles=4, subsample=None),
@@ -124,12 +124,12 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.DropConstantColumns()),
     ProcessorCase(sp.PCA(2)),
     ProcessorCase(sp.RandomProjection(2)),
-    ProcessorCase(sp.AlignCategories(), _make_align_categories_inputs),
+    ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
-    ProcessorCase(sp.ReduceEstimators(), _make_reduction_inputs),
+    ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(
         sp.Sequential(
@@ -187,15 +187,15 @@ def test_all_public_processors_have_contract_cases() -> None:
 def test_fit_transform_matches_fit_then_transform(
     case: ProcessorCase,
 ) -> None:
-    data = case.make_inputs()
+    table = case.make_table()
     processor_a, processor_b = _make_processor_pair(case.processor)
     processor_a.fit_ensemble(
-        data,
+        table,
         generator=torch.Generator().manual_seed(0),
     )
-    actual = processor_a.transform_ensemble(data)
+    actual = processor_a.transform_ensemble(table)
     expected = processor_b.fit_transform_ensemble(
-        data,
+        table,
         generator=torch.Generator().manual_seed(0),
     )
     assert actual.num_members == expected.num_members
@@ -211,12 +211,12 @@ def test_fit_transform_matches_fit_then_transform(
 def test_save_and_load_preserves_fitted_processor_behavior(
     case: ProcessorCase,
 ) -> None:
-    data = case.make_inputs()
+    table = case.make_table()
     processor_a, processor_b = _make_processor_pair(case.processor)
-    processor_a.fit_ensemble(data)
-    expected = processor_a.transform_ensemble(data)
+    processor_a.fit_ensemble(table)
+    expected = processor_a.transform_ensemble(table)
     processor_b.load_state_dict(processor_a.state_dict())
-    actual = processor_b.transform_ensemble(data)
+    actual = processor_b.transform_ensemble(table)
     assert actual.num_members == expected.num_members
     for member_id in range(actual.num_members):
         assert actual.table(member_id).equal(expected.table(member_id))
@@ -232,17 +232,17 @@ def test_save_and_load_preserves_fitted_processor_behavior(
     ids=lambda case: type(case.processor).__name__,
 )
 def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
-    data = case.make_inputs()
+    table = case.make_table()
     processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
-    transformed = processor.fit_transform_ensemble(data)
+    transformed = processor.fit_transform_ensemble(table)
     restored = cast(
         sp.EnsembleInvertibleMixin, processor
     ).inverse_transform_ensemble(transformed)
-    assert restored.num_members == data.num_members
+    assert restored.num_members == table.num_members
     for member_id in range(restored.num_members):
         torch.testing.assert_close(
             restored.table(member_id).numerical,
-            data.table(member_id).numerical,
+            table.table(member_id).numerical,
             atol=1e-3,
             rtol=1e-5,
             equal_nan=True,
@@ -257,11 +257,11 @@ def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
 def test_preserves_rows_and_unhandled_stypes(
     case: ProcessorCase,
 ) -> None:
-    data = case.make_inputs()
+    table = case.make_table()
     processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
-    output = processor.fit_transform_ensemble(data)
+    output = processor.fit_transform_ensemble(table)
     for member_id in range(output.num_members):
-        before = data.table(member_id)
+        before = table.table(member_id)
         after = output.table(member_id)
         assert after.size()[:-1] == before.size()[:-1]
         for stype in before.active_stypes - processor.handles_stypes:
@@ -280,7 +280,7 @@ def test_preserves_rows_and_unhandled_stypes(
 )
 def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
     dtype = torch.float64
-    source = case.make_inputs()
+    source = case.make_table()
     target = source.replace_groups(
         [
             group.replace_blocks(numerical=group.numerical.to(dtype))
@@ -318,7 +318,7 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
 )
 def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
     device = torch.device("cuda")
-    source = case.make_inputs()
+    source = case.make_table()
     target = source.replace_groups(
         [cast(TableTensor, group.to(device)) for group in source]
     )
