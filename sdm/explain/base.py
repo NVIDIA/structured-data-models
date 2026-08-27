@@ -48,7 +48,7 @@ class ICLExplainer(abc.ABC, Generic[T]):  # noqa: D101
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> T:
-
+        kwargs.pop("callbacks", None)
         num_estimators = kwargs.get("num_estimators", 1)
         if num_estimators != 1:
             raise RuntimeError(
