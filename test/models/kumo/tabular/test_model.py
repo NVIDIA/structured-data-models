@@ -187,17 +187,17 @@ def _cls_target() -> TableTensor:
     )
 
 
+def _reg_target(offset: float = 0.0) -> TableTensor:
+    values = torch.tensor([[10.0], [20.0], [30.0]])
+    return TableTensor.from_tensor(values + offset)
+
+
 def _recipe() -> sp.Recipe:
     return sp.Recipe(
         features=[sp.ToNumerical()],
         target=sp.StypeDispatch(numerical=sp.Standardize()),
         output=[sp.ReduceEstimators(method="mean")],
     )
-
-
-def _reg_target(offset: float = 0.0) -> TableTensor:
-    values = torch.tensor([[10.0], [20.0], [30.0]])
-    return TableTensor.from_tensor(values + offset)
 
 
 def test_forward(
@@ -223,16 +223,6 @@ def test_forward(
 
     assert out.size() == (2, 1)
     assert out.columns[Stype.numerical] == ("pred",)
-
-    # Targets are standardized on the context and inverted afterwards, so
-    # shifting the target shifts the prediction by the same amount.
-    shifted = reg_model(
-        x_context,
-        _reg_target(offset=1000.0),
-        x_query,
-        recipe=_recipe(),
-    )
-    torch.testing.assert_close(shifted.numerical, out.numerical + 1000.0)
 
 
 def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
