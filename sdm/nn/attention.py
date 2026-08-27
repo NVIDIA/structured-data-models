@@ -84,7 +84,8 @@ class SDPA(torch.nn.Module):
                 number of key/value heads (``num_key_value_heads``).
             value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
-                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype. Counts
+                above ``KV`` act as ``KV``.
             attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
                 For boolean masks, entries set to ``True`` participate in
                 attention. Floating-point masks act as additive bias.
@@ -124,7 +125,15 @@ class SDPA(torch.nn.Module):
                     "Per-head `attn_mask` is not supported with query scaling"
                 )
             if seqused_key_value is not None:
-                key_len = seqused_key_value.unsqueeze(-1)
+                # The key mask below saturates for over-range counts (every
+                # key stays visible), so the scaling length must saturate
+                # too or `QASSMax` would sharpen against keys that do not
+                # exist. Clamping keeps the count as tensor data (no sync).
+                # `clamp` preserves the caller's strides, and the scaling
+                # runs a linear layer on the count, so normalize the layout
+                # to keep the output independent of it.
+                key_len = seqused_key_value.clamp(max=key.size(-3))
+                key_len = key_len.contiguous().unsqueeze(-1)
             elif attn_mask is not None and attn_mask.size(-1) > 1:
                 key_len = attn_mask.sum(dim=-1).squeeze(-2)
             else:
@@ -659,6 +668,9 @@ class TransformerBlock(torch.nn.Module):
                 "'return_key_value=True' is not supported when 'key_value' is "
                 "already cached"
             )
+
+        if isinstance(batch_size_limit, int) and batch_size_limit <= 0:
+            raise ValueError("'batch_size_limit' must be positive")
 
         if torch.is_grad_enabled():
             return self._forward(
