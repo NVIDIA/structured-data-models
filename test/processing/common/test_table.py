@@ -23,7 +23,7 @@ def test_table_dispatch() -> None:
 
     recipe = Recipe(features=TableDispatch(task=_Add(1), related=_Add(2)))
     execution = RecipeExecution(recipe)
-    (context,) = execution.fit_transform(
+    (context_group,) = execution.fit_transform(
         x=x,
         y=x,
         related_tables=RelatedTables(
@@ -34,6 +34,7 @@ def test_table_dispatch() -> None:
         num_members=1,
         generator=None,
     )
+    (context,) = context_group.members
     assert context.x.numerical.equal(x.numerical + 1)
     assert context.related_tables is not None
     assert context.related_tables.tables["x"].numerical.equal(x.numerical + 2)

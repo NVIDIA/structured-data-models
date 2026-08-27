@@ -10,7 +10,7 @@ import torch
 import sdm.processing as sp
 from sdm import Recipe, RelatedTables, TableTensor
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
-from sdm.tensor import EnsembleTable
+from sdm.tensor import CategoricalTensor, EnsembleTable
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,22 @@ class MemberQuery:
     related_tables: RelatedTables | None
 
 
+@dataclass(frozen=True)
+class ContextGroup:
+    """Compatible transformed contexts and their logical member IDs."""
+
+    member_ids: tuple[int, ...]
+    members: tuple[MemberContext, ...]
+
+
+@dataclass(frozen=True)
+class QueryGroup:
+    """Transformed queries matching one fitted context group."""
+
+    member_ids: tuple[int, ...]
+    members: tuple[MemberQuery, ...]
+
+
 class RecipeExecution:
     """Recipe execution manager during model processing."""
 
@@ -38,6 +54,7 @@ class RecipeExecution:
 
         self._related_processors: Mapping[str, EnsembleProcessor] | None = None
         self._target_locations: tuple[tuple[int, int], ...] | None = None
+        self._member_groups: tuple[tuple[int, ...], ...] | None = None
 
     def fit_transform(
         self,
@@ -46,8 +63,9 @@ class RecipeExecution:
         related_tables: RelatedTables | None,
         *,
         num_members: int = 1,
+        group_members: bool = False,
         generator: torch.Generator | None = None,
-    ) -> tuple[MemberContext, ...]:
+    ) -> tuple[ContextGroup, ...]:
         """Fit and transform context data."""
         # Inverse target transform requires distinct member assignment:
         y_ensemble = EnsembleTable.__new__(EnsembleTable)
@@ -131,13 +149,29 @@ class RecipeExecution:
                 )
             )
 
-        return tuple(members)
+        if group_members:
+            grouped: dict[tuple[object, ...], list[int]] = {}
+            for member_id, member in enumerate(members):
+                grouped.setdefault(_context_key(member), []).append(member_id)
+            self._member_groups = tuple(
+                tuple(member_ids) for member_ids in grouped.values()
+            )
+        else:
+            self._member_groups = tuple((i,) for i in range(num_members))
+
+        return tuple(
+            ContextGroup(
+                member_ids=member_ids,
+                members=tuple(members[i] for i in member_ids),
+            )
+            for member_ids in self._member_groups
+        )
 
     def transform(
         self,
         x: TableTensor,
         related_tables: RelatedTables | None,
-    ) -> tuple[MemberQuery, ...]:
+    ) -> tuple[QueryGroup, ...]:
         """Transform query data."""
         assert self._target_locations is not None
         num_members = len(self._target_locations)
@@ -172,7 +206,14 @@ class RecipeExecution:
                 )
             )
 
-        return tuple(members)
+        assert self._member_groups is not None
+        return tuple(
+            QueryGroup(
+                member_ids=member_ids,
+                members=tuple(members[i] for i in member_ids),
+            )
+            for member_ids in self._member_groups
+        )
 
     def inverse_transform_target(
         self,
@@ -219,3 +260,33 @@ class RecipeExecution:
             out = torch.stack(list(outputs), dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
+
+
+def _context_key(context: MemberContext) -> tuple[object, ...]:
+    return (
+        _table_key(context.x),
+        _table_key(context.y),
+        None
+        if context.related_tables is None
+        else tuple(
+            (name, _table_key(table))
+            for name, table in context.related_tables.tables.items()
+        ),
+    )
+
+
+def _table_key(table: TableTensor) -> tuple[object, ...]:
+    return tuple(
+        (
+            stype,
+            type(block),
+            block.size(),
+            block.layout,
+            block.dtype,
+            block.device,
+            tuple(category.size() for category in block.categories)
+            if isinstance(block, CategoricalTensor)
+            else (),
+        )
+        for stype, block in table.items()
+    )

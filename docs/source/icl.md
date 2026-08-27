@@ -101,6 +101,13 @@ In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://li
 The interface of an {py:class}`~sdm.models.ICLModel` additionally supports estimator ensembling through the `num_estimators` argument in {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit`.
 When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.
 
+Models may support different ways of executing these estimator views, exposed
+through their `estimator_execution` constructor argument. The
+{py:attr}`~sdm.models.ICLModel.supported_execution_modes` attribute lists the
+available modes for each model. For example, {py:class}`~sdm.models.TabICLv2`
+supports sequential execution as well as batching compatible transformed
+views in a shared model call.
+
 ## Autocasting
 
 An {py:class}`~sdm.models.ICLModel` does **not** enable mixed-precision autocasting by default.
