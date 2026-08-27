@@ -6,10 +6,15 @@ from torch._ops import OpOverload
 from torch.utils._python_dispatch import TorchDispatchMode
 
 from sdm.cache import Cache, KVCacheEntry
-from sdm.models.tabiclv2 import row_embedding as row_embedding_module
+from sdm.models.tabiclv2 import TabICLv2InferenceConfig
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.testing import withCUDA
+
+_TEST_INFERENCE_CONFIG = TabICLv2InferenceConfig(
+    row_chunk_size=4,
+    column_chunk_size=3,
+)
 
 
 def _row_embedding(
@@ -54,18 +59,7 @@ def test_memory_efficient_row_embedding_matches_standard(
     num_classes: int,
     fit_rows: int,
     query_rows: int,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        row_embedding_module,
-        "_MEMORY_EFFICIENT_ROW_CHUNK_SIZE",
-        4,
-    )
-    monkeypatch.setattr(
-        row_embedding_module,
-        "_MEMORY_EFFICIENT_COLUMN_CHUNK_SIZE",
-        3,
-    )
     model = _row_embedding(
         device,
         num_classes=min(num_classes, 10),
@@ -87,6 +81,7 @@ def test_memory_efficient_row_embedding_matches_standard(
             y,
             num_classes=model_num_classes,
             memory_efficient=True,
+            inference_config=_TEST_INFERENCE_CONFIG,
         )
         model(
             x[:, :fit_rows],
@@ -100,6 +95,7 @@ def test_memory_efficient_row_embedding_matches_standard(
             num_classes=model_num_classes,
             cache=memory_cache,
             memory_efficient=True,
+            inference_config=_TEST_INFERENCE_CONFIG,
         )
         expected_replay = model(
             x[:, :query_rows],
@@ -113,6 +109,7 @@ def test_memory_efficient_row_embedding_matches_standard(
             num_classes=model_num_classes,
             cache=memory_cache.freeze(),
             memory_efficient=True,
+            inference_config=_TEST_INFERENCE_CONFIG,
         )
 
     torch.testing.assert_close(actual, expected, atol=2e-5, rtol=2e-5)
@@ -175,11 +172,6 @@ def test_memory_efficient_row_embedding_uses_2048_boundary(
 def test_memory_efficient_row_embedding_rejects_unsupported_active_use(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        row_embedding_module,
-        "_MEMORY_EFFICIENT_ROW_CHUNK_SIZE",
-        4,
-    )
     model = _row_embedding(num_layers=1)
     x = torch.randn(5, 4)
     y = torch.randint(10, (2,))
@@ -192,11 +184,21 @@ def test_memory_efficient_row_embedding_rejects_unsupported_active_use(
             match="requires evaluation mode",
         ),
     ):
-        model(x, y, memory_efficient=True)
+        model(
+            x,
+            y,
+            memory_efficient=True,
+            inference_config=_TEST_INFERENCE_CONFIG,
+        )
 
     model.eval()
     with pytest.raises(RuntimeError, match="gradients to be disabled"):
-        model(x, y, memory_efficient=True)
+        model(
+            x,
+            y,
+            memory_efficient=True,
+            inference_config=_TEST_INFERENCE_CONFIG,
+        )
 
     with monkeypatch.context() as compiling:
         compiling.setattr(torch.compiler, "is_compiling", lambda: True)
@@ -207,7 +209,12 @@ def test_memory_efficient_row_embedding_rejects_unsupported_active_use(
                 match=r"does not support torch\.compile",
             ),
         ):
-            model(x, y, memory_efficient=True)
+            model(
+                x,
+                y,
+                memory_efficient=True,
+                inference_config=_TEST_INFERENCE_CONFIG,
+            )
 
     with (
         torch.inference_mode(),
@@ -221,6 +228,7 @@ def test_memory_efficient_row_embedding_rejects_unsupported_active_use(
             y,
             train_mask=torch.tensor([True, False, True, False, False]),
             memory_efficient=True,
+            inference_config=_TEST_INFERENCE_CONFIG,
         )
     with (
         torch.inference_mode(),
@@ -229,7 +237,13 @@ def test_memory_efficient_row_embedding_rejects_unsupported_active_use(
             match="does not support 'max_keys'",
         ),
     ):
-        model(x, y, max_keys=1, memory_efficient=True)
+        model(
+            x,
+            y,
+            max_keys=1,
+            memory_efficient=True,
+            inference_config=_TEST_INFERENCE_CONFIG,
+        )
 
 
 def test_memory_efficient_row_embedding_bounds_materialization(
@@ -261,16 +275,6 @@ def test_memory_efficient_row_embedding_bounds_materialization(
                 self.shapes.append(tuple(tensor.size()))
             return func(*args, **kwargs)
 
-    monkeypatch.setattr(
-        row_embedding_module,
-        "_MEMORY_EFFICIENT_ROW_CHUNK_SIZE",
-        4,
-    )
-    monkeypatch.setattr(
-        row_embedding_module,
-        "_MEMORY_EFFICIENT_COLUMN_CHUNK_SIZE",
-        3,
-    )
     model = _row_embedding()
     clone = _row_embedding()
     clone.load_state_dict(model.state_dict(), strict=True)
@@ -294,7 +298,12 @@ def test_memory_efficient_row_embedding_bounds_materialization(
         model(x, y)
     projected_shapes.clear()
     with torch.inference_mode(), memory_mode:
-        model(x, y, memory_efficient=True)
+        model(
+            x,
+            y,
+            memory_efficient=True,
+            inference_config=_TEST_INFERENCE_CONFIG,
+        )
     handle.remove()
 
     full_projection = (3, 7, 12, 8)

@@ -5,11 +5,16 @@ import torch
 
 import sdm.processing as sp
 from sdm.models import TabICLv2
-from sdm.models.tabiclv2 import row_embedding as row_embedding_module
+from sdm.models.tabiclv2 import TabICLv2InferenceConfig
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention, TransformerBlock
 from sdm.testing import withCUDA
+
+_TINY_INFERENCE_CONFIG = TabICLv2InferenceConfig(
+    row_chunk_size=4,
+    column_chunk_size=3,
+)
 
 
 def _tiny_model(
@@ -24,6 +29,7 @@ def _tiny_model(
         pretrained=False,
         device=device,
         estimator_execution=estimator_execution,
+        inference_config=_TINY_INFERENCE_CONFIG,
     )
     model.cls_model = _TabICLv2(
         num_classes=10,
@@ -88,6 +94,10 @@ def test_estimator_execution_defaults_to_sequential() -> None:
     model = TabICLv2(pretrained=False)
 
     assert model.estimator_execution == "sequential"
+    assert model.inference_config == TabICLv2InferenceConfig()
+    assert model.inference_config.row_chunk_size == 2048
+    assert model.inference_config.column_chunk_size == 4
+    assert not any("inference_config" in key for key in model.state_dict())
 
 
 @withCUDA
@@ -200,18 +210,7 @@ def test_batched_estimator_execution_matches_sequential(
 def test_memory_efficient_execution_matches_batched(
     device: torch.device,
     dtype: torch.dtype,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        row_embedding_module,
-        "_MEMORY_EFFICIENT_ROW_CHUNK_SIZE",
-        4,
-    )
-    monkeypatch.setattr(
-        row_embedding_module,
-        "_MEMORY_EFFICIENT_COLUMN_CHUNK_SIZE",
-        3,
-    )
     batched = _tiny_model(device, "batched")
     memory_efficient = _tiny_model(device, "batched_memory_efficient")
     memory_efficient.load_state_dict(batched.state_dict())
@@ -288,11 +287,6 @@ def test_cached_prediction_reuses_fit_execution_policy(
     device: torch.device,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        row_embedding_module,
-        "_MEMORY_EFFICIENT_ROW_CHUNK_SIZE",
-        4,
-    )
     original = RowEmbedding._memory_efficient_forward
     calls: list[RowEmbedding] = []
 
@@ -334,13 +328,7 @@ def test_cached_prediction_reuses_fit_execution_policy(
 def test_memory_efficient_execution_autocast(
     device: torch.device,
     cached: bool,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        row_embedding_module,
-        "_MEMORY_EFFICIENT_ROW_CHUNK_SIZE",
-        4,
-    )
     model = _tiny_model(device, "batched_memory_efficient")
     x_context = torch.randn(7, 5, device=device)
     y_context = torch.randn(7, 1, device=device)
