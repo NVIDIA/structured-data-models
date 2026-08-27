@@ -186,13 +186,8 @@ class _Model(torch.nn.Module):
         )
         batch_ends.clamp_(max=num_strings)
         batch_ends -= 1
-        # This introduces a host device sync. However, the alternative
-        # is to apply maximum padding to all batches, which is significantly
-        # less efficient. Comparison benchmark:
-        # Strings: 18896, Batches: 591, Max seq length: 256
-        # Per-batch max lengths: min=2, max=256, mean=60
-        # Per-batch trim (.tolist() sync) -> mean:  4.1555s
-        # Pad to max (no sync) -> mean:  12.1554s
+        # Triggers a host device sync to get chunk sizes to
+        # minimize the padding
         batch_max_lengths = sorted_seq_lengths[batch_ends].tolist()
 
         embeddings = torch.empty(
