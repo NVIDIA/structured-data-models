@@ -1,11 +1,17 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, ClassVar, cast
 
 import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
+from sdm import (
+    ColumnarTensor,
+    EnsembleTable,
+    RelatedTables,
+    Stype,
+    TableTensor,
+)
 from sdm.cache import Cache
 from sdm.callbacks import Callback
 from sdm.models import ICLModel
@@ -18,6 +24,7 @@ class _Call:
     x_query: TableTensor | None
     related_context_tables: RelatedTables | None
     related_query_tables: RelatedTables | None
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 class _RecordingModel(ICLModel):
@@ -47,6 +54,7 @@ class _RecordingModel(ICLModel):
                 x_query=x_query,
                 related_context_tables=related_context_tables,
                 related_query_tables=related_query_tables,
+                kwargs=dict(kwargs),
             )
         )
         table = x_query if x_query is not None else x_context
@@ -112,6 +120,39 @@ class MyCallback(Callback):
     ) -> TableTensor:
         self._record("model_forward_end")
         return out
+
+
+class _LegacyModel(ICLModel):
+    """Model implementing the private hook without keyword passthrough."""
+
+    supported_feature_stypes = frozenset({Stype.numerical})
+    supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
+    supports_multi_target: ClassVar[bool] = False
+    supports_related_tables: ClassVar[bool] = False
+
+    # Deliberately narrower than `ICLModel._forward`: this model predates the
+    # optional `seqused_train`/`seqused_cols` (and any other model-specific)
+    # keywords and pins down that they are only forwarded when the caller
+    # asks for them.
+    def _forward(  # ty: ignore[invalid-method-override]
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+    ) -> TableTensor:
+        del y_context, related_context_tables, related_query_tables
+        del cache, generator
+        table = x_query if x_query is not None else x_context
+        assert table is not None
+        return table.select_stypes(Stype.numerical)
+
+    @classmethod
+    def default_recipe(cls) -> sp.Recipe:
+        return sp.Recipe()
 
 
 class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
@@ -498,3 +539,354 @@ def test_ensemble_output_reduces_with_reduce_estimators() -> None:
     )
 
     assert out.size() == (2, 3)
+
+
+def test_legacy_model_forward_compatibility() -> None:
+    """The default path does not pass new keywords to existing subclasses."""
+    model = _LegacyModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    out = model(x_context, y_context, x_query)
+    torch.testing.assert_close(out.numerical, x_query.unsqueeze(0))
+
+    model.fit(x_context, y_context)
+    prediction = model.predict(x_query)
+    torch.testing.assert_close(prediction.numerical, x_query.unsqueeze(0))
+
+    # Opting into padding (or other model-specific) keywords surfaces a hard
+    # error on subclasses that do not implement them instead of silently
+    # dropping them.
+    with pytest.raises(TypeError, match="unsupported_kwarg"):
+        model(x_context, y_context, x_query, unsupported_kwarg=2)
+    with pytest.raises(TypeError, match="unsupported_kwarg"):
+        model.fit(x_context, y_context, unsupported_kwarg=2)
+
+
+def test_forward_forwards_padding_keywords() -> None:
+    """Padding keywords reach the model only when explicitly requested."""
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    seqused_train = torch.tensor(3, dtype=torch.int32)
+    seqused_cols = torch.tensor(2, dtype=torch.int32)
+
+    model(x_context, y_context, x_query)
+
+    assert len(model.calls) == 1
+    assert model.calls[0].kwargs == {}
+
+    model.calls.clear()
+    model(
+        x_context,
+        y_context,
+        x_query,
+        seqused_train=seqused_train,
+        seqused_cols=seqused_cols,
+        model_specific_kwarg=2,
+    )
+
+    assert len(model.calls) == 1
+    kwargs = model.calls[0].kwargs
+    assert kwargs["model_specific_kwarg"] == 2
+    assert torch.equal(kwargs["seqused_train"], seqused_train)
+    assert torch.equal(kwargs["seqused_cols"], seqused_cols)
+    assert kwargs["seqused_train"].dtype == torch.int32
+    assert kwargs["seqused_cols"].dtype == torch.int32
+
+
+def test_fit_caches_padding_keywords_for_predict() -> None:
+    """Padding counts given to ``fit`` are replayed by ``predict``."""
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    seqused_train = torch.tensor(3, dtype=torch.int32)
+    seqused_cols = torch.tensor(2, dtype=torch.int32)
+
+    model.fit(
+        x_context,
+        y_context,
+        seqused_train=seqused_train,
+        seqused_cols=seqused_cols,
+    )
+
+    assert len(model.calls) == 1
+    fit_kwargs = model.calls[0].kwargs
+    assert torch.equal(fit_kwargs["seqused_train"], seqused_train)
+    assert torch.equal(fit_kwargs["seqused_cols"], seqused_cols)
+
+    # The cache holds its own copy of the counts: mutating the caller's
+    # tensors between `fit` and `predict` must not change replay masking.
+    model.calls.clear()
+    seqused_train.fill_(1)
+    seqused_cols.fill_(1)
+    model.predict(x_query)
+
+    assert len(model.calls) == 1
+    predict_kwargs = model.calls[0].kwargs
+    assert predict_kwargs["seqused_train"].item() == 3
+    assert predict_kwargs["seqused_cols"].item() == 2
+
+
+def test_seqused_rejects_ensemble_aware_inputs() -> None:
+    """Padding counts describe one shared context, not per-member tables."""
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    seqused_train = torch.tensor(3, dtype=torch.int32)
+    ensemble = EnsembleTable.from_table(
+        TableTensor.from_tensor(x_context),
+        num_members=2,
+    )
+
+    with pytest.raises(ValueError, match="EnsembleTable"):
+        model(ensemble, y_context, x_query, seqused_train=seqused_train)
+    with pytest.raises(ValueError, match="EnsembleTable"):
+        model.fit(ensemble, y_context, seqused_train=seqused_train)
+    assert len(model.calls) == 0
+
+    # Higher-rank inputs are only unambiguous with explicit
+    # 'num_estimators'; otherwise the leading dimension would be consumed
+    # as the estimator dimension while the counts index batch elements.
+    with pytest.raises(ValueError, match="num_estimators"):
+        model(
+            torch.randn(2, 4, 3),
+            torch.randn(2, 4, 1),
+            torch.randn(2, 2, 3),
+            seqused_train=torch.tensor([3, 4], dtype=torch.int32),
+        )
+    with pytest.raises(ValueError, match="num_estimators"):
+        model.fit(
+            torch.randn(2, 4, 3),
+            torch.randn(2, 4, 1),
+            seqused_train=torch.tensor([3, 4], dtype=torch.int32),
+        )
+    assert len(model.calls) == 0
+
+    model(
+        torch.randn(2, 4, 3),
+        torch.randn(2, 4, 1),
+        torch.randn(2, 2, 3),
+        num_estimators=1,
+        seqused_train=torch.tensor([3, 4], dtype=torch.int32),
+    )
+    assert len(model.calls) == 1
+
+
+def test_seqused_train_validates_batch_shape() -> None:
+    """The per-element counts must match the batch dimensions."""
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    # Unbatched tables have no batch dimensions, so the count must be a
+    # scalar.
+    with pytest.raises(ValueError, match="batch dimensions"):
+        model(
+            x_context,
+            y_context,
+            x_query,
+            seqused_train=torch.tensor([3, 4], dtype=torch.int32),
+        )
+    with pytest.raises(ValueError, match="batch dimensions"):
+        model.fit(
+            x_context,
+            y_context,
+            seqused_train=torch.tensor([3, 4], dtype=torch.int32),
+        )
+    # `TableTensor` inputs carry the same trailing row and column
+    # dimensions, so the check applies to them as well.
+    with pytest.raises(ValueError, match="batch dimensions"):
+        model(
+            TableTensor.from_tensor(x_context),
+            y_context,
+            x_query,
+            seqused_train=torch.tensor([3, 4], dtype=torch.int32),
+        )
+    # Batched tables require one count per batch element.
+    with pytest.raises(ValueError, match="batch dimensions"):
+        model(
+            torch.randn(2, 4, 3),
+            torch.randn(2, 4, 1),
+            torch.randn(2, 2, 3),
+            num_estimators=1,
+            seqused_train=torch.tensor([3, 4, 5], dtype=torch.int32),
+        )
+    assert len(model.calls) == 0
+
+    model(
+        torch.randn(2, 4, 3),
+        torch.randn(2, 4, 1),
+        torch.randn(2, 2, 3),
+        num_estimators=1,
+        seqused_train=torch.tensor([3, 4], dtype=torch.int32),
+    )
+    assert len(model.calls) == 1
+
+
+class _RowReversingCallback(Callback):
+    """Returns a context with reversed rows, keeping shape and schema."""
+
+    def on_context_preprocessing_end(
+        self,
+        model: torch.nn.Module,
+        x: TableTensor,
+        y: TableTensor,
+        related_tables: RelatedTables[TableTensor] | None,
+    ) -> tuple[TableTensor, TableTensor, RelatedTables | None]:
+        return (
+            x.replace_blocks(numerical=x.numerical.flip(-2)),
+            y.replace_blocks(numerical=y.numerical.flip(-2)),
+            related_tables,
+        )
+
+
+def test_seqused_rejects_context_replacing_callbacks() -> None:
+    """A row-reversing callback would move padding into the valid prefix."""
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    seqused_train = torch.tensor(3, dtype=torch.int32)
+    seqused_cols = torch.tensor(2, dtype=torch.int32)
+    callback = _RowReversingCallback()
+
+    # Without padding counts, replacement contexts remain legal.
+    model(x_context, y_context, x_query, callbacks=(callback,))
+    assert len(model.calls) == 1
+
+    # With counts set, the replacement preserves shape and schema, so no
+    # downstream validation could tell it apart from padding-safe output.
+    # It must be rejected before the model call.
+    model.calls.clear()
+    with pytest.raises(ValueError, match="replacement context"):
+        model(
+            x_context,
+            y_context,
+            x_query,
+            callbacks=(callback,),
+            seqused_train=seqused_train,
+        )
+    with pytest.raises(ValueError, match="replacement context"):
+        model(
+            x_context,
+            y_context,
+            x_query,
+            callbacks=(callback,),
+            seqused_cols=seqused_cols,
+        )
+    with pytest.raises(ValueError, match="replacement context"):
+        model.fit(
+            x_context,
+            y_context,
+            callbacks=(callback,),
+            seqused_train=seqused_train,
+        )
+    assert len(model.calls) == 0
+
+    # Passive observers return the context unchanged and keep working; the
+    # query hook stays open under row counts for layout-preserving
+    # replacement (`MyCallback` replaces the query features).
+    events: list[str] = []
+    observer = MyCallback("obs", scale=1.0, offset=0.0, events=events)
+    model(
+        x_context,
+        y_context,
+        x_query,
+        callbacks=(observer,),
+        seqused_train=seqused_train,
+    )
+    assert len(model.calls) == 1
+    assert "obs_context_preprocessing_end" in events
+
+
+class _ColumnReversingQueryCallback(Callback):
+    """Returns a query with reversed columns, keeping shape and schema."""
+
+    def on_query_preprocessing_end(
+        self,
+        model: torch.nn.Module,
+        x: TableTensor,
+        related_tables: RelatedTables[TableTensor] | None,
+    ) -> tuple[TableTensor, RelatedTables | None]:
+        return (
+            x.replace_blocks(numerical=x.numerical.flip(-1)),
+            related_tables,
+        )
+
+
+def test_seqused_cols_rejects_query_replacing_callbacks() -> None:
+    """A column-reversing query callback would move padding into the prefix.
+
+    `seqused_cols` counts the valid columns of the query as well, so the
+    guard covers the query hook, including the fit/predict replay path.
+    """
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    seqused_cols = torch.tensor(2, dtype=torch.int32)
+    callback = _ColumnReversingQueryCallback()
+
+    # Without padding counts, replacement queries remain legal.
+    model(x_context, y_context, x_query, callbacks=(callback,))
+    assert len(model.calls) == 1
+
+    # With the column count set, the replacement preserves shape and
+    # schema, so it must be rejected before the model call.
+    model.calls.clear()
+    with pytest.raises(ValueError, match="replacement query"):
+        model(
+            x_context,
+            y_context,
+            x_query,
+            callbacks=(callback,),
+            seqused_cols=seqused_cols,
+        )
+    assert len(model.calls) == 0
+
+    # `fit` caches the counts and `predict` replays them, even though the
+    # `predict` caller never passed them: rejected there as well.
+    model.fit(x_context, y_context, seqused_cols=seqused_cols)
+    model.calls.clear()
+    with pytest.raises(ValueError, match="replacement query"):
+        model.predict(x_query, callbacks=(callback,))
+    assert len(model.calls) == 0
+
+    # Passive query observers return the inputs unchanged and keep working
+    # with column counts.
+    model.calls.clear()
+    model(
+        x_context,
+        y_context,
+        x_query,
+        callbacks=(Callback(),),
+        seqused_cols=seqused_cols,
+    )
+    assert len(model.calls) == 1
+
+    # `seqused_train` counts context rows, which a replaced query cannot
+    # invalidate: layout-preserving query replacement stays open on both
+    # the forward and the fit/predict replay path.
+    events: list[str] = []
+    replacer = MyCallback("rep", scale=2.0, offset=1.0, events=events)
+    seqused_train = torch.tensor(3, dtype=torch.int32)
+    model.calls.clear()
+    model(
+        x_context,
+        y_context,
+        x_query,
+        callbacks=(replacer,),
+        seqused_train=seqused_train,
+    )
+    assert len(model.calls) == 1
+    model.fit(x_context, y_context, seqused_train=seqused_train)
+    model.calls.clear()
+    model.predict(x_query, callbacks=(replacer,))
+    assert len(model.calls) == 1
+    assert "rep_query_preprocessing_end" in events

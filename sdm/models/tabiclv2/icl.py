@@ -63,12 +63,14 @@ class ICLBlock(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         num_classes: int | None = None,
+        seqused_train: Tensor | None = None,  # [...]
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if num_classes is None or num_classes <= self.num_classes:
             return self._forward(
                 x=x,
                 y=y,
+                seqused_train=seqused_train,
                 cache=cache,
                 cache_prefix="icl_block",
             )
@@ -77,6 +79,16 @@ class ICLBlock(torch.nn.Module):
             raise ValueError(
                 "Hierarchical classification requires 'num_classes' to be "
                 "at least two"
+            )
+
+        if seqused_train is not None:
+            # Hierarchical nodes re-group the in-context rows by class, so
+            # the "only the first `seqused_train` rows are valid" contract
+            # no longer describes any node and padded rows would leak into
+            # the class hierarchy.
+            raise ValueError(
+                "`seqused_train` padding is not supported for hierarchical "
+                f"classification with more than {self.num_classes} classes"
             )
 
         return self._forward_hierarchical(
@@ -91,6 +103,7 @@ class ICLBlock(torch.nn.Module):
         x: Tensor,  # [..., R, D]
         y: Tensor,  # [..., R_train]
         *,
+        seqused_train: Tensor | None,  # [...]
         cache: Cache | None,
         cache_prefix: str,
     ) -> Tensor:  # [..., R_test, out_channels]
@@ -105,6 +118,15 @@ class ICLBlock(torch.nn.Module):
 
             x[..., :R_train, :] += y_emb.to(x.dtype)
 
+        # Only the lower bound is applied here (as in `RowEmbedding`): a
+        # non-positive count would mask out every in-context row and silently
+        # return degenerate numbers, and rejecting it would require reading
+        # the values off the device on every call. The upper bound is applied
+        # in `SDPA` against the actual key length (fresh or cached).
+        seqused_train = (
+            seqused_train.clamp(min=1) if seqused_train is not None else None
+        )
+
         for i, layer in enumerate(self.layers):
             key = f"{cache_prefix}.layer{i}"
             result = layer(
@@ -114,6 +136,7 @@ class ICLBlock(torch.nn.Module):
                     if cache is not None and cache.is_replaying
                     else x[..., :R_train, :]
                 ),
+                seqused_key_value=seqused_train,  # [...]
                 return_key_value=cache is not None and cache.is_recording,
                 # `x` is still the caller's tensor at i == 0; don't mutate.
                 out=None
@@ -361,6 +384,9 @@ class ICLBlock(torch.nn.Module):
         logits = self._forward(
             x=x,
             y=y,
+            # Hierarchical nodes hold exactly their own rows, so there is no
+            # padding to mask (`forward` rejects `seqused_train` here).
+            seqused_train=None,
             cache=cache,
             cache_prefix=cache_prefix,
         )
