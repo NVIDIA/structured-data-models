@@ -1,24 +1,31 @@
-import random
 from typing import Literal
 
 import pytest
 import torch
 
-from sdm import CategoricalTensor, Stype, TableTensor
-from sdm.models.tabiclv2.recipe import (
-    _TabICLv2EstimatorPlan,
-    _TabICLv2ShuffleColumns,
-    default_recipe,
-)
+from sdm import Stype, TableTensor
 from sdm.processing import ShuffleColumns
-from sdm.processing.execution import RecipeExecution
 from sdm.tensor import EnsembleTable
-from sdm.testing import withCUDA
 
 
 def _table() -> TableTensor:
     return TableTensor.from_tensor(
         torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    )
+
+def test_shuffle_columns_latin_method_rotates() -> None:
+    table = _table()
+
+    output = ShuffleColumns(method="latin").fit_transform(
+        table,
+        generator=torch.Generator().manual_seed(3),
+    )
+
+    assert isinstance(output, TableTensor)
+    assert output.columns[Stype.numerical] == ("1", "2", "0")
+    assert torch.equal(
+        output.numerical,
+        table.numerical.index_select(-1, torch.tensor([1, 2, 0])),
     )
 
 
