@@ -1,4 +1,4 @@
-"""Kumo Tabular."""
+"""KumoTabular."""
 
 from sdm.models.kumo.tabular.model import KumoTabular
 

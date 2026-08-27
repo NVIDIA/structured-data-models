@@ -30,6 +30,7 @@ class KumoTabular(ICLModel):  # noqa: D101
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__()
+
         self.model = _KumoTabular(
             num_classes=10,
             num_quantiles=0,
@@ -124,9 +125,7 @@ class KumoTabular(ICLModel):  # noqa: D101
             batch_size_limit=batch_size_limit,
         )
         return TableTensor(
-            columns={
-                Stype.numerical: [str(value) for value in classes.tolist()]
-            },
+            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
             numerical=out[..., : len(classes)],
         )
 
