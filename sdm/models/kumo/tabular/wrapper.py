@@ -9,15 +9,14 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models.base import ICLModel
 from sdm.models.kumo.tabular.model import _KumoTabular
-from sdm.models.kumo.tabular.recipe import default_recipe
 
 
 class KumoTabular(ICLModel):
     """Kumo Tabular in-context classification model.
 
-    The default recipe aligns and converts categorical columns but expects
-    otherwise preprocessed, finite features. The model supports at most ten
-    declared target classes, including classes absent from the context rows.
+    The model applies no default preprocessing or postprocessing and supports
+    at most ten declared target classes, including classes absent from the
+    context rows.
 
     Args:
         device: Device of the model parameters.
@@ -46,7 +45,7 @@ class KumoTabular(ICLModel):
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return default_recipe()
+        return Recipe()
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415

@@ -91,6 +91,36 @@ def _target(num_classes: int = 3) -> TableTensor:
     )
 
 
+def _recipe() -> sp.Recipe:
+    return sp.Recipe(
+        features=[
+            sp.StypeDispatch(
+                categorical=sp.AlignCategories(sort_by="value"),
+            ),
+            sp.ToNumerical(),
+        ],
+        output=[
+            sp.ReduceEstimators(method="mean"),
+            sp.Softmax(),
+        ],
+    )
+
+
+def test_default_recipe_is_empty(recording_model: KumoTabular) -> None:
+    context, query = _features()
+
+    out = recording_model(context.numerical, _target(), query.numerical)
+
+    assert out.size() == (1, 2, 3)
+    torch.testing.assert_close(
+        out.numerical,
+        torch.tensor([[[306.0, 307.0, 308.0], [308.0, 309.0, 310.0]]]),
+    )
+    x, _, categorical_mask, _, _ = _RecordingCore.calls[0]
+    assert x.equal(torch.cat((context.numerical, query.numerical), dim=-2))
+    assert not categorical_mask.any()
+
+
 def test_forward_preserves_declared_classes_and_feature_order(
     recording_model: KumoTabular,
 ) -> None:
@@ -100,6 +130,7 @@ def test_forward_preserves_declared_classes_and_feature_order(
         context,
         _target(),
         query,
+        recipe=_recipe(),
         batch_size_limit=7,
     )
 
@@ -128,8 +159,19 @@ def test_fit_predict_matches_one_shot_and_replays_categorical_mask(
     context, query = _features()
     target = _target()
 
-    expected = recording_model(context, target, query, batch_size_limit=3)
-    recording_model.fit(context, target, batch_size_limit=3)
+    expected = recording_model(
+        context,
+        target,
+        query,
+        recipe=_recipe(),
+        batch_size_limit=3,
+    )
+    recording_model.fit(
+        context,
+        target,
+        recipe=_recipe(),
+        batch_size_limit=3,
+    )
     actual = recording_model.predict(query)
 
     torch.testing.assert_close(actual.numerical, expected.numerical)
@@ -148,7 +190,7 @@ def test_categorical_mask_tracks_shuffled_columns(
     recording_model: KumoTabular,
 ) -> None:
     context, query = _features()
-    recipe = KumoTabular.default_recipe()
+    recipe = _recipe()
     recipe.append_features(sp.ShuffleColumns(method="shift"))
 
     recording_model(
@@ -174,8 +216,13 @@ def test_class_limit_uses_declared_vocabulary(
 ) -> None:
     context, query = _features()
     target = _target(num_classes=10)
-    out = recording_model(context, target, query)
+    out = recording_model(context, target, query, recipe=_recipe())
     assert out.size() == (2, 10)
 
     with pytest.raises(ValueError, match="only supports up to 10 classes"):
-        recording_model(context, _target(num_classes=11), query)
+        recording_model(
+            context,
+            _target(num_classes=11),
+            query,
+            recipe=_recipe(),
+        )
