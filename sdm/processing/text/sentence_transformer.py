@@ -197,11 +197,6 @@ class _CuDFTokenizer:
 
     def tokenize(self, text: StringTensor) -> tuple[Tensor, Tensor]:
         device = text.device
-        if device.type != "cuda":
-            raise RuntimeError(
-                f"Non-CPU tensor is passed to cuDF tokenizer: {device}"
-            )
-
         ser = text.to_cudf()
         ser = ser.fillna("") if text.is_nullable else ser
         ser = self._normalizer.normalize(ser)
