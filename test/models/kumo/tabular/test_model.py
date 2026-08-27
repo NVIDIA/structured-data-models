@@ -177,7 +177,7 @@ def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
     return x.split(3, dim=0)
 
 
-def _target() -> TableTensor:
+def _cls_target() -> TableTensor:
     return TableTensor(
         columns={Stype.categorical: ("target",)},
         categorical=CategoricalTensor(
@@ -190,6 +190,7 @@ def _target() -> TableTensor:
 def _recipe() -> sp.Recipe:
     return sp.Recipe(
         features=[sp.ToNumerical()],
+        target=sp.StypeDispatch(numerical=sp.Standardize()),
         output=[sp.ReduceEstimators(method="mean")],
     )
 
@@ -199,20 +200,13 @@ def _reg_target(offset: float = 0.0) -> TableTensor:
     return TableTensor.from_tensor(values + offset)
 
 
-def _reg_recipe() -> sp.Recipe:
-    return sp.Recipe(
-        target=sp.Standardize(),
-        output=[sp.ReduceEstimators(method="mean")],
-    )
-
-
 def test_forward(
     cls_model: KumoTabular,
     reg_model: KumoTabular,
 ) -> None:
     x_context, x_query = _features()
 
-    out = cls_model(x_context, _target(), x_query, recipe=_recipe())
+    out = cls_model(x_context, _cls_target(), x_query, recipe=_recipe())
 
     assert out.size() == (2, 3)
     assert out.columns[Stype.numerical] == ("0", "10", "20")
@@ -224,7 +218,7 @@ def test_forward(
         x_context,
         _reg_target(),
         x_query,
-        recipe=_reg_recipe(),
+        recipe=_recipe(),
     )
 
     assert out.size() == (2, 1)
@@ -236,13 +230,13 @@ def test_forward(
         x_context,
         _reg_target(offset=1000.0),
         x_query,
-        recipe=_reg_recipe(),
+        recipe=_recipe(),
     )
     torch.testing.assert_close(shifted.numerical, out.numerical + 1000.0)
 
 
 def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
-    target = _target()
+    target = _cls_target()
 
     x_context, x_query = _features(Stype.categorical)
     categorical = cls_model(x_context, target, x_query, recipe=_recipe())
@@ -259,7 +253,7 @@ def test_fit_predict(
     reg_model: KumoTabular,
 ) -> None:
     x_context, x_query = _features()
-    target = _target()
+    target = _cls_target()
 
     expected = cls_model(x_context, target, x_query, recipe=_recipe())
     cls_model.fit(x_context, target, recipe=_recipe())
@@ -270,7 +264,7 @@ def test_fit_predict(
 
     x_context, x_query = _features(Stype.numerical)
     target = _reg_target()
-    recipe = _reg_recipe()
+    recipe = _recipe()
     expected = reg_model(x_context, target, x_query, recipe=recipe)
     reg_model.fit(x_context, target, recipe=recipe)
     actual = reg_model.predict(x_query)
