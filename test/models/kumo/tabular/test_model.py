@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pytest
 import torch
 
@@ -129,9 +131,8 @@ def test_forward_does_not_mutate_input(
     )
 
 
-@pytest.fixture
-def model() -> KumoTabular:
-    model = KumoTabular()
+def _build(task: Literal["classification", "regression"]) -> KumoTabular:
+    model = KumoTabular(task=task)
     # Residual branches are zero-initialized, so an untrained model maps every
     # row onto the same constant. Randomize them to make the prediction depend
     # on the features it is given.
@@ -139,6 +140,11 @@ def model() -> KumoTabular:
         if not parameter.any():
             torch.nn.init.normal_(parameter, std=0.02)
     return model
+
+
+@pytest.fixture
+def model() -> KumoTabular:
+    return _build("classification")
 
 
 def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
@@ -217,3 +223,41 @@ def test_fit_predict(model: KumoTabular) -> None:
 
     assert actual.allclose(expected, atol=1e-5)
     assert actual.columns == expected.columns
+
+
+def test_default_recipe(model: KumoTabular) -> None:
+    # The default recipe does not convert features, so keep them numerical.
+    x_context, x_query = _features(Stype.numerical)
+
+    out = model(x_context, _target(), x_query)
+
+    # Estimators are reduced and classification logits become probabilities.
+    assert out.size() == (2, 3)
+    torch.testing.assert_close(out.numerical.sum(dim=-1), torch.ones(2))
+
+
+def test_regression() -> None:
+    model = _build("regression")
+    x_context, x_query = _features(Stype.numerical)
+    values = torch.tensor([[10.0], [20.0], [30.0]])
+    target = TableTensor.from_tensor(values)
+
+    out = model(x_context, target, x_query)
+
+    assert out.size() == (2, 1)
+    assert out.columns[Stype.numerical] == ("pred",)
+
+    # Targets are standardized on the context and inverted afterwards, so
+    # shifting the target shifts the prediction by the same amount.
+    shifted = model(
+        x_context, TableTensor.from_tensor(values + 1000.0), x_query
+    )
+    torch.testing.assert_close(shifted.numerical, out.numerical + 1000.0)
+
+    model.fit(x_context, target)
+    torch.testing.assert_close(
+        model.predict(x_query).numerical,
+        out.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
