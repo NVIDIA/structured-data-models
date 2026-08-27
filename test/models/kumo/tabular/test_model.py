@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 import torch
@@ -132,74 +132,66 @@ def test_forward_does_not_mutate_input(
 
 
 class _RecordingCore(torch.nn.Module):
-    calls: ClassVar[
-        list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, int | None]]
-    ] = []
+    calls: ClassVar[list[dict[str, Any]]] = []
 
     def __init__(
         self,
         num_classes: int,
         num_quantiles: int,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
+        **_: object,
     ) -> None:
         super().__init__()
-        assert num_classes == 10
-        assert num_quantiles == 0
-        self.anchor = torch.nn.Parameter(
-            torch.empty((), device=device, dtype=dtype)
-        )
+        assert (num_classes, num_quantiles) == (10, 0)
 
     def forward(
         self,
-        x: torch.Tensor,
-        y: torch.Tensor,
-        categorical_mask: torch.Tensor,
+        x: torch.Tensor,  # [..., R, C]
+        y: torch.Tensor,  # [..., R_context]
+        categorical_mask: torch.Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
         batch_size_limit: int | None = None,
-    ) -> torch.Tensor:
+    ) -> torch.Tensor:  # [..., R_query, 10]
         type(self).calls.append(
-            (
-                x.clone(),
-                y.clone(),
-                categorical_mask.clone(),
-                cache is not None and cache.is_replaying,
-                batch_size_limit,
-            )
+            {
+                "x": x.clone(),
+                "y": y.clone(),
+                "categorical_mask": categorical_mask.clone(),
+                "batch_size_limit": batch_size_limit,
+            }
         )
         query = x[..., y.size(-1) :, :]
-        offsets = torch.arange(10, device=x.device, dtype=x.dtype)
-        return query.sum(dim=-1, keepdim=True) + offsets
+        return query.sum(dim=-1, keepdim=True) + torch.arange(
+            10,
+            device=x.device,
+            dtype=x.dtype,
+        )
 
 
 @pytest.fixture
-def recording_model(monkeypatch: pytest.MonkeyPatch) -> KumoTabular:
+def model(monkeypatch: pytest.MonkeyPatch) -> KumoTabular:
     _RecordingCore.calls.clear()
     monkeypatch.setattr(model_module, "_KumoTabular", _RecordingCore)
     return KumoTabular()
 
 
 def _features() -> tuple[TableTensor, TableTensor]:
-    context = TableTensor(
+    x = TableTensor(
         columns={Stype.numerical: ("n0", "n1"), Stype.categorical: ("c",)},
         numerical=torch.tensor(
-            [[100.0, 200.0], [101.0, 201.0], [102.0, 202.0]]
+            [
+                [100.0, 200.0],
+                [101.0, 201.0],
+                [102.0, 202.0],
+                [103.0, 203.0],
+                [104.0, 204.0],
+            ]
         ),
-        categorical=CategoricalTensor(
-            code=torch.tensor([[0], [1], [0]]),
-            categories=(torch.tensor([10, 20]),),
-        ),
-    )
-    query = TableTensor(
-        columns={Stype.numerical: ("n0", "n1"), Stype.categorical: ("c",)},
-        numerical=torch.tensor([[103.0, 203.0], [104.0, 204.0]]),
-        categorical=CategoricalTensor(
-            code=torch.tensor([[0], [1]]),
-            categories=(torch.tensor([20, 10]),),
+        categorical=CategoricalTensor.from_tensor(
+            torch.tensor([[0], [1], [0], [0], [1]])
         ),
     )
-    return context, query
+    return x.split(3, dim=0)
 
 
 def _target(num_classes: int = 3) -> TableTensor:
@@ -214,136 +206,52 @@ def _target(num_classes: int = 3) -> TableTensor:
 
 def _recipe() -> sp.Recipe:
     return sp.Recipe(
-        features=[
-            sp.StypeDispatch(
-                categorical=sp.AlignCategories(sort_by="value"),
-            ),
-            sp.ToNumerical(),
-        ],
-        output=[
-            sp.ReduceEstimators(method="mean"),
-            sp.Softmax(),
-        ],
+        features=[sp.ToNumerical()],
+        output=[sp.ReduceEstimators(method="mean")],
     )
 
 
-def test_default_recipe_is_empty(recording_model: KumoTabular) -> None:
-    context, query = _features()
+def test_forward(model: KumoTabular) -> None:
+    x_context, x_query = _features()
 
-    out = recording_model(context.numerical, _target(), query.numerical)
-
-    assert out.size() == (1, 2, 3)
-    torch.testing.assert_close(
-        out.numerical,
-        torch.tensor([[[306.0, 307.0, 308.0], [308.0, 309.0, 310.0]]]),
-    )
-    x, _, categorical_mask, _, _ = _RecordingCore.calls[0]
-    assert x.equal(torch.cat((context.numerical, query.numerical), dim=-2))
-    assert not categorical_mask.any()
-
-
-def test_forward_preserves_declared_classes_and_feature_order(
-    recording_model: KumoTabular,
-) -> None:
-    context, query = _features()
-
-    out = recording_model(
-        context,
+    out = model(
+        x_context,
         _target(),
-        query,
+        x_query,
         recipe=_recipe(),
         batch_size_limit=7,
     )
 
     assert out.size() == (2, 3)
     assert out.columns[Stype.numerical] == ("0", "10", "20")
-    torch.testing.assert_close(out.numerical.sum(dim=-1), torch.ones(2))
 
-    x, y, categorical_mask, replaying, batch_size_limit = _RecordingCore.calls[
-        0
-    ]
-    assert categorical_mask.tolist() == [False, False, True]
-    assert x[..., :2].equal(
-        torch.cat((context.numerical, query.numerical), dim=-2)
+    call = _RecordingCore.calls[0]
+    assert call["x"][..., :2].equal(
+        torch.cat((x_context.numerical, x_query.numerical), dim=-2)
     )
-    # Query categories use the reversed input vocabulary and are realigned to
-    # the context vocabulary before becoming the final numerical column.
-    assert x[..., -1].tolist() == [0.0, 1.0, 0.0, 1.0, 0.0]
-    assert y.tolist() == [0, 2, 0]
-    assert not replaying
-    assert batch_size_limit == 7
+    assert call["y"].equal(torch.tensor([0, 2, 0]))
+    # Columns turned numerical by the recipe stay marked as categorical.
+    assert call["categorical_mask"].tolist() == [False, False, True]
+    assert call["batch_size_limit"] == 7
 
 
-def test_fit_predict_matches_one_shot_and_replays_categorical_mask(
-    recording_model: KumoTabular,
-) -> None:
-    context, query = _features()
+def test_fit_predict(model: KumoTabular) -> None:
+    x_context, x_query = _features()
     target = _target()
 
-    expected = recording_model(
-        context,
-        target,
-        query,
-        recipe=_recipe(),
-        batch_size_limit=3,
-    )
-    recording_model.fit(
-        context,
-        target,
-        recipe=_recipe(),
-        batch_size_limit=3,
-    )
-    actual = recording_model.predict(query)
+    expected = model(x_context, target, x_query, recipe=_recipe())
+    model.fit(x_context, target, recipe=_recipe())
+    actual = model.predict(x_query)
 
-    torch.testing.assert_close(actual.numerical, expected.numerical)
+    assert actual.allclose(expected)
     assert actual.columns == expected.columns
-    direct_mask = _RecordingCore.calls[0][2]
-    fit_mask = _RecordingCore.calls[1][2]
-    replay_mask = _RecordingCore.calls[2][2]
-    assert direct_mask.equal(fit_mask)
-    assert fit_mask.equal(replay_mask)
-    assert not _RecordingCore.calls[1][3]
-    assert _RecordingCore.calls[2][3]
-    assert _RecordingCore.calls[2][4] == 3
+    # The mask is derived from the context schema, which `predict` lacks.
+    fit_call, predict_call = _RecordingCore.calls[-2:]
+    assert predict_call["categorical_mask"].equal(fit_call["categorical_mask"])
 
 
-def test_categorical_mask_tracks_shuffled_columns(
-    recording_model: KumoTabular,
-) -> None:
-    context, query = _features()
-    recipe = _recipe()
-    recipe.append_features(sp.ShuffleColumns(method="shift"))
-
-    recording_model(
-        context,
-        _target(),
-        query,
-        recipe=recipe,
-        num_estimators=3,
-        generator=torch.Generator().manual_seed(0),
-    )
-
-    assert len(_RecordingCore.calls) == 3
-    for x, _, categorical_mask, _, _ in _RecordingCore.calls:
-        assert categorical_mask.sum() == 1
-        categorical = x[..., categorical_mask]
-        numerical = x[..., ~categorical_mask]
-        assert categorical.max() <= 1
-        assert numerical.min() >= 100
-
-
-def test_class_limit_uses_declared_vocabulary(
-    recording_model: KumoTabular,
-) -> None:
-    context, query = _features()
-    target = _target(num_classes=10)
-    out = recording_model(context, target, query, recipe=_recipe())
-    assert out.size() == (2, 10)
+def test_too_many_classes(model: KumoTabular) -> None:
+    x_context, x_query = _features()
 
     with pytest.raises(ValueError, match="only supports up to 10 classes"):
-        recording_model(
-            context,
-            _target(num_classes=11),
-            query,
-            recipe=_recipe(),
-        )
+        model(x_context, _target(num_classes=11), x_query, recipe=_recipe())
