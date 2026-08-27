@@ -90,6 +90,9 @@ class KumoTabular(ICLModel):  # noqa: D101
             assert x_query is not None
             x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
+        model_dtype = next(self.model.parameters()).dtype
+        x = x.to(dtype=model_dtype)
+
         classes: Tensor | None = None
         if y_context is not None and y_context.categorical.size(-1) > 0:
             if self.task != "classification":
@@ -106,6 +109,7 @@ class KumoTabular(ICLModel):  # noqa: D101
                     f"{self.task!r}, but received a numerical target"
                 )
             y = y_context.numerical.squeeze(-1)
+            y = y.to(dtype=model_dtype)
         else:
             assert cache is not None
             if self.task == "classification":

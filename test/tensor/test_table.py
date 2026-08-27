@@ -1115,6 +1115,48 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+@pytest.mark.parametrize("source", ["arrow", "pandas", "columns"])
+def test_numerical_ingestion_dtype_preserves_large_offsets(
+    source: str,
+) -> None:
+    values = (1e12 + torch.arange(3, dtype=torch.float64)).tolist()
+    stypes = {"value": "numerical"}
+
+    if source == "arrow":
+        table = TableTensor.from_arrow(
+            pa.table({"value": values}),
+            stypes,
+            numerical_dtype=torch.float64,
+        )
+    elif source == "pandas":
+        table = TableTensor.from_pandas(
+            pd.DataFrame({"value": values}),
+            stypes,
+            numerical_dtype=torch.float64,
+        )
+    else:
+        assert source == "columns"
+        table = TableTensor.from_columns(
+            {"value": values},
+            stypes,
+            numerical_dtype=torch.float64,
+        )
+
+    assert table.numerical.dtype == torch.float64
+    assert table.numerical.squeeze(-1).equal(
+        torch.tensor(values, dtype=torch.float64)
+    )
+
+
+def test_numerical_ingestion_dtype_rejects_non_floating_dtype() -> None:
+    with pytest.raises(ValueError, match="numerical_dtype"):
+        TableTensor.from_arrow(
+            pa.table({"value": [1, 2]}),
+            {"value": "numerical"},
+            numerical_dtype=torch.int64,
+        )
+
+
 @onlyCUDA
 def test_from_pandas_id_cuda() -> None:
     df = pd.DataFrame(
