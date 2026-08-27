@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 import torch.nn.functional as F
@@ -22,19 +22,27 @@ class KumoTabular(ICLModel):  # noqa: D101
         {Stype.numerical}
     )
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
-        {Stype.categorical}
+        {Stype.numerical, Stype.categorical}
     )
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
         self,
         device: torch.device | str | None = None,
+        *,
+        task: Literal["classification", "regression"] = "classification",
     ) -> None:
         super().__init__()
 
+        self.task = task
+        if task == "classification":
+            num_classes, num_quantiles = 10, 0
+        else:
+            assert task == "regression"
+            num_classes, num_quantiles = 0, 999
         self.model = _KumoTabular(
-            num_classes=10,
-            num_quantiles=0,
+            num_classes=num_classes,
+            num_quantiles=num_quantiles,
             device=device,
         )
         self.eval()
@@ -72,7 +80,7 @@ class KumoTabular(ICLModel):  # noqa: D101
         generator: torch.Generator | None,
         batch_size_limit: int | None = None,
         **kwargs: Any,
-    ) -> TableTensor:  # [..., R_query, num_classes]
+    ) -> TableTensor:  # [..., R_query, num_classes or 999]
         if x_query is None and x_context is not None:
             x = x_context.numerical
         elif x_context is None and x_query is not None:
@@ -82,15 +90,34 @@ class KumoTabular(ICLModel):  # noqa: D101
             assert x_query is not None
             x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
-        if y_context is not None:
+        classes: Tensor | None = None
+        if y_context is not None and y_context.categorical.size(-1) > 0:
+            if self.task != "classification":
+                raise ValueError(
+                    f"{self.__class__.__name__!r} is initialized for task "
+                    f"{self.task!r}, but received a categorical target"
+                )
             y = y_context.categorical.code.squeeze(-1)
             classes = y_context.categorical.categories[0]
+        elif y_context is not None and y_context.numerical.size(-1) > 0:
+            if self.task != "regression":
+                raise ValueError(
+                    f"{self.__class__.__name__!r} is initialized for task "
+                    f"{self.task!r}, but received a numerical target"
+                )
+            y = y_context.numerical.squeeze(-1)
         else:
             assert cache is not None
-            classes = cast(Tensor, cache["classes"])
-            y = x.new_empty((*x.size()[:-2], 0), dtype=torch.int64)
+            if self.task == "classification":
+                classes = cast(Tensor, cache["classes"])
+            y = x.new_empty(
+                (*x.size()[:-2], 0),
+                dtype=torch.int64
+                if self.task == "classification"
+                else x.dtype,
+            )
 
-        if len(classes) > 10:
+        if classes is not None and len(classes) > 10:
             raise ValueError(
                 f"{self.__class__.__name__!r} only supports up to 10 classes "
                 f"(got {len(classes)})"
@@ -121,6 +148,13 @@ class KumoTabular(ICLModel):  # noqa: D101
             cache=cache,
             batch_size_limit=batch_size_limit,
         )
+        if classes is None:
+            return TableTensor(
+                columns={
+                    Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
+                },
+                numerical=out.sort(dim=-1)[0],
+            )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
             numerical=out[..., : len(classes)],
