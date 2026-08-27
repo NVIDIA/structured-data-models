@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 
 import sdm.processing as sp
-from sdm import Stype, TableTensor
+from sdm import Stype
 from sdm.tensor import EnsembleTable
 
 
@@ -15,59 +15,6 @@ class _TabICLv2EstimatorPlan:
         self._num_classes = 1
         self._num_members = 1
         self._seed = 0
-
-    def initialize(
-        self,
-        target: TableTensor,
-        *,
-        num_members: int,
-        generator: torch.Generator | None,
-    ) -> None:
-        self._num_members = num_members
-        self._seed = (
-            generator.initial_seed()
-            if generator is not None
-            else torch.initial_seed()
-        )
-        if target.categorical.size(-1) == 0:
-            self._num_classes = 1
-            return
-        codes = target.categorical.code[..., 0]
-        self._num_classes = codes[codes >= 0].unique().numel()
-
-    @staticmethod
-    def _draw_latin(
-        n_features: int,
-        seed: int,
-    ) -> tuple[list[int], list[int], list[int]]:
-        rng = random.Random(seed)
-        tree = [0] + [index & -index for index in range(1, n_features + 1)]
-
-        def pop(order: int) -> int:
-            index = 0
-            step = 1 << (n_features.bit_length() - 1)
-            while step:
-                candidate = index + step
-                if candidate <= n_features and tree[candidate] <= order:
-                    index = candidate
-                    order -= tree[candidate]
-                step >>= 1
-            position = index + 1
-            while position <= n_features:
-                tree[position] -= 1
-                position += position & -position
-            return index
-
-        base = [
-            pop(rng.randrange(remaining))
-            for remaining in range(n_features, 1, -1)
-        ]
-        base.append(pop(0))
-        rows = list(range(n_features))
-        rng.shuffle(rows)
-        patterns = list(range(n_features))
-        rng.shuffle(patterns)
-        return base, rows, patterns
 
     def latin_state(
         self,
@@ -115,6 +62,40 @@ class _TabICLv2EstimatorPlan:
             ),
         )
 
+    @staticmethod
+    def _draw_latin(
+        n_features: int,
+        seed: int,
+    ) -> tuple[list[int], list[int], list[int]]:
+        rng = random.Random(seed)
+        tree = [0] + [index & -index for index in range(1, n_features + 1)]
+
+        def pop(order: int) -> int:
+            index = 0
+            step = 1 << (n_features.bit_length() - 1)
+            while step:
+                candidate = index + step
+                if candidate <= n_features and tree[candidate] <= order:
+                    index = candidate
+                    order -= tree[candidate]
+                step >>= 1
+            position = index + 1
+            while position <= n_features:
+                tree[position] -= 1
+                position += position & -position
+            return index
+
+        base = [
+            pop(rng.randrange(remaining))
+            for remaining in range(n_features, 1, -1)
+        ]
+        base.append(pop(0))
+        rows = list(range(n_features))
+        rng.shuffle(rows)
+        patterns = list(range(n_features))
+        rng.shuffle(patterns)
+        return base, rows, patterns
+
 
 class _InitializeTabICLv2EstimatorPlan(
     sp.EnsembleProcessor,
@@ -135,11 +116,18 @@ class _InitializeTabICLv2EstimatorPlan(
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._plan.initialize(
-            ensemble_table.table(0),
-            num_members=ensemble_table.num_members,
-            generator=generator,
+        self._plan._num_members = ensemble_table.num_members
+        self._plan._seed = (
+            generator.initial_seed()
+            if generator is not None
+            else torch.initial_seed()
         )
+        target = ensemble_table.table(0)
+        if target.categorical.size(-1) == 0:
+            self._plan._num_classes = 1
+            return
+        codes = target.categorical.code[..., 0]
+        self._plan._num_classes = codes[codes >= 0].unique().numel()
 
     def _transform_ensemble(
         self,

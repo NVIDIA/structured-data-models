@@ -7,6 +7,7 @@ import torch
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models.tabiclv2.recipe import (
     _TabICLv2EstimatorPlan,
+    _TabICLv2ShuffleColumns,
     default_recipe,
 )
 from sdm.processing import ShuffleColumns
@@ -245,12 +246,14 @@ def test_tabiclv2_latin_plan_matches_reference(
     plan._num_members = num_members
     plan._seed = seed
 
-    state = plan.latin_state(
-        n_features,
-        tuple(range(num_members)),
-        torch.device("cpu"),
+    processor = _TabICLv2ShuffleColumns(plan)
+    processor.fit_ensemble(
+        EnsembleTable(
+            _wide_table(n_features, device=torch.device("cpu")),
+            num_members=num_members,
+        )
     )
-    actual = ShuffleColumns._materialize_latin(*state).tolist()
+    actual = processor._permutations[0].tolist()
 
     assert actual == _reference_latin(
         n_features,
@@ -262,20 +265,30 @@ def test_tabiclv2_latin_plan_matches_reference(
 
 def test_tabiclv2_latin_plan_single_member_is_reference_identity() -> None:
     plan = _TabICLv2EstimatorPlan()
+    processor = _TabICLv2ShuffleColumns(plan)
 
-    state = plan.latin_state(7, (0,), torch.device("cpu"))
+    processor.fit_ensemble(
+        EnsembleTable(
+            _wide_table(7, device=torch.device("cpu")),
+            num_members=1,
+        )
+    )
 
-    assert ShuffleColumns._materialize_latin(*state).tolist() == [
-        list(range(7))
-    ]
+    assert processor._permutations[0].tolist() == [list(range(7))]
 
 
 def test_tabiclv2_latin_plan_scales_past_reference_limit() -> None:
     plan = _TabICLv2EstimatorPlan()
     plan._num_members = 8
     plan._seed = 42
-    state = plan.latin_state(4001, tuple(range(8)), torch.device("cpu"))
-    permutations = ShuffleColumns._materialize_latin(*state)
+    processor = _TabICLv2ShuffleColumns(plan)
+    processor.fit_ensemble(
+        EnsembleTable(
+            _wide_table(4001, device=torch.device("cpu")),
+            num_members=8,
+        )
+    )
+    permutations = processor._permutations[0]
 
     assert permutations.size() == (8, 4001)
     assert torch.equal(permutations[::2], permutations[1::2])
