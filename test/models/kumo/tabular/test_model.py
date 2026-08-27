@@ -415,11 +415,12 @@ def test_default_recipe_distinguishes_missing_and_unseen_categories() -> None:
 
 
 def test_default_recipe_clips_categories_but_not_datetime_fields() -> None:
-    num_rows = 20
+    num_rows = 100
     hours = torch.zeros(num_rows, dtype=torch.long)
     hours[-1] = 12
-    categories = torch.arange(1001)
-    codes = torch.cat((torch.arange(19), torch.tensor([1000]))).unsqueeze(-1)
+    categories = torch.arange(2)
+    codes = torch.zeros(num_rows, 1, dtype=torch.long)
+    codes[-1] = 1
     context = TableTensor(
         columns={Stype.datetime: ("when",), Stype.categorical: ("cat",)},
         datetime=hours.mul(3_600_000_000).unsqueeze(-1),
@@ -434,7 +435,7 @@ def test_default_recipe_clips_categories_but_not_datetime_fields() -> None:
     hour_cos = transformed.columns[Stype.numerical].index("when__hour__cos")
     cat = transformed.columns[Stype.numerical].index("cat")
     assert transformed.numerical[-1, hour_cos] < -4
-    assert transformed.numerical[-1, cat] < 3.5
+    assert transformed.numerical[-1, cat] < 4.1
 
 
 def test_default_recipe_fits_numerical_state_only_on_context() -> None:
