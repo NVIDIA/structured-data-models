@@ -146,6 +146,10 @@ class Chronos2(ICLModel):
         **kwargs: Any,
     ) -> TableTensor:
         r""":meta private:"""  # noqa: D415
+        self._validate_seqused(
+            seqused_train=kwargs.get("seqused_train"),
+            seqused_cols=kwargs.get("seqused_cols"),
+        )
         if cross_learning:  # Keep estimator groups separate:
             kwargs["estimator_batch_size"] = 1
         return super().forward(
@@ -165,6 +169,10 @@ class Chronos2(ICLModel):
         **kwargs: Any,
     ) -> None:
         r""":meta private:"""  # noqa: D415
+        self._validate_seqused(
+            seqused_train=kwargs.get("seqused_train"),
+            seqused_cols=kwargs.get("seqused_cols"),
+        )
         if cross_learning:  # Keep estimator groups separate:
             kwargs["estimator_batch_size"] = 1
         super().fit(

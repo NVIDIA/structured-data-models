@@ -127,6 +127,7 @@ class TabICLv2(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    supports_seqused: ClassVar[bool] = True
 
     paper: ClassVar[str] = "https://arxiv.org/abs/2602.11139"
     source: ClassVar[str] = "https://github.com/soda-inria/tabicl"

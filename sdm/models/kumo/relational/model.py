@@ -157,6 +157,7 @@ class KumoRelational(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = True
+    supports_seqused: ClassVar[bool] = False
 
     paper: ClassVar[str] = "https://arxiv.org/abs/2604.12596"
     source: ClassVar[str] = (
