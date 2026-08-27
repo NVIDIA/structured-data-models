@@ -76,7 +76,7 @@ Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.p
 For models with `supports_seqused=True`, {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit` accept padded inputs: pad the in-context rows and columns to a fixed set of shapes and pass the valid counts as `seqused_train` (per batch element) and `seqused_cols` (shared) `torch.int32` tensors together with a pass-through `sdm.Recipe()`.
 {py:meth}`~sdm.models.ICLModel.predict` reuses the counts and recipe cached by `fit`; it does not accept them directly.
 Padded features and regression targets must remain finite and moderate in magnitude; padded categorical targets must repeat classes present in the valid context. See {py:meth}`~sdm.models.ICLModel.forward` for the full padding contract.
-The {py:attr}`~sdm.models.ICLModel.supports_seqused` attribute denotes whether an {py:class}`~sdm.models.ICLModel` accepts padded inputs; padded rows and columns are masked from attention, so a stream of differently sized tables can reuse the same compiled graphs.
+The {py:attr}`~sdm.models.ICLModel.supports_seqused` attribute denotes whether an {py:class}`~sdm.models.ICLModel` accepts padded inputs; padded rows and columns are masked from attention, so a stream of differently sized tables can reuse the same compiled graphs; [`examples/benchmark_tabiclv2.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/benchmark_tabiclv2.py) measures this serving recipe.
 
 ## Model Concepts
 
