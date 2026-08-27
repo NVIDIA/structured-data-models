@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
+import sdm.processing as sp
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
@@ -50,8 +51,37 @@ class KumoTabular(ICLModel):  # noqa: D101
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        # TODO: Define the default recipe.
-        return Recipe()
+        return Recipe(
+            features=[
+                sp.StypeDispatch(
+                    numerical=[
+                        sp.ImputeMean(nonfinite=True),
+                        sp.ClipSigma(threshold=4.0, method="hard"),
+                    ],
+                ),
+                sp.AddCalendarFields(
+                    fields=("month", "day_of_month", "hour", "weekday"),
+                    encoding="cyclic",
+                ),
+                sp.DropStypes(Stype.datetime, Stype.text, Stype.id),
+                sp.StypeDispatch(
+                    categorical=sp.AlignCategories(sort_by="value"),
+                ),
+                sp.ToNumerical(),
+                sp.ImputeMean(nonfinite=True),
+                sp.Standardize(correction=1, min_scale=1e-6),
+                sp.Clip(min_value=-100.0, max_value=100.0),
+            ],
+            target=sp.StypeDispatch(
+                numerical=sp.Standardize(constant_threshold=1e-8),
+            ),
+            output=[
+                sp.ReduceEstimators(method="mean"),
+                sp.TaskDispatch(
+                    classification=sp.Softmax(),
+                ),
+            ],
+        )
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415

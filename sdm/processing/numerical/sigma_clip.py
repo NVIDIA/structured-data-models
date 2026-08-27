@@ -1,3 +1,5 @@
+from typing import Literal
+
 import torch
 from torch import Tensor
 
@@ -15,15 +17,16 @@ def _std(
 
 
 class ClipSigma(Processor):
-    """Two-stage z-score outlier clipping with soft logarithmic bounds.
+    """Two-stage z-score outlier clipping.
 
     The first pass masks values outside the initial z-score bounds, then the
-    second pass refits bounds on the remaining values. The transform applies
-    logarithmic soft clipping instead of hard truncation.
+    second pass refits bounds on the remaining values.
 
     Args:
         threshold: Positive z-score multiplier setting how many standard
-            deviations from the mean mark the soft clipping bounds.
+            deviations from the mean mark the clipping bounds.
+        method: ``"soft"`` applies logarithmic clipping outside the bounds;
+            ``"hard"`` clamps directly to the bounds.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -33,11 +36,13 @@ class ClipSigma(Processor):
         self,
         *,
         threshold: float = 4.0,
+        method: Literal["soft", "hard"] = "soft",
     ) -> None:
         super().__init__()
         if threshold <= 0:
             raise ValueError("threshold must be positive.")
         self.threshold = threshold
+        self.method = method
         self.register_buffer("_mean", torch.empty(0))
         self.register_buffer("_std", torch.empty(0))
         self.register_buffer("lower_bound", torch.empty(0))
@@ -92,15 +97,24 @@ class ClipSigma(Processor):
         self.upper_bound = self._mean + self.threshold * self._std
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        """Clip ``table`` using the fitted soft lower and upper bounds."""
+        """Clip ``table`` using the fitted lower and upper bounds."""
         numerical = table.numerical
+        if self.method == "hard":
+            numerical = numerical.clamp(
+                min=self.lower_bound,
+                max=self.upper_bound,
+            )
+            return table.replace_blocks(numerical=numerical)
+
+        assert self.method == "soft"
         log_abs = numerical.abs().log1p()
         clipped = torch.maximum(-log_abs + self.lower_bound, numerical)
         numerical = torch.minimum(log_abs + self.upper_bound, clipped)
         return table.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:
+        method = "" if self.method == "soft" else f", method={self.method!r}"
         return (
             f"{' ' * indent}{self.__class__.__name__}("
-            f"threshold={self.threshold})"
+            f"threshold={self.threshold}{method})"
         )

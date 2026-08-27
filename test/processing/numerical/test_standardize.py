@@ -44,6 +44,7 @@ def test_standardize_fit_transform_and_inverse_round_trip(
     assert torch.allclose(processor.scale, expected_scale)
     transformed = processor.transform(inp).numerical
     assert torch.allclose(transformed, expected)
+    assert transformed.device == device
     assert torch.allclose(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
@@ -64,6 +65,7 @@ def test_standardize_without_mean_or_std(device: torch.device) -> None:
     assert torch.equal(processor.scale, torch.ones((1, 2), device=device))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, inp)
+    assert transformed.device == device
 
 
 @withCUDA
@@ -77,12 +79,77 @@ def test_standardize_single_sample_uses_unit_scale(
 
     assert torch.equal(processor.scale, torch.ones((1, 2), device=device))
     assert torch.equal(transformed, torch.zeros_like(inp))
+    assert transformed.device == device
     assert torch.equal(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
         ).numerical,
         inp,
     )
+
+
+@withCUDA
+def test_standardize_constant_threshold_uses_unit_scale(
+    device: torch.device,
+) -> None:
+    inp = TableTensor.from_tensor(
+        torch.tensor(
+            [[0.0], [1e-9], [2e-9]],
+            dtype=torch.float64,
+            device=device,
+        )
+    )
+
+    processor = Standardize(constant_threshold=1e-8).fit(inp)
+    transformed = processor.transform(inp)
+
+    assert torch.equal(processor.scale, torch.ones_like(processor.scale))
+    torch.testing.assert_close(
+        transformed.numerical,
+        inp.numerical - inp.numerical.mean(dim=-2, keepdim=True),
+    )
+    torch.testing.assert_close(
+        processor.inverse_transform(transformed).numerical,
+        inp.numerical,
+    )
+
+    single = Standardize(
+        constant_threshold=1e-8,
+        epsilon=0.5,
+    ).fit(inp[:1])
+    assert torch.equal(single.scale, single.scale.new_tensor([[1.5]]))
+
+
+@withCUDA
+def test_standardize_correction_and_min_scale(
+    device: torch.device,
+) -> None:
+    inp = TableTensor.from_tensor(
+        torch.tensor(
+            [[0.0, 0.0], [2.0, 1e-9], [4.0, 2e-9], [6.0, 3e-9]],
+            dtype=torch.float64,
+            device=device,
+        )
+    )
+
+    processor = Standardize(correction=1, min_scale=1e-6).fit(inp)
+    transformed = processor.transform(inp).numerical
+
+    expected_scale = torch.tensor(
+        [[torch.sqrt(torch.tensor(20.0 / 3.0)), 1e-6]],
+        dtype=torch.float64,
+        device=device,
+    )
+    torch.testing.assert_close(processor.scale, expected_scale)
+    torch.testing.assert_close(
+        transformed[:, 0].std(correction=1),
+        torch.tensor(1.0, dtype=torch.float64, device=device),
+    )
+
+    single = Standardize(correction=1, min_scale=1e-6).fit(inp[:1])
+    assert torch.equal(single.scale, single.scale.new_full((1, 2), 1e-6))
+    assert repr(Standardize()) == "Standardize()"
+    assert repr(processor) == "Standardize(correction=1, min_scale=1e-06)"
 
 
 @withCUDA
