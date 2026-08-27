@@ -95,7 +95,11 @@ def test_shuffle_columns_ensemble_matches_independent_processors(
         assert restored.table(member_id).equal(context)
 
 
-def test_shuffle_columns_checks_num_members() -> None:
+@pytest.mark.parametrize(
+    "method_name",
+    ["transform_ensemble", "inverse_transform_ensemble"],
+)
+def test_shuffle_columns_checks_num_members(method_name: str) -> None:
     processor = ShuffleColumns(method="shift")
     processor.fit_ensemble(
         EnsembleTable(_table(), num_members=8),
@@ -106,4 +110,4 @@ def test_shuffle_columns_checks_num_members() -> None:
         RuntimeError,
         match="was fitted with 8 ensemble members, but got 7",
     ):
-        processor.transform_ensemble(EnsembleTable(_table(), num_members=7))
+        getattr(processor, method_name)(EnsembleTable(_table(), num_members=7))
