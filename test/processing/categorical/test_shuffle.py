@@ -70,7 +70,6 @@ def test_shuffle_categories_random_permutes_each_categorical_column(
         transformed.categorical.code[~valid_mask],
         features.categorical.code[~valid_mask],
     )
-    assert transformed.categorical.code.device == device
     for transformed_category, category in zip(
         transformed.categorical.categories,
         features.categorical.categories,

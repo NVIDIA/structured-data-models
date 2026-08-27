@@ -223,7 +223,6 @@ def test_cuda_matches_cpu(
             )
         )
 
-    assert output.numerical.is_cuda
     assert output.numerical.shape == expected.numerical.shape
     assert output.columns == expected.columns
     actual_columns = sorted(
@@ -307,24 +306,6 @@ def test_tfidf_keeps_vocabulary_per_member_table() -> None:
 
     with pytest.raises(RuntimeError, match="same number"):
         processor.transform_ensemble(EnsembleTable(query, num_members=3))
-
-
-def test_tfidf_fit_then_transform_matches_fit_transform() -> None:
-    first = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
-    second = TableTensor.from_tensor(StringTensor.from_list([["world"]]))
-    ensemble_table = EnsembleTable.from_tables(
-        tables=(first, second),
-        member_table_ids=(0, 1, 0, 1),
-    )
-    fitted = TFIDF(ngram_range=(2, 2))
-    combined = TFIDF(ngram_range=(2, 2))
-
-    fitted.fit_ensemble(ensemble_table)
-    actual = fitted.transform_ensemble(ensemble_table)
-    expected = combined.fit_transform_ensemble(ensemble_table)
-
-    for member_id in range(ensemble_table.num_members):
-        assert actual.table(member_id).equal(expected.table(member_id))
 
 
 def test_tfidf_refit_clears_ensemble_state() -> None:

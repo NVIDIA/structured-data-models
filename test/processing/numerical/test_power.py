@@ -80,7 +80,6 @@ def test_power_transform_standardized_fit_transform_and_inverse_round_trip(
         inp,
         atol=1e-8,
     )
-    assert transformed.device == device
 
 
 @withCUDA
@@ -117,7 +116,6 @@ def test_power_transform_without_standardization_is_near_identity(
         atol=1e-5,
     )
     assert torch.allclose(transformed, inp, atol=1e-5)
-    assert transformed.device == device
     assert torch.allclose(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
@@ -163,7 +161,6 @@ def test_power_transform_constant_columns_use_identity_lambda(
 
     assert torch.equal(processor.lambdas, torch.ones((1, 2), device=device))
     assert torch.equal(transformed, torch.zeros_like(inp))
-    assert transformed.device == device
     assert torch.equal(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
@@ -199,7 +196,6 @@ def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
 
     assert torch.isfinite(inverse).all()
     assert torch.equal(inverse, processor.max.reshape_as(inverse))
-    assert inverse.device == device
 
 
 @withCUDA

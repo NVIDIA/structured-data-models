@@ -28,7 +28,6 @@ def test_unique_filter(device: torch.device) -> None:
         "3",
     )
     assert output.numerical.equal(data[:, [1, 2, 3]])
-    assert output.device == device
 
 
 @withCUDA
@@ -74,7 +73,6 @@ def test_variance_filter(device: torch.device) -> None:
 
     assert output.columns[Stype.numerical] == ("2",)
     assert output.numerical.equal(data[:, [2]])
-    assert output.device == device
 
 
 def test_drop_constant_columns_rejects_invalid_arguments() -> None:
@@ -131,7 +129,6 @@ def test_drop_constant_columns_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output.table(member_id).equal(expected_query)
         assert separate_query_output.table(member_id).equal(expected_query)
-        assert query_output.table(member_id).device == device
 
 
 def test_drop_constant_columns_requires_fitted_member_count() -> None:

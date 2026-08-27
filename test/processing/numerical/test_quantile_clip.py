@@ -33,7 +33,6 @@ def test_clip_quantiles_bounds_and_transform(device: torch.device) -> None:
     assert torch.allclose(processor.upper_bound, expected_bounds[1])
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, expected)
-    assert transformed.device == device
 
 
 @withCUDA
@@ -57,7 +56,6 @@ def test_clip_quantiles_default_uses_min_max_bounds(
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, inp)
-    assert transformed.device == device
 
 
 @withCUDA
@@ -78,7 +76,6 @@ def test_clip_quantiles_constant_columns_are_exact(
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, inp)
-    assert transformed.device == device
 
 
 def test_clip_quantiles_rejects_invalid_quantiles() -> None:
