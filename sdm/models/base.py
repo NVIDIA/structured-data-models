@@ -78,34 +78,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
-        with inference_mode(not requires_grad):
-            return self._forward_call(
-                x_context=x_context,
-                y_context=y_context,
-                x_query=x_query,
-                related_context_tables=related_context_tables,
-                related_query_tables=related_query_tables,
-                recipe=recipe,
-                num_estimators=num_estimators,
-                generator=generator,
-                callbacks=callbacks,
-                **kwargs,
-            )
 
-    def _forward_call(
-        self,
-        x_context: Tensor | TableTensor,  # [..., R_context, D]
-        y_context: Tensor | TableTensor,  # [..., R_context, 1]
-        x_query: Tensor | TableTensor,  # [..., R_query, D]
-        related_context_tables: RelatedTables[TableTensor] | None = None,
-        related_query_tables: RelatedTables[TableTensor] | None = None,
-        *,
-        recipe: Recipe | None = None,
-        num_estimators: int = 1,
-        generator: torch.Generator | None = None,
-        callbacks: Sequence[Callback],
-        **kwargs: Any,
-    ) -> TableTensor:
         for callback in callbacks:
             callback.on_forward_start(
                 self,
@@ -145,7 +118,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
-        with torch.amp.autocast(x_query.device.type, enabled=False):
+        with (
+            torch.amp.autocast(x_query.device.type, enabled=False),
+            inference_mode("no_grad" if requires_grad else "inference"),
+        ):
             contexts = recipe_execution.fit_transform(
                 x=x_context,
                 y=y_context,
@@ -181,25 +157,33 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 else None,
                 related_query_tables=related_query_tables,
             )
-            out = self._forward(
-                x_context=context.x,
-                y_context=context.y,
-                x_query=x_query,
-                related_context_tables=context.related_tables,
-                related_query_tables=related_query_tables,
-                cache=None,
-                generator=generator,
-                **kwargs,
-            )
+
+            with inference_mode("grad" if requires_grad else "inference"):
+                out = self._forward(
+                    x_context=context.x,
+                    y_context=context.y,
+                    x_query=x_query,
+                    related_context_tables=context.related_tables,
+                    related_query_tables=related_query_tables,
+                    cache=None,
+                    generator=generator,
+                    **kwargs,
+                )
             out = cast(TableTensor, out.to(x_query.dtype))
             outs.append(out)
 
         # Regression: invert target before stacking estimator outputs.
         if contexts[0].y.numerical.size(-1) > 0:
-            with torch.amp.autocast(x_query.device.type, enabled=False):
+            with (
+                torch.amp.autocast(x_query.device.type, enabled=False),
+                inference_mode(),
+            ):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
-        with torch.amp.autocast(x_query.device.type, enabled=False):
+        with (
+            torch.amp.autocast(x_query.device.type, enabled=False),
+            inference_mode(),
+        ):
             prediction = recipe_execution.transform_output(outs)
 
         for callback in callbacks:
@@ -207,8 +191,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         return prediction
 
-    @inference_mode(False)
-    @torch.no_grad()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
@@ -249,7 +231,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
-        with torch.amp.autocast(x.device.type, enabled=False):
+        with (
+            torch.amp.autocast(x.device.type, enabled=False),
+            inference_mode(),
+        ):
             contexts = recipe_execution.fit_transform(
                 x=x,
                 y=y,
@@ -280,16 +265,17 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     else None
                 ),
             )
-            self._forward(
-                x_context=context.x,
-                y_context=context.y,
-                x_query=None,
-                related_context_tables=context.related_tables,
-                related_query_tables=None,
-                cache=estimator_cache,
-                generator=generator,
-                **kwargs,
-            )
+            with inference_mode():
+                self._forward(
+                    x_context=context.x,
+                    y_context=context.y,
+                    x_query=None,
+                    related_context_tables=context.related_tables,
+                    related_query_tables=None,
+                    cache=estimator_cache,
+                    generator=generator,
+                    **kwargs,
+                )
             if x.is_cuda and num_estimators > 1:
                 estimator_cache = estimator_cache.cpu().pin_memory()
             cache[i] = estimator_cache
@@ -321,20 +307,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
-        with inference_mode(not requires_grad):
-            return self._predict_call(
-                x=x,
-                related_tables=related_tables,
-                callbacks=callbacks,
-            )
 
-    def _predict_call(
-        self,
-        x: Tensor | TableTensor,  # [..., R, D]
-        related_tables: RelatedTables[TableTensor] | None = None,
-        *,
-        callbacks: Sequence[Callback],
-    ) -> TableTensor:
         for callback in callbacks:
             callback.on_forward_start(
                 self,
@@ -385,7 +358,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 RecipeExecution,
                 self._cache["recipe_execution"],
             )
-            with torch.amp.autocast(x.device.type, enabled=False):
+            with (
+                torch.amp.autocast(x.device.type, enabled=False),
+                inference_mode("no_grad" if requires_grad else "inference"),
+            ):
                 queries = recipe_execution.transform(x, related_tables)
 
             if x.is_cuda:
@@ -425,16 +401,17 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
-                out = self._forward(
-                    x_context=None,
-                    y_context=None,
-                    x_query=x_query,
-                    related_context_tables=None,
-                    related_query_tables=related_query_tables,
-                    cache=cache,
-                    generator=None,
-                    **cast(dict[str, Any], self._cache["kwargs"]),
-                )
+                with inference_mode("grad" if requires_grad else "inference"):
+                    out = self._forward(
+                        x_context=None,
+                        y_context=None,
+                        x_query=x_query,
+                        related_context_tables=None,
+                        related_query_tables=related_query_tables,
+                        cache=cache,
+                        generator=None,
+                        **cast(dict[str, Any], self._cache["kwargs"]),
+                    )
 
                 if x.is_cuda:
                     assert compute_stream is not None
@@ -456,10 +433,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         # Regression: invert target before stacking estimator outputs.
         if cast(Cache, self._cache[0])["classes"] is None:
-            with torch.amp.autocast(x.device.type, enabled=False):
+            with (
+                torch.amp.autocast(x.device.type, enabled=False),
+                inference_mode(),
+            ):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
-        with torch.amp.autocast(x.device.type, enabled=False):
+        with (
+            torch.amp.autocast(x.device.type, enabled=False),
+            inference_mode(),
+        ):
             prediction = recipe_execution.transform_output(outs)
 
         for callback in callbacks:
