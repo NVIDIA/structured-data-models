@@ -1,77 +1,71 @@
-# Spec: Geplante Spalten-Shuffles auf gestapelten Tabellen
+# Spec: Planbasierte, gebatchte Spalten-Shuffles
 
-Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `bebaef1ccd074a376dd2f4c3e5c0c010fb8d6db3`.
+Referenz: `tabicl==2.0.0` bei `f719c886a586ed4a29236345e319ac1ea596c478`. Baseline: `main` bei `2a73246320ea4188d8b8791e136ac8f111e112d6`.
 
 ## Problem
 
-Eine `EnsembleTable` trennt logische Estimatoren von physisch gespeicherten Tabellen. Im aktuellen TabICLv2-Feature-Rezept erzeugt die `none`-/`power`-`Choice` acht logische Estimatoren, aber nur zwei kompatible Tabellen in einer Gruppe `[2, Zeilen, Spalten]`. Die Referenz wählt vier Shuffle-Konfigurationen und wendet jede auf beide Normalisierungen an.
+Nach `Choice(Identity, PowerTransform)` enthält die `EnsembleTable` zwei Datenrepräsentationen. TabICLv2 wendet jede ausgewählte Shuffle-Konfiguration auf beide an. Bei E=8 sind das vier Slots und höchstens vier eindeutige Spaltenpermutationen. `ShuffleColumns` auf `main` zieht und verarbeitet dagegen acht Permutationen einzeln.
 
-`ShuffleColumns` verarbeitet auf `main` trotzdem acht logische Mitglieder einzeln. Danach hält es acht temporäre Tabellen, bevor `from_tables()` dieselben Normalisierungspaare wieder stapelt. Schema-Gleichheit allein erlaubt jedoch kein Teilen: Nur dieselbe geplante Permutations-ID darf gemeinsam ausgeführt werden; unterschiedliche Spaltenzahlen oder inkompatible Tabellen müssen getrennt bleiben.
+Das Modell entscheidet, **welche** Member eine logische Permutation teilen; der Processor entscheidet, **wie** sie ausgeführt wird. Physische Gruppen oder gleiches Schema beweisen kein semantisches Sharing.
 
 ## Lösung
 
-- Der gemeinsame logische Plan aus #619 wird pro tatsächlich vorkommendem Schema materialisiert: nicht vorhandene Spalten werden vor der lokalen Latin-Konstruktion herausgefiltert. Jede logische Estimator-ID verweist anschließend auf eine schemaspezifische Permutations-ID; ein konkreter `[P, C]`-Tensor wird nie zwischen verschiedenen Spaltenzahlen geteilt.
-- Die konkreten Permutationstensoren werden pro Schema in `BufferList` registriert. Permutations-, Schema- und Member-IDs liegen als `extra_state` vor, sodass der vollständige Ausführungsplan über den normalen `state_dict` gespeichert, geladen und auf ein anderes Device verschoben werden kann.
-- Die Eingaben werden nach kompatibler gespeicherter Gruppe und Spaltenzahl partitioniert. Für eine Partition werden die eindeutigen Indizes zu `[P, C]` gestapelt und alle gespeicherten Tabellen mit einem gebündelten CUDA-`gather` verarbeitet.
-- Die Quelltabelle `[S, R, C]` wird nur als View auf `[P, S, R, C]` erweitert; `gather` materialisiert ausschließlich die benötigte Ausgabe. Für TabICLv2 entsteht so ein Tensor `[4, 2, R, C]` statt acht Einzelresultaten plus Restacking.
-- Ein schmaler interner `EnsembleTable`-Assembly-Pfad übernimmt die fertigen Gruppen und `(group, position)`-Locations direkt. Er erhält logische Reihenfolge und Sharing, führt keine erneute Tensor-Kopie aus und erzeugt keine neue öffentliche Container-Abstraktion.
-- Inkompatible Gruppen werden separat gebatcht. Wenn kein gemeinsames Batch möglich ist, bleibt der bestehende per-Member-Pfad der korrekte Fallback.
+- Der Laufzeitplan aus #620 ordnet jedem Member Quellrepräsentations- und Permutations-ID zu; #619 projiziert logische Permutationen auf jedes vorhandene Schema.
+- Der Executor partitioniert nach Device, Stype, Schema und Quellgruppe und stapelt je Partition eindeutige Indizes zu `[P,C]`.
+- Für ein vollständiges Produkt wird `[S,R,C]` als View erweitert und per `gather` zu `[P,S,R,C]`. Beliebige, auch unabhängige K=E-Zuordnungen werden pro Quelle gebatcht; Quelltensoren werden nicht vorab kopiert.
+- Unterschiedliche Spaltenzahlen bleiben getrennt. Fertige Gruppen/Locations werden intern direkt zusammengesetzt. Tensorzustände liegen in `BufferList`, IDs in `extra_state`; der per-Member-Pfad bleibt Fallback.
 
 ## Ausführbares Akzeptanzbeispiel
 
-Dieser Draft ist noch spec-only und setzt `method="latin"` aus #619 voraus. Der synchronisierte CUDA-Lauf prüft öffentliche Ergebnisse und misst den Pfad mit 50.000 × 100 Werten.
-
 ```python
-import statistics
-import time
 import torch
-import sdm
-from sdm.processing import ShuffleColumns
-from sdm.tensor import EnsembleTable
+from sdm import Stype, TableTensor, CategoricalTensor
+from sdm.models import TabICLv2
+from sdm.processing.execution import RecipeExecution
 
-device = torch.device("cuda")
-tables = tuple(sdm.TableTensor.from_tensor(torch.full((50_000, 100), value, device=device)) for value in (0.0, 1.0))
-ensemble = EnsembleTable.from_tables(tables=tables, member_table_ids=(0, 1) * 4)
-processor = ShuffleColumns(method="latin").fit_ensemble(
-    ensemble, generator=torch.Generator(device=device).manual_seed(7)
+x = TableTensor.from_tensor(torch.randn(128, 32, device="cuda"))
+y = TableTensor(categorical=CategoricalTensor(
+    code=torch.arange(128, device="cuda", dtype=torch.int32).remainder(5)[:, None],
+    categories=(torch.arange(5, device="cuda"),),
+))
+members = RecipeExecution(TabICLv2.default_recipe()).fit_transform(
+    x, y, None, num_members=8,
+    generator=torch.Generator(device="cuda").manual_seed(7),
 )
-samples = []
-output = None
-for run in range(35):
-    del output
-    torch.cuda.synchronize()
-    start = time.perf_counter()
-    output = processor.transform_ensemble(ensemble)
-    torch.cuda.synchronize()
-    if run >= 5:
-        samples.append((time.perf_counter() - start) * 1_000)
-orders = [output.table(i).columns[sdm.Stype.numerical] for i in range(8)]
-paired = all(orders[i] == orders[i + 1] for i in range(0, 8, 2))
-restored = ShuffleColumns(method="latin")
-restored.load_state_dict(processor.state_dict())
-again = restored.transform_ensemble(ensemble)
-state_ok = all(output.table(i).equal(again.table(i)) for i in range(8))
-print(f"paired={paired}, state_dict={state_ok}, median_ms={statistics.median(samples):.3f}")
+orders = [member.x.columns[Stype.numerical] for member in members]
+assert all(orders[i] == orders[i + 1] for i in range(0, 8, 2))
+assert any(orders[i] != orders[i + 2] for i in range(0, 6, 2))
 ```
 
-Auf aktuellem `main` und diesem spec-only Draft endet der Lauf noch mit `AssertionError`. Mit #619, aber vor dieser Optimierung, sind auf der gemessenen L4 `paired=True, state_dict=True` bei etwa 8,403 ms Median zu erwarten; nach diesem PR bleiben beide Werte `True` und der Zielwert ist etwa 1,529 ms. Die exakte Nichtregressionsgrenze wird auf derselben GPU aus den 30 Messläufen festgelegt.
+Auf `main` scheitert die Paarbedingung. Nach #619–#621 teilen nur geplante Paare eine Permutation; E bleibt dynamisch.
 
 ## GPU-Benchmark-Ergebnisse
 
-NVIDIA L4, PyTorch 2.13/CUDA 13, float32, 100 Spalten, acht Estimatoren, zwei gespeicherte Tabellen und vier Permutationen; synchronisierte Median/p95-Wall-Time über 30 Läufe.
+NVIDIA L4 (23,66 GB), PyTorch `2.9.1+cu128`, CUDA 12.8, float32, E=8/S=2/C=100; 5 Warm-ups/30 synchronisierte Läufe. Fit und Input-Erzeugung sind im Transform-Test ausgeschlossen. K=4 ist der Worst-Case ohne zufällige Duplikate; Kandidaten sind Benchmark-Prototypen.
 
-| Zeilen | Main: einzeln + Restack | Vier `index_select` ohne Restack | Ein batched `gather` | Peak Main → batched |
-| -----: | ----------------------: | -------------------------------: | -------------------: | ------------------: |
-|  1.000 |         7,922/12,597 ms |                   2,396/2,791 ms |       0,718/1,191 ms |     6,12 → 3,06 MiB |
-| 10.000 |          7,666/8,775 ms |                   1,645/2,099 ms |       0,727/0,992 ms |   63,82 → 30,52 MiB |
-| 50.000 |          8,403/8,937 ms |                   1,642/2,165 ms |       1,529/1,564 ms | 312,60 → 152,59 MiB |
+| 50.000 Zeilen                    |      Median/p95 |       Peak |
+| -------------------------------- | --------------: | ---------: |
+| Main, voller Processor, K=8      | 7,753/11,851 ms | 198,15 MiB |
+| Geplant+gebatcht, K=4            |  1,632/1,721 ms | 152,59 MiB |
+| Nur Ausführung, batched K=8      |  1,753/1,854 ms | 152,59 MiB |
+| Nur Ausführung, cartesian K=4    |  1,636/1,689 ms | 152,59 MiB |
+| Ein `gather` mit Quellkopie, K=8 |  3,062/3,189 ms | 305,18 MiB |
 
-Bei 50.000 Zeilen war batched `gather` auch für 1/2/4/8 eindeutige Permutationen schneller als getrenntes `index_select` (0,451/0,808/1,536/2,977 ms gegenüber 0,478/0,956/1,725/3,203 ms). Der CUDA-Profiler reduziert 64 auf 6 Kernel-Events pro Anwendung. Damit ersetzt die Evidenz den bisherigen Vorschlag „mehrfach `index_select`“ durch den gebündelten Algorithmus; ein datenabhängiger Schwellwert ist nicht nötig.
+Der volle Kandidat ist **4,75×** schneller und spart 45,56 MiB. K=4 statt K=8 erklärt bei dieser speicherbandbreitenlimitierten Größe nur **6,7 %**; bei 1.000 Zeilen sind es launch-limitiert 48,8 %. Batching reduziert 34→5 CUDA-Events, 29→5 Launches und 5→0 Kopien. Ein einziges `gather` mit Quellauswahl ist 1,75× langsamer und benötigt 2× Speicher; pro Quelle zu batchen ist deshalb der robuste Algorithmus.
 
-## Teststrategie
+| Integration                                 |        Main Median/p95 |               Kandidat | Gewinn |
+| ------------------------------------------- | ---------------------: | ---------------------: | -----: |
+| Recipe 3.000×100, 10 kategorial, 10 Klassen |       60,473/86,219 ms |       41,881/51,157 ms |  1,44× |
+| Recipe 50.000×100                           |     106,228/123,229 ms |       87,840/96,679 ms |  1,21× |
+| Modell: 2.400 Kontext + 600 Query           | 2.417,990/2.478,307 ms | 2.395,339/2.420,758 ms | 1,009× |
 
-- Daten, Spaltennamen, inverse Transformation und logische Reihenfolge für geteilte Tabellen, zwei Normalisierungen, wiederholte IDs und inkompatible Schemata gegen den bestehenden Pfad vergleichen.
-- Die öffentliche Ausgabe für eine, zwei, vier und acht Permutationen sowie CPU-Fallback und CUDA-Pfad prüfen, ohne private Helper-Struktur festzuschreiben.
-- Unterschiedliche, stark überlappende Schemata prüfen: gemeinsame Spalten behalten die gekoppelte Planung, jedes lokale Ergebnis bleibt eine gültige Permutation und keine falsche Tensorlänge wird wiederverwendet.
-- Nach Fit den `state_dict` in einen leeren Processor laden und Transformation, Inverse, Gruppen-/Member-Zuordnung, Fitted-Status und Device exakt vergleichen.
-- 1.000, 10.000 und 50.000 Zeilen als permanente synchronisierte GPU-Nichtregressionsszenarien behalten; Peak-Speicher zusätzlich für die große Tabelle messen.
+Im Modell dominieren Transformer-Kosten; real bleibt knapp 1 % E2E. `ShuffleColumns` selbst skaliert bei 10.000×32 stark mit E (1,541 ms bei E=1; 13,126 ms bei E=16). Ausführungs-Batching ist daher allgemein sinnvoll, Sharing nur mit explizitem Modellplan.
+
+Reproduktion: `python benchmark/ensemble_permutation_gpu.py --output benchmark/results/ensemble_permutation_gpu.json`. Die [JSON](benchmark/results/ensemble_permutation_gpu.json) enthält alle Samples, CUDA-Events, Peaks und Profilerzählungen.
+
+## Testing
+
+- Ergebnisse/Inverse gegen per-Member für K=1/2/4/8 und unabhängiges K=E vergleichen.
+- Gleiche, unterschiedliche und überlappende Schemata; gerade/ungerade E; CPU und CUDA.
+- Leeren Processor per `state_dict` laden; Outputs, IDs, Locations und Device exakt vergleichen.
+- 1.000/10.000/50.000 Zeilen sowie Recipe-/Modell-E2E dauerhaft behalten.
