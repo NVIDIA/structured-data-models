@@ -203,6 +203,9 @@ banned-module-level-imports = [
     "pyg_lib",
     "pylibcudf",
     "pytest",
+    "sentence_transformers",
+    "transformers",
+    "tokenizers",
 ]
 
 [tool.ruff.lint.per-file-ignores]
