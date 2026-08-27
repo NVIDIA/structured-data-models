@@ -18,8 +18,9 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
 
     Args:
         method: Permutation strategy. ``"shift"`` cyclically shifts the
-            columns by a drawn offset, and ``"random"`` permutes the columns
-            with a drawn permutation.
+            columns by a drawn offset, ``"random"`` (the default) draws
+            independent permutations, and ``"latin"`` draws coupled Latin
+            permutations.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -27,20 +28,144 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
 
     def __init__(
         self,
-        method: Literal["shift", "random"] = "random",
+        method: Literal["shift", "random", "latin"] = "random",
     ) -> None:
         super().__init__()
         self.method = method
         self._permutations: BufferList[Tensor] = BufferList()
-        self._host_permutations: tuple[tuple[int, ...], ...] = ()
+        self._host_permutations: tuple[tuple[tuple[int, ...], ...], ...] = ()
+        self._locations: tuple[tuple[int, int], ...] = ()
+        self._schemas: tuple[tuple[str, ...], ...] = ()
 
-    def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
+    def get_extra_state(
+        self,
+    ) -> tuple[
+        tuple[tuple[tuple[int, ...], ...], ...],
+        tuple[tuple[int, int], ...],
+        tuple[tuple[str, ...], ...],
+    ]:
         r""":meta private:"""  # noqa: D415
-        return self._host_permutations
+        return self._host_permutations, self._locations, self._schemas
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        self._host_permutations = cast(tuple[tuple[int, ...], ...], state)
+        self._host_permutations, self._locations, self._schemas = cast(
+            tuple[
+                tuple[tuple[tuple[int, ...], ...], ...],
+                tuple[tuple[int, int], ...],
+                tuple[tuple[str, ...], ...],
+            ],
+            state,
+        )
+
+    def _draw_permutation(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Tensor:
+        n_features = table.numerical.size(-1)
+        device = table.numerical.device
+        if n_features <= 1:
+            return torch.arange(n_features, device=device)
+        if self.method == "shift":
+            offset = torch.randint(
+                n_features,
+                (1,),
+                generator=generator,
+                device=device,
+            )
+            return (
+                torch.arange(n_features, device=device) + offset
+            ) % n_features
+
+        assert self.method == "random"
+        return torch.randperm(
+            n_features,
+            generator=generator,
+            device=device,
+        )
+
+    def _latin_states(
+        self,
+        schemas: tuple[tuple[str, ...], ...],
+        members: tuple[tuple[int, ...], ...],
+        devices: tuple[torch.device, ...],
+        *,
+        generator: torch.Generator | None,
+    ) -> tuple[tuple[Tensor, Tensor, Tensor], ...]:
+        if len(schemas) == 1:
+            n_features = len(schemas[0])
+            device = devices[0]
+            base, rows, pattern_order = (
+                torch.randperm(
+                    n_features,
+                    generator=generator,
+                    device=device,
+                )
+                for _ in range(3)
+            )
+            positions = (
+                torch.arange(len(members[0]), device=device) % n_features
+                if n_features > 0
+                else torch.empty(
+                    len(members[0]), dtype=torch.long, device=device
+                )
+            )
+            return ((base, rows, pattern_order[positions]),)
+
+        columns = tuple(
+            dict.fromkeys(column for schema in schemas for column in schema)
+        )
+        device = devices[0]
+        size = len(columns)
+        ranks = tuple(
+            torch.randperm(size, generator=generator, device=device)
+            for _ in range(3)
+        )
+        column_ids = {column: index for index, column in enumerate(columns)}
+
+        states = []
+        for schema, member_ids, schema_device in zip(
+            schemas, members, devices, strict=True
+        ):
+            n_features = len(schema)
+            if n_features == 0:
+                empty = torch.empty(0, dtype=torch.long, device=schema_device)
+                patterns = torch.empty(
+                    len(member_ids), dtype=torch.long, device=schema_device
+                )
+                states.append((empty, empty, patterns))
+                continue
+
+            ids = torch.tensor(
+                [column_ids[column] for column in schema],
+                device=device,
+            )
+            present = torch.zeros(size, dtype=torch.bool, device=device)
+            present[ids] = True
+            local = torch.full((size,), -1, device=device)
+            local[ids] = torch.arange(n_features, device=device)
+            base, rows, pattern_order = (
+                local[rank[present[rank]]].to(device=schema_device)
+                for rank in ranks
+            )
+            positions = (
+                torch.arange(len(member_ids), device=schema_device)
+                % n_features
+            )
+            states.append((base, rows, pattern_order[positions]))
+        return tuple(states)
+
+    @staticmethod
+    def _materialize_latin(
+        base: Tensor,
+        rows: Tensor,
+        patterns: Tensor,
+    ) -> Tensor:
+        if base.numel() == 0:
+            return base.new_empty((patterns.numel(), 0))
+        return base[(patterns[:, None] - rows[None, :]) % base.numel()]
 
     def _fit_ensemble(
         self,
@@ -48,125 +173,131 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        permutations = []
-        device = next(iter(ensemble_table)).device
+        schema_ids: dict[tuple[torch.device, tuple[str, ...]], int] = {}
+        schemas: list[tuple[str, ...]] = []
+        devices: list[torch.device] = []
+        members: list[list[int]] = []
+        locations = []
         for member_id in range(ensemble_table.num_members):
-            n_features = ensemble_table.table(member_id).numerical.size(-1)
-            if n_features <= 1:
-                permutation = torch.arange(n_features, device=device)
-            elif self.method == "shift":
-                offset = torch.randint(
-                    n_features,
-                    (1,),
-                    generator=generator,
-                    device=device,
+            table = ensemble_table.table(member_id)
+            schema = table.columns[Stype.numerical]
+            key = (table.device, schema)
+            schema_id = schema_ids.get(key)
+            if schema_id is None:
+                schema_id = len(schemas)
+                schema_ids[key] = schema_id
+                schemas.append(schema)
+                devices.append(table.device)
+                members.append([])
+            position = len(members[schema_id])
+            members[schema_id].append(member_id)
+            locations.append((schema_id, position))
+
+        permutations: list[Tensor]
+        if self.method == "latin":
+            states = self._latin_states(
+                tuple(schemas),
+                tuple(tuple(ids) for ids in members),
+                tuple(devices),
+                generator=generator,
+            )
+            permutations = [
+                self._materialize_latin(*state) for state in states
+            ]
+        else:
+            by_schema: list[list[Tensor]] = [[] for _ in schemas]
+            for member_id, (schema_id, _) in enumerate(locations):
+                by_schema[schema_id].append(
+                    self._draw_permutation(
+                        ensemble_table.table(member_id),
+                        generator=generator,
+                    )
                 )
-                permutation = (
-                    torch.arange(n_features, device=device) + offset
-                ) % n_features
-            else:
-                assert self.method == "random"
-                permutation = torch.randperm(
-                    n_features,
-                    generator=generator,
-                    device=device,
-                )
-            permutations.append(permutation)
+            permutations = [torch.stack(values) for values in by_schema]
+
         self._permutations = BufferList(permutations)
-        # TODO: Add to EnsembleTable directly.
-        member_ids_by_group: list[list[int]] = [
-            [] for _ in range(ensemble_table.num_groups)
-        ]
-        for member_id, (group_id, _) in enumerate(ensemble_table._locations):
-            member_ids_by_group[group_id].append(member_id)
-        host_permutations = [()] * len(permutations)
-        for member_ids in member_ids_by_group:
-            host_rows = torch.stack(
-                [permutations[member_id] for member_id in member_ids]
-            ).tolist()
-            for member_id, host_row in zip(member_ids, host_rows, strict=True):
-                host_permutations[member_id] = tuple(host_row)
-        self._host_permutations = tuple(host_permutations)
+        self._host_permutations = tuple(
+            tuple(tuple(order) for order in permutation.tolist())
+            for permutation in permutations
+        )
+        self._locations = tuple(locations)
+        self._schemas = tuple(schemas)
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._permutations) != ensemble_table.num_members:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} was fitted with "
-                f"{len(self._permutations)} ensemble members, but got "
-                f"{ensemble_table.num_members}."
-            )
-        tables: list[TableTensor] = []
-        for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
-            host_permutation = self._host_permutations[member_id]
-            shuffled = table.__class__(
-                columns={
-                    Stype.numerical: tuple(
-                        table.columns[Stype.numerical][i]
-                        for i in host_permutation
-                    )
-                },
-                numerical=table.numerical.index_select(
-                    -1, self._permutations[member_id]
-                ),
-            )
-            tables.append(
-                cast(
-                    TableTensor,
-                    torch.cat(
-                        (table.drop_stypes(Stype.numerical), shuffled),
-                        dim=-1,
-                    ),
-                )
-            )
-        return EnsembleTable.from_tables(
-            tables=tables,
-            member_table_ids=range(len(tables)),
-        )
+        return self._apply_ensemble(ensemble_table, inverse=False)
 
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._permutations) != ensemble_table.num_members:
+        return self._apply_ensemble(ensemble_table, inverse=True)
+
+    def _apply_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        inverse: bool,
+    ) -> EnsembleTable:
+        if len(self._locations) != ensemble_table.num_members:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} was fitted with "
-                f"{len(self._permutations)} ensemble members, but got "
+                f"{len(self._locations)} ensemble members, but got "
                 f"{ensemble_table.num_members}."
             )
+
         tables: list[TableTensor] = []
-        for member_id in range(ensemble_table.num_members):
+        for member_id, (schema_id, position) in enumerate(self._locations):
             table = ensemble_table.table(member_id)
-            host_permutation = self._host_permutations[member_id]
-            inverse_host_permutation = [0] * len(host_permutation)
-            for destination, source in enumerate(host_permutation):
-                inverse_host_permutation[source] = destination
-            shuffled = table.__class__(
-                columns={
-                    Stype.numerical: tuple(
-                        table.columns[Stype.numerical][i]
-                        for i in inverse_host_permutation
-                    )
-                },
-                numerical=table.numerical.index_select(
-                    -1, self._permutations[member_id].argsort()
-                ),
-            )
-            tables.append(
-                cast(
-                    TableTensor,
-                    torch.cat(
-                        (table.drop_stypes(Stype.numerical), shuffled),
-                        dim=-1,
-                    ),
+            fitted_host_permutation = self._host_permutations[schema_id][
+                position
+            ]
+            expected_schema = self._schemas[schema_id]
+            if inverse:
+                expected_schema = tuple(
+                    expected_schema[index] for index in fitted_host_permutation
                 )
+            if table.columns[Stype.numerical] != expected_schema:
+                raise RuntimeError(
+                    "ShuffleColumns must be transformed with the fitted "
+                    "member schemas."
+                )
+            fitted_permutation = self._permutations[schema_id][position]
+            permutation = (
+                fitted_permutation.argsort() if inverse else fitted_permutation
             )
+            host_permutation = (
+                tuple(permutation.tolist())
+                if inverse
+                else fitted_host_permutation
+            )
+            tables.append(self._permute(table, permutation, host_permutation))
+
         return EnsembleTable.from_tables(
             tables=tables,
             member_table_ids=range(len(tables)),
+        )
+
+    @staticmethod
+    def _permute(
+        table: TableTensor,
+        permutation: Tensor,
+        host_permutation: tuple[int, ...],
+    ) -> TableTensor:
+        out = table.__class__(
+            columns={
+                Stype.numerical: tuple(
+                    table.columns[Stype.numerical][index]
+                    for index in host_permutation
+                )
+            },
+            numerical=table.numerical.index_select(-1, permutation),
+        )
+        return cast(
+            TableTensor,
+            torch.cat((table.drop_stypes(Stype.numerical), out), dim=-1),
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
