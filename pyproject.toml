@@ -47,6 +47,11 @@ dependencies = [
     "typing_extensions",
 ]
 
+[project.optional-dependencies]
+cudnn = [
+    "nvidia-cudnn-frontend>=1.23,<1.29; sys_platform == 'linux'",
+]
+
 [project.urls]
 Download = "https://github.com/NVIDIA/structured-data-models/releases"
 Homepage = "https://github.com/NVIDIA/structured-data-models"

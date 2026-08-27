@@ -11,7 +11,7 @@ from torch import Tensor
 from torch.nn import Linear
 
 from sdm.cache import KVCacheEntry
-from sdm.nn import QueryScaling
+from sdm.nn import QueryScaling, _cudnn_varlen
 
 
 class SDPA(torch.nn.Module):
@@ -77,7 +77,12 @@ class SDPA(torch.nn.Module):
             value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype. Counts
-                above ``KV`` act as ``KV``.
+                above ``KV`` act as ``KV``. With
+                :func:`~sdm.nn.enable_cudnn_varlen`, eligible calls
+                (``bfloat16``/``float16``, ``Hq == Hkv``, ``C % 8 == 0``,
+                ``C <= 128``, at most ``65535`` batch elements ``[...]``,
+                no gradients, default ``scale``) run on cuDNN's native
+                padding mask instead of a boolean mask.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
 
@@ -142,7 +147,29 @@ class SDPA(torch.nn.Module):
 
         if seqused_key_value is not None:
             seqused_key_value = seqused_key_value.expand(batch_shape)
-            seqused_key_value = seqused_key_value.reshape(-1).unsqueeze(-1)
+            seqused_key_value = seqused_key_value.reshape(-1)
+            # The variable-length op bakes in the default ``1 / sqrt(C)``
+            # attention scale, so a custom `scale` stays on the
+            # boolean-mask path rather than being silently ignored.
+            if self.scale is None and _cudnn_varlen.eligible(
+                query,
+                key,
+                num_query_heads=self.num_query_heads,
+                num_key_value_heads=self.num_key_value_heads,
+            ):
+                # cuDNN's native padding-mask support bounds attention
+                # to the valid key/value region instead of masking it
+                # (see enable_cudnn_varlen). The op saturates out-of-range
+                # counts, so the model contract (degrade, do not raise)
+                # matches the boolean mask below.
+                out = _cudnn_varlen.cudnn_varlen_sdpa(
+                    query=query.contiguous(),
+                    key=key.contiguous(),
+                    value=value.contiguous(),
+                    seqused_key_value=seqused_key_value,
+                )
+                return out.view(batch_shape + out.size()[-3:])
+            seqused_key_value = seqused_key_value.unsqueeze(-1)
             key_index = torch.arange(key.size(-3), device=key.device)
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
