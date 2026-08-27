@@ -17,8 +17,8 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     :class:`~sdm.processing.ToNumerical`.
 
     Args:
-        method: Permutation strategy. ``"random"`` (the default) draws
-            independent permutations, and ``"latin"`` draws coupled Latin
+        method: Permutation strategy. ``"random"`` draws independent
+            permutations, and ``"latin"`` draws coupled Latin
             permutations.
     """
 
@@ -64,18 +64,52 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
 
         permutations: list[Tensor]
         if self.method == "latin":
+            columns = tuple(
+                dict.fromkeys(
+                    column for schema in schemas for column in schema
+                )
+            )
+            device = devices[0]
+            size = len(columns)
+            ranks = tuple(
+                torch.randperm(size, generator=generator, device=device)
+                for _ in range(3)
+            )
+            column_ids = {
+                column: index for index, column in enumerate(columns)
+            }
             permutations = []
-            for base, rows, patterns in self._latin_states(
-                tuple(schemas),
-                tuple(tuple(ids) for ids in members),
-                tuple(devices),
-                generator=generator,
+            for schema, member_ids, schema_device in zip(
+                schemas, members, devices, strict=True
             ):
-                if base.numel() == 0:
-                    permutations.append(base.new_empty((patterns.numel(), 0)))
+                n_features = len(schema)
+                if n_features == 0:
+                    permutations.append(
+                        torch.empty(
+                            (len(member_ids), 0),
+                            dtype=torch.long,
+                            device=schema_device,
+                        )
+                    )
                     continue
+                ids = torch.tensor(
+                    [column_ids[column] for column in schema],
+                    device=device,
+                )
+                present = torch.zeros(size, dtype=torch.bool, device=device)
+                present[ids] = True
+                local = torch.full((size,), -1, device=device)
+                local[ids] = torch.arange(n_features, device=device)
+                base, rows, pattern_order = (
+                    local[rank[present[rank]]].to(device=schema_device)
+                    for rank in ranks
+                )
+                patterns = pattern_order[
+                    torch.arange(len(member_ids), device=schema_device)
+                    % n_features
+                ]
                 permutations.append(
-                    base[(patterns[:, None] - rows[None, :]) % base.numel()]
+                    base[(patterns[:, None] - rows[None, :]) % n_features]
                 )
         else:
             by_schema: list[list[Tensor]] = [[] for _ in schemas]
@@ -102,77 +136,6 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         )
         self._locations = tuple(locations)
         self._schemas = tuple(schemas)
-
-    def _latin_states(
-        self,
-        schemas: tuple[tuple[str, ...], ...],
-        members: tuple[tuple[int, ...], ...],
-        devices: tuple[torch.device, ...],
-        *,
-        generator: torch.Generator | None,
-    ) -> tuple[tuple[Tensor, Tensor, Tensor], ...]:
-        if len(schemas) == 1:
-            n_features = len(schemas[0])
-            device = devices[0]
-            base, rows, pattern_order = (
-                torch.randperm(
-                    n_features,
-                    generator=generator,
-                    device=device,
-                )
-                for _ in range(3)
-            )
-            positions = (
-                torch.arange(len(members[0]), device=device) % n_features
-                if n_features > 0
-                else torch.empty(
-                    len(members[0]), dtype=torch.long, device=device
-                )
-            )
-            return ((base, rows, pattern_order[positions]),)
-
-        columns = tuple(
-            dict.fromkeys(column for schema in schemas for column in schema)
-        )
-        device = devices[0]
-        size = len(columns)
-        ranks = tuple(
-            torch.randperm(size, generator=generator, device=device)
-            for _ in range(3)
-        )
-        column_ids = {column: index for index, column in enumerate(columns)}
-
-        states = []
-        for schema, member_ids, schema_device in zip(
-            schemas, members, devices, strict=True
-        ):
-            n_features = len(schema)
-            if n_features == 0:
-                empty = torch.empty(0, dtype=torch.long, device=schema_device)
-                patterns = torch.empty(
-                    len(member_ids), dtype=torch.long, device=schema_device
-                )
-                states.append((empty, empty, patterns))
-                continue
-
-            ids = torch.tensor(
-                [column_ids[column] for column in schema],
-                device=device,
-            )
-            present = torch.zeros(size, dtype=torch.bool, device=device)
-            present[ids] = True
-            local = torch.full((size,), -1, device=device)
-            local[ids] = torch.arange(n_features, device=device)
-            base, rows, pattern_order = (
-                local[rank[present[rank]]].to(device=schema_device)
-                for rank in ranks
-            )
-            positions = (
-                torch.arange(len(member_ids), device=schema_device)
-                % n_features
-            )
-            states.append((base, rows, pattern_order[positions]))
-        return tuple(states)
 
     def _transform_ensemble(
         self,
