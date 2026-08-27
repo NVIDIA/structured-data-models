@@ -221,8 +221,10 @@ def test_forward(
         recipe=_recipe(),
     )
 
-    assert out.size() == (2, 1)
-    assert out.columns[Stype.numerical] == ("pred",)
+    assert out.size() == (2, 999)
+    assert out.columns[Stype.numerical] == tuple(
+        f"q{i:03d}" for i in range(1, 1000)
+    )
 
 
 def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:

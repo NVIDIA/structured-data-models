@@ -80,7 +80,7 @@ class KumoTabular(ICLModel):  # noqa: D101
         generator: torch.Generator | None,
         batch_size_limit: int | None = None,
         **kwargs: Any,
-    ) -> TableTensor:  # [..., R_query, num_classes or 1]
+    ) -> TableTensor:  # [..., R_query, num_classes or 999]
         if x_query is None and x_context is not None:
             x = x_context.numerical
         elif x_context is None and x_query is not None:
@@ -150,8 +150,10 @@ class KumoTabular(ICLModel):  # noqa: D101
         )
         if classes is None:
             return TableTensor(
-                columns={Stype.numerical: ("pred",)},
-                numerical=out.mean(dim=-1, keepdim=True),
+                columns={
+                    Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
+                },
+                numerical=out.sort(dim=-1)[0],
             )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
