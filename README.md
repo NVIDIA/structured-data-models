@@ -17,7 +17,7 @@
 
 **A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
 
-- **Models:** Reference implementations of structured data foundation models such as the tabular [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and the relational [`NemotronRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.NemotronRelational), built on a unified interface with room for future model families.
+- **Models:** Reference implementations of structured data foundation models such as the tabular [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and the relational [`KumoRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRelational), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
@@ -41,7 +41,7 @@ pip install structured-data-models
 
 **Relational Foundation Models:**
 
-- **[`NemotronRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.NemotronRelational)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
+- **[`KumoRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRelational)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
 
 ## Quick Tour
 
@@ -55,7 +55,7 @@ df = load_breast_cancer(as_frame=True).frame
 # A lossless, fully tensorized representation of the raw data on GPU:
 table = sdm.TableTensor.from_pandas(
     df=df,
-    stypes=sdm.infer_stypes(df),
+    stypes=sdm.infer_stypes(df, overrides={"target": "categorical"}),
     device="cuda",
 )
 

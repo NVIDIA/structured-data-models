@@ -11,6 +11,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.tabiclv2.ckpt import remap_ckpt
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -126,17 +127,17 @@ class TabICLv2(ICLModel):
             num_classes=10,
             num_quantiles=0,
             norm_bias=True,
-            device=device,
+            device="meta" if pretrained else device,
         )
         self.reg_model = _TabICLv2(
             num_classes=0,
             num_quantiles=999,
             norm_bias=False,
-            device=device,
+            device="meta" if pretrained else device,
         )
 
         if pretrained:
-            self._load_from_pretrained()
+            self._load_from_pretrained(device=device)
 
         self.eval()
 
@@ -145,24 +146,29 @@ class TabICLv2(ICLModel):
         r""":meta private:"""  # noqa: D415
         return default_recipe()
 
-    def _load_from_pretrained(self) -> TabICLv2:
-        from sdm.models.tabiclv2.ckpt import remap_ckpt  # noqa: PLC0415
-
-        device = next(self.parameters()).device
+    def _load_from_pretrained(
+        self,
+        device: torch.device | str | None,
+    ) -> TabICLv2:
+        device = torch.get_default_device() if device is None else device
 
         for variant in ["classifier", "regressor"]:
             path = download_checkpoint(
                 repo_id="jingang/TabICL",
                 filename=f"tabicl-{variant}-v2-20260212.ckpt",
             )
-            ckpt = torch.load(path, map_location=device)["state_dict"]
+            ckpt = torch.load(
+                path,
+                map_location=device,
+                weights_only=True,
+            )["state_dict"]
 
             if variant == "classifier":
                 ckpt = remap_ckpt(ckpt, is_classifier=True)
-                self.cls_model.load_state_dict(ckpt)
+                self.cls_model.load_state_dict(ckpt, assign=True)
             else:
                 ckpt = remap_ckpt(ckpt, is_classifier=False)
-                self.reg_model.load_state_dict(ckpt)
+                self.reg_model.load_state_dict(ckpt, assign=True)
 
         return self
 

@@ -51,18 +51,18 @@ def test_forward(
     else:
         y_context = torch.tensor([0, 1, 0, 1, 0], device=device).unsqueeze(-1)
 
-    torch.manual_seed(1)
-    out = model(x_context, y_context, x_query)
+    generator = torch.Generator(device=device).manual_seed(1)
+    out = model(x_context, y_context, x_query, generator=generator)
     assert out.dtype == x_context.dtype
     assert out.device == device
     assert torch.is_inference(out)
     if dtype.is_floating_point:
-        assert out.size() == (1, 3, 1)
+        assert out.size() == (3, 1)
     else:
-        assert out.size() == (1, 3, 2)
+        assert out.size() == (3, 2)
 
-    torch.manual_seed(1)
-    model.fit(x_context, y_context)
+    generator = torch.Generator(device=device).manual_seed(1)
+    model.fit(x_context, y_context, generator=generator)
     assert model._cache is not None
     assert model._cache.size() > 0
     assert model.predict(x_query).allclose(out)

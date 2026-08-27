@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, ClassVar
 
 import torch
 
@@ -15,8 +15,13 @@ class Callback:
     preprocessing hooks run once per ensemble member.
 
     Callbacks supplied together run in sequence order, and each preprocessing
-    result is passed to the next callback.
+    result is passed to the next callback. Subclasses that use autograd set
+    :attr:`requires_grad` to ``True``. Gradient calculation is enabled for the
+    model call when any supplied callback requires it.
     """
+
+    #: Whether this callback requires gradient calculation during model calls.
+    requires_grad: ClassVar[bool] = False
 
     def on_forward_start(
         self,

@@ -13,14 +13,15 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.cell_embedding import CellEmbedding
+from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.row_embedding import RowEmbedding
 from sdm.tensor.table import TableSchema
 
 
 class TabFM(ICLModel):
-    r"""The tabular foundation model as introduced in `"Introducing TabFM: A
-    Zero-shot Foundation Model for Tabular Data" <https://research.google/blog/
+    r"""The tabular foundation model from `"Introducing TabFM: A Zero-shot
+    Foundation Model for Tabular Data" <https://research.google/blog/
     introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
 
     .. figure:: /images/tabfm_light.png
@@ -75,35 +76,73 @@ class TabFM(ICLModel):
         self.task = task
         self.model = _TabFM(
             num_classes=10 if task == "classification" else 0,
-            device=device,
+            device="meta" if checkpoint_path is not None else device,
         )
 
         if checkpoint_path is not None:
-            self._load_from_pretrained(checkpoint_path)
+            self._load_from_pretrained(checkpoint_path, device=device)
 
         self.eval()
 
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return Recipe(  # TODO Replace with final recipe.
+        return Recipe(
             features=[
-                sp.StypeDispatch(categorical=sp.ToNumerical()),
-                sp.ShuffleColumns(),
-            ]
+                sp.StypeDispatch(
+                    categorical=[
+                        sp.AlignCategories(min_frequency=2),
+                        sp.ToNumerical(),
+                    ],
+                ),
+                sp.StypeDispatch(
+                    numerical=[
+                        sp.ImputeMean(),
+                        sp.DropConstantColumns(),
+                        sp.Standardize(epsilon=1e-6),
+                        sp.Clip(min_value=-100.0, max_value=100.0),
+                        sp.Choice(
+                            sp.Identity(),
+                            sp.PowerTransform(),
+                            method="round_robin",
+                        ),
+                        sp.ClipSigma(threshold=4.0),
+                        sp.ShuffleColumns(method="random"),
+                        sp.SelectColumns(
+                            max_columns=500,
+                            method="round_robin",
+                        ),
+                    ],
+                ),
+            ],
+            target=sp.StypeDispatch(
+                categorical=[
+                    sp.AlignCategories(sort_by="value"),
+                    sp.ShuffleCategories(method="shift"),
+                ],
+                numerical=sp.Standardize(),
+            ),
+            output=[
+                sp.ReduceEstimators(method="mean"),
+                sp.TaskDispatch(
+                    classification=sp.Softmax(temperature=0.9),
+                ),
+            ],
         )
 
-    def _load_from_pretrained(self, checkpoint_path: str | Path) -> TabFM:
+    def _load_from_pretrained(
+        self,
+        checkpoint_path: str | Path,
+        device: torch.device | str | None,
+    ) -> TabFM:
         from safetensors.torch import load_file  # noqa: PLC0415
 
-        from sdm.models.tabfm.ckpt import remap_ckpt  # noqa: PLC0415
-
-        device = next(self.parameters()).device
+        device = torch.get_default_device() if device is None else device
         ckpt = remap_ckpt(
             ckpt=load_file(checkpoint_path, device=str(device)),
             is_classifier=self.task == "classification",
         )
-        self.model.load_state_dict(ckpt, strict=True)
+        self.model.load_state_dict(ckpt, strict=True, assign=True)
 
         return self
 

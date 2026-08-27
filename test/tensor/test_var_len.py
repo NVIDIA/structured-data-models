@@ -837,6 +837,20 @@ def test_select_slice_narrow_expand() -> None:
     assert out._offset.equal(torch.arange(13))
 
 
+def test_select_empty_view() -> None:
+    tensor = VarLenTensor(
+        data=torch.empty(0),
+        offset=torch.zeros(1, dtype=torch.int64),
+        valid=None,
+        size=(0, 3),
+    )
+
+    out = tensor.select(dim=1, index=2)
+
+    assert out.size() == (0,)
+    assert out.storage_offset() == 0
+
+
 def test_unbind() -> None:
     tensor = VarLenTensor(
         data=torch.arange(25),

@@ -242,8 +242,8 @@ out = model.predict(x_query, related_query_tables)
 ```
 
 The {py:attr}`~sdm.models.ICLModel.supports_related_tables` attribute denotes whether an {py:class}`~sdm.models.ICLModel` supports relational context.
-For example, {py:class}`~sdm.models.NemotronRelational` consumes the `x_context` and `x_query` together with related tables, propagates information through its induced relational subgraph, and then predicts the query rows from the labeled context rows.
+For example, {py:class}`~sdm.models.KumoRelational` consumes the `x_context` and `x_query` together with related tables, propagates information through its induced relational subgraph, and then predicts the query rows from the labeled context rows.
 
 To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we provide heterogeneous, temporally aware subgraph samplers with CPU and CUDA backends, based on [`pyg-lib`](https://github.com/pyg-team/pyg-lib) and [`cugraph`](https://docs.rapids.ai/api/cugraph), respectively.
 Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
-The full relational sampling and prediction flow is shown in [`examples/nemotron/relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/nemotron/relational/rel_bench.py).
+The full relational sampling and prediction flow is shown in [`examples/kumo/relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/rel_bench.py).

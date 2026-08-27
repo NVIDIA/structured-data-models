@@ -2,60 +2,10 @@ import importlib
 
 import pytest
 import torch
-from torch import Tensor
 
+from sdm._kernels import segment_multi_reduce
+from sdm._kernels.segment_multi_reduce import _eager_segment_multi_reduce
 from sdm.testing import onlyCUDA
-
-
-def _reference(
-    src: Tensor,
-    offsets: Tensor,
-) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-    values = src.float()
-    total = torch.segment_reduce(
-        values,
-        offsets=offsets,
-        reduce="sum",
-        unsafe=True,
-        initial=0,
-    )
-    mean = total / offsets.diff().clamp(min=1).view(-1, 1)
-    variance = (
-        torch.segment_reduce(
-            values.square(),
-            offsets=offsets,
-            reduce="mean",
-            unsafe=True,
-            initial=0,
-        )
-        - mean.square()
-    )
-    std = torch.where(
-        variance <= 1e-5,
-        0.0,
-        variance.clamp(min=1e-5).sqrt(),
-    )
-    minimum = torch.segment_reduce(
-        values,
-        offsets=offsets,
-        reduce="min",
-        unsafe=True,
-    )
-    maximum = torch.segment_reduce(
-        values,
-        offsets=offsets,
-        reduce="max",
-        unsafe=True,
-    )
-    minimum = torch.where(minimum.isinf(), 0.0, minimum)
-    maximum = torch.where(maximum.isinf(), 0.0, maximum)
-    return (
-        total.to(src.dtype),
-        mean.to(src.dtype),
-        std.to(src.dtype),
-        minimum.to(src.dtype),
-        maximum.to(src.dtype),
-    )
 
 
 @onlyCUDA
@@ -81,7 +31,18 @@ def test_segment_multi_reduce(
         device="cuda",
         dtype=offset_dtype,
     )
+    index = torch.arange(
+        sum(degrees),
+        device="cuda",
+        dtype=offset_dtype,
+    ).remainder(23)
     src = torch.randn(
+        23,
+        num_channels,
+        device="cuda",
+        dtype=dtype,
+    )
+    edge_attr = torch.randn(
         sum(degrees),
         num_channels,
         device="cuda",
@@ -92,9 +53,9 @@ def test_segment_multi_reduce(
     )
 
     with torch.inference_mode():
-        actual = module.segment_multi_reduce(src, offsets)
+        actual = module.segment_multi_reduce(src, index, edge_attr, offsets)
 
-    expected = _reference(src, offsets)
+    expected = _eager_segment_multi_reduce(src, index, edge_attr, offsets)
     for result, reference in zip(actual, expected, strict=True):
         assert result.shape == (len(degrees), num_channels)
         assert result.is_contiguous()
@@ -116,12 +77,19 @@ def test_segment_multi_reduce_std_threshold() -> None:
         ],
         device="cuda",
     )
+    index = torch.tensor([0, 1], device="cuda")
+    edge_attr = torch.zeros_like(src)
     offsets = torch.tensor([0, 2], device="cuda")
     module = importlib.import_module(
         "sdm._kernels.triton.segment_multi_reduce"
     )
 
-    _, _, std, _, _ = module.segment_multi_reduce(src, offsets)
+    _, _, std, _, _ = module.segment_multi_reduce(
+        src=src,
+        index=index,
+        edge_attr=edge_attr,
+        offsets=offsets,
+    )
 
     expected = torch.tensor(
         [[0.0, 0.004, 0.0, 0.004, 0.0, 0.004, 0.0]],
@@ -137,16 +105,22 @@ def test_segment_multi_reduce_empty() -> None:
     )
 
     no_segments = module.segment_multi_reduce(
-        torch.empty(0, 3, device="cuda"),
-        torch.tensor([0], device="cuda"),
+        src=torch.empty(0, 3, device="cuda"),
+        index=torch.empty(0, device="cuda", dtype=torch.int64),
+        edge_attr=torch.empty(0, 3, device="cuda"),
+        offsets=torch.tensor([0], device="cuda"),
     )
     no_channels = module.segment_multi_reduce(
-        torch.empty(2, 0, device="cuda"),
-        torch.tensor([0, 2], device="cuda"),
+        src=torch.empty(2, 0, device="cuda"),
+        index=torch.tensor([0, 1], device="cuda"),
+        edge_attr=torch.empty(2, 0, device="cuda"),
+        offsets=torch.tensor([0, 2], device="cuda"),
     )
     empty_segments = module.segment_multi_reduce(
-        torch.empty(0, 7, device="cuda"),
-        torch.zeros(4, device="cuda", dtype=torch.int64),
+        src=torch.empty(0, 7, device="cuda"),
+        index=torch.empty(0, device="cuda", dtype=torch.int64),
+        edge_attr=torch.empty(0, 7, device="cuda"),
+        offsets=torch.zeros(4, device="cuda", dtype=torch.int64),
     )
 
     assert all(result.shape == (0, 3) for result in no_segments)
@@ -164,31 +138,162 @@ def test_segment_multi_reduce_nonfinite() -> None:
         ],
         device="cuda",
     )
+    index = torch.tensor([0, 1], device="cuda")
+    edge_attr = torch.zeros_like(src)
     offsets = torch.tensor([0, 2], device="cuda")
     module = importlib.import_module(
         "sdm._kernels.triton.segment_multi_reduce"
     )
 
-    actual = module.segment_multi_reduce(src, offsets)
+    actual = module.segment_multi_reduce(src, index, edge_attr, offsets)
 
     for result, reference in zip(
         actual,
-        _reference(src, offsets),
+        _eager_segment_multi_reduce(src, index, edge_attr, offsets),
         strict=True,
     ):
         torch.testing.assert_close(result, reference, equal_nan=True)
 
 
 @onlyCUDA
-def test_segment_multi_reduce_requires_contiguous_inputs() -> None:
+def test_segment_multi_reduce_triton_requires_contiguous_inputs() -> None:
     src = torch.randn(7, 6, device="cuda")
-    offsets = torch.tensor([0, -1, 2, -1, 7, -1], device="cuda")
+    index = torch.tensor([0, -1, 1, -1, 2, -1], device="cuda")
+    edge_attr = torch.randn(3, 6, device="cuda")
+    offsets = torch.tensor([0, -1, 2, -1, 3, -1], device="cuda")
     module = importlib.import_module(
         "sdm._kernels.triton.segment_multi_reduce"
     )
 
-    with pytest.raises(ValueError, match="src and offsets must be contiguous"):
-        module.segment_multi_reduce(src[:, ::2], offsets[::2].contiguous())
+    with pytest.raises(ValueError, match="must be contiguous"):
+        module.segment_multi_reduce(
+            src=src[:, ::2],
+            index=index[::2].contiguous(),
+            edge_attr=edge_attr[:, ::2].contiguous(),
+            offsets=offsets[::2].contiguous(),
+        )
 
-    with pytest.raises(ValueError, match="src and offsets must be contiguous"):
-        module.segment_multi_reduce(src[:, ::2].contiguous(), offsets[::2])
+    with pytest.raises(ValueError, match="must be contiguous"):
+        module.segment_multi_reduce(
+            src=src[:, ::2].contiguous(),
+            index=index[::2],
+            edge_attr=edge_attr[:, ::2].contiguous(),
+            offsets=offsets[::2].contiguous(),
+        )
+
+    with pytest.raises(ValueError, match="must be contiguous"):
+        module.segment_multi_reduce(
+            src=src[:, ::2].contiguous(),
+            index=index[::2].contiguous(),
+            edge_attr=edge_attr[:, ::2],
+            offsets=offsets[::2].contiguous(),
+        )
+
+    with pytest.raises(ValueError, match="must be contiguous"):
+        module.segment_multi_reduce(
+            src=src[:, ::2].contiguous(),
+            index=index[::2].contiguous(),
+            edge_attr=edge_attr[:, ::2].contiguous(),
+            offsets=offsets[::2],
+        )
+
+
+@onlyCUDA
+def test_segment_multi_reduce_requires_matching_edge_attr() -> None:
+    module = importlib.import_module(
+        "sdm._kernels.triton.segment_multi_reduce"
+    )
+
+    with pytest.raises(ValueError, match="edge_attr must have shape"):
+        module.segment_multi_reduce(
+            src=torch.empty(3, 2, device="cuda"),
+            index=torch.tensor([0, 1], device="cuda"),
+            edge_attr=torch.empty(2, 3, device="cuda"),
+            offsets=torch.tensor([0, 2], device="cuda"),
+        )
+
+
+@onlyCUDA
+def test_segment_multi_reduce_noncontiguous() -> None:
+    src = torch.randn(7, 6, device="cuda")[:, ::2]
+    index = torch.tensor([0, -1, 1, -1, 6, -1], device="cuda")[::2]
+    edge_attr = torch.randn(3, 6, device="cuda")[:, ::2]
+    offsets = torch.tensor([0, -1, 2, -1, 3, -1], device="cuda")[::2]
+
+    actual = segment_multi_reduce(src, index, edge_attr, offsets)
+
+    for result, reference in zip(
+        actual,
+        _eager_segment_multi_reduce(src, index, edge_attr, offsets),
+        strict=True,
+    ):
+        torch.testing.assert_close(result, reference)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_segment_multi_reduce_torch(dtype: torch.dtype) -> None:
+    src = torch.arange(18, dtype=dtype).reshape(6, 3)
+    index = torch.tensor([0, 1, 1, 2, 4, 5])
+    edge_attr = torch.ones(6, 3, dtype=dtype)
+    offsets = torch.tensor([0, 0, 2, 6])
+
+    actual = segment_multi_reduce(src, index, edge_attr, offsets)
+
+    for result, reference in zip(
+        actual,
+        _eager_segment_multi_reduce(src, index, edge_attr, offsets),
+        strict=True,
+    ):
+        torch.testing.assert_close(result, reference)
+
+
+@onlyCUDA
+def test_segment_multi_reduce_compile() -> None:
+    src = torch.randn(7, 8, device="cuda", dtype=torch.bfloat16)
+    index = torch.arange(7, device="cuda")
+    edge_attr = torch.randn_like(src)
+    offsets = torch.tensor([0, 2, 2, 7], device="cuda")
+    compiled = torch.compile(
+        segment_multi_reduce,
+        fullgraph=True,
+        backend="eager",
+    )
+
+    actual = compiled(src, index, edge_attr, offsets)
+
+    for result, reference in zip(
+        actual,
+        _eager_segment_multi_reduce(src, index, edge_attr, offsets),
+        strict=True,
+    ):
+        torch.testing.assert_close(result, reference)
+
+
+@onlyCUDA
+def test_segment_multi_reduce_grad() -> None:
+    src = torch.randn(7, 8, device="cuda", requires_grad=True)
+    index = torch.arange(7, device="cuda")
+    edge_attr = torch.randn(7, 8, device="cuda", requires_grad=True)
+    offsets = torch.tensor([0, 2, 2, 7], device="cuda")
+
+    total, mean, _, _, _ = segment_multi_reduce(
+        src,
+        index,
+        edge_attr,
+        offsets,
+    )
+
+    total_grads = torch.autograd.grad(
+        total.sum(),
+        (src, edge_attr),
+        retain_graph=True,
+    )
+    for grad in total_grads:
+        torch.testing.assert_close(grad, torch.ones_like(grad))
+
+    # Segments hold 2, 0 and 5 rows, so each row is averaged over its degree.
+    mean_grads = torch.autograd.grad(mean.sum(), (src, edge_attr))
+    degree = torch.tensor([2.0, 2, 5, 5, 5, 5, 5], device="cuda")
+    expected = degree.reciprocal().unsqueeze(1).expand_as(src)
+    for grad in mean_grads:
+        torch.testing.assert_close(grad, expected)
