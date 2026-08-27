@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 import pytest
 import torch
@@ -23,8 +23,9 @@ class _RecordingCore(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        assert num_classes == 10
-        assert num_quantiles == 0
+        assert (num_classes, num_quantiles) in ((10, 0), (0, 999))
+        self.num_classes = num_classes
+        self.num_quantiles = num_quantiles
         self.anchor = torch.nn.Parameter(
             torch.empty((), device=device, dtype=dtype)
         )
@@ -48,7 +49,20 @@ class _RecordingCore(torch.nn.Module):
             )
         )
         query = x[..., y.size(-1) :, :]
-        offsets = torch.arange(10, device=x.device, dtype=x.dtype)
+        if self.num_classes > 0:
+            offsets = torch.arange(
+                self.num_classes,
+                device=x.device,
+                dtype=x.dtype,
+            )
+        else:
+            offsets = torch.linspace(
+                1.0,
+                3.0,
+                self.num_quantiles,
+                device=x.device,
+                dtype=x.dtype,
+            )
         return query.sum(dim=-1, keepdim=True) + offsets
 
 
@@ -106,16 +120,15 @@ def _recipe() -> sp.Recipe:
     )
 
 
-def test_default_recipe_is_empty(recording_model: KumoTabular) -> None:
+def test_default_recipe_reduces_and_applies_classification_softmax(
+    recording_model: KumoTabular,
+) -> None:
     context, query = _features()
 
     out = recording_model(context.numerical, _target(), query.numerical)
 
-    assert out.size() == (1, 2, 3)
-    torch.testing.assert_close(
-        out.numerical,
-        torch.tensor([[[306.0, 307.0, 308.0], [308.0, 309.0, 310.0]]]),
-    )
+    assert out.size() == (2, 3)
+    torch.testing.assert_close(out.numerical.sum(dim=-1), torch.ones(2))
     x, _, categorical_mask, _, _ = _RecordingCore.calls[0]
     assert x.equal(torch.cat((context.numerical, query.numerical), dim=-2))
     assert not categorical_mask.any()
@@ -226,3 +239,66 @@ def test_class_limit_uses_declared_vocabulary(
             query,
             recipe=_recipe(),
         )
+
+
+def test_regression_standardizes_target_and_averages_quantiles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _RecordingCore.calls.clear()
+    monkeypatch.setattr(model_module, "_KumoTabular", _RecordingCore)
+    model = KumoTabular(task="regression")
+    context = TableTensor.from_tensor(torch.zeros(3, 2))
+    query = TableTensor.from_tensor(torch.zeros(2, 2))
+    target = TableTensor.from_tensor(torch.tensor([[10.0], [20.0], [30.0]]))
+
+    expected = model(context, target, query)
+    model.fit(context, target)
+    actual = model.predict(query)
+
+    scale = target.numerical.std(dim=-2, correction=0, keepdim=True)
+    point = target.numerical.mean(dim=-2, keepdim=True) + 2.0 * scale
+    torch.testing.assert_close(expected.numerical, point.expand(2, 1))
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+    assert actual.columns[Stype.numerical] == ("pred",)
+
+    normalized_target = _RecordingCore.calls[0][1]
+    torch.testing.assert_close(
+        normalized_target.mean(dim=-1),
+        torch.tensor(0.0),
+        atol=1e-6,
+        rtol=0.0,
+    )
+    torch.testing.assert_close(
+        normalized_target.std(dim=-1, correction=0),
+        torch.tensor(1.0),
+    )
+
+    tiny_target = TableTensor.from_tensor(
+        torch.tensor([[0.0], [1e-9], [2e-9]])
+    )
+    tiny_out = model(context, tiny_target, query)
+    torch.testing.assert_close(
+        tiny_out.numerical,
+        torch.full((2, 1), 2.0 + 1e-9),
+    )
+
+
+@pytest.mark.parametrize(
+    ("task", "target", "target_name"),
+    [
+        ("classification", torch.arange(3.0).unsqueeze(-1), "numerical"),
+        ("regression", _target(), "categorical"),
+    ],
+)
+def test_target_must_match_task(
+    monkeypatch: pytest.MonkeyPatch,
+    task: Literal["classification", "regression"],
+    target: torch.Tensor | TableTensor,
+    target_name: str,
+) -> None:
+    monkeypatch.setattr(model_module, "_KumoTabular", _RecordingCore)
+    context, query = _features()
+    model = KumoTabular(task=task)
+
+    with pytest.raises(ValueError, match=f"received a {target_name} target"):
+        model(context, target, query, recipe=_recipe())
