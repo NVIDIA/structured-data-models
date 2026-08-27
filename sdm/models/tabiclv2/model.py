@@ -120,6 +120,7 @@ class TabICLv2(ICLModel):
     )
     supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    supports_seqused: ClassVar[bool] = True
 
     def __init__(
         self,

@@ -3,7 +3,7 @@ import functools
 import pytest
 import torch
 
-from sdm import CategoricalTensor, TableTensor
+from sdm import CategoricalTensor, Recipe, TableTensor
 from sdm.models import TabFM
 from sdm.models.tabfm import model as tabfm_module
 from sdm.testing import withCUDA
@@ -66,4 +66,50 @@ def test_forward(
     assert model._cache is not None
     assert model._cache.size() > 0
     assert model.predict(x_query).allclose(out, atol=1e-4, rtol=1e-4)
+    model.clear()
+
+
+def test_seqused_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        tabfm_module,
+        "_TabFM",
+        functools.partial(
+            tabfm_module._TabFM,
+            channels=64,
+            num_inducing_points=128,
+            num_readout_tokens=4,
+            num_icl_layers=4,
+        ),
+    )
+    model = TabFM(task="regression", pretrained=False)
+    x = TableTensor(numerical=torch.randn(6, 3))
+    x_context, x_query = x.split(4, dim=0)
+    y_context = torch.randn(4, 1)
+
+    # This model does not mask padded rows or columns
+    # (`supports_seqused` is `False`), so the padding keywords must be
+    # rejected instead of silently dropped. The rejection fires before
+    # any state mutation: a rejected `fit` must not clear a previously
+    # fitted cache.
+    model.fit(x_context, y_context, recipe=Recipe())
+    assert model._cache is not None
+    for key in ("seqused_train", "seqused_cols"):
+        with pytest.raises(ValueError, match=key):
+            model(
+                x_context,
+                y_context,
+                x_query,
+                recipe=Recipe(),
+                **{key: torch.tensor(2, dtype=torch.int32)},
+            )
+        with pytest.raises(ValueError, match=key):
+            model.fit(
+                x_context,
+                y_context,
+                recipe=Recipe(),
+                **{key: torch.tensor(2, dtype=torch.int32)},
+            )
+    # The fitted cache survived every rejected call.
+    assert model._cache is not None
+    model.predict(x_query)
     model.clear()

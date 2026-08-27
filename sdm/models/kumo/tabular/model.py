@@ -67,6 +67,7 @@ class KumoTabular(ICLModel):
     )
     supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    supports_seqused: ClassVar[bool] = False
 
     def __init__(
         self,
