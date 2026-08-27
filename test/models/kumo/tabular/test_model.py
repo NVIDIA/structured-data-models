@@ -143,8 +143,13 @@ def _build(task: Literal["classification", "regression"]) -> KumoTabular:
 
 
 @pytest.fixture
-def model() -> KumoTabular:
+def cls_model() -> KumoTabular:
     return _build("classification")
+
+
+@pytest.fixture
+def reg_model() -> KumoTabular:
+    return _build("regression")
 
 
 def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
@@ -189,75 +194,90 @@ def _recipe() -> sp.Recipe:
     )
 
 
-def test_forward(model: KumoTabular) -> None:
+def _reg_target(offset: float = 0.0) -> TableTensor:
+    values = torch.tensor([[10.0], [20.0], [30.0]])
+    return TableTensor.from_tensor(values + offset)
+
+
+def _reg_recipe() -> sp.Recipe:
+    return sp.Recipe(
+        target=sp.Standardize(),
+        output=[sp.ReduceEstimators(method="mean")],
+    )
+
+
+def test_forward(
+    cls_model: KumoTabular,
+    reg_model: KumoTabular,
+) -> None:
     x_context, x_query = _features()
 
-    out = model(x_context, _target(), x_query, recipe=_recipe())
+    out = cls_model(x_context, _target(), x_query, recipe=_recipe())
 
     assert out.size() == (2, 3)
     assert out.columns[Stype.numerical] == ("0", "10", "20")
     assert out.dtype == x_query.dtype
     assert torch.is_inference(out)
 
-
-def test_categorical_features_are_marked(model: KumoTabular) -> None:
-    target = _target()
-
-    x_context, x_query = _features(Stype.categorical)
-    categorical = model(x_context, target, x_query, recipe=_recipe())
-    # Declaring the same column numerical leaves the features handed to the
-    # model untouched, so only the stype it embeds them with differs.
     x_context, x_query = _features(Stype.numerical)
-    numerical = model(x_context, target, x_query, recipe=_recipe())
-
-    assert not categorical.allclose(numerical)
-
-
-def test_fit_predict(model: KumoTabular) -> None:
-    x_context, x_query = _features()
-    target = _target()
-
-    expected = model(x_context, target, x_query, recipe=_recipe())
-    model.fit(x_context, target, recipe=_recipe())
-    actual = model.predict(x_query)
-
-    assert actual.allclose(expected, atol=1e-5)
-    assert actual.columns == expected.columns
-
-
-def test_default_recipe(model: KumoTabular) -> None:
-    # The default recipe does not convert features, so keep them numerical.
-    x_context, x_query = _features(Stype.numerical)
-
-    out = model(x_context, _target(), x_query)
-
-    # Estimators are reduced and classification logits become probabilities.
-    assert out.size() == (2, 3)
-    torch.testing.assert_close(out.numerical.sum(dim=-1), torch.ones(2))
-
-
-def test_regression() -> None:
-    model = _build("regression")
-    x_context, x_query = _features(Stype.numerical)
-    values = torch.tensor([[10.0], [20.0], [30.0]])
-    target = TableTensor.from_tensor(values)
-
-    out = model(x_context, target, x_query)
+    out = reg_model(
+        x_context,
+        _reg_target(),
+        x_query,
+        recipe=_reg_recipe(),
+    )
 
     assert out.size() == (2, 1)
     assert out.columns[Stype.numerical] == ("pred",)
 
     # Targets are standardized on the context and inverted afterwards, so
     # shifting the target shifts the prediction by the same amount.
-    shifted = model(
-        x_context, TableTensor.from_tensor(values + 1000.0), x_query
+    shifted = reg_model(
+        x_context,
+        _reg_target(offset=1000.0),
+        x_query,
+        recipe=_reg_recipe(),
     )
     torch.testing.assert_close(shifted.numerical, out.numerical + 1000.0)
 
-    model.fit(x_context, target)
+
+def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
+    target = _target()
+
+    x_context, x_query = _features(Stype.categorical)
+    categorical = cls_model(x_context, target, x_query, recipe=_recipe())
+    # Declaring the same column numerical leaves the features handed to the
+    # model untouched, so only the stype it embeds them with differs.
+    x_context, x_query = _features(Stype.numerical)
+    numerical = cls_model(x_context, target, x_query, recipe=_recipe())
+
+    assert not categorical.allclose(numerical)
+
+
+def test_fit_predict(
+    cls_model: KumoTabular,
+    reg_model: KumoTabular,
+) -> None:
+    x_context, x_query = _features()
+    target = _target()
+
+    expected = cls_model(x_context, target, x_query, recipe=_recipe())
+    cls_model.fit(x_context, target, recipe=_recipe())
+    actual = cls_model.predict(x_query)
+
+    assert actual.allclose(expected, atol=1e-5)
+    assert actual.columns == expected.columns
+
+    x_context, x_query = _features(Stype.numerical)
+    target = _reg_target()
+    recipe = _reg_recipe()
+    expected = reg_model(x_context, target, x_query, recipe=recipe)
+    reg_model.fit(x_context, target, recipe=recipe)
+    actual = reg_model.predict(x_query)
+
     torch.testing.assert_close(
-        model.predict(x_query).numerical,
-        out.numerical,
+        actual.numerical,
+        expected.numerical,
         atol=1e-4,
         rtol=1e-4,
     )

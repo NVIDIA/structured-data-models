@@ -15,9 +15,6 @@ class Standardize(Processor, InvertibleMixin):
         with_mean: If ``True``, center each column by its fitted mean.
         with_std: If ``True``, scale each column by its fitted standard
             deviation.
-        constant_threshold: Standard deviations below this value are replaced
-            by one before adding ``epsilon``. If ``None``, preserve the default
-            constant-feature handling.
         epsilon: Value added to each fitted standard deviation. The default
             preserves exact constant-column handling.
     """
@@ -30,17 +27,13 @@ class Standardize(Processor, InvertibleMixin):
         *,
         with_mean: bool = True,
         with_std: bool = True,
-        constant_threshold: float | None = None,
         epsilon: float = 0.0,
     ) -> None:
         super().__init__()
-        if constant_threshold is not None and constant_threshold <= 0:
-            raise ValueError("constant_threshold must be positive.")
         if epsilon < 0:
             raise ValueError("epsilon must be non-negative.")
         self.with_mean = with_mean
         self.with_std = with_std
-        self.constant_threshold = constant_threshold
         self.epsilon = epsilon
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
@@ -72,12 +65,7 @@ class Standardize(Processor, InvertibleMixin):
                     keepdim=True,
                 )
                 scale = var.sqrt()
-                if self.constant_threshold is not None:
-                    scale = scale.masked_fill(
-                        scale < self.constant_threshold,
-                        1.0,
-                    )
-                elif self.epsilon == 0:
+                if self.epsilon == 0:
                     scale[
                         _constant_feature_mask(
                             var,
@@ -86,7 +74,7 @@ class Standardize(Processor, InvertibleMixin):
                         )
                     ] = 1.0
             else:
-                if self.constant_threshold is not None or self.epsilon == 0:
+                if self.epsilon == 0:
                     scale = torch.ones_like(data_mean)
                 else:
                     scale = torch.zeros_like(data_mean)

@@ -7,7 +7,6 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
-import sdm.processing as sp
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
@@ -51,17 +50,8 @@ class KumoTabular(ICLModel):  # noqa: D101
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return Recipe(
-            target=sp.StypeDispatch(
-                numerical=sp.Standardize(constant_threshold=1e-8),
-            ),
-            output=[
-                sp.ReduceEstimators(method="mean"),
-                sp.TaskDispatch(
-                    classification=sp.Softmax(),
-                ),
-            ],
-        )
+        # TODO: Define the default recipe.
+        return Recipe()
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415
