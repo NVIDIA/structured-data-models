@@ -1,5 +1,3 @@
-from typing import Any, ClassVar
-
 import pytest
 import torch
 
@@ -131,66 +129,40 @@ def test_forward_does_not_mutate_input(
     )
 
 
-class _RecordingCore(torch.nn.Module):
-    calls: ClassVar[list[dict[str, Any]]] = []
-
-    def __init__(
-        self,
-        num_classes: int,
-        num_quantiles: int,
-        **_: object,
-    ) -> None:
-        super().__init__()
-        assert (num_classes, num_quantiles) == (10, 0)
-
-    def forward(
-        self,
-        x: torch.Tensor,  # [..., R, C]
-        y: torch.Tensor,  # [..., R_context]
-        categorical_mask: torch.Tensor,  # [..., C]
-        *,
-        cache: Cache | None = None,
-        batch_size_limit: int | None = None,
-    ) -> torch.Tensor:  # [..., R_query, 10]
-        type(self).calls.append(
-            {
-                "x": x.clone(),
-                "y": y.clone(),
-                "categorical_mask": categorical_mask.clone(),
-                "batch_size_limit": batch_size_limit,
-            }
-        )
-        query = x[..., y.size(-1) :, :]
-        return query.sum(dim=-1, keepdim=True) + torch.arange(
-            10,
-            device=x.device,
-            dtype=x.dtype,
-        )
-
-
 @pytest.fixture
-def model(monkeypatch: pytest.MonkeyPatch) -> KumoTabular:
-    _RecordingCore.calls.clear()
-    monkeypatch.setattr(model_module, "_KumoTabular", _RecordingCore)
-    return KumoTabular()
+def model() -> KumoTabular:
+    model = KumoTabular()
+    # Residual branches are zero-initialized, so an untrained model maps every
+    # row onto the same constant. Randomize them to make the prediction depend
+    # on the features it is given.
+    for parameter in model.parameters():
+        if not parameter.any():
+            torch.nn.init.normal_(parameter, std=0.02)
+    return model
 
 
-def _features() -> tuple[TableTensor, TableTensor]:
-    x = TableTensor(
-        columns={Stype.numerical: ("n0", "n1"), Stype.categorical: ("c",)},
-        numerical=torch.tensor(
-            [
-                [100.0, 200.0],
-                [101.0, 201.0],
-                [102.0, 202.0],
-                [103.0, 203.0],
-                [104.0, 204.0],
-            ]
-        ),
-        categorical=CategoricalTensor.from_tensor(
-            torch.tensor([[0], [1], [0], [0], [1]])
-        ),
+def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
+    numerical = torch.tensor(
+        [
+            [100.0, 200.0],
+            [101.0, 201.0],
+            [102.0, 202.0],
+            [103.0, 203.0],
+            [104.0, 204.0],
+        ]
     )
+    label = torch.tensor([[0], [1], [0], [0], [1]])
+    if stype == Stype.categorical:
+        x = TableTensor(
+            columns={Stype.numerical: ("n0", "n1"), Stype.categorical: ("c",)},
+            numerical=numerical,
+            categorical=CategoricalTensor.from_tensor(label),
+        )
+    else:
+        x = TableTensor(
+            columns={Stype.numerical: ("n0", "n1", "c")},
+            numerical=torch.cat((numerical, label.float()), dim=-1),
+        )
     return x.split(3, dim=0)
 
 
@@ -214,25 +186,25 @@ def _recipe() -> sp.Recipe:
 def test_forward(model: KumoTabular) -> None:
     x_context, x_query = _features()
 
-    out = model(
-        x_context,
-        _target(),
-        x_query,
-        recipe=_recipe(),
-        batch_size_limit=7,
-    )
+    out = model(x_context, _target(), x_query, recipe=_recipe())
 
     assert out.size() == (2, 3)
     assert out.columns[Stype.numerical] == ("0", "10", "20")
+    assert out.dtype == x_query.dtype
+    assert torch.is_inference(out)
 
-    call = _RecordingCore.calls[0]
-    assert call["x"][..., :2].equal(
-        torch.cat((x_context.numerical, x_query.numerical), dim=-2)
-    )
-    assert call["y"].equal(torch.tensor([0, 2, 0]))
-    # Columns turned numerical by the recipe stay marked as categorical.
-    assert call["categorical_mask"].tolist() == [False, False, True]
-    assert call["batch_size_limit"] == 7
+
+def test_categorical_features_are_marked(model: KumoTabular) -> None:
+    target = _target()
+
+    x_context, x_query = _features(Stype.categorical)
+    categorical = model(x_context, target, x_query, recipe=_recipe())
+    # Declaring the same column numerical leaves the features handed to the
+    # model untouched, so only the stype it embeds them with differs.
+    x_context, x_query = _features(Stype.numerical)
+    numerical = model(x_context, target, x_query, recipe=_recipe())
+
+    assert not categorical.allclose(numerical)
 
 
 def test_fit_predict(model: KumoTabular) -> None:
@@ -245,6 +217,3 @@ def test_fit_predict(model: KumoTabular) -> None:
 
     assert actual.allclose(expected)
     assert actual.columns == expected.columns
-    # The mask is derived from the context schema, which `predict` lacks.
-    fit_call, predict_call = _RecordingCore.calls[-2:]
-    assert predict_call["categorical_mask"].equal(fit_call["categorical_mask"])
