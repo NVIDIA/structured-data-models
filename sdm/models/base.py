@@ -76,6 +76,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
+        kwargs = self._context_kwargs(x_context, kwargs)
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
         with inference_mode(not requires_grad):
@@ -243,6 +244,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             x = TableTensor.from_tensor(x)
         if not isinstance(y, TableTensor):
             y = TableTensor.from_tensor(y)
+        kwargs = self._context_kwargs(x, kwargs)
 
         self.clear()
 
@@ -509,6 +511,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
         r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################
+
+    def _context_kwargs(
+        self,
+        x: Tensor | TableTensor,
+        kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Add model-specific context metadata to execution arguments."""
+        return kwargs
 
     def _validate_context(
         self,

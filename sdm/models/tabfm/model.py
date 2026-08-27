@@ -146,21 +146,15 @@ class TabFM(ICLModel):
 
         return self
 
-    def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
-        x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
-        if not isinstance(x_context, TableTensor):
-            x_context = TableTensor.from_tensor(x_context)
-        kwargs["_schema"] = x_context.schema
-        return super().forward(*args, **kwargs)
-
-    def fit(self, *args: Any, **kwargs: Any) -> None:
-        r""":meta private:"""  # noqa: D415
-        x = kwargs["x"] if "x" in kwargs else args[0]
+    def _context_kwargs(
+        self,
+        x: Tensor | TableTensor,
+        kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
         kwargs["_schema"] = x.schema
-        return super().fit(*args, **kwargs)
+        return kwargs
 
     def _forward(
         self,
