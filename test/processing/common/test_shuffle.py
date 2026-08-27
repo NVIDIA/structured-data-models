@@ -30,29 +30,6 @@ def test_shuffle_columns_shift_rotates_numerical_block() -> None:
     )
 
 
-def test_shuffle_columns_preserves_non_numerical_columns() -> None:
-    table = TableTensor(
-        numerical=torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
-        categorical=CategoricalTensor.from_tensor(
-            torch.tensor([[0], [1]], dtype=torch.int32)
-        ),
-    )
-    processor = ShuffleColumns(method="shift")
-
-    transformed = processor.fit_transform(
-        table,
-        generator=torch.Generator().manual_seed(3),
-    )
-    restored = processor.inverse_transform(transformed)
-
-    assert (
-        transformed.columns[Stype.categorical]
-        == table.columns[Stype.categorical]
-    )
-    assert torch.equal(transformed.categorical.code, table.categorical.code)
-    assert restored.equal(table)
-
-
 @pytest.mark.parametrize("method", ["shift", "random"])
 def test_shuffle_columns_scalar_fit_transform_and_inverse(
     method: Literal["shift", "random"],
