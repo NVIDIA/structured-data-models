@@ -47,7 +47,7 @@ Default Recipe
              method='round_robin',
            ),
            ClipSigma(threshold=4.0),
-           ShuffleColumns(method='shift'),
+           ShuffleColumns(method='latin'),
          ),
        ),
      ),
