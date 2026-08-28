@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import Linear, ModuleList, Parameter, RMSNorm, Sequential
+from torch.nn import ModuleList, Parameter, RMSNorm
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
@@ -15,8 +15,7 @@ class TableEncoder(torch.nn.Module):
     def __init__(
         self,
         channels: int = 128,
-        num_col_heads: int = 8,
-        num_row_heads: int = 8,
+        num_heads: int = 4,
         num_inducing_points: int = 128,
         num_cls_tokens: int = 4,
         num_stages: int = 4,
@@ -36,7 +35,7 @@ class TableEncoder(torch.nn.Module):
         torch.nn.init.trunc_normal_(self.cls_tokens, std=0.02)
 
         rope = RotaryEmbedding(
-            channels=channels // num_row_heads,
+            channels=channels // num_heads,
             layout="split_half",
             theta=100_000,
             requires_grad=False,
@@ -50,37 +49,29 @@ class TableEncoder(torch.nn.Module):
                 num_inducing_points=num_inducing_points,
                 inducing_block=KumoTabularTransformerBlock(
                     channels=channels,
-                    num_heads=num_col_heads,
+                    num_heads=num_heads,
+                    query_log_scale=True,
                     **factory_kwargs,
                 ),
                 output_block=KumoTabularTransformerBlock(
                     channels=channels,
-                    num_heads=num_col_heads,
+                    num_heads=num_heads,
                     **factory_kwargs,
                 ),
                 **factory_kwargs,
-            )
-            for _ in range(num_stages)
-        )
-        self.col_projections = ModuleList(
-            Sequential(
-                Linear(channels, channels, **factory_kwargs),
-                RMSNorm(channels, **factory_kwargs),
             )
             for _ in range(num_stages)
         )
         self.row_blocks = ModuleList(
             KumoTabularTransformerBlock(
                 channels=channels,
-                num_heads=num_row_heads,
+                num_heads=num_heads,
                 rope=rope,
                 **factory_kwargs,
             )
             for _ in range(num_stages)
         )
-        self.row_norms = ModuleList(
-            RMSNorm(channels, **factory_kwargs) for _ in range(num_stages)
-        )
+        self.norm = RMSNorm(channels, **factory_kwargs)
 
     def forward(
         self,
@@ -90,15 +81,15 @@ class TableEncoder(torch.nn.Module):
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
         *batch, num_rows, _, channels = x.size()
+        if not 0 <= num_context_rows <= num_rows:
+            raise ValueError(
+                "`num_context_rows` must be between zero and the number of "
+                f"rows (got {num_context_rows} and {num_rows})"
+            )
         num_cls_tokens = self.num_cls_tokens
 
-        for i, (col_block, col_projection, row_block, row_norm) in enumerate(
-            zip(
-                self.col_blocks,
-                self.col_projections,
-                self.row_blocks,
-                self.row_norms,
-            )
+        for i, (col_block, row_block) in enumerate(
+            zip(self.col_blocks, self.row_blocks, strict=True)
         ):
             # CLS tokens bypass column stages after their first insertion.
             features = x if i == 0 else x[..., num_cls_tokens:, :]
@@ -118,7 +109,7 @@ class TableEncoder(torch.nn.Module):
                 features, cache[key] = result
             else:
                 features = result
-            features = col_projection(features.transpose(-2, -3))
+            features = features.transpose(-2, -3)
 
             if i == 0:
                 cls_tokens = self.cls_tokens.to(x.dtype)
@@ -132,6 +123,6 @@ class TableEncoder(torch.nn.Module):
             query = x
             if i == len(self.row_blocks) - 1:
                 query = x[..., :num_cls_tokens, :]
-            x = row_norm(row_block(query=query, key_value=x))
+            x = row_block(query=query, key_value=x)
 
-        return x.flatten(-2)
+        return self.norm(x).flatten(-2)
