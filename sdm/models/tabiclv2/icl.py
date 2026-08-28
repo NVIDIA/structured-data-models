@@ -1,5 +1,6 @@
 # ruff: noqa: D101, D102
 
+import contextlib
 import math
 from typing import Any, TypeAlias, cast
 
@@ -9,6 +10,11 @@ from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
+from sdm.nn.context_parallel import (
+    combine_scope,
+    context_group,
+    shard_context,
+)
 from sdm.nn.memory import (
     attention_batch_size_limit,
     cuda_attention_memory_limit,
@@ -114,47 +120,67 @@ class ICLBlock(torch.nn.Module):
 
             x[..., :R_train, :] += y_emb.to(x.dtype)
 
+        cp_group = context_group()
         plan_attention = (
             x.device.type == "cuda"
             and not self.training
             and not torch.is_grad_enabled()
             and not torch.compiler.is_compiling()
+            and cp_group is None
+        )
+
+        recording = cache is not None and cache.is_recording
+        replaying = cache is not None and cache.is_replaying
+        # Combine the sharded cross-attention over the group only on replay;
+        # recording runs on the full (replicated) local context.
+        combine = (
+            combine_scope(cp_group)
+            if replaying and cp_group is not None
+            else contextlib.nullcontext()
         )
 
         icl_batch_size_limit = batch_size_limit
-        for i, layer in enumerate(self.layers):
-            key = f"{cache_prefix}.layer{i}"
-            query = x[..., R_train:, :] if i == len(self.layers) - 1 else x
-            key_value = (
-                cast(KVCacheEntry, cache[key])
-                if cache is not None and cache.is_replaying
-                else x[..., :R_train, :]
-            )
-            if i == 0 or (
-                plan_attention and cache is not None and cache.is_recording
-            ):
-                icl_batch_size_limit = attention_batch_size_limit(
-                    requested_limit=batch_size_limit,
-                    query=query,
-                    key_value=key_value,
-                    attention_memory_limit=(
-                        cuda_attention_memory_limit(x.device)
-                        if plan_attention
-                        else None
-                    ),
-                    num_heads=self.num_heads,
+        with combine:
+            for i, layer in enumerate(self.layers):
+                key = f"{cache_prefix}.layer{i}"
+                query = (
+                    x[..., R_train:, :] if i == len(self.layers) - 1 else x
                 )
-            result = layer(
-                query=query,
-                key_value=key_value,  # [..., R_train, D]
-                return_key_value=cache is not None and cache.is_recording,
-                batch_size_limit=icl_batch_size_limit,
-            )
+                key_value = (
+                    cast(KVCacheEntry, cache[key])
+                    if replaying
+                    else x[..., :R_train, :]
+                )
+                if i == 0 or (plan_attention and recording):
+                    icl_batch_size_limit = attention_batch_size_limit(
+                        requested_limit=batch_size_limit,
+                        query=query,
+                        key_value=key_value,
+                        attention_memory_limit=(
+                            cuda_attention_memory_limit(x.device)
+                            if plan_attention
+                            else None
+                        ),
+                        num_heads=self.num_heads,
+                    )
+                result = layer(
+                    query=query,
+                    key_value=key_value,  # [..., R_train, D]
+                    return_key_value=recording,
+                    batch_size_limit=icl_batch_size_limit,
+                )
 
-            if cache is not None and cache.is_recording:
-                x, cache[key] = result
-            else:
-                x = result
+                if recording:
+                    x, kv = result
+                    if cp_group is not None:
+                        # Store only this rank's shard of the context cache.
+                        kv = KVCacheEntry(
+                            key=shard_context(kv.key, cp_group, -3),
+                            value=shard_context(kv.value, cp_group, -3),
+                        )
+                    cache[key] = kv
+                else:
+                    x = result
 
         return self.head(self.norm(x))  # [..., R_test, out_channels]
 

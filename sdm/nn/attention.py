@@ -5,12 +5,17 @@ from math import prod
 from typing import Any, Literal, overload
 
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
+from sdm.nn.context_parallel import (
+    _combine_group,
+    context_parallel_attention,
+)
 
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
@@ -313,11 +318,31 @@ class SDPA(torch.nn.Module):
                 assert out is not None
                 return out.view(batch_shape + query_size)
 
+        # Context parallelism: combine this rank's key/value shard with the
+        # other ranks' shards. Only the plain (unmasked) reduction is sharded.
+        combine_group = _combine_group()
+        if combine_group is not None and (
+            attn_mask is not None or seqused_key_value is not None
+        ):
+            combine_group = None
+
         if self.query_scaling is not None:
             if seqused_key_value is not None:
                 key_len = seqused_key_value.unsqueeze(-1)
             elif attn_mask is not None and attn_mask.size(-1) > 1:
                 key_len = attn_mask.sum(dim=-1)
+            elif combine_group is not None:
+                # Length-aware scaling needs the global context length, not
+                # this rank's shard length. Keep it on device (a tensor) to
+                # avoid a per-attention host synchronization.
+                key_len = torch.tensor(
+                    float(key.size(-3)),
+                    device=key.device,
+                    dtype=torch.float32,
+                )
+                dist.all_reduce(
+                    key_len, op=dist.ReduceOp.SUM, group=combine_group
+                )
             else:
                 key_len = key.size(-3)
             query = self.query_scaling(query, key_len=key_len)
@@ -344,6 +369,18 @@ class SDPA(torch.nn.Module):
             key_index = torch.arange(key.size(-3), device=key.device)
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
+
+        if combine_group is not None:
+            # Local shard attention + cross-rank log-sum-exp combine => exact
+            # attention over the full, sharded key/value context.
+            out = context_parallel_attention(
+                query,  # [B, Q, Hq, C]
+                key,  # [B, KV_local, Hkv, C]
+                value,  # [B, KV_local, Hkv, C]
+                group=combine_group,
+                scale=self.scale,
+            )  # [B, Q, Hq, C]
+            return out.view(batch_shape + out.size()[-3:])
 
         out = F.scaled_dot_product_attention(
             query=query.transpose(-3, -2),  # [B, Hq, Q, C],
