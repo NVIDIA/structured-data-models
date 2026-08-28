@@ -26,7 +26,7 @@ class _RecordingModel(ICLModel):
     supports_related_tables: ClassVar[bool] = True
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(task=None)
         self.calls: list[_Call] = []
 
     def _forward(

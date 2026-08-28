@@ -141,7 +141,7 @@ class KumoRelational(ICLModel):
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(task=None)
 
         self.cls_model = _KumoRelational(
             num_classes=10,

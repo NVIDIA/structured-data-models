@@ -32,9 +32,8 @@ class KumoTabular(ICLModel):  # noqa: D101
         *,
         task: Literal["classification", "regression"] = "classification",
     ) -> None:
-        super().__init__()
+        super().__init__(task=task)
 
-        self.task = task
         if task == "classification":
             num_classes, num_quantiles = 10, 0
         else:
@@ -81,6 +80,7 @@ class KumoTabular(ICLModel):  # noqa: D101
         batch_size_limit: int | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
+
         if x_query is None and x_context is not None:
             x = x_context.numerical
         elif x_context is None and x_query is not None:
@@ -92,29 +92,16 @@ class KumoTabular(ICLModel):  # noqa: D101
 
         classes: Tensor | None = None
         if y_context is not None and y_context.categorical.size(-1) > 0:
-            if self.task != "classification":
-                raise ValueError(
-                    f"{self.__class__.__name__!r} is initialized for task "
-                    f"{self.task!r}, but received a categorical target"
-                )
             y = y_context.categorical.code.squeeze(-1)
             classes = y_context.categorical.categories[0]
         elif y_context is not None and y_context.numerical.size(-1) > 0:
-            if self.task != "regression":
-                raise ValueError(
-                    f"{self.__class__.__name__!r} is initialized for task "
-                    f"{self.task!r}, but received a numerical target"
-                )
             y = y_context.numerical.squeeze(-1)
         else:
             assert cache is not None
-            if self.task == "classification":
-                classes = cast(Tensor, cache["classes"])
+            classes = cast(Tensor | None, cache["classes"])
             y = x.new_empty(
                 (*x.size()[:-2], 0),
-                dtype=torch.int64
-                if self.task == "classification"
-                else x.dtype,
+                dtype=torch.int64 if classes is not None else x.dtype,
             )
 
         if classes is not None and len(classes) > 10:

@@ -1,12 +1,12 @@
 import abc
 import copy
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
@@ -23,6 +23,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
     foundation models on structured data.
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
+
+    Args:
+        task: Tasks to initialize. If omitted, all supported tasks by the model
+            will be initialized.
     """
 
     #: Semantic types supported for input columns in this model.
@@ -31,11 +35,42 @@ class ICLModel(torch.nn.Module, abc.ABC):
     #: Semantic types supported for target columns in this model.
     supported_target_stypes: ClassVar[frozenset[Stype]]
 
+    #: Prediction tasks supported in this model.
+    supported_tasks: ClassVar[frozenset[Task]]
+
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
-    def __init__(self) -> None:
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+
+        if hasattr(cls, "supported_target_stypes"):
+            cls.supported_tasks = frozenset(
+                Task.from_stype(stype) for stype in cls.supported_target_stypes
+            )
+
+    def __init__(
+        self,
+        task: TaskLike | Iterable[TaskLike] | None,
+    ) -> None:
         super().__init__()
+
+        if task is None:
+            self.tasks = self.supported_tasks
+        elif isinstance(task, str):
+            self.tasks = frozenset({Task(task)})
+        else:
+            self.tasks = frozenset({Task(t) for t in task})
+
+        if not self.tasks.issubset(self.supported_tasks):
+            invalid = ", ".join(
+                f"{str(task)!r}" for task in self.tasks - self.supported_tasks
+            )
+            raise ValueError(
+                f"{self.__class__.__name__!r} received unsupported tasks "
+                f"{invalid}"
+            )
+
         self._cache: Cache | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
@@ -545,6 +580,15 @@ class ICLModel(torch.nn.Module, abc.ABC):
             raise ValueError(
                 f"{self.__class__.__name__!r} received unsupported target "
                 f"stypes {stypes}"
+            )
+        invalid = y.active_stypes - {task.stype for task in self.tasks}
+        if len(invalid) > 0:
+            tasks = ", ".join(
+                f"{str(Task.from_stype(stype))!r}" for stype in invalid
+            )
+            raise ValueError(
+                f"{self.__class__.__name__!r} is not initialized for tasks "
+                f"{tasks}"
             )
 
         if related_tables is not None:

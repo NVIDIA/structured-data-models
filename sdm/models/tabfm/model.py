@@ -9,7 +9,7 @@ import torch
 from torch import Tensor
 
 import sdm.processing as sp
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import Recipe, RelatedTables, Stype, TableTensor, Task
 from sdm.cache import Cache
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.cell_embedding import CellEmbedding
@@ -71,9 +71,8 @@ class TabFM(ICLModel):
         checkpoint_path: str | Path | None,
         device: torch.device | str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(task=task)
 
-        self.task = task
         self.model = _TabFM(
             num_classes=10 if task == "classification" else 0,
             device="meta" if checkpoint_path is not None else device,
@@ -140,7 +139,7 @@ class TabFM(ICLModel):
         device = torch.get_default_device() if device is None else device
         ckpt = remap_ckpt(
             ckpt=load_file(checkpoint_path, device=str(device)),
-            is_classifier=self.task == "classification",
+            is_classifier=Task.classification in self.tasks,
         )
         self.model.load_state_dict(ckpt, strict=True, assign=True)
 
@@ -183,36 +182,24 @@ class TabFM(ICLModel):
             assert x_query is not None
             x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
-        y: Tensor | None = None
         classes: Tensor | None = None
         if y_context is not None and y_context.categorical.size(-1) > 0:
-            if self.task != "classification":
-                raise ValueError(
-                    f"{self.__class__.__name__!r} is initialized for task "
-                    f"{self.task!r}, but received a categorical target"
-                )
             y = y_context.categorical.code.squeeze(-1)
             classes = y_context.categorical.categories[0]
         elif y_context is not None and y_context.numerical.size(-1) > 0:
-            if self.task != "regression":
-                raise ValueError(
-                    f"{self.__class__.__name__!r} is initialized for task "
-                    f"{self.task!r}, but received a numerical target"
-                )
             y = y_context.numerical.squeeze(-1)
-        elif cache is not None:
+        else:
+            assert cache is not None
             classes = cast(Tensor | None, cache["classes"])
+            y = x.new_empty(
+                (*x.size()[:-2], 0),
+                dtype=torch.int64 if classes is not None else x.dtype,
+            )
 
         if classes is not None and len(classes) > 10:
             raise ValueError(
                 f"{self.__class__.__name__!r} only supports up to 10 classes "
                 f"(got {len(classes)})"
-            )
-
-        if y is None:
-            y = x.new_empty(
-                (*x.size()[:-2], 0),
-                dtype=torch.int64 if classes is not None else x.dtype,
             )
 
         if cache is None or cache.is_recording:
