@@ -31,7 +31,8 @@ def download_checkpoint(
         if local_files_only:
             raise
         if license_prompt is not None:
-            answer = input(f"{license_prompt}\n\nAccept license terms? [y/N] ")
+            print(f"{license_prompt}\n")  # noqa: T201
+            answer = input("Accept license terms? [y/N] ")
             if answer.lower() not in {"y", "yes"}:
                 raise RuntimeError(
                     "Checkpoint download requires license acceptance"
