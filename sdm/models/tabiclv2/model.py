@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
+from torch.nn import ModuleDict
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -104,6 +106,8 @@ class TabICLv2(ICLModel):
         assert out.size() == (3, 2)
 
     Args:
+        task: The tasks to initialize. If ``None``, all tasks supported by this
+            model are initialized.
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
     """
@@ -118,23 +122,20 @@ class TabICLv2(ICLModel):
 
     def __init__(
         self,
+        task: TaskLike | Iterable[TaskLike] | None = None,
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
-        super().__init__(task=None)
+        super().__init__(task=task)
 
-        self.cls_model = _TabICLv2(
-            num_classes=10,
-            num_quantiles=0,
-            norm_bias=True,
-            device="meta" if pretrained else device,
-        )
-        self.reg_model = _TabICLv2(
-            num_classes=0,
-            num_quantiles=999,
-            norm_bias=False,
-            device="meta" if pretrained else device,
-        )
+        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        for task in self.tasks:
+            self.models[task] = _TabICLv2(
+                num_classes=10 if task == Task.classification else 0,
+                num_quantiles=999 if task == Task.regression else 0,
+                norm_bias=task == Task.classification,
+                device="meta" if pretrained else device,
+            )
 
         if pretrained:
             self._load_from_pretrained(device=device)
@@ -152,23 +153,20 @@ class TabICLv2(ICLModel):
     ) -> TabICLv2:
         device = torch.get_default_device() if device is None else device
 
-        for variant in ["classifier", "regressor"]:
-            path = download_checkpoint(
-                repo_id="jingang/TabICL",
-                filename=f"tabicl-{variant}-v2-20260212.ckpt",
-            )
+        for task, model in self.models.items():
+            if task == Task.classification:
+                filename = "tabicl-classifier-v2-20260212.ckpt"
+            else:
+                assert task == Task.regression
+                filename = "tabicl-regressor-v2-20260212.ckpt"
+
             ckpt = torch.load(
-                path,
+                download_checkpoint("jingang/TabICL", filename),
                 map_location=device,
                 weights_only=True,
             )["state_dict"]
-
-            if variant == "classifier":
-                ckpt = remap_ckpt(ckpt, is_classifier=True)
-                self.cls_model.load_state_dict(ckpt, assign=True)
-            else:
-                ckpt = remap_ckpt(ckpt, is_classifier=False)
-                self.reg_model.load_state_dict(ckpt, assign=True)
+            ckpt = remap_ckpt(ckpt, is_classifier=task == Task.classification)
+            model.load_state_dict(ckpt, assign=True)
 
         return self
 
@@ -209,7 +207,7 @@ class TabICLv2(ICLModel):
             )
 
         if classes is None:
-            out = self.reg_model(x, y, cache=cache)
+            out = self.models[Task.regression](x, y, cache=cache)
             return TableTensor(
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
@@ -217,7 +215,9 @@ class TabICLv2(ICLModel):
                 numerical=out.sort(dim=-1)[0],
             )
 
-        out = self.cls_model(x, y, cache=cache, num_classes=len(classes))
+        out = self.models[Task.classification](
+            x, y, cache=cache, num_classes=len(classes)
+        )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
             numerical=out[..., : len(classes)],
