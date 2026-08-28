@@ -23,10 +23,10 @@ def test_shuffle_columns_latin_method_rotates() -> None:
     )
 
     assert isinstance(output, TableTensor)
-    assert output.columns[Stype.numerical] == ("1", "2", "0")
+    assert output.columns[Stype.numerical] == ("2", "0", "1")
     assert torch.equal(
         output.numerical,
-        table.numerical.index_select(-1, torch.tensor([1, 2, 0])),
+        table.numerical.index_select(-1, torch.tensor([2, 0, 1])),
     )
 
 
