@@ -84,14 +84,10 @@ def test_latin_ensemble_couples_member_permutations(
     ensemble = EnsembleTable.from_tables(
         tables=(
             TableTensor.from_tensor(
-                torch.arange(8, dtype=torch.float32, device=device).view(
-                    2, 4
-                )
+                torch.arange(8, dtype=torch.float32, device=device).view(2, 4)
             ),
             TableTensor.from_tensor(
-                torch.arange(4, dtype=torch.float32, device=device).view(
-                    2, 2
-                )
+                torch.arange(4, dtype=torch.float32, device=device).view(2, 2)
             ),
         ),
         member_table_ids=(0, 0, 0, 0, 1, 1, 1, 1),
