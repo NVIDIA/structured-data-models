@@ -95,7 +95,7 @@ def test_latin_ensemble_couples_member_permutations(
     )
     output = ShuffleColumns(method="latin").fit_transform_ensemble(
         ensemble,
-        generator=torch.Generator().manual_seed(7),
+        generator=torch.Generator(device=device).manual_seed(7),
     )
     expected = (
         ("0", "3", "2", "1"),
