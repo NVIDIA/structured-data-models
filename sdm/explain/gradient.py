@@ -67,45 +67,35 @@ class _GradientCallback(Callback):
         model: torch.nn.Module,
         out: TableTensor,
     ) -> TableTensor:
-        self._on_forward_end(out)
-        return out
-
-    def _on_forward_end(self, prediction: TableTensor) -> None:
-        if not self._inputs:
-            raise RuntimeError("The model did not expose its query inputs")
-
         # TODO: Support AMP when TableTensor dtype casts preserve autograd.
-        objective = self._output(prediction).sum()
-        gradients = torch.autograd.grad(
+        objective = self._output(out).sum()
+        grads = torch.autograd.grad(
             objective,
             [numerical for _, _, numerical in self._inputs],
             allow_unused=True,
         )
-        x: TableTensor | None = None
-        related_tables: dict[str, TableTensor] = {}
-        for (table_name, columns, numerical), gradient in zip(
+        grad_tables: dict[str | None, TableTensor] = {}
+        for (table_name, columns, numerical), grad in zip(
             self._inputs,
-            gradients,
+            grads,
         ):
-            gradient_table = TableTensor(
+            grad_tables[table_name] = TableTensor(
                 columns={Stype.numerical: columns},
                 numerical=(
-                    torch.zeros_like(numerical)
-                    if gradient is None
-                    else gradient
+                    torch.zeros_like(numerical) if grad is None else grad
                 ),
             )
-            if table_name is None:
-                x = gradient_table
-            else:
-                related_tables[table_name] = gradient_table
 
-        if x is None:
-            raise RuntimeError("The model did not expose its primary query")
         self.result = GradientExplanationOutput(
-            x=x,
-            related_tables=related_tables or None,
+            x=grad_tables[None],
+            related_tables={
+                name: table
+                for name, table in grad_tables.items()
+                if name is not None
+            }
+            or None,
         )
+        return out
 
 
 class GradientExplainer(ICLExplainer[GradientExplanationOutput]):
