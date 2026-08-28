@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from model import MODEL_CONFIGS, SDMSystem
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import SystemConfigGenerator
+
+from models import MODEL_CONFIGS, SDMSystem
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
