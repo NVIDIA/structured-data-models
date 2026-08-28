@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,12 +19,12 @@ class GradientExplanationOutput:
 
     Args:
         x: Gradients for the primary query table.
-        related_tables: Gradients keyed by related query table name, or
-            ``None`` when the model call has no related query tables.
+        related_tables: Gradients for the related query tables, or ``None``
+            when the model call has no related query tables.
     """
 
     x: TableTensor
-    related_tables: Mapping[str, TableTensor] | None = None
+    related_tables: RelatedTables[TableTensor] | None = None
 
 
 class _GradientCallback(Callback):
@@ -33,6 +33,7 @@ class _GradientCallback(Callback):
     def __init__(self, output: Callable[[TableTensor], Tensor]) -> None:
         self._output = output
         self._inputs: list[tuple[str | None, tuple[str, ...], Tensor]] = []
+        self._related_tables: RelatedTables[TableTensor] | None = None
         self.result: GradientExplanationOutput | None = None
 
     def on_query_preprocessing_end(
@@ -49,6 +50,7 @@ class _GradientCallback(Callback):
                     for name, table in related_tables.tables.items()
                 }
             )
+        self._related_tables = related_tables
         return x, related_tables
 
     def _capture(
@@ -88,12 +90,16 @@ class _GradientCallback(Callback):
 
         self.result = GradientExplanationOutput(
             x=grad_tables[None],
-            related_tables={
-                name: table
-                for name, table in grad_tables.items()
-                if name is not None
-            }
-            or None,
+            related_tables=(
+                self._related_tables.replace_tables(
+                    {
+                        name: grad_tables[name]
+                        for name in self._related_tables.tables
+                    }
+                )
+                if self._related_tables is not None
+                else None
+            ),
         )
         return out
 

@@ -47,9 +47,21 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
     y_context = torch.zeros(1, 1)
     x_query = torch.ones(1, 2)
     related_tables = RelatedTables(
-        tables={"related": TableTensor(numerical=torch.ones(1, 2))},
-        relationships=(),
-        task_links=(),
+        tables={
+            "related": TableTensor(numerical=torch.ones(1, 2)),
+            "unused": TableTensor(numerical=torch.ones(1, 2)),
+        },
+        relationships=(
+            {
+                "left_table": "related",
+                "left_column": "0",
+                "right_table": "unused",
+                "right_column": "0",
+            },
+        ),
+        task_links=(
+            {"task_column": "0", "table": "related", "table_column": "0"},
+        ),
     )
     explainer = GradientExplainer(
         output=lambda prediction: prediction.numerical
@@ -74,6 +86,12 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
     )
     assert result.related_tables is not None
     torch.testing.assert_close(
-        result.related_tables["related"].numerical,
+        result.related_tables.tables["related"].numerical,
         torch.full_like(x_query, 3.0),
     )
+    torch.testing.assert_close(
+        result.related_tables.tables["unused"].numerical,
+        torch.zeros_like(x_query),
+    )
+    assert result.related_tables.relationships == related_tables.relationships
+    assert result.related_tables.task_links == related_tables.task_links
