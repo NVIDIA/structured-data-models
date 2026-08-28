@@ -9,7 +9,7 @@ Keep these components generic, modular, and lightweight; do not add platform or 
 1. **Adoption:** Researchers can evaluate an SDM model through public APIs without understanding SDM internals.
 2. **Research extensibility:** Researchers can inspect, modify, and add structured-data model methodologies through composable public abstractions.
 3. **Trust:** SDM preserves model semantics and makes claimed results reproducible within a documented scope.
-4. **Performance:** The default path is optimized for NVIDIA GPUs, with performance validated by documented, reproducible benchmarks.
+4. **Performance:** Core model workflows are optimized for NVIDIA GPUs, with performance validated through documented, reproducible benchmarks.
 
 # AI Policy
 
