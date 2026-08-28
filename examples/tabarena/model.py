@@ -1,9 +1,11 @@
-"""TabICLv2 model adapter for TabArena."""
+"""SDM tabular model adapter for TabArena."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import lru_cache
-from typing import Self
+from typing import Any, Literal, Self
 
 import pandas as pd
 import torch
@@ -12,14 +14,52 @@ from tabarena.benchmark.exec_models.external import ExternalSystemModel
 
 import sdm
 
+Task = Literal["classification", "regression"]
+ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
+
+
+@dataclass(frozen=True)
+class ModelConfig:
+    name: str
+    factory: ModelFactory
+    num_estimators: int
+
+    @property
+    def system_name(self) -> str:
+        return f"SDM{self.name}System"
+
+    @property
+    def method_name(self) -> str:
+        return f"{self.system_name}_c1_default"
+
 
 @lru_cache(maxsize=1)
-def _create_model(device: torch.device) -> sdm.models.TabICLv2:
+def _load_tabiclv2(device: torch.device) -> sdm.models.TabICLv2:
     return sdm.models.TabICLv2(device=device)
 
 
-class SDMTabICLv2System(ExternalSystemModel):
-    """Expose TabICLv2 through TabArena's external-system interface."""
+def _create_tabiclv2(
+    _task: Task,
+    device: torch.device,
+) -> sdm.models.ICLModel:
+    return _load_tabiclv2(device=device)
+
+
+MODEL_CONFIGS = {
+    "tabiclv2": ModelConfig(
+        name="TabICLv2",
+        factory=_create_tabiclv2,
+        num_estimators=8,
+    ),
+}
+
+
+class SDMSystem(ExternalSystemModel):
+    """Expose a registered SDM model through TabArena."""
+
+    def __init__(self, *, model: str, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._config = MODEL_CONFIGS[model]
 
     def _fit_system(
         self,
@@ -34,7 +74,10 @@ class SDMTabICLv2System(ExternalSystemModel):
         self._device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        self.model = _create_model(device=self._device)
+        task: Task = (
+            "regression" if problem_type == "regression" else "classification"
+        )
+        self.model = self._config.factory(task, self._device)
         generator = None
         if random_state is not None:
             generator = torch.Generator(device=self._device).manual_seed(
@@ -70,7 +113,7 @@ class SDMTabICLv2System(ExternalSystemModel):
             self.model.fit(
                 x=table_x,
                 y=table_y,
-                num_estimators=8,
+                num_estimators=self._config.num_estimators,
                 generator=generator,
             )
         return self

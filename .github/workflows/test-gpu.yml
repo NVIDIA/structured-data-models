@@ -151,18 +151,18 @@ jobs:
             --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             --index-strategy=unsafe-best-match \
             . \
-            'autogluon.common@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common' \
-            'autogluon.core@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core' \
-            'autogluon.features@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=features' \
-            'autogluon.tabular@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=tabular' \
-            'bencheval@git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/bencheval' \
+            'autogluon.common@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=common' \
+            'autogluon.core@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=core' \
+            'autogluon.features@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=features' \
+            'autogluon.tabular@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=tabular' \
+            'bencheval@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/bencheval' \
             'cudf-cu13>=26.6,<26.8' \
             'pandas<3' \
             pyg-lib \
             'pylibcugraph-cu13>=26.6,<26.8' \
             relbench \
             scikit-learn \
-            'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena' \
+            'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena' \
             torchmetrics \
             tqdm
 
@@ -179,5 +179,5 @@ jobs:
           python examples/tabiclv2/quickstart.py
           python examples/tabiclv2/strable.py --text-processor tfidf
           python examples/kumo/relational/rel_bench.py --dataset rel-f1 --task driver-position
-          python examples/tabiclv2/tabarena/main.py --dataset blood-transfusion-service-center
-          python examples/tabiclv2/tabarena/evaluate.py
+          python examples/tabarena/main.py --model tabiclv2 --dataset blood-transfusion-service-center
+          python examples/tabarena/evaluate.py
