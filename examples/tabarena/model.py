@@ -20,8 +20,6 @@ ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """Configure an SDM model exposed to TabArena."""
-
     name: str
     factory: ModelFactory
     num_estimators: int
