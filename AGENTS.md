@@ -2,6 +2,15 @@
 
 This repository is an open-source model zoo for structured data models (e.g., TabICLv2, KumoRelational, etc).
 
+SDM aims to become the default open-source, PyTorch-native research library for expressing, reproducing, adapting, and evaluating modern structured-data models, combining faithful, inspectable methodology with performance-leading NVIDIA GPU execution through simple public APIs.
+
+## Success Criteria
+
+1. **Adoption:** Researchers can evaluate an SDM model with minimal SDM-specific knowledge.
+2. **Research extensibility:** Researchers can understand, modify, and add structured-data model methodologies through composable public abstractions.
+3. **Trust:** SDM preserves model semantics and makes claimed results reproducible within a defined scope.
+4. **Performance:** SDM provides state-of-the-art NVIDIA GPU performance through the default path.
+
 The repository provides reusable model architectures, tensor containers, preprocessing and postprocessing blocks, attention modules, key/value cache building blocks, ensembling utilities, benchmark examples, and NIM-compatible runtime foundations.
 It should stay generic, modular, and lightweight.
 Do not add platform or serving abstractions unless explicitly requested.
