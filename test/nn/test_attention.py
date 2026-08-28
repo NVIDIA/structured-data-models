@@ -10,6 +10,7 @@ from torch import Tensor
 from sdm.nn import (
     SDPA,
     Attention,
+    PerHeadLogNScale,
     QASSMax,
     SoftplusScale,
     TransformerBlock,
@@ -203,6 +204,64 @@ def test_sdpa(
         query=query,
         key=key.expand(-1, num_test, -1, -1, -1),
         value=value.expand(-1, num_test, -1, -1, -1),
+    )
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("length_source", ["key", "seqused", "mask"])
+def test_sdpa_per_head_log_n_scale(
+    device: torch.device,
+    length_source: str,
+) -> None:
+    num_heads = 2
+    query = torch.randn(2, 3, num_heads, 2, device=device)
+    key = torch.randn(2, 4, num_heads, 2, device=device)
+    value = torch.randn(2, 4, num_heads, 2, device=device)
+    scaling = PerHeadLogNScale(num_heads=num_heads, device=device)
+    with torch.no_grad():
+        scaling.head_scale.copy_(torch.tensor([0.5, 1.5], device=device))
+    module = SDPA(num_query_heads=num_heads, query_scaling=scaling)
+
+    seqused_key_value = None
+    attn_mask = None
+    expected_mask = None
+    if length_source == "key":
+        key_len: Tensor | int = key.size(-3)
+    elif length_source == "seqused":
+        seqused_key_value = torch.tensor(
+            [2, 3], dtype=torch.int32, device=device
+        )
+        key_len = seqused_key_value.unsqueeze(-1)
+        key_index = torch.arange(key.size(-3), device=device)
+        expected_mask = key_index < seqused_key_value[:, None, None]
+        expected_mask = expected_mask.expand(-1, query.size(-3), -1)
+    else:
+        assert length_source == "mask"
+        attn_mask = torch.tensor(
+            [
+                [[1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 1]],
+                [[1, 0, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0]],
+            ],
+            dtype=torch.bool,
+            device=device,
+        )
+        key_len = attn_mask.sum(dim=-1)
+        expected_mask = attn_mask
+
+    out = module(
+        query=query,
+        key=key,
+        value=value,
+        seqused_key_value=seqused_key_value,
+        attn_mask=attn_mask,
+    )
+
+    expected = reference_sdpa(
+        query=scaling(query, key_len=key_len),
+        key=key,
+        value=value,
+        attn_mask=expected_mask,
     )
     torch.testing.assert_close(out, expected)
 

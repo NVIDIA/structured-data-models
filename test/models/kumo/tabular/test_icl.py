@@ -2,7 +2,9 @@ import pytest
 import torch
 
 from sdm.cache import Cache
+from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.icl import ICLBlock
+from sdm.nn import PerHeadLogNScale
 from sdm.testing import withCUDA
 
 
@@ -24,6 +26,9 @@ def test_icl_block(
         num_heads=2,
         device=device,
     ).eval()
+    for layer in block.layers:
+        assert isinstance(layer, KumoTabularTransformerBlock)
+        assert isinstance(layer.attn.sdpa.query_scaling, PerHeadLogNScale)
     for parameter in block.parameters():
         torch.nn.init.normal_(parameter, std=0.1)
     x = torch.randn(2, 5, 8, device=device)

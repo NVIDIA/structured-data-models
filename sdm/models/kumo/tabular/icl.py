@@ -36,6 +36,7 @@ class ICLBlock(torch.nn.Module):
             KumoTabularTransformerBlock(
                 channels=channels,
                 num_heads=num_heads,
+                per_head_logn_scale=True,
                 **factory_kwargs,
             )
             for _ in range(num_layers)

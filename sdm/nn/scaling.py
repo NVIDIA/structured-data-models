@@ -3,7 +3,7 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
+from torch.nn import GELU, Linear, Parameter, Sequential
 
 
 class QueryScaling(torch.nn.Module, abc.ABC):
@@ -121,3 +121,50 @@ class QASSMax(QueryScaling):
         scale = scale.unflatten(-1, (query.size(-2), query.size(-1)))
         gate = 1 + self.gate(query).tanh()
         return query * scale * gate
+
+
+class PerHeadLogNScale(QueryScaling):
+    r"""Trainable per-head LogN query scaling.
+
+    Each attention head receives an independent, unconstrained coefficient
+    initialized to ``0.43`` and multiplying the logarithm of the effective key
+    length. Key lengths are clamped to at least one, and the logarithm is
+    computed in fp32.
+
+    Args:
+        num_heads: The number of query attention heads.
+        device: The device.
+        dtype: The dtype.
+    """
+
+    def __init__(
+        self,
+        num_heads: int,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.head_scale = Parameter(
+            torch.full((num_heads,), 0.43, device=device, dtype=dtype)
+        )
+
+    def forward(
+        self,
+        query: Tensor,  # [..., S, H, C]
+        *,
+        key_len: Tensor | int,  # [..., 1] or [..., S] or scalar
+    ) -> Tensor:  # [..., S, H, C]
+        r""":meta private:"""  # noqa: D415
+        if isinstance(key_len, Tensor):
+            log_key_len = key_len.float().clamp(min=1.0).log()
+        else:
+            log_key_len = (
+                query.new_full((), key_len, dtype=torch.float32)
+                .clamp(min=1.0)
+                .log()
+            )
+        log_key_len = log_key_len.to(query.dtype)
+        head_scale = self.head_scale.to(query.dtype).reshape(
+            *((1,) * (query.dim() - 2)), -1, 1
+        )
+        return query * log_key_len[..., None, None] * head_scale
