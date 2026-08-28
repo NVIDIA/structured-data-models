@@ -1,6 +1,6 @@
 # Overview
 
-SDM is a PyTorch-native research library for expressing, reproducing, adapting, and evaluating structured-data models through reusable model architectures, tensor-native building blocks, and runtime foundations.
+Structured Data Models (SDM) is a PyTorch-native research library for expressing, reproducing, adapting, and evaluating structured-data models through reusable model architectures, tensor-native building blocks, and runtime foundations.
 
 Keep these components generic, modular, and lightweight; do not add platform or serving abstractions unless explicitly requested.
 
