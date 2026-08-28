@@ -1,6 +1,6 @@
-# TabICLv2 on TabArena
+# SDM tabular models on TabArena
 
-This example evaluates `sdm.models.TabICLv2` on [TabArena](https://tabarena.ai).
+This example benchmarks tabular models from `sdm.models` on [TabArena](https://tabarena.ai).
 
 ## Setup
 
@@ -21,16 +21,18 @@ pip install structured-data-models \
 Run the benchmark:
 
 ```bash
-python main.py
+python main.py --model tabiclv2
 ```
 
 Pass a dataset name to run only that TabArena dataset:
 
 ```bash
-python main.py --dataset blood-transfusion-service-center
+python main.py \
+  --model tabiclv2 \
+  --dataset blood-transfusion-service-center
 ```
 
-Evaluate the results with:
+Evaluate all available model results with:
 
 ```bash
 python evaluate.py
