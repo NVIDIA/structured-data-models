@@ -8,6 +8,7 @@ def download_checkpoint(
     revision: str | None = None,
     cache_dir: str | Path | None = None,
     local_files_only: bool = False,
+    license_prompt: str | None = None,
 ) -> str:
     r"""Resolve a checkpoint from the Hugging Face cache or Hub.
 
@@ -29,6 +30,12 @@ def download_checkpoint(
     except LocalEntryNotFoundError:
         if local_files_only:
             raise
+        if license_prompt is not None:
+            answer = input(f"{license_prompt}\n\nAccept license terms? [y/N] ")
+            if answer.lower() not in {"y", "yes"}:
+                raise RuntimeError(
+                    "Checkpoint download requires license acceptance"
+                ) from None
         return hf_hub_download(
             repo_id=repo_id,
             filename=filename,

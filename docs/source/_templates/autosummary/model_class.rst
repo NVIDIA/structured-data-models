@@ -6,7 +6,7 @@
    :members:
    :show-inheritance:
 {%- if objname != "ICLModel" %}
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supports_related_tables
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_related_tables
 {%- endif %}
 
 {% if objname != "ICLModel" %}

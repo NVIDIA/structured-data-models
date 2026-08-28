@@ -30,7 +30,7 @@ def test_forward(
 
     model = TabFM(
         task="regression" if dtype.is_floating_point else "classification",
-        checkpoint_path=None,
+        pretrained=False,
         device=device,
     )
     if device.type == "cpu":
