@@ -78,7 +78,6 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
             x_context=x_context,
             y_context=y_context,
             related_context_tables=related_tables,
-            callbacks=(),
         )
 
     torch.testing.assert_close(
