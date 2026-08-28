@@ -44,8 +44,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         x_context: Tensor | TableTensor,  # [..., R_context, D]
         y_context: Tensor | TableTensor,  # [..., R_context, 1]
         x_query: Tensor | TableTensor,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None = None,
-        related_query_tables: RelatedTables | None = None,
+        related_context_tables: RelatedTables[TableTensor] | None = None,
+        related_query_tables: RelatedTables[TableTensor] | None = None,
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
@@ -97,8 +97,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         x_context: Tensor | TableTensor,  # [..., R_context, D]
         y_context: Tensor | TableTensor,  # [..., R_context, 1]
         x_query: Tensor | TableTensor,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None = None,
-        related_query_tables: RelatedTables | None = None,
+        related_context_tables: RelatedTables[TableTensor] | None = None,
+        related_query_tables: RelatedTables[TableTensor] | None = None,
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
@@ -213,7 +213,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, D]
         y: Tensor | TableTensor,  # [..., R, 1]
-        related_tables: RelatedTables | None = None,
+        related_tables: RelatedTables[TableTensor] | None = None,
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
@@ -299,7 +299,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
-        related_tables: RelatedTables | None = None,
+        related_tables: RelatedTables[TableTensor] | None = None,
         *,
         callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:  # Recipe-defined output shape.
@@ -331,7 +331,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
     def _predict_call(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
-        related_tables: RelatedTables | None = None,
+        related_tables: RelatedTables[TableTensor] | None = None,
         *,
         callbacks: Sequence[Callback],
     ) -> TableTensor:
@@ -495,8 +495,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
+        related_context_tables: RelatedTables[TableTensor] | None,
+        related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         **kwargs: Any,
@@ -514,7 +514,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self,
         x: TableTensor,
         y: TableTensor,
-        related_tables: RelatedTables | None,
+        related_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
         if y.size(-1) != 1:
@@ -574,7 +574,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         x_context: TableSchema,
         x_query: TableTensor,
         related_context_tables: RelatedTablesSchema | None,
-        related_query_tables: RelatedTables | None,
+        related_query_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
         if x_context != x_query.schema:

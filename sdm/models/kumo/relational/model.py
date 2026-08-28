@@ -187,8 +187,8 @@ class KumoRelational(ICLModel):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
+        related_context_tables: RelatedTables[TableTensor] | None,
+        related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         **kwargs: Any,
@@ -284,8 +284,8 @@ class _KumoRelational(torch.nn.Module):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
+        related_context_tables: RelatedTables[TableTensor] | None,
+        related_query_tables: RelatedTables[TableTensor] | None,
         *,
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
@@ -341,7 +341,7 @@ class _KumoRelational(torch.nn.Module):
                 num_hops = cast(int, cache["num_hops"])
             query = TaskGraph.from_input(
                 x=x_query,
-                related_tables=RelatedTables(
+                related_tables=RelatedTables[TableTensor](
                     tables=related_query_tables.tables,
                     relationships=relationships,
                     task_links=related_query_tables.task_links,

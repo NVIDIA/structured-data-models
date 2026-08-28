@@ -22,7 +22,7 @@ EXAMPLE_ID = "__example__"
 
 class _RelationalSamplerOutput(NamedTuple):
     task_table: TableTensor
-    related_tables: RelatedTables
+    related_tables: RelatedTables[TableTensor]
 
 
 class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
@@ -191,7 +191,7 @@ class RelationalSampler:
 
         return RelationalSamplerOutput(
             task_table=cast(TableTensor, task_table),
-            related_tables=RelatedTables(
+            related_tables=RelatedTables[TableTensor](
                 tables=cast(dict[str, TableTensor], tables),
                 relationships=relationships,
                 task_links=(task_link,),
