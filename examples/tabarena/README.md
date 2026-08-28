@@ -32,8 +32,8 @@ python main.py \
   --dataset blood-transfusion-service-center
 ```
 
-Evaluate the results with:
+Evaluate all available model results with:
 
 ```bash
-python evaluate.py --model tabiclv2
+python evaluate.py
 ```
