@@ -1,10 +1,15 @@
 # Overview
 
-This repository is an open-source model zoo for structured data models (e.g., TabICLv2, KumoRelational, etc).
+Structured Data Models (SDM) is a PyTorch-native research library for expressing, reproducing, adapting, and evaluating structured-data models through reusable model architectures, tensor-native building blocks, and runtime foundations.
 
-The repository provides reusable model architectures, tensor containers, preprocessing and postprocessing blocks, attention modules, key/value cache building blocks, ensembling utilities, benchmark examples, and NIM-compatible runtime foundations.
-It should stay generic, modular, and lightweight.
-Do not add platform or serving abstractions unless explicitly requested.
+Keep these components generic, modular, and lightweight; do not add platform or serving abstractions unless explicitly requested.
+
+## Success Criteria
+
+1. **Adoption:** Researchers can evaluate an SDM model through public APIs without understanding SDM internals.
+2. **Research extensibility:** Researchers can inspect, modify, and add structured-data model methodologies through composable public abstractions.
+3. **Trust:** SDM preserves model semantics and makes claimed results reproducible within a documented scope.
+4. **Performance:** Core model workflows are optimized for NVIDIA GPUs, with performance validated through documented, reproducible benchmarks.
 
 # AI Policy
 
@@ -58,7 +63,6 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 
 # Core Design Principles
 
-- Keep the project PyTorch/tensor-centric.
 - Preserve dataframe ergonomics at the boundary, but move model execution onto structured tensor containers.
 - Keep model-family wrappers thin. Shared abstractions should live outside model implementations if possible.
 - Avoid mandatory config-first APIs. Direct Python composition should be the primary interface.
@@ -68,7 +72,6 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - Treat preprocessing as leakage-sensitive. Transformations that learn state must be scoped to the context/training portion unless explicitly designed otherwise.
 - Keep dependencies minimal in the core package. Heavy dependencies should be optional unless they become essential.
 - Treat packages listed in `[project].dependencies` as required at runtime. Import them at module scope; do not defer or guard them with function-local imports, `TYPE_CHECKING`, `try/except ImportError`, availability checks, or dynamic imports. Reserve guarded imports for optional dependencies.
-- Aim for GPU acceleration in all core components.
 
 # Python/PyTorch Coding Style
 
