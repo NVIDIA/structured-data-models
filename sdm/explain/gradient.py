@@ -105,17 +105,10 @@ class _GradientCallback(Callback):
 
 
 class GradientExplainer(ICLExplainer[GradientExplanationOutput]):
-    r"""Return gradients with respect to preprocessed query inputs.
-
-    The explainer differentiates one public model execution with respect to
-    the numerical blocks produced by the input recipe for the primary query
-    and any related query tables. Returned gradients are signed and
-    unnormalized. Recipe-derived numerical columns retain their transformed
-    column names.
+    r"""Return gradients of selected outputs with respect to query inputs.
 
     Args:
-        output: Select the prediction values to differentiate. Selected values
-            are summed before differentiation.
+        output: Map a model output to the tensor values to differentiate.
     """
 
     def __init__(
