@@ -1,4 +1,4 @@
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import torch
 
@@ -6,67 +6,54 @@ from sdm import RelatedTables, TableTensor
 
 
 class Callback:
-    """Base class for callbacks applied to one model call.
-
-    Lifecycle hooks run automatically around
-    :meth:`~sdm.models.ICLModel.forward` and
-    :meth:`~sdm.models.ICLModel.predict`. The start hook runs once per
-    attempted call, the end hook runs once after a successful call, and
-    preprocessing hooks run once per ensemble member.
-
-    Callbacks supplied together run in sequence order, and each preprocessing
-    result is passed to the next callback. Subclasses that use autograd set
-    :attr:`requires_grad` to ``True``. Gradient calculation is enabled for the
-    model call when any supplied callback requires it.
-    """
+    r"""Base class for callbacks applied to one model call."""
 
     #: Whether this callback requires gradient calculation during model calls.
     requires_grad: ClassVar[bool] = False
 
-    def on_forward_start(
+    def on_context_preprocessing_end(
         self,
         model: torch.nn.Module,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        """Run before input validation and preprocessing.
+        x: TableTensor,
+        y: TableTensor,
+        related_tables: RelatedTables[TableTensor] | None,
+    ) -> tuple[TableTensor, TableTensor, RelatedTables[TableTensor] | None]:
+        r"""Run after context preprocessing.
 
         Args:
             model: Model receiving the callback.
-            args: Model inputs in public signature order, including defaulted
-                values.
-            kwargs: Model options by name, including defaulted values.
+            x: The feature tensor of in-context examples with shape
+                ``[..., R, D]`` with ``R`` rows and ``D`` columns.
+            y: The targets of in-context examples with shape ``[..., R, 1]``.
+            related_tables: Related context for in-context examples.
         """
+        return x, y, related_tables
 
-    def on_forward_end(
-        self,
-        model: torch.nn.Module,
-        prediction: TableTensor,
-    ) -> None:
-        """Run after successful output postprocessing.
-
-        Args:
-            model: Model receiving the callback.
-            prediction: Fully processed prediction returned by the public
-                model call.
-        """
-
-    def on_preprocessing_end(
+    def on_query_preprocessing_end(
         self,
         model: torch.nn.Module,
         x: TableTensor,
         related_tables: RelatedTables[TableTensor] | None,
     ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
-        """Transform one ensemble member after preprocessing.
+        r"""Run after query preprocessing.
 
         Args:
             model: Model receiving the callback.
-            x: Preprocessed query table for the ensemble member.
-            related_tables: Preprocessed related query tables for the ensemble
-                member, if any.
-
-        Returns:
-            Query table and related tables passed to the next callback or the
-            model.
+            x: The feature tensor of query examples with shape ``[..., R, D]``
+                with ``R`` rows and ``D`` columns.
+            related_tables: Related context for query examples.
         """
         return x, related_tables
+
+    def on_model_forward_end(
+        self,
+        model: torch.nn.Module,
+        out: TableTensor,
+    ) -> TableTensor:
+        """Run after the model forward pass.
+
+        Args:
+            model: Model receiving the callback.
+            out: The output produced by the model.
+        """
+        return out

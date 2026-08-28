@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
-from typing import cast
+from dataclasses import replace
+from typing import NamedTuple, cast
 
 import torch
 
@@ -13,8 +13,7 @@ from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
 
-@dataclass(frozen=True)
-class MemberContext:
+class MemberContext(NamedTuple):
     """Transformed context tables for one ensemble member."""
 
     x: TableTensor
@@ -22,8 +21,7 @@ class MemberContext:
     related_tables: RelatedTables[TableTensor] | None
 
 
-@dataclass(frozen=True)
-class MemberQuery:
+class MemberQuery(NamedTuple):
     """Transformed query tables for one ensemble member."""
 
     x: TableTensor
