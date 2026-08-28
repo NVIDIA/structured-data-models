@@ -32,7 +32,12 @@ class ICLBlock(torch.nn.Module):
             self.y_lin = Linear(1, channels, bias=False, **factory_kwargs)
 
         self.layers = ModuleList(
-            KumoTabularTransformerBlock(channels, num_heads, **factory_kwargs)
+            KumoTabularTransformerBlock(
+                channels=channels,
+                num_heads=num_heads,
+                query_log_scale=True,
+                **factory_kwargs,
+            )
             for _ in range(num_layers)
         )
 
