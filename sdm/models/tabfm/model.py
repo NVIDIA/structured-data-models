@@ -94,6 +94,18 @@ class TabFM(ICLModel):
                         sp.AlignCategories(min_frequency=2),
                         sp.ToNumerical(),
                     ],
+                    datetime=[
+                        sp.ImputeMean(),
+                        sp.AddCalendarFields(
+                            fields=[
+                                "year",
+                                "month",
+                                "day_of_month",
+                                "weekday",
+                            ],
+                        ),
+                        sp.ToNumerical(),
+                    ],
                 ),
                 sp.StypeDispatch(
                     numerical=[

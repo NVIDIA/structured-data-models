@@ -1,12 +1,38 @@
 import functools
+from datetime import UTC, datetime
 
 import pytest
 import torch
 
-from sdm import CategoricalTensor, TableTensor
+from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import TabFM
 from sdm.models.tabfm import model as tabfm_module
+from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
+
+
+def test_default_recipe_converts_datetime_features() -> None:
+    timestamps = torch.tensor(
+        [
+            [datetime(2019, 1, 2, tzinfo=UTC).timestamp() * 1_000_000],
+            [datetime(2020, 4, 6, tzinfo=UTC).timestamp() * 1_000_000],
+            [datetime(2021, 8, 12, tzinfo=UTC).timestamp() * 1_000_000],
+            [torch.iinfo(torch.int64).min],
+        ],
+        dtype=torch.int64,
+    )
+    table = TableTensor(datetime=timestamps)
+
+    output = TabFM.default_recipe().features.fit_transform_ensemble(
+        EnsembleTable(table, num_members=1),
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    member = output.table(0)
+    assert member.active_stypes == {Stype.numerical}
+    assert member.numerical.dtype == table.numerical.dtype
+    assert member.numerical.size(-1) == 5
+    assert member.numerical.isfinite().all()
 
 
 @withCUDA

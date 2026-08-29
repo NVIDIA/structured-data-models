@@ -28,6 +28,7 @@ class AddCalendarFields(Processor):
         self,
         fields: Sequence[
             Literal[
+                "year",
                 "minute",
                 "hour",
                 "weekday",
@@ -41,6 +42,11 @@ class AddCalendarFields(Processor):
 
         if len(fields) != len(set(fields)):
             raise ValueError("Expected datetime fields to be unique")
+        if encoding == "cyclic" and "year" in fields:
+            raise ValueError(
+                "'year' does not have a fixed cycle and cannot use cyclic "
+                "encoding"
+            )
 
         self.fields = fields
         self.encoding = encoding
@@ -49,15 +55,20 @@ class AddCalendarFields(Processor):
         if len(self.fields) == 0:
             return table
 
+        na_mask = table.datetime == NaT
         datetime = table.datetime
-        na_mask = datetime == NaT
 
         days: Tensor | None = None
-        if len({"weekday", "day_of_month", "month"} & set(self.fields)) > 0:
+        if (
+            len(
+                {"year", "weekday", "day_of_month", "month"} & set(self.fields)
+            )
+            > 0
+        ):
             days = datetime.div(US_PER_DAY, rounding_mode="floor")
 
         year = month = day = None
-        if len({"day_of_month", "month"} & set(self.fields)) > 0:
+        if len({"year", "day_of_month", "month"} & set(self.fields)) > 0:
             assert days is not None
             year, month, day = _civil_from_days(days)
 
@@ -67,6 +78,11 @@ class AddCalendarFields(Processor):
 
         outs: dict[str, Tensor] = {}
         for field in self.fields:
+            if field == "year":
+                assert year is not None
+                outs[field] = year
+                continue
+
             if field == "minute":
                 assert time_of_day is not None
                 out = time_of_day.div(US_PER_MINUTE, rounding_mode="floor")

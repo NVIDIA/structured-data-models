@@ -79,3 +79,21 @@ def test_to_numerical_converts_categorical_only_table() -> None:
         output.numerical,
         table.categorical.code.to(table.numerical.dtype),
     )
+
+
+def test_to_numerical_converts_datetime_stype() -> None:
+    timestamp = 1_577_836_800_000_000
+    table = TableTensor(
+        numerical=torch.tensor([[1.0], [2.0]]),
+        datetime=torch.tensor([[timestamp], [torch.iinfo(torch.int64).min]]),
+    )
+
+    output = ToNumerical().transform(table)
+
+    assert output.columns[Stype.numerical] == ("num_0", "dt_0")
+    assert output.columns[Stype.datetime] == ()
+    torch.testing.assert_close(
+        output.numerical[:, 1],
+        torch.tensor([float(timestamp), float("nan")]),
+        equal_nan=True,
+    )
