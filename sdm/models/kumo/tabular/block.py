@@ -1,11 +1,10 @@
-import math
 from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import RMSNorm, Sequential
+from torch.nn import GELU, Linear, RMSNorm, Sequential
 
-from sdm.nn import RotaryEmbedding, SoftplusScale, SwiGLU, TransformerBlock
+from sdm.nn import LogScale, RotaryEmbedding, TransformerBlock
 
 
 class KumoTabularTransformerBlock(TransformerBlock):
@@ -15,6 +14,8 @@ class KumoTabularTransformerBlock(TransformerBlock):
         channels: Number of input and output channels.
         num_heads: Number of attention heads.
         rope: Optional rotary embedding applied to query and key heads.
+        query_log_scale: Whether to scale queries by a learned factor and the
+            logarithm of the key length.
         device: Device of the parameters.
         dtype: Data type of the parameters.
     """
@@ -24,6 +25,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
         channels: int,
         num_heads: int,
         rope: RotaryEmbedding | None = None,
+        query_log_scale: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -35,44 +37,41 @@ class KumoTabularTransformerBlock(TransformerBlock):
         if rope is not None:
             query_transforms.append(rope)
             key_transforms.append(rope)
-        query_transforms.extend(
-            [
-                RMSNorm(head_channels, eps=1e-6, **factory_kwargs),
-                SoftplusScale(
-                    channels=head_channels,
-                    multiplier=1.442695041 / math.sqrt(head_channels),
-                    **factory_kwargs,
-                ),
-            ]
+        query_transforms.append(
+            RMSNorm(
+                head_channels,
+                eps=1e-6,
+                elementwise_affine=False,
+                **factory_kwargs,
+            )
         )
         key_transforms.append(
-            RMSNorm(head_channels, eps=1e-6, **factory_kwargs)
+            RMSNorm(
+                head_channels,
+                eps=1e-6,
+                elementwise_affine=False,
+                **factory_kwargs,
+            )
         )
 
-        post_attn_norm = RMSNorm(channels, **factory_kwargs)
-        post_mlp_norm = RMSNorm(channels, **factory_kwargs)
+        mlp_out = Linear(2 * channels, channels, **factory_kwargs)
+        torch.nn.init.zeros_(mlp_out.weight)
+        torch.nn.init.zeros_(cast(Tensor, mlp_out.bias))
         super().__init__(
             channels=channels,
             num_query_heads=num_heads,
             mlp=Sequential(
                 RMSNorm(channels, **factory_kwargs),
-                SwiGLU(
-                    channels=channels,
-                    hidden_channels=2 * channels,
-                    bias=False,
-                    **factory_kwargs,
-                ),
-                post_mlp_norm,
+                Linear(channels, 2 * channels, **factory_kwargs),
+                GELU(),
+                mlp_out,
             ),
             query_norm=RMSNorm(channels, **factory_kwargs),
             key_value_norm=RMSNorm(channels, **factory_kwargs),
-            post_attn_norm=post_attn_norm,
             query_transform=Sequential(*query_transforms),
             key_transform=Sequential(*key_transforms),
-            scale=1.0,
+            query_scaling=LogScale(num_heads, **factory_kwargs)
+            if query_log_scale
+            else None,
             **factory_kwargs,
         )
-
-        self.attn.out_lin.reset_parameters()
-        torch.nn.init.zeros_(cast(Tensor, post_attn_norm.weight))
-        torch.nn.init.zeros_(cast(Tensor, post_mlp_norm.weight))
