@@ -1,0 +1,8 @@
+﻿LogScale
+========
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: LogScale
+   :members:
+   :show-inheritance:

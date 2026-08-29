@@ -140,6 +140,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.SoftplusScale.html">SoftplusScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.QueryScaling.html">QueryScaling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.QASSMax.html">QASSMax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.LogScale.html">LogScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.SDPA.html">SDPA</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.Attention.html">Attention</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.TransformerBlock.html">TransformerBlock</a></li>
@@ -219,16 +220,19 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.QASSMax.html#sdm.nn.QASSMax" title="sdm.nn.QASSMax"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QASSMax</span></code></a></p></td>
 <td><p>Query-Aware Scalable SoftMax (QASSMax).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.SDPA.html#sdm.nn.SDPA" title="sdm.nn.SDPA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SDPA</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.LogScale.html#sdm.nn.LogScale" title="sdm.nn.LogScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogScale</span></code></a></p></td>
+<td><p>Trainable logarithmic query scaling.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.SDPA.html#sdm.nn.SDPA" title="sdm.nn.SDPA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SDPA</span></code></a></p></td>
 <td><p>Scaled Dot-Product Attention (SDPA).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.Attention.html#sdm.nn.Attention" title="sdm.nn.Attention"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Attention</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.Attention.html#sdm.nn.Attention" title="sdm.nn.Attention"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Attention</span></code></a></p></td>
 <td><p>Multi-head attention layer with grouped-query attention support.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.TransformerBlock.html#sdm.nn.TransformerBlock" title="sdm.nn.TransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerBlock</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.TransformerBlock.html#sdm.nn.TransformerBlock" title="sdm.nn.TransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerBlock</span></code></a></p></td>
 <td><p>Transformer block with normalization and feedforward residual modules.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.InducedTransformerBlock.html#sdm.nn.InducedTransformerBlock" title="sdm.nn.InducedTransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InducedTransformerBlock</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.InducedTransformerBlock.html#sdm.nn.InducedTransformerBlock" title="sdm.nn.InducedTransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InducedTransformerBlock</span></code></a></p></td>
 <td><p>Transformer block using learned inducing points.</p></td>
 </tr>
 </tbody>
@@ -260,7 +264,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=537fc16f"></script>
+      <script src="../_static/documentation_options.js?v=8bbe8d5e"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
