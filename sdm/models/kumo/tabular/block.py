@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Any, cast
 
 import torch
+from torch import Tensor
 from torch.nn import GELU, Linear, RMSNorm, Sequential
 
 from sdm.nn import LogScale, RotaryEmbedding, TransformerBlock
@@ -13,8 +14,8 @@ class KumoTabularTransformerBlock(TransformerBlock):
         channels: Number of input and output channels.
         num_heads: Number of attention heads.
         rope: Optional rotary embedding applied to query and key heads.
-        per_head_logn_scale: Whether to scale queries by a learned per-head
-            factor and the logarithm of the key length.
+        query_log_scale: Whether to scale queries by a learned factor and the
+            logarithm of the key length.
         device: Device of the parameters.
         dtype: Data type of the parameters.
     """
@@ -24,7 +25,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
         channels: int,
         num_heads: int,
         rope: RotaryEmbedding | None = None,
-        per_head_logn_scale: bool = False,
+        query_log_scale: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -55,8 +56,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
 
         mlp_out = Linear(2 * channels, channels, **factory_kwargs)
         torch.nn.init.zeros_(mlp_out.weight)
-        assert mlp_out.bias is not None
-        torch.nn.init.zeros_(mlp_out.bias)
+        torch.nn.init.zeros_(cast(Tensor, mlp_out.bias))
         super().__init__(
             channels=channels,
             num_query_heads=num_heads,
@@ -71,7 +71,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
             query_transform=Sequential(*query_transforms),
             key_transform=Sequential(*key_transforms),
             query_scaling=LogScale(num_heads, **factory_kwargs)
-            if per_head_logn_scale
+            if query_log_scale
             else None,
             **factory_kwargs,
         )
