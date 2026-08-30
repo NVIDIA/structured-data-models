@@ -42,7 +42,8 @@ def _embedding(module: torch.nn.Module, args: tuple[Tensor, ...]) -> None:
     embeddings.append(args[0])
 
 
-handle = model.cls_model.icl_block.head.register_forward_pre_hook(_embedding)
+head = model.models["classification"].icl_block.head
+handle = head.register_forward_pre_hook(_embedding)
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model(
         x_context=table[:300].drop_columns("target"),

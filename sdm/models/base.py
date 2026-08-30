@@ -29,8 +29,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
     key/value caching, and ensembling.
 
     Args:
-        task: Tasks to initialize. If omitted, all supported tasks by the model
-            will be initialized.
+        task: The tasks to initialize. If ``None``, all tasks supported by this
+            model are initialized.
     """
 
     #: Semantic types supported for input columns in this model.
@@ -55,7 +55,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def __init__(
         self,
-        task: TaskLike | Iterable[TaskLike] | None,
+        task: TaskLike | Iterable[TaskLike] | None = None,
     ) -> None:
         super().__init__()
 

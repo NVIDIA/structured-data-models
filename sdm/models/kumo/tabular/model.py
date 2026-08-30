@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Literal, cast
+from collections.abc import Iterable
+from typing import Any, ClassVar, cast
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Linear
+from torch.nn import Linear, ModuleDict
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models.kumo.tabular.icl import ICLBlock
@@ -28,22 +29,20 @@ class KumoTabular(ICLModel):  # noqa: D101
 
     def __init__(
         self,
+        task: TaskLike | Iterable[TaskLike] | None = None,
+        pretrained: bool = True,
         device: torch.device | str | None = None,
-        *,
-        task: Literal["classification", "regression"] = "classification",
     ) -> None:
         super().__init__(task=task)
 
-        if task == "classification":
-            num_classes, num_quantiles = 10, 0
-        else:
-            assert task == "regression"
-            num_classes, num_quantiles = 0, 999
-        self.model = _KumoTabular(
-            num_classes=num_classes,
-            num_quantiles=num_quantiles,
-            device=device,
-        )
+        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        for task in self.tasks:
+            self.models[task] = _KumoTabular(
+                num_classes=10 if task == Task.classification else 0,
+                num_quantiles=999 if task == Task.regression else 0,
+                device=device,
+            )
+
         self.eval()
 
     @classmethod
@@ -128,7 +127,8 @@ class KumoTabular(ICLModel):  # noqa: D101
             categorical_mask = cast(Tensor, cache["categorical_mask"])
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
-        out = self.model(
+        task = Task.classification if classes is not None else Task.regression
+        out = self.models[task](
             x=x,
             y=y,
             categorical_mask=categorical_mask,

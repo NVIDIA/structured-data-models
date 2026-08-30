@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
+from torch.nn import ModuleDict
 
 import sdm.processing as sp
-from sdm import Recipe, RelatedTables, Stype, TableTensor, Task
+from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.cell_embedding import CellEmbedding
@@ -38,10 +39,6 @@ class TabFM(ICLModel):
     interaction stages, :class:`~torch.nn.RMSNorm`-based transformer blocks and
     :class:`~sdm.nn.SwiGLU` feed-forward blocks.
 
-    Due to the size of its checkpoints (~1.6B parameters), each :class:`TabFM`
-    instance is responsible for a single task only: classification or
-    regression.
-
     .. note::
         :class:`TabFM` model weights are distributed under a
         `non-commercial license <https://huggingface.co/google/
@@ -52,7 +49,9 @@ class TabFM(ICLModel):
         manually and use it in accordance with its license.
 
     Args:
-        task: The prediction task.
+        task: The tasks to initialize. If ``None``, all tasks supported by this
+            model are initialized. Pass a single task to avoid initializing
+            separate ~1.6B parameter models.
         checkpoint_path: The local checkpoint path.
         device: The device.
     """
@@ -67,16 +66,18 @@ class TabFM(ICLModel):
 
     def __init__(
         self,
-        task: Literal["classification", "regression"],
+        task: TaskLike | None,
         checkpoint_path: str | Path | None,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=task)
 
-        self.model = _TabFM(
-            num_classes=10 if task == "classification" else 0,
-            device="meta" if checkpoint_path is not None else device,
-        )
+        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        for task in self.tasks:
+            self.models[task] = _TabFM(
+                num_classes=10 if task == Task.classification else 0,
+                device="meta" if checkpoint_path is not None else device,
+            )
 
         if checkpoint_path is not None:
             self._load_from_pretrained(checkpoint_path, device=device)
@@ -137,11 +138,14 @@ class TabFM(ICLModel):
         from safetensors.torch import load_file  # noqa: PLC0415
 
         device = torch.get_default_device() if device is None else device
-        ckpt = remap_ckpt(
-            ckpt=load_file(checkpoint_path, device=str(device)),
-            is_classifier=Task.classification in self.tasks,
-        )
-        self.model.load_state_dict(ckpt, strict=True, assign=True)
+
+        assert len(self.models) == 1
+        for task, model in self.models.items():
+            ckpt = remap_ckpt(
+                ckpt=load_file(checkpoint_path, device=str(device)),
+                is_classifier=task == Task.classification,
+            )
+            model.load_state_dict(ckpt, strict=True, assign=True)
 
         return self
 
@@ -220,7 +224,8 @@ class TabFM(ICLModel):
             categorical_mask = cast(Tensor, cache["categorical_mask"])
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
-        out = self.model(x, y, categorical_mask, cache=cache)
+        task = Task.classification if classes is not None else Task.regression
+        out = self.models[task](x, y, categorical_mask, cache=cache)
 
         if classes is None:
             return TableTensor(

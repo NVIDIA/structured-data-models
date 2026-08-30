@@ -1,13 +1,22 @@
 # ruff: noqa: D205
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
+from torch.nn import ModuleDict
 
-from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
+from sdm import (
+    NaT,
+    RelatedTables,
+    Relationship,
+    Stype,
+    TableTensor,
+    Task,
+    TaskLike,
+)
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -124,6 +133,8 @@ class KumoRelational(ICLModel):
         out = model.predict(x_query, related_query_tables)
 
     Args:
+        task: The tasks to initialize. If ``None``, all tasks supported by this
+            model are initialized.
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
     """
@@ -138,23 +149,20 @@ class KumoRelational(ICLModel):
 
     def __init__(
         self,
+        task: TaskLike | Iterable[TaskLike] | None = None,
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
-        super().__init__(task=None)
+        super().__init__(task=task)
 
-        self.cls_model = _KumoRelational(
-            num_classes=10,
-            num_quantiles=0,
-            norm_bias=True,
-            device="meta" if pretrained else device,
-        )
-        self.reg_model = _KumoRelational(
-            num_classes=0,
-            num_quantiles=999,
-            norm_bias=False,
-            device="meta" if pretrained else device,
-        )
+        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        for task in self.tasks:
+            self.models[task] = _KumoRelational(
+                num_classes=10 if task == Task.classification else 0,
+                num_quantiles=999 if task == Task.regression else 0,
+                norm_bias=task == Task.classification,
+                device="meta" if pretrained else device,
+            )
 
         if pretrained:
             self._load_from_pretrained(device=device)
@@ -167,18 +175,20 @@ class KumoRelational(ICLModel):
     ) -> KumoRelational:
         device = torch.get_default_device() if device is None else device
 
-        for variant in ["classifier", "regressor"]:
+        for task, model in self.models.items():
+            if task == Task.classification:
+                filename = "classifier.pt"
+            else:
+                assert task == Task.regression
+                filename = "regressor.pt"
+
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Relational",
-                filename=f"{variant}.pt",
+                filename=filename,
                 revision="v2.1.1",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-
-            if variant == "classifier":
-                self.cls_model.load_state_dict(ckpt, assign=True)
-            else:
-                self.reg_model.load_state_dict(ckpt, assign=True)
+            model.load_state_dict(ckpt, assign=True)
 
         return self
 
@@ -200,7 +210,8 @@ class KumoRelational(ICLModel):
         elif cache is not None:
             classes = cast(Tensor | None, cache["classes"])
 
-        out = (self.reg_model if classes is None else self.cls_model)(
+        task = Task.classification if classes is not None else Task.regression
+        out = self.models[task](
             x_context=x_context,
             y_context=y_context,
             x_query=x_query,
