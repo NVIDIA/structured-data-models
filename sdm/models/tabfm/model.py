@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from collections.abc import Iterable
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
 from torch.nn import ModuleDict
 
-import sdm.processing as sp
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
+from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
+from sdm.models.tabfm.recipe import default_recipe
 from sdm.models.tabfm.row_embedding import RowEmbedding
 from sdm.tensor.table import TableSchema
 
@@ -40,19 +41,22 @@ class TabFM(ICLModel):
     :class:`~sdm.nn.SwiGLU` feed-forward blocks.
 
     .. note::
-        :class:`TabFM` model weights are distributed under a
-        `non-commercial license <https://huggingface.co/google/
-        tabfm-1.0.0-pytorch/blob/
-        77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__.
-        Users are expected to download the
-        `checkpoint <https://huggingface.co/google/tabfm-1.0.0-pytorch>`__
-        manually and use it in accordance with its license.
+        :class:`TabFM` model weights are distributed under the
+        `TabFM Non-Commercial License v1.0 <https://huggingface.co/google/
+        tabfm-1.0.0-pytorch/blob/main/LICENSE>`__.
+        Before downloading pretrained weights, users must accept the license
+        either interactively when prompted or explicitly via
+        ``accept_license=True``.
 
     Args:
         task: The tasks to initialize. If ``None``, all tasks supported by this
             model are initialized. Pass a single task to avoid initializing
             separate ~1.6B parameter models.
-        checkpoint_path: The local checkpoint path.
+        pretrained: Whether to load the pretrained checkpoint.
+        accept_license: Whether to accept the `TabFM Non-Commercial License
+            v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/
+            LICENSE>`__ without
+            showing the interactive license prompt.
         device: The device.
     """
 
@@ -66,8 +70,9 @@ class TabFM(ICLModel):
 
     def __init__(
         self,
-        task: TaskLike | None,
-        checkpoint_path: str | Path | None,
+        task: TaskLike | Iterable[TaskLike] | None,
+        pretrained: bool = True,
+        accept_license: bool = False,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=task)
@@ -76,75 +81,52 @@ class TabFM(ICLModel):
         for task in self.tasks:
             self.models[task] = _TabFM(
                 num_classes=10 if task == Task.classification else 0,
-                device="meta" if checkpoint_path is not None else device,
+                device="meta" if pretrained else device,
             )
 
-        if checkpoint_path is not None:
-            self._load_from_pretrained(checkpoint_path, device=device)
+        if pretrained:
+            self._load_from_pretrained(accept_license, device=device)
 
         self.eval()
 
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return Recipe(
-            features=[
-                sp.StypeDispatch(
-                    categorical=[
-                        sp.AlignCategories(min_frequency=2),
-                        sp.ToNumerical(),
-                    ],
-                ),
-                sp.StypeDispatch(
-                    numerical=[
-                        sp.ImputeMean(),
-                        sp.DropConstantColumns(),
-                        sp.Standardize(epsilon=1e-6),
-                        sp.Clip(min_value=-100.0, max_value=100.0),
-                        sp.Choice(
-                            sp.Identity(),
-                            sp.PowerTransform(),
-                            method="round_robin",
-                        ),
-                        sp.ClipSigma(threshold=4.0),
-                        sp.ShuffleColumns(method="random"),
-                        sp.SelectColumns(
-                            max_columns=500,
-                            method="round_robin",
-                        ),
-                    ],
-                ),
-            ],
-            target=sp.StypeDispatch(
-                categorical=[
-                    sp.AlignCategories(sort_by="value"),
-                    sp.ShuffleCategories(method="shift"),
-                ],
-                numerical=sp.Standardize(),
-            ),
-            output=[
-                sp.ReduceEstimators(method="mean"),
-                sp.TaskDispatch(
-                    classification=sp.Softmax(temperature=0.9),
-                ),
-            ],
-        )
+        return default_recipe()
 
     def _load_from_pretrained(
         self,
-        checkpoint_path: str | Path,
+        accept_license: bool,
         device: torch.device | str | None,
     ) -> TabFM:
         from safetensors.torch import load_file  # noqa: PLC0415
 
+        TABFM_LICENSE_PROMPT = (
+            "TabFM pretrained weights are distributed under the TabFM "
+            "Non-Commercial License v1.0 and may be used only for "
+            "non-commercial, non-production purposes. Review the license at "
+            "'https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/"
+            "LICENSE' before downloading."
+        )
+
         device = torch.get_default_device() if device is None else device
 
-        assert len(self.models) == 1
         for task, model in self.models.items():
-            ckpt = remap_ckpt(
-                ckpt=load_file(checkpoint_path, device=str(device)),
-                is_classifier=task == Task.classification,
+            if task == Task.classification:
+                filename = "classification/model.safetensors"
+            else:
+                assert task == Task.regression
+                filename = "regression/model.safetensors"
+
+            path = download_checkpoint(
+                "google/tabfm-1.0.0-pytorch",
+                filename,
+                license_prompt=None
+                if accept_license
+                else TABFM_LICENSE_PROMPT,
             )
+            ckpt = load_file(path, device=str(device))
+            ckpt = remap_ckpt(ckpt, is_classifier=task == Task.classification)
             model.load_state_dict(ckpt, strict=True, assign=True)
 
         return self
