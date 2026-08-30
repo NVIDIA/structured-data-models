@@ -76,6 +76,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l1"><a class="reference internal" href="../sdm.html">sdm</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="sdm.Stype.html">Stype</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.infer_stypes.html">infer_stypes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.Task.html">Task</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../tensor.html">sdm.tensor</a><ul>
@@ -172,7 +173,10 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.models.KumoTabular"><code class="docutils literal notranslate"><span class="pre">KumoTabular</span></code></a></li>
+<li><a class="reference internal" href="#sdm.models.KumoTabular"><code class="docutils literal notranslate"><span class="pre">KumoTabular</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.models.KumoTabular.supported_tasks"><code class="docutils literal notranslate"><span class="pre">KumoTabular.supported_tasks</span></code></a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#capabilities">Capabilities</a></li>
 <li><a class="reference internal" href="#default-recipe">Default Recipe</a></li>
 </ul>
@@ -223,6 +227,12 @@ data-aria-dark="Switch to auto color mode">
 </ul>
 </dd>
 </dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sdm.models.KumoTabular.supported_tasks">
+<span class="sig-name descname"><span class="pre">supported_tasks</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.ClassVar" title="(in Python v3.14)"><span class="pre">ClassVar</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Task.html#sdm.Task" title="sdm.task.Task"><span class="pre">Task</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">frozenset({Task.classification,</span> <span class="pre">Task.regression})</span></span><a class="headerlink" href="#sdm.models.KumoTabular.supported_tasks" title="Link to this definition">#</a></dt>
+<dd><p>Prediction tasks supported in this model.</p>
+</dd></dl>
+
 </dd></dl>
 
 <section id="capabilities">
@@ -236,7 +246,10 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-even"><td><p><strong>Supported Target Semantic Types</strong></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">categorical</span></code>, <code class="docutils literal notranslate"><span class="pre">numerical</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>Related Table Support</strong></p></td>
+<tr class="row-odd"><td><p><strong>Supported Prediction Tasks</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">classification</span></code>, <code class="docutils literal notranslate"><span class="pre">regression</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Related Table Support</strong></p></td>
 <td><p>❌</p></td>
 </tr>
 </tbody>
@@ -279,7 +292,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=78246b91"></script>
+      <script src="../../_static/documentation_options.js?v=4fdbb237"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

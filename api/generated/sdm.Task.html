@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>to_binary_class - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="prev" title="to_class_indices" href="sdm.evaluation.to_class_indices.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Task - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="sdm.tensor" href="../tensor.html" /><link rel="prev" title="infer_stypes" href="sdm.infer_stypes.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -20,7 +20,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="to_binary_class"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="Task"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -73,10 +73,10 @@ data-aria-dark="Switch to auto color mode">
 </ul>
 <p class="caption" role="heading" aria-level="3"><span class="caption-text">API</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="../sdm.html">sdm</a><ul>
+<li class="toctree-l1 current"><a class="reference internal" href="../sdm.html">sdm</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="sdm.Stype.html">Stype</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.infer_stypes.html">infer_stypes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.Task.html">Task</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Task</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../tensor.html">sdm.tensor</a><ul>
@@ -156,9 +156,9 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.KumoTabular.html">KumoTabular</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="reference internal" href="../evaluation.html">sdm.evaluation</a><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../evaluation.html">sdm.evaluation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="sdm.evaluation.to_class_indices.html">to_class_indices</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">to_binary_class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.evaluation.to_binary_class.html">to_binary_class</a></li>
 </ul>
 </li>
 </ul>
@@ -173,7 +173,13 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.evaluation.to_binary_class"><code class="docutils literal notranslate"><span class="pre">to_binary_class()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.Task"><code class="docutils literal notranslate"><span class="pre">Task</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.Task.classification"><code class="docutils literal notranslate"><span class="pre">Task.classification</span></code></a></li>
+<li><a class="reference internal" href="#sdm.Task.regression"><code class="docutils literal notranslate"><span class="pre">Task.regression</span></code></a></li>
+<li><a class="reference internal" href="#sdm.Task.from_stype"><code class="docutils literal notranslate"><span class="pre">Task.from_stype()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.Task.stype"><code class="docutils literal notranslate"><span class="pre">Task.stype</span></code></a></li>
+</ul>
+</li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -191,11 +197,11 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="1" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <a itemprop="item" href="../evaluation.html"><span itemprop="name">sdm.evaluation</span></a>
+        <a itemprop="item" href="../sdm.html"><span itemprop="name">sdm</span></a>
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">to_binary_class</strong>
+        <strong itemprop="name">Task</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -208,60 +214,47 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="to-binary-class">
-<h1>to_binary_class<a class="headerlink" href="#to-binary-class" title="Link to this heading">#</a></h1>
-<dl class="py function">
-<dt class="sig sig-object py" id="sdm.evaluation.to_binary_class">
-<span class="sig-prename descclassname"><span class="pre">sdm.evaluation.</span></span><span class="sig-name descname"><span class="pre">to_binary_class</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.categorical.CategoricalTensor"><span class="pre">CategoricalTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">positive_class</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#sdm.evaluation.to_binary_class" title="Link to this definition">#</a></dt>
-<dd><p>Convert binary predictions and targets to positive-class form.</p>
+          <section id="task">
+<h1>Task<a class="headerlink" href="#task" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="sdm.Task">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.</span></span><span class="sig-name descname"><span class="pre">Task</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.Task" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.StrEnum" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">StrEnum</span></code></a></p>
+<p>The prediction task type.</p>
+<p>A task type describes the kind of target a model predicts.
+Possible values are:</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sdm.Task.classification">
+<span class="sig-name descname"><span class="pre">classification</span></span><a class="headerlink" href="#sdm.Task.classification" title="Link to this definition">#</a></dt>
+<dd><p>Binary, multi-class, or multi-label classification.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sdm.Task.regression">
+<span class="sig-name descname"><span class="pre">regression</span></span><a class="headerlink" href="#sdm.Task.regression" title="Link to this definition">#</a></dt>
+<dd><p>Continuous numerical prediction.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.Task.from_stype">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_stype</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#sdm.Task" title="sdm.task.Task"><span class="pre">Task</span></a></span></span><a class="headerlink" href="#sdm.Task.from_stype" title="Link to this definition">#</a></dt>
+<dd><p>The prediction task associated with a target semantic type.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>pred</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Prediction table whose numerical columns contain class scores.
-Column names define the class order.</p></li>
-<li><p><strong>target</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a><em> | </em><a class="reference internal" href="sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.categorical.CategoricalTensor"><em>CategoricalTensor</em></a>) – Single-column categorical target.</p></li>
-<li><p><strong>positive_class</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Class value treated as the positive class.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>stype</strong> (<a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><em>Stype</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – The target semantic type.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)">tuple</a>[<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a>]</p>
+<dd class="field-even"><p><a class="reference internal" href="#sdm.Task" title="sdm.task.Task"><em>Task</em></a></p>
 </dd>
 </dl>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-</span><span data-line="2"><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">sdm</span>
-</span><span data-line="3"><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.evaluation</span><span class="w"> </span><span class="kn">import</span> <span class="n">to_binary_class</span>
-</span><span data-line="4"><span class="gp">&gt;&gt;&gt; </span><span class="n">pred</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">TableTensor</span><span class="o">.</span><span class="n">from_tensor</span><span class="p">(</span>
-</span><span data-line="5"><span class="gp">... </span>    <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">]]),</span>
-</span><span data-line="6"><span class="gp">... </span>    <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"false"</span><span class="p">,</span> <span class="s2">"true"</span><span class="p">],</span>
-</span><span data-line="7"><span class="gp">... </span><span class="p">)</span>
-</span><span data-line="8"><span class="gp">&gt;&gt;&gt; </span><span class="n">target</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">CategoricalTensor</span><span class="p">(</span>
-</span><span data-line="9"><span class="gp">... </span>    <span class="n">code</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">]]),</span>
-</span><span data-line="10"><span class="gp">... </span>    <span class="n">categories</span><span class="o">=</span><span class="p">(</span><span class="n">sdm</span><span class="o">.</span><span class="n">StringTensor</span><span class="o">.</span><span class="n">from_list</span><span class="p">([</span><span class="s2">"false"</span><span class="p">,</span> <span class="s2">"true"</span><span class="p">]),),</span>
-</span><span data-line="11"><span class="gp">... </span><span class="p">)</span>
-</span><span data-line="12"><span class="gp">&gt;&gt;&gt; </span><span class="n">positive_scores</span><span class="p">,</span> <span class="n">binary_target</span> <span class="o">=</span> <span class="n">to_binary_class</span><span class="p">(</span>
-</span><span data-line="13"><span class="gp">... </span>    <span class="n">pred</span><span class="p">,</span>
-</span><span data-line="14"><span class="gp">... </span>    <span class="n">target</span><span class="p">,</span>
-</span><span data-line="15"><span class="gp">... </span>    <span class="n">positive_class</span><span class="o">=</span><span class="s2">"true"</span><span class="p">,</span>
-</span><span data-line="16"><span class="gp">... </span><span class="p">)</span>
-</span><span data-line="17"><span class="gp">&gt;&gt;&gt; </span><span class="n">positive_scores</span>
-</span><span data-line="18"><span class="go">tensor([0.2000, 0.9000, 0.6000])</span>
-</span><span data-line="19"><span class="gp">&gt;&gt;&gt; </span><span class="n">binary_target</span>
-</span><span data-line="20"><span class="go">tensor([False,  True,  True])</span>
-</span><span data-line="21"><span class="gp">&gt;&gt;&gt; </span><span class="n">pred</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">TableTensor</span><span class="o">.</span><span class="n">from_tensor</span><span class="p">(</span>
-</span><span data-line="22"><span class="gp">... </span>    <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">]]),</span>
-</span><span data-line="23"><span class="gp">... </span>    <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"true"</span><span class="p">,</span> <span class="s2">"false"</span><span class="p">],</span>
-</span><span data-line="24"><span class="gp">... </span><span class="p">)</span>
-</span><span data-line="25"><span class="gp">&gt;&gt;&gt; </span><span class="n">positive_scores</span><span class="p">,</span> <span class="n">binary_target</span> <span class="o">=</span> <span class="n">to_binary_class</span><span class="p">(</span>
-</span><span data-line="26"><span class="gp">... </span>    <span class="n">pred</span><span class="p">,</span>
-</span><span data-line="27"><span class="gp">... </span>    <span class="n">target</span><span class="p">,</span>
-</span><span data-line="28"><span class="gp">... </span>    <span class="n">positive_class</span><span class="o">=</span><span class="s2">"true"</span><span class="p">,</span>
-</span><span data-line="29"><span class="gp">... </span><span class="p">)</span>
-</span><span data-line="30"><span class="gp">&gt;&gt;&gt; </span><span class="n">positive_scores</span>
-</span><span data-line="31"><span class="go">tensor([0.2000, 0.9000, 0.6000])</span>
-</span><span data-line="32"><span class="gp">&gt;&gt;&gt; </span><span class="n">binary_target</span>
-</span><span data-line="33"><span class="go">tensor([False,  True,  True])</span>
-</span></pre></div>
-</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.Task.stype">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">stype</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a></span><a class="headerlink" href="#sdm.Task.stype" title="Link to this definition">#</a></dt>
+<dd><p>The semantic type associated with a prediction task.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -272,10 +265,18 @@ Column names define the class order.</p></li>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.evaluation.to_class_indices.html">
+    <a href="sdm.infer_stypes.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">to_class_indices</div></div>
+        <span>Previous</span><div class="title">infer_stypes</div></div>
+    </a>
+  </div><div class="navigation-next">
+    <a href="../tensor.html">
+      <div class="page-info">
+        <span>Next</span>
+        <div class="title">sdm.tensor</div>
+      </div>
+      <i class="i-lucide chevron-right"></i>
     </a>
   </div></div></div>
     </div>

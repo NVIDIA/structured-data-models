@@ -76,6 +76,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l1"><a class="reference internal" href="../sdm.html">sdm</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="sdm.Stype.html">Stype</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.infer_stypes.html">infer_stypes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.Task.html">Task</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../tensor.html">sdm.tensor</a><ul>
@@ -175,6 +176,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.models.ICLModel"><code class="docutils literal notranslate"><span class="pre">ICLModel</span></code></a><ul>
 <li><a class="reference internal" href="#sdm.models.ICLModel.supported_feature_stypes"><code class="docutils literal notranslate"><span class="pre">ICLModel.supported_feature_stypes</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.supported_target_stypes"><code class="docutils literal notranslate"><span class="pre">ICLModel.supported_target_stypes</span></code></a></li>
+<li><a class="reference internal" href="#sdm.models.ICLModel.supported_tasks"><code class="docutils literal notranslate"><span class="pre">ICLModel.supported_tasks</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.supports_related_tables"><code class="docutils literal notranslate"><span class="pre">ICLModel.supports_related_tables</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.forward"><code class="docutils literal notranslate"><span class="pre">ICLModel.forward()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.fit"><code class="docutils literal notranslate"><span class="pre">ICLModel.fit()</span></code></a></li>
@@ -221,7 +223,7 @@ data-aria-dark="Switch to auto color mode">
 <h1>ICLModel<a class="headerlink" href="#iclmodel" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.models.ICLModel">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.models.</span></span><span class="sig-name descname"><span class="pre">ICLModel</span></span><a class="headerlink" href="#sdm.models.ICLModel" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.models.</span></span><span class="sig-name descname"><span class="pre">ICLModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.Task.html#sdm.Task" title="sdm.task.Task"><span class="pre">Task</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Task.html#sdm.Task" title="sdm.task.Task"><span class="pre">Task</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.models.ICLModel" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
 <p>Base model for in-context foundation models on structured data.</p>
 <p><a class="reference internal" href="#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> defines the public interface shared among in-context
@@ -229,6 +231,10 @@ foundation models on structured data.
 It enriches models by unified pre-processing and post-processing routines,
 key/value caching, and ensembling.</p>
 <dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>task</strong> (<a class="reference internal" href="sdm.Task.html#sdm.Task" title="sdm.task.Task"><em>Task</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference internal" href="sdm.Task.html#sdm.Task" title="sdm.task.Task"><em>Task</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Tasks to initialize. If omitted, all supported tasks by the model
+will be initialized.</p>
+</dd>
 </dl>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="sdm.models.ICLModel.supported_feature_stypes">
@@ -240,6 +246,12 @@ key/value caching, and ensembling.</p>
 <dt class="sig sig-object py" id="sdm.models.ICLModel.supported_target_stypes">
 <span class="sig-name descname"><span class="pre">supported_target_stypes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.ClassVar" title="(in Python v3.14)"><span class="pre">ClassVar</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#sdm.models.ICLModel.supported_target_stypes" title="Link to this definition">#</a></dt>
 <dd><p>Semantic types supported for target columns in this model.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sdm.models.ICLModel.supported_tasks">
+<span class="sig-name descname"><span class="pre">supported_tasks</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.ClassVar" title="(in Python v3.14)"><span class="pre">ClassVar</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Task.html#sdm.Task" title="sdm.task.Task"><span class="pre">Task</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#sdm.models.ICLModel.supported_tasks" title="Link to this definition">#</a></dt>
+<dd><p>Prediction tasks supported in this model.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -387,7 +399,7 @@ stacked estimator outputs with shape <code class="docutils literal notranslate">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=78246b91"></script>
+      <script src="../../_static/documentation_options.js?v=4fdbb237"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

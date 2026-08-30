@@ -1,0 +1,8 @@
+﻿Task
+====
+
+.. currentmodule:: sdm
+
+.. autoclass:: Task
+   :members:
+   :show-inheritance:

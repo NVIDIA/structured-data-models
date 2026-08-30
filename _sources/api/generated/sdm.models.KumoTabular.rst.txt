@@ -19,6 +19,8 @@ Capabilities
      - ``numerical``
    * - **Supported Target Semantic Types**
      - ``categorical``, ``numerical``
+   * - **Supported Prediction Tasks**
+     - ``classification``, ``regression``
    * - **Related Table Support**
      - ❌
 

@@ -139,6 +139,8 @@ data-aria-dark="Switch to auto color mode">
 </li>
       <li><a href="api/generated/sdm.processing.common.Choice.html#sdm.processing.common.Choice">Choice (class in sdm.processing.common)</a>
 </li>
+      <li><a href="api/generated/sdm.Task.html#sdm.Task.classification">classification (sdm.Task attribute)</a>
+</li>
       <li><a href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.clear">clear() (sdm.models.ICLModel method)</a>
 </li>
   </ul></td>
@@ -304,6 +306,8 @@ data-aria-dark="Switch to auto color mode">
 </li>
       </ul></li>
       <li><a href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor.from_pandas">from_pandas() (sdm.tensor.TableTensor class method)</a>
+</li>
+      <li><a href="api/generated/sdm.Task.html#sdm.Task.from_stype">from_stype() (sdm.Task class method)</a>
 </li>
       <li><a href="api/generated/sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable.from_tables">from_tables() (sdm.tensor.EnsembleTable class method)</a>
 </li>
@@ -487,16 +491,18 @@ data-aria-dark="Switch to auto color mode">
 </li>
       <li><a href="api/generated/sdm.processing.output.ReduceEstimators.html#sdm.processing.output.ReduceEstimators">ReduceEstimators (class in sdm.processing.output)</a>
 </li>
+      <li><a href="api/generated/sdm.Task.html#sdm.Task.regression">regression (sdm.Task attribute)</a>
+</li>
       <li><a href="api/generated/sdm.relational.RelatedTables.html#sdm.relational.RelatedTables">RelatedTables (class in sdm.relational)</a>
 </li>
       <li><a href="api/internal/related_tables_schema.html#sdm.relational.task.RelatedTablesSchema">RelatedTablesSchema (class in sdm.relational.task)</a>
 </li>
       <li><a href="api/generated/sdm.relational.RelationalData.html#sdm.relational.RelationalData">RelationalData (class in sdm.relational)</a>
 </li>
-      <li><a href="api/generated/sdm.relational.RelationalSampler.html#sdm.relational.RelationalSampler">RelationalSampler (class in sdm.relational)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/sdm.relational.RelationalSampler.html#sdm.relational.RelationalSampler">RelationalSampler (class in sdm.relational)</a>
+</li>
       <li><a href="api/internal/relational_sampler_output.html#sdm.relational.sampler.RelationalSamplerOutput">RelationalSamplerOutput (class in sdm.relational.sampler)</a>
 </li>
       <li><a href="api/generated/sdm.relational.Relationship.html#sdm.relational.Relationship">Relationship (class in sdm.relational)</a>
@@ -551,14 +557,14 @@ data-aria-dark="Switch to auto color mode">
 </li>
       <li><a href="api/generated/sdm.processing.categorical.ShuffleCategories.html#sdm.processing.categorical.ShuffleCategories">ShuffleCategories (class in sdm.processing.categorical)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns">ShuffleColumns (class in sdm.processing.common)</a>
 </li>
       <li><a href="api/internal/cache.html#sdm.cache.Cache.size">size() (sdm.cache.Cache method)</a>
 </li>
       <li><a href="api/generated/sdm.processing.output.Softmax.html#sdm.processing.output.Softmax">Softmax (class in sdm.processing.output)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/sdm.nn.SoftplusScale.html#sdm.nn.SoftplusScale">SoftplusScale (class in sdm.nn)</a>
 </li>
       <li><a href="api/generated/sdm.processing.numerical.Standardize.html#sdm.processing.numerical.Standardize">Standardize (class in sdm.processing.numerical)</a>
@@ -566,6 +572,8 @@ data-aria-dark="Switch to auto color mode">
       <li><a href="api/generated/sdm.tensor.StringTensor.html#sdm.tensor.StringTensor">StringTensor (class in sdm.tensor)</a>
 </li>
       <li><a href="api/generated/sdm.Stype.html#sdm.Stype">Stype (class in sdm)</a>
+</li>
+      <li><a href="api/generated/sdm.Task.html#sdm.Task.stype">stype (sdm.Task property)</a>
 </li>
       <li><a href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor.stype">stype() (sdm.tensor.TableTensor method)</a>
 </li>
@@ -577,6 +585,18 @@ data-aria-dark="Switch to auto color mode">
 </li>
       <li><a href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.supported_target_stypes">supported_target_stypes (sdm.models.ICLModel attribute)</a>
 </li>
+      <li><a href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.supported_tasks">supported_tasks (sdm.models.ICLModel attribute)</a>
+
+      <ul>
+        <li><a href="api/generated/sdm.models.KumoRelational.html#sdm.models.KumoRelational.supported_tasks">(sdm.models.KumoRelational attribute)</a>
+</li>
+        <li><a href="api/generated/sdm.models.KumoTabular.html#sdm.models.KumoTabular.supported_tasks">(sdm.models.KumoTabular attribute)</a>
+</li>
+        <li><a href="api/generated/sdm.models.TabFM.html#sdm.models.TabFM.supported_tasks">(sdm.models.TabFM attribute)</a>
+</li>
+        <li><a href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2.supported_tasks">(sdm.models.TabICLv2 attribute)</a>
+</li>
+      </ul></li>
       <li><a href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.supports_related_tables">supports_related_tables (sdm.models.ICLModel attribute)</a>
 </li>
       <li><a href="api/generated/sdm.nn.SwiGLU.html#sdm.nn.SwiGLU">SwiGLU (class in sdm.nn)</a>
@@ -598,6 +618,8 @@ data-aria-dark="Switch to auto color mode">
       <li><a href="api/internal/table_schema.html#sdm.tensor.table.TableSchema">TableSchema (class in sdm.tensor.table)</a>
 </li>
       <li><a href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor">TableTensor (class in sdm.tensor)</a>
+</li>
+      <li><a href="api/generated/sdm.Task.html#sdm.Task">Task (class in sdm)</a>
 </li>
       <li><a href="api/generated/sdm.processing.common.TaskDispatch.html#sdm.processing.common.TaskDispatch">TaskDispatch (class in sdm.processing.common)</a>
 </li>
@@ -686,7 +708,7 @@ data-aria-dark="Switch to auto color mode">
       
     </main>
   </div>
-      <script src="_static/documentation_options.js?v=78246b91"></script>
+      <script src="_static/documentation_options.js?v=4fdbb237"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
