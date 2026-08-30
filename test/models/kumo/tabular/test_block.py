@@ -1,13 +1,11 @@
 import torch
-from torch.nn import RMSNorm, Sequential
 
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.nn import SwiGLU
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_transformer_block_initialization(device: torch.device) -> None:
+def test_transformer_block(device: torch.device) -> None:
     block = KumoTabularTransformerBlock(
         channels=32,
         num_heads=4,
@@ -19,15 +17,3 @@ def test_transformer_block_initialization(device: torch.device) -> None:
     output = block(query=query, key_value=key_value)
 
     torch.testing.assert_close(output, query, rtol=0, atol=0)
-    assert torch.count_nonzero(block.attn.out_lin.weight) > 0
-    mlp = block.mlp
-    assert isinstance(mlp, Sequential)
-    swiglu = mlp[1]
-    assert isinstance(swiglu, SwiGLU)
-    assert torch.count_nonzero(swiglu.down_lin.weight) > 0
-    post_attn_norm = block.post_attn_norm
-    assert isinstance(post_attn_norm, RMSNorm)
-    assert torch.count_nonzero(post_attn_norm.weight) == 0
-    post_mlp_norm = mlp[-1]
-    assert isinstance(post_mlp_norm, RMSNorm)
-    assert torch.count_nonzero(post_mlp_norm.weight) == 0

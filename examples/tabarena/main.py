@@ -1,29 +1,36 @@
-r"""Run TabICLv2 on TabArena."""
+r"""Run an SDM tabular model on TabArena."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from model import SDMTabICLv2System
+from model import MODEL_CONFIGS, SDMSystem
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import SystemConfigGenerator
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
+    "--model",
+    choices=tuple(MODEL_CONFIGS),
+    default="tabiclv2",
+    help="SDM model to benchmark.",
+)
+parser.add_argument(
     "--dataset",
     help="Run only the selected TabArena dataset.",
 )
 args = parser.parse_args()
 
-result_dir = Path(__file__).parent.parent / "tabarena_out" / "TabICLv2"
+model_config = MODEL_CONFIGS[args.model]
+result_dir = Path(__file__).parent.parent / "tabarena_out" / model_config.name
 result_dir.mkdir(parents=True, exist_ok=True)
 
 generator = SystemConfigGenerator(
-    model_cls=SDMTabICLv2System,
-    name="SDMTabICLv2System",
-    manual_configs=[{}],
+    model_cls=SDMSystem,
+    name=model_config.system_name,
+    manual_configs=[{"model": args.model}],
 )
 experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],

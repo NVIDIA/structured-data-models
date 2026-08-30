@@ -22,7 +22,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                         method="round_robin",
                     ),
                     sp.ClipSigma(threshold=4.0),
-                    sp.ShuffleColumns(method="shift"),
+                    sp.ShuffleColumns(method="latin"),
                 ],
             ),
         ],

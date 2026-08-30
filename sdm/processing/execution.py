@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
-from typing import cast
+from dataclasses import replace
+from typing import NamedTuple, cast
 
 import torch
 
@@ -13,21 +13,19 @@ from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
 
-@dataclass(frozen=True)
-class MemberContext:
+class MemberContext(NamedTuple):
     """Transformed context tables for one ensemble member."""
 
     x: TableTensor
     y: TableTensor
-    related_tables: RelatedTables | None
+    related_tables: RelatedTables[TableTensor] | None
 
 
-@dataclass(frozen=True)
-class MemberQuery:
+class MemberQuery(NamedTuple):
     """Transformed query tables for one ensemble member."""
 
     x: TableTensor
-    related_tables: RelatedTables | None
+    related_tables: RelatedTables[TableTensor] | None
 
 
 class RecipeExecution:
@@ -43,7 +41,7 @@ class RecipeExecution:
         self,
         x: TableTensor,
         y: TableTensor,
-        related_tables: RelatedTables | None,
+        related_tables: RelatedTables[TableTensor] | None,
         *,
         num_members: int = 1,
         generator: torch.Generator | None = None,
@@ -114,7 +112,7 @@ class RecipeExecution:
 
         members: list[MemberContext] = []
         for member_id in range(num_members):
-            related_tables_i: RelatedTables | None = None
+            related_tables_i: RelatedTables[TableTensor] | None = None
             if related_tables is not None:
                 related_tables_i = replace(
                     related_tables,
@@ -136,7 +134,7 @@ class RecipeExecution:
     def transform(
         self,
         x: TableTensor,
-        related_tables: RelatedTables | None,
+        related_tables: RelatedTables[TableTensor] | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
         assert self._target_locations is not None
@@ -156,7 +154,7 @@ class RecipeExecution:
 
         members: list[MemberQuery] = []
         for member_id in range(num_members):
-            related_tables_i: RelatedTables | None = None
+            related_tables_i: RelatedTables[TableTensor] | None = None
             if related_tables is not None:
                 related_tables_i = replace(
                     related_tables,
