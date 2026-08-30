@@ -46,6 +46,9 @@ class TableSchema:
 
     columns: Mapping[Stype, tuple[str, ...]]
 
+    def __hash__(self) -> int:
+        return hash(frozenset(self.columns.items()))
+
 
 class TableTensor(Tensor):
     r"""A :class:`torch.Tensor` for tensorized, lossless table data.

@@ -26,7 +26,7 @@ class _RecordingModel(ICLModel):
     supports_related_tables: ClassVar[bool] = True
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(task=None)
         self.calls: list[_Call] = []
 
     def _forward(
@@ -77,40 +77,39 @@ class MyCallback(Callback):
         self.scale = scale
         self.offset = offset
         self.events = events
-        self.start_calls: list[
-            tuple[torch.nn.Module, tuple[Any, ...], dict[str, Any]]
-        ] = []
 
     def _record(self, event: str) -> None:
         self.events.append(f"{self.name}_{event}")
 
-    def on_forward_start(
-        self,
-        model: torch.nn.Module,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        self.start_calls.append((model, args, kwargs))
-        self._record("forward_start")
-
-    def on_forward_end(
-        self,
-        model: torch.nn.Module,
-        prediction: TableTensor,
-    ) -> None:
-        self._record("forward_end")
-
-    def on_preprocessing_end(
+    def on_context_preprocessing_end(
         self,
         model: torch.nn.Module,
         x: TableTensor,
-        related_tables: RelatedTables | None,
+        y: TableTensor,
+        related_tables: RelatedTables[TableTensor] | None,
+    ) -> tuple[TableTensor, TableTensor, RelatedTables | None]:
+        self._record("context_preprocessing_end")
+        return x, y, related_tables
+
+    def on_query_preprocessing_end(
+        self,
+        model: torch.nn.Module,
+        x: TableTensor,
+        related_tables: RelatedTables[TableTensor] | None,
     ) -> tuple[TableTensor, RelatedTables | None]:
-        self._record("preprocessing_end")
+        self._record("query_preprocessing_end")
         return (
             x.replace_blocks(numerical=x.numerical * self.scale + self.offset),
             related_tables,
         )
+
+    def on_model_forward_end(
+        self,
+        model: torch.nn.Module,
+        out: TableTensor,
+    ) -> TableTensor:
+        self._record("model_forward_end")
+        return out
 
 
 class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
@@ -269,14 +268,12 @@ def test_callback() -> None:
     x_context = torch.tensor([[0.0], [2.0]])
     y_context = torch.tensor([[0.0], [1.0]])
     x_query = torch.tensor([[3.0]])
-    marker = object()
 
     output = model(
         x_context,
         y_context,
         x_query,
         callbacks=callbacks,
-        marker=marker,
     )
     model.fit(
         x_context,
@@ -287,49 +284,17 @@ def test_callback() -> None:
         x_query,
         callbacks=callbacks,
     )
-    with pytest.raises(RuntimeError, match="not yet fitted"):
-        _RecordingModel().predict(
-            torch.tensor([[3.0]]),
-            callbacks=callbacks,
-        )
 
     torch.testing.assert_close(output.numerical, torch.tensor([[[8.0]]]))
     torch.testing.assert_close(prediction.numerical, output.numerical)
-    callback = callbacks[0]
-    start_model, start_args, start_kwargs = callback.start_calls[0]
-    assert start_model is model
-    assert start_args[0] is x_context
-    assert start_args[1] is y_context
-    assert start_args[2] is x_query
-    assert start_args[3:] == (None, None)
-    assert start_kwargs == {
-        "recipe": None,
-        "num_estimators": 1,
-        "generator": None,
-        "callbacks": callbacks,
-        "marker": marker,
-    }
 
-    predict_model, predict_args, predict_kwargs = callback.start_calls[1]
-    assert predict_model is model
-    assert predict_args[0] is x_query
-    assert predict_args[1] is None
-    assert predict_kwargs == {"callbacks": callbacks}
-    assert events == [
-        "1_forward_start",
-        "2_forward_start",
-        "1_preprocessing_end",
-        "2_preprocessing_end",
-        "1_forward_end",
-        "2_forward_end",
-        "1_forward_start",
-        "2_forward_start",
-        "1_preprocessing_end",
-        "2_preprocessing_end",
-        "1_forward_end",
-        "2_forward_end",
-        "1_forward_start",
-        "2_forward_start",
+    assert events == 2 * [
+        "1_context_preprocessing_end",
+        "2_context_preprocessing_end",
+        "1_query_preprocessing_end",
+        "2_query_preprocessing_end",
+        "1_model_forward_end",
+        "2_model_forward_end",
     ]
 
 

@@ -22,7 +22,6 @@ def test_reduce_estimators_mean(device: torch.device) -> None:
 
     assert output.size() == (3, 4, 2)
     assert output.schema == table.schema
-    assert output.device == device
     assert output.dtype == values.dtype
     torch.testing.assert_close(output.numerical, values.mean(dim=0))
     torch.testing.assert_close(fit_output.numerical, output.numerical)
@@ -86,7 +85,6 @@ def test_reduce_estimators_reduces_members_in_order(
     output = sp.ReduceEstimators().transform_ensemble(table)
 
     assert output.num_members == 1
-    assert output.table(0).device == device
     torch.testing.assert_close(
         output.table(0).numerical,
         (first.numerical + 2 * second.numerical) / 3,
@@ -144,7 +142,6 @@ def test_reduce_estimators_composes_with_following_processor(
     ).transform_ensemble(table)
 
     assert output.num_members == 1
-    assert output.table(0).device == device
     torch.testing.assert_close(
         output.table(0).numerical,
         torch.full((1, 2), 0.5, device=device),

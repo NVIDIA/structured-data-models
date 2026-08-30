@@ -9,7 +9,7 @@ from torch.nn import LayerNorm, Linear
 
 from sdm._kernels import segment_multi_reduce
 from sdm.cache import Cache
-from sdm.models.nemotron.relational.graph import HomogeneousGraph
+from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.nn.memory import cuda_memory_availability
 
 # Empirical upper bounds for transient aggregation work.
@@ -217,32 +217,33 @@ class InvariantGNN(torch.nn.Module):
                     work_byte_limit=work_byte_limit,
                     value_bytes=x.size(-1) * max(x.element_size(), 4),
                 )
-        edge_emb = (
+        edge_attr = (
             edge_type_emb[graph.edge_type]
             if aggregation_slices is None
             else None
         )
 
         for i in range(num_hops):
+            src_x = self.src_lin(x)
+            skip_x = self.skip_lin(x)
             if aggregation_slices is None:
-                assert edge_emb is not None
+                assert edge_attr is not None
                 x = self._aggregate(
-                    src_x=self.src_lin(x)[graph.row] + edge_emb,
+                    src_x=src_x,
+                    index=graph.row,
+                    edge_attr=edge_attr,
                     colptr=graph.colptr,
-                    skip_x=self.skip_lin(x),
+                    skip_x=skip_x,
                 )
             else:
-                src_x = self.src_lin(x)
-                skip_x = self.skip_lin(x)
                 out = torch.empty_like(skip_x)
                 for start, end, edge_start, edge_end in aggregation_slices:
                     out[start:end] = self._aggregate(
-                        src_x=(
-                            src_x[graph.row[edge_start:edge_end]]
-                            + edge_type_emb[
-                                graph.edge_type[edge_start:edge_end]
-                            ]
-                        ),
+                        src_x=src_x,
+                        index=graph.row[edge_start:edge_end],
+                        edge_attr=edge_type_emb[
+                            graph.edge_type[edge_start:edge_end]
+                        ],
                         colptr=(
                             graph.colptr[start : end + 1] - graph.colptr[start]
                         ),
@@ -263,12 +264,16 @@ class InvariantGNN(torch.nn.Module):
         self,
         *,
         src_x: Tensor,
+        index: Tensor,
+        edge_attr: Tensor,
         colptr: Tensor,
         skip_x: Tensor,
     ) -> Tensor:
         total, mean, std, minimum, maximum = segment_multi_reduce(
-            src_x,
-            colptr,
+            src=src_x,
+            index=index,
+            edge_attr=edge_attr,
+            offsets=colptr,
         )
         return (
             skip_x

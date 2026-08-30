@@ -5,14 +5,14 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
-from sdm.models.nemotron.relational.graph import HomogeneousGraph
+from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.relational.join import join_index
 
 
 @dataclass(frozen=True)
 class TaskGraph:  # noqa: D101
     x: TableTensor
-    related_tables: RelatedTables
+    related_tables: RelatedTables[TableTensor]
     graph: HomogeneousGraph
     readout_table: str
     readout_index: Tensor  # Entity-table rows ordered by task row.
@@ -23,7 +23,7 @@ class TaskGraph:  # noqa: D101
     def from_input(  # noqa: D102
         cls,
         x: TableTensor,
-        related_tables: RelatedTables,
+        related_tables: RelatedTables[TableTensor],
         num_hops: int | None = None,
     ) -> Self:
 
@@ -36,7 +36,7 @@ class TaskGraph:  # noqa: D101
 
         if len(related_tables.task_links) != 1:
             raise ValueError(
-                f"'NemotronRelational' expects exactly one task link to an "
+                f"'KumoRelational' expects exactly one task link to an "
                 f"entity table "
                 f"(got {len(related_tables.task_links)})"
             )

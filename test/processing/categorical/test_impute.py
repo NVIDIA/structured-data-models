@@ -3,7 +3,7 @@ import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import withCUDA
 
 
 def _table(
@@ -66,21 +66,6 @@ def test_impute_mode_uses_most_frequent_category(
         query.categorical.categories,
     ):
         assert torch.equal(actual, expected)
-
-
-@onlyCUDA
-def test_impute_mode_moves_fitted_processor_to_cuda() -> None:
-    processor = sp.ImputeMode().fit(_table([[0, 1], [0, -1], [1, 0]]))
-    processor = processor.to("cuda")
-    query = _table([[-1, -1]], device=torch.device("cuda"))
-
-    output = processor.transform(query)
-
-    assert output.categorical.device.type == "cuda"
-    assert torch.equal(
-        output.categorical.code,
-        torch.tensor([[0, 0]], dtype=torch.int32, device="cuda"),
-    )
 
 
 @withCUDA

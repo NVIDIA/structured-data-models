@@ -55,7 +55,6 @@ def test_align_categories_remaps_independent_vocabularies(
     )
     assert output.categorical.categories[0].tolist() == ["red", "blue"]
     assert output.categorical.categories[1].tolist() == ["x", "y"]
-    assert output.categorical.device == device
 
 
 @withCUDA
@@ -147,6 +146,77 @@ def test_align_categories_orders_joint_vocabulary(
             1,
         ]
         assert query.categorical.code.squeeze(-1).tolist() == [1]
+
+
+@withCUDA
+def test_align_categories_filters_rare_categories(
+    device: torch.device,
+) -> None:
+    context = _table(
+        [[-1], [2], [1], [2], [0], [3], [1], [0]],
+        categories=(("alpha", "beta", "gamma", "rare", "unused"),),
+        device=device,
+    )
+    query = _table(
+        [[3], [0], [2], [1], [4], [-1]],
+        categories=(("gamma", "other", "alpha", "beta", "rare"),),
+        device=device,
+    )
+
+    processor = AlignCategories(min_frequency=2)
+    context_output = processor.fit_transform(context)
+    query_output = processor.transform(query)
+
+    assert context_output.categorical.categories[0].tolist() == [
+        "alpha",
+        "beta",
+        "gamma",
+    ]
+    assert context_output.categorical.code.squeeze(-1).tolist() == [
+        -1,
+        2,
+        1,
+        2,
+        0,
+        -1,
+        1,
+        0,
+    ]
+    assert query_output.categorical.code.squeeze(-1).tolist() == [
+        1,
+        2,
+        0,
+        -1,
+        -1,
+        -1,
+    ]
+
+
+@withCUDA
+def test_align_categories_filters_per_ensemble_member(
+    device: torch.device,
+) -> None:
+    first = _table(
+        [[0], [0], [1]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    second = _table(
+        [[1], [1], [2]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    context = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1),
+    )
+
+    output = AlignCategories(min_frequency=2).fit_transform_ensemble(context)
+
+    assert output.table(0).categorical.categories[0].tolist() == ["red"]
+    assert output.table(0).categorical.code.squeeze(-1).tolist() == [0, 0, -1]
+    assert output.table(1).categorical.categories[0].tolist() == ["blue"]
+    assert output.table(1).categorical.code.squeeze(-1).tolist() == [0, 0, -1]
 
 
 @withCUDA

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
-from typing import cast
+from dataclasses import replace
+from typing import NamedTuple, cast
 
 import torch
 from torch import Tensor
@@ -14,21 +14,19 @@ from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
 
-@dataclass(frozen=True)
-class MemberContext:
+class MemberContext(NamedTuple):
     """Transformed context tables for one ensemble member."""
 
     x: TableTensor
     y: TableTensor
-    related_tables: RelatedTables | None
+    related_tables: RelatedTables[TableTensor] | None
 
 
-@dataclass(frozen=True)
-class MemberQuery:
+class MemberQuery(NamedTuple):
     """Transformed query tables for one ensemble member."""
 
     x: TableTensor
-    related_tables: RelatedTables | None
+    related_tables: RelatedTables[TableTensor] | None
 
 
 class RecipeExecution:
@@ -45,7 +43,7 @@ class RecipeExecution:
         self,
         x: Tensor | TableTensor | EnsembleTable,
         y: Tensor | TableTensor | EnsembleTable,
-        related_tables: RelatedTables | None,
+        related_tables: RelatedTables[TableTensor] | RelatedTables[EnsembleTable] | None,
         *,
         num_members: int | None = None,
         generator: torch.Generator | None = None,
@@ -107,8 +105,8 @@ class RecipeExecution:
         x = self.recipe.features.fit_transform_ensemble(x, generator=generator)
 
         members: list[MemberContext] = []
-        for member_id in range(x.num_members):
-            related_tables_i: RelatedTables | None = None
+        for member_id in range(num_members):
+            related_tables_i: RelatedTables[TableTensor] | None = None
             if related_tables is not None:
                 related_tables_i = replace(
                     related_tables,
@@ -129,8 +127,8 @@ class RecipeExecution:
 
     def transform(
         self,
-        x: Tensor | TableTensor | EnsembleTable,
-        related_tables: RelatedTables | None,
+        x: TableTensor,
+        related_tables: RelatedTables[TableTensor] | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
         assert self._y_locations is not None
@@ -148,8 +146,8 @@ class RecipeExecution:
                 )
 
         members: list[MemberQuery] = []
-        for member_id in range(x.num_members):
-            related_tables_i: RelatedTables | None = None
+        for member_id in range(num_members):
+            related_tables_i: RelatedTables[TableTensor] | None = None
             if related_tables is not None:
                 related_tables_i = replace(
                     related_tables,

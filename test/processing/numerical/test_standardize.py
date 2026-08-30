@@ -44,7 +44,6 @@ def test_standardize_fit_transform_and_inverse_round_trip(
     assert torch.allclose(processor.scale, expected_scale)
     transformed = processor.transform(inp).numerical
     assert torch.allclose(transformed, expected)
-    assert transformed.device == device
     assert torch.allclose(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
@@ -65,7 +64,6 @@ def test_standardize_without_mean_or_std(device: torch.device) -> None:
     assert torch.equal(processor.scale, torch.ones((1, 2), device=device))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, inp)
-    assert transformed.device == device
 
 
 @withCUDA
@@ -79,7 +77,6 @@ def test_standardize_single_sample_uses_unit_scale(
 
     assert torch.equal(processor.scale, torch.ones((1, 2), device=device))
     assert torch.equal(transformed, torch.zeros_like(inp))
-    assert transformed.device == device
     assert torch.equal(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)

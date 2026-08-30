@@ -3,7 +3,7 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
+from torch.nn import GELU, Linear, Parameter, Sequential
 
 
 class QueryScaling(torch.nn.Module, abc.ABC):
@@ -121,3 +121,60 @@ class QASSMax(QueryScaling):
         scale = scale.unflatten(-1, (query.size(-2), query.size(-1)))
         gate = 1 + self.gate(query).tanh()
         return query * scale * gate
+
+
+class LogScale(QueryScaling):
+    r"""Trainable logarithmic query scaling.
+
+    For a query tensor :math:`q`, effective key length :math:`n`, and learned
+    per-head coefficient :math:`a_h`, this module returns a scaled query
+
+    .. math::
+
+        \tilde{q}_{hi} = q_{hi} \cdot a_h \cdot \log(\max(n, 1)),
+
+    where :math:`h` indexes attention heads and :math:`i` indexes head
+    channels.
+
+    Each attention head receives an unconstrained coefficient initialized
+    independently and uniformly in ``[0, 1)``. Key lengths are clamped to at
+    least one, and the logarithm is computed in fp32.
+
+    Args:
+        num_heads: The number of query attention heads.
+        device: The device.
+        dtype: The dtype.
+    """
+
+    def __init__(
+        self,
+        num_heads: int,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.head_scale = Parameter(torch.rand((num_heads,), **factory_kwargs))
+
+    def forward(
+        self,
+        query: Tensor,  # [..., S, H, C]
+        *,
+        key_len: Tensor | int,  # [..., 1] or [..., S] or scalar
+    ) -> Tensor:  # [..., S, H, C]
+        r""":meta private:"""  # noqa: D415
+        # Avoid a silently wrong result from broadcasting the head dimension.
+        if query.size(-2) != self.head_scale.numel():
+            raise ValueError(
+                "`query.size(-2)` must equal the number of per-head scales "
+                f"(got {query.size(-2)} and {self.head_scale.numel()})"
+            )
+        if isinstance(key_len, Tensor):
+            key_len_tensor = key_len.float()
+        else:
+            key_len_tensor = query.new_full((), key_len, dtype=torch.float32)
+        log_key_len = key_len_tensor.clamp(min=1.0).log().to(query.dtype)
+        head_scale = self.head_scale.to(query.dtype).reshape(
+            *((1,) * (query.dim() - 2)), -1, 1
+        )
+        return query * log_key_len[..., None, None] * head_scale

@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, ClassVar, Literal, cast
+from collections.abc import Iterable
+from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
+from torch.nn import ModuleDict
 
-import sdm.processing as sp
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
+from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
+from sdm.models.tabfm.recipe import default_recipe
 from sdm.models.tabfm.row_embedding import RowEmbedding
 from sdm.tensor.table import TableSchema
 
@@ -38,22 +40,23 @@ class TabFM(ICLModel):
     interaction stages, :class:`~torch.nn.RMSNorm`-based transformer blocks and
     :class:`~sdm.nn.SwiGLU` feed-forward blocks.
 
-    Due to the size of its checkpoints (~1.6B parameters), each :class:`TabFM`
-    instance is responsible for a single task only: classification or
-    regression.
-
     .. note::
-        :class:`TabFM` model weights are distributed under a
-        `non-commercial license <https://huggingface.co/google/
-        tabfm-1.0.0-pytorch/blob/
-        77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__.
-        Users are expected to download the
-        `checkpoint <https://huggingface.co/google/tabfm-1.0.0-pytorch>`__
-        manually and use it in accordance with its license.
+        :class:`TabFM` model weights are distributed under the
+        `TabFM Non-Commercial License v1.0 <https://huggingface.co/google/
+        tabfm-1.0.0-pytorch/blob/main/LICENSE>`__.
+        Before downloading pretrained weights, users must accept the license
+        either interactively when prompted or explicitly via
+        ``accept_license=True``.
 
     Args:
-        task: The prediction task.
-        checkpoint_path: The local checkpoint path.
+        task: The tasks to initialize. If ``None``, all tasks supported by this
+            model are initialized. Pass a single task to avoid initializing
+            separate ~1.6B parameter models.
+        pretrained: Whether to load the pretrained checkpoint.
+        accept_license: Whether to accept the `TabFM Non-Commercial License
+            v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/
+            LICENSE>`__ without
+            showing the interactive license prompt.
         device: The device.
     """
 
@@ -67,83 +70,64 @@ class TabFM(ICLModel):
 
     def __init__(
         self,
-        task: Literal["classification", "regression"],
-        checkpoint_path: str | Path | None,
+        task: TaskLike | Iterable[TaskLike] | None,
+        pretrained: bool = True,
+        accept_license: bool = False,
         device: torch.device | str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(task=task)
 
-        self.task = task
-        self.model = _TabFM(
-            num_classes=10 if task == "classification" else 0,
-            device="meta" if checkpoint_path is not None else device,
-        )
+        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        for task in self.tasks:
+            self.models[task] = _TabFM(
+                num_classes=10 if task == Task.classification else 0,
+                device="meta" if pretrained else device,
+            )
 
-        if checkpoint_path is not None:
-            self._load_from_pretrained(checkpoint_path, device=device)
+        if pretrained:
+            self._load_from_pretrained(accept_license, device=device)
 
         self.eval()
 
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return Recipe(
-            features=[
-                sp.StypeDispatch(
-                    categorical=[
-                        # TODO: Sort by appearance and filter rare categories.
-                        sp.AlignCategories(),
-                        sp.ToNumerical(),
-                    ],
-                ),
-                sp.StypeDispatch(
-                    numerical=[
-                        sp.DropConstantColumns(),
-                        sp.ImputeMean(),
-                        sp.Standardize(epsilon=1e-6),
-                        sp.Clip(min_value=-100.0, max_value=100.0),
-                        sp.Choice(
-                            sp.Identity(),
-                            sp.PowerTransform(),
-                            method="round_robin",
-                        ),
-                        sp.ClipSigma(threshold=4.0),
-                        sp.ShuffleColumns(method="random"),
-                        sp.SelectColumns(
-                            max_columns=500,
-                            method="round_robin",
-                        ),
-                    ],
-                ),
-            ],
-            target=sp.StypeDispatch(
-                categorical=[
-                    sp.AlignCategories(sort_by="value"),
-                    sp.ShuffleCategories(method="shift"),
-                ],
-                numerical=sp.Standardize(),
-            ),
-            output=[
-                sp.ReduceEstimators(method="mean"),
-                sp.TaskDispatch(
-                    classification=sp.Softmax(temperature=0.9),
-                ),
-            ],
-        )
+        return default_recipe()
 
     def _load_from_pretrained(
         self,
-        checkpoint_path: str | Path,
+        accept_license: bool,
         device: torch.device | str | None,
     ) -> TabFM:
         from safetensors.torch import load_file  # noqa: PLC0415
 
-        device = torch.get_default_device() if device is None else device
-        ckpt = remap_ckpt(
-            ckpt=load_file(checkpoint_path, device=str(device)),
-            is_classifier=self.task == "classification",
+        TABFM_LICENSE_PROMPT = (
+            "TabFM pretrained weights are distributed under the TabFM "
+            "Non-Commercial License v1.0 and may be used only for "
+            "non-commercial, non-production purposes. Review the license at "
+            "'https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/"
+            "LICENSE' before downloading."
         )
-        self.model.load_state_dict(ckpt, strict=True, assign=True)
+
+        device = torch.get_default_device() if device is None else device
+
+        for task, model in self.models.items():
+            if task == Task.classification:
+                filename = "classification/model.safetensors"
+            else:
+                assert task == Task.regression
+                filename = "regression/model.safetensors"
+
+            path = download_checkpoint(
+                "google/tabfm-1.0.0-pytorch",
+                filename,
+                license_prompt=None
+                if accept_license
+                else TABFM_LICENSE_PROMPT,
+            )
+            ckpt = load_file(path, device=str(device))
+            ckpt = remap_ckpt(ckpt, is_classifier=task == Task.classification)
+            model.load_state_dict(ckpt, strict=True, assign=True)
 
         return self
 
@@ -168,8 +152,8 @@ class TabFM(ICLModel):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
+        related_context_tables: RelatedTables[TableTensor] | None,
+        related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         **kwargs: Any,
@@ -184,36 +168,24 @@ class TabFM(ICLModel):
             assert x_query is not None
             x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
-        y: Tensor | None = None
         classes: Tensor | None = None
         if y_context is not None and y_context.categorical.size(-1) > 0:
-            if self.task != "classification":
-                raise ValueError(
-                    f"{self.__class__.__name__!r} is initialized for task "
-                    f"{self.task!r}, but received a categorical target"
-                )
             y = y_context.categorical.code.squeeze(-1)
             classes = y_context.categorical.categories[0]
         elif y_context is not None and y_context.numerical.size(-1) > 0:
-            if self.task != "regression":
-                raise ValueError(
-                    f"{self.__class__.__name__!r} is initialized for task "
-                    f"{self.task!r}, but received a numerical target"
-                )
             y = y_context.numerical.squeeze(-1)
-        elif cache is not None:
+        else:
+            assert cache is not None
             classes = cast(Tensor | None, cache["classes"])
+            y = x.new_empty(
+                (*x.size()[:-2], 0),
+                dtype=torch.int64 if classes is not None else x.dtype,
+            )
 
         if classes is not None and len(classes) > 10:
             raise ValueError(
                 f"{self.__class__.__name__!r} only supports up to 10 classes "
                 f"(got {len(classes)})"
-            )
-
-        if y is None:
-            y = x.new_empty(
-                (*x.size()[:-2], 0),
-                dtype=torch.int64 if classes is not None else x.dtype,
             )
 
         if cache is None or cache.is_recording:
@@ -234,7 +206,8 @@ class TabFM(ICLModel):
             categorical_mask = cast(Tensor, cache["categorical_mask"])
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
-        out = self.model(x, y, categorical_mask, cache=cache)
+        task = Task.classification if classes is not None else Task.regression
+        out = self.models[task](x, y, categorical_mask, cache=cache)
 
         if classes is None:
             return TableTensor(

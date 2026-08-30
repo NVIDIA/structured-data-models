@@ -26,13 +26,16 @@ class AlignCategories(EnsembleProcessor):
     ordered list of categories. Separately created tables can use different
     codes for the same value. Fitting learns the category list for each column,
     and transforming remaps another table to use it. Missing values and
-    categories not seen during fitting receive code ``-1``.
+    categories not retained during fitting receive code ``-1``.
 
     Args:
         sort_by: How to order fitted categories.
             ``"code"`` keeps observed categories in original order.
             ``"frequency"`` orders observed categories by descending frequency.
             ``"value"`` orders observed categories by ascending value.
+        min_frequency: Minimum number of observations required to retain a
+            category. Values of rarer categories receive code ``-1``.
+            Must be positive.
 
     >>> import pandas as pd
     >>> import sdm
@@ -68,9 +71,14 @@ class AlignCategories(EnsembleProcessor):
     def __init__(
         self,
         sort_by: Literal["code", "frequency", "value"] = "code",
+        *,
+        min_frequency: int = 1,
     ) -> None:
         super().__init__()
+        if min_frequency <= 0:
+            raise ValueError("min_frequency must be positive")
         self.sort_by = sort_by
+        self.min_frequency = min_frequency
         self._categories: BufferList[BufferList[Tensor]] = BufferList()
 
     def _fit_column(
@@ -116,7 +124,7 @@ class AlignCategories(EnsembleProcessor):
             ).expand(batch_size, -1)
             ordered_categories = input_categories
 
-        observed = counts.gather(1, order) > 0
+        observed = counts.gather(1, order) >= self.min_frequency
         # Only ragged vocabularies require per-batch materialization.
         fitted_categories = []
         for batch_index in range(batch_size):
@@ -517,10 +525,13 @@ class AlignCategories(EnsembleProcessor):
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
-        if self.sort_by == "code":
+        arguments = []
+        if self.sort_by != "code":
+            arguments.append(f"sort_by={self.sort_by!r}")
+        if self.min_frequency != 1:
+            arguments.append(f"min_frequency={self.min_frequency!r}")
+        if not arguments:
             return super().__repr__(indent=indent)
         return (
-            f"{' ' * indent}{self.__class__.__name__}("
-            f"sort_by={self.sort_by!r}"
-            f")"
+            f"{' ' * indent}{self.__class__.__name__}({', '.join(arguments)})"
         )

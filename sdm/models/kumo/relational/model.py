@@ -1,25 +1,34 @@
 # ruff: noqa: D205
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
+from torch.nn import ModuleDict
 
-from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
+from sdm import (
+    NaT,
+    RelatedTables,
+    Relationship,
+    Stype,
+    TableTensor,
+    Task,
+    TaskLike,
+)
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.nemotron.relational.invariant_gnn import InvariantGNN
-from sdm.models.nemotron.relational.recipe import default_recipe
-from sdm.models.nemotron.relational.task import TaskGraph
+from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
+from sdm.models.kumo.relational.recipe import default_recipe
+from sdm.models.kumo.relational.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
 
 
-class NemotronRelational(ICLModel):
+class KumoRelational(ICLModel):
     r"""An adapted version of the relational foundation model
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
@@ -32,7 +41,7 @@ class NemotronRelational(ICLModel):
         :figclass: dark-only
         :width: 100%
 
-    :class:`NemotronRelational` extends the in-context learning structure of
+    :class:`KumoRelational` extends the in-context learning structure of
     tabular foundation models from single tables to relational, multi-table
     inputs.
     It processes task rows together with one or more related tables, avoiding
@@ -57,7 +66,7 @@ class NemotronRelational(ICLModel):
     .. testcode::
 
         from sdm import RelatedTables, TableTensor
-        from sdm.models import NemotronRelational
+        from sdm.models import KumoRelational
 
         task_table = TableTensor.from_columns(
             {"user_id": [0, 1, 2, 3], "churn": [True, False, True, False]},
@@ -107,7 +116,7 @@ class NemotronRelational(ICLModel):
             "orders": related_tables.tables["orders"][3:],
         })
 
-        model = NemotronRelational(device="cuda")
+        model = KumoRelational(device="cuda")
 
         # Default in-context learning forward pass:
         out = model(
@@ -124,6 +133,8 @@ class NemotronRelational(ICLModel):
         out = model.predict(x_query, related_query_tables)
 
     Args:
+        task: The tasks to initialize. If ``None``, all tasks supported by this
+            model are initialized.
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
     """
@@ -138,23 +149,20 @@ class NemotronRelational(ICLModel):
 
     def __init__(
         self,
+        task: TaskLike | Iterable[TaskLike] | None = None,
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(task=task)
 
-        self.cls_model = _NemotronRelational(
-            num_classes=10,
-            num_quantiles=0,
-            norm_bias=True,
-            device="meta" if pretrained else device,
-        )
-        self.reg_model = _NemotronRelational(
-            num_classes=0,
-            num_quantiles=999,
-            norm_bias=False,
-            device="meta" if pretrained else device,
-        )
+        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        for task in self.tasks:
+            self.models[task] = _KumoRelational(
+                num_classes=10 if task == Task.classification else 0,
+                num_quantiles=999 if task == Task.regression else 0,
+                norm_bias=task == Task.classification,
+                device="meta" if pretrained else device,
+            )
 
         if pretrained:
             self._load_from_pretrained(device=device)
@@ -164,21 +172,23 @@ class NemotronRelational(ICLModel):
     def _load_from_pretrained(
         self,
         device: torch.device | str | None,
-    ) -> NemotronRelational:
+    ) -> KumoRelational:
         device = torch.get_default_device() if device is None else device
 
-        for variant in ["classifier", "regressor"]:
+        for task, model in self.models.items():
+            if task == Task.classification:
+                filename = "classifier.pt"
+            else:
+                assert task == Task.regression
+                filename = "regressor.pt"
+
             path = download_checkpoint(
-                repo_id="nvidia/Nemotron-Relational",
-                filename=f"{variant}.pt",
+                repo_id="nvidia/Kumo-Relational",
+                filename=filename,
                 revision="v2.1.1",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-
-            if variant == "classifier":
-                self.cls_model.load_state_dict(ckpt, assign=True)
-            else:
-                self.reg_model.load_state_dict(ckpt, assign=True)
+            model.load_state_dict(ckpt, assign=True)
 
         return self
 
@@ -187,8 +197,8 @@ class NemotronRelational(ICLModel):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
+        related_context_tables: RelatedTables[TableTensor] | None,
+        related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         **kwargs: Any,
@@ -200,7 +210,8 @@ class NemotronRelational(ICLModel):
         elif cache is not None:
             classes = cast(Tensor | None, cache["classes"])
 
-        out = (self.reg_model if classes is None else self.cls_model)(
+        task = Task.classification if classes is not None else Task.regression
+        out = self.models[task](
             x_context=x_context,
             y_context=y_context,
             x_query=x_query,
@@ -230,7 +241,7 @@ class NemotronRelational(ICLModel):
         return default_recipe()
 
 
-class _NemotronRelational(torch.nn.Module):
+class _KumoRelational(torch.nn.Module):
     def __init__(
         self,
         num_classes: int,
@@ -284,8 +295,8 @@ class _NemotronRelational(torch.nn.Module):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
+        related_context_tables: RelatedTables[TableTensor] | None,
+        related_query_tables: RelatedTables[TableTensor] | None,
         *,
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
@@ -341,7 +352,7 @@ class _NemotronRelational(torch.nn.Module):
                 num_hops = cast(int, cache["num_hops"])
             query = TaskGraph.from_input(
                 x=x_query,
-                related_tables=RelatedTables(
+                related_tables=RelatedTables[TableTensor](
                     tables=related_query_tables.tables,
                     relationships=relationships,
                     task_links=related_query_tables.task_links,

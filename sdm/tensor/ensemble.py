@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Self, cast
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, StypeLike
 from sdm.tensor import TableTensor
+from sdm.tensor.mixin import DeviceMixin
 
 
-class EnsembleTable:
+class EnsembleTable(DeviceMixin):
     """Store and group input tables for an ensemble.
 
     Each ensemble member is associated with one table. Shared tables are stored
@@ -315,6 +317,14 @@ class EnsembleTable:
         """Iterate over groups of compatible tables."""
         return iter(self._groups)
 
+    def _tensors(self) -> Iterator[Tensor]:
+        yield from self._groups
+
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return self.replace_groups(
+            [cast(TableTensor, fn(group)) for group in self._groups]
+        )
+
     def select_stypes(
         self,
         stypes: StypeLike | Iterable[StypeLike],
@@ -424,8 +434,8 @@ class EnsembleTable:
         ensemble._groups = tuple(groups)
         return ensemble
 
-    def __repr__(self) -> str:
+    def __repr__(self, *, indent: int = 0) -> str:
         return (
-            f"{self.__class__.__name__}(num_members={self.num_members}, "
-            f"num_groups={self.num_groups})"
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"num_members={self.num_members}, num_groups={self.num_groups})"
         )
