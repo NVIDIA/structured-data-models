@@ -55,7 +55,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def __init__(
         self,
-        task: TaskLike | Iterable[TaskLike] | None,
+        task: TaskLike | Iterable[TaskLike] | None = None,
     ) -> None:
         super().__init__()
 
