@@ -125,7 +125,8 @@ def _embedding(_module: torch.nn.Module, args: tuple[Tensor, ...]) -> None:
     query_embedding = args[0]
 
 model = sdm.models.TabICLv2()
-handle = model.cls_model.icl_block.head.register_forward_pre_hook(_embedding)
+head = model.models["classification"].icl_block.head
+handle = head.register_forward_pre_hook(_embedding)
 ```
 
 Such embeddings can be used for downstream analysis, such as clustering, retrieval, or similarity search.
