@@ -170,8 +170,8 @@ class TabFM(ICLModel):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
+        related_context_tables: RelatedTables[TableTensor] | None,
+        related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         **kwargs: Any,

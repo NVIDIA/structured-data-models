@@ -1,25 +1,39 @@
 import contextlib
 from collections.abc import Iterator
+from typing import Literal
 
 import torch
 
 
 @contextlib.contextmanager
-def inference_mode(mode: bool = True) -> Iterator[None]:
-    r"""Context manager that enables or disables inference mode.
-
-    Uses :func:`torch.no_grad` instead of :func:`torch.inference_mode` inside a
-    compiled region.
+def inference_mode(
+    mode: Literal["inference", "no_grad", "grad", "none"] = "inference",
+) -> Iterator[None]:
+    r"""Context manager to adjust PyTorch inference and autograd states.
 
     Args:
-        mode: Whether to enable or disable inference mode.
+        mode: The desired mode. ``"inference"`` runs under
+            :func:`torch.inference_mode` (falling back to :func:`torch.no_grad`
+            inside compiled regions), ``"no_grad"`` runs under
+            :func:`torch.no_grad`, ``"grad"`` runs under
+            :func:`torch.enable_grad`, and ``"none"`` preserves the ambient
+            PyTorch context.
     """
-    # `torch.inference_mode` is not supported inside a compiled region:
-    # https://github.com/pytorch/pytorch/issues/180823
-    if torch.compiler.is_compiling():
-        context = torch.set_grad_enabled(not mode)
+    if mode == "inference":
+        # `torch.inference_mode` is not supported inside a compiled region:
+        # https://github.com/pytorch/pytorch/issues/180823
+        context = (
+            torch.no_grad()
+            if torch.compiler.is_compiling()
+            else torch.inference_mode()
+        )
+    elif mode == "no_grad":
+        context = torch.no_grad()
+    elif mode == "grad":
+        context = torch.enable_grad()
     else:
-        context = torch.inference_mode(mode)
+        assert mode == "none"
+        context = contextlib.nullcontext()
 
     with context:
         yield

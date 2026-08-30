@@ -10,19 +10,22 @@ from collections.abc import (
 )
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, cast
 
 from torch import Tensor
 
 from sdm import TableTensor
 from sdm.relational import RelationalData, Relationship
 from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID
+from sdm.tensor import EnsembleTable
 from sdm.tensor.mixin import DeviceMixin
 from sdm.tensor.table import TableSchema
 
 if TYPE_CHECKING:
     import graphviz
 
+
+T = TypeVar("T", TableTensor, EnsembleTable)
 
 TASK_TABLE = "__task_table__"
 
@@ -143,9 +146,18 @@ class RelatedTablesSchema:
         }
         return set(self.task_links) == other_task_links
 
+    def __hash__(self) -> int:
+        return hash(
+            (
+                frozenset(self.tables.items()),
+                self.relationships,
+                self.task_links,
+            )
+        )
+
 
 @dataclass(frozen=True, init=False, repr=False)
-class RelatedTables(DeviceMixin):
+class RelatedTables(DeviceMixin, Generic[T]):
     r"""Task-specific related tables attached to model inputs.
 
     :class:`RelatedTables` store the relational context provided to a model
@@ -197,13 +209,13 @@ class RelatedTables(DeviceMixin):
         task_links: Links from task columns to related ``tables``.
     """  # noqa: E501
 
-    tables: Mapping[str, TableTensor]
+    tables: Mapping[str, T]
     relationships: tuple[Relationship, ...]
     task_links: tuple[TaskLink, ...]
 
     def __init__(
         self,
-        tables: Mapping[str, TableTensor],
+        tables: Mapping[str, T],
         relationships: Collection[
             Relationship | Mapping[str, str | Sequence[str]]
         ],
@@ -229,12 +241,18 @@ class RelatedTables(DeviceMixin):
         object.__setattr__(self, "task_links", task_links)
 
     def _tensors(self) -> Iterator[Tensor]:
-        yield from self.tables.values()
+        for table in self.tables.values():
+            if isinstance(table, DeviceMixin):
+                yield from table._tensors()
+                continue
+            yield table
 
     def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
         return self.__class__(
             tables={
-                name: cast(TableTensor, fn(table))
+                name: table._apply_tensor(fn)
+                if isinstance(table, DeviceMixin)
+                else cast(TableTensor, fn(table))
                 for name, table in self.tables.items()
             },
             relationships=self.relationships,
@@ -244,8 +262,21 @@ class RelatedTables(DeviceMixin):
     @property
     def schema(self) -> RelatedTablesSchema:
         r"""The schema of this related context."""
+        table_schemas = {}
+        for name, table in self.tables.items():
+            if isinstance(table, EnsembleTable):
+                schemas = {group.schema for group in table}
+                if len(schemas) != 1:
+                    raise ValueError(
+                        "'schema' requires each 'EnsembleTable' to have a "
+                        "unique table schema"
+                    )
+                table_schemas[name] = next(iter(schemas))
+                continue
+            table_schemas[name] = table.schema
+
         return RelatedTablesSchema(
-            tables={name: table.schema for name, table in self.tables.items()},
+            tables=table_schemas,
             relationships=self.relationships,
             task_links=self.task_links,
         )
@@ -285,7 +316,7 @@ class RelatedTables(DeviceMixin):
             ),
         )
 
-    def replace_tables(self, tables: Mapping[str, TableTensor]) -> Self:
+    def replace_tables(self, tables: Mapping[str, T]) -> Self:
         r"""Return related tables with replaced table data.
 
         Args:
@@ -313,8 +344,20 @@ class RelatedTables(DeviceMixin):
             **kwargs: Additional keyword arguments passed to
                 :class:`graphviz.Graph`.
         """
+        tables = {}
+        for name, table in self.tables.items():
+            if isinstance(table, EnsembleTable):
+                if len({group.schema for group in table}) != 1:
+                    raise ValueError(
+                        "'to_graphviz' requires each 'EnsembleTable' to have "
+                        "a unique table schema"
+                    )
+                tables[name] = table.table(0)
+                continue
+            tables[name] = table
+
         graph = RelationalData(
-            tables=self.tables,
+            tables=tables,
             relationships=self.relationships,
         ).to_graphviz(hide_columns=hide_columns, **kwargs)
 
@@ -341,8 +384,8 @@ class RelatedTables(DeviceMixin):
         if len(self.tables) > 0:
             out += "  tables={\n"
             out += "".join(
-                f"    {name}: {table.__repr__(indent=4)[4:]},\n"
-                for name, table in self.tables.items()
+                f"    {key}: {value.__repr__(indent=4)[4:]},\n"  # type: ignore
+                for key, value in self.tables.items()
             )
             out += "  },\n"
         else:
@@ -365,19 +408,32 @@ class RelatedTables(DeviceMixin):
     def _repr_html_(self) -> str:
         import pandas as pd
 
-        rows = [
-            [
-                name,
-                table.size(-2),
-                table.size(-1),
-                ", ".join(
-                    str(stype)
-                    for stype, tensor in table.items()
-                    if tensor.size(-1) > 0
-                ),
-            ]
-            for name, table in self.tables.items()
-        ]
+        rows = []
+        for name, table in self.tables.items():
+            row: list[Any] = [name]
+            if isinstance(table, EnsembleTable):
+                num_rows = {group.size(-2) for group in table}
+                row.append(
+                    next(iter(num_rows))
+                    if len(num_rows) == 1
+                    else f"{min(num_rows)} - {max(num_rows)}"
+                )
+                num_cols = {group.size(-1) for group in table}
+                row.append(
+                    next(iter(num_cols))
+                    if len(num_cols) == 1
+                    else f"{min(num_cols)} - {max(num_cols)}"
+                )
+                stypes = {stype for g in table for stype in g.active_stypes}
+                row.append(", ".join(stypes))
+            else:
+                row += [
+                    table.size(-2),
+                    table.size(-1),
+                    ", ".join(table.active_stypes),
+                ]
+            rows.append(row)
+
         df = pd.DataFrame(
             rows,
             columns=pd.Index(["Table", "Rows", "Columns", "Stypes"]),

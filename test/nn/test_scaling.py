@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from sdm.nn import QASSMax
+from sdm.nn import LogScale, QASSMax
 from sdm.testing import withCUDA
 
 
@@ -40,3 +40,39 @@ def test_qassmax(
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    "key_len_fn",
+    [
+        lambda: 4,
+        lambda: torch.tensor([[1, 2, 0], [3, 4, 1]]),
+    ],
+)
+def test_log_scale(
+    device: torch.device,
+    key_len_fn: Callable[[], Tensor | int],
+) -> None:
+    module = LogScale(num_heads=3, device=device)
+    with torch.no_grad():
+        module.head_scale.copy_(torch.tensor([0.5, 1.0, 1.5], device=device))
+
+    query = torch.arange(1, 37, dtype=torch.float32, device=device).reshape(
+        2, 3, 3, 2
+    )
+    key_len = key_len_fn()
+    if isinstance(key_len, Tensor):
+        key_len = key_len.to(device)
+        expected_key_len = key_len.float().broadcast_to((2, 3))
+    else:
+        expected_key_len = torch.full((2, 3), key_len, device=device)
+
+    out = module(query, key_len=key_len)
+
+    expected_scale = expected_key_len.clamp(min=1.0).log()[..., None, None]
+    expected_head_scale = module.head_scale[None, None, :, None]
+    torch.testing.assert_close(
+        out,
+        query * expected_scale * expected_head_scale,
+    )

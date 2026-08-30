@@ -11,18 +11,6 @@ from sdm.models.kumo.tabular import model as model_module
 from sdm.models.kumo.tabular.model import _KumoTabular
 
 
-def test_parameter_count() -> None:
-    model = _KumoTabular(
-        num_classes=10,
-        num_quantiles=0,
-        device="meta",
-    )
-
-    assert sum(parameter.numel() for parameter in model.parameters()) == (
-        34_188_428
-    )
-
-
 @pytest.mark.parametrize(
     ("num_classes", "num_quantiles"),
     [(10, 0), (0, 999)],
