@@ -24,6 +24,10 @@ Capabilities
      - {% for stype in cls.supported_target_stypes | sort(attribute="value") -%}
          ``{{ stype }}``{{ ", " if not loop.last }}
        {%- endfor %}
+   * - **Supported Prediction Tasks**
+     - {% for task in cls.supported_tasks | sort(attribute="value") -%}
+         ``{{ task }}``{{ ", " if not loop.last }}
+       {%- endfor %}
    * - **Related Table Support**
      - {{ "✅" if cls.supports_related_tables else "❌" }}
 

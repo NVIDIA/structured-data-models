@@ -121,7 +121,7 @@ class TabICLv2(ICLModel):
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(task=None)
 
         self.cls_model = _TabICLv2(
             num_classes=10,
@@ -200,10 +200,9 @@ class TabICLv2(ICLModel):
             classes = y_context.categorical.categories[0]
         elif y_context is not None and y_context.numerical.size(-1) > 0:
             y = y_context.numerical.squeeze(-1)
-        elif cache is not None:
+        else:
+            assert cache is not None
             classes = cast(Tensor | None, cache["classes"])
-
-        if y is None:
             y = x.new_empty(
                 (*x.size()[:-2], 0),
                 dtype=torch.int64 if classes is not None else x.dtype,
