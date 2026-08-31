@@ -29,7 +29,7 @@ Overview
      - | 29.93M (classification)
        | 30.94M (regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     -
+     - BSD-3-Clause
 
 Model API
 ---------
