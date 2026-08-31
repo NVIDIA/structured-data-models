@@ -1,4 +1,3 @@
-import pytest
 import torch
 
 from sdm.cache import Cache
@@ -6,19 +5,15 @@ from sdm.models.kumo.tabular.table_encoder import TableEncoder
 from sdm.testing import withCUDA
 
 
-def test_requires_stage() -> None:
-    with pytest.raises(ValueError, match="'num_stages' must be at least 1"):
-        TableEncoder(num_stages=0)
-
-
 @withCUDA
 def test_table_encoder(device: torch.device) -> None:
     encoder = TableEncoder(
         channels=16,
+        num_layers=4,
         num_col_heads=2,
         num_row_heads=2,
         num_inducing_points=4,
-        num_cls_tokens=2,
+        num_readout_tokens=2,
         device=device,
     )
     context = torch.randn(2, 3, 3, 16, device=device)

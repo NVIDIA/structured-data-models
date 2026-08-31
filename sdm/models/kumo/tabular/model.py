@@ -72,8 +72,8 @@ class KumoTabular(ICLModel):  # noqa: D101
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
+        related_context_tables: RelatedTables[TableTensor] | None,
+        related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         batch_size_limit: int | None = None,
@@ -185,11 +185,11 @@ class _KumoTabular(torch.nn.Module):
         )
         self.table_encoder = TableEncoder(
             channels=channels,
+            num_layers=num_embedding_layers,
             num_col_heads=num_embedding_col_heads,
             num_row_heads=num_embedding_row_heads,
             num_inducing_points=num_inducing_points,
-            num_cls_tokens=num_readout_tokens,
-            num_stages=num_embedding_layers,
+            num_readout_tokens=num_readout_tokens,
             **factory_kwargs,
         )
         self.icl_block = ICLBlock(
