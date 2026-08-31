@@ -101,6 +101,25 @@ In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://li
 The interface of an {py:class}`~sdm.models.ICLModel` additionally supports estimator ensembling through the `num_estimators` argument in {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit`.
 When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.
 
+Beyond stochastic processors, ensembling can also provide distinct in-context examples per estimator.
+By default, the leading dimension of higher-rank inputs is interpreted as the estimator dimension, which allows callers to customize the data seen by each estimator (*e.g.*, to scale to larger datasets):
+
+```python
+num_estimators = 4
+rows_per_estimator = 1_000
+
+row_index = torch.randperm(x.size(0), device=x.device)
+row_index = index[:num_estimators * rows_per_estimator]
+row_index = index.view(num_estimators, rows_per_estimator)
+
+model(
+    x_context=x_context[row_index],
+    y_context=y_context[row_index],
+    x_query=x_query.expand(num_estimators, *x_query.size()),
+    num_estimators=None,
+)
+```
+
 ## Autocasting
 
 An {py:class}`~sdm.models.ICLModel` does **not** enable mixed-precision autocasting by default.
