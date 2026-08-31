@@ -114,3 +114,36 @@ def test_sampler(relational_data: RelationalData) -> None:
             [user_id,__example__] > users.[user_id,__example__],
           ],
         )""")
+
+
+def test_batch_sampler(relational_data: RelationalData) -> None:
+    pytest.importorskip("pyg_lib")
+
+    task_table, related_tables = relational_data.sampler()(
+        task_table=TableTensor(
+            columns={"id": ("user_id",)},
+            id=ColumnarTensor((torch.tensor([[3, 2, 1, 0], [0, 1, 2, 3]]),)),
+        ),
+        task_link={
+            "task_column": "user_id",
+            "table": "users",
+            "table_columns": "user_id",
+        },
+        num_neighbors=[10, 10],
+    )
+
+    assert task_table.columns[Stype.id] == ("user_id", "__example__")
+    assert task_table.id[..., 0].equal(
+        torch.tensor([[3, 2, 1, 0], [0, 1, 2, 3]])
+    )
+    assert task_table.id[..., 1].equal(
+        torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
+    )
+
+    assert len(related_tables.tables) == 3
+    assert all(t.num_members == 2 for t in related_tables.tables.values())
+
+    user = next(iter(related_tables.tables["users"]))
+    assert user.columns[Stype.id] == ("user_id", "__example__")
+    assert user.id[..., 0].equal(torch.tensor([[3, 2, 1, 0], [0, 1, 2, 3]]))
+    assert user.id[..., 1].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
