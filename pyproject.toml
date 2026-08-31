@@ -97,6 +97,7 @@ pylibcudf-cu13 = false
 pylibcugraph-cu13 = false
 pylibraft-cu13 = false
 rmm-cu13 = false
+relbench = false
 
 [tool.pytest.ini_options]
 addopts = [
