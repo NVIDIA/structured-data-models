@@ -36,3 +36,11 @@ def test_table_encoder(device: torch.device) -> None:
     out = encoder(query, num_context_rows=0, cache=cache.freeze())
     assert out.size() == (2, 2, 32)
     assert out.device == device
+
+    with torch.no_grad():
+        encoder.norm.weight.zero_()
+    out = encoder(
+        torch.cat((context, query), dim=-3),
+        num_context_rows=context.size(-3),
+    )
+    assert torch.count_nonzero(out) == 0
