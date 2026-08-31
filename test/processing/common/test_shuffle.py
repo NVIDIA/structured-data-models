@@ -93,6 +93,7 @@ def test_latin_ensemble_couples_member_permutations(
         member_table_ids=(0, 0, 0, 0, 1, 1, 1, 1),
     )
     output = ShuffleColumns(method="latin").fit_transform_ensemble(ensemble)
+    # Check column/value alignment and Latin balance for both schema widths.
     permutations = tuple(
         output.table(member_id).columns[Stype.numerical]
         for member_id in range(output.num_members)
