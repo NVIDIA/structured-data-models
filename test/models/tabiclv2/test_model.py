@@ -303,7 +303,9 @@ def test_compile(dtype: torch.dtype) -> None:
 
     torch.manual_seed(1)
     expected = model(x_context, y_context, x_query)
-    submodel = model.reg_model if dtype.is_floating_point else model.cls_model
+    submodel = model.models[
+        "regression" if dtype.is_floating_point else "classification"
+    ]
     submodel.compile(fullgraph=True)
 
     torch.manual_seed(1)

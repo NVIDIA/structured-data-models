@@ -15,7 +15,8 @@ class TableEncoder(torch.nn.Module):
     def __init__(
         self,
         channels: int = 128,
-        num_heads: int = 4,
+        num_col_heads: int = 4,
+        num_row_heads: int = 4,
         num_inducing_points: int = 128,
         num_cls_tokens: int = 4,
         num_stages: int = 4,
@@ -35,7 +36,7 @@ class TableEncoder(torch.nn.Module):
         torch.nn.init.trunc_normal_(self.cls_tokens, std=0.02)
 
         rope = RotaryEmbedding(
-            channels=channels // num_heads,
+            channels=channels // num_row_heads,
             layout="split_half",
             theta=100_000,
             requires_grad=False,
@@ -49,13 +50,13 @@ class TableEncoder(torch.nn.Module):
                 num_inducing_points=num_inducing_points,
                 inducing_block=KumoTabularTransformerBlock(
                     channels=channels,
-                    num_heads=num_heads,
+                    num_heads=num_col_heads,
                     query_log_scale=True,
                     **factory_kwargs,
                 ),
                 output_block=KumoTabularTransformerBlock(
                     channels=channels,
-                    num_heads=num_heads,
+                    num_heads=num_col_heads,
                     **factory_kwargs,
                 ),
                 **factory_kwargs,
@@ -65,7 +66,7 @@ class TableEncoder(torch.nn.Module):
         self.row_blocks = ModuleList(
             KumoTabularTransformerBlock(
                 channels=channels,
-                num_heads=num_heads,
+                num_heads=num_row_heads,
                 rope=rope,
                 **factory_kwargs,
             )
@@ -81,11 +82,6 @@ class TableEncoder(torch.nn.Module):
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
         *batch, num_rows, _, channels = x.size()
-        if not 0 <= num_context_rows <= num_rows:
-            raise ValueError(
-                "`num_context_rows` must be between zero and the number of "
-                f"rows (got {num_context_rows} and {num_rows})"
-            )
         num_cls_tokens = self.num_cls_tokens
 
         for i, (col_block, row_block) in enumerate(

@@ -4,6 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from sdm._constants import NaT
 from sdm.stype import Stype, StypeLike, infer_stypes
+from sdm.task import Task, TaskLike
 from sdm.tensor import (
     VarLenTensor,
     StringTensor,
@@ -30,6 +31,8 @@ __all__ = [
     "NaT",
     "Stype",
     "StypeLike",
+    "Task",
+    "TaskLike",
     "infer_stypes",
     "VarLenTensor",
     "StringTensor",

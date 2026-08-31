@@ -15,7 +15,8 @@ def test_requires_stage() -> None:
 def test_table_encoder(device: torch.device) -> None:
     encoder = TableEncoder(
         channels=16,
-        num_heads=2,
+        num_col_heads=2,
+        num_row_heads=2,
         num_inducing_points=4,
         num_cls_tokens=2,
         device=device,
