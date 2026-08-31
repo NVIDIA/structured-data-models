@@ -6,7 +6,7 @@ import torch
 import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.models import KumoTabular
+from sdm.models.kumo.tabular import KumoTabular
 from sdm.models.kumo.tabular import model as model_module
 from sdm.models.kumo.tabular.model import _KumoTabular
 

@@ -17,6 +17,7 @@ from sdm.processing.execution import (
     RecipeExecution,
 )
 from sdm.relational.task import RelatedTablesSchema
+from sdm.tensor import EnsembleTable
 from sdm.tensor.table import TableSchema
 
 
@@ -80,14 +81,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def forward(
         self,
-        x_context: Tensor | TableTensor,  # [..., R_context, D]
-        y_context: Tensor | TableTensor,  # [..., R_context, 1]
-        x_query: Tensor | TableTensor,  # [..., R_query, D]
-        related_context_tables: RelatedTables[TableTensor] | None = None,
-        related_query_tables: RelatedTables[TableTensor] | None = None,
+        x_context: Tensor | TableTensor | EnsembleTable,  # [..., R_context, D]
+        y_context: Tensor | TableTensor | EnsembleTable,  # [..., R_context, 1]
+        x_query: Tensor | TableTensor | EnsembleTable,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None = None,
+        related_query_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
-        num_estimators: int = 1,
+        num_estimators: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -106,6 +107,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
             related_query_tables: Related context for query examples.
             recipe: The custom recipe for pre- and post-processing.
             num_estimators: The number of estimators ``E`` for ensembling.
+                If ``None``, the leading dimension of higher-rank inputs is
+                used as the estimator dimension, allowing input data to be
+                customized per estimator (*e.g.*, different in-context examples
+                per estimator).
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -212,12 +217,12 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def fit(
         self,
-        x: Tensor | TableTensor,  # [..., R, D]
-        y: Tensor | TableTensor,  # [..., R, 1]
-        related_tables: RelatedTables[TableTensor] | None = None,
+        x: Tensor | TableTensor | EnsembleTable,  # [..., R, D]
+        y: Tensor | TableTensor | EnsembleTable,  # [..., R, 1]
+        related_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
-        num_estimators: int = 1,
+        num_estimators: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -234,7 +239,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ``[..., R, 1]``.
             related_tables: Related context for in-context examples.
             recipe: The custom recipe for pre- and post-processing.
-            num_estimators: The number of estimators for ensembling.
+            num_estimators: The number of estimators ``E`` for ensembling.
+                If ``None``, the leading dimension of higher-rank inputs is
+                used as the estimator dimension, allowing input data to be
+                customized per estimator (*e.g.*, different in-context examples
+                per estimator).
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -305,8 +314,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def predict(
         self,
-        x: Tensor | TableTensor,  # [..., R, D]
-        related_tables: RelatedTables[TableTensor] | None = None,
+        x: Tensor | TableTensor | EnsembleTable,  # [..., R, D]
+        related_tables: RelatedTables | None = None,
         *,
         callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:  # Recipe-defined output shape.
