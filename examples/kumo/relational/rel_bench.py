@@ -25,6 +25,8 @@ import tqdm
 
 import sdm
 
+# RelBench 3 removed the dataset registry. Preserve the v2 public ``rel-*``
+# benchmark set, excluding MIMIC-IV and SALT as documented above.
 DEFAULT_DATASETS = [
     "rel-amazon",
     "rel-arxiv",
@@ -55,11 +57,8 @@ if args.task and not args.dataset:
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def run_task(
-    dataset_name: str,
-    dataset: Any,
-    task_name: str,
-) -> None:
+def run_task(dataset: Any, task_name: str) -> None:
+    dataset_name = str(dataset.name_or_path)
     task = dataset.load_task(task_name)
     if not isinstance(task, relbench.base.EntityTask):
         print(f"{dataset_name}/{task_name}: skipped (not an entity task)")
@@ -235,4 +234,4 @@ for dataset_name in datasets:
     dataset = relbench.load_dataset(dataset_name)
     task_names = [args.task] if args.task else sorted(dataset.get_task_names())
     for task_name in task_names:
-        run_task(dataset_name, dataset, task_name)
+        run_task(dataset, task_name)
