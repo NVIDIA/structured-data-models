@@ -109,8 +109,8 @@ num_estimators = 4
 rows_per_estimator = 1_000
 
 row_index = torch.randperm(x.size(0), device=x.device)
-row_index = index[:num_estimators * rows_per_estimator]
-row_index = index.view(num_estimators, rows_per_estimator)
+row_index = row_index[:num_estimators * rows_per_estimator]
+row_index = row_index.view(num_estimators, rows_per_estimator)
 
 model(
     x_context=x_context[row_index],
