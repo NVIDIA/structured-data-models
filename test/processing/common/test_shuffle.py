@@ -114,7 +114,8 @@ def test_latin_ensemble_couples_member_permutations(
             source.numerical.index_select(-1, indices),
         )
 
-    # Per position, each of 4 columns must occur once and each of 2 columns twice.
+    # Per position, each of 4 columns must occur once 
+    # and each of 2 columns twice.
     for member_ids in (range(4), range(4, 8)):
         source_columns = ensemble.table(member_ids.start).columns[
             Stype.numerical
