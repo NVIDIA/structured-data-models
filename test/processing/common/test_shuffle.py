@@ -97,7 +97,8 @@ def test_latin_ensemble_couples_member_permutations(
         output.table(member_id).columns[Stype.numerical]
         for member_id in range(output.num_members)
     )
-    # Each member must contain every source column once and reorder its values accordingly.
+    # Each member must contain every source column once 
+    # and reorder its values accordingly.
     for member_id, permutation in enumerate(permutations):
         source = ensemble.table(member_id)
         result = output.table(member_id)
