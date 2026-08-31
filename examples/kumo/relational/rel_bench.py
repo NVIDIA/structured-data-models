@@ -46,7 +46,7 @@ parser.add_argument("--task")
 parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument("--batch_size", type=int, default=1000)
 parser.add_argument("--num_neighbors", type=int, nargs="+", default=[16, 16])
-parser.add_argument("--num_estimators", type=int, default=1)
+parser.add_argument("--num_estimators", type=int, default=8)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 if args.task and not args.dataset:
@@ -77,21 +77,30 @@ def run_task(dataset: Any, task_name: str) -> None:
     classification = binary or multiclass
 
     # Task-owned DB removes target leakage and adds any required row key.
-    db = task.get_db(upto_test_timestamp=False)
+    db = task.get_db(upto_test_timestamp=True)
     tables = {}
     for name, table in db.table_dict.items():
+        stypes = sdm.infer_stypes(
+            table.df.head(10_000),
+            overrides={
+                cast(str, table.pkey_col): "id",
+                **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
+            },
+            text="drop",
+            unsupported="drop",
+        )
         tables[name] = sdm.TableTensor.from_pandas(
             df=table.df,
-            stypes=sdm.infer_stypes(
-                table.df.head(10_000),
-                overrides={
-                    cast(str, table.pkey_col): "id",
-                    **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
-                },
-                text="drop",
-                unsupported="drop",
-            ),
+            stypes=stypes,
         )
+        if name == "studies":
+            print(table.df.dtypes)
+            # for col, stype in list(stypes.items()):
+            #     if stype == "datetime" or stype == "numerical":
+            #         del stypes[col]
+            #     else:
+            #         print(col, stype)
+        # del stypes["numerical"]
 
     data = sdm.RelationalData(
         tables=tables,
@@ -140,6 +149,7 @@ def run_task(dataset: Any, task_name: str) -> None:
         },
     )
     context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
+    # context = context[-args.context_size :]
     context = context[torch.randperm(len(context))[: args.context_size]]
 
     model = sdm.models.KumoRelational(device=device)
@@ -154,8 +164,9 @@ def run_task(dataset: Any, task_name: str) -> None:
         "num_neighbors": args.num_neighbors,
         "task_time_column": task.time_col,
     }
+    print(task.entity_table)
     context, related_tables = sampler(context, **kwargs).to(device)
-    with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
+    with torch.amp.autocast(device.type, torch.float32, enabled=True):
         model.fit(
             x=context.drop_columns(task.target_col),
             y=context[task.target_col],
@@ -170,7 +181,7 @@ def run_task(dataset: Any, task_name: str) -> None:
         desc=f"{dataset_name}/{task_name}",
     ):
         y_query = batch[task.target_col].to(device)
-        with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
+        with torch.amp.autocast(device.type, torch.float32, enabled=True):
             out = model.predict(
                 *sampler(
                     batch.drop_columns(task.target_col),
