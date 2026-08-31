@@ -160,7 +160,7 @@ jobs:
             'pandas<3' \
             pyg-lib \
             'pylibcugraph-cu13>=26.6,<26.8' \
-            'relbench>=3.0.1,<4' \
+            'relbench>=3.0.1' \
             scikit-learn \
             'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena' \
             torchmetrics \
