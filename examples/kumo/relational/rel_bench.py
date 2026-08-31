@@ -25,8 +25,6 @@ import tqdm
 
 import sdm
 
-# RelBench 3 removed the dataset registry. Preserve the v2 public ``rel-*``
-# benchmark set, excluding MIMIC-IV and SALT as documented above.
 DEFAULT_DATASETS = [
     "rel-amazon",
     "rel-arxiv",
