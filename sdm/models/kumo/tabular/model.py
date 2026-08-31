@@ -153,6 +153,16 @@ class _KumoTabular(torch.nn.Module):
         self,
         num_classes: int,
         num_quantiles: int,
+        channels: int = 128,
+        num_embedding_layers: int = 4,
+        num_embedding_col_heads: int = 4,
+        num_embedding_row_heads: int = 4,
+        num_inducing_points: int = 128,
+        group_size: int = 3,
+        num_frequencies: int = 32,
+        num_readout_tokens: int = 4,
+        num_icl_layers: int = 12,
+        num_icl_heads: int = 8,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -162,24 +172,32 @@ class _KumoTabular(torch.nn.Module):
         self.num_classes = num_classes
 
         self.cell_embedding = CellEmbedding(
-            channels=128,
-            group_size=3,
-            num_frequencies=32,
+            channels=channels,
+            group_size=group_size,
+            num_frequencies=num_frequencies,
             **factory_kwargs,
         )
         self.y_encoder = Linear(
-            num_classes or 1,
-            128,
+            in_features=num_classes or 1,
+            out_features=channels,
             bias=num_classes > 0,
             **factory_kwargs,
         )
-        self.table_encoder = TableEncoder(**factory_kwargs)
+        self.table_encoder = TableEncoder(
+            channels=channels,
+            num_col_heads=num_embedding_col_heads,
+            num_row_heads=num_embedding_row_heads,
+            num_inducing_points=num_inducing_points,
+            num_cls_tokens=num_readout_tokens,
+            num_stages=num_embedding_layers,
+            **factory_kwargs,
+        )
         self.icl_block = ICLBlock(
             num_classes=num_classes,
             out_channels=num_classes or num_quantiles,
-            channels=512,
-            num_layers=12,
-            num_heads=8,
+            channels=num_readout_tokens * channels,
+            num_layers=num_icl_layers,
+            num_heads=num_icl_heads,
             **factory_kwargs,
         )
 
