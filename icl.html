@@ -299,6 +299,23 @@ For example, <a class="reference internal" href="api/generated/sdm.models.TabICL
 <h2>Ensembling<a class="headerlink" href="#ensembling" title="Link to this heading">#</a></h2>
 <p>The interface of an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> additionally supports estimator ensembling through the <code class="docutils literal notranslate"><span class="pre">num_estimators</span></code> argument in <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> and <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>.
 When a recipe contains stochastic processors, such as <a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a>, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.</p>
+<p>Beyond stochastic processors, ensembling can also provide distinct in-context examples per estimator.
+By default, the leading dimension of higher-rank inputs is interpreted as the estimator dimension, which allows callers to customize the data seen by each estimator (<em>e.g.</em>, to scale to larger datasets):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">num_estimators</span> <span class="o">=</span> <span class="mi">4</span>
+</span><span data-line="2"><span class="n">rows_per_estimator</span> <span class="o">=</span> <span class="mi">1_000</span>
+</span><span data-line="3">
+</span><span data-line="4"><span class="n">row_index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randperm</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+</span><span data-line="5"><span class="n">row_index</span> <span class="o">=</span> <span class="n">row_index</span><span class="p">[:</span><span class="n">num_estimators</span> <span class="o">*</span> <span class="n">rows_per_estimator</span><span class="p">]</span>
+</span><span data-line="6"><span class="n">row_index</span> <span class="o">=</span> <span class="n">row_index</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">num_estimators</span><span class="p">,</span> <span class="n">rows_per_estimator</span><span class="p">)</span>
+</span><span data-line="7">
+</span><span data-line="8"><span class="n">model</span><span class="p">(</span>
+</span><span data-line="9">    <span class="n">x_context</span><span class="o">=</span><span class="n">x_context</span><span class="p">[</span><span class="n">row_index</span><span class="p">],</span>
+</span><span data-line="10">    <span class="n">y_context</span><span class="o">=</span><span class="n">y_context</span><span class="p">[</span><span class="n">row_index</span><span class="p">],</span>
+</span><span data-line="11">    <span class="n">x_query</span><span class="o">=</span><span class="n">x_query</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">num_estimators</span><span class="p">,</span> <span class="o">*</span><span class="n">x_query</span><span class="o">.</span><span class="n">size</span><span class="p">()),</span>
+</span><span data-line="12">    <span class="n">num_estimators</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span data-line="13"><span class="p">)</span>
+</span></pre></div>
+</div>
 </section>
 <section id="autocasting">
 <h2>Autocasting<a class="headerlink" href="#autocasting" title="Link to this heading">#</a></h2>
@@ -458,7 +475,7 @@ The full relational sampling and prediction flow is shown in <a class="reference
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=c30c3d06"></script>
+      <script src="_static/documentation_options.js?v=569006fa"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
