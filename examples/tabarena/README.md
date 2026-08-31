@@ -1,6 +1,8 @@
 # SDM tabular models on TabArena
 
-This example benchmarks tabular models from `sdm.models` on [TabArena](https://tabarena.ai).
+This example benchmarks SDM tabular models on [TabArena](https://tabarena.ai).
+
+KumoTabular uses TabICLv2's default processing recipe in this benchmark.
 
 TabFM's pretrained weights are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE). Review the license before running this example, which accepts it noninteractively and downloads the weights.
 
@@ -20,7 +22,13 @@ pip install structured-data-models \
 
 ## Run
 
-Run the benchmark:
+Run KumoTabular:
+
+```bash
+python main.py --model kumo-tabular
+```
+
+Run TabICLv2:
 
 ```bash
 python main.py --model tabiclv2
@@ -36,7 +44,7 @@ Pass a dataset name to run only that TabArena dataset:
 
 ```bash
 python main.py \
-  --model tabiclv2 \
+  --model kumo-tabular \
   --dataset blood-transfusion-service-center
 ```
 

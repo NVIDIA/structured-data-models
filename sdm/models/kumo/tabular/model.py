@@ -10,7 +10,7 @@ from torch.nn import Linear, ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
-from sdm.models import ICLModel
+from sdm.models import ICLModel, TabICLv2
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.table_encoder import TableEncoder
 from sdm.models.tabfm.cell_embedding import CellEmbedding
@@ -49,7 +49,7 @@ class KumoTabular(ICLModel):  # noqa: D101
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         # TODO: Define the default recipe.
-        return Recipe()
+        return TabICLv2.default_recipe()
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415
