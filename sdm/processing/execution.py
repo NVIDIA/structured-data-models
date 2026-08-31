@@ -98,7 +98,7 @@ class RecipeExecution:
                         module._route = "related"
                 self._related_processors[name] = processor
                 related_ensembles[name] = processor.fit_transform_ensemble(
-                    _to_ensemble_table(table, num_members, expand=False),
+                    _to_ensemble_table(table, num_members),
                     generator=generator,
                 )
                 if related_ensembles[name].num_members != self.num_members:
@@ -111,7 +111,7 @@ class RecipeExecution:
             if isinstance(module, sp.TableDispatch):
                 module._route = "task"
 
-        x = _to_ensemble_table(x, num_members, expand=False)
+        x = _to_ensemble_table(x, num_members)
         x = self.recipe.features.fit_transform_ensemble(x, generator=generator)
         if x.num_members != self.num_members:
             raise ValueError(
@@ -146,7 +146,7 @@ class RecipeExecution:
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
-        x = _to_ensemble_table(x, self._num_estimators, expand=False)
+        x = _to_ensemble_table(x, self._num_estimators)
         x = self.recipe.features.transform_ensemble(x)
         if x.num_members != self.num_members:
             raise ValueError(
@@ -159,9 +159,7 @@ class RecipeExecution:
             for name, table in related_tables.tables.items():
                 processor = self._related_processors[name]
                 related_ensembles[name] = processor.transform_ensemble(
-                    _to_ensemble_table(
-                        table, self._num_estimators, expand=False
-                    )
+                    _to_ensemble_table(table, self._num_estimators)
                 )
                 if related_ensembles[name].num_members != self.num_members:
                     raise ValueError(
