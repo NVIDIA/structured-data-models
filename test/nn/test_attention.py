@@ -338,7 +338,7 @@ def test_batch_size_limit_autocast_dtype() -> None:
         attention.out_lin.bias.zero_()
     attention_query = torch.randn(5, 3, 6)
 
-    with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+    with torch.autocast(device_type="cpu", dtype=torch.float16):
         expected_sdpa = sdpa(query=query, key=key, value=value)
         chunked_sdpa = sdpa(
             query=query,
@@ -352,10 +352,8 @@ def test_batch_size_limit_autocast_dtype() -> None:
             batch_size_limit=2,
         )
 
-    assert chunked_sdpa.dtype == expected_sdpa.dtype == torch.bfloat16
-    assert (
-        chunked_attention.dtype == expected_attention.dtype == torch.bfloat16
-    )
+    assert chunked_sdpa.dtype == expected_sdpa.dtype == torch.float16
+    assert chunked_attention.dtype == expected_attention.dtype == torch.float16
     torch.testing.assert_close(chunked_sdpa, expected_sdpa)
     torch.testing.assert_close(chunked_attention, expected_attention)
 

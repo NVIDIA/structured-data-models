@@ -155,7 +155,7 @@ def run_task(dataset: Any, task_name: str) -> None:
         "task_time_column": task.time_col,
     }
     context, related_tables = sampler(context, **kwargs).to(device)
-    with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
+    with torch.amp.autocast(device.type, torch.float16, enabled=True):
         model.fit(
             x=context.drop_columns(task.target_col),
             y=context[task.target_col],
@@ -170,7 +170,7 @@ def run_task(dataset: Any, task_name: str) -> None:
         desc=f"{dataset_name}/{task_name}",
     ):
         y_query = batch[task.target_col].to(device)
-        with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
+        with torch.amp.autocast(device.type, torch.float16, enabled=True):
             out = model.predict(
                 *sampler(
                     batch.drop_columns(task.target_col),
