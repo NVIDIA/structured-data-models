@@ -35,7 +35,7 @@ class RecipeExecution:
         self.recipe = recipe
 
         self._related_processors: Mapping[str, EnsembleProcessor] | None = None
-        self._num_members: int | None = None
+        self._num_estimators: int | None = None
         self._y_locations: tuple[tuple[int, int], ...] | None = None
 
     @property
@@ -59,7 +59,7 @@ class RecipeExecution:
         y = _to_ensemble_table(y, num_members, expand=True)
         y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
 
-        self._num_members = num_members
+        self._num_estimators = num_members
         self._y_locations = y._locations
 
         task_dispatchers = tuple(
@@ -146,7 +146,7 @@ class RecipeExecution:
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
-        x = _to_ensemble_table(x, self._num_members, expand=False)
+        x = _to_ensemble_table(x, self._num_estimators, expand=False)
         x = self.recipe.features.transform_ensemble(x)
         if x.num_members != self.num_members:
             raise ValueError(
@@ -159,7 +159,9 @@ class RecipeExecution:
             for name, table in related_tables.tables.items():
                 processor = self._related_processors[name]
                 related_ensembles[name] = processor.transform_ensemble(
-                    _to_ensemble_table(table, self._num_members, expand=False)
+                    _to_ensemble_table(
+                        table, self._num_estimators, expand=False
+                    )
                 )
                 if related_ensembles[name].num_members != self.num_members:
                     raise ValueError(
