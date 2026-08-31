@@ -119,15 +119,16 @@ def run_task(dataset: Any, task_name: str) -> None:
         task.get_table(split, mask_input_cols=False).df
         for split in ["train", "val", "test"]
     ]
+    context_df = pd.concat(dfs[:2], ignore_index=True)
     task_df = pd.concat(dfs, ignore_index=True)
     if binary:
         # Normalize 0/1, Boolean, and f/t labels so AUROC scores True.
-        labels = sorted(
-            pd.concat(dfs[:2], ignore_index=True)[task.target_col]
-            .dropna()
-            .unique()
-        )
+        labels = sorted(context_df[task.target_col].dropna().unique())
         task_df[task.target_col] = task_df[task.target_col] == labels[-1]
+    # Multiclass targets are zero-based IDs; preserve gaps without test labels.
+    num_classes = (
+        int(context_df[task.target_col].max()) + 1 if multiclass else 0
+    )
     task_table = sdm.TableTensor.from_pandas(
         df=task_df,
         stypes={
@@ -137,16 +138,6 @@ def run_task(dataset: Any, task_name: str) -> None:
                 "categorical" if classification else "numerical"
             ),
         },
-    )
-    class_to_index = (
-        {
-            str(value): index
-            for index, value in enumerate(
-                task_table.categorical.categories[0].tolist()
-            )
-        }
-        if multiclass
-        else {}
     )
     context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
     context = context[torch.randperm(len(context))[: args.context_size]]
@@ -195,14 +186,11 @@ def run_task(dataset: Any, task_name: str) -> None:
         elif multiclass:
             pred = out.numerical
             class_ids = torch.tensor(
-                [
-                    class_to_index[column]
-                    for column in out.columns[sdm.Stype.numerical]
-                ],
+                [int(column) for column in out.columns[sdm.Stype.numerical]],
                 dtype=torch.long,
                 device=pred.device,
             )
-            scores = pred.new_zeros(pred.size(0), len(class_to_index))
+            scores = pred.new_zeros(pred.size(0), num_classes)
             pred = scores.index_copy(-1, class_ids, pred)
         else:
             pred = out["q500"].numerical.squeeze(-1)
