@@ -3,165 +3,104 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
 import torch
 from torch import Tensor
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import RelatedTables, TableTensor
 from sdm.explain.base import ICLExplainer
 from sdm.models import ICLModel
-from sdm.models.callback import Callback
+from sdm.models.callback import CaptureInputs, EnableInputGradients
 
 
-@dataclass(frozen=True)
-class GradientExplanationOutput:
-    r"""Gradients with respect to preprocessed query inputs.
-
-    Args:
-        x: Gradients for the primary query table.
-        related_tables: Gradients for the related query tables, or ``None``
-            when the model call has no related query tables.
-    """
-
-    x: TableTensor
-    related_tables: RelatedTables[TableTensor] | None = None
-
-
-class _GradientCallback(Callback):
-    requires_grad = True
-
-    def __init__(self, output: Callable[[TableTensor], Tensor]) -> None:
-        self._output = output
-        self._inputs: list[tuple[str | None, tuple[str, ...], Tensor]] = []
-        self._related_tables: RelatedTables[TableTensor] | None = None
-        self.result: GradientExplanationOutput | None = None
-
-    def on_query_preprocessing_end(
-        self,
-        model: torch.nn.Module,
-        x: TableTensor,
-        related_tables: RelatedTables | None,
-    ) -> tuple[TableTensor, RelatedTables | None]:
-        x = self._capture(None, x)
-        if related_tables is not None:
-            related_tables = related_tables.replace_tables(
-                {
-                    name: self._capture(name, table)
-                    for name, table in related_tables.tables.items()
-                }
-            )
-        self._related_tables = related_tables
-        return x, related_tables
-
-    def _capture(
-        self,
-        table_name: str | None,
-        table: TableTensor,
-    ) -> TableTensor:
-        numerical = table.numerical.detach().requires_grad_(True)
-        self._inputs.append(
-            (table_name, table.columns[Stype.numerical], numerical)
-        )
-        return table.replace_blocks(numerical=numerical)
-
-    def on_model_forward_end(
-        self,
-        model: torch.nn.Module,
-        out: TableTensor,
-    ) -> TableTensor:
-        # TODO: Support AMP when TableTensor dtype casts preserve autograd.
-        objective = self._output(out).sum()
-        grads = torch.autograd.grad(
-            objective,
-            [numerical for _, _, numerical in self._inputs],
-            allow_unused=True,
-        )
-        grad_tables: dict[str | None, TableTensor] = {}
-        for (table_name, columns, numerical), grad in zip(
-            self._inputs,
-            grads,
-        ):
-            grad_tables[table_name] = TableTensor(
-                columns={Stype.numerical: columns},
-                numerical=(
-                    torch.zeros_like(numerical) if grad is None else grad
-                ),
-            )
-
-        self.result = GradientExplanationOutput(
-            x=grad_tables[None],
-            related_tables=(
-                self._related_tables.replace_tables(
-                    {
-                        name: grad_tables[name]
-                        for name in self._related_tables.tables
-                    }
-                )
-                if self._related_tables is not None
-                else None
-            ),
-        )
-        return out
-
-
-class GradientExplainer(ICLExplainer[GradientExplanationOutput]):
-    r"""Return gradients of selected outputs with respect to query inputs.
-
-    Args:
-        output: Map a model output to the tensor values to differentiate.
-    """
-
-    def __init__(
-        self,
-        *,
-        output: Callable[[TableTensor], Tensor],
-    ) -> None:
-        self._output = output
-
-    def _explain_forward(
-        self,
-        model: ICLModel,
-        x_context: Tensor | TableTensor,
-        y_context: Tensor | TableTensor,
-        x_query: Tensor | TableTensor,
-        related_context_tables: RelatedTables | None = None,
-        related_query_tables: RelatedTables | None = None,
-        *,
-        recipe: Recipe | None = None,
-        generator: torch.Generator | None = None,
-        **kwargs: Any,
-    ) -> GradientExplanationOutput:
-        callback = _GradientCallback(self._output)
-        model(
-            x_context=x_context,
-            y_context=y_context,
-            x_query=x_query,
-            related_context_tables=related_context_tables,
-            related_query_tables=related_query_tables,
-            recipe=recipe,
-            generator=generator,
-            callbacks=(callback,),
-            **kwargs,
-        )
-        assert callback.result is not None
-        return callback.result
+class GradientExplainer(
+    ICLExplainer[tuple[TableTensor, RelatedTables[TableTensor] | None]]
+):
+    """Return per-output gradients for preprocessed query inputs."""
 
     def _explain_predict(
         self,
         model: ICLModel,
         x_query: Tensor | TableTensor,
-        related_query_tables: RelatedTables | None = None,
+        related_query_tables: RelatedTables[TableTensor] | None = None,
         *,
         generator: torch.Generator | None = None,
-    ) -> GradientExplanationOutput:
-        callback = _GradientCallback(self._output)
-        model.predict(
+    ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
+        callbacks = (EnableInputGradients(), CaptureInputs())
+        prediction = model.predict(
             x=x_query,
             related_tables=related_query_tables,
-            callbacks=(callback,),
+            callbacks=callbacks,
         )
-        assert callback.result is not None
-        return callback.result
+        if len(callbacks[1].inputs) != 1:
+            raise RuntimeError(
+                "GradientExplainer requires exactly one estimator"
+            )
+        x, related_tables = callbacks[1].inputs[0]
+
+        scores = prediction.numerical
+        if not scores.requires_grad:
+            raise RuntimeError(
+                "The model output is not differentiable with respect to "
+                "its query inputs"
+            )
+
+        leaves = [x.numerical]
+        if related_tables is not None:
+            leaves.extend(
+                table.numerical for table in related_tables.tables.values()
+            )
+        # scores: [..., R, C] -> explanations: [C, ..., R, D]
+        gradient_x, *gradient_related = zip(
+            *[
+                torch.autograd.grad(
+                    scores[..., index].sum(),
+                    leaves,
+                    retain_graph=index < scores.size(-1) - 1,
+                    allow_unused=True,
+                )
+                for index in range(scores.size(-1))
+            ]
+        )
+        x = cast(
+            TableTensor,
+            torch.stack(
+                [
+                    x.replace_blocks(
+                        numerical=(
+                            torch.zeros_like(x.numerical)
+                            if gradient is None
+                            else gradient
+                        )
+                    )
+                    for gradient in gradient_x
+                ]
+            ),
+        )
+        if related_tables is None:
+            return x, None
+
+        return x, related_tables.replace_tables(
+            {
+                name: cast(
+                    TableTensor,
+                    torch.stack(
+                        [
+                            table.replace_blocks(
+                                numerical=(
+                                    torch.zeros_like(table.numerical)
+                                    if gradient is None
+                                    else gradient
+                                )
+                            )
+                            for gradient in gradients
+                        ]
+                    ),
+                )
+                for (name, table), gradients in zip(
+                    related_tables.tables.items(),
+                    gradient_related,
+                )
+            }
+        )

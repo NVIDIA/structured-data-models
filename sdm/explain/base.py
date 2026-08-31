@@ -80,7 +80,6 @@ class ICLExplainer(abc.ABC, Generic[T]):  # noqa: D101
             generator=generator,
         )
 
-    @abc.abstractmethod
     def _explain_forward(
         self,
         model: ICLModel,
@@ -93,7 +92,25 @@ class ICLExplainer(abc.ABC, Generic[T]):  # noqa: D101
         recipe: Recipe | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
-    ) -> T: ...
+    ) -> T:
+        kwargs.pop("callbacks", None)
+        model.fit(
+            x=x_context,
+            y=y_context,
+            related_tables=related_context_tables,
+            recipe=recipe,
+            generator=generator,
+            **kwargs,
+        )
+        try:
+            return self._explain_predict(
+                model,
+                x_query,
+                related_query_tables,
+                generator=generator,
+            )
+        finally:
+            model.clear()
 
     @abc.abstractmethod
     def _explain_predict(

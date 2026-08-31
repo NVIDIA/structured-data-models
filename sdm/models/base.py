@@ -218,13 +218,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
         if contexts[0].y.numerical.size(-1) > 0:
             with (
                 torch.amp.autocast(x_query.device.type, enabled=False),
-                inference_mode(),
+                inference_mode("grad" if requires_grad else "inference"),
             ):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
-            inference_mode(),
+            inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
 
@@ -478,13 +478,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
         if cast(Cache, self._cache[0])["classes"] is None:
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode(),
+                inference_mode("grad" if requires_grad else "inference"),
             ):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
         with (
             torch.amp.autocast(x.device.type, enabled=False),
-            inference_mode(),
+            inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
 

@@ -10,6 +10,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.explain import GradientExplainer
 from sdm.models import ICLModel
+from sdm.models.callback import CaptureInputs, EnableInputGradients
 
 
 class _LinearModel(ICLModel):
@@ -44,6 +45,39 @@ class _LinearModel(ICLModel):
         return Recipe()
 
 
+@pytest.mark.parametrize("enable_gradients", [False, True])
+def test_capture_inputs(enable_gradients: bool) -> None:
+    model = _LinearModel()
+    capture_inputs = CaptureInputs()
+    callbacks = (
+        (EnableInputGradients(), capture_inputs)
+        if enable_gradients
+        else (capture_inputs,)
+    )
+    related_tables = RelatedTables(
+        tables={"related": TableTensor(numerical=torch.ones(1, 2))},
+        relationships=(),
+        task_links=(),
+    )
+
+    model(
+        torch.zeros(1, 2),
+        torch.zeros(1, 1),
+        torch.ones(1, 2),
+        related_context_tables=related_tables,
+        related_query_tables=related_tables,
+        callbacks=callbacks,
+    )
+
+    assert len(capture_inputs.inputs) == 1
+    x, related = capture_inputs.inputs[0]
+    assert x.numerical.requires_grad is enable_gradients
+    assert related is not None
+    assert (
+        related.tables["related"].numerical.requires_grad is enable_gradients
+    )
+
+
 @pytest.mark.parametrize("fitted", [False, True])
 def test_returns_query_input_gradients(fitted: bool) -> None:
     model = _LinearModel()
@@ -67,34 +101,36 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
             {"task_column": "0", "table": "related", "table_column": "0"},
         ),
     )
-    explainer = GradientExplainer(
-        output=lambda prediction: prediction.numerical
-    )
+    explainer = GradientExplainer()
 
     if fitted:
         model.fit(x_context, y_context, related_tables)
-        result = explainer.explain(model, x_query, related_tables)
+        x, related = explainer.explain(model, x_query, related_tables)
+        assert model._cache is not None
     else:
-        result = explainer.explain(
+        x, related = explainer.explain(
             model,
             x_query,
             related_tables,
             x_context=x_context,
             y_context=y_context,
             related_context_tables=related_tables,
+            callbacks=(),
         )
+        assert model._cache is None
 
     torch.testing.assert_close(
-        result.x.numerical, torch.full_like(x_query, 2.0)
+        x.numerical,
+        2.0 * torch.eye(2).unsqueeze(1),
     )
-    assert result.related_tables is not None
+    assert related is not None
     torch.testing.assert_close(
-        result.related_tables.tables["related"].numerical,
-        torch.full_like(x_query, 3.0),
+        related.tables["related"].numerical,
+        3.0 * torch.eye(2).unsqueeze(1),
     )
     torch.testing.assert_close(
-        result.related_tables.tables["unused"].numerical,
-        torch.zeros_like(x_query),
+        related.tables["unused"].numerical,
+        torch.zeros(2, 1, 2),
     )
-    assert result.related_tables.relationships == related_tables.relationships
-    assert result.related_tables.task_links == related_tables.task_links
+    assert related.relationships == related_tables.relationships
+    assert related.task_links == related_tables.task_links
