@@ -92,33 +92,42 @@ def test_latin_ensemble_couples_member_permutations(
         ),
         member_table_ids=(0, 0, 0, 0, 1, 1, 1, 1),
     )
-    output = ShuffleColumns(method="latin").fit_transform_ensemble(
-        ensemble,
-        generator=torch.Generator(device=device).manual_seed(7),
+    output = ShuffleColumns(method="latin").fit_transform_ensemble(ensemble)
+    permutations = tuple(
+        output.table(member_id).columns[Stype.numerical]
+        for member_id in range(output.num_members)
     )
-    expected = (
-        ("0", "3", "2", "1"),
-        ("1", "2", "0", "3"),
-        ("3", "0", "1", "2"),
-        ("2", "1", "3", "0"),
-        ("0", "1"),
-        ("1", "0"),
-        ("0", "1"),
-        ("1", "0"),
-    )
-    for member_id, permutation in enumerate(expected):
+    # Each member must contain every source column once
+    # and reorder its values accordingly.
+    for member_id, permutation in enumerate(permutations):
         source = ensemble.table(member_id)
         result = output.table(member_id)
+        source_columns = source.columns[Stype.numerical]
         indices = torch.tensor(
-            [int(column) for column in permutation],
+            [source_columns.index(column) for column in permutation],
             dtype=torch.long,
             device=source.numerical.device,
         )
-        assert result.columns[Stype.numerical] == permutation
+        assert sorted(permutation) == sorted(source_columns)
         assert torch.equal(
             result.numerical,
             source.numerical.index_select(-1, indices),
         )
+
+    # Per position, each of 4 columns must occur once
+    # and each of 2 columns twice.
+    for member_ids in (range(4), range(4, 8)):
+        source_columns = ensemble.table(member_ids.start).columns[
+            Stype.numerical
+        ]
+        expected_columns = sorted(
+            source_columns * (len(member_ids) // len(source_columns))
+        )
+        for position in zip(
+            *(permutations[member_id] for member_id in member_ids),
+            strict=True,
+        ):
+            assert sorted(position) == expected_columns
 
 
 @pytest.mark.parametrize(

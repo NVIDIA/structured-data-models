@@ -127,8 +127,8 @@ jobs:
       - name: Cache RelBench dataset
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
-          path: /home/runner/.cache/relbench
-          key: relbench-${{ runner.os }}-${{ runner.arch }}-rel-f1
+          path: /home/runner/.cache/huggingface/hub
+          key: relbench-3-${{ runner.os }}-${{ runner.arch }}-rel-f1
 
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
@@ -160,7 +160,7 @@ jobs:
             'pandas<3' \
             pyg-lib \
             'pylibcugraph-cu13>=26.6,<26.8' \
-            relbench \
+            'relbench>=3.0.1' \
             scikit-learn \
             'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena' \
             torchmetrics \
