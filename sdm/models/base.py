@@ -240,6 +240,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
+        callbacks = () if callbacks is None else callbacks
+
         self.clear()
 
         recipe_execution = RecipeExecution(
@@ -258,7 +260,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
 
         cache = Cache(
-            num_estimators=len(contexts),
             recipe_execution=recipe_execution,
             kwargs=kwargs,
         )
@@ -296,7 +297,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     **kwargs,
                 )
 
-            if x.is_cuda and num_estimators > 1:
+            if x.is_cuda and len(contexts) > 1:
                 estimator_cache = estimator_cache.cpu().pin_memory()
             cache[i] = estimator_cache
 
@@ -346,8 +347,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ).tables,
             )
 
-        num_estimators = cast(int, self._cache["num_estimators"])
-        caches = [cast(Cache, self._cache[i]) for i in range(num_estimators)]
+        recipe_execution = cast(
+            RecipeExecution,
+            self._cache["recipe_execution"],
+        )
+        caches = [
+            cast(Cache, self._cache[i])
+            for i in range(recipe_execution._num_members)
+        ]
         next_cache = caches[0]
 
         compute_stream: torch.cuda.Stream | None = None
@@ -363,10 +370,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 with torch.cuda.stream(transfer_stream):
                     next_cache = next_cache.to(x.device, non_blocking=True)
 
-            recipe_execution = cast(
-                RecipeExecution,
-                self._cache["recipe_execution"],
-            )
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
                 inference_mode("no_grad" if requires_grad else "inference"),
@@ -397,7 +400,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     related_query_tables=query.related_tables,
                 )
 
-                if i + 1 < num_estimators:
+                if i + 1 < len(caches):
                     next_cache = caches[i + 1]
                 if x.is_cuda and next_cache is not None:
                     assert transfer_stream is not None
