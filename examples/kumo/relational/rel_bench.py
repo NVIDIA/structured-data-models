@@ -25,11 +25,23 @@ import tqdm
 
 import sdm
 
+DEFAULT_DATASETS = [
+    "rel-amazon",
+    "rel-arxiv",
+    "rel-avito",
+    "rel-event",
+    "rel-f1",
+    "rel-hm",
+    "rel-ratebeer",
+    "rel-stack",
+    "rel-trial",
+]
+
 parser = argparse.ArgumentParser(
     description=__doc__,
     formatter_class=argparse.RawDescriptionHelpFormatter,
 )
-parser.add_argument("--dataset", choices=relbench.datasets.get_dataset_names())
+parser.add_argument("--dataset")
 parser.add_argument("--task")
 parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument("--batch_size", type=int, default=1000)
@@ -43,8 +55,12 @@ if args.task and not args.dataset:
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def run_task(dataset_name: str, task_name: str) -> None:
-    task = relbench.tasks.get_task(dataset_name, task_name, download=True)
+def run_task(
+    dataset_name: str,
+    dataset: Any,
+    task_name: str,
+) -> None:
+    task = dataset.load_task(task_name)
     if not isinstance(task, relbench.base.EntityTask):
         print(f"{dataset_name}/{task_name}: skipped (not an entity task)")
         return
@@ -63,8 +79,8 @@ def run_task(dataset_name: str, task_name: str) -> None:
     )
     classification = binary or multiclass
 
-    # Task-owned DB removes autocomplete leakage and adds any required row key.
-    db = task.dataset.get_db(upto_test_timestamp=False)
+    # Task-owned DB removes target leakage and adds any required row key.
+    db = task.get_db(upto_test_timestamp=False)
     tables = {}
     for name, table in db.table_dict.items():
         tables[name] = sdm.TableTensor.from_pandas(
@@ -125,6 +141,16 @@ def run_task(dataset_name: str, task_name: str) -> None:
             ),
         },
     )
+    class_to_index = (
+        {
+            str(value): index
+            for index, value in enumerate(
+                task_table.categorical.categories[0].tolist()
+            )
+        }
+        if multiclass
+        else {}
+    )
     context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
     context = context[torch.randperm(len(context))[: args.context_size]]
 
@@ -172,11 +198,14 @@ def run_task(dataset_name: str, task_name: str) -> None:
         elif multiclass:
             pred = out.numerical
             class_ids = torch.tensor(
-                [int(column) for column in out.columns[sdm.Stype.numerical]],
+                [
+                    class_to_index[column]
+                    for column in out.columns[sdm.Stype.numerical]
+                ],
                 dtype=torch.long,
                 device=pred.device,
             )
-            scores = pred.new_zeros(pred.size(0), int(task.num_classes))
+            scores = pred.new_zeros(pred.size(0), len(class_to_index))
             pred = scores.index_copy(-1, class_ids, pred)
         else:
             pred = out["q500"].numerical.squeeze(-1)
@@ -201,23 +230,9 @@ def run_task(dataset_name: str, task_name: str) -> None:
     print(f"{dataset_name}/{task_name} {name}: {score:.4f}")
 
 
-datasets = (
-    [args.dataset]
-    if args.dataset
-    else sorted(
-        name
-        for name in relbench.datasets.get_dataset_names()
-        if name.startswith("rel-") and name not in {"rel-mimic", "rel-salt"}
-    )
-)
+datasets = [args.dataset] if args.dataset else DEFAULT_DATASETS
 for dataset_name in datasets:
-    task_names = (
-        [args.task]
-        if args.task
-        else sorted(relbench.tasks.get_task_names(dataset_name))
-    )
+    dataset = relbench.load_dataset(dataset_name)
+    task_names = [args.task] if args.task else sorted(dataset.get_task_names())
     for task_name in task_names:
-        run_task(dataset_name, task_name)
-        relbench.base.Dataset.get_db.cache_clear()
-        relbench.tasks.get_task.cache_clear()
-        relbench.datasets.get_dataset.cache_clear()
+        run_task(dataset_name, dataset, task_name)
