@@ -18,6 +18,10 @@ from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabfm.block import TabFMTransformerBlock
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding
 
+# TODO: Derive these limits from available CUDA memory.
+_COL_BATCH_SIZE_LIMIT = 16
+_ROW_BATCH_SIZE_LIMIT = 2048
+
 
 class RowEmbedding(torch.nn.Module):
     def __init__(
@@ -149,6 +153,7 @@ class RowEmbedding(torch.nn.Module):
                     query=x,  # [..., C, R, D]
                     key_value=key_value,  # [..., C, R_train, D]
                     return_key_value=cache is not None and cache.is_recording,
+                    batch_size_limit=_COL_BATCH_SIZE_LIMIT,
                 )  # [..., C, R, D]
 
                 if cache is not None and cache.is_recording:
@@ -178,6 +183,7 @@ class RowEmbedding(torch.nn.Module):
                 x = row_layer(
                     query=query,  # [..., R, K + C, D] or [..., R, K, D]
                     key_value=x,  # [..., R, K + C, D]
+                    batch_size_limit=_ROW_BATCH_SIZE_LIMIT,
                 )  # [..., R, K + C, D] or [..., R, K, D]
 
             x = row_norm(x)

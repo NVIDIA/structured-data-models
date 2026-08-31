@@ -2,9 +2,10 @@ r"""Evaluate SDM tabular model results on TabArena."""
 
 from pathlib import Path
 
-from model import MODEL_CONFIGS
 from tabarena.contexts import TabArenaContext
 from tabarena.end_to_end import EndToEnd
+
+from models import MODEL_CONFIGS
 from tabarena.models import MethodMetadata
 
 example_dir = Path(__file__).parent.parent
