@@ -77,7 +77,7 @@ def run_task(dataset: Any, task_name: str) -> None:
     classification = binary or multiclass
 
     # Task-owned DB removes target leakage and adds any required row key.
-    db = task.get_db(upto_test_timestamp=True)
+    db = task.get_db(upto_test_timestamp=False)
     tables = {}
     for name, table in db.table_dict.items():
         tables[name] = sdm.TableTensor.from_pandas(
