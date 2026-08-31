@@ -81,7 +81,4 @@ class RandomProjection(EnsembleProcessor):
             locations.append((group_id, group_position[group_id]))
             group_position[group_id] += 1
 
-        out = EnsembleTable.__new__(EnsembleTable)
-        out._groups = tuple(groups)
-        out._locations = tuple(locations)
-        return out
+        return EnsembleTable._from_groups(groups, locations)

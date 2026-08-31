@@ -73,6 +73,17 @@ class EnsembleTable(DeviceMixin):
         self._locations = ((0, 0),) * num_members
 
     @classmethod
+    def _from_groups(
+        cls,
+        groups: Sequence[TableTensor],
+        locations: Sequence[tuple[int, int]],
+    ) -> Self:
+        out = cls.__new__(cls)
+        out._groups = tuple(groups)
+        out._locations = tuple(locations)
+        return out
+
+    @classmethod
     def from_tables(
         cls,
         tables: Sequence[TableTensor],

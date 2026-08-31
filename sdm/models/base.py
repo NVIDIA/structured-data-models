@@ -118,15 +118,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
 
-        if num_estimators < 1:
-            raise ValueError("'num_estimators' needs to be positive")
-        if not isinstance(x_context, TableTensor):
-            x_context = TableTensor.from_tensor(x_context)
-        if not isinstance(y_context, TableTensor):
-            y_context = TableTensor.from_tensor(y_context)
-        if not isinstance(x_query, TableTensor):
-            x_query = TableTensor.from_tensor(x_query)
-
         if (related_context_tables is None) != (related_query_tables is None):
             raise ValueError(
                 "Expected 'related_context_tables' and 'related_query_tables' "
@@ -202,7 +193,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 for callback in callbacks:
                     out = callback.on_model_forward_end(self, out)
 
-            out = cast(TableTensor, out.to(x_query.dtype))
+            out = cast(TableTensor, out.to(query.x.dtype))
             outs.append(out)
 
         # Regression: invert target before stacking estimator outputs.
@@ -251,13 +242,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         """
         callbacks = () if callbacks is None else callbacks
 
-        if num_estimators < 1:
-            raise ValueError("'num_estimators' needs to be positive")
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        if not isinstance(y, TableTensor):
-            y = TableTensor.from_tensor(y)
-
         self.clear()
 
         recipe_execution = RecipeExecution(
@@ -276,7 +260,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
 
         cache = Cache(
-            num_estimators=num_estimators,
             recipe_execution=recipe_execution,
             kwargs=kwargs,
         )
@@ -314,7 +297,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     **kwargs,
                 )
 
-            if x.is_cuda and num_estimators > 1:
+            if x.is_cuda and len(contexts) > 1:
                 estimator_cache = estimator_cache.cpu().pin_memory()
             cache[i] = estimator_cache
 
@@ -346,9 +329,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
 
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-
         if self._cache is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} not yet fitted. Make sure to "
@@ -367,8 +347,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ).tables,
             )
 
-        num_estimators = cast(int, self._cache["num_estimators"])
-        caches = [cast(Cache, self._cache[i]) for i in range(num_estimators)]
+        recipe_execution = cast(
+            RecipeExecution,
+            self._cache["recipe_execution"],
+        )
+        caches = [
+            cast(Cache, self._cache[i])
+            for i in range(recipe_execution.num_members)
+        ]
         next_cache = caches[0]
 
         compute_stream: torch.cuda.Stream | None = None
@@ -384,10 +370,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 with torch.cuda.stream(transfer_stream):
                     next_cache = next_cache.to(x.device, non_blocking=True)
 
-            recipe_execution = cast(
-                RecipeExecution,
-                self._cache["recipe_execution"],
-            )
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
                 inference_mode("no_grad" if requires_grad else "inference"),
@@ -418,7 +400,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     related_query_tables=query.related_tables,
                 )
 
-                if i + 1 < num_estimators:
+                if i + 1 < len(caches):
                     next_cache = caches[i + 1]
                 if x.is_cuda and next_cache is not None:
                     assert transfer_stream is not None
@@ -445,7 +427,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     for tensor in cache._tensors():
                         tensor.record_stream(compute_stream)
 
-                out = cast(TableTensor, out.to(x.dtype))
+                out = cast(TableTensor, out.to(query.x.dtype))
                 outs.append(out)
 
                 if x.is_cuda and next_cache is not None:
