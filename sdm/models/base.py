@@ -193,7 +193,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 for callback in callbacks:
                     out = callback.on_model_forward_end(self, out)
 
-            out = cast(TableTensor, out.to(x_query.dtype))
+            out = cast(TableTensor, out.to(query.x.dtype))
             outs.append(out)
 
         # Regression: invert target before stacking estimator outputs.
@@ -353,7 +353,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         )
         caches = [
             cast(Cache, self._cache[i])
-            for i in range(recipe_execution._num_members)
+            for i in range(recipe_execution.num_members)
         ]
         next_cache = caches[0]
 
@@ -427,7 +427,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     for tensor in cache._tensors():
                         tensor.record_stream(compute_stream)
 
-                out = cast(TableTensor, out.to(x.dtype))
+                out = cast(TableTensor, out.to(query.x.dtype))
                 outs.append(out)
 
                 if x.is_cuda and next_cache is not None:

@@ -151,6 +151,8 @@ class GradientExplainer(ICLExplainer[GradientExplanationOutput]):
         model: ICLModel,
         x_query: Tensor | TableTensor,
         related_query_tables: RelatedTables | None = None,
+        *,
+        generator: torch.Generator | None = None,
     ) -> GradientExplanationOutput:
         callback = _GradientCallback(self._output)
         model.predict(

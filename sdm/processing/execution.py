@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
 from typing import NamedTuple, cast
 
 import torch
@@ -39,11 +38,17 @@ class RecipeExecution:
         self._num_members: int | None = None
         self._y_locations: tuple[tuple[int, int], ...] | None = None
 
+    @property
+    def num_members(self) -> int:
+        r"""The number of fitted members."""
+        assert self._y_locations is not None
+        return len(self._y_locations)
+
     def fit_transform(
         self,
         x: Tensor | TableTensor | EnsembleTable,
         y: Tensor | TableTensor | EnsembleTable,
-        related_tables: RelatedTables[TableTensor] | RelatedTables[EnsembleTable] | None,
+        related_tables: RelatedTables | None,
         *,
         num_members: int | None = None,
         generator: torch.Generator | None = None,
@@ -51,7 +56,7 @@ class RecipeExecution:
         """Fit and transform context data."""
         # Transform target first to be able to resolve task type. Inverse
         # target transforms require distinct member assignment:
-        y = _to_ensemble_tensor(y, num_members, expand=True)
+        y = _to_ensemble_table(y, num_members, expand=True)
         y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
 
         self._num_members = num_members
@@ -93,27 +98,37 @@ class RecipeExecution:
                         module._route = "related"
                 self._related_processors[name] = processor
                 related_ensembles[name] = processor.fit_transform_ensemble(
-                    _to_ensemble_tensor(table, num_members, expand=False),
+                    _to_ensemble_table(table, num_members, expand=False),
                     generator=generator,
                 )
+                if related_ensembles[name].num_members != self.num_members:
+                    raise ValueError(
+                        "Expected inputs to map to the same number of "
+                        "ensemble members"
+                    )
 
         for module in self.recipe.features.modules():
             if isinstance(module, sp.TableDispatch):
                 module._route = "task"
 
-        x = _to_ensemble_tensor(x, num_members, expand=False)
+        x = _to_ensemble_table(x, num_members, expand=False)
         x = self.recipe.features.fit_transform_ensemble(x, generator=generator)
+        if x.num_members != self.num_members:
+            raise ValueError(
+                "Expected inputs to map to the same number of ensemble members"
+            )
 
         members: list[MemberContext] = []
-        for member_id in range(num_members):
+        for member_id in range(self.num_members):
             related_tables_i: RelatedTables[TableTensor] | None = None
             if related_tables is not None:
-                related_tables_i = replace(
-                    related_tables,
+                related_tables_i = RelatedTables(
                     tables={
                         name: table.table(member_id)
                         for name, table in related_ensembles.items()
                     },
+                    relationships=related_tables.relationships,
+                    task_links=related_tables.task_links,
                 )
             members.append(
                 MemberContext(
@@ -127,14 +142,16 @@ class RecipeExecution:
 
     def transform(
         self,
-        x: TableTensor,
-        related_tables: RelatedTables[TableTensor] | None,
+        x: Tensor | TableTensor | EnsembleTable,
+        related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
-        assert self._y_locations is not None
-
-        x = _to_ensemble_tensor(x, self._num_members, expand=False)
+        x = _to_ensemble_table(x, self._num_members, expand=False)
         x = self.recipe.features.transform_ensemble(x)
+        if x.num_members != self.num_members:
+            raise ValueError(
+                "Expected inputs to map to the same number of ensemble members"
+            )
 
         related_ensembles: Mapping[str, EnsembleTable] = {}
         if related_tables is not None:
@@ -142,19 +159,25 @@ class RecipeExecution:
             for name, table in related_tables.tables.items():
                 processor = self._related_processors[name]
                 related_ensembles[name] = processor.transform_ensemble(
-                    _to_ensemble_tensor(table, self._num_members, expand=False)
+                    _to_ensemble_table(table, self._num_members, expand=False)
                 )
+                if related_ensembles[name].num_members != self.num_members:
+                    raise ValueError(
+                        "Expected inputs to map to the same number of "
+                        "ensemble members"
+                    )
 
         members: list[MemberQuery] = []
-        for member_id in range(num_members):
+        for member_id in range(self.num_members):
             related_tables_i: RelatedTables[TableTensor] | None = None
             if related_tables is not None:
-                related_tables_i = replace(
-                    related_tables,
+                related_tables_i = RelatedTables(
                     tables={
                         name: table.table(member_id)
                         for name, table in related_ensembles.items()
                     },
+                    relationships=related_tables.relationships,
+                    task_links=related_tables.task_links,
                 )
             members.append(
                 MemberQuery(
@@ -170,9 +193,10 @@ class RecipeExecution:
         outputs: Sequence[TableTensor],
     ) -> tuple[TableTensor, ...]:
         """Invert fitted target transforms on member outputs."""
+        assert len(outputs) == self.num_members
+
         # Reconstruct the group layout of the transformed target:
         assert self._y_locations is not None
-        assert len(outputs) == len(self._y_locations)
         num_groups = max(group for group, _ in self._y_locations) + 1
         groups: list[list[TableTensor | None]] = [
             [] for _ in range(num_groups)
@@ -182,17 +206,18 @@ class RecipeExecution:
         for i, (group_id, position) in enumerate(self._y_locations):
             groups[group_id][position] = outputs[i]
 
-        table = EnsembleTable.__new__(EnsembleTable)
-        table._groups = tuple(
-            cast(
-                TableTensor,
-                group[0].unsqueeze(0)  # type: ignore
-                if len(group) == 1
-                else torch.stack(group, dim=0),  # type: ignore
-            )
-            for group in groups
+        table = EnsembleTable._from_groups(
+            groups=[
+                cast(
+                    TableTensor,
+                    group[0].unsqueeze(0)  # type: ignore
+                    if len(group) == 1
+                    else torch.stack(group, dim=0),  # type: ignore
+                )
+                for group in groups
+            ],
+            locations=self._y_locations,
         )
-        table._locations = self._y_locations
 
         if not isinstance(self.recipe.target, EnsembleInvertibleMixin):
             raise RuntimeError("Target recipe is not invertible")
@@ -212,7 +237,7 @@ class RecipeExecution:
         return self.recipe.output.transform(cast(TableTensor, out))
 
 
-def _to_ensemble_tensor(
+def _to_ensemble_table(
     x: Tensor | TableTensor | EnsembleTable,
     num_estimators: int | None,
     *,
@@ -222,7 +247,7 @@ def _to_ensemble_tensor(
 
     Args:
         x: The input table.
-        num_estimators: Number of estimators to represent. If omitted, a 2D
+        num_estimators: Number of estimators to represent. If ``None``, a 2D
             input creates one estimator and higher-rank inputs infer the
             estimator count from their leading dimension.
         expand: Whether to expand shared inputs into distinct logical member
