@@ -321,8 +321,8 @@ By default, the leading dimension of higher-rank inputs is interpreted as the es
 <h2>Autocasting<a class="headerlink" href="#autocasting" title="Link to this heading">#</a></h2>
 <p>An <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> does <strong>not</strong> enable mixed-precision autocasting by default.
 Instead, the model respects the caller’s active PyTorch autocast context.
-For example, to run the model forward pass in <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes"><code class="docutils literal notranslate"><span class="pre">torch.bfloat16</span></code></a> mixed precision on CUDA with <a class="reference external" href="https://docs.pytorch.org/docs/stable/amp"><code class="docutils literal notranslate"><span class="pre">torch.amp.autocast()</span></code></a>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">amp</span><span class="o">.</span><span class="n">autocast</span><span class="p">(</span><span class="s2">"cuda"</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">):</span>
+For example, to run the model forward pass in <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes"><code class="docutils literal notranslate"><span class="pre">torch.float16</span></code></a> mixed precision on CUDA with <a class="reference external" href="https://docs.pytorch.org/docs/stable/amp"><code class="docutils literal notranslate"><span class="pre">torch.amp.autocast()</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">amp</span><span class="o">.</span><span class="n">autocast</span><span class="p">(</span><span class="s2">"cuda"</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">):</span>
 </span><span data-line="2">    <span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 </span></pre></div>
 </div>
@@ -475,7 +475,7 @@ The full relational sampling and prediction flow is shown in <a class="reference
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=6af62a84"></script>
+      <script src="_static/documentation_options.js?v=12accc39"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
