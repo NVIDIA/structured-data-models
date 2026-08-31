@@ -23,6 +23,7 @@ class ModelConfig:
     name: str
     factory: ModelFactory
     num_estimators: int
+    autocast_dtype: torch.dtype
 
     @property
     def system_name(self) -> str:
@@ -45,19 +46,51 @@ def _create_tabiclv2(
     return _load_tabiclv2(device=device)
 
 
+@lru_cache(maxsize=1)
+def _load_tabfm(
+    task: Task,
+    device: torch.device,
+) -> sdm.models.TabFM:
+    return sdm.models.TabFM(
+        task=task,
+        accept_license=True,
+        device=device,
+    )
+
+
+def _create_tabfm(
+    task: Task,
+    device: torch.device,
+) -> sdm.models.ICLModel:
+    return _load_tabfm(
+        task=task,
+        device=device,
+    )
+
+
 MODEL_CONFIGS = {
     "tabiclv2": ModelConfig(
         name="TabICLv2",
         factory=_create_tabiclv2,
         num_estimators=8,
+        autocast_dtype=torch.float16,
+    ),
+    "tabfm": ModelConfig(
+        name="TabFM",
+        factory=_create_tabfm,
+        num_estimators=8,
+        autocast_dtype=torch.bfloat16,
     ),
 }
 
 
 class SDMSystem(ExternalSystemModel):
-    """Expose a registered SDM model through TabArena."""
-
-    def __init__(self, *, model: str, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        model: str,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self._config = MODEL_CONFIGS[model]
 
@@ -107,7 +140,7 @@ class SDMSystem(ExternalSystemModel):
         )
         with torch.amp.autocast(
             self._device.type,
-            torch.float16,
+            self._config.autocast_dtype,
             enabled=table_x.is_cuda,
         ):
             self.model.fit(
@@ -126,7 +159,7 @@ class SDMSystem(ExternalSystemModel):
         )
         with torch.amp.autocast(
             self._device.type,
-            torch.float16,
+            self._config.autocast_dtype,
             enabled=table_x.is_cuda,
         ):
             out = self.model.predict(table_x)
@@ -141,7 +174,7 @@ class SDMSystem(ExternalSystemModel):
         )
         with torch.amp.autocast(
             self._device.type,
-            torch.float16,
+            self._config.autocast_dtype,
             enabled=table_x.is_cuda,
         ):
             probabilities = self.model.predict(table_x).to_pandas()
