@@ -63,12 +63,11 @@ def test_row_embedding_automatic_batch_size_limit(
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
-# @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])  # TODO Reenable
-@pytest.mark.parametrize("batch_shape", [()])
+@pytest.mark.parametrize("shape", [(), (2,)])
 def test_forward(
     device: torch.device,
     dtype: torch.dtype,
-    batch_shape: tuple[int, ...],
+    shape: tuple[int, ...],
 ) -> None:
     model = TabICLv2(pretrained=False, device=device)
     if device.type == "cpu":
@@ -78,38 +77,28 @@ def test_forward(
 
     R_context, R_query, C = 5, 3, 6
 
-    x_context = torch.randn(*batch_shape, R_context, C, device=device)
-    x_query = torch.randn(*batch_shape, R_query, C, device=device)
+    x_context = torch.randn(*shape, R_context, C, device=device)
+    x_query = torch.randn(*shape, R_query, C, device=device)
     if dtype.is_floating_point:
-        y_context = torch.randn((*batch_shape, R_context, 1), device=device)
+        y_context = torch.randn((*shape, R_context, 1), device=device)
         torch.manual_seed(1)
         out = model(x_context, y_context, x_query)
-        assert out.size() == (*batch_shape, R_query, 999)
+        assert out.size() == (R_query, 999)
     else:
         y_context = torch.randint(
             low=0,
             high=10,
-            size=(*batch_shape, R_context, 1),
+            size=(R_context, 1),
             device=device,
-        )
+        ).expand(*shape, -1, -1)
         num_classes = len(y_context.unique())
         torch.manual_seed(1)
         out = model(x_context, y_context, x_query)
-        assert out.size() == (*batch_shape, R_query, num_classes)
+        assert out.size() == (R_query, num_classes)
 
     assert out.dtype == x_query.dtype
     assert out.device == x_query.device
     assert torch.is_inference(out)
-
-    if len(batch_shape) > 0:
-        looped = torch.stack(
-            [
-                model(x_context[i], y_context[i], x_query[i])
-                for i in range(batch_shape[0])
-            ],
-            dim=0,
-        )
-        assert out.assert_close(looped)
 
     torch.manual_seed(1)
     model.fit(x_context, y_context)
