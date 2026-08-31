@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     import graphviz
 
 
-T = TypeVar("T", TableTensor, EnsembleTable)
+T = TypeVar("T", bound=TableTensor | EnsembleTable)
 
 TASK_TABLE = "__task_table__"
 

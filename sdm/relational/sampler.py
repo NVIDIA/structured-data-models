@@ -1,5 +1,5 @@
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from typing import Literal, NamedTuple, Self, cast
+from typing import Generic, Literal, NamedTuple, Self, TypeVar, cast
 
 import torch
 from torch import Tensor
@@ -15,17 +15,22 @@ from sdm.relational.backend import (
     CuGraphRelationalSampler,
     PyGLibRelationalSampler,
 )
+from sdm.tensor import EnsembleTable
 from sdm.tensor.mixin import DeviceMixin
+
+T = TypeVar("T", bound=TableTensor | EnsembleTable)
 
 EXAMPLE_ID = "__example__"
 
 
-class _RelationalSamplerOutput(NamedTuple):
+class _RelationalSamplerOutput(NamedTuple, Generic[T]):
     task_table: TableTensor
-    related_tables: RelatedTables[TableTensor]
+    related_tables: RelatedTables[T]
 
 
-class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
+class RelationalSamplerOutput(
+    _RelationalSamplerOutput[T], DeviceMixin, Generic[T]
+):
     r"""Relational sampler output.
 
     Args:
@@ -138,6 +143,17 @@ class RelationalSampler:
                     f"{str(Stype.datetime)!r} (got {str(stype)!r})"
                 )
 
+        if task_table.dim() not in (2, 3):
+            raise ValueError(
+                f"Task table needs to be either 2D or 3D "
+                f"(got {task_table.dim()})"
+            )
+        if task_table.dim() == 3:
+            num_members, num_rows = task_table.size()[:2]
+            task_table = cast(TableTensor, task_table.flatten(0, 1))
+        else:
+            num_members, num_rows = None, task_table.size(0)
+
         nodes = self._sampler.sample(
             task_table=task_table,
             task_link=task_link,
@@ -146,17 +162,34 @@ class RelationalSampler:
             temporal_strategy=temporal_strategy,
         )
 
-        tables: dict[str, Tensor] = {}
+        tables: dict[str, TableTensor | EnsembleTable] = {}
         for table_name, (example, index) in nodes.items():
-            tables[table_name] = torch.cat(
+            table = torch.cat(
                 [
                     self.data.tables[table_name][index],
                     TableTensor(
                         columns={"id": (EXAMPLE_ID,)},
-                        id=ColumnarTensor((example,)),
+                        id=ColumnarTensor(
+                            (
+                                example
+                                if num_members is None
+                                else example % num_rows,
+                            )
+                        ),
                     ),
                 ],
                 dim=-1,
+            )
+            table = cast(TableTensor, table)
+
+            if num_members is None:
+                tables[table_name] = table
+                continue
+
+            member = example // num_rows
+            tables[table_name] = EnsembleTable.from_tables(
+                tables=[table[member == i] for i in range(num_members)],
+                member_table_ids=range(num_members),
             )
 
         # Build composite keys for disjoint linkage across examples:
@@ -178,6 +211,8 @@ class RelationalSampler:
         )
 
         arange = torch.arange(task_table.size(0), device=task_table.device)
+        if num_members is not None:
+            arange = arange % num_rows
         task_table: Tensor = torch.cat(
             [
                 task_table,
@@ -188,11 +223,13 @@ class RelationalSampler:
             ],
             dim=-1,
         )
+        if num_members is not None:
+            task_table = task_table.view(num_members, num_rows, -1)
 
         return RelationalSamplerOutput(
             task_table=cast(TableTensor, task_table),
-            related_tables=RelatedTables[TableTensor](
-                tables=cast(dict[str, TableTensor], tables),
+            related_tables=RelatedTables(
+                tables=tables,
                 relationships=relationships,
                 task_links=(task_link,),
             ),
