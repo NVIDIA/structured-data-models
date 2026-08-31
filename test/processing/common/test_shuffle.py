@@ -93,11 +93,11 @@ def test_latin_ensemble_couples_member_permutations(
         member_table_ids=(0, 0, 0, 0, 1, 1, 1, 1),
     )
     output = ShuffleColumns(method="latin").fit_transform_ensemble(ensemble)
-    # Check column/value alignment and Latin balance for both schema widths.
     permutations = tuple(
         output.table(member_id).columns[Stype.numerical]
         for member_id in range(output.num_members)
     )
+    # Each member must contain every source column once and reorder its values accordingly.
     for member_id, permutation in enumerate(permutations):
         source = ensemble.table(member_id)
         result = output.table(member_id)
@@ -113,6 +113,7 @@ def test_latin_ensemble_couples_member_permutations(
             source.numerical.index_select(-1, indices),
         )
 
+    # Per position, each of 4 columns must occur once and each of 2 columns twice.
     for member_ids in (range(4), range(4, 8)):
         source_columns = ensemble.table(member_ids.start).columns[
             Stype.numerical
