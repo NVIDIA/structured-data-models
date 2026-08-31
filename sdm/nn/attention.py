@@ -583,7 +583,12 @@ class Attention(torch.nn.Module):
         out = out.flatten(-2, -1)  # [..., Q, C]
         out = self.out_lin(out)  # [..., Q, C]
         if return_key_value:
-            return out, KVCacheEntry(key=key, value=value)
+            # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
+            # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
+            return out, KVCacheEntry(
+                key=key.to(value.dtype),
+                value=value,
+            )
         return out
 
 
