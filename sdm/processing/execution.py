@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 
 import sdm.processing as sp
-from sdm import Recipe, RelatedTables, TableTensor
+from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
@@ -232,6 +232,15 @@ class RecipeExecution:
         if len(outputs) == 1:
             out = outputs[0].unsqueeze(0)
         else:
+            expected = set(outputs[0].columns[Stype.numerical])
+            for output in outputs[1:]:
+                if set(output.columns[Stype.numerical]) != expected:
+                    raise ValueError(
+                        "Expected all model outputs to have the same columns "
+                        "before applying 'Recipe.output'. Ensure every target "
+                        "contains the same set of classes."
+                    )
+
             out = torch.stack(list(outputs), dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
