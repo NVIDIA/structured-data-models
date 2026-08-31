@@ -267,6 +267,8 @@ def _to_ensemble_table(
                 locations.append((i, next_pos[i]))
                 next_pos[i] += 1
             x = EnsembleTable._from_groups(groups, locations)
+        if x.num_members < 1:
+            raise ValueError("'num_estimators' needs to be positive")
         return x
 
     if not isinstance(x, TableTensor):
@@ -275,7 +277,10 @@ def _to_ensemble_table(
     # Treat leading dimension as ensemble dimension:
     if x.dim() > 2 and num_estimators is None:
         locations = tuple((0, i) for i in range(x.size(0)))
-        return EnsembleTable._from_groups((x,), locations)
+        x = EnsembleTable._from_groups((x,), locations)
+        if x.num_members < 1:
+            raise ValueError("'num_estimators' needs to be positive")
+        return x
 
     num_estimators = 1 if num_estimators is None else num_estimators
     if num_estimators < 1:
