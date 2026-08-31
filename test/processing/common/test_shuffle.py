@@ -6,6 +6,7 @@ import torch
 from sdm import Stype, TableTensor
 from sdm.processing import ShuffleColumns
 from sdm.tensor import EnsembleTable
+from sdm.testing import withCUDA
 
 
 def _table() -> TableTensor:
@@ -76,21 +77,24 @@ def test_random_ensemble_matches_independent_shuffles() -> None:
         assert restored.table(member_id).equal(context)
 
 
-def test_latin_ensemble_couples_member_permutations() -> None:
+@withCUDA
+def test_latin_ensemble_couples_member_permutations(
+    device: torch.device,
+) -> None:
     ensemble = EnsembleTable.from_tables(
         tables=(
             TableTensor.from_tensor(
-                torch.arange(8, dtype=torch.float32).view(2, 4)
+                torch.arange(8, dtype=torch.float32, device=device).view(2, 4)
             ),
             TableTensor.from_tensor(
-                torch.arange(4, dtype=torch.float32).view(2, 2) + 10
+                torch.arange(4, dtype=torch.float32, device=device).view(2, 2)
             ),
         ),
         member_table_ids=(0, 0, 0, 0, 1, 1, 1, 1),
     )
     output = ShuffleColumns(method="latin").fit_transform_ensemble(
         ensemble,
-        generator=torch.Generator().manual_seed(7),
+        generator=torch.Generator(device=device).manual_seed(7),
     )
     expected = (
         ("0", "3", "2", "1"),
@@ -103,7 +107,18 @@ def test_latin_ensemble_couples_member_permutations() -> None:
         ("1", "0"),
     )
     for member_id, permutation in enumerate(expected):
-        assert output.table(member_id).columns[Stype.numerical] == permutation
+        source = ensemble.table(member_id)
+        result = output.table(member_id)
+        indices = torch.tensor(
+            [int(column) for column in permutation],
+            dtype=torch.long,
+            device=source.numerical.device,
+        )
+        assert result.columns[Stype.numerical] == permutation
+        assert torch.equal(
+            result.numerical,
+            source.numerical.index_select(-1, indices),
+        )
 
 
 @pytest.mark.parametrize(
