@@ -2,10 +2,6 @@
 
 This example benchmarks `structured-data-models` on [TabArena](https://tabarena.ai).
 
-> [!NOTE]
-> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
-> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
-
 ## Setup
 
 Install the source revisions of AutoGluon and TabArena used by this example:
@@ -22,7 +18,7 @@ pip install structured-data-models \
 
 ## Run
 
-Run `TabICLv2`:
+- Run `TabICLv2`:
 
 ```bash
 python main.py --model tabiclv2
@@ -35,6 +31,10 @@ python main.py --model kumo-tabular
 ```
 
 Run `TabFM`:
+
+> [!NOTE]
+> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
+> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
 
 ```bash
 python main.py --model tabfm
