@@ -1,0 +1,71 @@
+﻿KumoTabular
+===========
+
+.. currentmodule:: sdm.models
+
+.. autoclass:: KumoTabular
+   :members:
+   :show-inheritance:
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_related_tables
+
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Input Semantic Types**
+     - ``numerical``
+   * - **Supported Target Semantic Types**
+     - ``categorical``, ``numerical``
+   * - **Supported Prediction Tasks**
+     - ``classification``, ``regression``
+   * - **Related Table Support**
+     - ❌
+
+Default Recipe
+--------------
+
+.. code-block:: python
+
+   Recipe(
+     features=Sequential(
+       StypeDispatch(
+         categorical=Sequential(
+           AlignCategories(sort_by='value'),
+           ToNumerical(),
+         ),
+       ),
+       StypeDispatch(
+         numerical=Sequential(
+           ImputeMean(),
+           DropConstantColumns(),
+           Standardize(),
+           Clip(-100.0, 100.0),
+           Choice(
+             Identity(),
+             PowerTransform(),
+             method='round_robin',
+           ),
+           ClipSigma(threshold=4.0),
+           ShuffleColumns(method='latin'),
+         ),
+       ),
+     ),
+     target=Sequential(
+       StypeDispatch(
+         numerical=Standardize(),
+         categorical=Sequential(
+           AlignCategories(),
+           ShuffleCategories(method='shift'),
+         ),
+       ),
+     ),
+     output=Sequential(
+       ReduceEstimators(method='mean'),
+       TaskDispatch(
+         classification=Softmax(temperature=0.9),
+       ),
+     ),
+   )
