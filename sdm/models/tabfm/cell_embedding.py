@@ -1,5 +1,5 @@
 # ruff: noqa: D101, D102
-
+import math
 from typing import Any
 
 import torch
@@ -34,14 +34,15 @@ class CellEmbedding(torch.nn.Module):
         self,
         x: Tensor,  # [..., R, C],
         categorical_mask: Tensor,  # [..., C],
+        *,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R, C, D]
-        C = x.size(-1)
+        *B, R, C = x.size()
 
         # Feature grouping:
         index = torch.arange(C, device=x.device)
         shift = 2 ** torch.arange(self.group_size, device=x.device) - 1
         index = (index.view(C, 1) + shift.view(1, self.group_size)) % C
-        x = x[..., index]  # [..., R, C, G]
 
         # Compute Fourier features per semantic type:
         grouped_mask = categorical_mask[..., index]  # [..., C, G]
@@ -52,13 +53,37 @@ class CellEmbedding(torch.nn.Module):
             self.cat_freq.to(torch.float32),  # [G, F]
             self.num_freq.to(torch.float32),  # [G, F]
         )  # [..., 1, C, G, F]
-        angle = x.unsqueeze(-1).to(torch.float32) * freq  # [..., R, C, G, F]
-        fourier = torch.cat([angle.sin(), angle.cos()], dim=-1)
-        fourier = fourier.to(self.num_lin.weight.dtype)
 
-        # Project Fourier features per semantic type:
-        return torch.where(
-            grouped_mask,  # [..., 1, C, G, 1]
-            self.cat_lin(fourier),  # [..., R, C, G, D]
-            self.num_lin(fourier),  # [..., R, C, G, D]
-        ).sum(dim=-2)  # [..., R, C, D]
+        if batch_size_limit is not None:
+            rows_per_chunk = max(1, batch_size_limit // (math.prod(B) * C))
+            xs = x.split(rows_per_chunk, dim=-2)
+        else:
+            xs = [x]
+
+        start = 0
+        out: Tensor | None = None
+        for i, x in enumerate(xs):
+            x = x[..., index].unsqueeze(-1)  # [..., R, C, G, 1]
+            angle = x.to(torch.float32) * freq  # [..., R, C, G, F]
+            fourier = torch.cat([angle.sin(), angle.cos()], dim=-1)
+            fourier = fourier.to(self.num_lin.weight.dtype)
+
+            # Project Fourier features per semantic type:
+            x = torch.where(
+                grouped_mask,  # [..., 1, C, G, 1]
+                self.cat_lin(fourier),  # [..., R, C, G, D]
+                self.num_lin(fourier),  # [..., R, C, G, D]
+            ).sum(dim=-2)  # [..., R, C, D]
+
+            if len(xs) == 1:
+                out = x
+                continue
+
+            if i == 0:
+                out = x.new_empty(*B, R, C, x.size(-1))
+            assert out is not None
+            out[..., start : start + x.size(-3), :, :] = x
+            start += x.size(-3)
+
+        assert out is not None
+        return out
