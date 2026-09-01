@@ -85,4 +85,5 @@ class CellEmbedding(torch.nn.Module):
             out[..., start : start + x.size(-3), :, :] = x
             start += x.size(-3)
 
+        assert out is not None
         return out
