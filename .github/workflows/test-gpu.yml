@@ -110,7 +110,7 @@ jobs:
     needs: trigger
     if: needs.trigger.outputs.full_test == 'true'
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v7
@@ -126,6 +126,12 @@ jobs:
         with:
           path: /home/runner/.cache/huggingface/hub
           key: relbench-3-${{ runner.os }}-${{ runner.arch }}-rel-f1
+
+      - name: Cache BeyondArena dataset
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: /home/runner/.cache/data_foundry
+          key: beyondarena-1-${{ runner.os }}-${{ runner.arch }}-parkinsons-biomedical-voice-measurements
 
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
@@ -157,7 +163,7 @@ jobs:
             'pylibcugraph-cu13>=26.6,<26.8' \
             'relbench>=3.0.1' \
             scikit-learn \
-            'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena' \
+            'tabarena[data-foundry,plot]@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena' \
             torchmetrics \
             tqdm
 
@@ -195,3 +201,11 @@ jobs:
         run: |
           python examples/tabarena/main.py --model tabiclv2 --dataset blood-transfusion-service-center
           python examples/tabarena/evaluate.py
+
+      - name: Run BeyondArena benchmark and evaluation example
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python examples/beyondarena/main.py --model tabiclv2 --dataset parkinsons_biomedical_voice_measurements --subset lite
+          python examples/beyondarena/evaluate.py
