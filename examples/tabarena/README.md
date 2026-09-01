@@ -32,13 +32,13 @@ pip install structured-data-models \
 
 - **`TabFM`:**
 
-  > [!NOTE]
-  > Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
-  > Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
-
   ```bash
   python main.py --model tabfm
   ```
+
+> [!NOTE]
+> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
+> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
 
 Pass a dataset name to run only that TabArena dataset:
 
