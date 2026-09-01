@@ -19,3 +19,8 @@ def test_cell_embedding(device: torch.device) -> None:
     out = module(x, categorical_mask)
     assert out.size() == (6, 4, 8)
     assert out.device == device
+
+    torch.testing.assert_close(
+        module(x, categorical_mask, batch_size_limit=8),
+        out,
+    )
