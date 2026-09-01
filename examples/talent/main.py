@@ -49,6 +49,7 @@ if not datasets:
     raise FileNotFoundError(f"No TALENT datasets found under {root}")
 
 model = MODEL_CONFIGS[args.model]
+method = f"[SDM] {model.name}"
 config = {
     "model": {},
     "training": {"n_bins": 2},
@@ -68,6 +69,9 @@ for dataset in datasets:
         and cached.get("config") == config
         and cached.get("seed_num") == SEED_NUM
     ):
+        if cached.get("method") != method:
+            cached["method"] = method
+            _write(path, cached)
         print(f"{dataset}: cached")
         continue
 
@@ -88,6 +92,7 @@ for dataset in datasets:
             "status": "success",
             "dataset": dataset,
             "model": args.model,
+            "method": method,
             "config": config,
             "seed_num": SEED_NUM,
             "result": result.to_dict(),
@@ -97,6 +102,7 @@ for dataset in datasets:
             "status": "unsupported",
             "dataset": dataset,
             "model": args.model,
+            "method": method,
             "config": config,
             "seed_num": SEED_NUM,
             "error": str(error),

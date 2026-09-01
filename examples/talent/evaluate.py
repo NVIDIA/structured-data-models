@@ -65,7 +65,7 @@ def _sdm(
             models and record["model"] not in models
         ):
             continue
-        dataset, model = record["dataset"], record["model"]
+        dataset = record["dataset"]
         if dataset not in task_by_dataset:
             raise ValueError(
                 f"{dataset!r} from {path} is not in TALENT's tables"
@@ -76,7 +76,7 @@ def _sdm(
             {
                 "task": task,
                 "dataset": dataset,
-                "method": model,
+                "method": record["method"],
                 "mean": round(result["metrics_mean"][metric], 4),
                 "std": round(result["metrics_std"][metric], 4),
                 "seed_num": record.get("seed_num"),
@@ -100,7 +100,7 @@ def _leaderboard(
             index="dataset", columns="method", values="mean"
         )
         common = scores.dropna()
-        blocks[task] = common
+        blocks[task] = scores
         ranks = common.rank(
             axis="columns", ascending=task == "regression"
         ).mean()
@@ -137,15 +137,17 @@ def _plot(output: Path, blocks: dict[str, pd.DataFrame]) -> None:
         from matplotlib import pyplot  # noqa: PLC0415
         from scikit_posthocs import (  # noqa: PLC0415
             critical_difference_diagram,
-            posthoc_conover_friedman,
         )
+        from scipy.stats import wilcoxon  # noqa: PLC0415
     except ImportError as error:
         raise ImportError(
             "--plot-cd requires matplotlib and scikit-posthocs"
         ) from error
 
     for task, scores in blocks.items():
-        if len(scores) < 2:
+        coverage = scores.notna().sum()
+        scores = scores.loc[:, coverage == coverage.max()].dropna()
+        if len(scores) < 2 or scores.shape[1] < 2:
             continue
         ranks = (
             scores.rank(axis="columns", ascending=task == "regression")
@@ -153,9 +155,28 @@ def _plot(output: Path, blocks: dict[str, pd.DataFrame]) -> None:
             .sort_values()
         )
         figure, axis = pyplot.subplots(figsize=(12, max(6, len(ranks) * 0.2)))
-        critical_difference_diagram(
-            ranks, posthoc_conover_friedman(scores), ax=axis
+        pvalues = pd.DataFrame(1.0, index=ranks.index, columns=ranks.index)
+        pairs = [
+            (left, right)
+            for i, left in enumerate(ranks.index)
+            for right in ranks.index[i + 1 :]
+        ]
+        tests = sorted(
+            (
+                wilcoxon(
+                    scores[left], scores[right], zero_method="pratt"
+                ).pvalue,
+                left,
+                right,
+            )
+            for left, right in pairs
         )
+        for i, (pvalue, left, right) in enumerate(tests):
+            if pvalue > 0.05 / (len(tests) - i):
+                break
+            pvalues.loc[left, right] = 0.0
+            pvalues.loc[right, left] = 0.0
+        critical_difference_diagram(ranks, pvalues, ax=axis)
         axis.set_title(f"TALENT {task} ({len(scores)} common datasets)")
         figure.savefig(
             output / f"critical_difference_{task}.png", bbox_inches="tight"
