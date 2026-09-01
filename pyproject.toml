@@ -82,7 +82,9 @@ include = ["sdm*"]
 fallback_version = "0.1.0.dev0"
 
 [tool.uv]
+managed = true
 package = true
+find-links = ["https://data.pyg.org/whl/torch-2.13.0+cpu.html"]
 exclude-newer = "7 days"
 
 [tool.uv.exclude-newer-package]
