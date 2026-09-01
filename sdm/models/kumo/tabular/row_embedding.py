@@ -31,7 +31,7 @@ class RowEmbedding(torch.nn.Module):
         if num_classes > 0:
             self.y_emb = Embedding(num_classes, channels, **factory_kwargs)
         else:
-            self.y_lin = Linear(1, channels, **factory_kwargs)
+            self.y_lin = Linear(1, channels, bias=False, **factory_kwargs)
 
         self.readout_token = Parameter(
             torch.empty(num_readout_tokens, channels, **factory_kwargs)
