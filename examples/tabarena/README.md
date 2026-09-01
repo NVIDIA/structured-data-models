@@ -3,8 +3,8 @@
 This example benchmarks `structured-data-models` on [TabArena](https://tabarena.ai).
 
 > [!NOTE]
-> Pretrained weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
-> Review the license before running the `TabFM` benchmark, which will download weights noninteractively.
+> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
+> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
 
 ## Setup
 
