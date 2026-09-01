@@ -1,4 +1,4 @@
-# SDM tabular models on TabArena
+# Tabular Foundation Models on TabArena
 
 This example benchmarks `structured-data-models` on [TabArena](https://tabarena.ai).
 
