@@ -1,10 +1,6 @@
-# SDM tabular models on TabArena
+# Tabular Foundation Models on TabArena
 
-This example benchmarks SDM tabular models on [TabArena](https://tabarena.ai).
-
-KumoTabular uses TabICLv2's default processing recipe in this benchmark.
-
-TabFM's pretrained weights are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE). Review the license before running this example, which accepts it noninteractively and downloads the weights.
+This example benchmarks `structured-data-models` on [TabArena](https://tabarena.ai).
 
 ## Setup
 
@@ -22,30 +18,32 @@ pip install structured-data-models \
 
 ## Run
 
-Run KumoTabular:
+- **`TabICLv2`:**
 
-```bash
-python main.py --model kumo-tabular
-```
+  ```bash
+  python main.py --model tabiclv2
+  ```
 
-Run TabICLv2:
+- **`KumoTabular`:**
 
-```bash
-python main.py --model tabiclv2
-```
+  ```bash
+  python main.py --model kumo-tabular
+  ```
 
-Run TabFM:
+- **`TabFM`:**
 
-```bash
-python main.py --model tabfm
-```
+  ```bash
+  python main.py --model tabfm
+  ```
+
+> [!NOTE]
+> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
+> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
 
 Pass a dataset name to run only that TabArena dataset:
 
 ```bash
-python main.py \
-  --model kumo-tabular \
-  --dataset blood-transfusion-service-center
+python main.py --model kumo-tabular --dataset blood-transfusion-service-center
 ```
 
 Evaluate all available model results with:
