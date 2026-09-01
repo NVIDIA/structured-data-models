@@ -127,7 +127,7 @@ class TabFM(ICLModel):
             )
             ckpt = load_file(path, device=str(device))
             ckpt = remap_ckpt(ckpt, is_classifier=task == Task.classification)
-            model.load_state_dict(ckpt, strict=True, assign=True)
+            model.load_state_dict(ckpt, assign=True)
 
         return self
 
