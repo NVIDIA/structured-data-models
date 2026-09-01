@@ -25,12 +25,14 @@ parser.add_argument(
 parser.add_argument(
     "--subset",
     action="append",
-    help="Filter BeyondArena tasks; repeat to combine filters (default: core).",
+    help="Filter tasks; repeat to combine filters (default: core).",
 )
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
-result_dir = Path(__file__).parent.parent / "beyondarena_out" / model_config.name
+result_dir = (
+    Path(__file__).parent.parent / "beyondarena_out" / model_config.name
+)
 result_dir.mkdir(parents=True, exist_ok=True)
 
 generator = SystemConfigGenerator(

@@ -19,7 +19,9 @@ for model_config in MODEL_CONFIGS.values():
         runs.append((model_config, result_dir))
 
 if not runs:
-    raise FileNotFoundError(f"No BeyondArena results found under {result_root}")
+    raise FileNotFoundError(
+        f"No BeyondArena results found under {result_root}"
+    )
 
 base_context = BeyondArenaContext()
 methods = []
