@@ -1,64 +1,51 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from typing import Any, ClassVar, Literal, cast
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Linear, ModuleDict
+from torch.nn import Identity, Linear, ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel, TabICLv2
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.tabular.icl import ICLBlock
-from sdm.models.kumo.tabular.table_encoder import TableEncoder
+from sdm.models.kumo.tabular.row_embedding import RowEmbedding
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.tensor.table import TableSchema
 
-_CHECKPOINT_FILE = {
-    Task.classification: "classifier.pt",
-    Task.regression: "regressor.pt",
+MODEL_KWARGS: dict[str, dict[str, Any]] = {
+    "small": {
+        "cell_channels": 128,
+        "num_embedding_layers": 4,
+        "num_embedding_heads": 4,
+        "num_inducing_points": 128,
+        "group_size": 3,
+        "num_frequencies": 32,
+        "num_readout_tokens": 4,
+        "icl_channels": 512,
+        "num_icl_layers": 12,
+        "num_icl_heads": 8,
+        "num_icl_key_value_heads_for_query": None,
+    },
+    "large": {
+        "cell_channels": 256,
+        "num_embedding_layers": 6,
+        "num_embedding_heads": 4,
+        "num_inducing_points": 256,
+        "group_size": 3,
+        "num_frequencies": 32,
+        "num_readout_tokens": 4,
+        "icl_channels": 512,
+        "num_icl_layers": 24,
+        "num_icl_heads": 8,
+        "num_icl_key_value_heads_for_query": 2,
+    },
 }
 
 
-def _architecture_kwargs(state: Mapping[str, Tensor]) -> dict[str, Any]:
-    channels = state["cell_embedding.num_lin.weight"].size(0)
-    if channels == 128:
-        return {
-            "channels": 128,
-            "num_embedding_layers": 4,
-            "num_embedding_col_heads": 4,
-            "num_embedding_row_heads": 4,
-            "num_inducing_points": 128,
-            "group_size": 3,
-            "num_frequencies": 32,
-            "num_readout_tokens": 4,
-            "downproject_cls_factor": 1.0,
-            "num_icl_layers": 12,
-            "num_icl_heads": 8,
-            "num_icl_key_value_heads_for_query": None,
-        }
-    if channels == 256:
-        return {
-            "channels": 256,
-            "num_embedding_layers": 6,
-            "num_embedding_col_heads": 4,
-            "num_embedding_row_heads": 4,
-            "num_inducing_points": 256,
-            "group_size": 3,
-            "num_frequencies": 32,
-            "num_readout_tokens": 4,
-            "downproject_cls_factor": 0.5,
-            "num_icl_layers": 24,
-            "num_icl_heads": 8,
-            "num_icl_key_value_heads_for_query": 2,
-        }
-    raise ValueError(f"Unsupported KumoTabular checkpoint width: {channels}")
-
-
-# TODO: Add model documentation.
 class KumoTabular(ICLModel):  # noqa: D101
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
@@ -79,52 +66,47 @@ class KumoTabular(ICLModel):  # noqa: D101
 
         self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
         for task in self.tasks:
-            if pretrained:
-                self.models[task] = self._load_from_pretrained(
-                    task,
-                    size,
-                    device,
-                )
-            else:
-                self.models[task] = _KumoTabular(
-                    num_classes=10 if task == Task.classification else 0,
-                    num_quantiles=999 if task == Task.regression else 0,
-                    device=device,
-                )
+            self.models[task] = _KumoTabular(
+                num_classes=10 if task == Task.classification else 0,
+                num_quantiles=999 if task == Task.regression else 0,
+                device="meta" if pretrained else device,
+                **MODEL_KWARGS[size],
+            )
+
+        if pretrained:
+            self.models[task] = self._load_from_pretrained(size, device=device)
 
         self.eval()
-
-    def _load_from_pretrained(
-        self,
-        task: Task,
-        size: Literal["small", "large"],
-        device: torch.device | str | None,
-    ) -> _KumoTabular:
-        device = torch.get_default_device() if device is None else device
-        checkpoint_path = download_checkpoint(
-            repo_id="nvidia/Kumo-Tabular",
-            filename=f"{size}/{_CHECKPOINT_FILE[task]}",
-            revision="v1.0.1",
-        )
-        state = torch.load(
-            checkpoint_path,
-            map_location=device,
-            weights_only=True,
-        )
-        model = _KumoTabular(
-            num_classes=10 if task == Task.classification else 0,
-            num_quantiles=999 if task == Task.regression else 0,
-            **_architecture_kwargs(state),
-            device="meta",
-        )
-        model.load_state_dict(state, strict=True, assign=True)
-        return model
 
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         # TODO: Define the default recipe.
         return TabICLv2.default_recipe()
+
+    def _load_from_pretrained(
+        self,
+        size: Literal["small", "large"],
+        device: torch.device | str | None,
+    ) -> _KumoTabular:
+        device = torch.get_default_device() if device is None else device
+
+        for task, model in self.models.items():
+            if task == Task.classification:
+                filename = f"{size}/classifier.pt"
+            else:
+                assert task == Task.regression
+                filename = f"{size}/regressor.pt"
+
+            path = download_checkpoint(
+                repo_id="nvidia/Kumo-Tabular",
+                filename=filename,
+                revision="v1.0.1",
+            )
+            ckpt = torch.load(path, map_location=device, weights_only=True)
+            model.load_state_dict(ckpt, assign=True)
+
+        return model
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415
@@ -151,7 +133,6 @@ class KumoTabular(ICLModel):  # noqa: D101
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
-        batch_size_limit: int | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -203,13 +184,8 @@ class KumoTabular(ICLModel):  # noqa: D101
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
         task = Task.classification if classes is not None else Task.regression
-        out = self.models[task](
-            x=x,
-            y=y,
-            categorical_mask=categorical_mask,
-            cache=cache,
-            batch_size_limit=batch_size_limit,
-        )
+        out = self.models[task](x, y, categorical_mask, cache=cache)
+
         if classes is None:
             return TableTensor(
                 columns={
@@ -228,15 +204,14 @@ class _KumoTabular(torch.nn.Module):
         self,
         num_classes: int,
         num_quantiles: int,
-        channels: int = 128,
+        cell_channels: int = 128,
         num_embedding_layers: int = 4,
-        num_embedding_col_heads: int = 4,
-        num_embedding_row_heads: int = 4,
+        num_embedding_heads: int = 4,
         num_inducing_points: int = 128,
         group_size: int = 3,
         num_frequencies: int = 32,
         num_readout_tokens: int = 4,
-        downproject_cls_factor: float = 1.0,
+        icl_channels: int = 512,
         num_icl_layers: int = 12,
         num_icl_heads: int = 8,
         num_icl_key_value_heads_for_query: int | None = None,
@@ -246,43 +221,29 @@ class _KumoTabular(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.num_classes = num_classes
-        cls_channels = num_readout_tokens * channels
-        icl_channels = round(cls_channels * downproject_cls_factor)
-        if icl_channels < 1:
-            raise ValueError(
-                "`downproject_cls_factor` must yield at least one ICL channel"
-            )
-
         self.cell_embedding = CellEmbedding(
-            channels=channels,
+            channels=cell_channels,
             group_size=group_size,
             num_frequencies=num_frequencies,
             **factory_kwargs,
         )
-        self.y_encoder = Linear(
-            in_features=num_classes or 1,
-            out_features=channels,
-            bias=num_classes > 0,
-            **factory_kwargs,
-        )
-        self.table_encoder = TableEncoder(
-            channels=channels,
+        self.row_embedding = RowEmbedding(
+            num_classes=num_classes,
+            channels=cell_channels,
             num_layers=num_embedding_layers,
-            num_col_heads=num_embedding_col_heads,
-            num_row_heads=num_embedding_row_heads,
+            num_heads=num_embedding_heads,
             num_inducing_points=num_inducing_points,
             num_readout_tokens=num_readout_tokens,
             **factory_kwargs,
         )
-
-        self.cls_downproject: Linear | None = None
-        if icl_channels != cls_channels:
-            self.cls_downproject = Linear(
-                cls_channels,
+        if cell_channels * num_readout_tokens != icl_channels:
+            self.row_project = Linear(
+                cell_channels * num_readout_tokens,
                 icl_channels,
                 **factory_kwargs,
             )
+        else:
+            self.row_project = Identity()
         self.icl_block = ICLBlock(
             num_classes=num_classes,
             out_channels=num_classes or num_quantiles,
@@ -300,33 +261,8 @@ class _KumoTabular(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
-        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        R_train = y.size(-1)
         x = self.cell_embedding(x, categorical_mask)
-
-        if y.numel() > 0:
-            if self.num_classes > 0:
-                y_emb = F.one_hot(y.long(), num_classes=self.num_classes)
-            else:
-                y_emb = y.unsqueeze(-1)
-            y_emb = self.y_encoder(y_emb.to(self.y_encoder.weight.dtype)).to(
-                x.dtype
-            )
-            x = torch.cat(
-                (
-                    x[..., :R_train, :, :] + y_emb.unsqueeze(-2),
-                    x[..., R_train:, :, :],
-                ),
-                dim=-3,
-            )
-
-        x = self.table_encoder(x, R_train, cache=cache)
-        if self.cls_downproject is not None:
-            x = self.cls_downproject(x)
-        return self.icl_block(
-            x=x,
-            y=y,
-            cache=cache,
-            batch_size_limit=batch_size_limit,
-        )
+        x = self.row_embedding(x, y, cache=cache)
+        x = self.row_project(x)
+        return self.icl_block(x=x, y=y, cache=cache)
