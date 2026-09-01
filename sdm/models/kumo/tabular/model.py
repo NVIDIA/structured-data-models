@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable, Mapping
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 import torch.nn.functional as F
@@ -12,14 +11,15 @@ from torch.nn import Linear, ModuleDict
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel, TabICLv2
+from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.table_encoder import TableEncoder
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.tensor.table import TableSchema
 
-_CHECKPOINT_ENV = {
-    Task.classification: "SDM_KUMO_TABULAR_CLS_CKPT_PATH",
-    Task.regression: "SDM_KUMO_TABULAR_REG_CKPT_PATH",
+_CHECKPOINT_FILE = {
+    Task.classification: "classifier.pt",
+    Task.regression: "regressor.pt",
 }
 
 
@@ -71,6 +71,7 @@ class KumoTabular(ICLModel):  # noqa: D101
     def __init__(
         self,
         task: TaskLike | Iterable[TaskLike] | None = None,
+        size: Literal["small", "large"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
@@ -79,7 +80,11 @@ class KumoTabular(ICLModel):  # noqa: D101
         self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
         for task in self.tasks:
             if pretrained:
-                self.models[task] = self._load_from_pretrained(task, device)
+                self.models[task] = self._load_from_pretrained(
+                    task,
+                    size,
+                    device,
+                )
             else:
                 self.models[task] = _KumoTabular(
                     num_classes=10 if task == Task.classification else 0,
@@ -92,18 +97,15 @@ class KumoTabular(ICLModel):  # noqa: D101
     def _load_from_pretrained(
         self,
         task: Task,
+        size: Literal["small", "large"],
         device: torch.device | str | None,
     ) -> _KumoTabular:
-        # TODO: Remove the environment lookup once checkpoints are on HF.
-        checkpoint_env = _CHECKPOINT_ENV[task]
-        checkpoint_path = os.getenv(checkpoint_env)
-        if checkpoint_path is None:
-            raise RuntimeError(
-                f"Set {checkpoint_env} to a local checkpoint path or pass "
-                "pretrained=False"
-            )
-
         device = torch.get_default_device() if device is None else device
+        checkpoint_path = download_checkpoint(
+            repo_id="nvidia/Kumo-Tabular",
+            filename=f"{size}/{_CHECKPOINT_FILE[task]}",
+            revision="v1.0.1",
+        )
         state = torch.load(
             checkpoint_path,
             map_location=device,
