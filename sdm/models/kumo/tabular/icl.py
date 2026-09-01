@@ -24,7 +24,7 @@ class ICLBlock(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        self.num_key_value_heads_for_query = num_key_value_heads_for_query
+        self.kv_heads = num_key_value_heads_for_query
 
         self.y_emb: torch.nn.Module | None = None
         self.y_lin: torch.nn.Module | None = None
@@ -59,7 +59,6 @@ class ICLBlock(torch.nn.Module):
         batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
-        kv_heads = self.num_key_value_heads_for_query
 
         if y.numel() > 0:
             if self.y_emb is not None:
@@ -74,7 +73,7 @@ class ICLBlock(torch.nn.Module):
             cache_key = f"icl_block.layer{i}"
             last_layer = i == len(self.layers) - 1
 
-            if kv_heads is None or cache is not None:
+            if self.kv_heads is None or cache is not None:
                 result = layer(
                     query=x[..., R_train:, :] if last_layer else x,
                     key_value=(
@@ -88,9 +87,9 @@ class ICLBlock(torch.nn.Module):
 
                 if cache is not None and cache.is_recording:
                     x, (key, value) = result
-                    if kv_heads is not None:
-                        key = key[..., :kv_heads, :].contiguous()
-                        value = value[..., :kv_heads, :].contiguous()
+                    if self.kv_heads is not None:
+                        key = key[..., : self.kv_heads, :].contiguous()
+                        value = value[..., : self.kv_heads, :].contiguous()
                     cache[cache_key] = KVCacheEntry(key, value)
                 else:
                     x = result
@@ -105,8 +104,8 @@ class ICLBlock(torch.nn.Module):
             x_query = layer(
                 query=x[..., R_train:, :],
                 key_value=KVCacheEntry(
-                    key=key[..., :kv_heads, :].contiguous(),
-                    value=value[..., :kv_heads, :].contiguous(),
+                    key=key[..., : self.kv_heads, :].contiguous(),
+                    value=value[..., : self.kv_heads, :].contiguous(),
                 ),
                 batch_size_limit=batch_size_limit,
             )
