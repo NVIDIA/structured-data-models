@@ -58,19 +58,8 @@ def _architecture_kwargs(state: Mapping[str, Tensor]) -> dict[str, Any]:
     raise ValueError(f"Unsupported KumoTabular checkpoint width: {channels}")
 
 
-class KumoTabular(ICLModel):
-    """A pretrained tabular foundation model for classification and regression.
-
-    Args:
-        task: The tasks to initialize. If ``None``, all supported tasks are
-            initialized.
-        size: The checkpoint size. ``"small"`` selects the 27M
-            classification and 28M regression models; ``"large"``
-            selects the 61M and 62M models.
-        pretrained: Whether to load pretrained checkpoints.
-        device: The device.
-    """
-
+# TODO: Add model documentation.
+class KumoTabular(ICLModel):  # noqa: D101
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
