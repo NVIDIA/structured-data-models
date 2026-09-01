@@ -13,7 +13,6 @@ from autogluon.core.data import LabelCleaner
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
 
 import sdm
-from sdm.models.kumo.tabular import KumoTabular
 
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
@@ -51,8 +50,8 @@ def _create_tabiclv2(
 def _create_kumo_tabular(
     task: Task,
     device: torch.device,
-) -> KumoTabular:
-    return KumoTabular(task=task, device=device)
+) -> sdm.models.KumoTabular:
+    return sdm.models.KumoTabular(task=task, device=device)
 
 
 @lru_cache(maxsize=1)
@@ -135,9 +134,9 @@ class SDMSystem(ExternalSystemModel):
         self.stypes = sdm.infer_stypes(X)
         target_name = target_name or "__target__"
         if problem_type == "regression":
-            target_stype = sdm.Stype.numerical
+            target_stype = "numerical"
         else:
-            target_stype = sdm.Stype.categorical
+            target_stype = "categorical"
             cleaner = LabelCleaner.construct(problem_type=problem_type, y=y)
             self._class_labels_by_key = {
                 str(label): label for label in cleaner.ordered_class_labels
