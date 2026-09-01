@@ -92,7 +92,7 @@ MODEL_CONFIGS = {
     "tabfm": ModelConfig(
         name="TabFM",
         factory=_create_tabfm,
-        num_estimators=8,
+        num_estimators=32,
         autocast_dtype=torch.bfloat16,
     ),
 }
