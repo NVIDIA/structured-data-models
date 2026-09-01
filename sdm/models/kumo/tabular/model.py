@@ -38,7 +38,7 @@ def _architecture_kwargs(state: Mapping[str, Tensor]) -> dict[str, Any]:
             "downproject_cls_factor": 1.0,
             "num_icl_layers": 12,
             "num_icl_heads": 8,
-            "icl_num_kv_heads_test": None,
+            "num_icl_key_value_heads_for_query": None,
         }
     if channels == 256:
         return {
@@ -53,7 +53,7 @@ def _architecture_kwargs(state: Mapping[str, Tensor]) -> dict[str, Any]:
             "downproject_cls_factor": 0.5,
             "num_icl_layers": 24,
             "num_icl_heads": 8,
-            "icl_num_kv_heads_test": 2,
+            "num_icl_key_value_heads_for_query": 2,
         }
     raise ValueError(f"Unsupported KumoTabular checkpoint width: {channels}")
 
@@ -237,7 +237,7 @@ class _KumoTabular(torch.nn.Module):
         downproject_cls_factor: float = 1.0,
         num_icl_layers: int = 12,
         num_icl_heads: int = 8,
-        icl_num_kv_heads_test: int | None = None,
+        num_icl_key_value_heads_for_query: int | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -287,7 +287,7 @@ class _KumoTabular(torch.nn.Module):
             channels=icl_channels,
             num_layers=num_icl_layers,
             num_heads=num_icl_heads,
-            num_key_value_heads_test=icl_num_kv_heads_test,
+            num_key_value_heads_for_query=num_icl_key_value_heads_for_query,
             **factory_kwargs,
         )
 

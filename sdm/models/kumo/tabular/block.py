@@ -13,8 +13,8 @@ class KumoTabularTransformerBlock(TransformerBlock):
         self,
         channels: int,
         num_heads: int,
+        query_log_scale: bool,
         rope: RotaryEmbedding | None = None,
-        query_log_scale: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:

@@ -9,6 +9,7 @@ def test_transformer_block(device: torch.device) -> None:
     block = KumoTabularTransformerBlock(
         channels=32,
         num_heads=4,
+        query_log_scale=True,
         device=device,
     )
     query = torch.randn(2, 5, 32, device=device)

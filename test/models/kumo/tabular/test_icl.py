@@ -12,17 +12,17 @@ from sdm.testing import withCUDA
     [(3, 4), (0, 5)],
 )
 @pytest.mark.parametrize(
-    "num_key_value_heads_test",
+    "num_key_value_heads_for_query",
     [
         pytest.param(None, id="mha"),
-        pytest.param(1, id="test-mqa"),
+        pytest.param(1, id="mqa"),
     ],
 )
 def test_icl_block(
     device: torch.device,
     num_classes: int,
     out_channels: int,
-    num_key_value_heads_test: int | None,
+    num_key_value_heads_for_query: int | None,
 ) -> None:
     block = ICLBlock(
         num_classes=num_classes,
@@ -31,7 +31,7 @@ def test_icl_block(
         num_layers=3,
         num_heads=2,
         device=device,
-        num_key_value_heads_test=num_key_value_heads_test,
+        num_key_value_heads_for_query=num_key_value_heads_for_query,
     ).eval()
     for parameter in block.parameters():
         torch.nn.init.normal_(parameter, std=0.1)
@@ -50,7 +50,7 @@ def test_icl_block(
     assert out.dtype == x.dtype
     assert out.device == device
 
-    if num_key_value_heads_test is not None:
+    if num_key_value_heads_for_query is not None:
         mha = ICLBlock(
             num_classes=num_classes,
             out_channels=out_channels,

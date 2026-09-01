@@ -18,13 +18,13 @@ class ICLBlock(torch.nn.Module):
         channels: int,
         num_layers: int,
         num_heads: int,
+        num_key_value_heads_for_query: int | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        num_key_value_heads_test: int | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        self.num_key_value_heads_test = num_key_value_heads_test
+        self.num_key_value_heads_for_query = num_key_value_heads_for_query
 
         self.y_emb: torch.nn.Module | None = None
         self.y_lin: torch.nn.Module | None = None
@@ -59,8 +59,7 @@ class ICLBlock(torch.nn.Module):
         batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
-        R_test = x.size(-2) - R_train
-        kv_heads = self.num_key_value_heads_test
+        kv_heads = self.num_key_value_heads_for_query
 
         if y.numel() > 0:
             if self.y_emb is not None:
@@ -72,69 +71,45 @@ class ICLBlock(torch.nn.Module):
             x[..., :R_train, :] += y_emb.to(x.dtype)
 
         for i, layer in enumerate(self.layers):
-            key = f"icl_block.layer{i}"
+            cache_key = f"icl_block.layer{i}"
             last_layer = i == len(self.layers) - 1
-            query = x[..., R_train:, :] if last_layer else x
-            is_recording = cache is not None and cache.is_recording
 
-            if kv_heads is None or R_test == 0:
+            if kv_heads is None or cache is not None:
                 result = layer(
-                    query=query,
+                    query=x[..., R_train:, :] if last_layer else x,
                     key_value=(
-                        cast(KVCacheEntry, cache[key])
+                        cast(KVCacheEntry, cache[cache_key])
                         if cache is not None and cache.is_replaying
                         else x[..., :R_train, :]
                     ),
-                    return_key_value=is_recording,
+                    return_key_value=cache is not None and cache.is_recording,
                     batch_size_limit=batch_size_limit,
                 )
 
-                if is_recording:
-                    x, key_value = result
+                if cache is not None and cache.is_recording:
+                    x, (key, value) = result
                     if kv_heads is not None:
-                        key_value = KVCacheEntry(
-                            key=key_value.key[..., :kv_heads, :].contiguous(),
-                            value=key_value.value[
-                                ..., :kv_heads, :
-                            ].contiguous(),
-                        )
-                    cache[key] = key_value
+                        key = key[..., :kv_heads, :].contiguous()
+                        value = value[..., :kv_heads, :].contiguous()
+                    cache[cache_key] = KVCacheEntry(key, value)
                 else:
                     x = result
                 continue
 
-            if cache is not None and cache.is_replaying:
-                x = layer(
-                    query=query,
-                    key_value=cast(KVCacheEntry, cache[key]),
-                    batch_size_limit=batch_size_limit,
-                )
-                continue
-
-            train = x[..., :R_train, :]
-            test = x[..., R_train:, :]
-            train_out, key_value = layer(
-                query=x[..., :0, :] if last_layer else train,
-                key_value=train,
+            x_context, (key, value) = layer(
+                query=x[..., :0, :] if last_layer else x[..., :R_train, :],
+                key_value=x[..., :R_train, :],
                 return_key_value=True,
                 batch_size_limit=batch_size_limit,
             )
-            key_value = KVCacheEntry(
-                key=key_value.key[..., :kv_heads, :].contiguous(),
-                value=key_value.value[..., :kv_heads, :].contiguous(),
-            )
-            test_out = layer(
-                query=test,
-                key_value=key_value,
+            x_query = layer(
+                query=x[..., R_train:, :],
+                key_value=KVCacheEntry(
+                    key=key[..., :kv_heads, :].contiguous(),
+                    value=value[..., :kv_heads, :].contiguous(),
+                ),
                 batch_size_limit=batch_size_limit,
             )
-            x = (
-                test_out
-                if last_layer
-                else torch.cat((train_out, test_out), -2)
-            )
-
-            if is_recording:
-                cache[key] = key_value
+            x = x_query if last_layer else torch.cat([x_context, x_query], -2)
 
         return self.head(self.norm(x))

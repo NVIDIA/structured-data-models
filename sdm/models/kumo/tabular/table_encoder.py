@@ -54,6 +54,7 @@ class TableEncoder(torch.nn.Module):
                 output_block=KumoTabularTransformerBlock(
                     channels=channels,
                     num_heads=num_col_heads,
+                    query_log_scale=False,
                     **factory_kwargs,
                 ),
                 **factory_kwargs,
@@ -64,6 +65,7 @@ class TableEncoder(torch.nn.Module):
             KumoTabularTransformerBlock(
                 channels=channels,
                 num_heads=num_row_heads,
+                query_log_scale=False,
                 rope=rope,
                 **factory_kwargs,
             )
