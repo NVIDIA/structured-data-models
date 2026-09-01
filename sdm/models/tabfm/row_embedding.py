@@ -160,6 +160,7 @@ class RowEmbedding(torch.nn.Module):
                     x, cache[key] = result
                 else:
                     x = result
+                del result
 
             x = col_proj(x.transpose(-2, -3))  # [..., R, C, D]
 

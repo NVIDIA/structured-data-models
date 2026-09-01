@@ -155,6 +155,7 @@ class ICLBlock(torch.nn.Module):
                 x, cache[key] = result
             else:
                 x = result
+            del result
 
         return self.head(self.norm(x))  # [..., R_test, out_channels]
 

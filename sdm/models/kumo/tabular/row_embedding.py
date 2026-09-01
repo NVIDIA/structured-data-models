@@ -102,39 +102,31 @@ class RowEmbedding(torch.nn.Module):
         for i, (col_block, row_block) in enumerate(
             zip(self.col_blocks, self.row_blocks)
         ):
-            x_i = x if i == 0 else x[..., K:, :]
-            x_i = x_i.transpose(-2, -3).contiguous()
-
-            key = f"row_embedding.col_block{i}"
-            if cache is not None and cache.is_replaying:
-                key_value = cast(KVCacheEntry, cache[key])
+            if i > 0:
+                readout_token, x = x.split([K, x.size(-2) - K], dim=-2)
+                readout_token = readout_token.clone()
             else:
-                key_value = x_i[..., :R_train, :]
+                readout_token = self.readout_token
+                readout_token = readout_token.view(*(1,) * len(B), 1, K, D)
+                readout_token = readout_token.expand(*B, R, K, D)
 
+            x = x.transpose(-2, -3).contiguous()
+            key = f"row_embedding.col_block{i}"
             result = col_block(
-                query=x_i,
-                key_value=key_value,
+                query=x,
+                key_value=cast(KVCacheEntry, cache[key])
+                if cache is not None and cache.is_replaying
+                else x[..., :R_train, :],
                 return_key_value=cache is not None and cache.is_recording,
             )
 
             if cache is not None and cache.is_recording:
-                x_i, cache[key] = result
+                x, cache[key] = result
             else:
-                x_i = result
+                x = result
+            del result
 
-            x_i = x_i.transpose(-2, -3)
-
-            if i == 0:
-                readout_token = (
-                    self.readout_token.to(x_i.dtype)
-                    .view(*(1,) * len(B), 1, K, D)
-                    .expand(*B, R, K, D)
-                )
-                x = torch.cat([readout_token, x_i], dim=-2)
-            else:
-                x = torch.cat([x[..., :K, :], x_i], dim=-2)
-            del x_i
-
+            x = torch.cat([readout_token.to(x.dtype), x.transpose(-2, -3)], -2)
             x = row_block(
                 query=x[..., :K, :] if i == len(self.row_blocks) - 1 else x,
                 key_value=x,

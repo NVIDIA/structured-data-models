@@ -35,7 +35,7 @@ class CellEmbedding(torch.nn.Module):
         x: Tensor,  # [..., R, C],
         categorical_mask: Tensor,  # [..., C],
         *,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | None = 50_000,
     ) -> Tensor:  # [..., R, C, D]
         *B, R, C = x.size()
 
@@ -73,7 +73,8 @@ class CellEmbedding(torch.nn.Module):
                 grouped_mask,  # [..., 1, C, G, 1]
                 self.cat_lin(fourier),  # [..., R, C, G, D]
                 self.num_lin(fourier),  # [..., R, C, G, D]
-            ).sum(dim=-2)  # [..., R, C, D]
+            )
+            x = x.sum(dim=-2).to(x.dtype)  # [..., R, C, D]
 
             if len(xs) == 1:
                 out = x
