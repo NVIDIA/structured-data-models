@@ -20,9 +20,11 @@ class ICLBlock(torch.nn.Module):
         num_heads: int,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        num_key_value_heads_test: int | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.num_key_value_heads_test = num_key_value_heads_test
 
         self.y_emb: torch.nn.Module | None = None
         self.y_lin: torch.nn.Module | None = None
@@ -57,6 +59,8 @@ class ICLBlock(torch.nn.Module):
         batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
+        R_test = x.size(-2) - R_train
+        kv_heads = self.num_key_value_heads_test
 
         if y.numel() > 0:
             if self.y_emb is not None:
@@ -69,20 +73,68 @@ class ICLBlock(torch.nn.Module):
 
         for i, layer in enumerate(self.layers):
             key = f"icl_block.layer{i}"
-            result = layer(
-                query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
-                key_value=(
-                    cast(KVCacheEntry, cache[key])
-                    if cache is not None and cache.is_replaying
-                    else x[..., :R_train, :]
-                ),
-                return_key_value=cache is not None and cache.is_recording,
+            last_layer = i == len(self.layers) - 1
+            query = x[..., R_train:, :] if last_layer else x
+            is_recording = cache is not None and cache.is_recording
+
+            if kv_heads is None or R_test == 0:
+                result = layer(
+                    query=query,
+                    key_value=(
+                        cast(KVCacheEntry, cache[key])
+                        if cache is not None and cache.is_replaying
+                        else x[..., :R_train, :]
+                    ),
+                    return_key_value=is_recording,
+                    batch_size_limit=batch_size_limit,
+                )
+
+                if is_recording:
+                    x, key_value = result
+                    if kv_heads is not None:
+                        key_value = KVCacheEntry(
+                            key=key_value.key[..., :kv_heads, :].contiguous(),
+                            value=key_value.value[
+                                ..., :kv_heads, :
+                            ].contiguous(),
+                        )
+                    cache[key] = key_value
+                else:
+                    x = result
+                continue
+
+            if cache is not None and cache.is_replaying:
+                x = layer(
+                    query=query,
+                    key_value=cast(KVCacheEntry, cache[key]),
+                    batch_size_limit=batch_size_limit,
+                )
+                continue
+
+            train = x[..., :R_train, :]
+            test = x[..., R_train:, :]
+            train_out, key_value = layer(
+                query=x[..., :0, :] if last_layer else train,
+                key_value=train,
+                return_key_value=True,
                 batch_size_limit=batch_size_limit,
             )
+            key_value = KVCacheEntry(
+                key=key_value.key[..., :kv_heads, :].contiguous(),
+                value=key_value.value[..., :kv_heads, :].contiguous(),
+            )
+            test_out = layer(
+                query=test,
+                key_value=key_value,
+                batch_size_limit=batch_size_limit,
+            )
+            x = (
+                test_out
+                if last_layer
+                else torch.cat((train_out, test_out), -2)
+            )
 
-            if cache is not None and cache.is_recording:
-                x, cache[key] = result
-            else:
-                x = result
+            if is_recording:
+                cache[key] = key_value
 
         return self.head(self.norm(x))

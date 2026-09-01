@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+import os
+from collections.abc import Iterable, Mapping
 from typing import Any, ClassVar, cast
 
 import torch
@@ -15,6 +16,46 @@ from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.table_encoder import TableEncoder
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.tensor.table import TableSchema
+
+_CHECKPOINT_ENV = {
+    Task.classification: "SDM_KUMO_TABULAR_CLS_CKPT_PATH",
+    Task.regression: "SDM_KUMO_TABULAR_REG_CKPT_PATH",
+}
+
+
+def _architecture_kwargs(state: Mapping[str, Tensor]) -> dict[str, Any]:
+    channels = state["cell_embedding.num_lin.weight"].size(0)
+    if channels == 128:
+        return {
+            "channels": 128,
+            "num_embedding_layers": 4,
+            "num_embedding_col_heads": 4,
+            "num_embedding_row_heads": 4,
+            "num_inducing_points": 128,
+            "group_size": 3,
+            "num_frequencies": 32,
+            "num_readout_tokens": 4,
+            "downproject_cls_factor": 1.0,
+            "num_icl_layers": 12,
+            "num_icl_heads": 8,
+            "icl_num_kv_heads_test": None,
+        }
+    if channels == 256:
+        return {
+            "channels": 256,
+            "num_embedding_layers": 6,
+            "num_embedding_col_heads": 4,
+            "num_embedding_row_heads": 4,
+            "num_inducing_points": 256,
+            "group_size": 3,
+            "num_frequencies": 32,
+            "num_readout_tokens": 4,
+            "downproject_cls_factor": 0.5,
+            "num_icl_layers": 24,
+            "num_icl_heads": 8,
+            "icl_num_kv_heads_test": 2,
+        }
+    raise ValueError(f"Unsupported KumoTabular checkpoint width: {channels}")
 
 
 # TODO: Add model documentation.
@@ -37,13 +78,45 @@ class KumoTabular(ICLModel):  # noqa: D101
 
         self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
         for task in self.tasks:
-            self.models[task] = _KumoTabular(
-                num_classes=10 if task == Task.classification else 0,
-                num_quantiles=999 if task == Task.regression else 0,
-                device=device,
-            )
+            if pretrained:
+                self.models[task] = self._load_from_pretrained(task, device)
+            else:
+                self.models[task] = _KumoTabular(
+                    num_classes=10 if task == Task.classification else 0,
+                    num_quantiles=999 if task == Task.regression else 0,
+                    device=device,
+                )
 
         self.eval()
+
+    def _load_from_pretrained(
+        self,
+        task: Task,
+        device: torch.device | str | None,
+    ) -> _KumoTabular:
+        # TODO: Remove the environment lookup once checkpoints are on HF.
+        checkpoint_env = _CHECKPOINT_ENV[task]
+        checkpoint_path = os.getenv(checkpoint_env)
+        if checkpoint_path is None:
+            raise RuntimeError(
+                f"Set {checkpoint_env} to a local checkpoint path or pass "
+                "pretrained=False"
+            )
+
+        device = torch.get_default_device() if device is None else device
+        state = torch.load(
+            checkpoint_path,
+            map_location=device,
+            weights_only=True,
+        )
+        model = _KumoTabular(
+            num_classes=10 if task == Task.classification else 0,
+            num_quantiles=999 if task == Task.regression else 0,
+            **_architecture_kwargs(state),
+            device="meta",
+        )
+        model.load_state_dict(state, strict=True, assign=True)
+        return model
 
     @classmethod
     def default_recipe(cls) -> Recipe:
@@ -161,8 +234,10 @@ class _KumoTabular(torch.nn.Module):
         group_size: int = 3,
         num_frequencies: int = 32,
         num_readout_tokens: int = 4,
+        downproject_cls_factor: float = 1.0,
         num_icl_layers: int = 12,
         num_icl_heads: int = 8,
+        icl_num_kv_heads_test: int | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -170,6 +245,12 @@ class _KumoTabular(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_classes = num_classes
+        cls_channels = num_readout_tokens * channels
+        icl_channels = round(cls_channels * downproject_cls_factor)
+        if icl_channels < 1:
+            raise ValueError(
+                "`downproject_cls_factor` must yield at least one ICL channel"
+            )
 
         self.cell_embedding = CellEmbedding(
             channels=channels,
@@ -192,12 +273,21 @@ class _KumoTabular(torch.nn.Module):
             num_readout_tokens=num_readout_tokens,
             **factory_kwargs,
         )
+
+        self.cls_downproject: Linear | None = None
+        if icl_channels != cls_channels:
+            self.cls_downproject = Linear(
+                cls_channels,
+                icl_channels,
+                **factory_kwargs,
+            )
         self.icl_block = ICLBlock(
             num_classes=num_classes,
             out_channels=num_classes or num_quantiles,
-            channels=num_readout_tokens * channels,
+            channels=icl_channels,
             num_layers=num_icl_layers,
             num_heads=num_icl_heads,
+            num_key_value_heads_test=icl_num_kv_heads_test,
             **factory_kwargs,
         )
 
@@ -230,6 +320,8 @@ class _KumoTabular(torch.nn.Module):
             )
 
         x = self.table_encoder(x, R_train, cache=cache)
+        if self.cls_downproject is not None:
+            x = self.cls_downproject(x)
         return self.icl_block(
             x=x,
             y=y,
