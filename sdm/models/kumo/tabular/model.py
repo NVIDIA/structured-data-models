@@ -18,18 +18,8 @@ from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.tensor.table import TableSchema
 
 _CHECKPOINT_FILE = {
-    ("small", Task.classification): (
-        "sdm-cls-s3-27m-gelu-phlogn-ft12k-r60k.pt"
-    ),
-    ("small", Task.regression): (
-        "sdm-reg-s3-28m-gelu-phlogn-bf16-full-ft12k-r60k.pt"
-    ),
-    ("large", Task.classification): (
-        "sdm-cls-s3-61m-gelu-phlogn-ch256-ft12k-r60k.pt"
-    ),
-    ("large", Task.regression): (
-        "sdm-reg-s3-62m-gelu-phlogn-ch256-ft12k-r60k.pt"
-    ),
+    Task.classification: "classifier.pt",
+    Task.regression: "regressor.pt",
 }
 
 
@@ -74,11 +64,11 @@ class KumoTabular(ICLModel):
     Args:
         task: The tasks to initialize. If ``None``, all supported tasks are
             initialized.
-        pretrained: Whether to load pretrained checkpoints.
-        device: The device.
         size: The checkpoint size. ``"small"`` selects the 27M
             classification and 28M regression models; ``"large"``
             selects the 61M and 62M models.
+        pretrained: Whether to load pretrained checkpoints.
+        device: The device.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -92,10 +82,9 @@ class KumoTabular(ICLModel):
     def __init__(
         self,
         task: TaskLike | Iterable[TaskLike] | None = None,
+        size: Literal["small", "large"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
-        *,
-        size: Literal["small", "large"] = "large",
     ) -> None:
         super().__init__(task=task)
 
@@ -125,8 +114,8 @@ class KumoTabular(ICLModel):
         device = torch.get_default_device() if device is None else device
         checkpoint_path = download_checkpoint(
             repo_id="nvidia/Kumo-Tabular",
-            filename=_CHECKPOINT_FILE[(size, task)],
-            revision="v1.0.0",
+            filename=f"{size}/{_CHECKPOINT_FILE[task]}",
+            revision="v1.0.1",
         )
         state = torch.load(
             checkpoint_path,

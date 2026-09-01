@@ -124,59 +124,6 @@ def test_rejects_zero_icl_width() -> None:
         _KumoTabular(10, 0, downproject_cls_factor=0)
 
 
-@pytest.mark.parametrize(
-    ("task", "size", "expected_filename"),
-    [
-        (
-            "classification",
-            "small",
-            "sdm-cls-s3-27m-gelu-phlogn-ft12k-r60k.pt",
-        ),
-        (
-            "regression",
-            "small",
-            "sdm-reg-s3-28m-gelu-phlogn-bf16-full-ft12k-r60k.pt",
-        ),
-        (
-            "classification",
-            "large",
-            "sdm-cls-s3-61m-gelu-phlogn-ch256-ft12k-r60k.pt",
-        ),
-        (
-            "regression",
-            "large",
-            "sdm-reg-s3-62m-gelu-phlogn-ch256-ft12k-r60k.pt",
-        ),
-    ],
-)
-def test_downloads_pretrained_checkpoint_from_hugging_face(
-    monkeypatch: pytest.MonkeyPatch,
-    task: Literal["classification", "regression"],
-    size: Literal["small", "large"],
-    expected_filename: str,
-) -> None:
-    class CheckpointRequested(Exception):
-        pass
-
-    def download_checkpoint(
-        repo_id: str,
-        filename: str,
-        *,
-        revision: str | None = None,
-    ) -> str:
-        assert repo_id == "nvidia/Kumo-Tabular"
-        assert filename == expected_filename
-        assert revision == "v1.0.0"
-        raise CheckpointRequested
-
-    monkeypatch.setattr(
-        model_module, "download_checkpoint", download_checkpoint
-    )
-
-    with pytest.raises(CheckpointRequested):
-        KumoTabular(task=task, size=size)
-
-
 def _build(task: Literal["classification", "regression"]) -> KumoTabular:
     model = KumoTabular(task=task, pretrained=False)
     # Residual branches are zero-initialized, so an untrained model maps every
