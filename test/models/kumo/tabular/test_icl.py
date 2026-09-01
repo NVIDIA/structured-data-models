@@ -11,10 +11,18 @@ from sdm.testing import withCUDA
     ("num_classes", "out_channels"),
     [(3, 4), (0, 5)],
 )
+@pytest.mark.parametrize(
+    "num_key_value_heads_test",
+    [
+        pytest.param(None, id="mha"),
+        pytest.param(1, id="test-mqa"),
+    ],
+)
 def test_icl_block(
     device: torch.device,
     num_classes: int,
     out_channels: int,
+    num_key_value_heads_test: int | None,
 ) -> None:
     block = ICLBlock(
         num_classes=num_classes,
@@ -23,6 +31,7 @@ def test_icl_block(
         num_layers=3,
         num_heads=2,
         device=device,
+        num_key_value_heads_test=num_key_value_heads_test,
     ).eval()
     for parameter in block.parameters():
         torch.nn.init.normal_(parameter, std=0.1)
@@ -35,15 +44,32 @@ def test_icl_block(
     else:
         y = torch.randint(num_classes, (2, 3), device=device)
 
-    out = block(x, y)
+    out = block(x.clone(), y)
 
     assert out.size() == (2, 2, out_channels)
     assert out.dtype == x.dtype
     assert out.device == device
 
+    if num_key_value_heads_test is not None:
+        mha = ICLBlock(
+            num_classes=num_classes,
+            out_channels=out_channels,
+            channels=8,
+            num_layers=3,
+            num_heads=2,
+            device=device,
+        ).eval()
+        mha.load_state_dict(block.state_dict())
+        assert not torch.allclose(mha(x.clone(), y), out)
+
     cache = Cache()
-    fit_out = block(x[..., :3, :], y, cache=cache)
-    replayed = block(x[..., 3:, :], y[..., :0], cache=cache.freeze())
+    fit_out = block(x[..., :3, :].clone(), y, cache=cache)
+    replayed = block(
+        x[..., 3:, :].clone(),
+        y[..., :0],
+        cache=cache.freeze(),
+        batch_size_limit=1,
+    )
 
     assert fit_out.size() == (2, 0, out_channels)
     assert cache.size() > 0

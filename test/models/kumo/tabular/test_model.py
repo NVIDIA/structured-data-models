@@ -119,8 +119,13 @@ def test_forward_does_not_mutate_input(
     )
 
 
+def test_rejects_zero_icl_width() -> None:
+    with pytest.raises(ValueError, match="at least one ICL channel"):
+        _KumoTabular(10, 0, downproject_cls_factor=0)
+
+
 def _build(task: Literal["classification", "regression"]) -> KumoTabular:
-    model = KumoTabular(task=task)
+    model = KumoTabular(task=task, pretrained=False)
     # Residual branches are zero-initialized, so an untrained model maps every
     # row onto the same constant. Randomize them to make the prediction depend
     # on the features it is given.
