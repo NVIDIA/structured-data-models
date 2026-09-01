@@ -7,9 +7,9 @@ import json
 import traceback
 from pathlib import Path
 
+import TALENT
 import torch
 
-import TALENT
 from models import MODEL_CONFIGS, UnsupportedDatasetError, register_sdm_method
 
 SEED_NUM = 15
