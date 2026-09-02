@@ -185,7 +185,6 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python examples/tabiclv2/strable.py --text-processor tfidf
-
       # Temporarily disabled while data.pyg.org is unavailable.
       # - name: Run Kumo RelBench example
       #   timeout-minutes: 2
@@ -199,13 +198,13 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/tabarena/main.py --model tabiclv2 --dataset blood-transfusion-service-center
-          python examples/tabarena/evaluate.py
+          python examples/tabarena/tabarena_main.py --model tabiclv2 --dataset blood-transfusion-service-center
+          python examples/tabarena/tabarena_evaluate.py
 
       - name: Run BeyondArena benchmark and evaluation example
         timeout-minutes: 5
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/beyondarena/main.py --model tabiclv2 --dataset parkinsons_biomedical_voice_measurements --subset lite
-          python examples/beyondarena/evaluate.py
+          python examples/tabarena/beyondarena_main.py --model tabiclv2 --dataset parkinsons_biomedical_voice_measurements --subset lite
+          python examples/tabarena/beyondarena_evaluate.py

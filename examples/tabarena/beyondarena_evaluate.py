@@ -30,7 +30,7 @@ for model_config, result_dir in runs:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     method_metadata = MethodMetadata.baseline(
-        method=model_config.method_name,
+        method=f"{model_config.system_name}_c1",
         compute="gpu",
         artifact_dir=output_dir / "artifacts",
     )
