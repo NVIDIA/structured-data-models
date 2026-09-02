@@ -38,7 +38,6 @@ repos:
       - id: ty
         name: Type check Python
         args:
-          - --find-links=https://data.pyg.org/whl/torch-2.13.0+cpu.html
           - --no-default-groups
           - --group=test
 
