@@ -143,6 +143,7 @@ class RelationalSampler:
                     f"{str(Stype.datetime)!r} (got {str(stype)!r})"
                 )
 
+        shared = False
         if task_table.dim() not in (2, 3):
             raise ValueError(
                 f"Task table needs to be either 2D or 3D "
@@ -150,7 +151,15 @@ class RelationalSampler:
             )
         if task_table.dim() == 3:
             num_members, num_rows = task_table.size()[:2]
-            task_table = cast(TableTensor, task_table.flatten(0, 1))
+            shared = all(
+                block.stride(0) == 0
+                for stype, block in task_table.items()
+                if block.size(-1) > 0 and stype != Stype.id
+            )
+            if shared:
+                task_table = task_table[0]
+            else:
+                task_table = cast(TableTensor, task_table.flatten(0, 1))
         else:
             num_members, num_rows = None, task_table.size(0)
 
@@ -172,7 +181,7 @@ class RelationalSampler:
                         id=ColumnarTensor(
                             (
                                 example
-                                if num_members is None
+                                if num_members is None or shared
                                 else example % num_rows,
                             )
                         ),
@@ -184,6 +193,13 @@ class RelationalSampler:
 
             if num_members is None:
                 tables[table_name] = table
+                continue
+
+            if shared:
+                tables[table_name] = EnsembleTable.from_tables(
+                    tables=[table for i in range(num_members)],
+                    member_table_ids=range(num_members),
+                )
                 continue
 
             member = example // num_rows
@@ -224,7 +240,10 @@ class RelationalSampler:
             dim=-1,
         )
         if num_members is not None:
-            task_table = task_table.view(num_members, num_rows, -1)
+            if shared:
+                task_table = task_table.expand(num_members, *task_table.size())
+            else:
+                task_table = task_table.view(num_members, num_rows, -1)
 
         return RelationalSamplerOutput(
             task_table=cast(TableTensor, task_table),
