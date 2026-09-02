@@ -44,16 +44,12 @@ class ModelConfig:
     max_classes: int | None = None
 
 
-@lru_cache(maxsize=1)
-def _load_tabiclv2(device: torch.device) -> sdm.models.TabICLv2:
-    return sdm.models.TabICLv2(device=device)
-
-
+@lru_cache(maxsize=2)
 def _create_tabiclv2(
-    _task: Task,
+    task: Task,
     device: torch.device,
-) -> sdm.models.ICLModel:
-    return _load_tabiclv2(device=device)
+) -> sdm.models.TabICLv2:
+    return sdm.models.TabICLv2(task=task, device=device)
 
 
 @lru_cache(maxsize=2)
@@ -65,7 +61,7 @@ def _create_kumo_tabular(
 
 
 @lru_cache(maxsize=1)
-def _load_tabfm(
+def _create_tabfm(
     task: Task,
     device: torch.device,
 ) -> sdm.models.TabFM:
@@ -74,13 +70,6 @@ def _load_tabfm(
         accept_license=True,
         device=device,
     )
-
-
-def _create_tabfm(
-    task: Task,
-    device: torch.device,
-) -> sdm.models.ICLModel:
-    return _load_tabfm(task=task, device=device)
 
 
 MODEL_CONFIGS = {
@@ -293,6 +282,8 @@ class SDMMethod(Method):
             enabled=x_test.is_cuda,
         ):
             out = self.model.predict(x_test)
+        if x_test.is_cuda:
+            torch.cuda.synchronize()
         self.predict_time = time.perf_counter() - tic
 
         if self.is_regression:
