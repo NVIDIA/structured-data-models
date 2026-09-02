@@ -93,6 +93,7 @@ class ICLBlock(torch.nn.Module):
                     cache[cache_key] = KVCacheEntry(key, value)
                 else:
                     x = result
+                del result
                 continue
 
             x_context, (key, value) = layer(
