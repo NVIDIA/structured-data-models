@@ -244,7 +244,7 @@ def _infer_pandas_stype(
             return None if text == "drop" else Stype.text
         return Stype.categorical
 
-    if is_datetime64_any_dtype(dtype):
+    if is_datetime64_any_dtype(dtype) or isinstance(dtype, pd.PeriodDtype):
         return Stype.datetime
 
     raise TypeError(f"Unsupported pandas type '{dtype}' for column {name!r}")
