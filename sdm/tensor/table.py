@@ -286,6 +286,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        categorical_as_string: bool = False,
     ) -> Self:
         r"""Create a tensor from a :class:`pyarrow.Table`.
 
@@ -308,6 +309,8 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``table`` but not included in ``stypes`` will be ignored.
             device: The device.
+            categorical_as_string: Convert categorical values to strings
+                before dictionary encoding.
         """
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
@@ -324,6 +327,8 @@ class TableTensor(Tensor):
                         dtype=torch.get_default_dtype(),
                     ).unsqueeze(-1)
                 elif stype == Stype.categorical:
+                    if categorical_as_string:
+                        array = array.cast(pa.string())
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.datetime:
                     array = array.cast(pa.timestamp("us"))
@@ -381,6 +386,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        categorical_as_string: bool = False,
     ) -> Self:
         r"""Create a tensor from a :class:`pandas.DataFrame`.
 
@@ -389,13 +395,20 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``df`` but not included in ``stypes`` will be ignored.
             device: The device.
+            categorical_as_string: Convert categorical values to strings
+                before dictionary encoding.
         """
+        data = df[stypes.keys()]
+        if categorical_as_string:
+            data = data.copy()
+            for column, stype in stypes.items():
+                if Stype(stype) == Stype.categorical:
+                    data[column] = data[column].astype("string")
         return cls.from_arrow(
-            table=pa.Table.from_pandas(
-                df[stypes.keys()], preserve_index=False
-            ),
+            table=pa.Table.from_pandas(data, preserve_index=False),
             stypes=stypes,
             device=device,
+            categorical_as_string=categorical_as_string,
         )
 
     @classmethod
@@ -405,6 +418,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        categorical_as_string: bool = False,
     ) -> Self:
         r"""Create a tensor from column data.
 
@@ -413,6 +427,8 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``data`` but not included in ``stypes`` will be ignored.
             device: The device.
+            categorical_as_string: Convert categorical values to strings
+                before dictionary encoding.
         """
         import pandas as pd
 
@@ -420,6 +436,7 @@ class TableTensor(Tensor):
             df=pd.DataFrame(data),
             stypes=stypes,
             device=device,
+            categorical_as_string=categorical_as_string,
         )
 
     def to_pandas(self) -> pd.DataFrame:
@@ -470,6 +487,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        categorical_as_string: bool = False,
     ) -> Self:
         r"""Create a tensor from a :class:`cudf.DataFrame`.
 
@@ -478,6 +496,8 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``df`` but not included in ``stypes`` will be ignored.
             device: The device.
+            categorical_as_string: Convert categorical values to strings
+                before dictionary encoding.
         """
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
@@ -495,6 +515,8 @@ class TableTensor(Tensor):
                     tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
                     tensor = tensor.to(device)
                 elif stype == Stype.categorical:
+                    if categorical_as_string:
+                        ser = ser.astype("str")
                     tensor = CategoricalTensor.from_cudf(ser, device=device)
                 elif stype == Stype.datetime:
                     ser = ser.astype("datetime64[us]", copy=False)
