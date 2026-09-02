@@ -86,8 +86,21 @@ def join_index(
             pa.array(torch.arange(right_rows, dtype=dtype).numpy()),
         )
 
-        joined = dropna(left, subset=left_keys).join(
-            dropna(right, subset=right_keys),
+        left = dropna(left, subset=left_keys)
+        right = dropna(right, subset=right_keys)
+
+        right_schema = right.schema
+        for left_key, right_key in zip(left_keys, right_keys):
+            left_type = left[left_key].type
+            if left_type != right[right_key].type:
+                index = right.schema.get_field_index(right_key)
+                field = right.schema.field(index).with_type(left_type)
+                right_schema = right_schema.set(index, field)
+        if right_schema != right.schema:
+            right = right.cast(right_schema, safe=True)
+
+        joined = left.join(
+            right,
             keys=left_keys,
             right_keys=right_keys,
             join_type=how,
