@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Literal, Self
 
 import pandas as pd
@@ -33,13 +34,15 @@ class ModelConfig:
         return f"{self.system_name}_c1_default"
 
 
+@lru_cache(maxsize=2)
 def _create_tabiclv2(
-    _task: Task,
+    task: Task,
     device: torch.device,
-) -> sdm.models.ICLModel:
-    return sdm.models.TabICLv2(device=device)
+) -> sdm.models.TabICLv2:
+    return sdm.models.TabICLv2(task=task, device=device)
 
 
+@lru_cache(maxsize=2)
 def _create_kumo_tabular(
     task: Task,
     device: torch.device,
@@ -47,15 +50,12 @@ def _create_kumo_tabular(
     return sdm.models.KumoTabular(task=task, device=device)
 
 
+@lru_cache(maxsize=1)
 def _create_tabfm(
     task: Task,
     device: torch.device,
-) -> sdm.models.ICLModel:
-    return sdm.models.TabFM(
-        task=task,
-        accept_license=True,
-        device=device,
-    )
+) -> sdm.models.TabFM:
+    return sdm.models.TabFM(task=task, accept_license=True, device=device)
 
 
 MODEL_CONFIGS = {
