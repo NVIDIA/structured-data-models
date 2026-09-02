@@ -1115,6 +1115,70 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+@pytest.mark.parametrize("source", ["arrow", "pandas", "columns"])
+def test_numerical_ingestion_dtype_preserves_large_offsets(
+    source: str,
+) -> None:
+    values = (1e12 + torch.arange(3, dtype=torch.float64)).tolist()
+    stypes = {"value": "numerical"}
+
+    if source == "arrow":
+        table = TableTensor.from_arrow(
+            pa.table({"value": values}),
+            stypes,
+            numerical_dtype=torch.float64,
+        )
+    elif source == "pandas":
+        table = TableTensor.from_pandas(
+            pd.DataFrame({"value": values}),
+            stypes,
+            numerical_dtype=torch.float64,
+        )
+    else:
+        assert source == "columns"
+        table = TableTensor.from_columns(
+            {"value": values},
+            stypes,
+            numerical_dtype=torch.float64,
+        )
+
+    assert table.numerical.dtype == torch.float64
+    assert table.numerical.squeeze(-1).equal(
+        torch.tensor(values, dtype=torch.float64)
+    )
+
+
+def test_numerical_ingestion_dtype_rejects_non_floating_dtype() -> None:
+    with pytest.raises(ValueError, match="numerical_dtype"):
+        TableTensor.from_arrow(
+            pa.table({"value": [1, 2]}),
+            {"value": "numerical"},
+            numerical_dtype=torch.int64,
+        )
+
+
+def test_numerical_ingestion_dtype_is_unused_without_numerical_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(torch, "get_default_dtype", lambda: torch.float16)
+
+    table = TableTensor.from_arrow(
+        pa.table({"kind": ["a", "b"]}),
+        {"kind": "categorical"},
+    )
+
+    assert table.categorical.code.squeeze(-1).tolist() == [0, 1]
+
+
+def test_explicit_dtype_is_validated_without_numerical_columns() -> None:
+    with pytest.raises(ValueError, match="numerical_dtype"):
+        TableTensor.from_arrow(
+            pa.table({"kind": ["a", "b"]}),
+            {"kind": "categorical"},
+            numerical_dtype=torch.int64,
+        )
+
+
 @onlyCUDA
 def test_from_pandas_id_cuda() -> None:
     df = pd.DataFrame(
@@ -1237,6 +1301,21 @@ def test_cudf() -> None:
 
     df = tensor.to_cudf()
     assert df.to_arrow().to_pydict() == data
+
+
+@onlyCUDA
+def test_from_cudf_preserves_default_float32_numerical_dtype(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cudf = pytest.importorskip("cudf")
+    monkeypatch.setattr(torch, "get_default_dtype", lambda: torch.float64)
+
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame({"value": [1.0, 2.0]}),
+        stypes={"value": "numerical"},
+    )
+
+    assert tensor.numerical.dtype == torch.float32
 
 
 @onlyCUDA

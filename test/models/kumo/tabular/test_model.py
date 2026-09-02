@@ -77,6 +77,69 @@ def _recipe() -> sp.Recipe:
     )
 
 
+def test_numerical_precision_is_preserved_before_model_cast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RecordingCore(torch.nn.Module):
+        seen: torch.Tensor
+
+        def __init__(
+            self,
+            num_classes: int,
+            num_quantiles: int,
+            device: torch.device | str | None = None,
+            dtype: torch.dtype | None = None,
+        ) -> None:
+            super().__init__()
+            self.num_classes = num_classes
+            self.anchor = torch.nn.Parameter(
+                torch.empty((), device=device, dtype=dtype)
+            )
+
+        def forward(
+            self,
+            x: torch.Tensor,
+            y: torch.Tensor,
+            categorical_mask: torch.Tensor,
+            *,
+            cache: Cache | None = None,
+            batch_size_limit: int | None = None,
+        ) -> torch.Tensor:
+            type(self).seen = x
+            return x.new_zeros(
+                (*x.size()[:-2], x.size(-2) - y.size(-1), self.num_classes)
+            )
+
+    monkeypatch.setattr(model_module, "_KumoTabular", RecordingCore)
+    model = KumoTabular()
+    context = TableTensor.from_columns(
+        {"value": (1e12 + torch.arange(16, dtype=torch.float64)).tolist()},
+        {"value": "numerical"},
+        numerical_dtype=torch.float64,
+    )
+    query = TableTensor.from_columns(
+        {"value": [1e12 + 16]},
+        {"value": "numerical"},
+        numerical_dtype=torch.float64,
+    )
+    target = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.arange(16).remainder(3).unsqueeze(-1),
+            categories=(torch.arange(3).mul(10),),
+        )
+    )
+
+    model(
+        context,
+        target,
+        query,
+        recipe=sp.Recipe(features=sp.Standardize()),
+    )
+
+    assert RecordingCore.seen.dtype == torch.float32
+    assert RecordingCore.seen[:16].unique().numel() == 16
+
+
 def test_forward(
     cls_model: KumoTabular,
     reg_model: KumoTabular,

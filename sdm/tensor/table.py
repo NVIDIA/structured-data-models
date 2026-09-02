@@ -36,6 +36,15 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
+def _validate_numerical_dtype(dtype: torch.dtype) -> torch.dtype:
+    if dtype not in (torch.float32, torch.float64):
+        raise ValueError(
+            "Expected 'numerical_dtype' to be torch.float32 or "
+            f"torch.float64 (got {dtype})"
+        )
+    return dtype
+
+
 @dataclass(frozen=True)
 class TableSchema:
     r"""The schema of a :class:`TableTensor`.
@@ -286,6 +295,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        numerical_dtype: torch.dtype | None = None,
     ) -> Self:
         r"""Create a tensor from a :class:`pyarrow.Table`.
 
@@ -308,10 +318,20 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``table`` but not included in ``stypes`` will be ignored.
             device: The device.
+            numerical_dtype: Floating-point dtype for numerical columns.
+                ``None`` uses :func:`torch.get_default_dtype`.
         """
+        if numerical_dtype is not None:
+            _validate_numerical_dtype(numerical_dtype)
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
             columns[Stype(stype)].append(column)
+        if Stype.numerical in columns:
+            numerical_dtype = _validate_numerical_dtype(
+                torch.get_default_dtype()
+                if numerical_dtype is None
+                else numerical_dtype
+            )
 
         blocks: dict[Stype, Tensor] = {}
         for stype in columns:
@@ -319,9 +339,10 @@ class TableTensor(Tensor):
             for column in columns[stype]:
                 array = table.column(column)
                 if stype == Stype.numerical:
+                    assert numerical_dtype is not None
                     tensor = arrow_as_tensor(
                         array,
-                        dtype=torch.get_default_dtype(),
+                        dtype=numerical_dtype,
                     ).unsqueeze(-1)
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
@@ -381,6 +402,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        numerical_dtype: torch.dtype | None = None,
     ) -> Self:
         r"""Create a tensor from a :class:`pandas.DataFrame`.
 
@@ -389,6 +411,8 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``df`` but not included in ``stypes`` will be ignored.
             device: The device.
+            numerical_dtype: Floating-point dtype for numerical columns.
+                ``None`` uses :func:`torch.get_default_dtype`.
         """
         return cls.from_arrow(
             table=pa.Table.from_pandas(
@@ -396,6 +420,7 @@ class TableTensor(Tensor):
             ),
             stypes=stypes,
             device=device,
+            numerical_dtype=numerical_dtype,
         )
 
     @classmethod
@@ -405,6 +430,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        numerical_dtype: torch.dtype | None = None,
     ) -> Self:
         r"""Create a tensor from column data.
 
@@ -413,6 +439,8 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``data`` but not included in ``stypes`` will be ignored.
             device: The device.
+            numerical_dtype: Floating-point dtype for numerical columns.
+                ``None`` uses :func:`torch.get_default_dtype`.
         """
         import pandas as pd
 
@@ -420,6 +448,7 @@ class TableTensor(Tensor):
             df=pd.DataFrame(data),
             stypes=stypes,
             device=device,
+            numerical_dtype=numerical_dtype,
         )
 
     def to_pandas(self) -> pd.DataFrame:
@@ -470,6 +499,7 @@ class TableTensor(Tensor):
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
+        numerical_dtype: torch.dtype | None = None,
     ) -> Self:
         r"""Create a tensor from a :class:`cudf.DataFrame`.
 
@@ -478,10 +508,18 @@ class TableTensor(Tensor):
             stypes: The semantic type for each column. Columns that are present
                 in ``df`` but not included in ``stypes`` will be ignored.
             device: The device.
+            numerical_dtype: Floating-point dtype for numerical columns.
+                ``None`` preserves the existing ``float32`` conversion.
         """
+        if numerical_dtype is not None:
+            _validate_numerical_dtype(numerical_dtype)
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
             columns[Stype(stype)].append(column)
+        if Stype.numerical in columns:
+            numerical_dtype = (
+                torch.float32 if numerical_dtype is None else numerical_dtype
+            )
 
         blocks: dict[Stype, Tensor] = {}
         for stype in columns:
@@ -489,7 +527,11 @@ class TableTensor(Tensor):
             for column in columns[stype]:
                 ser = df[column]
                 if stype == Stype.numerical:
-                    ser = ser.astype("float32", copy=False)
+                    assert numerical_dtype is not None
+                    ser = ser.astype(
+                        str(numerical_dtype).removeprefix("torch."),
+                        copy=False,
+                    )
                     if ser.null_count > 0:
                         ser = ser.fillna(float("nan"))
                     tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)

@@ -146,12 +146,16 @@ class KumoTabular(ICLModel):  # noqa: D101
             assert x_query is not None
             x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
+        model_dtype = next(self.model.parameters()).dtype
+        x = x.to(dtype=model_dtype)
+
         classes: Tensor | None = None
         if y_context is not None and y_context.categorical.size(-1) > 0:
             y = y_context.categorical.code.squeeze(-1)
             classes = y_context.categorical.categories[0]
         elif y_context is not None and y_context.numerical.size(-1) > 0:
             y = y_context.numerical.squeeze(-1)
+            y = y.to(dtype=model_dtype)
         else:
             assert cache is not None
             classes = cast(Tensor | None, cache["classes"])
