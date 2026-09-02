@@ -35,7 +35,7 @@ class CellEmbedding(torch.nn.Module):
         x: Tensor,  # [..., R, C],
         categorical_mask: Tensor,  # [..., C],
         *,
-        batch_size_limit: int | None = 50_000,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R, C, D]
         *B, R, C = x.size()
 
