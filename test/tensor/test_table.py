@@ -1115,6 +1115,39 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+@pytest.mark.parametrize("source", ["arrow", "pandas", "columns"])
+def test_categorical_ingestion_can_encode_missing_values(source: str) -> None:
+    values = ["b", None, "a", None]
+    stypes = {"kind": "categorical"}
+
+    if source == "arrow":
+        table = TableTensor.from_arrow(
+            table=pa.table({"kind": values}),
+            stypes=stypes,
+            categorical_missing_value="___missing___",
+        )
+    elif source == "pandas":
+        table = TableTensor.from_pandas(
+            df=pd.DataFrame({"kind": values}),
+            stypes=stypes,
+            categorical_missing_value="___missing___",
+        )
+    else:
+        assert source == "columns"
+        table = TableTensor.from_columns(
+            data={"kind": values},
+            stypes=stypes,
+            categorical_missing_value="___missing___",
+        )
+
+    assert table.categorical.categories[0].tolist() == [
+        "b",
+        "___missing___",
+        "a",
+    ]
+    assert table.categorical.code.squeeze(-1).tolist() == [0, 1, 2, 1]
+
+
 @onlyCUDA
 def test_from_pandas_id_cuda() -> None:
     df = pd.DataFrame(
