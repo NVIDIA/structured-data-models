@@ -30,6 +30,27 @@ def test_join_index(dtype: torch.dtype, device: torch.device) -> None:
     assert right_index.equal(left_index)
 
 
+def test_join_index_cast() -> None:
+    left_table = TableTensor(
+        columns={"id": ("friend",)},
+        id=ColumnarTensor((torch.tensor([1.0, float("nan"), 3.0]),)),
+    )
+    right_table = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.tensor([1, 2, 3]),)),
+    )
+
+    left_index, right_index = join_index(
+        left_table=left_table,
+        right_table=right_table,
+        left_keys=["friend"],
+        right_keys=["user_id"],
+    )
+
+    assert left_index.equal(torch.tensor([0, 2]))
+    assert right_index.equal(torch.tensor([0, 2]))
+
+
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
 def test_invalid_dtype(
