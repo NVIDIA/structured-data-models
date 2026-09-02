@@ -73,7 +73,8 @@ class CellEmbedding(torch.nn.Module):
                 grouped_mask,  # [..., 1, C, G, 1]
                 self.cat_lin(fourier),  # [..., R, C, G, D]
                 self.num_lin(fourier),  # [..., R, C, G, D]
-            ).sum(dim=-2)  # [..., R, C, D]
+            )
+            x = x.sum(dim=-2).to(x.dtype)  # [..., R, C, D]
 
             if len(xs) == 1:
                 out = x

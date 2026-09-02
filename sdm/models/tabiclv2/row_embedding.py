@@ -188,6 +188,7 @@ class RowEmbedding(torch.nn.Module):
                 x, cache[key] = result
             else:
                 x = result
+            del result
 
         if num_digits > 1:  # Average over mixed-radix digits.
             x = x.mean(dim=0)  # [F, ..., C, R, D] -> [..., C, R, D]
