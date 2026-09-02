@@ -94,6 +94,7 @@ def _chunk_attention(
     seqused_key_value: Tensor | None,
     attn_mask: Tensor | None,
     return_key_value: bool,
+    return_key_value_heads: int | None,
     batch_size_limit: int,
 ) -> Tensor | tuple[Tensor, KVCacheEntry] | None:
     batch_shape = _attention_batch_shape(
@@ -138,6 +139,7 @@ def _chunk_attention(
                 attn_mask, batch_shape, 2, start, end
             ),
             return_key_value=return_key_value,
+            return_key_value_heads=return_key_value_heads,
             batch_size_limit=batch_size_limit,
         )
         if return_key_value:
@@ -446,6 +448,7 @@ class Attention(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
+        return_key_value_heads: int | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor: ...
 
@@ -458,6 +461,7 @@ class Attention(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
+        return_key_value_heads: int | None = None,
         batch_size_limit: int | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
@@ -470,6 +474,7 @@ class Attention(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
+        return_key_value_heads: int | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
@@ -481,6 +486,7 @@ class Attention(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         return_key_value: bool = False,
         *,
+        return_key_value_heads: int | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -500,6 +506,8 @@ class Attention(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
+            return_key_value_heads: Number of leading key/value heads to return
+                when ``return_key_value`` is ``True``.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
 
@@ -518,12 +526,15 @@ class Attention(torch.nn.Module):
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
                 return_key_value=return_key_value,
+                return_key_value_heads=return_key_value_heads,
                 batch_size_limit=batch_size_limit,
             )
             if chunked_result is not None:
                 return chunked_result
 
-        if isinstance(key_value, KVCacheEntry):
+        key_value_cached = isinstance(key_value, KVCacheEntry)
+        if key_value_cached:
+            assert isinstance(key_value, KVCacheEntry)
             query = F.linear(
                 query,
                 weight=self.qkv_lin.weight[: self.q_dim],
@@ -539,9 +550,10 @@ class Attention(torch.nn.Module):
                     f"Key/value projections were cached under dtypes "
                     f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
                     f"the query has dtype '{query.dtype}'"
-                )
+            )
             key = key_value.key
             value = key_value.value
+            del key_value
         elif key_value is None:
             query, key, value = self.qkv_lin(query).split(
                 [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
@@ -554,10 +566,11 @@ class Attention(torch.nn.Module):
                 q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
             query = F.linear(query, q_weight, q_bias)
             key, value = F.linear(key_value, kv_weight, kv_bias).chunk(2, -1)
+            del key_value
 
         # [..., S, C] -> [..., S, H, C // H], with separate query/kv heads.
         query = query.unflatten(-1, [self.num_query_heads, self.head_dim])
-        if not isinstance(key_value, KVCacheEntry):
+        if not key_value_cached:
             key = key.unflatten(-1, [self.num_key_value_heads, self.head_dim])
             value = value.unflatten(
                 -1, [self.num_key_value_heads, self.head_dim]
@@ -566,7 +579,7 @@ class Attention(torch.nn.Module):
         if self.query_transform is not None:
             query = self.query_transform(query)
         if (
-            not isinstance(key_value, KVCacheEntry)
+            not key_value_cached
             and self.key_transform is not None
         ):
             key = self.key_transform(key)
@@ -579,6 +592,12 @@ class Attention(torch.nn.Module):
             attn_mask=attn_mask,  # [..., Q, KV]
             batch_size_limit=batch_size_limit,
         )  # [..., Q, Hq, C // Hq]
+
+        if not return_key_value:
+            del query, key, value
+        elif return_key_value_heads is not None:
+            key = key[..., :return_key_value_heads, :].contiguous()
+            value = value[..., :return_key_value_heads, :].contiguous()
 
         out = out.flatten(-2, -1)  # [..., Q, C]
         out = self.out_lin(out)  # [..., Q, C]
@@ -606,6 +625,8 @@ class TransformerBlock(torch.nn.Module):
             attention.
         post_attn_norm: Normalization applied to the attention output before
             its residual addition.
+        mlp_batch_size_divisor: Optional divisor applied to
+            ``batch_size_limit`` when applying the MLP residual in inference.
         query_transform: Transformation applied to projected query heads before
             scaled dot-product attention.
         key_transform: Transformation applied to projected key heads before
@@ -629,6 +650,7 @@ class TransformerBlock(torch.nn.Module):
         query_norm: torch.nn.Module | None = None,
         key_value_norm: torch.nn.Module | None = None,
         post_attn_norm: torch.nn.Module | None = None,
+        mlp_batch_size_divisor: int | None = None,
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
@@ -644,6 +666,7 @@ class TransformerBlock(torch.nn.Module):
         self.query_norm = query_norm
         self.key_value_norm = key_value_norm
         self.post_attn_norm = post_attn_norm
+        self.mlp_batch_size_divisor = mlp_batch_size_divisor
 
         self.attn = Attention(
             channels=channels,
@@ -666,6 +689,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
+        return_key_value_heads: int | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor: ...
 
@@ -678,6 +702,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
+        return_key_value_heads: int | None = None,
         batch_size_limit: int | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
@@ -690,6 +715,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
+        return_key_value_heads: int | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
@@ -701,6 +727,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         return_key_value: bool = False,
         *,
+        return_key_value_heads: int | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -720,6 +747,8 @@ class TransformerBlock(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
+            return_key_value_heads: Number of leading key/value heads to return
+                when ``return_key_value`` is ``True``.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
 
@@ -738,6 +767,7 @@ class TransformerBlock(torch.nn.Module):
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
                 return_key_value=return_key_value,
+                return_key_value_heads=return_key_value_heads,
                 batch_size_limit=batch_size_limit,
             )
             if chunked_result is not None:
@@ -757,7 +787,9 @@ class TransformerBlock(torch.nn.Module):
             attn_mask=attn_mask,
             batch_size_limit=batch_size_limit,
             return_key_value=return_key_value,
+            return_key_value_heads=return_key_value_heads,
         )
+        del key_value
         if return_key_value:
             out, kv = result
         else:
@@ -766,7 +798,34 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             out = self.post_attn_norm(out)
 
-        out = query + out
-        out = out + self.mlp(out)
+        if torch.is_grad_enabled():
+            out = query + out
+            out = out + self.mlp(out)
+        else:
+            out.add_(query)
+            if (
+                self.mlp_batch_size_divisor is not None
+                and not torch.compiler.is_compiling()
+                and out.is_contiguous()
+            ):
+                mlp_batch_size_limit = max(
+                    1,
+                    batch_size_limit // self.mlp_batch_size_divisor,
+                )
+                batch_size = prod(out.size()[:-2])
+                if batch_size > mlp_batch_size_limit:
+                    out_size = out.size()[-2:]
+                    flat_out = out.view(batch_size, *out_size)
+                    for start in range(
+                        0,
+                        batch_size,
+                        mlp_batch_size_limit,
+                    ):
+                        end = min(start + mlp_batch_size_limit, batch_size)
+                        chunk = flat_out[start:end]
+                        chunk.add_(self.mlp(chunk))
+                        del chunk
+                    return (out, kv) if return_key_value else out
+            out.add_(self.mlp(out))
 
         return (out, kv) if return_key_value else out

@@ -613,6 +613,38 @@ def test_attention_chunked_broadcast_kv_cache_shape() -> None:
     torch.testing.assert_close(kv.value, expected_kv.value)
 
 
+def test_attention_return_key_value_heads() -> None:
+    channels = 8
+    num_heads = 4
+    query = torch.randn(2, 3, channels)
+    modules = (
+        Attention(channels=channels, num_query_heads=num_heads),
+        TransformerBlock(
+            channels=channels,
+            num_query_heads=num_heads,
+            mlp=torch.nn.Identity(),
+        ),
+    )
+
+    for module in modules:
+        module.eval()
+        expected_out, expected_kv = module(
+            query=query,
+            return_key_value=True,
+        )
+        out, kv = module(
+            query=query,
+            return_key_value=True,
+            return_key_value_heads=2,
+        )
+
+        assert kv.key.size() == (2, 3, 2, channels // num_heads)
+        assert kv.value.size() == kv.key.size()
+        torch.testing.assert_close(out, expected_out)
+        torch.testing.assert_close(kv.key, expected_kv.key[..., :2, :])
+        torch.testing.assert_close(kv.value, expected_kv.value[..., :2, :])
+
+
 def test_attention_errors() -> None:
     channels = 6
     num_heads = 3
@@ -732,6 +764,35 @@ def test_transformer_block_batch_size_limit_bypass(
     handle.remove()
 
     assert batch_sizes == [5]
+
+
+def test_transformer_block_mlp_batch_size_limit() -> None:
+    channels = 8
+    mlp = torch.nn.Sequential(
+        torch.nn.Linear(channels, 2 * channels),
+        torch.nn.GELU(),
+        torch.nn.Linear(2 * channels, channels),
+    )
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        mlp=mlp,
+        mlp_batch_size_divisor=2,
+    ).eval()
+    query = torch.randn(5, 3, channels)
+
+    expected = module(query=query)
+
+    batch_sizes: list[int] = []
+    handle = mlp.register_forward_pre_hook(
+        lambda _module, args: batch_sizes.append(args[0].size(0))
+    )
+    with torch.no_grad():
+        out = module(query=query, batch_size_limit=4)
+    handle.remove()
+
+    assert batch_sizes == [2, 2, 1]
+    torch.testing.assert_close(out, expected)
 
 
 def test_return_key_value_positional_compatibility() -> None:

@@ -1,14 +1,18 @@
 # ruff: noqa: D101, D102
 
+import math
 from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import Embedding, Linear, ModuleList, Parameter, RMSNorm
+from torch.nn import Embedding, Linear, ModuleList, Parameter
 
 from sdm.cache import Cache, KVCacheEntry
-from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
+from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock, _RMSNorm
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding
+
+_COL_BATCH_SIZE_LIMIT = 50
+_ROW_BATCH_SIZE_LIMIT = 10_000
 
 
 class RowEmbedding(torch.nn.Module):
@@ -77,19 +81,24 @@ class RowEmbedding(torch.nn.Module):
             )
             for _ in range(num_layers)
         )
-        self.norm = RMSNorm(channels, **factory_kwargs)
+        self.norm = _RMSNorm(channels, **factory_kwargs)
 
     def forward(
         self,
-        x: Tensor,  # [..., R, C, D]
+        x: Tensor,  # [..., R, K + C, D]
         y: Tensor,  # [..., R_train]
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
         *B, R, _, D = x.size()
+        batch_size = max(1, math.prod(B))
         R_train = y.size(-1)
         K = self.readout_token.size(-2)
+
+        readout_token = self.readout_token.to(x.dtype)
+        readout_token = readout_token.view(*(1,) * len(B), 1, K, D)
+        x[..., :, :K, :].copy_(readout_token.expand(*B, R, K, D))
 
         if y.numel() > 0:
             if self.y_emb is not None:
@@ -97,39 +106,92 @@ class RowEmbedding(torch.nn.Module):
             else:
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
-            x[..., :R_train, :, :] += y_emb.to(x.dtype)
+            x[..., :R_train, K:, :] += y_emb.to(x.dtype)
 
         for i, (col_block, row_block) in enumerate(
             zip(self.col_blocks, self.row_blocks)
         ):
-            if i > 0:
-                readout_token, x = x.split([K, x.size(-2) - K], dim=-2)
-                readout_token = readout_token.clone()
-            else:
-                readout_token = self.readout_token
-                readout_token = readout_token.view(*(1,) * len(B), 1, K, D)
-                readout_token = readout_token.expand(*B, R, K, D)
-
-            x = x.transpose(-2, -3).contiguous()
             key = f"row_embedding.col_block{i}"
-            result = col_block(
-                query=x,
-                key_value=cast(KVCacheEntry, cache[key])
-                if cache is not None and cache.is_replaying
-                else x[..., :R_train, :],
-                return_key_value=cache is not None and cache.is_recording,
-            )
+            features = x[..., :, K:, :]
+            num_cols = features.size(-2)
+            cols_per_chunk = max(1, _COL_BATCH_SIZE_LIMIT // batch_size)
+
+            key_out: Tensor | None = None
+            value_out: Tensor | None = None
+            cached_key_value: KVCacheEntry | None = None
+            if cache is not None and cache.is_replaying:
+                cached_key_value = cast(KVCacheEntry, cache[key])
+
+            for start in range(0, num_cols, cols_per_chunk):
+                end = min(start + cols_per_chunk, num_cols)
+                query = features[..., :, start:end, :]
+                query = query.transpose(-2, -3)
+
+                if cached_key_value is None:
+                    key_value: Tensor | KVCacheEntry = query[..., :R_train, :]
+                else:
+                    key_value = KVCacheEntry(
+                        key=cached_key_value.key[..., start:end, :, :, :],
+                        value=cached_key_value.value[..., start:end, :, :, :],
+                    )
+
+                result = col_block(
+                    query=query,
+                    key_value=key_value,
+                    return_key_value=cache is not None and cache.is_recording,
+                    batch_size_limit=_COL_BATCH_SIZE_LIMIT,
+                )
+
+                if cache is not None and cache.is_recording:
+                    query, chunk_key_value = result
+                    if key_out is None:
+                        key_size = chunk_key_value.key.size()
+                        value_size = chunk_key_value.value.size()
+                        key_out = chunk_key_value.key.new_empty(
+                            *key_size[:-4],
+                            num_cols,
+                            *key_size[-3:],
+                        )
+                        value_out = chunk_key_value.value.new_empty(
+                            *value_size[:-4],
+                            num_cols,
+                            *value_size[-3:],
+                        )
+                    assert value_out is not None
+                    key_out[..., start:end, :, :, :] = chunk_key_value.key
+                    value_out[..., start:end, :, :, :] = chunk_key_value.value
+                    del chunk_key_value
+                else:
+                    query = result
+                assert isinstance(query, Tensor)
+
+                features[..., :, start:end, :].copy_(query.transpose(-2, -3))
+                del query, key_value, result
 
             if cache is not None and cache.is_recording:
-                x, cache[key] = result
-            else:
-                x = result
-            del result
+                assert key_out is not None
+                assert value_out is not None
+                cache[key] = KVCacheEntry(key=key_out, value=value_out)
 
-            x = torch.cat([readout_token.to(x.dtype), x.transpose(-2, -3)], -2)
-            x = row_block(
-                query=x[..., :K, :] if i == len(self.row_blocks) - 1 else x,
-                key_value=x,
-            )
+            rows_per_chunk = max(1, _ROW_BATCH_SIZE_LIMIT // batch_size)
+            last_layer = i == len(self.row_blocks) - 1
+            for start in range(0, R, rows_per_chunk):
+                end = min(start + rows_per_chunk, R)
+                key_value = x[..., start:end, :, :]
+                query = key_value[..., :K, :] if last_layer else key_value
+                result = row_block(
+                    query=query,
+                    key_value=key_value,
+                    batch_size_limit=_ROW_BATCH_SIZE_LIMIT,
+                )
+
+                if last_layer:
+                    x[..., start:end, :K, :].copy_(result)
+                else:
+                    key_value.copy_(result)
+                del query, key_value, result
+
+            if last_layer:
+                x = x[..., :, :K, :].contiguous()
 
         return self.norm(x).flatten(-2)

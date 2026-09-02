@@ -16,7 +16,10 @@ def test_row_embedding(device: torch.device) -> None:
         num_readout_tokens=2,
         device=device,
     )
-    x = torch.randn(2, 5, 3, 16, device=device)
+    K = encoder.readout_token.size(-2)
+    features = torch.randn(2, 5, 3, 16, device=device)
+    x = features.new_empty(2, 5, K + features.size(-2), 16)
+    x[..., :, K:, :] = features
     y = torch.randn(2, 3, device=device)
 
     out = encoder(x, y)

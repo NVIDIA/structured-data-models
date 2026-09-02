@@ -50,6 +50,11 @@ def test_icl_block(
     assert out.dtype == x.dtype
     assert out.device == device
 
+    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
+    with torch.amp.autocast(device.type, dtype=dtype):
+        autocast_out = block(x.clone(), y)
+    assert autocast_out.dtype == dtype
+
     if num_key_value_heads_for_query is not None:
         mha = ICLBlock(
             num_classes=num_classes,

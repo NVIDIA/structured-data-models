@@ -4,10 +4,10 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Embedding, Linear, ModuleList, RMSNorm, Sequential
+from torch.nn import GELU, Embedding, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
-from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
+from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock, _RMSNorm
 
 
 class ICLBlock(torch.nn.Module):
@@ -43,7 +43,7 @@ class ICLBlock(torch.nn.Module):
             for _ in range(num_layers)
         )
 
-        self.norm = RMSNorm(channels, **factory_kwargs)
+        self.norm = _RMSNorm(channels, **factory_kwargs)
         self.head = Sequential(
             Linear(channels, 2 * channels, **factory_kwargs),
             GELU(),
@@ -82,31 +82,30 @@ class ICLBlock(torch.nn.Module):
                         else x[..., :R_train, :]
                     ),
                     return_key_value=cache is not None and cache.is_recording,
+                    return_key_value_heads=self.kv_heads,
                     batch_size_limit=batch_size_limit,
                 )
 
                 if cache is not None and cache.is_recording:
                     x, (key, value) = result
-                    if self.kv_heads is not None:
-                        key = key[..., : self.kv_heads, :].contiguous()
-                        value = value[..., : self.kv_heads, :].contiguous()
+                    del result
                     cache[cache_key] = KVCacheEntry(key, value)
                 else:
                     x = result
-                del result
                 continue
 
             x_context, (key, value) = layer(
                 query=x[..., :0, :] if last_layer else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
+                return_key_value_heads=self.kv_heads,
                 batch_size_limit=batch_size_limit,
             )
             x_query = layer(
                 query=x[..., R_train:, :],
                 key_value=KVCacheEntry(
-                    key=key[..., : self.kv_heads, :].contiguous(),
-                    value=value[..., : self.kv_heads, :].contiguous(),
+                    key=key,
+                    value=value,
                 ),
                 batch_size_limit=batch_size_limit,
             )

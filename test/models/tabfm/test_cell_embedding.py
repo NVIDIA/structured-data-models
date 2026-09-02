@@ -24,3 +24,34 @@ def test_cell_embedding(device: torch.device) -> None:
         module(x, categorical_mask, batch_size_limit=8),
         out,
     )
+
+    prefixed = module(x, categorical_mask, num_prefix_columns=2)
+    assert prefixed.size() == (6, 6, 8)
+    torch.testing.assert_close(prefixed[..., 2:, :], out)
+
+    categorical_mask = torch.zeros(4, dtype=torch.bool, device=device)
+    out = module(x, categorical_mask)
+    fast_out = module(
+        x,
+        categorical_mask,
+        num_categorical_columns=0,
+    )
+    torch.testing.assert_close(fast_out, out)
+
+    categorical_mask = torch.ones(4, dtype=torch.bool, device=device)
+    out = module(x, categorical_mask)
+    fast_out = module(
+        x,
+        categorical_mask,
+        num_categorical_columns=4,
+    )
+    torch.testing.assert_close(fast_out, out)
+
+    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
+    with torch.amp.autocast(device.type, dtype=dtype):
+        out = module(
+            x,
+            torch.zeros(4, dtype=torch.bool, device=device),
+            num_categorical_columns=0,
+        )
+    assert out.dtype == dtype

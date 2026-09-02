@@ -192,22 +192,35 @@ class TabFM(ICLModel):
             assert x_context is not None
             schema: TableSchema = kwargs["_schema"]
             categorical_columns = set(schema.columns[Stype.categorical])
+            num_categorical_columns = 0
+            categorical_mask_values: list[bool] = []
+            for column in x_context.columns[Stype.numerical]:
+                is_categorical = column in categorical_columns
+                categorical_mask_values.append(is_categorical)
+                num_categorical_columns += is_categorical
             categorical_mask = torch.tensor(
-                [
-                    column in categorical_columns
-                    for column in x_context.columns[Stype.numerical]
-                ],
+                categorical_mask_values,
                 device=x.device,
                 dtype=torch.bool,
             )
             if cache is not None:
                 cache["categorical_mask"] = categorical_mask
+                cache["num_categorical_columns"] = num_categorical_columns
         else:
             categorical_mask = cast(Tensor, cache["categorical_mask"])
+            num_categorical_columns = cast(
+                int, cache["num_categorical_columns"]
+            )
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
         task = Task.classification if classes is not None else Task.regression
-        out = self.models[task](x, y, categorical_mask, cache=cache)
+        out = self.models[task](
+            x,
+            y,
+            categorical_mask,
+            cache=cache,
+            num_categorical_columns=num_categorical_columns,
+        )
 
         if classes is None:
             return TableTensor(
@@ -275,7 +288,12 @@ class _TabFM(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
+        num_categorical_columns: int | None = None,
     ) -> Tensor:  # [..., R_test, 1 or num_classes]
-        x = self.cell_embedding(x, categorical_mask)
+        x = self.cell_embedding(
+            x,
+            categorical_mask,
+            num_categorical_columns=num_categorical_columns,
+        )
         x = self.row_embedding(x, y, cache=cache)
         return self.icl_block(x, y, cache=cache)

@@ -3,9 +3,15 @@
 from typing import Any, cast
 
 import torch
+from torch import Tensor
 from torch.nn import GELU, Linear, RMSNorm, Sequential
 
 from sdm.nn import LogScale, RotaryEmbedding, TransformerBlock
+
+
+class _RMSNorm(RMSNorm):
+    def forward(self, x: Tensor) -> Tensor:
+        return super().forward(x).to(x.dtype)
 
 
 class KumoTabularTransformerBlock(TransformerBlock):
@@ -26,7 +32,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
             query_transforms.append(rope)
             key_transforms.append(rope)
         query_transforms.append(
-            RMSNorm(
+            _RMSNorm(
                 channels // num_heads,
                 eps=1e-6,
                 elementwise_affine=False,
@@ -34,7 +40,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
             )
         )
         key_transforms.append(
-            RMSNorm(
+            _RMSNorm(
                 channels // num_heads,
                 eps=1e-6,
                 elementwise_affine=False,
@@ -43,7 +49,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
         )
 
         mlp = Sequential(
-            RMSNorm(channels, **factory_kwargs),
+            _RMSNorm(channels, **factory_kwargs),
             Linear(channels, 2 * channels, **factory_kwargs),
             GELU(),
             Linear(2 * channels, channels, **factory_kwargs),
@@ -55,8 +61,9 @@ class KumoTabularTransformerBlock(TransformerBlock):
             channels=channels,
             num_query_heads=num_heads,
             mlp=mlp,
-            query_norm=RMSNorm(channels, **factory_kwargs),
-            key_value_norm=RMSNorm(channels, **factory_kwargs),
+            query_norm=_RMSNorm(channels, **factory_kwargs),
+            key_value_norm=_RMSNorm(channels, **factory_kwargs),
+            mlp_batch_size_divisor=2,
             query_transform=Sequential(*query_transforms),
             key_transform=Sequential(*key_transforms),
             query_scaling=LogScale(num_heads, **factory_kwargs)
