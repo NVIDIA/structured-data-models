@@ -152,9 +152,11 @@ class RelationalSampler:
         if task_table.dim() == 3:
             num_members, num_rows = task_table.size()[:2]
             shared = all(
-                block.stride(0) == 0
+                all(column.stride(0) == 0 for column in block.unbind(-1))
+                if isinstance(block, ColumnarTensor)
+                else block.stride(0) == 0
                 for stype, block in task_table.items()
-                if block.size(-1) > 0 and stype != Stype.id
+                if block.size(-1) > 0
             )
             if shared:
                 task_table = task_table[0]

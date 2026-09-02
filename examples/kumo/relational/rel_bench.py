@@ -17,7 +17,7 @@ parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument("--batch_size", type=int, default=1000)
 parser.add_argument("--max_test_steps", type=int, default=None)
 parser.add_argument("--num_neighbors", type=int, nargs="*", default=[16, 16])
-parser.add_argument("--num_estimators", type=int, default=1)
+parser.add_argument("--num_estimators", type=int, default=2)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 
