@@ -1115,6 +1115,37 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+def test_from_pandas_period() -> None:
+    df = pd.DataFrame(
+        {
+            "year": pd.PeriodIndex(["2020", None], freq="Y"),
+            "quarter": pd.PeriodIndex(["2020Q2", None], freq="Q"),
+            "month": pd.PeriodIndex(["2020-02", None], freq="M"),
+            "day": pd.PeriodIndex(["2020-02-03", None], freq="D"),
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes=dict.fromkeys(df.columns, Stype.datetime),
+    )
+
+    assert tensor.datetime.equal(
+        torch.tensor(
+            [
+                [
+                    1_577_836_800_000_000,
+                    1_585_699_200_000_000,
+                    1_580_515_200_000_000,
+                    1_580_688_000_000_000,
+                ],
+                [NaT, NaT, NaT, NaT],
+            ]
+        )
+    )
+    assert all(isinstance(dtype, pd.PeriodDtype) for dtype in df.dtypes)
+
+
 @onlyCUDA
 def test_from_pandas_id_cuda() -> None:
     df = pd.DataFrame(

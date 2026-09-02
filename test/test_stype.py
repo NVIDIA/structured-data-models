@@ -112,6 +112,14 @@ def test_infer_stypes_pandas_object_strings() -> None:
     }
 
 
+def test_infer_stypes_pandas_period() -> None:
+    table = pd.DataFrame(
+        {"year": pd.period_range("2020", periods=3, freq="Y")}
+    )
+
+    assert infer_stypes(table) == {"year": Stype.datetime}
+
+
 def test_id_detection() -> None:
     table = pa.table(
         {
