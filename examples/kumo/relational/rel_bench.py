@@ -139,4 +139,4 @@ if task.task_type == relbench.base.TaskType.REGRESSION:
 elif task.task_type == relbench.base.TaskType.BINARY_CLASSIFICATION:
     print(f"AUROC: {metric.compute():.4f}")
 else:
-    print(f"Acc: {metric.compute():.4f}")
+    print(f"ACC: {metric.compute():.4f}")
