@@ -34,16 +34,12 @@ class ModelConfig:
         return f"{self.system_name}_c1_default"
 
 
-@lru_cache(maxsize=1)
-def _load_tabiclv2(device: torch.device) -> sdm.models.TabICLv2:
-    return sdm.models.TabICLv2(device=device)
-
-
+@lru_cache(maxsize=2)
 def _create_tabiclv2(
-    _task: Task,
+    task: Task,
     device: torch.device,
-) -> sdm.models.ICLModel:
-    return _load_tabiclv2(device=device)
+) -> sdm.models.TabICLv2:
+    return sdm.models.TabICLv2(task=task, device=device)
 
 
 @lru_cache(maxsize=2)
@@ -55,25 +51,11 @@ def _create_kumo_tabular(
 
 
 @lru_cache(maxsize=1)
-def _load_tabfm(
-    task: Task,
-    device: torch.device,
-) -> sdm.models.TabFM:
-    return sdm.models.TabFM(
-        task=task,
-        accept_license=True,
-        device=device,
-    )
-
-
 def _create_tabfm(
     task: Task,
     device: torch.device,
-) -> sdm.models.ICLModel:
-    return _load_tabfm(
-        task=task,
-        device=device,
-    )
+) -> sdm.models.TabFM:
+    return sdm.models.TabFM(task=task, accept_license=True, device=device)
 
 
 MODEL_CONFIGS = {
