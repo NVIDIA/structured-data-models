@@ -87,11 +87,11 @@ task_table = sdm.TableTensor.from_pandas(
 )
 
 context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
-num_repeats = math.ceil(args.num_estimators * args.context_size / len(context))
+context_size = min(len(context), args.context_size)
+num_repeats = math.ceil(args.num_estimators * context_size / len(context))
 perm = torch.cat([torch.randperm(len(context)) for _ in range(num_repeats)])
-perm = perm[: args.num_estimators * args.context_size]
-context = context[perm].unflatten(0, (args.num_estimators, args.context_size))
-print(context.size(), len(context))
+perm = perm[: args.num_estimators * context_size]
+context = context[perm].unflatten(0, (args.num_estimators, context_size))
 
 # Execute Model ###############################################################
 model = sdm.models.KumoRelational(device=device)
