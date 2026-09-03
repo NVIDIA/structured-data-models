@@ -100,7 +100,7 @@ def _leaderboard(
             index="dataset", columns="method", values="mean"
         )
         common = scores.dropna()
-        blocks[task] = scores
+        blocks[task] = common
         ranks = common.rank(
             axis="columns", ascending=task == "regression"
         ).mean()
@@ -145,8 +145,6 @@ def _plot(output: Path, blocks: dict[str, pd.DataFrame]) -> None:
         ) from error
 
     for task, scores in blocks.items():
-        coverage = scores.notna().sum()
-        scores = scores.loc[:, coverage == coverage.max()].dropna()
         if len(scores) < 2 or scores.shape[1] < 2:
             continue
         ranks = (
