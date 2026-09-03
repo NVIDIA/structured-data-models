@@ -263,7 +263,7 @@ class SDMMethod(Method):
                 generator=generator,
             )
         if x_train.is_cuda:
-            torch.cuda.synchronize()
+            torch.cuda.synchronize(x_train.device)
         self.fit_time = time.perf_counter() - tic
 
     def predict(
@@ -285,7 +285,7 @@ class SDMMethod(Method):
         ):
             out = self.model.predict(x_test)
         if x_test.is_cuda:
-            torch.cuda.synchronize()
+            torch.cuda.synchronize(x_test.device)
         self.predict_time = time.perf_counter() - tic
 
         if self.is_regression:
