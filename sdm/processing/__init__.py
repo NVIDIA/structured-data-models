@@ -18,6 +18,7 @@ from sdm.processing.common import (
     ToNumerical,
     ShuffleColumns,
     SelectColumns,
+    SelectRows,
 )
 from sdm.processing.text import TFIDF, SentenceTransformer
 from sdm.processing.numerical import (
@@ -59,6 +60,7 @@ __all__ = [
     "ToNumerical",
     "ShuffleColumns",
     "SelectColumns",
+    "SelectRows",
     "TFIDF",
     "SentenceTransformer",
     "Clip",

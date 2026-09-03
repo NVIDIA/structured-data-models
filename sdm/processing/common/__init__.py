@@ -11,7 +11,7 @@ from sdm.processing.common.ensemble import EnsembleProcessorAdapter
 from sdm.processing.common.choice import Choice
 from sdm.processing.common.to_numerical import ToNumerical
 from sdm.processing.common.shuffle import ShuffleColumns
-from sdm.processing.common.select import SelectColumns
+from sdm.processing.common.select import SelectColumns, SelectRows
 
 __all__ = [
     "Identity",
@@ -26,4 +26,5 @@ __all__ = [
     "ToNumerical",
     "ShuffleColumns",
     "SelectColumns",
+    "SelectRows",
 ]
