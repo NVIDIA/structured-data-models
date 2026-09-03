@@ -1,6 +1,6 @@
 # Tabular Foundation Models on TabArena and BeyondArena
 
-This example benchmarks `structured-data-models` on [TabArena and BeyondArena](https://tabarena.ai), including IID, temporal, and grouped tasks.
+This example benchmarks `structured-data-models` on [TabArena and BeyondArena](https://tabarena.ai).
 
 ## Setup
 
