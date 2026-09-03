@@ -13,7 +13,6 @@ class SelectColumns(EnsembleProcessor):
 
     Args:
         max_columns: The maximum number of columns to keep per semantic type.
-            Must be positive.
         method: The column selection method.
             ``"first"`` keeps the first columns according to their order within
             each semantic block. ``"round_robin"`` assigns each ensemble
@@ -101,13 +100,10 @@ class SelectColumns(EnsembleProcessor):
 
 
 class SelectRows(EnsembleProcessor):
-    r"""Select a subset of rows for each ensemble member.
-
-    Apply the same selection to tables whose rows must remain aligned, such as
-    feature and target tables.
+    r"""Select a subset of rows.
 
     Args:
-        max_rows: The maximum number of rows to keep. Must be positive.
+        max_rows: The maximum number of rows to keep.
         method: The row selection method. ``"first"`` keeps the first rows.
             ``"round_robin"`` assigns each ensemble member the next
             consecutive chunk, wrapping to the first row after the last. For
@@ -139,7 +135,7 @@ class SelectRows(EnsembleProcessor):
             )
 
         assert self.method == "round_robin"
-        tables = []
+        tables: list[TableTensor] = []
         for member_id in range(ensemble_table.num_members):
             table = ensemble_table.table(member_id)
             num_rows = table.size(-2)
@@ -148,35 +144,16 @@ class SelectRows(EnsembleProcessor):
                 continue
 
             start = member_id * self.max_rows % num_rows
-            first_count = min(self.max_rows, num_rows - start)
-            wrap_count = self.max_rows - first_count
-            first = cast(
-                TableTensor,
-                table.narrow(
-                    dim=-2,
-                    start=start,
-                    length=first_count,
-                ),
-            )
-            if wrap_count == 0:
-                tables.append(first)
+            length = min(self.max_rows, num_rows - start)
+            first = table.narrow(dim=-2, start=start, length=length)
+
+            wrap_length = self.max_rows - length
+            if wrap_length == 0:
+                tables.append(cast(TableTensor, first))
                 continue
-            tables.append(
-                cast(
-                    TableTensor,
-                    torch.cat(
-                        tensors=[
-                            first,
-                            table.narrow(
-                                dim=-2,
-                                start=0,
-                                length=wrap_count,
-                            ),
-                        ],
-                        dim=-2,
-                    ),
-                )
-            )
+
+            second = table.narrow(dim=-2, start=0, length=wrap_length)
+            tables.append(cast(TableTensor, torch.cat([first, second], -2)))
 
         return EnsembleTable.from_tables(
             tables=tables,
