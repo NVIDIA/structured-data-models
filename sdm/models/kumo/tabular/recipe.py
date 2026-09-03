@@ -1,11 +1,13 @@
 import sdm.processing as sp
 
+MAX_ROWS = 100_000
+
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
         features=[
             sp.ContextQueryDispatch(
-                context=sp.SelectRows(100_000, method="round_robin"),
+                context=sp.SelectRows(MAX_ROWS, method="round_robin"),
             ),
             sp.StypeDispatch(
                 categorical=[
@@ -32,7 +34,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
         ],
         target=[
-            sp.SelectRows(100_000, method="round_robin"),
+            sp.SelectRows(MAX_ROWS, method="round_robin"),
             sp.StypeDispatch(
                 categorical=[
                     sp.AlignCategories(),
