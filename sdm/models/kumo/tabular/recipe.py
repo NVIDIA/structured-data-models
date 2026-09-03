@@ -32,6 +32,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
         ],
         target=[
+            sp.SelectRows(100_000, method="round_robin"),
             sp.StypeDispatch(
                 categorical=[
                     sp.AlignCategories(),
