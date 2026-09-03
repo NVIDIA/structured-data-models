@@ -55,21 +55,13 @@ def test_select_rows_rejects_non_positive_max_rows(max_rows: int) -> None:
 
 
 def test_select_first_rows() -> None:
-    table = TableTensor(
-        numerical=torch.arange(12, dtype=torch.float).view(2, 3, 2),
-        datetime=torch.arange(12, dtype=torch.int64).view(2, 3, 2),
-    )
-
+    table = TableTensor.from_tensor(torch.randn(2, 3, 2))
     out = SelectRows(max_rows=2, method="first").transform(table)
-
     assert out.equal(table[:, :2])
 
 
 def test_select_rows_round_robin_routes_members() -> None:
-    table = TableTensor(
-        numerical=torch.arange(10, dtype=torch.float).view(5, 2),
-        datetime=torch.arange(10, dtype=torch.int64).view(5, 2),
-    )
+    table = TableTensor.from_tensor(torch.randn(5, 2))
 
     out = SelectRows(
         max_rows=2,
@@ -85,9 +77,7 @@ def test_select_rows_round_robin_routes_members() -> None:
 def test_select_rows_round_robin_keeps_all_rows_within_limit(
     num_rows: int,
 ) -> None:
-    table = TableTensor.from_tensor(
-        torch.arange(2 * num_rows).view(num_rows, 2)
-    )
+    table = TableTensor.from_tensor(torch.randn(num_rows, 2))
 
     out = SelectRows(
         max_rows=3,
