@@ -298,9 +298,7 @@ class SDMMethod(Method):
             loss = self.criterion(pred_tensor, label_tensor).item()
         else:
             columns = [str(value) for value in self.y_info["classes"]]
-            prediction = np.ascontiguousarray(
-                out.to_pandas().reindex(columns=columns).to_numpy()
-            )
+            prediction = out.to_pandas()[columns].to_numpy()
             probabilities = torch.as_tensor(prediction)
             loss = self.criterion(
                 probabilities.clamp_min(
