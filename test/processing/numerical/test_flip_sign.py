@@ -62,6 +62,49 @@ def test_flip_sign_is_reproducible_with_generator() -> None:
         assert first.table(member_id).equal(second.table(member_id))
 
 
+def test_flip_sign_reuses_signs_for_logical_members() -> None:
+    table = TableTensor.from_tensor(torch.arange(1.0, 49.0).view(3, 16))
+    tables = (table[:2], table)
+    context = EnsembleTable.from_tables(
+        tables=tables,
+        member_table_ids=(0, 1),
+    )
+    processor = FlipSign()
+    context_output = processor.fit_transform_ensemble(
+        context,
+        generator=torch.Generator().manual_seed(0),
+    )
+    reordered = EnsembleTable.from_tables(
+        tables=tables[::-1],
+        member_table_ids=(1, 0),
+    )
+    reordered_fit_output = FlipSign().fit_transform_ensemble(
+        reordered,
+        generator=torch.Generator().manual_seed(0),
+    )
+    queries = (
+        reordered,
+        EnsembleTable(table, num_members=2),
+    )
+
+    for member_id in range(context.num_members):
+        assert reordered_fit_output.table(member_id).equal(
+            context_output.table(member_id)
+        )
+
+    for query in queries:
+        output = processor.transform_ensemble(query)
+        for member_id in range(context.num_members):
+            sign = (
+                context_output.table(member_id).numerical[:1]
+                / context.table(member_id).numerical[:1]
+            )
+            torch.testing.assert_close(
+                output.table(member_id).numerical,
+                query.table(member_id).numerical * sign,
+            )
+
+
 @pytest.mark.parametrize(
     ("probability", "factor"),
     [(0.0, 1.0), (1.0, -1.0)],
