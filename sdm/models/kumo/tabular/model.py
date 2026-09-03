@@ -55,6 +55,7 @@ class KumoTabular(ICLModel):  # noqa: D101
         {Stype.numerical, Stype.categorical}
     )
     supports_related_tables: ClassVar[bool] = False
+    _partition_context_rows: ClassVar[bool] = True
 
     def __init__(
         self,

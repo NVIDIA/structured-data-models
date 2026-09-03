@@ -46,6 +46,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
+    #: Whether shared context rows are partitioned across ensemble members.
+    _partition_context_rows: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -148,6 +151,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables=related_context_tables,
                 num_members=num_estimators,
                 generator=generator,
+                partition_rows=self._partition_context_rows,
             )
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
@@ -266,6 +270,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables=related_tables,
                 num_members=num_estimators,
                 generator=generator,
+                partition_rows=self._partition_context_rows,
             )
 
         cache = Cache(
