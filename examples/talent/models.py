@@ -262,6 +262,8 @@ class SDMMethod(Method):
                 num_estimators=self._num_estimators,
                 generator=generator,
             )
+        if x_train.is_cuda:
+            torch.cuda.synchronize()
         self.fit_time = time.perf_counter() - tic
 
     def predict(
