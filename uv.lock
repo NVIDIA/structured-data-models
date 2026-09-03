@@ -1361,6 +1361,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyg-lib"
+version = "0.8.0+pt213cpu"
+source = { registry = "https://data.pyg.org/whl/torch-2.13.0+cpu.html" }
+wheels = [
+    { url = "https://data.pyg.org/whl/torch-2.13.0%2Bcpu/pyg_lib-0.8.0%2Bpt213cpu-cp310-abi3-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.13.0%2Bcpu/pyg_lib-0.8.0%2Bpt213cpu-cp310-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2116,6 +2125,7 @@ dev = [
     { name = "cudf-cu13", marker = "sys_platform == 'linux'" },
     { name = "myst-parser" },
     { name = "pandas" },
+    { name = "pyg-lib", marker = "sys_platform == 'linux'" },
     { name = "pylibcugraph-cu13", marker = "sys_platform == 'linux'" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -2136,6 +2146,7 @@ doc = [
 test = [
     { name = "cudf-cu13", marker = "sys_platform == 'linux'" },
     { name = "pandas" },
+    { name = "pyg-lib", marker = "sys_platform == 'linux'" },
     { name = "pylibcugraph-cu13", marker = "sys_platform == 'linux'" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -2157,6 +2168,7 @@ dev = [
     { name = "cudf-cu13", marker = "sys_platform == 'linux'", specifier = ">=26.8" },
     { name = "myst-parser" },
     { name = "pandas" },
+    { name = "pyg-lib", marker = "sys_platform == 'linux'" },
     { name = "pylibcugraph-cu13", marker = "sys_platform == 'linux'", specifier = ">=26.8" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -2175,6 +2187,7 @@ doc = [
 test = [
     { name = "cudf-cu13", marker = "sys_platform == 'linux'", specifier = ">=26.8" },
     { name = "pandas" },
+    { name = "pyg-lib", marker = "sys_platform == 'linux'" },
     { name = "pylibcugraph-cu13", marker = "sys_platform == 'linux'", specifier = ">=26.8" },
     { name = "pytest" },
     { name = "pytest-cov" },

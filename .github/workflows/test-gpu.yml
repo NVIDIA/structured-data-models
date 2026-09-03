@@ -70,6 +70,7 @@ jobs:
           uv pip install \
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
+            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             --index-strategy=unsafe-best-match \
             --group=test \
             .
@@ -82,6 +83,7 @@ jobs:
 
           import cudf
           import cupy
+          import pyg_lib
           import pylibcugraph
           import torch
 
@@ -98,6 +100,7 @@ jobs:
           print("cupy", cupy.__version__)
           print("pandas", pandas_version)
           print("pylibcugraph", version("pylibcugraph-cu13"))
+          print("pyg-lib", version("pyg-lib"))
           PY
 
       - name: Run tests
@@ -150,6 +153,7 @@ jobs:
           uv pip install \
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
+            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             --index-strategy=unsafe-best-match \
             . \
             'autogluon.common@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=common' \
@@ -159,6 +163,7 @@ jobs:
             'bencheval@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/bencheval' \
             'cudf-cu13>=26.6,<26.8' \
             'pandas<3' \
+            pyg-lib \
             'pylibcugraph-cu13>=26.6,<26.8' \
             'relbench>=3.0.1' \
             scikit-learn \
