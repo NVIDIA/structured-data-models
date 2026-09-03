@@ -1,0 +1,20 @@
+﻿SelectRows
+==========
+
+.. currentmodule:: sdm.processing.common
+
+.. autoclass:: SelectRows
+   :members:
+   :show-inheritance:
+   :exclude-members: handles_stypes, requires_fit
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Handled Semantic Types**
+     - ``categorical``, ``datetime``, ``id``, ``numerical``, ``text``
+   * - **Requires Fitting**
+     - ❌

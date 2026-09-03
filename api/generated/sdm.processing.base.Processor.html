@@ -115,6 +115,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.SelectColumns.html">SelectColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.SelectRows.html">SelectRows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Clip.html">Clip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
@@ -230,8 +231,9 @@ data-aria-dark="Switch to auto color mode">
 <a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> for feature, target and output
 preprocessing.
 A <a class="reference internal" href="#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> learns any required state via <a class="reference internal" href="#sdm.processing.base.Processor.fit" title="sdm.processing.base.Processor.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>, and applies
-the transformation via <a class="reference internal" href="#sdm.processing.base.Processor.transform" title="sdm.processing.base.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>. Implementations preserve the row
-and batch dimensions. Batch dimensions are processed independently.</p>
+the transformation via <a class="reference internal" href="#sdm.processing.base.Processor.transform" title="sdm.processing.base.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>. Implementations preserve batch
+dimensions, and preserve rows unless documented otherwise. Batch
+dimensions are processed independently.</p>
 <p><a class="reference internal" href="#sdm.processing.base.Processor.fit" title="sdm.processing.base.Processor.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>, <a class="reference internal" href="#sdm.processing.base.Processor.transform" title="sdm.processing.base.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>, and <a class="reference internal" href="#sdm.processing.base.Processor.fit_transform" title="sdm.processing.base.Processor.fit_transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit_transform()</span></code></a> are no-ops for
 stypes outside of <a class="reference internal" href="#sdm.processing.base.Processor.handles_stypes" title="sdm.processing.base.Processor.handles_stypes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">handles_stypes</span></code></a>.</p>
 <dl class="field-list simple">
@@ -367,7 +369,7 @@ and a sequence of processor-like objects is normalized to
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=13ef50e6"></script>
+      <script src="../../_static/documentation_options.js?v=21dc58d0"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
