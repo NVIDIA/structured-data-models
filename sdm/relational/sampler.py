@@ -155,7 +155,7 @@ class RelationalSampler:
                 all(column.stride(0) == 0 for column in block.unbind(-1))
                 if isinstance(block, ColumnarTensor)
                 else block.stride(0) == 0
-                for stype, block in task_table.items()
+                for _, block in task_table.items()
                 if block.size(-1) > 0
             )
             if shared:
@@ -199,7 +199,7 @@ class RelationalSampler:
 
             if shared:
                 tables[table_name] = EnsembleTable.from_tables(
-                    tables=[table for i in range(num_members)],
+                    tables=[table for _ in range(num_members)],
                     member_table_ids=range(num_members),
                 )
                 continue
