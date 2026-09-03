@@ -1,6 +1,6 @@
 import sdm.processing as sp
 
-MAX_ROWS = 100_000
+MAX_ROWS = 1_000_000
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
