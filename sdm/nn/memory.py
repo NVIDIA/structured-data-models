@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """CUDA inference memory heuristics.
 
 Reserve 20% (at least 512 MiB) of available memory. Attention chunks use at

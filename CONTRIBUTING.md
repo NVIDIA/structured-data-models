@@ -101,4 +101,4 @@ which conforms to the following conventions:
 
 ## Attribution
 
-Portions adopted from https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md
+Portions adopted from https://github.com/pytorch/pytorch/blob/main/CONTRIBUTING.md under the BSD 3-Clause License distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).

@@ -11,9 +11,11 @@ requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = [
     "LICENSE",
+    "THIRD_PARTY_LICENSES.md",
     "sdm/models/tabiclv2/LICENSE",
-    "sdm/models/tabfm/LICENSE",
     "sdm/models/kumo/relational/NOTICE",
+    "third_party/contributor-covenant/LICENSE",
+    "third_party/pytorch/LICENSE",
 ]
 authors = [
     { name = "NVIDIA" },
