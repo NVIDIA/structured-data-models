@@ -218,7 +218,8 @@ jobs:
           TALENT_ARCHIVE=$(hf download \
             LAMDA-Tabular/TALENT dataset-latest.zip \
             --repo-type dataset \
-            --revision 7bd276bcb7f6b4c0998025855528bd76bd88f13d)
+            --revision 7bd276bcb7f6b4c0998025855528bd76bd88f13d \
+            --quiet)
           unzip -q "${TALENT_ARCHIVE}" 'data/boston/*' -d "${RUNNER_TEMP}/talent"
           python examples/talent/main.py --model tabiclv2 --dataset-path "${RUNNER_TEMP}/talent/data" --dataset boston
           python examples/talent/evaluate.py
