@@ -4,9 +4,12 @@ import sdm.processing as sp
 def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
         features=[
+            sp.ContextQueryDispatch(
+                context=sp.SelectRows(100_000, method="round_robin"),
+            ),
             sp.StypeDispatch(
                 categorical=[
-                    sp.AlignCategories(sort_by="value"),
+                    sp.AlignCategories(sort_by="value", min_frequency=2),
                     sp.ToNumerical(),
                 ],
             ),
@@ -22,7 +25,9 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                         method="round_robin",
                     ),
                     sp.ClipSigma(threshold=4.0),
+                    sp.FlipSign(),
                     sp.ShuffleColumns(method="latin"),
+                    sp.SelectColumns(500, method="round_robin"),
                 ],
             ),
         ],
@@ -32,7 +37,10 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.AlignCategories(),
                     sp.ShuffleCategories(method="shift"),
                 ],
-                numerical=sp.Standardize(),
+                numerical=[
+                    sp.Standardize(),
+                    sp.FlipSign(),
+                ],
             ),
         ],
         output=[
