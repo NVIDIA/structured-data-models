@@ -122,6 +122,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Standardize.html">Standardize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.FlipSign.html">FlipSign</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html">PCA</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html">RandomProjection</a></li>
@@ -307,13 +308,16 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Standardize.html#sdm.processing.numerical.Standardize" title="sdm.processing.numerical.Standardize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Standardize</span></code></a></p></td>
 <td><p>Center and scale each feature column.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html#sdm.processing.numerical.DropConstantColumns" title="sdm.processing.numerical.DropConstantColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DropConstantColumns</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.FlipSign.html#sdm.processing.numerical.FlipSign" title="sdm.processing.numerical.FlipSign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlipSign</span></code></a></p></td>
+<td><p>Randomly negate numerical feature columns.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html#sdm.processing.numerical.DropConstantColumns" title="sdm.processing.numerical.DropConstantColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DropConstantColumns</span></code></a></p></td>
 <td><p>Remove non-informative numerical columns learned during fit.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html#sdm.processing.numerical.PCA" title="sdm.processing.numerical.PCA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCA</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html#sdm.processing.numerical.PCA" title="sdm.processing.numerical.PCA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCA</span></code></a></p></td>
 <td><p>Project numerical columns onto their principal components.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html#sdm.processing.numerical.RandomProjection" title="sdm.processing.numerical.RandomProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomProjection</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html#sdm.processing.numerical.RandomProjection" title="sdm.processing.numerical.RandomProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomProjection</span></code></a></p></td>
 <td><p>Randomly project numerical columns.</p></td>
 </tr>
 </tbody>
@@ -406,7 +410,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=ebaac513"></script>
+      <script src="../_static/documentation_options.js?v=13ef50e6"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
