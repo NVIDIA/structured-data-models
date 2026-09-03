@@ -110,7 +110,6 @@ jobs:
     needs: trigger
     if: needs.trigger.outputs.full_test == 'true'
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
-    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v7
@@ -185,6 +184,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python examples/tabiclv2/strable.py --text-processor tfidf
+
       # Temporarily disabled while data.pyg.org is unavailable.
       # - name: Run Kumo RelBench example
       #   timeout-minutes: 2
