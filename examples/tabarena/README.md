@@ -2,6 +2,10 @@
 
 This example benchmarks `structured-data-models` on [TabArena and BeyondArena](https://tabarena.ai).
 
+> [!NOTE]
+> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
+> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
+
 ## Setup
 
 Install the source revisions of AutoGluon and TabArena used by this example. The Data Foundry extra downloads BeyondArena datasets on demand:
@@ -40,10 +44,6 @@ ______________________________________________________________________
   python tabarena_main.py --model tabfm
   ```
 
-> [!NOTE]
-> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
-> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
-
 Pass a dataset name to run only that TabArena dataset:
 
 ```bash
@@ -81,10 +81,6 @@ ______________________________________________________________________
   ```bash
   python beyondarena_main.py --model tabfm
   ```
-
-> [!NOTE]
-> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
-> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
 
 By default, each command evaluates the recommended `core` subset. Repeat `--subset` to combine filters:
 

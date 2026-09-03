@@ -1,4 +1,4 @@
-"""SDM tabular model adapter for TabArena."""
+"""SDM tabular model adapter for TabArena and BeyondArena."""
 
 from __future__ import annotations
 
