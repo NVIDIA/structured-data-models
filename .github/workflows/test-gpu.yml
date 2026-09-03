@@ -166,13 +166,32 @@ jobs:
           nvidia-smi
           python -c 'import torch; assert torch.cuda.is_available(), "CUDA not available to torch"'
 
-      - name: Run examples
-        timeout-minutes: 10
+      - name: Run TabICLv2 quickstart example
+        timeout-minutes: 2
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python examples/tabiclv2/quickstart.py
+
+      - name: Run TabICLv2 Strable example
+        timeout-minutes: 2
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
           python examples/tabiclv2/strable.py --text-processor tfidf
-          python examples/kumo/relational/rel_bench.py --dataset rel-f1 --task driver-position
+
+      # Temporarily disabled while data.pyg.org is unavailable.
+      # - name: Run Kumo RelBench example
+      #   timeout-minutes: 2
+      #   env:
+      #     HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      #   run: |
+      #     python examples/kumo/relational/rel_bench.py --dataset rel-f1 --task driver-position
+
+      - name: Run TabArena benchmark and evaluation example
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
           python examples/tabarena/main.py --model tabiclv2 --dataset blood-transfusion-service-center
           python examples/tabarena/evaluate.py
