@@ -152,6 +152,7 @@ jobs:
             --extra-index-url="${RAPIDS_INDEX_URL}" \
             --index-strategy=unsafe-best-match \
             . \
+            'TALENT@git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6' \
             'autogluon.common@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=common' \
             'autogluon.core@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=core' \
             'autogluon.features@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=features' \
@@ -208,3 +209,17 @@ jobs:
         run: |
           python examples/tabarena/beyondarena_main.py --model tabiclv2 --dataset parkinsons_biomedical_voice_measurements --subset lite
           python examples/tabarena/beyondarena_evaluate.py
+
+      - name: Run TALENT benchmark and evaluation example
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          TALENT_ARCHIVE=$(hf download \
+            LAMDA-Tabular/TALENT dataset-latest.zip \
+            --repo-type dataset \
+            --revision 7bd276bcb7f6b4c0998025855528bd76bd88f13d \
+            --quiet)
+          unzip -q "${TALENT_ARCHIVE}" 'data/boston/*' -d "${RUNNER_TEMP}/talent"
+          python examples/talent/main.py --model tabiclv2 --dataset-path "${RUNNER_TEMP}/talent/data" --dataset boston
+          python examples/talent/evaluate.py
