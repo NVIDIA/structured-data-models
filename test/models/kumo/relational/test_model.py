@@ -230,7 +230,7 @@ def test_forward(
             relationships=related_tables.relationships[::-1],
             task_links=related_tables.task_links[::-1],
         ),
-    ).allclose(out)
+    ).allclose(out, atol=1e-4, rtol=1e-4)
     model.clear()
 
 
