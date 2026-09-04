@@ -139,6 +139,23 @@ MODEL_CONFIGS = {
         recipe_factory=_checkpoint_recipe,
         checkpoint_task="regression",
     ),
+    "kumo-3us8y132": ModelConfig(
+        name="Kumo3us8y132",
+        factory=_create_kumo_tabular,
+        num_estimators=8,
+        autocast_dtype=torch.bfloat16,
+        batch_size=4096,
+        checkpoint_task="regression",
+    ),
+    "kumo-2uirqewf": ModelConfig(
+        name="Kumo2uirqewf",
+        factory=_create_kumo_tabular,
+        num_estimators=8,
+        autocast_dtype=torch.bfloat16,
+        batch_size=4096,
+        recipe_factory=_checkpoint_recipe,
+        checkpoint_task="regression",
+    ),
     "tabfm": ModelConfig(
         name="TabFM",
         factory=_create_tabfm,

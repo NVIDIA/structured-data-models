@@ -27,7 +27,7 @@ def test_checkpoint_requires_pretrained() -> None:
         )
 
 
-def test_checkpoint_arguments_require_rope_fraction_one() -> None:
+def test_checkpoint_arguments_require_consistent_missing_architecture() -> None:
     args = {
         **_EXPECTED_ARGS_BY_TASK["classification"],
         "rope_frac": 0.25,
@@ -35,6 +35,22 @@ def test_checkpoint_arguments_require_rope_fraction_one() -> None:
 
     with pytest.raises(ValueError, match="rope_frac"):
         _validate_args(args, task="classification")
+
+
+def test_checkpoint_arguments_support_standard_architecture() -> None:
+    args = {
+        **_EXPECTED_ARGS_BY_TASK["regression"],
+        "cell_embedding": "fourier",
+        "row_stage_logn_scale": False,
+        "rope_frac": 0.25,
+        "icl_num_kv_heads_test": 0,
+    }
+
+    architecture = _validate_args(args, task="regression")
+
+    assert architecture.cell_embedding == "fourier"
+    assert architecture.row_log_scale is False
+    assert architecture.rope_fraction == 0.25
 
 
 @pytest.mark.parametrize("grad_checkpoint", [False, True])

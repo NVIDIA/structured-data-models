@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
 
@@ -9,6 +10,14 @@ from torch import Tensor
 
 Task = Literal["classification", "regression"]
 _Model = TypeVar("_Model", bound=torch.nn.Module)
+
+
+@dataclass(frozen=True)
+class _CheckpointArchitecture:
+    cell_embedding: Literal["fourier", "fourier_nan_indicator"]
+    row_log_scale: bool
+    rope_fraction: float
+
 
 _BASE_ARGS: dict[str, Any] = {
     "channels": 128,
@@ -22,7 +31,6 @@ _BASE_ARGS: dict[str, Any] = {
     "downproject_cls_factor": 1.0,
     "icl_num_blocks": 12,
     "icl_num_kv_heads_test": None,
-    "cell_embedding": "fourier_nan_indicator",
     "max_classes": 10,
     "norm": "rms",
     "norm_bias": True,
@@ -34,7 +42,6 @@ _BASE_ARGS: dict[str, Any] = {
     "per_dim_scale_per_head": False,
     "gated_logn_scale": False,
     "per_head_logn_scale": True,
-    "row_stage_logn_scale": True,
     "sandwich": False,
     "attention_bias": True,
     "ffn_bias": True,
@@ -43,28 +50,59 @@ _BASE_ARGS: dict[str, Any] = {
     "row_stage_norm": False,
     "rope_interleaved": False,
     "rope_requires_grad": False,
-    "rope_frac": 1.0,
     "sdpa_fp32": False,
     "grad_checkpoint": False,
     "text_embedding_dim": 30,
     "icl": "standard",
     "icl_num_thinking_rows": 0,
 }
+_MISSING_ARCHITECTURE = _CheckpointArchitecture(
+    cell_embedding="fourier_nan_indicator",
+    row_log_scale=True,
+    rope_fraction=1.0,
+)
+_STANDARD_ARCHITECTURE = _CheckpointArchitecture(
+    cell_embedding="fourier",
+    row_log_scale=False,
+    rope_fraction=0.25,
+)
+
+
+def _expected_args(
+    task: Task,
+    architecture: _CheckpointArchitecture,
+) -> dict[str, Any]:
+    return {
+        **_BASE_ARGS,
+        "cell_embedding": architecture.cell_embedding,
+        "row_stage_logn_scale": architecture.row_log_scale,
+        "rope_frac": architecture.rope_fraction,
+        "task_type": task,
+        "y_encoder": (
+            "one_hot_cls" if task == "classification" else "linear_reg"
+        ),
+        "icl_y_encoder": (
+            "one_hot_cls" if task == "classification" else "linear_reg"
+        ),
+        "prediction_head": (
+            "mlp_cls" if task == "classification" else "quantile_reg"
+        ),
+    }
+
+
 _EXPECTED_ARGS_BY_TASK: dict[Task, dict[str, Any]] = {
-    "classification": {
-        **_BASE_ARGS,
-        "task_type": "classification",
-        "y_encoder": "one_hot_cls",
-        "icl_y_encoder": "one_hot_cls",
-        "prediction_head": "mlp_cls",
-    },
-    "regression": {
-        **_BASE_ARGS,
-        "task_type": "regression",
-        "y_encoder": "linear_reg",
-        "icl_y_encoder": "linear_reg",
-        "prediction_head": "quantile_reg",
-    },
+    task: _expected_args(task, _MISSING_ARCHITECTURE)
+    for task in ("classification", "regression")
+}
+_SUPPORTED_ARGS_BY_TASK: dict[
+    Task,
+    tuple[tuple[dict[str, Any], _CheckpointArchitecture], ...],
+] = {
+    task: tuple(
+        (_expected_args(task, architecture), architecture)
+        for architecture in (_MISSING_ARCHITECTURE, _STANDARD_ARCHITECTURE)
+    )
+    for task in ("classification", "regression")
 }
 
 
@@ -292,28 +330,46 @@ def _remap_checkpoint(
     return out
 
 
-def _validate_args(args: object, *, task: Task) -> None:
+def _validate_args(
+    args: object,
+    *,
+    task: Task,
+) -> _CheckpointArchitecture:
     if not isinstance(args, Mapping):
         raise TypeError("Checkpoint 'args' must be a mapping")
 
     actual = dict(args)
-    expected = _EXPECTED_ARGS_BY_TASK[task]
     if not isinstance(actual.get("grad_checkpoint"), bool):
         raise ValueError(
             "Unsupported Kumo Tabular checkpoint argument: "
             "'grad_checkpoint' must be bool"
         )
+    if actual.get("icl_num_kv_heads_test") == 0:
+        actual["icl_num_kv_heads_test"] = None
+
+    candidates = _SUPPORTED_ARGS_BY_TASK[task]
+    expected = candidates[0][0]
     missing = sorted(key for key in expected if key not in actual)
     unexpected = sorted(repr(key) for key in actual if key not in expected)
-    changed = sorted(
-        key
-        for key, expected_value in expected.items()
-        if key != "grad_checkpoint"
-        and key in actual
-        and actual[key] != expected_value
-    )
-    if not missing and not unexpected and not changed:
-        return
+    changed_by_candidate = [
+        sorted(
+            key
+            for key, expected_value in candidate.items()
+            if key != "grad_checkpoint"
+            and key in actual
+            and actual[key] != expected_value
+        )
+        for candidate, _ in candidates
+    ]
+    if not missing and not unexpected:
+        for changed, (_, architecture) in zip(
+            changed_by_candidate,
+            candidates,
+            strict=True,
+        ):
+            if not changed:
+                return architecture
+    changed = min(changed_by_candidate, key=len)
     raise ValueError(
         "Unsupported Kumo Tabular checkpoint arguments: "
         f"missing={missing}, unexpected={unexpected}, changed={changed}"
@@ -357,13 +413,11 @@ def _validate_state(
             )
 
 
-def _load_checkpoint(
-    model: _Model,
+def _read_checkpoint(
     checkpoint_path: str | Path,
     *,
     task: Task,
-    device: torch.device | str | None,
-) -> _Model:
+) -> tuple[Mapping[object, object], _CheckpointArchitecture]:
     checkpoint = torch.load(
         checkpoint_path,
         map_location="cpu",
@@ -372,7 +426,17 @@ def _load_checkpoint(
     if not isinstance(checkpoint, Mapping):
         raise TypeError("Checkpoint must be a mapping")
     _validate_checkpoint_schema(checkpoint)
-    _validate_args(checkpoint["args"], task=task)
+    architecture = _validate_args(checkpoint["args"], task=task)
+    return checkpoint, architecture
+
+
+def _load_checkpoint(
+    model: _Model,
+    checkpoint: Mapping[object, object],
+    *,
+    task: Task,
+    device: torch.device | str | None,
+) -> _Model:
 
     raw_state = checkpoint["model"]
     if not isinstance(raw_state, Mapping):

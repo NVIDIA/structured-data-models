@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
@@ -12,7 +12,11 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.tabular.checkpoint import _load_checkpoint
+from sdm.models.kumo.tabular.checkpoint import (
+    _CheckpointArchitecture,
+    _load_checkpoint,
+    _read_checkpoint,
+)
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -95,18 +99,39 @@ class KumoTabular(ICLModel):
                 "regression task"
             )
 
+        checkpoint: Mapping[object, object] | None = None
+        checkpoint_architecture: _CheckpointArchitecture | None = None
+        checkpoint_task: Literal["classification", "regression"] | None = None
+        if checkpoint_path is not None:
+            checkpoint_task = cast(
+                Literal["classification", "regression"],
+                next(iter(self.tasks)),
+            )
+            checkpoint, checkpoint_architecture = _read_checkpoint(
+                checkpoint_path,
+                task=checkpoint_task,
+            )
+
         self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
         for task in self.tasks:
             self.models[task] = _KumoTabular(
                 num_classes=10 if task == Task.classification else 0,
                 num_quantiles=999 if task == Task.regression else 0,
                 cell_embedding=(
-                    "fourier_nan_indicator"
-                    if checkpoint_path is not None
+                    checkpoint_architecture.cell_embedding
+                    if checkpoint_architecture is not None
                     else "fourier"
                 ),
-                row_log_scale=checkpoint_path is not None,
-                rope_fraction=1.0 if checkpoint_path is not None else 0.25,
+                row_log_scale=(
+                    checkpoint_architecture.row_log_scale
+                    if checkpoint_architecture is not None
+                    else False
+                ),
+                rope_fraction=(
+                    checkpoint_architecture.rope_fraction
+                    if checkpoint_architecture is not None
+                    else 0.25
+                ),
                 device="meta" if pretrained else device,
                 **(
                     MODEL_KWARGS["small"]
@@ -116,14 +141,13 @@ class KumoTabular(ICLModel):
             )
 
         if checkpoint_path is not None:
-            checkpoint_task = next(iter(self.tasks))
+            assert checkpoint is not None
+            assert checkpoint_task is not None
             model = cast(_KumoTabular, self.models[checkpoint_task])
             self.models[checkpoint_task] = _load_checkpoint(
                 model,
-                checkpoint_path,
-                task=cast(
-                    Literal["classification", "regression"], checkpoint_task
-                ),
+                checkpoint,
+                task=checkpoint_task,
                 device=device,
             )
         elif pretrained:
