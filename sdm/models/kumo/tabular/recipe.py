@@ -6,12 +6,9 @@ MAX_ROWS = 1_000_000
 def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
         features=[
-            sp.ContextQueryDispatch(
-                context=sp.SelectRows(MAX_ROWS, method="round_robin"),
-            ),
             sp.StypeDispatch(
                 categorical=[
-                    sp.AlignCategories(sort_by="value", min_frequency=2),
+                    sp.AlignCategories(sort_by="value"),
                     sp.ToNumerical(),
                 ],
             ),
@@ -27,8 +24,6 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                         method="round_robin",
                     ),
                     sp.ClipSigma(threshold=4.0),
-                    sp.FlipSign(),
-                    sp.SelectColumns(500, method="round_robin"),
                     sp.ShuffleColumns(method="latin"),
                 ],
             ),
@@ -40,10 +35,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.AlignCategories(),
                     sp.ShuffleCategories(method="shift"),
                 ],
-                numerical=[
-                    sp.Standardize(),
-                    sp.FlipSign(),
-                ],
+                numerical=sp.Standardize(),
             ),
         ],
         output=[
