@@ -9,7 +9,12 @@ from torch.nn import Embedding, Linear, ModuleList, Parameter, RMSNorm
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.tabfm.cell_embedding import CellEmbedding
-from sdm.nn import InducedTransformerBlock, RotaryEmbedding
+from sdm.nn import (
+    GatedLogScale,
+    InducedTransformerBlock,
+    LogScale,
+    RotaryEmbedding,
+)
 
 
 class RowEmbedding(torch.nn.Module):
@@ -23,6 +28,7 @@ class RowEmbedding(torch.nn.Module):
         num_frequencies: int,
         num_inducing_points: int,
         num_readout_tokens: int,
+        row_log_scale: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -65,13 +71,16 @@ class RowEmbedding(torch.nn.Module):
                 inducing_block=KumoTabularTransformerBlock(
                     channels=channels,
                     num_heads=num_heads,
-                    query_log_scale=True,
+                    query_scaling=LogScale(
+                        num_heads=num_heads,
+                        **factory_kwargs,
+                    ),
                     **factory_kwargs,
                 ),
                 output_block=KumoTabularTransformerBlock(
                     channels=channels,
                     num_heads=num_heads,
-                    query_log_scale=False,
+                    query_scaling=None,
                     **factory_kwargs,
                 ),
                 **factory_kwargs,
@@ -82,7 +91,13 @@ class RowEmbedding(torch.nn.Module):
             KumoTabularTransformerBlock(
                 channels=channels,
                 num_heads=num_heads,
-                query_log_scale=False,
+                query_scaling=GatedLogScale(
+                    channels=channels // num_heads,
+                    num_heads=num_heads,
+                    **factory_kwargs,
+                )
+                if row_log_scale
+                else None,
                 rope=rope,
                 **factory_kwargs,
             )

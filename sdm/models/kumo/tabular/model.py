@@ -271,6 +271,7 @@ class _KumoTabular(torch.nn.Module):
         num_embedding_layers: int = 4,
         num_embedding_heads: int = 4,
         num_inducing_points: int = 128,
+        row_log_scale: bool = False,
         group_size: int = 3,
         num_frequencies: int = 32,
         num_readout_tokens: int = 4,
@@ -293,6 +294,7 @@ class _KumoTabular(torch.nn.Module):
             num_frequencies=num_frequencies,
             num_inducing_points=num_inducing_points,
             num_readout_tokens=num_readout_tokens,
+            row_log_scale=row_log_scale,
             **factory_kwargs,
         )
         if cell_channels * num_readout_tokens != icl_channels:
