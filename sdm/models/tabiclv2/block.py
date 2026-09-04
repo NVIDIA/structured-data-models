@@ -48,3 +48,12 @@ class TabICLv2TransformerBlock(TransformerBlock):
             key_transform=rope,
             **factory_kwargs,
         )
+
+    def peak_bytes_per_example(
+        self,
+        query_length: int,
+        key_value_length: int | None = None,
+        *,
+        dtype: torch.dtype,
+    ) -> int:
+        pass
