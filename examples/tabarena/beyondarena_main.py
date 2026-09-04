@@ -1,7 +1,5 @@
 r"""Run an SDM tabular model on BeyondArena."""
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 
