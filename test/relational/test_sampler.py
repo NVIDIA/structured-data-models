@@ -152,7 +152,6 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
 
 def test_batch_sampler_accepts_expanded_task_rows(
     relational_data: RelationalData,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backend = Mock()
     backend.sample.return_value = {
