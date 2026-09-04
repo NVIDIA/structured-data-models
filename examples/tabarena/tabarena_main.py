@@ -1,7 +1,5 @@
 r"""Run an SDM tabular model on TabArena."""
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 
@@ -22,16 +20,37 @@ parser.add_argument(
     "--dataset",
     help="Run only the selected TabArena dataset.",
 )
+parser.add_argument(
+    "--subset",
+    action="append",
+    help="Filter tasks; repeat to combine filters.",
+)
+parser.add_argument(
+    "--max_context_size",
+    type=int,
+    help="Subsample the context to at most this many rows.",
+)
+parser.add_argument(
+    "--batch_size",
+    type=int,
+    help="Prediction batch size.",
+)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = Path(__file__).parent.parent / "tabarena_out" / model_config.name
 result_dir.mkdir(parents=True, exist_ok=True)
 
+config = {
+    "model": args.model,
+    "max_context_size": args.max_context_size,
+    "batch_size": args.batch_size,
+}
+
 generator = SystemConfigGenerator(
     model_cls=SDMSystem,
     name=model_config.system_name,
-    manual_configs=[{"model": args.model}],
+    manual_configs=[config],
 )
 experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
@@ -42,6 +61,7 @@ context = TabArenaContext()
 context.build_and_run_jobs(
     experiments,
     expname=result_dir,
+    subset=args.subset,
     register=False,
     build_kwargs=(
         {"dataset_names": [args.dataset]} if args.dataset is not None else None
