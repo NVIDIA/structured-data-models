@@ -198,21 +198,21 @@ jobs:
         run: |
           python examples/kumo/relational/rel_bench.py --dataset rel-f1 --task driver-position
 
-      - name: Run TabArena benchmark and evaluation example
+      - name: Run TabArena benchmark and evaluation
         timeout-minutes: 5
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/tabarena/tabarena_main.py --model tabiclv2 --dataset blood-transfusion-service-center
-          python examples/tabarena/tabarena_evaluate.py
+          python -m benchmark.tabular.tabarena.main --model tabiclv2 --dataset blood-transfusion-service-center
+          python -m benchmark.tabular.tabarena.evaluate
 
-      - name: Run BeyondArena benchmark and evaluation example
+      - name: Run BeyondArena benchmark and evaluation
         timeout-minutes: 5
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/tabarena/beyondarena_main.py --model tabiclv2 --dataset parkinsons_biomedical_voice_measurements --subset lite
-          python examples/tabarena/beyondarena_evaluate.py
+          python -m benchmark.tabular.beyondarena.main --model tabiclv2 --dataset parkinsons_biomedical_voice_measurements --subset lite
+          python -m benchmark.tabular.beyondarena.evaluate
 
       - name: Run TALENT benchmark and evaluation example
         timeout-minutes: 5
