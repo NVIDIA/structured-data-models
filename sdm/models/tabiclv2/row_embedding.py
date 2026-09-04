@@ -177,7 +177,6 @@ class RowEmbedding(torch.nn.Module):
                         else None
                     ),
                 )
-                print(x.shape, col_batch_size_limit)
             result = col_layer(
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
