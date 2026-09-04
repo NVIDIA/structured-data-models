@@ -150,7 +150,10 @@ class RelationalSampler:
             )
         if task_table.dim() == 3:
             num_members, num_rows = task_table.size()[:2]
-            task_table = cast(TableTensor, task_table.flatten(0, 1))
+            task_table = cast(
+                TableTensor,
+                task_table.contiguous().flatten(0, 1),
+            )
         else:
             num_members, num_rows = None, task_table.size(0)
 
