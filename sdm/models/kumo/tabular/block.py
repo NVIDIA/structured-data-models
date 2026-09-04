@@ -67,12 +67,24 @@ class KumoTabularTransformerBlock(TransformerBlock):
 
     def peak_bytes_per_example(
         self,
+        element_size: int,
         query_length: int,
         key_value_length: int | None = None,
-        *,
-        dtype: torch.dtype,
     ) -> int:
+        r""":meta private:"""  # noqa: D415
         length = max(query_length, key_value_length or 0)
-        precision = torch.empty((), dtype=dtype).element_size()
-        factor = 30 if precision <= 2 else 32  # TODO High peak!
-        return factor * length * self.attn.q_dim
+        factor = 15 if element_size <= 2 else 8
+        return factor * length * element_size * self.attn.q_dim
+
+
+if __name__ == "__main__":
+    from sdm.testing.memory import benchmark_transformer_block_memory_peak
+
+    benchmark_transformer_block_memory_peak(
+        block=lambda channels, num_heads: KumoTabularTransformerBlock(
+            channels=channels,
+            num_heads=num_heads,
+            query_log_scale=True,
+        ),
+        channels_and_heads=[(256, 4), (512, 4)],
+    )

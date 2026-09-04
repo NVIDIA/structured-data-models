@@ -776,3 +776,12 @@ class TransformerBlock(torch.nn.Module):
             out += self.mlp(out)
 
         return (out, kv) if return_key_value else out
+
+    def peak_bytes_per_example(
+        self,
+        element_size: int,
+        query_length: int,
+        key_value_length: int | None = None,
+    ) -> int:
+        r""":meta private:"""  # noqa: D415
+        raise NotImplementedError

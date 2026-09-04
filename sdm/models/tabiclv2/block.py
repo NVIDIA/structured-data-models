@@ -51,96 +51,25 @@ class TabICLv2TransformerBlock(TransformerBlock):
 
     def peak_bytes_per_example(
         self,
+        element_size: int,
         query_length: int,
         key_value_length: int | None = None,
-        *,
-        dtype: torch.dtype,
     ) -> int:
+        r""":meta private:"""  # noqa: D415
         length = max(query_length, key_value_length or 0)
-        precision = torch.empty((), dtype=dtype).element_size()
-        factor = 21 if precision <= 2 else 33
-        return factor * length * self.attn.q_dim
+        factor = 10 if element_size <= 2 else 8
+        return factor * length * element_size * self.attn.q_dim
 
 
 if __name__ == "__main__":
-    import gc
-    import itertools
+    from sdm.testing.memory import benchmark_transformer_block_memory_peak
 
-    from tqdm import tqdm
-
-    @torch.inference_mode()
-    def measure_peak(
-        *,
-        batch_size: int,
-        length: int,
-        channels: int,
-        num_heads: int,
-        amp: bool,
-        warmups: int = 3,
-        repeats: int = 5,
-    ) -> int:
-        block = TabICLv2TransformerBlock(
+    benchmark_transformer_block_memory_peak(
+        block=lambda channels, num_heads: TabICLv2TransformerBlock(
             channels=channels,
             num_heads=num_heads,
             norm_bias=True,
             qassmax=True,
-            device=torch.device("cuda"),
-        ).eval()
-
-        x = torch.randn(
-            (batch_size, length, channels),
-            dtype=torch.float16 if amp else torch.float32,
-            device=torch.device("cuda"),
-        )
-
-        peaks = []
-        for _ in range(warmups + repeats):
-            with torch.autocast("cuda", torch.float16, enabled=amp):
-                gc.collect()
-                torch.cuda.empty_cache()
-                torch.cuda.reset_peak_memory_stats()
-                baseline = torch.cuda.memory_allocated()
-                out = block(x, x)
-                torch.cuda.synchronize()
-                peaks.append(torch.cuda.max_memory_allocated() - baseline)
-                del out
-
-        return max(peaks[warmups:])
-
-    configs = itertools.product(
-        [128, 256, 512],
-        [(128, 8), (512, 8)],
-        [64, 128, 256, 512, 1024],
-        [False, True],
+        ),
+        channels_and_heads=[(128, 8), (512, 8)],
     )
-    measurements: list[tuple[int, int, int, bool, float]] = []
-    for batch_size, (channels, heads), length, amp in tqdm(list(configs)):
-        peak = measure_peak(
-            batch_size=batch_size,
-            length=length,
-            channels=channels,
-            num_heads=heads,
-            amp=amp,
-        )
-        measurements.append((batch_size, channels, length, amp, peak))
-
-    result = {}
-    for amp in [False, True]:
-        rows = [row for row in measurements if row[3] == amp]
-        xs = [
-            batch_size * length * channels
-            for (batch_size, channels, length, _, _) in rows
-        ]
-        ys = [peak for *_, peak in rows]
-        slope = sum(x * y for x, y in zip(xs, ys)) / sum(x * x for x in xs)
-        preds = [slope * x for x in xs]
-        mean = sum(ys) / len(ys)
-        sse = sum((y - pred) ** 2 for y, pred in zip(ys, preds))
-        sst = sum((y - mean) ** 2 for y in ys)
-        result["fp16_amp" if amp else "fp32"] = (slope, 1.0 - sse / sst)
-
-    for dtype, (slope, r2) in result.items():
-        print(
-            f"{dtype}: peak ~= batch_size * {slope:.6f} * length * channels; "
-            f"R2={r2:.6f}"
-        )
