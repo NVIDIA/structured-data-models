@@ -213,6 +213,7 @@ banned-module-level-imports = [
 
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["I"]
+"benchmark/**/__init__.py" = ["D104"]
 "sdm/_kernels/**/*.py" = ["D"]
 "examples/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"

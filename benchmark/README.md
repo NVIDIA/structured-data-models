@@ -1,6 +1,6 @@
 # Benchmarks
 
-This folder contains runnable benchmark integrations for `structured-data-models`:
+This folder contains benchmark integrations for `structured-data-models`:
 
 - [**`tabular/`**](tabular/): Tabular benchmarks
   - [**`tabarena/`**](tabular/tabarena/): [TabArena](https://tabarena.ai)

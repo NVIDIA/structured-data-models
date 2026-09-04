@@ -1,4 +1,4 @@
-"""SDM tabular system adapter for TabArena and BeyondArena."""
+"""SDM tabular model adapter for TabArena and BeyondArena."""
 
 import math
 from collections.abc import Callable

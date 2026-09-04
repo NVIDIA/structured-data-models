@@ -1,1 +1,0 @@
-"""TabArena benchmark integration."""

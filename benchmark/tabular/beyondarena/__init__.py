@@ -1,1 +1,0 @@
-"""BeyondArena benchmark integration."""
