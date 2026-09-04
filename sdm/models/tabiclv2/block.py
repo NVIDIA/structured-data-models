@@ -56,10 +56,7 @@ class TabICLv2TransformerBlock(TransformerBlock):
         *,
         dtype: torch.dtype,
     ) -> int:
-        key_value_length = (
-            query_length if key_value_length is None else key_value_length
-        )
-        length = max(query_length, key_value_length)
+        length = max(query_length, key_value_length or 0)
         precision = torch.empty((), dtype=dtype).element_size()
         factor = 21 if precision <= 2 else 33
         return factor * length * self.attn.q_dim

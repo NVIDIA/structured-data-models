@@ -64,3 +64,18 @@ class KumoTabularTransformerBlock(TransformerBlock):
             else None,
             **factory_kwargs,
         )
+
+    def peak_bytes_per_example(
+        self,
+        query_length: int,
+        key_value_length: int | None = None,
+        *,
+        dtype: torch.dtype,
+    ) -> int:
+        key_value_length = (
+            query_length if key_value_length is None else key_value_length
+        )
+        length = max(query_length, key_value_length)
+        precision = torch.empty((), dtype=dtype).element_size()
+        factor = 30 if precision <= 2 else 32  # TODO High peak!
+        return factor * length * self.attn.q_dim
