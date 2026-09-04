@@ -1,4 +1,6 @@
 from textwrap import dedent
+from typing import cast
+from unittest.mock import Mock
 
 import pytest
 import torch
@@ -147,3 +149,50 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
     assert user.columns[Stype.id] == ("user_id", "__example__")
     assert user.id[..., 0].equal(torch.tensor([[3, 2, 1, 0], [0, 1, 2, 3]]))
     assert user.id[..., 1].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
+
+
+def test_batch_sampler_accepts_expanded_task_rows(
+    relational_data: RelationalData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = Mock()
+    backend.sample.return_value = {
+        "users": (
+            torch.tensor([0, 1, 2, 3]),
+            torch.tensor([3, 2, 3, 2]),
+        ),
+        "orders": (
+            torch.tensor([0, 2, 2]),
+            torch.tensor([3, 4, 5]),
+        ),
+    }
+    monkeypatch.setattr(
+        "sdm.relational.sampler.PyGLibRelationalSampler",
+        Mock(return_value=backend),
+    )
+    task_table = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.tensor([3, 2]),)),
+    )
+    task_table = cast(
+        TableTensor,
+        task_table.unsqueeze(0).expand(2, -1, -1),
+    )
+
+    sampled = relational_data.sampler()(
+        task_table=task_table,
+        task_link={
+            "task_column": "user_id",
+            "table": "users",
+            "table_columns": "user_id",
+        },
+        num_neighbors=[1],
+    )
+
+    assert sampled.task_table.id[..., 0].equal(torch.tensor([[3, 2], [3, 2]]))
+    orders = sampled.related_tables.tables["orders"]
+    assert orders.num_members == 2
+    assert orders.table(0).numerical[..., 0].equal(torch.tensor([99.99]))
+    assert (
+        orders.table(1).numerical[..., 0].equal(torch.tensor([199.99, 39.99]))
+    )
