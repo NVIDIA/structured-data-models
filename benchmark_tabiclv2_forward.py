@@ -29,7 +29,7 @@ def _make_table(
 
 
 def _measure_forward(
-    model: sdm.models.TabICLv2,
+    model: sdm.models.KumoTabular,
     x_context: sdm.TableTensor,
     y_context: sdm.TableTensor,
     x_query: sdm.TableTensor,
@@ -95,7 +95,7 @@ def main() -> None:
         raise RuntimeError("CUDA is required for this benchmark")
 
     device = torch.device("cuda")
-    model = sdm.models.TabICLv2(
+    model = sdm.models.KumoTabular(
         task=sdm.Task.regression,
         pretrained=args.pretrained,
         device=device,
