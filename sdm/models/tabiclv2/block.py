@@ -129,7 +129,7 @@ if __name__ == "__main__":
 
     result = {}
     for amp in [False, True]:
-        rows = [row for row in measurements if row[4] == amp]
+        rows = [row for row in measurements if row[3] == amp]
         xs = [
             batch_size * length * channels
             for (batch_size, channels, length, _, _) in rows
