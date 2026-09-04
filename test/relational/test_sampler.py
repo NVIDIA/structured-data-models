@@ -1,6 +1,5 @@
 from textwrap import dedent
 from typing import cast
-from unittest.mock import Mock
 
 import pytest
 import torch
