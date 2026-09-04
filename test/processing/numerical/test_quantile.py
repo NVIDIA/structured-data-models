@@ -204,7 +204,7 @@ def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("subsample", [None, 32])
-def test_quantile_transform_adapter_matches_grouped_tables(
+def test_quantile_transform_adapter_matches_member_fits(
     device: torch.device,
     subsample: int | None,
 ) -> None:
@@ -235,22 +235,25 @@ def test_quantile_transform_adapter_matches_grouped_tables(
     expected_contexts = []
     expected_queries = []
     expected_restored = []
-    for context_table, query_table in zip(contexts, queries, strict=True):
+    generator = torch.Generator(device=device).manual_seed(7)
+    for table_id in member_table_ids:
+        context_table = contexts[table_id]
+        query_table = queries[table_id]
         reference = QuantileTransform(
             n_quantiles=8,
             subsample=subsample,
         )
         expected_context = reference.fit_transform(
             context_table,
-            generator=torch.Generator(device=device).manual_seed(7),
+            generator=generator,
         )
         expected_contexts.append(expected_context)
         expected_queries.append(reference.transform(query_table))
         expected_restored.append(reference.inverse_transform(expected_context))
 
-    for member_id, table_id in enumerate(member_table_ids):
+    for member_id in range(context.num_members):
         assert context_output.table(member_id).equal(
-            expected_contexts[table_id]
+            expected_contexts[member_id]
         )
-        assert query_output.table(member_id).equal(expected_queries[table_id])
-        assert restored.table(member_id).equal(expected_restored[table_id])
+        assert query_output.table(member_id).equal(expected_queries[member_id])
+        assert restored.table(member_id).equal(expected_restored[member_id])
