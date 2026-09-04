@@ -39,6 +39,9 @@ class SelectColumns(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        if all(group.size(-1) <= self.max_columns for group in ensemble_table):
+            return ensemble_table
+
         if self.method == "first":
             groups = []
             for group in ensemble_table:
@@ -129,6 +132,9 @@ class SelectRows(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        if all(group.size(-2) <= self.max_rows for group in ensemble_table):
+            return ensemble_table
+
         if self.method == "first":
             return ensemble_table.replace_groups(
                 [group[..., : self.max_rows, :] for group in ensemble_table]
