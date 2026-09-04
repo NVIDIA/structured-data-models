@@ -6,6 +6,7 @@ import torch
 from torch import Tensor
 
 from sdm import VarLenTensor
+from sdm.tensor.var_len import _compact
 from sdm.testing import onlyCUDA
 
 
@@ -91,6 +92,18 @@ def test_offset_dtype() -> None:
     )
     assert isinstance(out, VarLenTensor)
     assert out._offset.dtype == torch.int64
+
+
+def test_compact_promotes_cumulative_offsets() -> None:
+    start = torch.tensor([0, 0], dtype=torch.int8)
+    end = torch.tensor([100, 100], dtype=torch.int8)
+
+    offset, index = _compact(start, end)
+
+    assert offset.dtype == torch.int64
+    assert offset.equal(torch.tensor([0, 100, 200]))
+    assert index.dtype == torch.int8
+    assert index.equal(torch.arange(100, dtype=torch.int8).repeat(2))
 
 
 def test_arrow() -> None:
