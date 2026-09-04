@@ -1386,7 +1386,7 @@ def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
 
 
 def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
-    count = (end - start).to(torch.int64)
+    count = end.to(torch.int64) - start
 
     offset = count.new_empty(count.numel() + 1)
     offset[0] = 0
