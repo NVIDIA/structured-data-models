@@ -244,26 +244,44 @@ class EnsembleTable(DeviceMixin):
         if all(table is first for table in tables[1:]):
             return first.select_members(member_ids)
 
-        # TODO: This path occurs when members come from multiple sources, such
-        # as different Choice options. It can be optimized by refining their
-        # compatible group layouts and gathering their rows directly into the
-        # output groups.
-        outputs: list[TableTensor] = []
-        output_id_by_source: dict[tuple[int, tuple[int, int]], int] = {}
-        member_table_ids = []
+        sources: dict[tuple[int, int], tuple[Self, int]] = {}
+        positions: dict[tuple[int, int], dict[int, int]] = {}
+        member_sources: list[tuple[tuple[int, int], int]] = []
         for table, member_id in zip(tables, member_ids, strict=True):
-            location = table._locations[member_id]
-            key = (id(table), location)
-            output_id = output_id_by_source.get(key)
-            if output_id is None:
-                output_id = len(outputs)
-                output_id_by_source[key] = output_id
-                outputs.append(table.table(member_id))
-            member_table_ids.append(output_id)
+            group_id, position = table._locations[member_id]
+            key = (id(table), group_id)
+            sources.setdefault(key, (table, group_id))
+            group_positions = positions.setdefault(key, {})
+            group_positions.setdefault(position, len(group_positions))
+            member_sources.append((key, position))
 
-        return cls.from_tables(
-            tables=outputs,
-            member_table_ids=member_table_ids,
+        group_ids = {key: group_id for group_id, key in enumerate(sources)}
+        groups: list[TableTensor] = []
+        for key, (table, source_group_id) in sources.items():
+            group = table._groups[source_group_id]
+            selected = tuple(positions[key])
+            if selected == tuple(range(group.size(0))):
+                groups.append(group)
+            elif len(selected) == 1:
+                groups.append(
+                    cast(TableTensor, group.narrow(0, selected[0], 1))
+                )
+            else:
+                groups.append(
+                    cast(
+                        TableTensor,
+                        torch.stack(
+                            tensors=[group[position] for position in selected]
+                        ),
+                    )
+                )
+
+        return cls._from_groups(
+            groups=groups,
+            locations=[
+                (group_ids[key], positions[key][position])
+                for key, position in member_sources
+            ],
         )
 
     @property
