@@ -70,7 +70,7 @@ jobs:
           uv pip install \
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
-            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
+            --find-links=https://data.pyg.org/whl/torch-2.14.0+cu130.html \
             --index-strategy=unsafe-best-match \
             --group=test \
             .
@@ -153,7 +153,7 @@ jobs:
           uv pip install \
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
-            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
+            --find-links=https://data.pyg.org/whl/torch-2.14.0+cu130.html \
             --index-strategy=unsafe-best-match \
             . \
             'TALENT@git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6' \
