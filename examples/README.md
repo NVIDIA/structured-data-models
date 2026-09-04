@@ -6,5 +6,3 @@ This folder contains runnable examples of `structured-data-models`:
 - [**`kumo/relational/`**](kumo/relational/): `sdm.models.KumoRelational`
 
 See [`tabiclv2/quickstart.py`](tabiclv2/quickstart.py) for a minimal runnable `structured-data-models` example with `TabICLv2`.
-
-Benchmark integrations live under [`benchmark/`](../benchmark/).
