@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import Literal, cast
+from typing import Literal
 
 import torch
 
@@ -96,71 +96,6 @@ class SelectColumns(EnsembleProcessor):
                     **blocks,
                 )
             )
-        return EnsembleTable.from_tables(
-            tables=tables,
-            member_table_ids=range(len(tables)),
-        )
-
-
-class SelectRows(EnsembleProcessor):
-    r"""Select a subset of rows.
-
-    Args:
-        max_rows: The maximum number of rows to keep.
-        method: The row selection method. ``"first"`` keeps the first rows.
-            ``"round_robin"`` assigns each ensemble member the next
-            consecutive chunk, wrapping to the first row after the last. For
-            five rows and ``max_rows=2``, members 0, 1, and 2 receive rows
-            (0, 1), (2, 3), and (4, 0).
-    """
-
-    handles_stypes = frozenset(Stype)
-    requires_fit = False
-
-    def __init__(
-        self,
-        max_rows: int,
-        method: Literal["first", "round_robin"] = "first",
-    ) -> None:
-        super().__init__()
-        if max_rows <= 0:
-            raise ValueError("max_rows must be positive")
-        self.max_rows = max_rows
-        self.method = method
-
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        if all(group.size(-2) <= self.max_rows for group in ensemble_table):
-            return ensemble_table
-
-        if self.method == "first":
-            return ensemble_table.replace_groups(
-                [group[..., : self.max_rows, :] for group in ensemble_table]
-            )
-
-        assert self.method == "round_robin"
-        tables: list[TableTensor] = []
-        for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
-            num_rows = table.size(-2)
-            if num_rows <= self.max_rows:
-                tables.append(table)
-                continue
-
-            start = member_id * self.max_rows % num_rows
-            length = min(self.max_rows, num_rows - start)
-            first = table.narrow(dim=-2, start=start, length=length)
-
-            wrap_length = self.max_rows - length
-            if wrap_length == 0:
-                tables.append(cast(TableTensor, first))
-                continue
-
-            second = table.narrow(dim=-2, start=0, length=wrap_length)
-            tables.append(cast(TableTensor, torch.cat([first, second], -2)))
-
         return EnsembleTable.from_tables(
             tables=tables,
             member_table_ids=range(len(tables)),

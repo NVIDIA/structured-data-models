@@ -111,7 +111,6 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ToNumerical()),
     ProcessorCase(sp.ShuffleColumns()),
     ProcessorCase(sp.SelectColumns(2)),
-    ProcessorCase(sp.SelectRows(3, method="round_robin")),
     ProcessorCase(sp.TFIDF(ngram_range=(2, 2))),
     ProcessorCase(sp.Clip(-2.0, 6.0)),
     ProcessorCase(sp.ClipQuantiles()),
@@ -271,10 +270,7 @@ def test_preserves_rows_and_unhandled_stypes(
     for member_id in range(output.num_members):
         before = table.table(member_id)
         after = output.table(member_id)
-        if isinstance(case.processor, sp.SelectRows):
-            assert after.size()[:-2] == before.size()[:-2]
-        else:
-            assert after.size()[:-1] == before.size()[:-1]
+        assert after.size()[:-1] == before.size()[:-1]
         for stype in before.active_stypes - processor.handles_stypes:
             columns = before.columns[stype]
             assert all(column in after.column_names for column in columns)
