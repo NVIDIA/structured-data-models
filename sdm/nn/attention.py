@@ -768,12 +768,16 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             out = self.post_attn_norm(out)
 
-        if self.training or torch.is_grad_enabled():
-            out = out + query
-            out = out + self.mlp(out)
-        else:
+        if not torch.is_grad_enabled() and out.dtype == query.dtype:
             out += query
-            out += self.mlp(out)
+        else:
+            out = out + query
+
+        mlp_out = self.mlp(out)
+        if not torch.is_grad_enabled() and out.dtype == mlp_out.dtype:
+            out += mlp_out
+        else:
+            out = out + mlp_out
 
         return (out, kv) if return_key_value else out
 
