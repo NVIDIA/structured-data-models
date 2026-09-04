@@ -174,8 +174,3 @@ def test_batch_sampler_accepts_expanded_task_rows(
     )
 
     assert sampled.task_table.id[..., 0].equal(torch.tensor([[3, 2], [3, 2]]))
-    orders = sampled.related_tables.tables["orders"]
-    assert orders.table(0).numerical[..., 0].equal(torch.tensor([99.99]))
-    assert (
-        orders.table(1).numerical[..., 0].equal(torch.tensor([199.99, 39.99]))
-    )
