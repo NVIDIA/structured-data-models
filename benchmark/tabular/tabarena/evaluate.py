@@ -53,4 +53,5 @@ leaderboard = context.compare(
     only_valid_tasks=[method.method for method in methods],
 )
 website = context.leaderboard_to_website_format(leaderboard)
+website.to_csv(output_root / "website_leaderboard.csv", index=False)
 print(website.to_string(index=False))

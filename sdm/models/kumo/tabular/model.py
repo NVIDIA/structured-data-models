@@ -12,11 +12,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.tabular.ckpt import (
-    remap_kumo_tfm_ckpt,
-    sdm_kwargs_from_kumo_args,
-    unwrap_kumo_checkpoint,
-)
+from sdm.models.kumo.tabular.checkpoint import _load_checkpoint
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -52,7 +48,24 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
-class KumoTabular(ICLModel):  # noqa: D101
+class KumoTabular(ICLModel):
+    """Kumo Tabular in-context classification and regression model.
+
+    Args:
+        task: The tasks to initialize. If ``None``, initialize all supported
+            tasks.
+        size: Size of the Hugging Face checkpoint or randomly initialized
+            model. Ignored when ``checkpoint_path`` is provided because that
+            checkpoint records its architecture.
+        pretrained: Whether to load pretrained weights. By default, weights
+            are downloaded from Hugging Face unless ``checkpoint_path`` is
+            provided.
+        device: Device of the model parameters.
+        checkpoint_path: Local Kumo-SCM training checkpoint. A local
+            checkpoint requires exactly one task and cannot be combined with
+            ``pretrained=False``.
+    """
+
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
@@ -67,19 +80,53 @@ class KumoTabular(ICLModel):  # noqa: D101
         size: Literal["small", "large"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        *,
+        checkpoint_path: str | Path | None = None,
     ) -> None:
         super().__init__(task=task)
+
+        if checkpoint_path is not None and not pretrained:
+            raise ValueError(
+                "'checkpoint_path' cannot be combined with pretrained=False"
+            )
+        if checkpoint_path is not None and len(self.tasks) != 1:
+            raise ValueError(
+                "'checkpoint_path' requires exactly one classification or "
+                "regression task"
+            )
 
         self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
         for task in self.tasks:
             self.models[task] = _KumoTabular(
                 num_classes=10 if task == Task.classification else 0,
                 num_quantiles=999 if task == Task.regression else 0,
+                cell_embedding=(
+                    "fourier_nan_indicator"
+                    if checkpoint_path is not None
+                    else "fourier"
+                ),
+                row_log_scale=checkpoint_path is not None,
+                rope_fraction=1.0 if checkpoint_path is not None else 0.25,
                 device="meta" if pretrained else device,
-                **MODEL_KWARGS[size],
+                **(
+                    MODEL_KWARGS["small"]
+                    if checkpoint_path is not None
+                    else MODEL_KWARGS[size]
+                ),
             )
 
-        if pretrained:
+        if checkpoint_path is not None:
+            checkpoint_task = next(iter(self.tasks))
+            model = cast(_KumoTabular, self.models[checkpoint_task])
+            self.models[checkpoint_task] = _load_checkpoint(
+                model,
+                checkpoint_path,
+                task=cast(
+                    Literal["classification", "regression"], checkpoint_task
+                ),
+                device=device,
+            )
+        elif pretrained:
             self.models[task] = self._load_from_pretrained(size, device=device)
 
         self.eval()
@@ -88,63 +135,6 @@ class KumoTabular(ICLModel):  # noqa: D101
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
-
-    @classmethod
-    def from_kumo_checkpoint(
-        cls,
-        path: str | Path,
-        *,
-        task: TaskLike,
-        device: torch.device | str | None = None,
-    ) -> KumoTabular:
-        """Load a compatible KumoTFM trainer checkpoint."""
-        payload = torch.load(
-            path,
-            map_location=torch.device("cpu") if device is None else device,
-            weights_only=False,
-        )
-        state, args = unwrap_kumo_checkpoint(payload)
-        model_kwargs = sdm_kwargs_from_kumo_args(args)
-        channels = model_kwargs["cell_channels"]
-        if channels == MODEL_KWARGS["small"]["cell_channels"]:
-            size: Literal["small", "large"] = "small"
-        elif channels == MODEL_KWARGS["large"]["cell_channels"]:
-            size = "large"
-        else:
-            raise ValueError(
-                f"Unsupported checkpoint channel count: {channels}"
-            )
-
-        expected = {
-            **MODEL_KWARGS[size],
-            "nan_indicator": False,
-            "partial_rotary_factor": 0.25,
-            "row_log_scale": False,
-        }
-        mismatched = {
-            key: (model_kwargs[key], value)
-            for key, value in expected.items()
-            if model_kwargs[key] != value
-        }
-        if mismatched:
-            raise ValueError(
-                f"Unsupported checkpoint architecture: {mismatched}"
-            )
-
-        model = cls(
-            task=task,
-            size=size,
-            pretrained=False,
-            device=device,
-        )
-        task = Task(task)
-        mapped = remap_kumo_tfm_ckpt(
-            state,
-            is_classifier=task == Task.classification,
-            num_row_layers=MODEL_KWARGS[size]["num_embedding_layers"],
-        )
-        model.models[task].load_state_dict(mapped, strict=True)
-        return model
 
     def _load_from_pretrained(
         self,
@@ -271,7 +261,11 @@ class _KumoTabular(torch.nn.Module):
         num_embedding_layers: int = 4,
         num_embedding_heads: int = 4,
         num_inducing_points: int = 128,
+        cell_embedding: Literal[
+            "fourier", "fourier_nan_indicator"
+        ] = "fourier",
         row_log_scale: bool = False,
+        rope_fraction: float = 0.25,
         group_size: int = 3,
         num_frequencies: int = 32,
         num_readout_tokens: int = 4,
@@ -294,7 +288,9 @@ class _KumoTabular(torch.nn.Module):
             num_frequencies=num_frequencies,
             num_inducing_points=num_inducing_points,
             num_readout_tokens=num_readout_tokens,
+            cell_embedding=cell_embedding,
             row_log_scale=row_log_scale,
+            rope_fraction=rope_fraction,
             **factory_kwargs,
         )
         if cell_channels * num_readout_tokens != icl_channels:

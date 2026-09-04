@@ -258,12 +258,21 @@ class FourierNanIndicatorCellEmbedding(_CellEmbedding):
             dtype=dtype,
         )
 
+    def _context_mean(self, x: Tensor, *, train_size: int) -> Tensor:
+        missing = x.isnan()
+        train = x[..., :train_size, :].to(torch.float32)
+        observed = ~missing[..., :train_size, :]
+        count = observed.sum(dim=-2, keepdim=True).clamp(min=1)
+        mean = train.masked_fill(~observed, 0.0).sum(dim=-2, keepdim=True)
+        return mean / count
+
     def forward(
         self,
         x: Tensor,  # [..., R, C]
         categorical_mask: Tensor,  # [..., C]
         *,
         train_size: int,
+        context_mean: Tensor | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor:  # [..., R, C, D]
@@ -273,6 +282,8 @@ class FourierNanIndicatorCellEmbedding(_CellEmbedding):
             x: Input values with shape ``[..., R, C]``.
             categorical_mask: Categorical column mask with shape ``[..., C]``.
             train_size: Number of leading context rows used for imputation.
+            context_mean: Previously computed context mean with shape
+                ``[..., 1, C]``. If ``None``, compute it from ``x``.
             batch_size_limit: Target maximum number of cells per Fourier
                 feature chunk, or ``"auto"`` to derive it from GPU memory.
             out: Optional output tensor. Only supported when gradients are
@@ -284,12 +295,9 @@ class FourierNanIndicatorCellEmbedding(_CellEmbedding):
         missing = x.isnan()
 
         # Impute from observed context rows only, with fp32 statistics.
-        train = x[..., :train_size, :].to(torch.float32)
-        observed = ~missing[..., :train_size, :]
-        count = observed.sum(dim=-2, keepdim=True).clamp(min=1)
-        mean = train.masked_fill(~observed, 0.0).sum(dim=-2, keepdim=True)
-        mean = mean / count
-        x = torch.where(missing, mean.to(x.dtype), x)
+        if context_mean is None:
+            context_mean = self._context_mean(x, train_size=train_size)
+        x = torch.where(missing, context_mean.to(x.dtype), x)
 
         embedding = self._embed(
             x=x,

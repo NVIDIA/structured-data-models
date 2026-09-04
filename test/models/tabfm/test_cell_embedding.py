@@ -91,6 +91,30 @@ def test_fourier_nan_indicator_imputes_from_context_only() -> None:
     )
 
 
+def test_fourier_nan_indicator_reuses_context_mean() -> None:
+    module = FourierNanIndicatorCellEmbedding(
+        channels=4,
+        group_size=3,
+        num_frequencies=2,
+    )
+    with torch.no_grad():
+        module.nan_lin.weight.zero_()
+    categorical_mask = torch.tensor([False])
+    context_mean = torch.tensor([[2.0]])
+    query = torch.tensor([[torch.nan], [100.0]])
+    expected = torch.tensor([[2.0], [100.0]])
+
+    torch.testing.assert_close(
+        module(
+            query,
+            categorical_mask,
+            train_size=0,
+            context_mean=context_mean,
+        ),
+        module(expected, categorical_mask, train_size=0),
+    )
+
+
 def test_fourier_nan_indicator_matches_finite_inputs() -> None:
     fourier = CellEmbedding(
         channels=4,

@@ -1,6 +1,6 @@
 # ruff: noqa: D101, D102
 
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import torch
 from torch import Tensor
@@ -8,7 +8,10 @@ from torch.nn import Embedding, Linear, ModuleList, Parameter, RMSNorm
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.models.tabfm.cell_embedding import CellEmbedding
+from sdm.models.tabfm.cell_embedding import (
+    CellEmbedding,
+    FourierNanIndicatorCellEmbedding,
+)
 from sdm.nn import (
     GatedLogScale,
     InducedTransformerBlock,
@@ -28,7 +31,11 @@ class RowEmbedding(torch.nn.Module):
         num_frequencies: int,
         num_inducing_points: int,
         num_readout_tokens: int,
+        cell_embedding: Literal[
+            "fourier", "fourier_nan_indicator"
+        ] = "fourier",
         row_log_scale: bool = False,
+        rope_fraction: float = 0.25,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -36,7 +43,12 @@ class RowEmbedding(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.channels = channels
 
-        self.cell_embedding = CellEmbedding(
+        if cell_embedding == "fourier":
+            cell_embedding_cls = CellEmbedding
+        else:
+            assert cell_embedding == "fourier_nan_indicator"
+            cell_embedding_cls = FourierNanIndicatorCellEmbedding
+        self.cell_embedding = cell_embedding_cls(
             channels=channels,
             group_size=group_size,
             num_frequencies=num_frequencies,
@@ -60,7 +72,7 @@ class RowEmbedding(torch.nn.Module):
             layout="split_half",
             theta=100_000,
             requires_grad=False,
-            partial_rotary_factor=0.25,
+            partial_rotary_factor=rope_fraction,
             **factory_kwargs,
         )
 
@@ -125,12 +137,34 @@ class RowEmbedding(torch.nn.Module):
             else x.dtype,
         )
         buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
-        x = self.cell_embedding(
-            x,
-            categorical_mask,
-            batch_size_limit="auto",
-            out=buffer[..., K:, :],
-        )
+        if isinstance(
+            self.cell_embedding,
+            FourierNanIndicatorCellEmbedding,
+        ):
+            if cache is not None and cache.is_replaying:
+                context_mean = cast(Tensor, cache["cell_embedding.mean"])
+            else:
+                context_mean = self.cell_embedding._context_mean(
+                    x,
+                    train_size=R_train,
+                )
+                if cache is not None:
+                    cache["cell_embedding.mean"] = context_mean
+            x = self.cell_embedding(
+                x,
+                categorical_mask,
+                train_size=R_train,
+                context_mean=context_mean,
+                batch_size_limit="auto",
+                out=buffer[..., K:, :],
+            )
+        else:
+            x = self.cell_embedding(
+                x,
+                categorical_mask,
+                batch_size_limit="auto",
+                out=buffer[..., K:, :],
+            )
 
         if y.numel() > 0:
             if self.y_emb is not None:

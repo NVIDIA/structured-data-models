@@ -17,6 +17,9 @@ class Standardize(Processor, InvertibleMixin):
             deviation.
         epsilon: Value added to each fitted standard deviation. The default
             preserves exact constant-column handling.
+        ignore_nan: If ``True``, fit statistics from non-NaN values and
+            preserve NaNs during transformation. All-missing columns use zero
+            mean and unit scale.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -28,6 +31,7 @@ class Standardize(Processor, InvertibleMixin):
         with_mean: bool = True,
         with_std: bool = True,
         epsilon: float = 0.0,
+        ignore_nan: bool = False,
     ) -> None:
         super().__init__()
         if epsilon < 0:
@@ -35,6 +39,7 @@ class Standardize(Processor, InvertibleMixin):
         self.with_mean = with_mean
         self.with_std = with_std
         self.epsilon = epsilon
+        self.ignore_nan = ignore_nan
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
 
@@ -50,7 +55,18 @@ class Standardize(Processor, InvertibleMixin):
             self.scale = torch.ones_like(self.mean)
             return
 
-        data_mean = numerical.mean(dim=-2, keepdim=True)
+        count: int | torch.Tensor = numerical.size(-2)
+        if self.ignore_nan:
+            observed = ~numerical.isnan()
+            count = observed.sum(dim=-2, keepdim=True)
+            data_mean = numerical.masked_fill(~observed, 0.0).sum(
+                dim=-2,
+                keepdim=True,
+            )
+            data_mean = data_mean / count.clamp(min=1)
+        else:
+            observed = None
+            data_mean = numerical.mean(dim=-2, keepdim=True)
 
         if self.with_mean:
             self.mean = data_mean
@@ -59,18 +75,27 @@ class Standardize(Processor, InvertibleMixin):
 
         if self.with_std:
             if numerical.size(-2) > 1:
-                var = numerical.var(
-                    dim=-2,
-                    correction=0,
-                    keepdim=True,
-                )
+                if observed is None:
+                    var = numerical.var(
+                        dim=-2,
+                        correction=0,
+                        keepdim=True,
+                    )
+                else:
+                    assert isinstance(count, torch.Tensor)
+                    centered = (numerical - data_mean).masked_fill(
+                        ~observed,
+                        0.0,
+                    )
+                    var = centered.square().sum(dim=-2, keepdim=True)
+                    var = var / count.clamp(min=1)
                 scale = var.sqrt()
                 if self.epsilon == 0:
                     scale[
                         _constant_feature_mask(
                             var,
                             data_mean,
-                            numerical.size(-2),
+                            count,
                         )
                     ] = 1.0
             else:
@@ -79,6 +104,9 @@ class Standardize(Processor, InvertibleMixin):
                 else:
                     scale = torch.zeros_like(data_mean)
             self.scale = scale + self.epsilon
+            if self.ignore_nan:
+                assert isinstance(count, torch.Tensor)
+                self.scale = self.scale.masked_fill(count == 0, 1.0)
         else:
             self.scale = torch.ones_like(data_mean)
 
