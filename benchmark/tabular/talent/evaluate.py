@@ -20,7 +20,7 @@ METRICS = {
     "multiclass": "Accuracy",
     "regression": "RMSE",
 }
-EXAMPLE_DIR = Path(__file__).parent.parent
+BENCHMARK_DIR = Path(__file__).parent.parent
 
 
 def _official(root: Path | None, revision: str) -> pd.DataFrame:
@@ -184,10 +184,10 @@ def _plot(output: Path, blocks: dict[str, pd.DataFrame]) -> None:
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
-    "--result-dir", type=Path, default=EXAMPLE_DIR / "talent_out"
+    "--result-dir", type=Path, default=BENCHMARK_DIR / "talent_out"
 )
 parser.add_argument(
-    "--output-dir", type=Path, default=EXAMPLE_DIR / "evals" / "talent"
+    "--output-dir", type=Path, default=BENCHMARK_DIR / "evals" / "talent"
 )
 parser.add_argument("--official-results", type=Path)
 parser.add_argument("--official-revision", default=TALENT_REVISION)

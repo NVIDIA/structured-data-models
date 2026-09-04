@@ -31,11 +31,11 @@ def _segment_multi_reduce_kernel(
     start = tl.load(offsets_ptr + segment)
     end = tl.load(offsets_ptr + segment + 1)
 
-    total = tl.zeros((block_channels,), tl.float32)
-    square_total = tl.zeros((block_channels,), tl.float32)
+    total = tl.zeros((block_channels,), tl.float32)  # ty: ignore[invalid-argument-type]
+    square_total = tl.zeros((block_channels,), tl.float32)  # ty: ignore[invalid-argument-type]
     minimum = tl.full((block_channels,), float("inf"), tl.float32)
     maximum = tl.full((block_channels,), -float("inf"), tl.float32)
-    has_nan = tl.zeros((block_channels,), tl.int1)
+    has_nan = tl.zeros((block_channels,), tl.int1)  # ty: ignore[invalid-argument-type]
 
     edge = start
     while edge < end:
@@ -113,14 +113,22 @@ def segment_multi_reduce(
     if shape[0] == 0 or shape[1] == 0:
         return outputs
 
-    block_channels = min(triton.next_power_of_2(shape[1]), 512)
+    block_channels = min(
+        triton.next_power_of_2(shape[1]),  # ty: ignore[invalid-argument-type]
+        512,
+    )
     if block_channels >= 256:
         num_warps = 8
     elif block_channels >= 128:
         num_warps = 4
     else:
         num_warps = 1
-    grid = (shape[0], triton.cdiv(shape[1], block_channels))
+    grid = (
+        shape[0],
+        triton.cdiv(  # ty: ignore[invalid-argument-type]
+            shape[1], block_channels
+        ),
+    )
     with torch.cuda.device(src.device):
         cast(Any, _segment_multi_reduce_kernel)[grid](
             src,
