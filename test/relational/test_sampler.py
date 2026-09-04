@@ -153,6 +153,7 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
 def test_batch_sampler_accepts_expanded_task_rows(
     relational_data: RelationalData,
 ) -> None:
+    pytest.importorskip("pyg_lib")
     task_table = TableTensor(
         columns={"id": ("user_id",)},
         id=ColumnarTensor((torch.tensor([3, 2]),)),
