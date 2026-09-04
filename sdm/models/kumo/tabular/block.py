@@ -72,10 +72,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
         *,
         dtype: torch.dtype,
     ) -> int:
-        key_value_length = (
-            query_length if key_value_length is None else key_value_length
-        )
-        length = max(query_length, key_value_length)
+        length = max(query_length, key_value_length or 0)
         precision = torch.empty((), dtype=dtype).element_size()
         factor = 30 if precision <= 2 else 32  # TODO High peak!
         return factor * length * self.attn.q_dim
