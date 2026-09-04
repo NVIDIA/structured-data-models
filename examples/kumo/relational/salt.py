@@ -18,10 +18,8 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 import pandas as pd
+import relbench
 import torch
-from relbench.base import Dataset
-from relbench.datasets import get_dataset
-from relbench.tasks import get_task
 from torchmetrics.aggregation import MeanMetric
 from tqdm import tqdm
 
@@ -61,25 +59,23 @@ args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def run_task(task_name: str) -> None:
+def run_task(dataset: relbench.base.Dataset, task_name: str) -> None:
     """Evaluate one SALT task."""
     torch.manual_seed(args.seed)
-    task = get_task(SALT_DATASET, task_name, download=True)
-    db = task.dataset.get_db(upto_test_timestamp=False)
+    task = dataset.load_task(task_name)
+    db = task.get_db(upto_test_timestamp=False)
     data = RelationalData(
         tables={
             name: TableTensor.from_pandas(
                 df=table.df,
                 stypes=infer_stypes(
-                    table.df,
+                    table.df.head(10_000),
                     overrides={
-                        column: "id"
-                        for column in (
-                            table.pkey_col,
-                            *table.fkey_col_to_pkey_table,
-                        )
-                        if column is not None
+                        cast(str, table.pkey_col): "id",
+                        **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
                     },
+                    text="drop",
+                    unsupported="drop",
                 ),
             )
             for name, table in db.table_dict.items()
@@ -190,9 +186,7 @@ def run_task(task_name: str) -> None:
     model.clear()
 
 
+dataset = relbench.load_dataset(SALT_DATASET)
 task_names = [args.task] if args.task else SALT_PRESETS
 for task_name in task_names:
-    run_task(task_name)
-    Dataset.get_db.cache_clear()
-    get_task.cache_clear()
-    get_dataset.cache_clear()
+    run_task(dataset, task_name)
