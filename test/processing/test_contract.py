@@ -186,7 +186,6 @@ def test_all_public_processors_have_contract_cases() -> None:
     specialized_processors = {
         sp.TaskDispatch,
         sp.TableDispatch,
-        sp.ContextQueryDispatch,
         sp.SentenceTransformer,
     }
     assert public_processors == covered_processors | specialized_processors

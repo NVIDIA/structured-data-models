@@ -87,10 +87,6 @@ class RecipeExecution:
             for task_dispatcher in task_dispatchers:
                 task_dispatcher._task = task
 
-        for module in self.recipe.features.modules():
-            if isinstance(module, sp.ContextQueryDispatch):
-                module._route = "context"
-
         self._related_processors = None
         related_ensembles: Mapping[str, EnsembleTable] = {}
         if related_tables is not None:
@@ -150,14 +146,6 @@ class RecipeExecution:
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
-        for module in self.recipe.features.modules():
-            if isinstance(module, sp.ContextQueryDispatch):
-                module._route = "query"
-        for processor in (self._related_processors or {}).values():
-            for module in processor.modules():
-                if isinstance(module, sp.ContextQueryDispatch):
-                    module._route = "query"
-
         x = _to_ensemble_table(x, self._num_estimators)
         x = self.recipe.features.transform_ensemble(x)
         if x.num_members != self.num_members:

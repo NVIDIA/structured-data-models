@@ -1,7 +1,5 @@
 import sdm.processing as sp
 
-MAX_ROWS = 1_000_000
-
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
@@ -29,7 +27,6 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
         ],
         target=[
-            sp.SelectRows(MAX_ROWS, method="round_robin"),
             sp.StypeDispatch(
                 categorical=[
                     sp.AlignCategories(),
