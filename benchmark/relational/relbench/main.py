@@ -1,3 +1,5 @@
+"""Benchmark KumoRelational on a selected RelBench task."""
+
 import argparse
 from typing import Any, cast
 

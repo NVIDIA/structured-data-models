@@ -1,12 +1,12 @@
-# Tabular Foundation Models on TabArena and BeyondArena
+# Tabular Benchmarks
 
-These benchmarks evaluate `structured-data-models` on [TabArena and BeyondArena](https://tabarena.ai).
+This directory contains benchmarks of `structured-data-models` on [TabArena and BeyondArena](https://tabarena.ai), plus a separate [TALENT integration](talent/).
 
 > [!NOTE]
 > Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
 > Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
 
-## Setup
+## TabArena and BeyondArena setup
 
 Run the commands below from the repository root. Install the source revisions of AutoGluon and TabArena used by these benchmarks. The Data Foundry extra downloads BeyondArena datasets on demand:
 

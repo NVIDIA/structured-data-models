@@ -1,13 +1,15 @@
-"""Benchmark KumoRelational on RelBench SALT autocomplete tasks.
+r"""Benchmark KumoRelational on RelBench SALT autocomplete tasks.
 
 Without arguments, this runs all eight SALT tasks. Pass ``--task`` to run one
 task.
 
 Examples:
-    python salt.py
-    python salt.py --task sales-incoterms
-    python salt.py --task sales-group --num_neighbors 32
-    python salt.py --task item-plant --num_neighbors 32 32 8
+    python -m benchmark.relational.relbench.salt
+    python -m benchmark.relational.relbench.salt --task sales-incoterms
+    python -m benchmark.relational.relbench.salt \
+        --task sales-group --num_neighbors 32
+    python -m benchmark.relational.relbench.salt \
+        --task item-plant --num_neighbors 32 32 8
 
 Each ``--num_neighbors`` value configures one hop: ``32`` is one hop, and
 ``32 32 8`` is three hops.
