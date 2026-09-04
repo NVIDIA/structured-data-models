@@ -153,21 +153,6 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
 def test_batch_sampler_accepts_expanded_task_rows(
     relational_data: RelationalData,
 ) -> None:
-    backend = Mock()
-    backend.sample.return_value = {
-        "users": (
-            torch.tensor([0, 1, 2, 3]),
-            torch.tensor([3, 2, 3, 2]),
-        ),
-        "orders": (
-            torch.tensor([0, 2, 2]),
-            torch.tensor([3, 4, 5]),
-        ),
-    }
-    monkeypatch.setattr(
-        "sdm.relational.sampler.PyGLibRelationalSampler",
-        Mock(return_value=backend),
-    )
     task_table = TableTensor(
         columns={"id": ("user_id",)},
         id=ColumnarTensor((torch.tensor([3, 2]),)),
