@@ -61,7 +61,7 @@ class TabICLv2TransformerBlock(TransformerBlock):
         )
         length = max(query_length, key_value_length)
         precision = torch.empty((), dtype=dtype).element_size()
-        factor = 15 if precision <= 2 else 22
+        factor = 21 if precision <= 2 else 33
         return factor * length * self.attn.q_dim
 
 
@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     from tqdm import tqdm
 
-    @torch.inference_mode
+    @torch.inference_mode()
     def measure_peak(
         *,
         batch_size: int,
@@ -108,7 +108,7 @@ if __name__ == "__main__":
                 peaks.append(torch.cuda.max_memory_allocated() - baseline)
                 del out
 
-        return sum(peaks[warmups:]) / repeats
+        return max(peaks[warmups:])
 
     configs = itertools.product(
         [128, 256, 512],
