@@ -333,7 +333,7 @@ def register_sdm_method() -> None:
         supports_regression=True,
         supports_classification=True,
         train_row_limit=None,
-        notes="structured-data-models TALENT example adapter.",
+        notes="structured-data-models TALENT benchmark adapter.",
     )
     existing = METHOD_REGISTRY.get(spec.name)
     if existing is not None and existing != spec:

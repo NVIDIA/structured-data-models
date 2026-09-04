@@ -198,23 +198,23 @@ jobs:
         run: |
           python examples/kumo/relational/rel_bench.py --dataset rel-f1 --task driver-position
 
-      - name: Run TabArena benchmark and evaluation example
+      - name: Test TabArena benchmark
         timeout-minutes: 5
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/tabarena/tabarena_main.py --model tabiclv2 --dataset blood-transfusion-service-center
-          python examples/tabarena/tabarena_evaluate.py
+          python -m benchmark.tabular.tabarena.main --model tabiclv2 --dataset blood-transfusion-service-center
+          python -m benchmark.tabular.tabarena.evaluate
 
-      - name: Run BeyondArena benchmark and evaluation example
+      - name: Test BeyondArena benchmark
         timeout-minutes: 5
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/tabarena/beyondarena_main.py --model tabiclv2 --dataset parkinsons_biomedical_voice_measurements --subset lite
-          python examples/tabarena/beyondarena_evaluate.py
+          python -m benchmark.tabular.beyondarena.main --model tabiclv2 --dataset parkinsons_biomedical_voice_measurements --subset lite
+          python -m benchmark.tabular.beyondarena.evaluate
 
-      - name: Run TALENT benchmark and evaluation example
+      - name: Test TALENT benchmark
         timeout-minutes: 5
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -225,5 +225,5 @@ jobs:
             --revision 7bd276bcb7f6b4c0998025855528bd76bd88f13d \
             --quiet)
           unzip -q "${TALENT_ARCHIVE}" 'data/boston/*' -d "${RUNNER_TEMP}/talent"
-          python examples/talent/main.py --model tabiclv2 --dataset-path "${RUNNER_TEMP}/talent/data" --dataset boston
-          python examples/talent/evaluate.py
+          python -m benchmark.tabular.talent.main --model tabiclv2 --dataset-path "${RUNNER_TEMP}/talent/data" --dataset boston
+          python -m benchmark.tabular.talent.evaluate
