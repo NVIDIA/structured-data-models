@@ -758,6 +758,8 @@ class TransformerBlock(torch.nn.Module):
             batch_size_limit=batch_size_limit,
             return_key_value=return_key_value,
         )
+        del key_value
+
         if return_key_value:
             out, kv = result
         else:
@@ -766,7 +768,11 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             out = self.post_attn_norm(out)
 
-        out = query + out
-        out = out + self.mlp(out)
+        if self.training or torch.is_grad_enabled():
+            out = out + query
+            out = out + self.mlp(out)
+        else:
+            out += query
+            out += self.mlp(out)
 
         return (out, kv) if return_key_value else out
