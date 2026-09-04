@@ -7,7 +7,7 @@ from torch import Tensor
 
 from sdm import VarLenTensor
 from sdm.tensor.var_len import _compact
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_dtype_conversion() -> None:
@@ -94,16 +94,29 @@ def test_offset_dtype() -> None:
     assert out._offset.dtype == torch.int64
 
 
-def test_compact_promotes_cumulative_offsets() -> None:
-    start = torch.tensor([0, 0], dtype=torch.int8)
-    end = torch.tensor([100, 100], dtype=torch.int8)
+@withCUDA
+@pytest.mark.parametrize(
+    ("input_dtype", "offset_dtype"),
+    [(torch.int8, torch.int64), (torch.int32, torch.int32)],
+)
+def test_compact_offset_dtype(
+    device: torch.device,
+    input_dtype: torch.dtype,
+    offset_dtype: torch.dtype,
+) -> None:
+    start = torch.tensor([0, 0], dtype=input_dtype, device=device)
+    end = torch.tensor([100, 100], dtype=input_dtype, device=device)
 
     offset, index = _compact(start, end)
 
-    assert offset.dtype == torch.int64
-    assert offset.equal(torch.tensor([0, 100, 200]))
-    assert index.dtype == torch.int8
-    assert index.equal(torch.arange(100, dtype=torch.int8).repeat(2))
+    assert offset.dtype == offset_dtype
+    assert offset.equal(
+        torch.tensor([0, 100, 200], dtype=offset_dtype, device=device)
+    )
+    assert index.dtype == input_dtype
+    assert index.equal(
+        torch.arange(100, dtype=input_dtype, device=device).repeat(2)
+    )
 
 
 def test_arrow() -> None:
