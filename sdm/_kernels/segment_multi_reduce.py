@@ -5,8 +5,8 @@ import torch
 from torch import Tensor
 
 _SegmentMultiReduce: TypeAlias = Callable[
-    [Tensor, Tensor, Tensor, Tensor],
-    tuple[Tensor, Tensor, Tensor, Tensor, Tensor],
+    [Tensor, Tensor, Tensor, Tensor, Tensor | None],
+    Tensor,
 ]
 
 _triton_segment_multi_reduce: _SegmentMultiReduce | None = None
@@ -25,7 +25,10 @@ def _eager_segment_multi_reduce(
     index: Tensor,
     edge_attr: Tensor,
     offsets: Tensor,
-) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    edge_type: Tensor | None = None,
+) -> Tensor:
+    if edge_type is not None:
+        edge_attr = edge_attr[edge_type]
     values = src[index]
     if src.dtype in {torch.float16, torch.bfloat16}:
         values = values.float() + edge_attr.float()
@@ -68,13 +71,16 @@ def _eager_segment_multi_reduce(
     )
     minimum = torch.where(minimum.isinf(), 0.0, minimum)
     maximum = torch.where(maximum.isinf(), 0.0, maximum)
-    return (
-        total.to(src.dtype),
-        mean.to(src.dtype),
-        std.to(src.dtype),
-        minimum.to(src.dtype),
-        maximum.to(src.dtype),
-    )
+    return torch.stack(
+        (
+            total,
+            mean,
+            std,
+            minimum,
+            maximum,
+        ),
+        dim=1,
+    ).to(src.dtype)
 
 
 def segment_multi_reduce(
@@ -82,7 +88,22 @@ def segment_multi_reduce(
     index: Tensor,
     edge_attr: Tensor,
     offsets: Tensor,
-) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    edge_type: Tensor | None = None,
+) -> Tensor:
+    edge_attr_matches = (
+        edge_attr.shape == (index.numel(), src.size(1))
+        if edge_type is None
+        else (
+            edge_attr.dim() == 2
+            and edge_attr.size(1) == src.size(1)
+            and edge_type.numel() == index.numel()
+        )
+    )
+    edge_type_is_supported = edge_type is None or (
+        edge_type.is_contiguous()
+        and edge_type.device == src.device
+        and edge_type.dtype in {torch.int32, torch.int64}
+    )
     if (
         _triton_segment_multi_reduce is not None
         and not (
@@ -96,12 +117,25 @@ def segment_multi_reduce(
         and index.is_contiguous()
         and edge_attr.is_contiguous()
         and offsets.is_contiguous()
+        and edge_type_is_supported
         and index.device == src.device
         and edge_attr.device == src.device
         and offsets.device == src.device
         and index.dtype in {torch.int32, torch.int64}
         and offsets.dtype in {torch.int32, torch.int64}
-        and edge_attr.shape == (index.numel(), src.size(1))
+        and edge_attr_matches
     ):
-        return _triton_segment_multi_reduce(src, index, edge_attr, offsets)
-    return _eager_segment_multi_reduce(src, index, edge_attr, offsets)
+        return _triton_segment_multi_reduce(
+            src,
+            index,
+            edge_attr,
+            offsets,
+            edge_type,
+        )
+    return _eager_segment_multi_reduce(
+        src,
+        index,
+        edge_attr,
+        offsets,
+        edge_type,
+    )

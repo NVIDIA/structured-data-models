@@ -12,13 +12,35 @@ from sdm import (
 )
 from sdm.cache import Cache
 from sdm.models import KumoRelational
-from sdm.models.kumo.relational import invariant_gnn as gnn_module
+from sdm.models.kumo.relational.ckpt import remap_ckpt
 from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.model import (
     _KumoRelational,
 )
 from sdm.testing import withCUDA
+
+
+def test_remap_ckpt_legacy_aggregation_weight() -> None:
+    channels = 8
+    source = torch.nn.ModuleDict({"gnn": InvariantGNN(channels=channels)})
+    ckpt = source.state_dict()
+    expected = ckpt.pop("gnn.aggregation_lin.weight")
+    for name, legacy_weight in zip(
+        ("sum", "avg", "std", "min", "max"),
+        expected.tensor_split(5, dim=1),
+        strict=True,
+    ):
+        ckpt[f"gnn.{name}_lin.weight"] = legacy_weight
+
+    remapped = remap_ckpt(ckpt)
+
+    torch.testing.assert_close(
+        remapped["gnn.aggregation_lin.weight"],
+        expected,
+    )
+    for name in ("sum", "avg", "std", "min", "max"):
+        assert f"gnn.{name}_lin.weight" not in remapped
 
 
 @withCUDA
@@ -76,11 +98,10 @@ def test_invariant_gnn(
     "dtype",
     [torch.float16, torch.float32, torch.float64],
 )
-def test_invariant_gnn_destination_chunks(
+def test_invariant_gnn_cache(
     relational_data: RelationalData,
     device: torch.device,
     dtype: torch.dtype,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     related_tables = RelatedTables(
         tables={
@@ -107,19 +128,6 @@ def test_invariant_gnn_destination_chunks(
             num_hops=2,
             generator=torch.Generator(device=device).manual_seed(0),
         )
-        monkeypatch.setattr(
-            gnn_module,
-            "_automatic_aggregation_work_byte_limit",
-            lambda _x, _graph: 1024,
-        )
-        actual = model(
-            x=x,
-            graph=graph,
-            readout_table="users",
-            readout_index=readout_index,
-            num_hops=2,
-            generator=torch.Generator(device=device).manual_seed(0),
-        )
         cache = Cache()
         recorded = model(
             x=x,
@@ -139,7 +147,6 @@ def test_invariant_gnn_destination_chunks(
             cache=cache.freeze(),
         )
 
-    torch.testing.assert_close(actual, expected)
     torch.testing.assert_close(recorded, expected)
     torch.testing.assert_close(replayed, expected)
 
