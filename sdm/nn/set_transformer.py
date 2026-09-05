@@ -71,7 +71,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -83,7 +83,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -95,7 +95,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -106,7 +106,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., KV]
         return_key_value: bool = False,
         *,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 

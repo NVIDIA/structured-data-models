@@ -118,6 +118,7 @@ class RowEmbedding(torch.nn.Module):
                 if cache is not None and cache.is_replaying
                 else x[..., :R_train, :],
                 return_key_value=cache is not None and cache.is_recording,
+                batch_size_limit="auto",
             )
 
             if cache is not None and cache.is_recording:
@@ -130,6 +131,7 @@ class RowEmbedding(torch.nn.Module):
             x = row_block(
                 query=x[..., :K, :] if i == len(self.row_blocks) - 1 else x,
                 key_value=x,
+                batch_size_limit="auto",
             )
 
         return self.norm(x).flatten(-2)

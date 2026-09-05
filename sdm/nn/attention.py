@@ -1,7 +1,8 @@
 """Attention modules for structured tensor models."""
 
+import math
+import os
 from collections.abc import Callable
-from math import prod
 from typing import Any, Literal, overload
 
 import torch
@@ -102,7 +103,7 @@ def _chunk_attention(
         seqused_key_value=seqused_key_value,
         attn_mask=attn_mask,
     )
-    batch_size = prod(batch_shape)
+    batch_size = math.prod(batch_shape)
     if batch_size <= batch_size_limit:
         return None
 
@@ -286,7 +287,7 @@ class SDPA(torch.nn.Module):
         batch_shape = torch.broadcast_shapes(*batch_shapes)
 
         if not self.training and not torch.compiler.is_compiling():
-            batch_size = prod(batch_shape)
+            batch_size = math.prod(batch_shape)
             if batch_size > batch_size_limit:
                 query_size = query.size()[-3:]
                 out: Tensor | None = None
@@ -666,7 +667,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -678,7 +679,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -690,7 +691,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -701,7 +702,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         return_key_value: bool = False,
         *,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -729,6 +730,38 @@ class TransformerBlock(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
+        if batch_size_limit == "auto":
+            batch_size_limit = None
+            if (
+                query.is_cuda
+                and not self.training
+                and not torch.compiler.is_compiling()
+            ):
+                key_value_length: int | None = None
+                if isinstance(key_value, Tensor):
+                    key_value_length = key_value.size(-2)
+                elif isinstance(key_value, KVCacheEntry):
+                    key_value_length = key_value.key.size(-3)
+
+                bytes_per_example = self.peak_bytes_per_example(
+                    element_size=torch.empty(
+                        size=(),
+                        dtype=torch.get_autocast_dtype(query.device.type),
+                    ).element_size()
+                    if torch.is_autocast_enabled(query.device.type)
+                    else query.element_size(),
+                    query_length=query.size(-2),
+                    key_value_length=key_value_length,
+                )
+
+                memory_limit = int(
+                    torch.cuda.get_device_properties(query.device).total_memory
+                    * torch.cuda.get_per_process_memory_fraction(query.device)
+                    * float(os.getenv("SDM_CHUNK_MEMORY_FRACTION", "0.05"))
+                )
+                batch_size_limit = memory_limit // max(bytes_per_example, 1)
+                batch_size_limit = max(batch_size_limit, 1)
+
         batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
         if not self.training and not torch.compiler.is_compiling():
             chunked_result = _chunk_attention(
@@ -788,4 +821,4 @@ class TransformerBlock(torch.nn.Module):
         key_value_length: int | None = None,
     ) -> int:
         r""":meta private:"""  # noqa: D415
-        raise NotImplementedError
+        return 0

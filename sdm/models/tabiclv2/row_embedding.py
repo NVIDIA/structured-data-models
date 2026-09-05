@@ -10,10 +10,6 @@ from torch.nn import Embedding, LayerNorm, Linear, ModuleList, Parameter
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding
-from sdm.nn.memory import (
-    attention_batch_size_limit,
-    cuda_attention_memory_limit,
-)
 
 
 class RowEmbedding(torch.nn.Module):
@@ -34,7 +30,6 @@ class RowEmbedding(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.lin = Linear(group_size, channels, **factory_kwargs)
-        self.num_heads = num_heads
 
         self.num_classes = num_classes
         self.y_emb: torch.nn.Module | None = None
@@ -101,7 +96,6 @@ class RowEmbedding(torch.nn.Module):
         max_keys: int | None = None,
         num_classes: int | None = None,
         cache: Cache | None = None,
-        batch_size_limit: int | None = None,
         generator: torch.Generator | None = None,
     ) -> Tensor:  # [..., R, K * D]
         *B, R, C = x.size()
@@ -109,12 +103,7 @@ class RowEmbedding(torch.nn.Module):
         G, D = self.lin.in_features, self.lin.out_features
         K = self.readout_token.size(-2)
         train_mask: Any = slice(R_train) if train_mask is None else train_mask
-        plan_attention = (
-            x.device.type == "cuda"
-            and not self.training
-            and not torch.is_grad_enabled()
-            and not torch.compiler.is_compiling()
-        )
+
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
         index = torch.arange(C, device=x.device)
@@ -149,7 +138,6 @@ class RowEmbedding(torch.nn.Module):
         # Column-wise induced set attention (B * C as the batch axis).
         # Materialize once to avoid repeated copies in the column layers.
         x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
-        col_batch_size_limit = batch_size_limit
         for i, col_layer in enumerate(self.col_layers):
             key = f"row_embedding.col_layer{i}"
             if cache is not None and cache.is_replaying:
@@ -164,25 +152,13 @@ class RowEmbedding(torch.nn.Module):
                     )[:max_keys]
                     key_value = key_value[..., index, :]
 
-            if i == 0 or (
-                plan_attention and cache is not None and cache.is_recording
-            ):
-                col_batch_size_limit = attention_batch_size_limit(
-                    requested_limit=batch_size_limit,
-                    query=x,
-                    key_value=key_value,
-                    attention_memory_limit=(
-                        cuda_attention_memory_limit(x.device)
-                        if plan_attention
-                        else None
-                    ),
-                )
             result = col_layer(
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
-                batch_size_limit=col_batch_size_limit,
+                batch_size_limit="auto",
             )  # [..., C, R, D]
+            del key_value
 
             if cache is not None and cache.is_recording:
                 x, cache[key] = result
@@ -204,23 +180,11 @@ class RowEmbedding(torch.nn.Module):
         )  # [..., R, K + C, D]
 
         # Row-wise attention (B * R as the batch axis).
-        row_batch_size_limit = attention_batch_size_limit(
-            requested_limit=batch_size_limit,
-            query=x,
-            key_value=x,
-            attention_memory_limit=(
-                cuda_attention_memory_limit(x.device)
-                if plan_attention
-                else None
-            ),
-            num_heads=self.num_heads,
-        )
         for i, row_layer in enumerate(self.row_layers):
-            query = x[..., :K, :] if i == len(self.row_layers) - 1 else x
             x = row_layer(
-                query=query,  # [..., R, K + C, D] or [..., R, K, D]
+                query=x[..., :K, :] if i == len(self.row_layers) - 1 else x,
                 key_value=x,  # [..., R, K + C, D]
-                batch_size_limit=row_batch_size_limit,
+                batch_size_limit="auto",
             )  # [..., R, K + C, D] or [..., R, K, D]
 
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]
