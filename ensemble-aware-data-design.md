@@ -4,8 +4,8 @@ Processors use the same code for single and ensemble inputs. Ensemble representa
 ## Types
 ```
 EnsembleStorage[T]
-    groups: list[T]
-    locations: list[tuple[int, int]]
+    groups: tuple[T, ...]
+    locations: tuple[tuple[int, int], ...]
 
 EnsembleData[T]
     storage: EnsembleStorage[T]
@@ -37,8 +37,19 @@ Execution must:
 
 Processor code never accesses storage, groups, or locations. E.g within Standardize we would have
 ```
-mean = x.numerical.mean(dim=0)
+# x is TableTensor or EnsembleTable) 
+mean = x.numerical.mean(dim=0)  # Tensor or EnsembleTensor
 return x.with_numerical(x.numerical - mean)
 ```
 
-The physical ensemble representation is hidden from processor implementations.
+And within Shuffle
+```
+num_columns = x.num_columns
+if isinstance(num_columns, EnsembleData): 
+    num_columns = man(num_columns)
+return x.select_columns(permutation)
+```
+
+
+Note to myself: 
+- batched TableTensors might need to be mapped to EnsembleTable in fit() otherwise today's EnsembleProcessors might break in that case. 
