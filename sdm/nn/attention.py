@@ -667,7 +667,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -679,7 +679,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -691,7 +691,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -732,7 +732,11 @@ class TransformerBlock(torch.nn.Module):
         """
         if batch_size_limit == "auto":
             batch_size_limit = None
-            if query.is_cuda and not self.training:
+            if (
+                query.is_cuda
+                and not self.training
+                and not torch.compiler.is_compiling()
+            ):
                 key_value_length: int | None = None
                 if isinstance(key_value, Tensor):
                     key_value_length = key_value.size(-2)
