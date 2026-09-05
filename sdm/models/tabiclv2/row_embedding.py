@@ -103,12 +103,7 @@ class RowEmbedding(torch.nn.Module):
         G, D = self.lin.in_features, self.lin.out_features
         K = self.readout_token.size(-2)
         train_mask: Any = slice(R_train) if train_mask is None else train_mask
-        plan_attention = (
-            x.device.type == "cuda"
-            and not self.training
-            and not torch.is_grad_enabled()
-            and not torch.compiler.is_compiling()
-        )
+
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
         index = torch.arange(C, device=x.device)
