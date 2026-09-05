@@ -68,7 +68,6 @@ def test_icl_block(
         x[..., 3:, :].clone(),
         y[..., :0],
         cache=cache.freeze(),
-        batch_size_limit=1,
     )
 
     assert fit_out.size() == (2, 0, out_channels)
