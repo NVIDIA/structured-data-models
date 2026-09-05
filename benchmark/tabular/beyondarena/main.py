@@ -7,7 +7,7 @@ from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
 from tabarena.contexts import BeyondArenaContext
 from tabarena.utils.config_utils import SystemConfigGenerator
 
-from models import MODEL_CONFIGS, SDMSystem
+from benchmark.tabular.system import MODEL_CONFIGS, SDMSystem
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(

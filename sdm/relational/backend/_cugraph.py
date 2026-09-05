@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 import torch
@@ -288,7 +288,8 @@ class CuGraphRelationalSampler:
         source: Tensor,
     ) -> bool:
         cached, version, _, _ = lookup
-        return (
+        return cast(
+            bool,
             cached._version == version
             and cached.dtype == source.dtype
             and cached.device == source.device
@@ -296,7 +297,7 @@ class CuGraphRelationalSampler:
             and cached.data_ptr() == source.data_ptr()
             and cached.size() == source.size()
             and cached.stride() == source.stride()
-            and cached.storage_offset() == source.storage_offset()
+            and cached.storage_offset() == source.storage_offset(),
         )
 
     def _resolve_seed_join(
