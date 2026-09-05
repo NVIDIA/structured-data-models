@@ -2,7 +2,7 @@
 Processors use the same code for single and ensemble inputs. Ensemble representation, alignment, sharing, and batching are handled by the data types.
 
 ## Types
-```
+```python
 EnsembleStorage[T]
     groups: tuple[T, ...]
     locations: tuple[tuple[int, int], ...]
@@ -36,14 +36,14 @@ Execution must:
 
 
 Processor code never accesses storage, groups, or locations. E.g within Standardize we would have
-```
+```python
 # x is TableTensor or EnsembleTable) 
 mean = x.numerical.mean(dim=0)  # Tensor or EnsembleTensor
 return x.with_numerical(x.numerical - mean)
 ```
 
 And within Shuffle
-```
+```python
 num_columns = x.num_columns
 if isinstance(num_columns, EnsembleData): 
     num_columns = man(num_columns)
