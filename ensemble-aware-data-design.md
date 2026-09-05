@@ -47,6 +47,7 @@ And within Shuffle
 num_columns = x.num_columns
 if isinstance(num_columns, EnsembleData): 
     num_columns = man(num_columns)
+...
 return x.select_columns(permutation)
 ```
 
