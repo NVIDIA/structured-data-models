@@ -758,6 +758,8 @@ class TransformerBlock(torch.nn.Module):
             batch_size_limit=batch_size_limit,
             return_key_value=return_key_value,
         )
+        del key_value
+
         if return_key_value:
             out, kv = result
         else:
@@ -766,7 +768,24 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             out = self.post_attn_norm(out)
 
-        out = query + out
-        out = out + self.mlp(out)
+        if not torch.is_grad_enabled() and out.dtype == query.dtype:
+            out += query
+        else:
+            out = out + query
+
+        mlp_out = self.mlp(out)
+        if not torch.is_grad_enabled() and out.dtype == mlp_out.dtype:
+            out += mlp_out
+        else:
+            out = out + mlp_out
 
         return (out, kv) if return_key_value else out
+
+    def peak_bytes_per_example(
+        self,
+        element_size: int,
+        query_length: int,
+        key_value_length: int | None = None,
+    ) -> int:
+        r""":meta private:"""  # noqa: D415
+        raise NotImplementedError
