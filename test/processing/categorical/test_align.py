@@ -27,6 +27,21 @@ def _table(
     )
 
 
+def _batched_table(
+    codes: torch.Tensor,
+    *,
+    categories: tuple[str, ...],
+) -> TableTensor:
+    return TableTensor(
+        categorical=CategoricalTensor(
+            code=codes,
+            categories=(
+                StringTensor.from_list(categories, device=codes.device),
+            ),
+        ),
+    )
+
+
 @withCUDA
 def test_align_categories_remaps_independent_vocabularies(
     device: torch.device,
@@ -605,3 +620,144 @@ def test_align_categories_rejects_changed_ensemble_size() -> None:
 
     with pytest.raises(RuntimeError, match="same number of ensemble members"):
         processor.transform_ensemble(query)
+
+
+@withCUDA
+def test_align_categories_preserves_batched_shape_and_state(
+    device: torch.device,
+) -> None:
+    context = _batched_table(
+        torch.tensor(
+            [[[0], [0], [1]], [[0], [1], [1]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+        categories=("red", "blue", "green"),
+    )
+    query = _batched_table(
+        torch.tensor(
+            [[[0], [1], [2]], [[0], [1], [2]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+        categories=("blue", "red", "green"),
+    )
+    processor = AlignCategories(min_frequency=2)
+
+    context_output = processor.fit_transform(context)
+    query_output = processor.transform(query)
+    restored = AlignCategories(min_frequency=2)
+    restored.load_state_dict(processor.state_dict())
+
+    assert context_output.shape == context.shape
+    assert context_output.categorical.code.tolist() == [
+        [[0], [0], [-1]],
+        [[-1], [1], [1]],
+    ]
+    assert query_output.shape == query.shape
+    assert query_output.categorical.categories[0].tolist() == ["red", "blue"]
+    assert query_output.categorical.code.tolist() == [
+        [[-1], [0], [-1]],
+        [[1], [-1], [-1]],
+    ]
+    assert restored.transform(query).equal(query_output)
+
+
+@withCUDA
+def test_align_categories_broadcasts_multiple_batch_dimensions(
+    device: torch.device,
+) -> None:
+    context = _batched_table(
+        torch.tensor(
+            [[[[0], [0]], [[1], [1]]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+        categories=("red", "blue", "green"),
+    )
+    query_codes = torch.tensor(
+        [[[[0], [1], [2]], [[0], [1], [2]]]],
+        dtype=torch.int32,
+        device=device,
+    ).expand(3, -1, -1, -1)
+    query = _batched_table(
+        query_codes,
+        categories=("red", "blue", "green"),
+    )
+    processor = AlignCategories()
+
+    context_output = processor.fit_transform(context)
+    output = processor.transform(query)
+
+    expected = torch.tensor(
+        [[[[0], [-1], [-1]], [[-1], [1], [-1]]]],
+        dtype=torch.int32,
+        device=device,
+    ).expand(3, -1, -1, -1)
+    assert context_output.shape == context.shape
+    assert output.shape == query.shape
+    assert torch.equal(output.categorical.code, expected)
+
+
+def test_align_categories_rejects_incompatible_batch_shape() -> None:
+    context = _batched_table(
+        torch.tensor([[[0]], [[1]]], dtype=torch.int32),
+        categories=("red", "blue"),
+    )
+    query = _batched_table(
+        torch.tensor([[[0]], [[1]], [[0]]], dtype=torch.int32),
+        categories=("red", "blue"),
+    )
+
+    with pytest.raises(ValueError, match="fitted batch shape must broadcast"):
+        AlignCategories().fit(context).transform(query)
+
+
+@withCUDA
+def test_align_categories_batched_ensemble_uses_member_state(
+    device: torch.device,
+) -> None:
+    first_context = _batched_table(
+        torch.tensor(
+            [[[0], [0]], [[1], [1]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+        categories=("red", "blue", "green"),
+    )
+    second_context = _batched_table(
+        torch.tensor(
+            [[[2], [2]], [[0], [0]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+        categories=("red", "blue", "green"),
+    )
+    context = EnsembleTable.from_tables(
+        tables=(first_context, second_context),
+        member_table_ids=(0, 1),
+    )
+    query = _batched_table(
+        torch.tensor(
+            [[[0], [1], [2]], [[0], [1], [2]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+        categories=("red", "blue", "green"),
+    )
+    query_ensemble = EnsembleTable(query, num_members=2)
+    processor = AlignCategories()
+
+    context_output = processor.fit_transform_ensemble(context)
+    output = processor.transform_ensemble(query_ensemble)
+
+    assert context_output.table(0).shape == first_context.shape
+    assert context_output.table(1).shape == second_context.shape
+    assert output.table(0).categorical.code.tolist() == [
+        [[0], [-1], [-1]],
+        [[-1], [1], [-1]],
+    ]
+    assert output.table(1).categorical.code.tolist() == [
+        [[-1], [-1], [1]],
+        [[0], [-1], [-1]],
+    ]
