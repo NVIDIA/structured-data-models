@@ -13,7 +13,7 @@ def benchmark_transformer_block_memory_peak(
     device: torch.device | str = "cuda",
 ) -> None:
     r"""Benchmark peak memory of a :class:`~sdm.nn.TransformerBlock`."""
-    import tqdm
+    import tqdm  # noqa: PLC0415
 
     @torch.inference_mode()
     def _run(
@@ -83,7 +83,7 @@ def benchmark_transformer_block_memory_peak(
         )
 
     for mode, (slope, r2) in result.items():
-        print(
+        print(  # noqa: T201
             f"{mode:>6} ~= batch_size * {slope:7.4f} * length * element_size "
             f"* channels; R2={r2:.4f}"
         )

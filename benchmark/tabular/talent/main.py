@@ -10,10 +10,14 @@ from pathlib import Path
 import TALENT
 import torch
 
-from models import MODEL_CONFIGS, UnsupportedDatasetError, register_sdm_method
+from benchmark.tabular.talent.models import (
+    MODEL_CONFIGS,
+    UnsupportedDatasetError,
+    register_sdm_method,
+)
 
 SEED_NUM = 15
-EXAMPLE_DIR = Path(__file__).parent.parent
+BENCHMARK_DIR = Path(__file__).parent.parent
 
 
 def _write(path: Path, record: dict[str, object]) -> None:
@@ -30,7 +34,7 @@ parser.add_argument(
 parser.add_argument("--dataset-path", type=Path, required=True)
 parser.add_argument("--dataset")
 parser.add_argument(
-    "--output-dir", type=Path, default=EXAMPLE_DIR / "talent_out"
+    "--output-dir", type=Path, default=BENCHMARK_DIR / "talent_out"
 )
 args = parser.parse_args()
 
