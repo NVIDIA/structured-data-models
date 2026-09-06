@@ -80,6 +80,15 @@ class AlignCategories(EnsembleProcessor):
         self.sort_by = sort_by
         self.min_frequency = min_frequency
         self._categories: BufferList[BufferList[Tensor]] = BufferList()
+        self._category_ids: tuple[int, ...] = ()
+
+    def get_extra_state(self) -> tuple[int, ...]:
+        r""":meta private:"""  # noqa: D415
+        return self._category_ids
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        self._category_ids = cast(tuple[int, ...], state)
 
     def _fit_column(
         self,
@@ -226,6 +235,7 @@ class AlignCategories(EnsembleProcessor):
         self._categories = BufferList(
             BufferList(categories) for categories in fitted_categories
         )
+        self._category_ids = (0,)
 
     def _fit_transform(
         self,
@@ -237,6 +247,7 @@ class AlignCategories(EnsembleProcessor):
         self._categories = BufferList(
             BufferList(categories) for categories in fitted_categories
         )
+        self._category_ids = (0,)
         return aligned_tables[0]
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -278,6 +289,7 @@ class AlignCategories(EnsembleProcessor):
         self._categories = BufferList(
             BufferList(categories) for categories in fitted_categories
         )
+        self._category_ids = self._member_table_ids(ensemble_table)
 
     def _fit_transform_ensemble(
         self,
@@ -300,31 +312,47 @@ class AlignCategories(EnsembleProcessor):
         self._categories = BufferList(
             BufferList(categories) for categories in fitted_categories
         )
+        self._category_ids = member_table_ids
         return output
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        table_ids = self._member_table_ids(ensemble_table)
-        aligned_tables = []
-        offset = 0
-        for group in ensemble_table:
-            end = offset + group.size(0)
-            aligned_tables.extend(
-                self._align_to_categories(
-                    group,
-                    tuple(
-                        cast(Sequence[Tensor], self._categories[index])
-                        for index in range(offset, end)
-                    ),
-                )
+        if len(self._category_ids) != ensemble_table.num_members:
+            raise RuntimeError(
+                "AlignCategories must be fitted with the same number of "
+                "ensemble members before transform."
             )
-            offset = end
+
+        aligned_tables = []
+        member_table_ids = []
+        aligned_table_ids: dict[tuple[int, int], int] = {}
+        input_table_ids = self._member_table_ids(ensemble_table)
+        for member_id, (input_table_id, category_id) in enumerate(
+            zip(input_table_ids, self._category_ids, strict=True)
+        ):
+            key = (input_table_id, category_id)
+            aligned_table_id = aligned_table_ids.get(key)
+            if aligned_table_id is None:
+                aligned_table_id = len(aligned_tables)
+                aligned_table_ids[key] = aligned_table_id
+                aligned_tables.append(
+                    self._align_to_categories(
+                        ensemble_table.table(member_id),
+                        (
+                            cast(
+                                Sequence[Tensor],
+                                self._categories[category_id],
+                            ),
+                        ),
+                    )[0]
+                )
+            member_table_ids.append(aligned_table_id)
 
         return EnsembleTable.from_tables(
             tables=aligned_tables,
-            member_table_ids=table_ids,
+            member_table_ids=member_table_ids,
         )
 
     @staticmethod

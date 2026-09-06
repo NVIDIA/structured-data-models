@@ -501,3 +501,107 @@ def test_align_categories_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output.table(member_id).equal(expected_query)
         assert fitted_query_output.table(member_id).equal(expected_query)
+
+
+@withCUDA
+def test_align_categories_shared_query_uses_member_categories(
+    device: torch.device,
+) -> None:
+    red_context = _table(
+        [[0], [0]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    blue_context = _table(
+        [[1], [1]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    context = EnsembleTable.from_tables(
+        tables=(red_context, blue_context),
+        member_table_ids=(0, 1),
+    )
+    query = _table(
+        [[0], [1], [2]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    query_ensemble = EnsembleTable(query, num_members=2)
+    processor = AlignCategories().fit_ensemble(context)
+    restored = AlignCategories()
+    restored.load_state_dict(processor.state_dict())
+
+    for fitted in (processor, restored):
+        output = fitted.transform_ensemble(query_ensemble)
+
+        assert output.table(0).categorical.categories[0].tolist() == ["red"]
+        assert output.table(0).categorical.code.squeeze(-1).tolist() == [
+            0,
+            -1,
+            -1,
+        ]
+        assert output.table(1).categorical.categories[0].tolist() == ["blue"]
+        assert output.table(1).categorical.code.squeeze(-1).tolist() == [
+            -1,
+            0,
+            -1,
+        ]
+
+
+@withCUDA
+def test_align_categories_regrouped_query_uses_member_categories(
+    device: torch.device,
+) -> None:
+    red_context = _table(
+        [[0]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    blue_context = _table(
+        [[1]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    context = EnsembleTable.from_tables(
+        tables=(red_context, blue_context),
+        member_table_ids=(0, 1, 0),
+    )
+    red_query = _table(
+        [[0], [1], [2]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    blue_query = _table(
+        [[0], [1], [2]],
+        categories=(("blue", "red", "green"),),
+        device=device,
+    )
+    query = EnsembleTable.from_tables(
+        tables=(blue_query, red_query),
+        member_table_ids=(1, 0, 1),
+    )
+
+    processor = AlignCategories()
+    processor.fit_transform_ensemble(context)
+    output = processor.transform_ensemble(query)
+
+    assert output.table(0).categorical.categories[0].tolist() == ["red"]
+    assert output.table(0).categorical.code.squeeze(-1).tolist() == [0, -1, -1]
+    assert output.table(1).categorical.categories[0].tolist() == ["blue"]
+    assert output.table(1).categorical.code.squeeze(-1).tolist() == [0, -1, -1]
+    assert output.table(2).equal(output.table(0))
+
+
+def test_align_categories_rejects_changed_ensemble_size() -> None:
+    context = EnsembleTable(
+        _table([[0]], categories=(("red",),)),
+        num_members=2,
+    )
+    query = EnsembleTable(
+        _table([[0]], categories=(("red",),)),
+        num_members=3,
+    )
+    processor = AlignCategories().fit_ensemble(context)
+
+    with pytest.raises(RuntimeError, match="same number of ensemble members"):
+        processor.transform_ensemble(query)
