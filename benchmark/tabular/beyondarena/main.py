@@ -48,6 +48,11 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+parser.add_argument(
+    "--many_class",
+    action="store_true",
+    help="Use ECOC when KumoTabular receives more than 10 classes.",
+)
 args = parser.parse_args()
 if args.checkpoint is not None and args.name is None:
     parser.error("--name is required with --checkpoint")
@@ -63,6 +68,7 @@ config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
     "batch_size": args.batch_size,
+    "many_class": args.many_class,
 }
 
 generator = SystemConfigGenerator(

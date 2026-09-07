@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Literal, Self
 
+import numpy as np
 import pandas as pd
 import torch
 from autogluon.core.data import LabelCleaner
@@ -13,6 +14,12 @@ from tabarena.benchmark.exec_models.external import ExternalSystemModel
 
 import sdm
 import sdm.processing as sp
+from benchmark.tabular._ecoc import (
+    align_symbol_probabilities,
+    decode_many_class_probabilities,
+    many_class_codebook,
+    many_class_estimator_count,
+)
 
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
@@ -89,6 +96,7 @@ class SDMSystem(ExternalSystemModel):
         max_context_size: int | None = None,
         max_columns: int | None = None,
         batch_size: int | None = None,
+        many_class: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -97,6 +105,10 @@ class SDMSystem(ExternalSystemModel):
         self._max_context_size = max_context_size
         self._max_columns = max_columns
         self._batch_size = batch_size
+        self._many_class = many_class
+        self._many_class_codebook: np.ndarray | None = None
+        if many_class and self._config.name != "KumoTabular":
+            raise ValueError("'many_class' requires model 'kumo-tabular'")
 
     def _fit_system(
         self,
@@ -108,6 +120,7 @@ class SDMSystem(ExternalSystemModel):
         random_state: int | None,
         **_: object,
     ) -> Self:
+        self._many_class_codebook = None
         self._device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
@@ -176,20 +189,54 @@ class SDMSystem(ExternalSystemModel):
             num_estimators = None
         self.expand_query = num_estimators is None
 
+        recipe = None
+        if self._max_columns is not None:
+            recipe = self.model.default_recipe()
+            recipe.append_features(
+                sp.SelectColumns(
+                    self._max_columns,
+                    method="round_robin",
+                )
+            )
+
+        if (
+            self._many_class
+            and task == "classification"
+            and y_context.categorical.categories[0].numel() > 10
+        ):
+            if generator is None:
+                generator = torch.Generator(self._device)
+                generator.seed()
+            n_classes = y_context.categorical.categories[0].numel()
+            n_code_rows = many_class_estimator_count(n_classes, 10)
+            seed = (
+                random_state
+                if random_state is not None
+                else int(generator.initial_seed() % (2**32))
+            )
+            self._many_class_codebook = many_class_codebook(
+                n_classes,
+                10,
+                n_code_rows,
+                seed,
+            )
+            categories = y_context.categorical.categories[0].tolist()
+            self._many_class_labels = tuple(
+                self._class_labels_by_key[str(label)] for label in categories
+            )
+            self._many_class_x_context = x_context.cpu()
+            self._many_class_y_context = y_context.cpu()
+            self._many_class_num_estimators = num_estimators
+            self._many_class_recipe = recipe
+            self._many_class_generator_state = generator.get_state()
+            self.model.clear()
+            return self
+
         with torch.amp.autocast(
             self._device.type,
             self._config.autocast_dtype,
             enabled=x_context.is_cuda,
         ):
-            recipe = None
-            if self._max_columns is not None:
-                recipe = self.model.default_recipe()
-                recipe.append_features(
-                    sp.SelectColumns(
-                        self._max_columns,
-                        method="round_robin",
-                    )
-                )
             self.model.fit(
                 x=x_context,
                 y=y_context,
@@ -224,6 +271,9 @@ class SDMSystem(ExternalSystemModel):
         return pd.Series(values, index=X.index)
 
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
+        if self._many_class_codebook is not None:
+            return self._predict_many_class_proba(X)
+
         x_query = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
@@ -249,3 +299,92 @@ class SDMSystem(ExternalSystemModel):
         return prob.reindex(
             columns=tuple(self._class_labels_by_key.values()),
         )
+
+    def _predict_many_class_proba(
+        self,
+        X: pd.DataFrame,
+    ) -> pd.DataFrame:
+        x_query = sdm.TableTensor.from_pandas(
+            df=X,
+            stypes=self.stypes,
+            device=self._device,
+        )
+        if self.expand_query:
+            x_query = x_query.expand(
+                self._config.num_estimators,
+                *x_query.size(),
+            )
+
+        row_probabilities = []
+        try:
+            for code_row in self._many_class_codebook:
+                x_context = self._many_class_x_context.to(self._device)
+                y_context = self._encode_many_class_target(code_row)
+                generator = torch.Generator(self._device)
+                generator.set_state(self._many_class_generator_state)
+
+                with torch.amp.autocast(
+                    self._device.type,
+                    self._config.autocast_dtype,
+                    enabled=x_context.is_cuda,
+                ):
+                    self.model.fit(
+                        x=x_context,
+                        y=y_context,
+                        recipe=self._many_class_recipe,
+                        num_estimators=self._many_class_num_estimators,
+                        generator=generator,
+                    )
+                del x_context, y_context
+
+                outs = []
+                for batch in x_query.split(
+                    self._batch_size or x_query.size(-2),
+                    -2,
+                ):
+                    with torch.amp.autocast(
+                        self._device.type,
+                        self._config.autocast_dtype,
+                        enabled=batch.is_cuda,
+                    ):
+                        outs.append(self.model.predict(batch))
+                out = torch.cat(outs, dim=-2) if len(outs) > 1 else outs[0]
+                prob = out.to_pandas()
+                symbols = np.asarray(prob.columns, dtype=np.int64)
+                row_probabilities.append(
+                    align_symbol_probabilities(
+                        prob.to_numpy(),
+                        symbols,
+                        alphabet_size=10,
+                    )
+                )
+                self.model.clear()
+        finally:
+            self.model.clear()
+
+        decoded = decode_many_class_probabilities(
+            np.stack(row_probabilities),
+            self._many_class_codebook,
+        )
+        return pd.DataFrame(
+            decoded,
+            index=X.index,
+            columns=self._many_class_labels,
+        ).reindex(columns=tuple(self._class_labels_by_key.values()))
+
+    def _encode_many_class_target(
+        self,
+        code_row: np.ndarray,
+    ) -> sdm.TableTensor:
+        target = self._many_class_y_context.to(self._device)
+        code = target.categorical.code
+        if torch.any(code < 0):
+            raise ValueError(
+                "Many-class targets must not contain missing values"
+            )
+        mapping = torch.as_tensor(code_row, device=self._device)
+        categorical = sdm.CategoricalTensor(
+            code=mapping[code.to(torch.long)],
+            categories=(torch.arange(10, device=self._device),),
+        )
+        return target.replace_blocks(categorical=categorical)
