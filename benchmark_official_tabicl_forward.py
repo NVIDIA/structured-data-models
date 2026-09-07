@@ -1,7 +1,6 @@
 import argparse
 import gc
 import time
-from collections.abc import Sequence
 
 import numpy as np
 import torch
