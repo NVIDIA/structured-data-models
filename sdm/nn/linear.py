@@ -20,7 +20,9 @@ class Linear(torch.nn.Linear):
             )
 
         torch.matmul(
-            input.to(out.dtype), self.weight.to(out.dtype).t(), out=out
+            input.to(out.dtype),
+            self.weight.to(out.dtype).t(),
+            out=out,
         )
 
         if self.bias is not None:
