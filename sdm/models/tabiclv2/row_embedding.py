@@ -123,18 +123,18 @@ class RowEmbedding(torch.nn.Module):
             if y.numel() > 0:
                 y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
 
-        out: Tensor | None = None
+        buffer: Tensor | None = None
         if torch.is_grad_enabled():
             x = self.lin(x)  # [..., C, R, D]
         else:
-            out = torch.empty(
+            buffer = torch.empty(
                 (*x.size()[:-3], K + C, R, D),
                 device=x.device,
                 dtype=torch.get_autocast_dtype(x.device.type)
                 if torch.is_autocast_enabled(x.device.type)
                 else x.dtype,
             )
-            x = self.lin(x, out=out[..., K:, :, :])  # [..., C, R, D]
+            x = self.lin(x, out=buffer[..., K:, :, :])  # [..., C, R, D]
 
         if y.numel() > 0:
             if self.y_emb is not None:
@@ -143,7 +143,6 @@ class RowEmbedding(torch.nn.Module):
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-3)
 
-            # y_emb has shape [F, ..., 1, R_train, D]:
             x[..., train_mask, :] += y_emb.to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis).
@@ -176,25 +175,28 @@ class RowEmbedding(torch.nn.Module):
                 x = result
             del result
 
+        if buffer is not None:
+            buffer = buffer.transpose(-2, -3)
+        else:
+            x = x.transpose(-2, -3)
+
         if num_digits > 1:  # Average over mixed-radix digits.
-            if out is not None:
-                out = out.mean(dim=0)
+            if buffer is not None:
+                buffer = buffer.mean(dim=0)  #  [..., R, K + C, D]
             else:
-                x = x.mean(dim=0)  # [F, ..., C, R, D] -> [..., C, R, D]
+                x = x.mean(dim=0)  # [..., R, C, D]
 
         # Prepend readout tokens before row-wise attention.
         readout_token = self.readout_token.to(x.dtype)
         readout_token = readout_token.view(*(1,) * len(B), 1, K, D)
         readout_token = readout_token.expand(*B, R, K, D)
 
-        if out is not None:
-            x = out.transpose(-2, -3)
-            x[..., :K, :] = readout_token
+        if buffer is not None:
+            buffer[..., :K, :] = readout_token
+            x = buffer
+            del buffer
         else:
-            x = torch.cat(
-                [readout_token, x.transpose(-2, -3)],
-                dim=-2,
-            )  # [..., R, K + C, D]
+            x = torch.cat([readout_token, x], dim=-2)  # [..., R, K + C, D]
 
         # Row-wise attention (B * R as the batch axis).
         for i, row_layer in enumerate(self.row_layers):
