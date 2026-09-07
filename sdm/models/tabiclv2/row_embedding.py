@@ -194,7 +194,6 @@ class RowEmbedding(torch.nn.Module):
         if buffer is not None:
             buffer[..., :K, :] = readout_token
             x = buffer
-            del buffer
         else:
             x = torch.cat([readout_token, x], dim=-2)  # [..., R, K + C, D]
 
