@@ -80,10 +80,11 @@ def _measure_forward(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--context-rows", default="128,256,512")
-    parser.add_argument("--query-rows", default="64")
-    parser.add_argument("--cols", default="16,32,64,128")
-    parser.add_argument("--fractions", default="0.05,0.1,0.2,0.5")
+    parser.add_argument("--model", type=str)
+    parser.add_argument("--context-rows", default="10000")
+    parser.add_argument("--query-rows", default="1000")
+    parser.add_argument("--cols", default="100")
+    parser.add_argument("--fractions", default="0.05")
     parser.add_argument("--num-estimators", type=int, default=1)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=3)
@@ -95,11 +96,19 @@ def main() -> None:
         raise RuntimeError("CUDA is required for this benchmark")
 
     device = torch.device("cuda")
-    model = sdm.models.KumoTabular(
-        task=sdm.Task.regression,
-        pretrained=args.pretrained,
-        device=device,
-    ).eval()
+    if args.model == "kumo":
+        model = sdm.models.KumoTabular(
+            size="small",
+            task=sdm.Task.regression,
+            pretrained=args.pretrained,
+            device=device,
+        ).eval()
+    else:
+        model = sdm.models.TabICLv2(
+            task=sdm.Task.regression,
+            pretrained=args.pretrained,
+            device=device,
+        ).eval()
 
     old_fraction = os.environ.get("SDM_CHUNK_MEMORY_FRACTION")
     print(
