@@ -16,11 +16,11 @@ def test_cell_embedding(device: torch.device) -> None:
     x = torch.randn(6, 4, device=device)
     categorical_mask = torch.tensor([True, False, True, False], device=device)
 
-    out = module(x, categorical_mask)
-    assert out.size() == (6, 4, 8)
-    assert out.device == device
+    with torch.no_grad():
+        out1 = module(x, categorical_mask)
+    assert out1.size() == (6, 4, 8)
+    assert out1.device == device
 
-    torch.testing.assert_close(
-        module(x, categorical_mask, batch_size_limit=8),
-        out,
-    )
+    with torch.no_grad():
+        out2 = module(x, categorical_mask, batch_size_limit=8)
+    torch.testing.assert_close(out1, out2)
