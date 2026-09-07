@@ -51,6 +51,37 @@ if isinstance(num_columns, EnsembleData):
 return x.select_columns(permutation)
 ```
 
+More Pseudo Code: 
+```
+class EnsembleTable(TableTensor):
+
+    _storage: EnsembleStorage[TableTensor]
+
+    def __table_dispatch__(
+        self,
+        op: TableOp,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        return EnsembleData.execute(
+            op=op,
+            args=args,
+            kwargs=kwargs,
+        )
+
+    def __torch_dispatch__(
+        ....
+    ):
+        return EnsembleData.execute(
+            op=func,
+            args=args,
+            kwargs=kwargs or {},
+        )
+```
+
+
+Open Questions:
+- Solution around custom tensor classes such as CategoricalTensor, StringTensor etc. 
 
 Note to myself: 
 - batched TableTensors might need to be mapped to EnsembleTable in fit() otherwise today's EnsembleProcessors might break in that case. 
