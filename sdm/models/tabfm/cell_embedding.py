@@ -86,9 +86,9 @@ class CellEmbedding(torch.nn.Module):
             torch.sum(
                 input=x,
                 dim=-2,
-                out=out[..., start : start + x.size(-3), :, :],
+                out=out[..., start : start + x.size(-4), :, :],
             )
-            start += x.size(-3)
+            start += x.size(-4)
 
         assert out is not None
         return out
