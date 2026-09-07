@@ -631,12 +631,17 @@ class TransformerBlock(torch.nn.Module):
                 flat_key[start:end] = chunk_kv.key
                 flat_value[start:end] = chunk_kv.value
 
+                del chunk_kv
+
             else:
                 chunk = result
 
             if flat_out is None:
                 flat_out = chunk.new_empty((batch_size, *query.size()[-2:]))
                 flat_out[start:end] = chunk
+
+            del chunk
+            del result
 
         if out is None:
             out = flat_out.view(*batch_shape, *query.size()[-2:])
