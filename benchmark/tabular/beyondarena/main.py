@@ -21,6 +21,14 @@ parser.add_argument(
     help="Run only the selected BeyondArena dataset.",
 )
 parser.add_argument(
+    "--checkpoint",
+    help="Load a local KumoTFM trainer checkpoint.",
+)
+parser.add_argument(
+    "--name",
+    help="Use this result name for a local checkpoint.",
+)
+parser.add_argument(
     "--subset",
     action="append",
     help="Filter tasks; repeat to combine filters (default: core).",
@@ -41,15 +49,17 @@ parser.add_argument(
     help="Prediction batch size.",
 )
 args = parser.parse_args()
+if args.checkpoint is not None and args.name is None:
+    parser.error("--name is required with --checkpoint")
 
 model_config = MODEL_CONFIGS[args.model]
-result_dir = (
-    Path(__file__).parent.parent / "beyondarena_out" / model_config.name
-)
+run_name = args.name or model_config.name
+result_dir = Path(__file__).parent.parent / "beyondarena_out" / run_name
 result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
     "model": args.model,
+    "checkpoint": args.checkpoint,
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
     "batch_size": args.batch_size,
@@ -57,7 +67,7 @@ config = {
 
 generator = SystemConfigGenerator(
     model_cls=SDMSystem,
-    name=model_config.system_name,
+    name=f"SDM{''.join(char for char in run_name if char.isalnum())}System",
     manual_configs=[config],
 )
 experiments = BeyondArenaExperimentBundle(

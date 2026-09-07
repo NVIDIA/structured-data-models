@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -11,6 +12,11 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.tabular.ckpt import (
+    remap_kumo_tfm_ckpt,
+    sdm_kwargs_from_kumo_args,
+    unwrap_kumo_checkpoint,
+)
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -82,6 +88,63 @@ class KumoTabular(ICLModel):  # noqa: D101
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
+
+    @classmethod
+    def from_kumo_checkpoint(
+        cls,
+        path: str | Path,
+        *,
+        task: TaskLike,
+        device: torch.device | str | None = None,
+    ) -> KumoTabular:
+        """Load a compatible KumoTFM trainer checkpoint."""
+        payload = torch.load(
+            path,
+            map_location=torch.device("cpu") if device is None else device,
+            weights_only=False,
+        )
+        state, args = unwrap_kumo_checkpoint(payload)
+        model_kwargs = sdm_kwargs_from_kumo_args(args)
+        channels = model_kwargs["cell_channels"]
+        if channels == MODEL_KWARGS["small"]["cell_channels"]:
+            size: Literal["small", "large"] = "small"
+        elif channels == MODEL_KWARGS["large"]["cell_channels"]:
+            size = "large"
+        else:
+            raise ValueError(
+                f"Unsupported checkpoint channel count: {channels}"
+            )
+
+        expected = {
+            **MODEL_KWARGS[size],
+            "nan_indicator": False,
+            "partial_rotary_factor": 0.25,
+            "row_log_scale": False,
+        }
+        mismatched = {
+            key: (model_kwargs[key], value)
+            for key, value in expected.items()
+            if model_kwargs[key] != value
+        }
+        if mismatched:
+            raise ValueError(
+                f"Unsupported checkpoint architecture: {mismatched}"
+            )
+
+        model = cls(
+            task=task,
+            size=size,
+            pretrained=False,
+            device=device,
+        )
+        task = Task(task)
+        mapped = remap_kumo_tfm_ckpt(
+            state,
+            is_classifier=task == Task.classification,
+            num_row_layers=MODEL_KWARGS[size]["num_embedding_layers"],
+        )
+        model.models[task].load_state_dict(mapped, strict=True)
+        return model
 
     def _load_from_pretrained(
         self,

@@ -85,6 +85,7 @@ class SDMSystem(ExternalSystemModel):
         self,
         *,
         model: str,
+        checkpoint: str | None = None,
         max_context_size: int | None = None,
         max_columns: int | None = None,
         batch_size: int | None = None,
@@ -92,6 +93,7 @@ class SDMSystem(ExternalSystemModel):
     ) -> None:
         super().__init__(**kwargs)
         self._config = MODEL_CONFIGS[model]
+        self._checkpoint = checkpoint
         self._max_context_size = max_context_size
         self._max_columns = max_columns
         self._batch_size = batch_size
@@ -109,12 +111,24 @@ class SDMSystem(ExternalSystemModel):
         self._device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        self.model = self._config.factory(
-            task="regression"
-            if problem_type == "regression"
-            else "classification",
-            device=self._device,
+        task: Task = (
+            "regression" if problem_type == "regression" else "classification"
         )
+        if self._checkpoint is None:
+            self.model = self._config.factory(
+                task=task,
+                device=self._device,
+            )
+        else:
+            if self._config.name != "KumoTabular":
+                raise ValueError(
+                    "A local checkpoint requires model 'kumo-tabular'"
+                )
+            self.model = sdm.models.KumoTabular.from_kumo_checkpoint(
+                self._checkpoint,
+                task=task,
+                device=self._device,
+            )
 
         generator: torch.Generator | None = None
         if random_state is not None:
