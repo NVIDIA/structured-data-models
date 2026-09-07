@@ -14,7 +14,7 @@ class Linear(torch.nn.Linear):
         if out is None:
             return super().forward(input)
 
-        if out is not None and torch.is_grad_enabled():
+        if torch.is_grad_enabled():
             raise RuntimeError(
                 "'out' is only supported when gradients are disabled"
             )
