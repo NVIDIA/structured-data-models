@@ -31,6 +31,11 @@ parser.add_argument(
     help="Subsample the context to at most this many rows.",
 )
 parser.add_argument(
+    "--max_columns",
+    type=int,
+    help="Select at most this many columns per estimator.",
+)
+parser.add_argument(
     "--batch_size",
     type=int,
     help="Prediction batch size.",
@@ -46,6 +51,7 @@ result_dir.mkdir(parents=True, exist_ok=True)
 config = {
     "model": args.model,
     "max_context_size": args.max_context_size,
+    "max_columns": args.max_columns,
     "batch_size": args.batch_size,
 }
 

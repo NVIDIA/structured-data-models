@@ -12,6 +12,7 @@ from autogluon.core.data import LabelCleaner
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
 
 import sdm
+import sdm.processing as sp
 
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
@@ -85,12 +86,14 @@ class SDMSystem(ExternalSystemModel):
         *,
         model: str,
         max_context_size: int | None = None,
+        max_columns: int | None = None,
         batch_size: int | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._config = MODEL_CONFIGS[model]
         self._max_context_size = max_context_size
+        self._max_columns = max_columns
         self._batch_size = batch_size
 
     def _fit_system(
@@ -164,9 +167,19 @@ class SDMSystem(ExternalSystemModel):
             self._config.autocast_dtype,
             enabled=x_context.is_cuda,
         ):
+            recipe = None
+            if self._max_columns is not None:
+                recipe = self.model.default_recipe()
+                recipe.append_features(
+                    sp.SelectColumns(
+                        self._max_columns,
+                        method="round_robin",
+                    )
+                )
             self.model.fit(
                 x=x_context,
                 y=y_context,
+                recipe=recipe,
                 num_estimators=num_estimators,
                 generator=generator,
             )
