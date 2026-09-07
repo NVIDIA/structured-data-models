@@ -81,7 +81,7 @@ def _measure_forward(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)
-    parser.add_argument("--context-rows", default="10000")
+    parser.add_argument("--context-rows", default="50000")
     parser.add_argument("--query-rows", default="1000")
     parser.add_argument("--cols", default="100")
     parser.add_argument("--fractions", default="0.05")
