@@ -38,6 +38,11 @@ class CellEmbedding(torch.nn.Module):
         batch_size_limit: int | None = None,
         out: Tensor | None = None,
     ) -> Tensor:  # [..., R, C, D]
+        if out is not None and torch.is_grad_enabled():
+            raise RuntimeError(
+                "'out' is only supported when gradients are disabled"
+            )
+
         *B, R, C = x.size()
 
         # Feature grouping:
@@ -61,9 +66,6 @@ class CellEmbedding(torch.nn.Module):
         else:
             xs = [x]
 
-        if out is None:
-            out = x.new_empty(*B, R, C, x.size(-1))
-
         start = 0
         for x in xs:
             x = x[..., index].unsqueeze(-1)  # [..., R, C, G, 1]
@@ -77,6 +79,9 @@ class CellEmbedding(torch.nn.Module):
                 self.cat_lin(fourier),  # [..., R, C, G, D]
                 self.num_lin(fourier),  # [..., R, C, G, D]
             )
+
+            if out is None:
+                out = x.new_empty(*B, R, C, x.size(-1))
 
             torch.sum(
                 input=x,
