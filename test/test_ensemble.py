@@ -143,6 +143,22 @@ def test_gather_members_preserves_member_order() -> None:
     assert output.table(2).equal(tables[0])
 
 
+def test_gather_members_preserves_source_groups() -> None:
+    table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
+    first = EnsembleTable.from_table(table, num_members=2)
+    second = EnsembleTable.from_table(table, num_members=2)
+
+    output = EnsembleTable.gather_members(
+        tables=(first, second, first, second),
+        member_ids=(0, 0, 1, 1),
+    )
+
+    assert output.num_members == 4
+    assert output.num_groups == 2
+    assert [group.size(0) for group in output] == [1, 1]
+    assert all(output.table(i).equal(table) for i in range(4))
+
+
 def test_gather_members_rejects_source_count_mismatch() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
 
