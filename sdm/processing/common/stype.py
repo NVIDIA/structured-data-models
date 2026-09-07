@@ -17,12 +17,14 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     For each configured route, matching columns from a
     :class:`~sdm.tensor.TableTensor` or
     :class:`~sdm.EnsembleTable` are passed to that processor. Ordinary
-    processors learn separate state for each compatible ensemble group, while
-    ensemble-aware processors operate on all groups directly. Compatible
-    members are processed together and route outputs are concatenated in
-    semantic type order while preserving logical member order. A route may
-    change column values, names, count, or order. With the default passthrough
-    behavior, unconfigured semantic types follow in input order.
+    fitted processors learn separate state for each logical ensemble
+    member, while stateless ordinary processors transform each physically
+    shared table once. Ensemble-aware processors operate on all groups
+    directly. Compatible members are processed together and route outputs are
+    concatenated in semantic type order while preserving logical member order.
+    A route may change column values, names, count, or order. With the default
+    passthrough behavior, unconfigured semantic types follow in input order. A
+    ``generator`` passed during fitting is passed on to every route.
 
     Inverse transform supports routes that preserve their semantic type. Every
     active route must be invertible, and routes must not share an output

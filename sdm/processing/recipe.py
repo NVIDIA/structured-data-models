@@ -33,6 +33,11 @@ class Recipe:
     step's non-finite input contract; order steps so values are imputed before
     processors that do not explicitly document non-finite support.
 
+    During ensemble processing, stateless ordinary processors transform each
+    physically shared table once. Fitted ordinary processors keep separate
+    state for every logical member, fanning shared inputs through those states
+    in member order.
+
     Args:
         features: Steps applied to model inputs before the model.
         target: Steps applied to labels. Invertible numerical target steps map
