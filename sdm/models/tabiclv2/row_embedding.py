@@ -205,8 +205,6 @@ class RowEmbedding(torch.nn.Module):
                 query=x[..., :K, :] if i == len(self.row_layers) - 1 else x,
                 key_value=x,  # [..., R, K + C, D]
                 batch_size_limit="auto",
-                # `x[..., :K, :]` is non-contiguous, which `torch.compile`
-                # doesn't support as `out=`.
                 out=None
                 if torch.is_grad_enabled() or torch.compiler.is_compiling()
                 else x[..., :K, :]
