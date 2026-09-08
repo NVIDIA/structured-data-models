@@ -119,22 +119,32 @@ class RowEmbedding(torch.nn.Module):
         ):
             bases = _mixed_radix_bases(num_classes, self.num_classes)
             num_digits = len(bases)
-            x = x.expand(num_digits, *x.size())
             if y.numel() > 0:
                 y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
 
         buffer: Tensor | None = None
         if torch.is_grad_enabled():
             x = self.lin(x)  # [..., R, C, D]
+            if num_digits > 1:
+                if y.numel() > 0:
+                    x = x.repeat(num_digits, *(1,) * x.dim())
+                else:
+                    x = x.expand(num_digits, *x.size())
         else:
             buffer = torch.empty(
-                (*x.size()[:-3], R, K + C, D),
+                ((num_digits,) if num_digits > 1 else ())
+                + (*x.size()[:-3], R, K + C, D),
                 device=x.device,
                 dtype=torch.get_autocast_dtype(x.device.type)
                 if torch.is_autocast_enabled(x.device.type)
                 else x.dtype,
             )
-            x = self.lin(x, out=buffer[..., :, K:, :])  # [..., R, C, D]
+            if num_digits > 1:
+                self.lin(x, out=buffer[0, ..., K:, :])
+                buffer[1:, ..., K:, :] = buffer[:1, ..., K:, :]
+                x = buffer[..., K:, :]
+            else:
+                x = self.lin(x, out=buffer[..., :, K:, :])  # [..., R, C, D]
 
         if y.numel() > 0:
             if self.y_emb is not None:
