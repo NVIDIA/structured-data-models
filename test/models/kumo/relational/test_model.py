@@ -90,7 +90,7 @@ def test_invariant_gnn_autocast(
         tables=related_tables.tables,
         relationships=related_tables.relationships,
     )
-    model = InvariantGNN(channels=8, device=device).eval()
+    model = InvariantGNN(channels=8, device=device)
 
     with torch.inference_mode(), torch.autocast(device.type, dtype):
         out = model(
