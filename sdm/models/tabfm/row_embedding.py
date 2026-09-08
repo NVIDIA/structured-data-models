@@ -38,6 +38,7 @@ class RowEmbedding(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.channels = channels
 
         self.cell_embedding = CellEmbedding(
             channels=channels,
@@ -125,15 +126,28 @@ class RowEmbedding(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
-        x = self.cell_embedding(x, categorical_mask)
 
-        *B, R, _, D = x.size()
         R_train = y.size(-1)
         K = self.readout_token.size(-2)
 
+        buffer = torch.empty(
+            (*x.size()[:-1], K + x.size(-1), self.channels),
+            device=x.device,
+            dtype=torch.get_autocast_dtype(x.device.type)
+            if torch.is_autocast_enabled(x.device.type)
+            else x.dtype,
+        )
+        buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
+        x = self.cell_embedding(
+            x,
+            categorical_mask,
+            batch_size_limit="auto",
+            out=buffer[..., K:, :],
+        )
+
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y).unsqueeze(-2)
+                y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
             else:
                 assert self.y_mlp is not None
                 y_emb = self.y_mlp(y.unsqueeze(-1)).unsqueeze(-2)
@@ -148,40 +162,25 @@ class RowEmbedding(torch.nn.Module):
             )
         ):
             # Column-wise induced set attention (B * C as the batch axis).
-            # Materialize once to avoid repeated copies in the column layers.
-            x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
+            x = x.transpose(-2, -3)
             for j, col_layer in enumerate(col_layers):
                 key = f"row_embedding.col_layer{i}.{j}"
-                if cache is not None and cache.is_replaying:
-                    key_value = cast(KVCacheEntry, cache[key])
-                else:
-                    key_value = x[..., :R_train, :]
-
                 result = col_layer(
                     query=x,  # [..., C, R, D]
-                    key_value=key_value,  # [..., C, R_train, D]
+                    key_value=cast(KVCacheEntry, cache[key])
+                    if cache is not None and cache.is_replaying
+                    else x[..., :R_train, :],
                     return_key_value=cache is not None and cache.is_recording,
                     batch_size_limit="auto",
+                    out=x,
                 )  # [..., C, R, D]
 
                 if cache is not None and cache.is_recording:
-                    x, cache[key] = result
-                else:
-                    x = result
+                    cache[key] = result[1]
                 del result
 
-            x = col_proj(x.transpose(-2, -3))  # [..., R, C, D]
-
-            if i == 0:  # Prepend readout tokens before row-wise attention.
-                x = torch.cat(
-                    [
-                        self.readout_token.to(x.dtype)
-                        .view(*(1,) * len(B), 1, K, D)
-                        .expand(*B, R, K, D),
-                        x,  # [..., R, C, D]
-                    ],
-                    dim=-2,
-                )  # [..., R, K + C, D]
+            x.copy_(col_proj(x))  # NOTE Double peak memory.
+            x = buffer  # [..., R, K + C, D]
 
             # Row-wise attention (B * R as the batch axis).
             for j, row_layer in enumerate(row_layers):
@@ -190,11 +189,12 @@ class RowEmbedding(torch.nn.Module):
                     query = x[..., :K, :]
 
                 x = row_layer(
-                    query=query,  # [..., R, K + C, D] or [..., R, K, D]
-                    key_value=x,  # [..., R, K + C, D]
+                    query=query,
+                    key_value=x,
                     batch_size_limit="auto",
-                )  # [..., R, K + C, D] or [..., R, K, D]
+                    out=query,
+                )
 
-            x = row_norm(x)
+            x.copy_(row_norm(x))  # NOTE Double peak memory.
 
         return x.flatten(-2)
