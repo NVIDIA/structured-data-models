@@ -19,11 +19,18 @@ class Linear(torch.nn.Linear):
                 "'out' is only supported when gradients are disabled"
             )
 
-        torch.matmul(
-            input.to(out.dtype),
-            self.weight.to(out.dtype).t(),
-            out=out,
-        )
+        input = input.to(out.dtype)
+        weight = self.weight.to(out.dtype).t()
+
+        if input.dim() == 2:
+            torch.matmul(input, weight, out=out)
+        else:
+            input = input.view(-1, input.size(-2), input.size(-1))
+            torch.bmm(
+                input,
+                weight.expand(input.size(0), -1, -1),
+                out.view(-1, out.size(-2), out.size(-1)),
+            )
 
         if self.bias is not None:
             out += self.bias.to(out.dtype)
