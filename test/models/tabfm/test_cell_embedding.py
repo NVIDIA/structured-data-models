@@ -40,4 +40,3 @@ def test_cell_embedding(device: torch.device) -> None:
     out4.sum().backward()
     assert module.num_lin.weight.grad is not None
     assert module.cat_lin.weight.grad is not None
-
