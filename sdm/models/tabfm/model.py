@@ -13,7 +13,6 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
-from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.recipe import default_recipe
@@ -242,12 +241,6 @@ class _TabFM(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.cell_embedding = CellEmbedding(
-            channels=channels,
-            group_size=group_size,
-            num_frequencies=num_frequencies,
-            **factory_kwargs,
-        )
         self.row_embedding = RowEmbedding(
             num_classes=num_classes,
             channels=channels,
@@ -256,6 +249,8 @@ class _TabFM(torch.nn.Module):
             num_col_heads=num_embedding_col_heads,
             num_row_heads=num_embedding_row_heads,
             num_inducing_points=num_inducing_points,
+            group_size=group_size,
+            num_frequencies=num_frequencies,
             num_readout_tokens=num_readout_tokens,
             **factory_kwargs,
         )
@@ -276,6 +271,5 @@ class _TabFM(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, 1 or num_classes]
-        x = self.cell_embedding(x, categorical_mask)
-        x = self.row_embedding(x, y, cache=cache)
+        x = self.row_embedding(x, y, categorical_mask, cache=cache)
         return self.icl_block(x, y, cache=cache)
