@@ -592,6 +592,21 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
             seqused_key_value=seqused_key_value,
             batch_size_limit=1,
         )
+        buffer = torch.empty_like(out1)
+        buffered_out = module(
+            query=query,
+            key_value=key_value,
+            seqused_key_value=seqused_key_value,
+            out=buffer,
+        )
+        chunked_buffer = torch.empty_like(out1)
+        chunked_buffered_out = module(
+            query=query,
+            key_value=key_value,
+            seqused_key_value=seqused_key_value,
+            batch_size_limit=1,
+            out=chunked_buffer,
+        )
     # Both paths reduce to the same boolean mask and SDPA kernel, but with
     # `qassmax` the key lengths enter :class:`QASSMax` as differently-shaped
     # tensors (`[..., 1]` from `seqused_key_value` vs `[..., Q]` from the
@@ -601,6 +616,10 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     else:
         torch.testing.assert_close(out1, out2)
     torch.testing.assert_close(chunked_out, out1)
+    assert buffered_out is buffer
+    torch.testing.assert_close(buffered_out, out1)
+    assert chunked_buffered_out is chunked_buffer
+    torch.testing.assert_close(chunked_buffered_out, out1)
 
     # Test no padding leakage
     new_key_value = key_value.clone()
