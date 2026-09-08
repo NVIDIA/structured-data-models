@@ -263,9 +263,7 @@ class _KumoTabular(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.cell_embedding(x, categorical_mask, batch_size_limit="auto")
-        return x.new_empty(x.size(-3) - y.size(-1), 999)
-        return x
+        x = self.cell_embedding(x, categorical_mask)
         x = self.row_embedding(x, y, cache=cache)
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)
