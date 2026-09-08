@@ -32,7 +32,7 @@ def test_icl_block(
         num_heads=2,
         device=device,
         num_key_value_heads_for_query=num_key_value_heads_for_query,
-    ).eval()
+    )
     for parameter in block.parameters():
         torch.nn.init.normal_(parameter, std=0.1)
     x = torch.randn(2, 5, 8, device=device)
@@ -58,7 +58,7 @@ def test_icl_block(
             num_layers=3,
             num_heads=2,
             device=device,
-        ).eval()
+        )
         mha.load_state_dict(block.state_dict())
         assert not torch.allclose(mha(x.clone(), y), out)
 

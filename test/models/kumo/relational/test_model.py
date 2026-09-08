@@ -90,7 +90,7 @@ def test_invariant_gnn_autocast(
         tables=related_tables.tables,
         relationships=related_tables.relationships,
     )
-    model = InvariantGNN(channels=8, device=device).eval()
+    model = InvariantGNN(channels=8, device=device)
 
     with torch.inference_mode(), torch.autocast(device.type, dtype):
         out = model(
@@ -128,7 +128,7 @@ def test_invariant_gnn_cache(
         tables=related_tables.tables,
         relationships=related_tables.relationships,
     )
-    model = InvariantGNN(channels=8, device=device, dtype=dtype).eval()
+    model = InvariantGNN(channels=8, device=device, dtype=dtype)
     x = torch.randn(10, 8, device=device, dtype=dtype)
     readout_index = torch.arange(4, device=device)
 
@@ -296,7 +296,7 @@ def test_many_classes_forward_and_cache(
         num_icl_heads=2,
         norm_bias=True,
         device=device,
-    ).eval()
+    )
 
     expected = model(
         x_context=task,

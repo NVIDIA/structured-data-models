@@ -279,7 +279,7 @@ def test_sdpa_batch_size_limit() -> None:
     module = SDPA(
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
-    ).eval()
+    )
 
     query_len = 3
     key_value_len = 4
@@ -300,11 +300,14 @@ def test_sdpa_batch_size_limit() -> None:
         value=value,
         attn_mask=attn_mask,
     )
-    with patch.object(
-        F,
-        "scaled_dot_product_attention",
-        wraps=F.scaled_dot_product_attention,
-    ) as sdpa:
+    with (
+        torch.no_grad(),
+        patch.object(
+            F,
+            "scaled_dot_product_attention",
+            wraps=F.scaled_dot_product_attention,
+        ) as sdpa,
+    ):
         out = module(
             query=query,
             key=key,
@@ -326,18 +329,21 @@ def test_sdpa_batch_size_limit() -> None:
 
 
 def test_batch_size_limit_autocast_dtype() -> None:
-    sdpa = SDPA(num_query_heads=2).eval()
+    sdpa = SDPA(num_query_heads=2)
     query = torch.randn(5, 3, 2, 3)
     key = torch.randn(5, 4, 2, 3)
     value = torch.randn(5, 4, 2, 3)
 
-    attention = Attention(channels=6, num_query_heads=2).eval()
+    attention = Attention(channels=6, num_query_heads=2)
     with torch.no_grad():
         attention.out_lin.weight.copy_(torch.eye(6))
         attention.out_lin.bias.zero_()
     attention_query = torch.randn(5, 3, 6)
 
-    with torch.autocast(device_type="cpu", dtype=torch.float16):
+    with (
+        torch.autocast(device_type="cpu", dtype=torch.float16),
+        torch.no_grad(),
+    ):
         expected_sdpa = sdpa(query=query, key=key, value=value)
         chunked_sdpa = sdpa(
             query=query,
@@ -358,26 +364,26 @@ def test_batch_size_limit_autocast_dtype() -> None:
 
 
 @pytest.mark.parametrize(
-    ("training", "compiling", "batch_size_limit"),
+    ("requires_grad", "compiling", "batch_size_limit"),
     [
-        pytest.param(True, False, 2, id="training"),
+        pytest.param(True, False, 2, id="requires-grad"),
         pytest.param(False, True, 2, id="compiling"),
         pytest.param(False, False, None, id="default-limit"),
         pytest.param(False, False, 5, id="within-limit"),
     ],
 )
 def test_sdpa_batch_size_limit_bypass(
-    training: bool,
+    requires_grad: bool,
     compiling: bool,
     batch_size_limit: int | None,
 ) -> None:
     module = SDPA(num_query_heads=2)
-    module.train(training)
     query = torch.randn(5, 3, 2, 3)
     key = torch.randn(5, 4, 2, 3)
     value = torch.randn(5, 4, 2, 3)
 
     with (
+        torch.set_grad_enabled(requires_grad),
         patch.object(torch.compiler, "is_compiling", return_value=compiling),
         patch.object(
             F,
@@ -500,20 +506,20 @@ def test_attention_kv_cache(qassmax: bool) -> None:
         key_value=kv,
         attn_mask=attn_mask,
     )
-    module.eval()
-    chunked_cache_out, chunked_kv = module(
-        query=query,
-        key_value=key_value,
-        attn_mask=attn_mask,
-        return_key_value=True,
-        batch_size_limit=1,
-    )
-    chunked_cached_out = module(
-        query=query,
-        key_value=kv,
-        attn_mask=attn_mask,
-        batch_size_limit=1,
-    )
+    with torch.no_grad():
+        chunked_cache_out, chunked_kv = module(
+            query=query,
+            key_value=key_value,
+            attn_mask=attn_mask,
+            return_key_value=True,
+            batch_size_limit=1,
+        )
+        chunked_cached_out = module(
+            query=query,
+            key_value=kv,
+            attn_mask=attn_mask,
+            batch_size_limit=1,
+        )
 
     self_out, self_kv = module(query=query, return_key_value=True)
     self_cached_out = module(query=query, key_value=self_kv)
@@ -533,7 +539,7 @@ def test_attention_empty_query_chunked_kv_cache() -> None:
     batch_size = 3
     channels = 8
     num_heads = 2
-    module = Attention(channels=channels, num_query_heads=num_heads).eval()
+    module = Attention(channels=channels, num_query_heads=num_heads)
     query = torch.randn(batch_size, 0, channels)
     key_value = torch.randn(batch_size, 5, channels)
 
@@ -542,12 +548,13 @@ def test_attention_empty_query_chunked_kv_cache() -> None:
         key_value=key_value,
         return_key_value=True,
     )
-    out, kv = module(
-        query=query,
-        key_value=key_value,
-        return_key_value=True,
-        batch_size_limit=2,
-    )
+    with torch.no_grad():
+        out, kv = module(
+            query=query,
+            key_value=key_value,
+            return_key_value=True,
+            batch_size_limit=2,
+        )
 
     assert out.size() == expected_out.size() == query.size()
     torch.testing.assert_close(kv.key, expected_kv.key)
@@ -570,16 +577,17 @@ def test_empty_query_chunking_preserves_unbroadcast_shape(
     module_factory: Callable[[], Attention | TransformerBlock],
 ) -> None:
     channels = 8
-    module = module_factory().eval()
+    module = module_factory()
     query = torch.randn(1, 0, channels)
     key_value = torch.randn(3, 5, channels)
 
     expected = module(query=query, key_value=key_value)
-    actual = module(
-        query=query,
-        key_value=key_value,
-        batch_size_limit=1,
-    )
+    with torch.no_grad():
+        actual = module(
+            query=query,
+            key_value=key_value,
+            batch_size_limit=1,
+        )
 
     assert actual.size() == expected.size() == query.size()
     torch.testing.assert_close(actual, expected)
@@ -588,7 +596,7 @@ def test_empty_query_chunking_preserves_unbroadcast_shape(
 def test_attention_chunked_broadcast_kv_cache_shape() -> None:
     channels = 8
     num_heads = 2
-    module = Attention(channels=channels, num_query_heads=num_heads).eval()
+    module = Attention(channels=channels, num_query_heads=num_heads)
     query = torch.randn(2, 3, 4, channels)
     key_value = torch.randn(2, 1, 5, channels)
 
@@ -597,12 +605,13 @@ def test_attention_chunked_broadcast_kv_cache_shape() -> None:
         key_value=key_value,
         return_key_value=True,
     )
-    out, kv = module(
-        query=query,
-        key_value=key_value,
-        return_key_value=True,
-        batch_size_limit=2,
-    )
+    with torch.no_grad():
+        out, kv = module(
+            query=query,
+            key_value=key_value,
+            return_key_value=True,
+            batch_size_limit=2,
+        )
 
     assert out.size() == expected_out.size() == query.size()
     assert kv.key.size() == (2, 1, 5, num_heads, channels // num_heads)
@@ -662,7 +671,6 @@ def test_attention_batch_size_limit_propagation() -> None:
     )
 
     for module in modules:
-        module.eval()
         attention = module if isinstance(module, Attention) else module.attn
         with torch.no_grad():
             attention.out_lin.weight.copy_(torch.eye(channels))
@@ -681,11 +689,14 @@ def test_attention_batch_size_limit_propagation() -> None:
                 batch_sizes.append(args[0].size(0))
             )
         )
-        with patch.object(
-            F,
-            "scaled_dot_product_attention",
-            wraps=F.scaled_dot_product_attention,
-        ) as sdpa:
+        with (
+            torch.no_grad(),
+            patch.object(
+                F,
+                "scaled_dot_product_attention",
+                wraps=F.scaled_dot_product_attention,
+            ) as sdpa,
+        ):
             out = module(query=query, batch_size_limit=2)
         handle.remove()
 
@@ -698,14 +709,14 @@ def test_attention_batch_size_limit_propagation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("training", "compiling"),
+    ("requires_grad", "compiling"),
     [
-        pytest.param(True, False, id="training"),
+        pytest.param(True, False, id="requires-grad"),
         pytest.param(False, True, id="compiling"),
     ],
 )
 def test_transformer_block_batch_size_limit_bypass(
-    training: bool,
+    requires_grad: bool,
     compiling: bool,
 ) -> None:
     module = TransformerBlock(
@@ -714,7 +725,6 @@ def test_transformer_block_batch_size_limit_bypass(
         mlp=torch.nn.Identity(),
         query_norm=torch.nn.LayerNorm(8),
     )
-    module.train(training)
     query = torch.randn(5, 3, 8)
     batch_sizes: list[int] = []
     assert module.query_norm is not None
@@ -722,10 +732,13 @@ def test_transformer_block_batch_size_limit_bypass(
         lambda _module, args: batch_sizes.append(args[0].size(0))
     )
 
-    with patch.object(
-        torch.compiler,
-        "is_compiling",
-        return_value=compiling,
+    with (
+        torch.set_grad_enabled(requires_grad),
+        patch.object(
+            torch.compiler,
+            "is_compiling",
+            return_value=compiling,
+        ),
     ):
         module(query=query, batch_size_limit=2)
     handle.remove()
@@ -793,13 +806,13 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
         key_value=key_value,
         attn_mask=attn_mask,
     )
-    module.eval()
-    chunked_out = module(
-        query=query,
-        key_value=key_value,
-        seqused_key_value=seqused_key_value,
-        batch_size_limit=1,
-    )
+    with torch.no_grad():
+        chunked_out = module(
+            query=query,
+            key_value=key_value,
+            seqused_key_value=seqused_key_value,
+            batch_size_limit=1,
+        )
     # Both paths reduce to the same boolean mask and SDPA kernel, but with
     # `qassmax` the key lengths enter :class:`QASSMax` as differently-shaped
     # tensors (`[..., 1]` from `seqused_key_value` vs `[..., Q]` from the
