@@ -248,9 +248,11 @@ def test_icl_block_rejects_one_class_hierarchy() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("batch_shape", [(), (2,)])
+@pytest.mark.parametrize("requires_grad", [False, True])
 def test_icl_block_hierarchical_cache(
     device: torch.device,
     batch_shape: tuple[int, ...],
+    requires_grad: bool,
 ) -> None:
     block = ICLBlock(
         num_classes=2,
@@ -279,20 +281,21 @@ def test_icl_block_hierarchical_cache(
         num_classes=num_classes,
     )
 
-    cache = Cache()
-    recorded = block(
-        train_rows.clone(),
-        y,
-        num_classes=num_classes,
-        cache=cache,
-    )
-    assert recorded.size() == (*batch_shape, 0, num_classes)
-    assert cache.size() > 0
+    with torch.set_grad_enabled(requires_grad):
+        cache = Cache()
+        recorded = block(
+            train_rows.clone(),
+            y,
+            num_classes=num_classes,
+            cache=cache,
+        )
+        assert recorded.size() == (*batch_shape, 0, num_classes)
+        assert cache.size() > 0
 
-    predicted = block(
-        test_rows.clone(),
-        y.new_empty((*batch_shape, 0)),
-        num_classes=num_classes,
-        cache=cache.freeze(),
-    )
+        predicted = block(
+            test_rows.clone(),
+            y.new_empty((*batch_shape, 0)),
+            num_classes=num_classes,
+            cache=cache.freeze(),
+        )
     torch.testing.assert_close(predicted, expected)
