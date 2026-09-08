@@ -58,9 +58,25 @@ parser.add_argument(
     action="store_true",
     help="Use ECOC when KumoTabular receives more than 10 classes.",
 )
+parser.add_argument(
+    "--num_shards",
+    type=int,
+    default=1,
+    help="Split the selected jobs into this many shards.",
+)
+parser.add_argument(
+    "--shard_index",
+    type=int,
+    default=0,
+    help="Run this zero-based shard.",
+)
 args = parser.parse_args()
 if args.checkpoint is not None and args.name is None:
     parser.error("--name is required with --checkpoint")
+if args.num_shards < 1:
+    parser.error("--num_shards must be positive")
+if not 0 <= args.shard_index < args.num_shards:
+    parser.error("--shard_index must be smaller than --num_shards")
 
 model_config = MODEL_CONFIGS[args.model]
 run_name = args.name or model_config.name
@@ -89,12 +105,14 @@ experiments = BeyondArenaExperimentBundle(
 ).build_experiments()
 
 context = BeyondArenaContext()
-context.build_and_run_jobs(
+jobs = context.build_jobs(
     experiments,
-    expname=result_dir,
     subset=args.subset or ["core"],
+    **({"dataset_names": [args.dataset]} if args.dataset is not None else {}),
+)
+context.run_jobs(
+    jobs[args.shard_index :: args.num_shards],
+    expname=result_dir,
     register=False,
-    build_kwargs=(
-        {"dataset_names": [args.dataset]} if args.dataset is not None else None
-    ),
+    raise_on_failure=False,
 )
