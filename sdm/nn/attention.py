@@ -515,11 +515,7 @@ class TransformerBlock(torch.nn.Module):
                 "already cached"
             )
 
-        if (
-            self.training
-            or torch.is_grad_enabled()
-            or torch.compiler.is_compiling()
-        ):
+        if torch.is_grad_enabled() or torch.compiler.is_compiling():
             return self._forward(
                 query=query,
                 key_value=key_value,
