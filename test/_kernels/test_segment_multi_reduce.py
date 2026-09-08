@@ -136,7 +136,7 @@ def test_segment_multi_reduce_std_threshold() -> None:
         "sdm._kernels.triton.segment_multi_reduce"
     )
 
-    statistics = module.segment_multi_reduce(
+    stats = module.segment_multi_reduce(
         src=src,
         index=index,
         edge_attr=edge_attr,
@@ -148,7 +148,7 @@ def test_segment_multi_reduce_std_threshold() -> None:
         device="cuda",
     )
     torch.testing.assert_close(
-        statistics[:, 2],
+        stats[:, 2],  # std
         expected,
         atol=1e-6,
         rtol=1e-6,
@@ -361,14 +361,14 @@ def test_segment_multi_reduce_grad() -> None:
     edge_attr = torch.randn(7, 8, device="cuda", requires_grad=True)
     offsets = torch.tensor([0, 2, 2, 7], device="cuda")
 
-    statistics = segment_multi_reduce(
+    stats = segment_multi_reduce(
         src,
         index,
         edge_attr,
         offsets,
     )
-    total = statistics[:, 0]
-    mean = statistics[:, 1]
+    total = stats[:, 0]
+    mean = stats[:, 1]
 
     total_grads = torch.autograd.grad(
         total.sum(),
