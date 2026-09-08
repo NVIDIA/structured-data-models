@@ -286,7 +286,7 @@ class SDPA(torch.nn.Module):
             batch_shapes.append(attn_mask.size()[:-2])
         batch_shape = torch.broadcast_shapes(*batch_shapes)
 
-        if not self.training and not torch.compiler.is_compiling():
+        if not torch.is_grad_enabled() and not torch.compiler.is_compiling():
             batch_size = math.prod(batch_shape)
             if batch_size > batch_size_limit:
                 query_size = query.size()[-3:]
@@ -511,7 +511,7 @@ class Attention(torch.nn.Module):
             :class:`~sdm.cache.KVCacheEntry`.
         """
         batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
-        if not self.training and not torch.compiler.is_compiling():
+        if not torch.is_grad_enabled() and not torch.compiler.is_compiling():
             chunked_result = _chunk_attention(
                 forward=self.forward,
                 query=query,
@@ -734,7 +734,7 @@ class TransformerBlock(torch.nn.Module):
             batch_size_limit = None
             if (
                 query.is_cuda
-                and not self.training
+                and not torch.is_grad_enabled()
                 and not torch.compiler.is_compiling()
             ):
                 key_value_length: int | None = None
@@ -763,7 +763,7 @@ class TransformerBlock(torch.nn.Module):
                 batch_size_limit = max(batch_size_limit, 1)
 
         batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
-        if not self.training and not torch.compiler.is_compiling():
+        if not torch.is_grad_enabled() and not torch.compiler.is_compiling():
             chunked_result = _chunk_attention(
                 forward=self.forward,
                 query=query,
