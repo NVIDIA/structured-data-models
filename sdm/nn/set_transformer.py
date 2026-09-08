@@ -72,6 +72,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | Literal["auto"] | None = None,
+        out: Tensor | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -84,6 +85,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: Literal[True],
         batch_size_limit: int | Literal["auto"] | None = None,
+        out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -96,6 +98,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: bool,
         batch_size_limit: int | Literal["auto"] | None = None,
+        out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
