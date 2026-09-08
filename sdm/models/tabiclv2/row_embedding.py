@@ -144,7 +144,7 @@ class RowEmbedding(torch.nn.Module):
                 buffer[1:, ..., K:, :] = buffer[:1, ..., K:, :]
                 x = buffer[..., K:, :]
             else:
-                x = self.lin(x, out=buffer[..., :, K:, :])  # [..., R, C, D]
+                x = self.lin(x, out=buffer[..., K:, :])  # [..., R, C, D]
 
         if y.numel() > 0:
             if self.y_emb is not None:

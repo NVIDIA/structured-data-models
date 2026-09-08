@@ -28,6 +28,7 @@ class RowEmbedding(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.channels = channels
 
         self.cell_embedding = CellEmbedding(
             channels=channels,
@@ -98,32 +99,36 @@ class RowEmbedding(torch.nn.Module):
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
-        x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
-
-        *B, R, _, D = x.size()
         R_train = y.size(-1)
         K = self.readout_token.size(-2)
 
+        buffer = torch.empty(
+            (*x.size()[:-1], K + x.size(-1), self.channels),
+            device=x.device,
+            dtype=torch.get_autocast_dtype(x.device.type)
+            if torch.is_autocast_enabled(x.device.type)
+            else x.dtype,
+        )
+        buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
+        x = self.cell_embedding(
+            x,
+            categorical_mask,
+            batch_size_limit="auto",
+            out=buffer[..., K:, :],
+        )
+
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y).unsqueeze(-2)
+                y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
             else:
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
             x[..., :R_train, :, :] += y_emb.to(x.dtype)
 
+        x = x.transpose(-2, -3)
         for i, (col_block, row_block) in enumerate(
             zip(self.col_blocks, self.row_blocks)
         ):
-            if i > 0:
-                readout_token, x = x.split([K, x.size(-2) - K], dim=-2)
-                readout_token = readout_token.clone()
-            else:
-                readout_token = self.readout_token
-                readout_token = readout_token.view(*(1,) * len(B), 1, K, D)
-                readout_token = readout_token.expand(*B, R, K, D)
-
-            x = x.transpose(-2, -3).contiguous()
             key = f"row_embedding.col_block{i}"
             result = col_block(
                 query=x,
@@ -132,19 +137,22 @@ class RowEmbedding(torch.nn.Module):
                 else x[..., :R_train, :],
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit="auto",
+                out=x,
             )
 
             if cache is not None and cache.is_recording:
-                x, cache[key] = result
-            else:
-                x = result
+                cache[key] = result[1]
             del result
 
-            x = torch.cat([readout_token.to(x.dtype), x.transpose(-2, -3)], -2)
-            x = row_block(
-                query=x[..., :K, :] if i == len(self.row_blocks) - 1 else x,
-                key_value=x,
+            buffer = row_block(
+                query=buffer[..., :K, :]
+                if i == len(self.row_blocks) - 1
+                else buffer,
+                key_value=buffer,
                 batch_size_limit="auto",
+                out=buffer[..., :K, :]
+                if i == len(self.row_blocks) - 1
+                else buffer,
             )
 
-        return self.norm(x).flatten(-2)
+        return self.norm(buffer).flatten(-2)
