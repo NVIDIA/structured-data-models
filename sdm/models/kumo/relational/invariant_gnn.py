@@ -101,7 +101,8 @@ class InvariantGNN(torch.nn.Module):
                 offsets=graph.colptr,
                 edge_type=graph.edge_type,
             )
-            x = self.skip_lin(x).addmm_(
+            x = torch.addmm(
+                self.skip_lin(x),
                 stats.flatten(1),
                 self.aggregation_lin.weight.T,
             )

@@ -71,6 +71,42 @@ def test_invariant_gnn(
 
 
 @withCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_invariant_gnn_autocast(
+    relational_data: RelationalData,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    # Float32 parameters under autocast, as in the RelBench example.
+    related_tables = RelatedTables(
+        tables={
+            "users": relational_data.tables["users"],
+            "orders": relational_data.tables["orders"],
+        },
+        relationships=relational_data.relationships[:1],
+        task_links=[],
+    )
+    graph = HomogeneousGraph.from_tables(
+        tables=related_tables.tables,
+        relationships=related_tables.relationships,
+    )
+    model = InvariantGNN(channels=8, device=device).eval()
+
+    with torch.inference_mode(), torch.autocast(device.type, dtype):
+        out = model(
+            x=torch.randn(10, 8, device=device),
+            graph=graph,
+            readout_table="users",
+            readout_index=torch.arange(4, device=device),
+            num_hops=2,
+        )
+
+    assert out.size() == (4, 8)
+    assert out.device == device
+    assert not out.isnan().any()
+
+
+@withCUDA
 @pytest.mark.parametrize(
     "dtype",
     [torch.float16, torch.float32, torch.float64],
