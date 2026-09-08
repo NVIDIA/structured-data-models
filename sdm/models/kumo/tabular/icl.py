@@ -95,21 +95,19 @@ class ICLBlock(torch.nn.Module):
                 del result
                 continue
 
-            x_context = x[..., :0, :] if last_layer else x[..., :R_train, :]
-            x_context, (key, value) = layer(
+            key, value = layer(
                 query=x[..., :0, :] if last_layer else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
-                out=x_context,
-            )
-            x_query = x[..., R_train:, :]
+                out=x[..., :0, :] if last_layer else x[..., :R_train, :],
+            )[1]
             x_query = layer(
-                query=x_query,
+                query=x[..., R_train:, :],
                 key_value=KVCacheEntry(
                     key=key[..., : self.kv_heads, :].contiguous(),
                     value=value[..., : self.kv_heads, :].contiguous(),
                 ),
-                out=x_query,
+                out=x[..., R_train:, :],
             )
             if last_layer:
                 x = x_query
