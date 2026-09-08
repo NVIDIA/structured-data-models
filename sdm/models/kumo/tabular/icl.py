@@ -81,6 +81,7 @@ class ICLBlock(torch.nn.Module):
                         else x[..., :R_train, :]
                     ),
                     return_key_value=cache is not None and cache.is_recording,
+                    out=x[..., R_train:, :] if last_layer else x,
                 )
 
                 if cache is not None and cache.is_recording:
@@ -94,18 +95,23 @@ class ICLBlock(torch.nn.Module):
                 del result
                 continue
 
+            x_context = x[..., :0, :] if last_layer else x[..., :R_train, :]
             x_context, (key, value) = layer(
                 query=x[..., :0, :] if last_layer else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
+                out=x_context,
             )
+            x_query = x[..., R_train:, :]
             x_query = layer(
-                query=x[..., R_train:, :],
+                query=x_query,
                 key_value=KVCacheEntry(
                     key=key[..., : self.kv_heads, :].contiguous(),
                     value=value[..., : self.kv_heads, :].contiguous(),
                 ),
+                out=x_query,
             )
-            x = x_query if last_layer else torch.cat([x_context, x_query], -2)
+            if last_layer:
+                x = x_query
 
         return self.head(self.norm(x))
