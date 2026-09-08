@@ -72,6 +72,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | Literal["auto"] | None = None,
+        out: Tensor | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -84,6 +85,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: Literal[True],
         batch_size_limit: int | Literal["auto"] | None = None,
+        out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -96,6 +98,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: bool,
         batch_size_limit: int | Literal["auto"] | None = None,
+        out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -107,6 +110,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
+        out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -127,6 +131,7 @@ class InducedTransformerBlock(torch.nn.Module):
                 projections for the final attention site alongside the output.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
+            out: The output tensor.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -150,4 +155,5 @@ class InducedTransformerBlock(torch.nn.Module):
             key_value=key_value,  # [..., M, C]
             return_key_value=return_key_value,
             batch_size_limit=batch_size_limit,
+            out=out,
         )  # [..., Q, C]
