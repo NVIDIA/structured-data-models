@@ -664,8 +664,8 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        return_key_value: bool = False,
         *,
+        return_key_value: bool = False,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
 
