@@ -480,8 +480,8 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        return_key_value: bool = False,
         *,
+        return_key_value: bool = False,
         batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -700,8 +700,8 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        return_key_value: bool = False,
         *,
+        return_key_value: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
