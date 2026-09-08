@@ -97,19 +97,21 @@ def remap_kumo_tfm_ckpt(
 
     for key, value in ckpt.items():
         if key == "cell_embedding.frequencies_num":
-            out["cell_embedding.num_freq"] = value
+            out["row_embedding.cell_embedding.num_freq"] = value
             continue
         if key == "cell_embedding.frequencies_cat":
-            out["cell_embedding.cat_freq"] = value
+            out["row_embedding.cell_embedding.cat_freq"] = value
             continue
         if key.startswith("cell_embedding.lin_num."):
-            out[key.replace("lin_num.", "num_lin.", 1)] = value
+            key = key.replace("lin_num.", "num_lin.", 1)
+            out[f"row_embedding.{key}"] = value
             continue
         if key.startswith("cell_embedding.lin_cat."):
-            out[key.replace("lin_cat.", "cat_lin.", 1)] = value
+            key = key.replace("lin_cat.", "cat_lin.", 1)
+            out[f"row_embedding.{key}"] = value
             continue
         if key.startswith("cell_embedding.lin_missing."):
-            out[key] = value
+            out[f"row_embedding.{key}"] = value
             continue
 
         if key.startswith("y_encoder."):
