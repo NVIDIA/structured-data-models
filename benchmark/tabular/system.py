@@ -87,6 +87,21 @@ MODEL_CONFIGS = {
 }
 
 
+def _column_limit(
+    *,
+    num_rows: int,
+    max_columns: int | None,
+    max_cells: int | None,
+) -> int | None:
+    if max_cells is None:
+        return max_columns
+    if max_cells < 1:
+        raise ValueError("'max_cells' must be positive")
+
+    cell_limit = max(1, max_cells // max(num_rows, 1))
+    return cell_limit if max_columns is None else min(max_columns, cell_limit)
+
+
 class SDMSystem(ExternalSystemModel):
     def __init__(
         self,
@@ -95,6 +110,7 @@ class SDMSystem(ExternalSystemModel):
         checkpoint: str | None = None,
         max_context_size: int | None = None,
         max_columns: int | None = None,
+        max_cells: int | None = None,
         batch_size: int | None = None,
         many_class: bool = False,
         **kwargs: Any,
@@ -104,9 +120,12 @@ class SDMSystem(ExternalSystemModel):
         self._checkpoint = checkpoint
         self._max_context_size = max_context_size
         self._max_columns = max_columns
+        self._max_cells = max_cells
         self._batch_size = batch_size
         self._many_class = many_class
         self._many_class_codebook: np.ndarray | None = None
+        if max_cells is not None and max_cells < 1:
+            raise ValueError("'max_cells' must be positive")
         if many_class and self._config.name != "KumoTabular":
             raise ValueError("'many_class' requires model 'kumo-tabular'")
 
@@ -190,11 +209,17 @@ class SDMSystem(ExternalSystemModel):
         self.expand_query = num_estimators is None
 
         recipe = None
-        if self._max_columns is not None:
+        num_context_rows = min(len(X), max_context_size or len(X))
+        max_columns = _column_limit(
+            num_rows=num_context_rows,
+            max_columns=self._max_columns,
+            max_cells=self._max_cells,
+        )
+        if max_columns is not None:
             recipe = self.model.default_recipe()
             recipe.append_features(
                 sp.SelectColumns(
-                    self._max_columns,
+                    max_columns,
                     method="round_robin",
                 )
             )

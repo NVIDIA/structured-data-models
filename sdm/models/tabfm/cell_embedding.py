@@ -41,7 +41,8 @@ class CellEmbedding(torch.nn.Module):
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor:  # [..., R, C, D]
-        if out is not None and torch.is_grad_enabled():
+        gradients_enabled = torch.is_grad_enabled()
+        if out is not None and gradients_enabled:
             raise RuntimeError(
                 "'out' is only supported when gradients are disabled"
             )
@@ -87,11 +88,10 @@ class CellEmbedding(torch.nn.Module):
         ).sum(dim=-2)  # [..., 1, C, D]
         bias = bias.to(dtype)
 
-        if (
-            self.training
-            or torch.is_grad_enabled()
-            or torch.compiler.is_compiling()
-        ):
+        if gradients_enabled:
+            return self._forward_with_grad(x, freq, weight, bias)
+
+        if self.training or torch.compiler.is_compiling():
             return self._forward(x, freq, weight, bias, out=out)
 
         if batch_size_limit == "auto":
@@ -147,6 +147,18 @@ class CellEmbedding(torch.nn.Module):
             )
 
         return out
+
+    def _forward_with_grad(
+        self,
+        x: Tensor,  # [..., G]
+        freq: Tensor,  # [..., G, F]
+        weight: Tensor,  # [..., G, D, 2F]
+        bias: Tensor,  # [..., D]
+    ) -> Tensor:
+        x = x.to(torch.float32).unsqueeze(-1) * freq
+        fourier = torch.cat([x.sin(), x.cos()], dim=-1).to(weight.dtype)
+        out = torch.einsum("...gf,...gdf->...d", fourier, weight)
+        return out + bias.to(out.dtype)
 
     def _forward(
         self,

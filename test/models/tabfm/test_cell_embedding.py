@@ -24,3 +24,7 @@ def test_cell_embedding(device: torch.device) -> None:
     with torch.no_grad():
         out2 = module(x, categorical_mask, batch_size_limit=8)
     torch.testing.assert_close(out1, out2)
+
+    x.requires_grad_()
+    module(x, categorical_mask, batch_size_limit=8).sum().backward()
+    assert x.grad is not None

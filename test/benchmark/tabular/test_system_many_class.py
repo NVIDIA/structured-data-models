@@ -56,6 +56,7 @@ def _make_system(
     system._checkpoint = None
     system._max_context_size = None
     system._max_columns = None
+    system._max_cells = None
     system._batch_size = 2
     system._many_class = many_class
     system._many_class_codebook = None

@@ -44,6 +44,11 @@ parser.add_argument(
     help="Select at most this many columns per estimator.",
 )
 parser.add_argument(
+    "--max_cells",
+    type=int,
+    help="Limit context rows times selected columns per estimator.",
+)
+parser.add_argument(
     "--batch_size",
     type=int,
     help="Prediction batch size.",
@@ -67,6 +72,7 @@ config = {
     "checkpoint": args.checkpoint,
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
+    "max_cells": args.max_cells,
     "batch_size": args.batch_size,
     "many_class": args.many_class,
 }
