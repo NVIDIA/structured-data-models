@@ -36,32 +36,49 @@ parser.add_argument("--dataset")
 parser.add_argument(
     "--output-dir", type=Path, default=BENCHMARK_DIR / "talent_out"
 )
+parser.add_argument(
+    "--checkpoint-path",
+    type=Path,
+    help="Local Kumo-SCM checkpoint.",
+)
 args = parser.parse_args()
 
 register_sdm_method()
 root = args.dataset_path.resolve()
+model = MODEL_CONFIGS[args.model]
+if model.checkpoint_task is not None and args.checkpoint_path is None:
+    parser.error(f"--model {args.model} requires --checkpoint-path")
 datasets = (
     [args.dataset]
     if args.dataset
     else sorted(
         path.name
         for path in root.iterdir()
-        if path.is_dir() and (path / "info.json").is_file()
+        if path.is_dir()
+        and (path / "info.json").is_file()
+        and (
+            model.checkpoint_task is None
+            or json.loads((path / "info.json").read_text())["task_type"]
+            == model.checkpoint_task
+        )
     )
 )
 if not datasets:
     raise FileNotFoundError(f"No TALENT datasets found under {root}")
 
-model = MODEL_CONFIGS[args.model]
 method = f"[SDM] {model.name}"
+general = {
+    "model": args.model,
+    "device": "cuda" if torch.cuda.is_available() else "cpu",
+    "num_estimators": model.num_estimators,
+}
+if model.checkpoint_task is not None:
+    assert args.checkpoint_path is not None
+    general["checkpoint_path"] = str(args.checkpoint_path.resolve())
 config = {
     "model": {},
     "training": {"n_bins": 2},
-    "general": {
-        "model": args.model,
-        "device": "cuda" if torch.cuda.is_available() else "cpu",
-        "num_estimators": model.num_estimators,
-    },
+    "general": general,
 }
 
 failed = False

@@ -46,6 +46,15 @@ python -m benchmark.tabular.talent.main \
   --dataset Bank_Customer_Churn_Dataset
 ```
 
+Local Kumo-SCM training checkpoints can be evaluated with their registered run
+name. Checkpoint models automatically select the task supported by the saved
+weights:
+
+```bash
+python main.py --model kumo-bmsg60zm --dataset-path /path/to/talent/data \
+  --checkpoint-path /path/to/model/final.pt
+```
+
 Evaluate all available model results with:
 
 ```bash

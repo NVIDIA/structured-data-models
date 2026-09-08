@@ -171,7 +171,13 @@ class CategoricalTensor(Tensor):
         dictionary = encoded.dictionary
         is_string = pa.types.is_string(dictionary.type)
         is_large_string = pa.types.is_large_string(dictionary.type)
-        if is_string or is_large_string:
+        is_binary = pa.types.is_binary(dictionary.type)
+        is_large_binary = pa.types.is_large_binary(dictionary.type)
+        if is_binary or is_large_binary:
+            dictionary = dictionary.cast(
+                pa.large_string() if is_large_binary else pa.string()
+            )
+        if is_string or is_large_string or is_binary or is_large_binary:
             category = StringTensor.from_arrow(dictionary, device=device)
         elif pa.types.is_null(dictionary.type):
             category = torch.empty(0, dtype=torch.int64, device=device)

@@ -66,6 +66,21 @@ def test_from_arrow_string_values() -> None:
     assert tensor.to_arrow().column(0).chunk(0).dictionary.type == pa.string()
 
 
+@pytest.mark.parametrize(
+    "arrow_type",
+    [pa.binary(), pa.large_binary()],
+)
+def test_from_arrow_binary_values(arrow_type: pa.DataType) -> None:
+    tensor = CategoricalTensor.from_arrow(
+        pa.array([b"b", b"a", None, b"b"], type=arrow_type),
+    )
+
+    assert tensor.dtype == torch.int32
+    assert tensor.code.equal(torch.tensor([[0], [1], [-1], [0]]))
+    assert tensor.categories[0].tolist() == ["b", "a"]
+    assert tensor.tolist() == [["b"], ["a"], [None], ["b"]]
+
+
 def test_from_arrow_chunked_values() -> None:
     tensor = CategoricalTensor.from_arrow(
         pa.chunked_array([pa.array(["b", None]), pa.array(["a", "b"])]),

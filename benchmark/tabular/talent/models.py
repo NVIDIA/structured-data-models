@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -26,9 +27,13 @@ from TALENT.model.method_registry import (
 from TALENT.model.methods.base import Method
 
 import sdm
+import sdm.processing as sp
 
 Task = Literal["classification", "regression"]
-ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
+ModelFactory = Callable[
+    [Task, torch.device, Path | None],
+    sdm.models.ICLModel,
+]
 
 
 class UnsupportedDatasetError(RuntimeError):
@@ -41,6 +46,9 @@ class ModelConfig:
     factory: ModelFactory
     num_estimators: int
     autocast_dtype: torch.dtype
+    batch_size: int | None = None
+    recipe_factory: Callable[[], sdm.Recipe] | None = None
+    checkpoint_task: Task | None = None
     max_classes: int | None = None
 
 
@@ -48,7 +56,9 @@ class ModelConfig:
 def _create_tabiclv2(
     task: Task,
     device: torch.device,
+    checkpoint_path: Path | None,
 ) -> sdm.models.TabICLv2:
+    assert checkpoint_path is None
     return sdm.models.TabICLv2(task=task, device=device)
 
 
@@ -56,19 +66,62 @@ def _create_tabiclv2(
 def _create_kumo_tabular(
     task: Task,
     device: torch.device,
+    checkpoint_path: Path | None,
 ) -> sdm.models.KumoTabular:
-    return sdm.models.KumoTabular(task=task, device=device)
+    return sdm.models.KumoTabular(
+        task=task,
+        device=device,
+        checkpoint_path=checkpoint_path,
+    )
 
 
 @lru_cache(maxsize=1)
 def _create_tabfm(
     task: Task,
     device: torch.device,
+    checkpoint_path: Path | None,
 ) -> sdm.models.TabFM:
+    assert checkpoint_path is None
     return sdm.models.TabFM(
         task=task,
         accept_license=True,
         device=device,
+    )
+
+
+def _checkpoint_recipe() -> sdm.Recipe:
+    return sp.Recipe(
+        features=[
+            sp.StypeDispatch(
+                categorical=[
+                    sp.AlignCategories(sort_by="value"),
+                    sp.ToNumerical(missing_value=float("nan")),
+                ],
+            ),
+            sp.StypeDispatch(
+                numerical=[
+                    sp.DropConstantColumns(),
+                    sp.Standardize(epsilon=1e-6, ignore_nan=True),
+                    sp.Clip(min_value=-100.0, max_value=100.0),
+                    sp.ShuffleColumns(method="latin"),
+                ],
+            ),
+        ],
+        target=[
+            sp.StypeDispatch(
+                categorical=[
+                    sp.AlignCategories(),
+                    sp.ShuffleCategories(method="shift"),
+                ],
+                numerical=sp.Standardize(),
+            ),
+        ],
+        output=[
+            sp.ReduceEstimators(method="mean"),
+            sp.TaskDispatch(
+                classification=sp.Softmax(temperature=0.9),
+            ),
+        ],
     )
 
 
@@ -85,6 +138,32 @@ MODEL_CONFIGS = {
         num_estimators=8,
         autocast_dtype=torch.float16,
         max_classes=10,
+    ),
+    "kumo-bmsg60zm": ModelConfig(
+        name="KumoBmsg60zm",
+        factory=_create_kumo_tabular,
+        num_estimators=8,
+        autocast_dtype=torch.float16,
+        batch_size=4096,
+        recipe_factory=_checkpoint_recipe,
+        checkpoint_task="regression",
+    ),
+    "kumo-3us8y132": ModelConfig(
+        name="Kumo3us8y132",
+        factory=_create_kumo_tabular,
+        num_estimators=8,
+        autocast_dtype=torch.float16,
+        batch_size=4096,
+        checkpoint_task="regression",
+    ),
+    "kumo-2uirqewf": ModelConfig(
+        name="Kumo2uirqewf",
+        factory=_create_kumo_tabular,
+        num_estimators=8,
+        autocast_dtype=torch.float16,
+        batch_size=4096,
+        recipe_factory=_checkpoint_recipe,
+        checkpoint_task="regression",
     ),
     "tabfm": ModelConfig(
         name="TabFM",
@@ -105,6 +184,25 @@ def _target_vector(values: np.ndarray) -> np.ndarray:
     raise ValueError(f"Expected one target column, got shape {values.shape}.")
 
 
+def _checkpoint_features(
+    values: dict[str, np.ndarray] | None,
+    *,
+    numerical: bool,
+) -> dict[str, np.ndarray] | None:
+    if values is None:
+        return None
+    arrays = {
+        split: np.asarray(array).reshape(len(array), -1).copy()
+        for split, array in values.items()
+    }
+    if numerical:
+        arrays = {
+            split: np.where(np.isfinite(array.astype(float)), array, np.nan)
+            for split, array in arrays.items()
+        }
+    return arrays
+
+
 class SDMMethod(Method):
     """Run an SDM in-context model through TALENT's evaluation protocol."""
 
@@ -123,6 +221,15 @@ class SDMMethod(Method):
             "num_estimators",
             self._config.num_estimators,
         )
+        checkpoint_path = general.get("checkpoint_path")
+        self._checkpoint_path = (
+            Path(checkpoint_path) if checkpoint_path is not None else None
+        )
+        if (
+            self._config.checkpoint_task is not None
+            and self._checkpoint_path is None
+        ):
+            raise ValueError("This model requires a checkpoint path")
 
     def data_format(
         self,
@@ -132,18 +239,22 @@ class SDMMethod(Method):
         y: dict[str, np.ndarray] | None = None,
     ) -> None:
         if is_train:
-            (
-                self.N,
-                self.C,
-                self.num_new_value,
-                self.imputer,
-                self.cat_new_value,
-            ) = data_nan_process(
-                self.N,
-                self.C,
-                self.args.num_nan_policy,
-                self.args.cat_nan_policy,
-            )
+            if self._config.checkpoint_task is None:
+                (
+                    self.N,
+                    self.C,
+                    self.num_new_value,
+                    self.imputer,
+                    self.cat_new_value,
+                ) = data_nan_process(
+                    self.N,
+                    self.C,
+                    self.args.num_nan_policy,
+                    self.args.cat_nan_policy,
+                )
+            else:
+                self.N = _checkpoint_features(self.N, numerical=True)
+                self.C = _checkpoint_features(self.C, numerical=False)
             self.y, self.y_info, self.label_encoder = data_label_process(
                 self.y,
                 self.is_regression,
@@ -155,15 +266,19 @@ class SDMMethod(Method):
             self.criterion = F.mse_loss if self.is_regression else F.nll_loss
             return
 
-        N_test, C_test, _, _, _ = data_nan_process(
-            N,
-            C,
-            self.args.num_nan_policy,
-            self.args.cat_nan_policy,
-            self.num_new_value,
-            self.imputer,
-            self.cat_new_value,
-        )
+        if self._config.checkpoint_task is None:
+            N_test, C_test, _, _, _ = data_nan_process(
+                N,
+                C,
+                self.args.num_nan_policy,
+                self.args.cat_nan_policy,
+                self.num_new_value,
+                self.imputer,
+                self.cat_new_value,
+            )
+        else:
+            N_test = _checkpoint_features(N, numerical=True)
+            C_test = _checkpoint_features(C, numerical=False)
         assert y is not None
         y_test, _, _ = data_label_process(
             y,
@@ -245,9 +360,26 @@ class SDMMethod(Method):
         x_train = self._to_table(N_train, C_train)
         y_train = self._to_target(self.y["train"])
         task: Task = "regression" if self.is_regression else "classification"
-        self.model = self._config.factory(task, self._device)
+        if (
+            self._config.checkpoint_task is not None
+            and task != self._config.checkpoint_task
+        ):
+            raise UnsupportedDatasetError(
+                f"{self._config.name} only supports "
+                f"{self._config.checkpoint_task}"
+            )
+        self.model = self._config.factory(
+            task,
+            self._device,
+            self._checkpoint_path,
+        )
         generator = torch.Generator(device=self._device).manual_seed(
             self.args.seed
+        )
+        recipe = (
+            self._config.recipe_factory()
+            if self._config.recipe_factory is not None
+            else None
         )
 
         tic = time.perf_counter()
@@ -259,6 +391,7 @@ class SDMMethod(Method):
             self.model.fit(
                 x=x_train,
                 y=y_train,
+                recipe=recipe,
                 num_estimators=self._num_estimators,
                 generator=generator,
             )
@@ -278,12 +411,20 @@ class SDMMethod(Method):
         x_test = self._to_table(self.N_test, self.C_test)
 
         tic = time.perf_counter()
-        with torch.amp.autocast(
-            self._device.type,
-            self._config.autocast_dtype,
-            enabled=x_test.is_cuda,
-        ):
-            out = self.model.predict(x_test)
+        batch_size = self._config.batch_size or x_test.size(-2)
+        outs: list[sdm.TableTensor] = []
+        for batch in x_test.split(batch_size, dim=-2):
+            with torch.amp.autocast(
+                self._device.type,
+                self._config.autocast_dtype,
+                enabled=batch.is_cuda,
+            ):
+                outs.append(self.model.predict(batch))
+        out = (
+            outs[0]
+            if len(outs) == 1
+            else cast(sdm.TableTensor, torch.cat(outs, dim=-2))
+        )
         if x_test.is_cuda:
             torch.cuda.synchronize(x_test.device)
         self.predict_time = time.perf_counter() - tic
