@@ -79,6 +79,23 @@ class EnsembleTable(TableTensor):
         )
 ```
 
+## An intermediate solution could be 
+- Introduce necessary classes such as EnsembleData, EnsembleTensor & Table, but Tensor or TableTensor specific functions or properties are later added to the respective classes. While the the fist version can only rely on execute e.g.
+
+```python
+        if isinstance(table, EnsembleTable):
+            self._mean, self._scale = Ensemble.execute(
+                lambda table: (
+                    table.numerical.mean(dim=-2, keepdim=True),
+                    table.numerical.std(dim=-2, keepdim=True),
+                ),
+                table,
+            )
+            return
+
+        self._mean = table.numerical.mean(dim=-2, keepdim=True)
+        self._scale = table.numerical.std(dim=-2, keepdim=True)
+```
 
 Open Questions:
 - Solution around custom tensor classes such as CategoricalTensor, StringTensor etc. 
