@@ -261,7 +261,7 @@ def test_icl_block_hierarchical_cache(
         norm_bias=True,
         temperature=0.9,
         device=device,
-    ).eval()
+    )
     for parameter in block.parameters():
         torch.nn.init.normal_(parameter, std=0.1)
 

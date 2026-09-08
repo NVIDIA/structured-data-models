@@ -398,11 +398,12 @@ def test_empty_query_chunking_preserves_unbroadcast_shape() -> None:
     key_value = torch.randn(3, 5, channels)
 
     expected = module(query=query, key_value=key_value)
-    actual = module(
-        query=query,
-        key_value=key_value,
-        batch_size_limit=1,
-    )
+    with torch.no_grad():
+        actual = module(
+            query=query,
+            key_value=key_value,
+            batch_size_limit=1,
+        )
 
     assert actual.size() == expected.size() == query.size()
     torch.testing.assert_close(actual, expected)
@@ -487,14 +488,14 @@ def test_attention_batch_size_limit_propagation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("training", "compiling"),
+    ("requires_grad", "compiling"),
     [
-        pytest.param(True, False, id="training"),
+        pytest.param(True, False, id="requires-grad"),
         pytest.param(False, True, id="compiling"),
     ],
 )
 def test_transformer_block_batch_size_limit_bypass(
-    training: bool,
+    requires_grad: bool,
     compiling: bool,
 ) -> None:
     module = TransformerBlock(
@@ -503,7 +504,6 @@ def test_transformer_block_batch_size_limit_bypass(
         mlp=torch.nn.Identity(),
         query_norm=torch.nn.LayerNorm(8),
     )
-    module.train(training)
     query = torch.randn(5, 3, 8)
     batch_sizes: list[int] = []
     assert module.query_norm is not None
@@ -511,10 +511,13 @@ def test_transformer_block_batch_size_limit_bypass(
         lambda _module, args: batch_sizes.append(args[0].size(0))
     )
 
-    with patch.object(
-        torch.compiler,
-        "is_compiling",
-        return_value=compiling,
+    with (
+        torch.set_grad_enabled(requires_grad),
+        patch.object(
+            torch.compiler,
+            "is_compiling",
+            return_value=compiling,
+        ),
     ):
         module(query=query, batch_size_limit=2)
     handle.remove()
@@ -582,13 +585,13 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
         key_value=key_value,
         attn_mask=attn_mask,
     )
-    module.eval()
-    chunked_out = module(
-        query=query,
-        key_value=key_value,
-        seqused_key_value=seqused_key_value,
-        batch_size_limit=1,
-    )
+    with torch.no_grad():
+        chunked_out = module(
+            query=query,
+            key_value=key_value,
+            seqused_key_value=seqused_key_value,
+            batch_size_limit=1,
+        )
     # Both paths reduce to the same boolean mask and SDPA kernel, but with
     # `qassmax` the key lengths enter :class:`QASSMax` as differently-shaped
     # tensors (`[..., 1]` from `seqused_key_value` vs `[..., Q]` from the
