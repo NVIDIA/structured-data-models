@@ -83,11 +83,12 @@ class CellEmbedding(torch.nn.Module):
             if out is None:
                 out = x.new_empty(*B, R, C, x.size(-1))
 
-            torch.sum(
-                input=x,
-                dim=-2,
-                out=out[..., start : start + x.size(-4), :, :],
-            )
+            out_chunk = out[..., start : start + x.size(-4), :, :]
+            if torch.is_grad_enabled():
+                out_chunk[...] = x.sum(dim=-2)
+            else:
+                torch.sum(input=x, dim=-2, out=out_chunk)
+
             start += x.size(-4)
 
         assert out is not None

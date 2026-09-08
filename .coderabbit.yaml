@@ -8,7 +8,7 @@ tone_instructions: >-
   Skip style nitpicks already enforced by ruff and pre-commit.
 
 reviews:
-  profile: chill
+  profile: quiet
   request_changes_workflow: false
   high_level_summary: true
   high_level_summary_in_walkthrough: true
