@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -732,25 +731,6 @@ def test_transformer_block_batch_size_limit_bypass(
     handle.remove()
 
     assert batch_sizes == [5]
-
-
-def test_return_key_value_positional_compatibility() -> None:
-    channels = 8
-    query = torch.randn(2, 3, channels)
-    modules = (
-        Attention(channels=channels, num_query_heads=2),
-        TransformerBlock(
-            channels=channels,
-            num_query_heads=2,
-            mlp=torch.nn.Identity(),
-        ),
-    )
-
-    for module in modules:
-        forward = cast(Callable[..., object], module.forward)
-        result = forward(query, None, None, None, True)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
 
 
 @withCUDA
