@@ -6,17 +6,16 @@ from tabarena.contexts import BeyondArenaContext
 from tabarena.end_to_end import EndToEnd
 from tabarena.models import MethodMetadata
 
-from benchmark.tabular.system import MODEL_CONFIGS
-
 benchmark_dir = Path(__file__).parent.parent
 result_root = benchmark_dir / "beyondarena_out"
 output_root = benchmark_dir / "beyondarena_evals"
 
-runs = []
-for model_config in MODEL_CONFIGS.values():
-    result_dir = result_root / model_config.name
-    if next(result_dir.rglob("results.pkl"), None) is not None:
-        runs.append((model_config, result_dir))
+runs = [
+    result_dir
+    for result_dir in sorted(result_root.iterdir())
+    if result_dir.is_dir()
+    and next(result_dir.rglob("results.pkl"), None) is not None
+]
 
 if not runs:
     raise FileNotFoundError(
@@ -24,13 +23,16 @@ if not runs:
     )
 
 base_context = BeyondArenaContext()
-methods = []
-for model_config, result_dir in runs:
-    output_dir = output_root / model_config.name
+for result_dir in runs:
+    run_name = result_dir.name
+    output_dir = output_root / run_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     method_metadata = MethodMetadata.baseline(
-        method=f"{model_config.system_name}_c1",
+        method=(
+            f"SDM{''.join(char for char in run_name if char.isalnum())}"
+            "System_c1"
+        ),
         compute="gpu",
         artifact_dir=output_dir / "artifacts",
     )
@@ -45,14 +47,12 @@ for model_config, result_dir in runs:
         output_dir / "method_results_per_split.csv",
         index=False,
     )
-    methods.extend(
-        processed.to_method_metadata_lst(new_result_prefix="[SDM] ")
+    methods = processed.to_method_metadata_lst(new_result_prefix="[SDM] ")
+    context = BeyondArenaContext.from_new_methods(methods)
+    leaderboard = context.compare(
+        output_dir=output_dir,
+        only_valid_tasks=[method.method for method in methods],
     )
-
-context = BeyondArenaContext.from_new_methods(methods)
-leaderboard = context.compare(
-    output_dir=output_root,
-    only_valid_tasks=[method.method for method in methods],
-)
-website = context.leaderboard_to_website_format(leaderboard)
-print(website.to_string(index=False))
+    website = context.leaderboard_to_website_format(leaderboard)
+    website.to_csv(output_dir / "leaderboard.csv", index=False)
+    print(f"\n{run_name}\n{website.to_string(index=False)}")
