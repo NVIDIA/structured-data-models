@@ -99,10 +99,6 @@ def segment_multi_reduce(
             and edge_type.numel() == index.numel()
         )
     )
-    edge_type_is_supported = edge_type is None or (
-        edge_type.device == src.device
-        and edge_type.dtype in {torch.int32, torch.int64}
-    )
     if (
         _triton_segment_multi_reduce is not None
         and not (
@@ -112,7 +108,13 @@ def segment_multi_reduce(
         and src.is_cuda
         and src.dtype in {torch.float16, torch.bfloat16, torch.float32}
         and edge_attr.dtype == src.dtype
-        and edge_type_is_supported
+        and (
+            edge_type is None
+            or (
+                edge_type.device == src.device
+                and edge_type.dtype in {torch.int32, torch.int64}
+            )
+        )
         and index.device == src.device
         and edge_attr.device == src.device
         and offsets.device == src.device
