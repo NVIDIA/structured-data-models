@@ -11,7 +11,7 @@ def test_cell_embedding(device: torch.device) -> None:
         group_size=3,
         num_frequencies=2,
         device=device,
-    )
+    ).eval()
 
     x = torch.randn(6, 4, device=device)
     categorical_mask = torch.tensor([True, False, True, False], device=device)

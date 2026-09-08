@@ -1,4 +1,4 @@
-# ruff: noqa: D101, D102
+# ruff: noqa: D101, D102, A002
 
 import torch
 from torch import Tensor

@@ -570,10 +570,14 @@ class TransformerBlock(torch.nn.Module):
         disable_chunking = False
         if batch_size <= batch_size_limit or query.size(-2) == 0:
             disable_chunking = True
-        if return_key_value and batch_shape != (
-            query.size()[:-2] if key_value is None else key_value.size()[:-2]
-        ):
-            disable_chunking = True
+        if return_key_value:
+            assert not isinstance(key_value, KVCacheEntry)
+            if batch_shape != (
+                query.size()[:-2]
+                if key_value is None
+                else key_value.size()[:-2]
+            ):
+                disable_chunking = True
 
         if disable_chunking:
             return self._forward(
@@ -616,7 +620,7 @@ class TransformerBlock(torch.nn.Module):
                 out=flat_out[start:end] if flat_out is not None else None,
             )
 
-            if return_key_value:
+            if isinstance(result, tuple):
                 chunk, chunk_kv = result
 
                 if flat_key is None:
@@ -644,6 +648,7 @@ class TransformerBlock(torch.nn.Module):
             del result
 
         if out is None:
+            assert flat_out is not None
             out = flat_out.view(*batch_shape, *query.size()[-2:])
 
         if not return_key_value:
@@ -757,7 +762,7 @@ def _chunk(
 
 def _chunk(
     tensor: Tensor | KVCacheEntry | None,
-    batch_shape: tuple[int, ...],
+    batch_shape: torch.Size,
     trailing_dims: int,
     start: int,
     end: int,
