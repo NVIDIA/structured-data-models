@@ -36,7 +36,13 @@ class CellEmbedding(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C],
         *,
         batch_size_limit: int | None = None,
+        out: Tensor | None = None,
     ) -> Tensor:  # [..., R, C, D]
+        if out is not None and torch.is_grad_enabled():
+            raise RuntimeError(
+                "'out' is only supported when gradients are disabled"
+            )
+
         *B, R, C = x.size()
 
         # Feature grouping:
@@ -61,8 +67,7 @@ class CellEmbedding(torch.nn.Module):
             xs = [x]
 
         start = 0
-        out: Tensor | None = None
-        for i, x in enumerate(xs):
+        for x in xs:
             x = x[..., index].unsqueeze(-1)  # [..., R, C, G, 1]
             angle = x.to(torch.float32) * freq  # [..., R, C, G, F]
             fourier = torch.cat([angle.sin(), angle.cos()], dim=-1)
@@ -74,17 +79,16 @@ class CellEmbedding(torch.nn.Module):
                 self.cat_lin(fourier),  # [..., R, C, G, D]
                 self.num_lin(fourier),  # [..., R, C, G, D]
             )
-            x = x.sum(dim=-2).to(x.dtype)  # [..., R, C, D]
 
-            if len(xs) == 1:
-                out = x
-                continue
-
-            if i == 0:
+            if out is None:
                 out = x.new_empty(*B, R, C, x.size(-1))
-            assert out is not None
-            out[..., start : start + x.size(-3), :, :] = x
-            start += x.size(-3)
+
+            out_chunk = out[..., start : start + x.size(-4), :, :]
+            if torch.is_grad_enabled():
+                out_chunk[...] = x.sum(dim=-2)
+            else:
+                torch.sum(input=x, dim=-2, out=out_chunk)
+            start += x.size(-4)
 
         assert out is not None
         return out
