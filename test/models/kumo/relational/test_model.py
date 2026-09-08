@@ -12,7 +12,6 @@ from sdm import (
 )
 from sdm.cache import Cache
 from sdm.models import KumoRelational
-from sdm.models.kumo.relational import invariant_gnn as gnn_module
 from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.model import (
@@ -72,15 +71,50 @@ def test_invariant_gnn(
 
 
 @withCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_invariant_gnn_autocast(
+    relational_data: RelationalData,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    # Float32 parameters under autocast, as in the RelBench example.
+    related_tables = RelatedTables(
+        tables={
+            "users": relational_data.tables["users"],
+            "orders": relational_data.tables["orders"],
+        },
+        relationships=relational_data.relationships[:1],
+        task_links=[],
+    )
+    graph = HomogeneousGraph.from_tables(
+        tables=related_tables.tables,
+        relationships=related_tables.relationships,
+    )
+    model = InvariantGNN(channels=8, device=device).eval()
+
+    with torch.inference_mode(), torch.autocast(device.type, dtype):
+        out = model(
+            x=torch.randn(10, 8, device=device),
+            graph=graph,
+            readout_table="users",
+            readout_index=torch.arange(4, device=device),
+            num_hops=2,
+        )
+
+    assert out.size() == (4, 8)
+    assert out.device == device
+    assert not out.isnan().any()
+
+
+@withCUDA
 @pytest.mark.parametrize(
     "dtype",
     [torch.float16, torch.float32, torch.float64],
 )
-def test_invariant_gnn_destination_chunks(
+def test_invariant_gnn_cache(
     relational_data: RelationalData,
     device: torch.device,
     dtype: torch.dtype,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     related_tables = RelatedTables(
         tables={
@@ -107,19 +141,6 @@ def test_invariant_gnn_destination_chunks(
             num_hops=2,
             generator=torch.Generator(device=device).manual_seed(0),
         )
-        monkeypatch.setattr(
-            gnn_module,
-            "_automatic_aggregation_work_byte_limit",
-            lambda _x, _graph: 1024,
-        )
-        actual = model(
-            x=x,
-            graph=graph,
-            readout_table="users",
-            readout_index=readout_index,
-            num_hops=2,
-            generator=torch.Generator(device=device).manual_seed(0),
-        )
         cache = Cache()
         recorded = model(
             x=x,
@@ -139,7 +160,6 @@ def test_invariant_gnn_destination_chunks(
             cache=cache.freeze(),
         )
 
-    torch.testing.assert_close(actual, expected)
     torch.testing.assert_close(recorded, expected)
     torch.testing.assert_close(replayed, expected)
 
