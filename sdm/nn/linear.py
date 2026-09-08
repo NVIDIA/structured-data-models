@@ -1,4 +1,4 @@
-# ruff: noqa: D101, D102, A002
+# ruff: noqa: D101, D102, A001, A002
 
 import torch
 from torch import Tensor
@@ -29,7 +29,7 @@ class Linear(torch.nn.Linear):
             torch.bmm(
                 input,
                 weight.expand(input.size(0), -1, -1),
-                out.view(-1, out.size(-2), out.size(-1)),
+                out=out.view(-1, out.size(-2), out.size(-1)),
             )
 
         if self.bias is not None:
