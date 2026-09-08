@@ -8,6 +8,7 @@ from torch.nn import Embedding, Linear, ModuleList, Parameter, RMSNorm
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
+from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding
 
 
@@ -18,6 +19,8 @@ class RowEmbedding(torch.nn.Module):
         channels: int,
         num_layers: int,
         num_heads: int,
+        group_size: int,
+        num_frequencies: int,
         num_inducing_points: int,
         num_readout_tokens: int,
         device: torch.device | str | None = None,
@@ -25,6 +28,13 @@ class RowEmbedding(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        self.cell_embedding = CellEmbedding(
+            channels=channels,
+            group_size=group_size,
+            num_frequencies=num_frequencies,
+            **factory_kwargs,
+        )
 
         self.y_emb: torch.nn.Module | None = None
         self.y_lin: torch.nn.Module | None = None
@@ -81,11 +91,14 @@ class RowEmbedding(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,  # [..., R, C, D]
+        x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
+        categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
+
+        x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
 
         *B, R, _, D = x.size()
         R_train = y.size(-1)
