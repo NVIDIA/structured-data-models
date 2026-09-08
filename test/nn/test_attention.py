@@ -364,16 +364,16 @@ def test_batch_size_limit_autocast_dtype() -> None:
 
 
 @pytest.mark.parametrize(
-    ("grad_enabled", "compiling", "batch_size_limit"),
+    ("requires_grad", "compiling", "batch_size_limit"),
     [
-        pytest.param(True, False, 2, id="grad-enabled"),
+        pytest.param(True, False, 2, id="requires-grad"),
         pytest.param(False, True, 2, id="compiling"),
         pytest.param(False, False, None, id="default-limit"),
         pytest.param(False, False, 5, id="within-limit"),
     ],
 )
 def test_sdpa_batch_size_limit_bypass(
-    grad_enabled: bool,
+    requires_grad: bool,
     compiling: bool,
     batch_size_limit: int | None,
 ) -> None:
@@ -383,7 +383,7 @@ def test_sdpa_batch_size_limit_bypass(
     value = torch.randn(5, 4, 2, 3)
 
     with (
-        torch.set_grad_enabled(grad_enabled),
+        torch.set_grad_enabled(requires_grad),
         patch.object(torch.compiler, "is_compiling", return_value=compiling),
         patch.object(
             F,
@@ -709,14 +709,14 @@ def test_attention_batch_size_limit_propagation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("grad_enabled", "compiling"),
+    ("requires_grad", "compiling"),
     [
-        pytest.param(True, False, id="grad-enabled"),
+        pytest.param(True, False, id="requires-grad"),
         pytest.param(False, True, id="compiling"),
     ],
 )
 def test_transformer_block_batch_size_limit_bypass(
-    grad_enabled: bool,
+    requires_grad: bool,
     compiling: bool,
 ) -> None:
     module = TransformerBlock(
@@ -733,7 +733,7 @@ def test_transformer_block_batch_size_limit_bypass(
     )
 
     with (
-        torch.set_grad_enabled(grad_enabled),
+        torch.set_grad_enabled(requires_grad),
         patch.object(
             torch.compiler,
             "is_compiling",
