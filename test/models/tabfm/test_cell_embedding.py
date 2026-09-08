@@ -35,6 +35,8 @@ def test_cell_embedding(device: torch.device) -> None:
     with pytest.raises(RuntimeError, match="only supported when gradients"):
         module(x, categorical_mask, out=buffer)
 
-    module(x, categorical_mask).sum().backward()
+    out4 = module(x, categorical_mask)
+    torch.testing.assert_close(out4, out1)
+    out4.sum().backward()
     assert module.num_lin.weight.grad is not None
     assert module.cat_lin.weight.grad is not None
