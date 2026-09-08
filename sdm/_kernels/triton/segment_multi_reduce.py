@@ -114,16 +114,12 @@ def segment_multi_reduce(
     offsets: Tensor,
     edge_type: Tensor | None = None,
 ) -> Tensor:
-    if (
-        not src.is_contiguous()
-        or not index.is_contiguous()
-        or not edge_attr.is_contiguous()
-        or not offsets.is_contiguous()
-        or (edge_type is not None and not edge_type.is_contiguous())
-    ):
-        raise ValueError(
-            "src, index, edge_attr, offsets, and edge_type must be contiguous"
-        )
+    src = src.contiguous()
+    index = index.contiguous()
+    edge_attr = edge_attr.contiguous()
+    offsets = offsets.contiguous()
+    if edge_type is not None:
+        edge_type = edge_type.contiguous()
     if edge_type is None and edge_attr.shape != (
         index.numel(),
         src.size(1),

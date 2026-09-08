@@ -212,46 +212,40 @@ def test_segment_multi_reduce_nonfinite() -> None:
 
 
 @onlyCUDA
-def test_segment_multi_reduce_triton_requires_contiguous_inputs() -> None:
+@pytest.mark.parametrize("with_edge_type", [False, True])
+def test_segment_multi_reduce_triton_noncontiguous_inputs(
+    with_edge_type: bool,
+) -> None:
     src = torch.randn(7, 6, device="cuda")
     index = torch.tensor([0, -1, 1, -1, 2, -1], device="cuda")
     edge_attr = torch.randn(3, 6, device="cuda")
     offsets = torch.tensor([0, -1, 2, -1, 3, -1], device="cuda")
+    edge_type = (
+        torch.tensor([0, -1, 2, -1, 1, -1], device="cuda")
+        if with_edge_type
+        else None
+    )
     module = importlib.import_module(
         "sdm._kernels.triton.segment_multi_reduce"
     )
 
-    with pytest.raises(ValueError, match="must be contiguous"):
-        module.segment_multi_reduce(
-            src=src[:, ::2],
-            index=index[::2].contiguous(),
-            edge_attr=edge_attr[:, ::2].contiguous(),
-            offsets=offsets[::2].contiguous(),
-        )
+    actual = module.segment_multi_reduce(
+        src=src[:, ::2],
+        index=index[::2],
+        edge_attr=edge_attr[:, ::2],
+        offsets=offsets[::2],
+        edge_type=None if edge_type is None else edge_type[::2],
+    )
 
-    with pytest.raises(ValueError, match="must be contiguous"):
-        module.segment_multi_reduce(
-            src=src[:, ::2].contiguous(),
-            index=index[::2],
-            edge_attr=edge_attr[:, ::2].contiguous(),
-            offsets=offsets[::2].contiguous(),
-        )
+    expected = module.segment_multi_reduce(
+        src=src[:, ::2].contiguous(),
+        index=index[::2].contiguous(),
+        edge_attr=edge_attr[:, ::2].contiguous(),
+        offsets=offsets[::2].contiguous(),
+        edge_type=None if edge_type is None else edge_type[::2].contiguous(),
+    )
 
-    with pytest.raises(ValueError, match="must be contiguous"):
-        module.segment_multi_reduce(
-            src=src[:, ::2].contiguous(),
-            index=index[::2].contiguous(),
-            edge_attr=edge_attr[:, ::2],
-            offsets=offsets[::2].contiguous(),
-        )
-
-    with pytest.raises(ValueError, match="must be contiguous"):
-        module.segment_multi_reduce(
-            src=src[:, ::2].contiguous(),
-            index=index[::2].contiguous(),
-            edge_attr=edge_attr[:, ::2].contiguous(),
-            offsets=offsets[::2],
-        )
+    torch.testing.assert_close(actual, expected, equal_nan=True)
 
 
 @onlyCUDA

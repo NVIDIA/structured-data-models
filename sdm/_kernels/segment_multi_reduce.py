@@ -100,8 +100,7 @@ def segment_multi_reduce(
         )
     )
     edge_type_is_supported = edge_type is None or (
-        edge_type.is_contiguous()
-        and edge_type.device == src.device
+        edge_type.device == src.device
         and edge_type.dtype in {torch.int32, torch.int64}
     )
     if (
@@ -113,10 +112,6 @@ def segment_multi_reduce(
         and src.is_cuda
         and src.dtype in {torch.float16, torch.bfloat16, torch.float32}
         and edge_attr.dtype == src.dtype
-        and src.is_contiguous()
-        and index.is_contiguous()
-        and edge_attr.is_contiguous()
-        and offsets.is_contiguous()
         and edge_type_is_supported
         and index.device == src.device
         and edge_attr.device == src.device
