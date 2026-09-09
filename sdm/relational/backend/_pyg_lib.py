@@ -47,6 +47,9 @@ class PyGLibRelationalSampler:
 
         self.data = data
         self.time_columns = time_columns
+        self._seed_lookups: dict[
+            tuple[str, str], tuple[Tensor, int, Tensor, Tensor]
+        ] = {}
 
         self._row_dict: dict[tuple[str, str, str], Tensor] = {}
         self._colptr_dict: dict[tuple[str, str, str], Tensor] = {}
@@ -86,27 +89,7 @@ class PyGLibRelationalSampler:
                 f"(got '{task_table.device}')"
             )
 
-        # Resolve entity table node indices:
-        task_index, seed = join_index(
-            left_table=task_table,
-            right_table=self.data.tables[task_link.table],
-            left_keys=task_link.task_columns,
-            right_keys=task_link.table_columns,
-            device=task_table.device,
-        )
-        task_index, perm = task_index.sort()
-        seed = seed[perm]
-
-        expected = torch.arange(
-            task_table.size(-2),
-            dtype=task_index.dtype,
-            device=task_index.device,
-        )
-        if not task_index.equal(expected):
-            raise ValueError(
-                f"Expected each task row to match exactly one row in "
-                f"{task_link.table!r}"
-            )
+        seed = self._resolve_seed(task_table, task_link)
 
         if task_time_column is not None:
             seed_time = task_table[task_time_column].datetime.squeeze(-1)
@@ -148,6 +131,92 @@ class PyGLibRelationalSampler:
             for table_name, node in node_dict.items()
             if node.numel() > 0
         }
+
+    def _resolve_seed(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink,
+    ) -> Tensor:
+        seed = self._resolve_integer_seed(task_table, task_link)
+        if seed is not None:
+            return seed
+
+        task_index, seed = join_index(
+            left_table=task_table,
+            right_table=self.data.tables[task_link.table],
+            left_keys=task_link.task_columns,
+            right_keys=task_link.table_columns,
+            device=task_table.device,
+        )
+        task_index, perm = task_index.sort()
+        seed = seed[perm]
+
+        expected = torch.arange(
+            task_table.size(-2),
+            dtype=task_index.dtype,
+            device=task_index.device,
+        )
+        if not task_index.equal(expected):
+            raise ValueError(
+                f"Expected each task row to match exactly one row in "
+                f"{task_link.table!r}"
+            )
+
+        return seed
+
+    def _resolve_integer_seed(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink,
+    ) -> Tensor | None:
+        if len(task_link.task_columns) != 1:
+            return None
+
+        task_value = task_table[task_link.task_columns[0]].id[..., 0]
+        table_value = self.data.tables[task_link.table][
+            task_link.table_columns[0]
+        ].id[..., 0]
+        # Other key types retain the general join's semantics.
+        # Inference tensors have no version counter for cache invalidation.
+        if (
+            type(task_value) is not Tensor
+            or type(table_value) is not Tensor
+            or task_value.dtype != table_value.dtype
+            or table_value.dtype
+            not in {
+                torch.uint8,
+                torch.int8,
+                torch.int16,
+                torch.int32,
+                torch.int64,
+            }
+            or table_value.is_inference()
+        ):
+            return None
+
+        key = (task_link.table, task_link.table_columns[0])
+        lookup = self._seed_lookups.get(key)
+        if lookup is None or not (
+            lookup[0]._version == lookup[1] == table_value._version
+            and lookup[0].data_ptr() == table_value.data_ptr()
+            and lookup[0].dtype == table_value.dtype
+            and lookup[0].size() == table_value.size()
+            and lookup[0].stride() == table_value.stride()
+        ):
+            value, row = table_value.sort()
+            lookup = (table_value, table_value._version, value, row)
+            self._seed_lookups[key] = lookup
+        _, _, value, row = lookup
+
+        task_value = task_value.contiguous()
+        lower = torch.searchsorted(value, task_value)
+        upper = torch.searchsorted(value, task_value, right=True)
+        if not torch.all((upper - lower) == 1):
+            raise ValueError(
+                f"Expected each task row to match exactly one row in "
+                f"{task_link.table!r}"
+            )
+        return row[lower]
 
 
 def _to_csc(
