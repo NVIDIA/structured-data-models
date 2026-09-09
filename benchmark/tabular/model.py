@@ -49,6 +49,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             self.default_num_estimators,
         )
         self._set_default_param_value("max_context_size", None)
+        self._set_default_param_value("max_columns", None)
 
     def _fit(
         self,
@@ -115,6 +116,13 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             num_estimators = None
         self._expand_query = num_estimators is None
 
+        recipe = None
+        max_columns = params["max_columns"]
+        if max_columns is not None:
+            if not isinstance(self.model, sdm.models.KumoTabular):
+                raise ValueError("'max_columns' requires KumoTabular")
+            recipe = self.model.default_recipe(max_columns=max_columns)
+
         with torch.amp.autocast(
             self._device.type,
             self.autocast_dtype,
@@ -123,6 +131,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             self.model.fit(
                 x=x_context,
                 y=y_context,
+                recipe=recipe,
                 num_estimators=num_estimators,
                 generator=generator,
             )
