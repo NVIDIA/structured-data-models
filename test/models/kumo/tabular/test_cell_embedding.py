@@ -103,3 +103,46 @@ def test_fourier_nan_indicator_is_additive() -> None:
     out = module(missing, categorical_mask, train_size=2)
     expected = module(observed, categorical_mask, train_size=2)
     torch.testing.assert_close(out[-1] - expected[-1], torch.full((1, 4), 3.0))
+
+
+@withCUDA
+def test_fourier_nan_indicator_uses_impute_mean(device: torch.device) -> None:
+    module = FourierNanIndicatorCellEmbedding(
+        channels=8,
+        group_size=3,
+        num_frequencies=2,
+        device=device,
+    )
+    x = torch.tensor(
+        [
+            [1.0, float("nan"), float("nan")],
+            [3.0, 10.0, float("nan")],
+        ],
+        device=device,
+    )
+    categorical_mask = torch.zeros(3, dtype=torch.bool, device=device)
+    impute_mean = torch.tensor([[2.0, 10.0, 0.0]], device=device)
+    with torch.no_grad():
+        module.nan_lin.weight.zero_()
+
+    out = module(x, categorical_mask, impute_mean=impute_mean)
+
+    finite = x.clone()
+    finite[0, 1] = 10.0
+    finite[0, 2] = 0.0
+    finite[1, 2] = 0.0
+    expected = CellEmbedding(
+        channels=8,
+        group_size=3,
+        num_frequencies=2,
+        device=device,
+    )
+    expected.load_state_dict(
+        {
+            key: value
+            for key, value in module.state_dict().items()
+            if key in expected.state_dict()
+        },
+        strict=False,
+    )
+    torch.testing.assert_close(out, expected(finite, categorical_mask))

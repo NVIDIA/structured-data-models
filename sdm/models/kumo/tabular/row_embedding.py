@@ -8,7 +8,9 @@ from torch.nn import Embedding, Linear, ModuleList, Parameter, RMSNorm
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.models.tabfm.cell_embedding import CellEmbedding
+from sdm.models.kumo.tabular.cell_embedding import (
+    FourierNanIndicatorCellEmbedding,
+)
 from sdm.nn import (
     GatedLogScale,
     InducedTransformerBlock,
@@ -28,7 +30,6 @@ class RowEmbedding(torch.nn.Module):
         num_frequencies: int,
         num_inducing_points: int,
         num_readout_tokens: int,
-        row_log_scale: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -36,7 +37,7 @@ class RowEmbedding(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.channels = channels
 
-        self.cell_embedding = CellEmbedding(
+        self.cell_embedding = FourierNanIndicatorCellEmbedding(
             channels=channels,
             group_size=group_size,
             num_frequencies=num_frequencies,
@@ -96,9 +97,7 @@ class RowEmbedding(torch.nn.Module):
                     num_heads=num_heads,
                     hidden_channels=64,
                     **factory_kwargs,
-                )
-                if row_log_scale
-                else None,
+                ),
                 rope=rope,
                 **factory_kwargs,
             )
@@ -120,9 +119,29 @@ class RowEmbedding(torch.nn.Module):
         K = self.readout_token.size(-2)
         D = self.channels
 
+        if cache is not None and cache.is_replaying:
+            impute_mean = cast(Tensor, cache["cell_impute_mean"])
+        else:
+            context = x[..., :R_train, :] if R_train > 0 else x
+            missing = context.isnan()
+            observed = ~missing
+            count = observed.sum(dim=-2, keepdim=True).clamp(min=1)
+            mean = (
+                context.float()
+                .masked_fill(~observed, 0.0)
+                .sum(dim=-2, keepdim=True)
+            )
+            impute_mean = (mean / count).to(dtype=x.dtype)
+            if cache is not None and cache.is_recording:
+                cache["cell_impute_mean"] = impute_mean
+
         buffer: Tensor | None = None
         if torch.is_grad_enabled():
-            x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
+            x = self.cell_embedding(
+                x,
+                categorical_mask,
+                impute_mean=impute_mean,
+            )  # [..., R, C, D]
         else:
             buffer = torch.empty(
                 (*B, R, K + C, D),
@@ -137,6 +156,7 @@ class RowEmbedding(torch.nn.Module):
                 categorical_mask,
                 batch_size_limit="auto",
                 out=buffer[..., K:, :],
+                impute_mean=impute_mean,
             )
 
         if y.numel() > 0:

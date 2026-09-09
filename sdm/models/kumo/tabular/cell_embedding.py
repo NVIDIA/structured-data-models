@@ -48,12 +48,13 @@ class FourierNanIndicatorCellEmbedding(CellEmbedding):
             dtype=dtype,
         )
 
-    def forward(  # ty: ignore[invalid-method-override]
+    def forward(
         self,
         x: Tensor,  # [..., R, C]
         categorical_mask: Tensor,  # [..., C]
         *,
-        train_size: int,
+        train_size: int | None = None,
+        impute_mean: Tensor | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor:  # [..., R, C, D]
@@ -62,7 +63,10 @@ class FourierNanIndicatorCellEmbedding(CellEmbedding):
         Args:
             x: Input values with shape ``[..., R, C]``.
             categorical_mask: Categorical column mask with shape ``[..., C]``.
-            train_size: Number of leading context rows used for imputation.
+            train_size: Number of leading context rows used for imputation
+                when ``impute_mean`` is omitted.
+            impute_mean: Optional precomputed column means with shape
+                ``[..., 1, C]`` for query-only cached inference.
             batch_size_limit: Target maximum number of cells per Fourier
                 feature chunk.
             out: Optional preallocated output buffer.
@@ -72,13 +76,20 @@ class FourierNanIndicatorCellEmbedding(CellEmbedding):
         """
         missing = x.isnan()
 
-        # Impute from observed context rows only, with fp32 statistics.
-        train = x[..., :train_size, :].to(torch.float32)
-        observed = ~missing[..., :train_size, :]
-        count = observed.sum(dim=-2, keepdim=True).clamp(min=1)
-        mean = train.masked_fill(~observed, 0.0).sum(dim=-2, keepdim=True)
-        mean = mean / count
-        x = torch.where(missing, mean.to(x.dtype), x)
+        if impute_mean is None:
+            if train_size is None:
+                raise ValueError(
+                    "FourierNanIndicatorCellEmbedding requires train_size "
+                    "or impute_mean"
+                )
+            # Impute from observed context rows only, with fp32 statistics.
+            train = x[..., :train_size, :].to(torch.float32)
+            observed = ~missing[..., :train_size, :]
+            count = observed.sum(dim=-2, keepdim=True).clamp(min=1)
+            mean = train.masked_fill(~observed, 0.0).sum(dim=-2, keepdim=True)
+            impute_mean = (mean / count).to(x.dtype)
+
+        x = torch.where(missing, impute_mean.to(x.dtype), x)
 
         result = super().forward(
             x,
