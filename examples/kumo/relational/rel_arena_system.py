@@ -9,7 +9,13 @@ rel_arena_search_space.py policy as the model.
 Run one task from the repository root, after the setup in README.relarena.md::
 
     python -m examples.kumo.relational.rel_arena_system \
-        --datasets rel-f1 --tasks driver-position --output system-results.csv
+        --datasets rel-f1 --tasks driver-position \
+        --search-space examples/kumo/relational/rel_arena_search_space.py \
+        --output system-results.csv
+
+--search-space is optional; omit it to use the bundled policy. Custom Python
+files must export SEARCH_SPACE with a fixed_grid; this system evaluates every
+entry. Loading executes the file, so use only trusted files.
 
 The CLI uses full validation. To choose a validation subset, call Python::
 
@@ -57,7 +63,10 @@ from dataclasses import replace
 
 import numpy as np
 from examples.kumo.relational.rel_arena import KumoPredictor
-from examples.kumo.relational.rel_arena_search_space import SEARCH_SPACE
+from examples.kumo.relational.rel_arena_search_space import (
+    SEARCH_SPACE,
+    parse_search_space,
+)
 from relarena.dataset import InnerSplit, OuterSplit, concat_tables
 from relarena.metrics import primary_metric
 from relarena.registry import register_system
@@ -189,4 +198,5 @@ class KumoSystem(RelArenaSystem):
 if __name__ == "__main__":
     from relarena.cli import main
 
-    raise SystemExit(main(["--model", KumoSystem.name, *sys.argv[1:]]))
+    SEARCH_SPACE, arguments = parse_search_space(sys.argv[1:])
+    raise SystemExit(main(["--model", KumoSystem.name, *arguments]))

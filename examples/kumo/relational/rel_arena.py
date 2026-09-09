@@ -4,6 +4,7 @@ Run one task from the repository root, after the setup in README.relarena.md::
 
     python -m examples.kumo.relational.rel_arena \
         --datasets rel-f1 --tasks driver-position --n-trials 2 \
+        --search-space examples/kumo/relational/rel_arena_search_space.py \
         --output model-results.csv
 
 Or call the same official runner from Python::
@@ -31,6 +32,8 @@ separately on each training context in both cases.
 rel_arena_search_space.py compares text OFF against context-fitted PCA32, with
 all other parameters fixed across tasks. The system uses the same candidates.
 Complete runtime has not been certified.
+--search-space is optional; omit it to use the bundled policy. A custom Python
+file must export SEARCH_SPACE and is executed, so use only trusted files.
 RelArena scores every candidate on full validation, then refits and scores the
 winner and default on TEST. The complete per-task budget includes preprocessing
 and all trials/refits; a per-trial time limit is not a whole-task limit.
@@ -52,6 +55,7 @@ from examples.kumo.relational._relarena.text import ContextPCA, QwenDocuments
 from examples.kumo.relational.rel_arena_search_space import (
     DEFAULT,
     SEARCH_SPACE,
+    parse_search_space,
 )
 from relarena.model import RelArenaModel
 from relarena.registry import register_model
@@ -547,4 +551,6 @@ KumoModel = register_model(search_space=SEARCH_SPACE)(KumoPredictor)
 if __name__ == "__main__":
     from relarena.cli import main
 
-    raise SystemExit(main(["--model", KumoModel.name, *sys.argv[1:]]))
+    search_space, arguments = parse_search_space(sys.argv[1:])
+    register_model(search_space=search_space)(KumoModel)
+    raise SystemExit(main(["--model", KumoModel.name, *arguments]))
