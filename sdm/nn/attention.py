@@ -137,6 +137,10 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
+        enable_gqa = False
+        if query.size(-2) != key.size(-2):
+            enable_gqa = True
+
         out = F.scaled_dot_product_attention(
             query=query.transpose(-3, -2),  # [B, Hq, Q, C],
             key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
@@ -144,7 +148,7 @@ class SDPA(torch.nn.Module):
             attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
             if attn_mask is not None
             else None,
-            enable_gqa=self.num_query_heads != self.num_key_value_heads,
+            enable_gqa=enable_gqa,
             scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
 
