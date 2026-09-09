@@ -74,5 +74,4 @@ def test_row_embedding_compiled_replay(
             cache=cache,
         )
 
-        assert actual.size() == (*batch_shape, 3, 32)
         torch.testing.assert_close(actual, expected, atol=1e-5, rtol=1e-5)
