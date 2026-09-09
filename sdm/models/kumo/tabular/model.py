@@ -48,14 +48,15 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 
 
 class KumoTabular(ICLModel):
-    """KumoTabular in-context model for classification and regression.
+    """Kumo Tabular, a foundation model for classification and regression.
 
     Args:
-        task: Tasks to initialize. If ``None``, initialize every supported
-            task.
-        size: Model architecture size.
-        pretrained: Whether to load the published KumoTabular weights.
-        device: Device on which to initialize the model.
+        task: The tasks to initialize. If ``None``, both classification and
+            regression are initialized.
+        size: The model size, either ``"small"`` or ``"large"`` (default).
+        pretrained: Whether to load pretrained checkpoints.
+        device: The device for model parameters. If ``None``, uses PyTorch's
+            default device.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
