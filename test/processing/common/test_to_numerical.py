@@ -79,3 +79,10 @@ def test_to_numerical_converts_categorical_only_table() -> None:
         output.numerical,
         table.categorical.code.to(table.numerical.dtype),
     )
+
+
+def test_to_numerical_missing_as_nan() -> None:
+    output = ToNumerical(missing_as_nan=True).transform(_table())
+
+    assert output.numerical[1, 2].isnan()
+    assert output.numerical[1, 3] == 0.0

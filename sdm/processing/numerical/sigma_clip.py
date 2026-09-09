@@ -5,13 +5,18 @@ from sdm import Stype, TableTensor
 from sdm.processing import Processor
 
 
-def _std(
+def _finite_std(
     inp: Tensor,
-    *,
-    dim: int,
+    finite: Tensor,
+    mean: Tensor,
 ) -> Tensor:
-    correction = 1 if inp.size(dim) > 1 else 0
-    return inp.std(dim=dim, correction=correction, keepdim=True)
+    count = finite.sum(dim=-2, keepdim=True)
+    correction = (count > 1).to(dtype=inp.dtype)
+    centered = torch.where(finite, inp - mean, 0.0)
+    return (
+        centered.square().sum(dim=-2, keepdim=True)
+        / (count - correction).clamp_min(1)
+    ).sqrt()
 
 
 class ClipSigma(Processor):
@@ -19,7 +24,8 @@ class ClipSigma(Processor):
 
     The first pass masks values outside the initial z-score bounds, then the
     second pass refits bounds on the remaining values. The transform applies
-    logarithmic soft clipping instead of hard truncation.
+    logarithmic soft clipping instead of hard truncation. NaN values are
+    ignored when fitting and preserved during the transform.
 
     Args:
         threshold: Positive z-score multiplier setting how many standard
@@ -51,20 +57,18 @@ class ClipSigma(Processor):
     ) -> None:
         numerical = table.numerical
         min_std = numerical.new_tensor(1e-6)
-
-        mean = numerical.mean(dim=-2, keepdim=True)
-        std = torch.maximum(
-            _std(
-                numerical,
-                dim=-2,
-            ),
-            min_std,
-        )
+        finite = numerical.isfinite()
+        safe = numerical.masked_fill(~finite, float("nan"))
+        mean = safe.nanmean(dim=-2, keepdim=True)
+        mean = torch.where(mean.isnan(), torch.zeros_like(mean), mean)
+        std = torch.maximum(_finite_std(numerical, finite, mean), min_std)
         lower_bound = mean - self.threshold * std
         upper_bound = mean + self.threshold * std
-        outlier_mask = (numerical < lower_bound) | (numerical > upper_bound)
+        outlier_mask = finite & (
+            (numerical < lower_bound) | (numerical > upper_bound)
+        )
 
-        keep = ~outlier_mask
+        keep = finite & ~outlier_mask
         count = keep.sum(dim=-2, keepdim=True)
         safe_count = count.clamp_min(1)
         clean_sum = torch.where(

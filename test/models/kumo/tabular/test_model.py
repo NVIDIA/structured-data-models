@@ -9,7 +9,10 @@ from sdm.models.kumo.tabular import KumoTabular
 
 
 def _build(task: Literal["classification", "regression"]) -> KumoTabular:
-    model = KumoTabular(task=task, pretrained=False)
+    model = KumoTabular(
+        task=task,
+        pretrained=False,
+    )
     # Residual branches are zero-initialized, so an untrained model maps every
     # row onto the same constant. Randomize them to make the prediction depend
     # on the features it is given.
@@ -144,3 +147,33 @@ def test_fit_predict(
         atol=1e-4,
         rtol=1e-4,
     )
+
+
+def test_missing_values_pass_through_fit_predict() -> None:
+    model = _build("regression")
+    x_context = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [100.0, float("inf")],
+                [float("nan"), 201.0],
+                [102.0, 202.0],
+            ]
+        )
+    )
+    x_query = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [float("nan"), 203.0],
+                [104.0, float("-inf")],
+            ]
+        )
+    )
+    target = _reg_target()
+
+    direct = model(x_context, target, x_query)
+    model.fit(x_context, target)
+    cached = model.predict(x_query)
+
+    assert direct.numerical.isfinite().all()
+    assert cached.numerical.isfinite().all()
+    assert cached.shape == direct.shape

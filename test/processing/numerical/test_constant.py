@@ -140,3 +140,23 @@ def test_drop_constant_columns_requires_fitted_member_count() -> None:
         processor.transform_ensemble(
             EnsembleTable.from_table(table, num_members=1)
         )
+
+
+@withCUDA
+def test_drop_constant_columns_ignores_nan_for_uniqueness(
+    device: torch.device,
+) -> None:
+    table = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [1.0, 1.0, float("nan")],
+                [1.0, 2.0, float("nan")],
+                [float("nan"), 2.0, float("nan")],
+            ],
+            device=device,
+        )
+    )
+
+    output = DropConstantColumns().fit_transform(table)
+
+    assert output.columns[Stype.numerical] == ("1",)

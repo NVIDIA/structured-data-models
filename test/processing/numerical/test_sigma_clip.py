@@ -114,3 +114,25 @@ def test_clip_sigma_fits_leading_batches_independently(
             device=device,
         ),
     )
+
+
+@withCUDA
+def test_clip_sigma_preserves_nan(device: torch.device) -> None:
+    inp = torch.tensor(
+        [
+            [0.0, float("nan")],
+            [1.0, 10.0],
+            [2.0, 12.0],
+            [100.0, 14.0],
+        ],
+        device=device,
+    )
+
+    transformed = (
+        ClipSigma(threshold=1.0)
+        .fit_transform(TableTensor.from_tensor(inp))
+        .numerical
+    )
+
+    assert torch.equal(transformed.isnan(), inp.isnan())
+    assert transformed[~inp.isnan()].isfinite().all()
