@@ -206,6 +206,31 @@ def test_adapter_fits_each_group_separately() -> None:
     assert output.table(2).equal(output.table(0))
 
 
+def test_adapter_reuses_shared_state_for_separate_query_groups() -> None:
+    context = EnsembleTable.from_table(
+        TableTensor.from_tensor(torch.tensor([[1.0], [3.0]])),
+        num_members=2,
+    )
+    query = EnsembleTable.from_tables(
+        tables=(
+            TableTensor.from_tensor(torch.tensor([[4.0], [6.0]])),
+            TableTensor.from_tensor(torch.tensor([[10.0], [20.0], [30.0]])),
+        ),
+        member_table_ids=(0, 1),
+    )
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+
+    processor.fit_ensemble(context)
+    output = processor.transform_ensemble(query)
+
+    assert output.table(0).numerical.tolist() == [[2.0], [4.0]]
+    assert output.table(1).numerical.tolist() == [
+        [8.0],
+        [18.0],
+        [28.0],
+    ]
+
+
 def test_adapter_inverse_restores_input() -> None:
     ensemble_table = _two_group_ensemble_table()
     processor = EnsembleProcessorAdapter(Standardize(with_std=False))

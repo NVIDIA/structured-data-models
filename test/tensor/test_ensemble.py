@@ -22,7 +22,7 @@ def test_shared_member_table() -> None:
         assert ensemble_table.table(member_id).equal(data)
 
 
-def test_from_tables_stacks_compatible_schemas() -> None:
+def test_from_tables_keeps_tables_separate() -> None:
     first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0]]))
 
@@ -32,46 +32,12 @@ def test_from_tables_stacks_compatible_schemas() -> None:
     )
 
     groups = tuple(ensemble_table)
-    assert len(groups) == 1
-    assert groups[0].size() == (2, 2, 1)
+    assert len(groups) == 2
+    assert all(group.size() == (1, 2, 1) for group in groups)
     assert ensemble_table.table(0).equal(first)
     assert ensemble_table.table(1).equal(second)
     assert ensemble_table.table(2).equal(first)
     assert ensemble_table.table(3).equal(second)
-
-
-def test_from_tables_separates_incompatible_schemas() -> None:
-    first = TableTensor.from_tensor(
-        tensor=torch.tensor([[1.0], [2.0]]),
-        columns=("first",),
-    )
-    second = TableTensor.from_tensor(
-        tensor=torch.tensor([[3.0], [4.0]]),
-        columns=("second",),
-    )
-
-    ensemble_table = EnsembleTable.from_tables(
-        tables=(first, second),
-        member_table_ids=(0, 1),
-    )
-
-    assert len(tuple(ensemble_table)) == 2
-    assert ensemble_table.table(0).columns == first.columns
-    assert ensemble_table.table(1).columns == second.columns
-
-
-def test_from_tables_separates_incompatible_block_sizes() -> None:
-    first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0], [5.0]]))
-
-    ensemble_table = EnsembleTable.from_tables(
-        tables=(first, second),
-        member_table_ids=(0, 1),
-    )
-
-    assert len(tuple(ensemble_table)) == 2
-    assert ensemble_table.table(0).size() == (2, 1)
-    assert ensemble_table.table(1).size() == (3, 1)
 
 
 def test_from_tables_ignores_unused_tables() -> None:
@@ -167,8 +133,7 @@ def test_select_members_preserves_groups_and_order() -> None:
     output = ensemble_table.select_members((1, 3, 0))
 
     assert output.num_members == 3
-    assert output.num_groups == 1
-    assert next(iter(output)).size(0) == 2
+    assert output.num_groups == 2
     assert output.table(0).equal(tables[0])
     assert output.table(1).equal(tables[2])
     assert output.table(2).equal(tables[2])
@@ -260,17 +225,3 @@ def test_concatenate_columns_rejects_different_member_counts() -> None:
                 EnsembleTable.from_table(table, num_members=3),
             )
         )
-
-
-def test_from_tables_separates_incompatible_layouts() -> None:
-    dense = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    with torch.sparse.check_sparse_tensor_invariants():
-        sparse = TableTensor.from_tensor(
-            tensor=torch.tensor([[3.0], [4.0]]).to_sparse()
-        )
-        ensemble_table = EnsembleTable.from_tables(
-            tables=(dense, sparse),
-            member_table_ids=(0, 1),
-        )
-
-    assert len(tuple(ensemble_table)) == 2

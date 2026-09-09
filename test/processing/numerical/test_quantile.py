@@ -235,6 +235,7 @@ def test_quantile_transform_adapter_matches_grouped_tables(
     expected_contexts = []
     expected_queries = []
     expected_restored = []
+    expected_generator = torch.Generator(device=device).manual_seed(7)
     for context_table, query_table in zip(contexts, queries, strict=True):
         reference = QuantileTransform(
             n_quantiles=8,
@@ -242,7 +243,7 @@ def test_quantile_transform_adapter_matches_grouped_tables(
         )
         expected_context = reference.fit_transform(
             context_table,
-            generator=torch.Generator(device=device).manual_seed(7),
+            generator=expected_generator,
         )
         expected_contexts.append(expected_context)
         expected_queries.append(reference.transform(query_table))
