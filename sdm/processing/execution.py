@@ -206,7 +206,7 @@ class RecipeExecution:
         for i, (group_id, position) in enumerate(self._y_locations):
             groups[group_id][position] = outputs[i]
 
-        table = EnsembleTable._from_groups(
+        table = EnsembleTable(
             groups=[
                 cast(
                     TableTensor,
@@ -275,7 +275,7 @@ def _to_ensemble_table(
             for i, _ in x._locations:
                 locations.append((i, next_pos[i]))
                 next_pos[i] += 1
-            x = EnsembleTable._from_groups(groups, locations)
+            x = EnsembleTable(groups=groups, locations=locations)
         if x.num_members < 1:
             raise ValueError("'num_estimators' needs to be positive")
         return x
@@ -286,7 +286,7 @@ def _to_ensemble_table(
     # Treat leading dimension as ensemble dimension:
     if x.dim() > 2 and num_estimators is None:
         locations = tuple((0, i) for i in range(x.size(0)))
-        x = EnsembleTable._from_groups((x,), locations)
+        x = EnsembleTable(groups=(x,), locations=locations)
         if x.num_members < 1:
             raise ValueError("'num_estimators' needs to be positive")
         return x
@@ -305,4 +305,4 @@ def _to_ensemble_table(
     else:
         locations = tuple((0, i) for i in range(num_estimators))
 
-    return EnsembleTable._from_groups((cast(TableTensor, x),), locations)
+    return EnsembleTable(groups=(cast(TableTensor, x),), locations=locations)

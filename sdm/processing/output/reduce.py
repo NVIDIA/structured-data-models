@@ -108,7 +108,7 @@ class ReduceEstimators(EnsembleProcessor):
         output = reference.replace_blocks(
             numerical=total / ensemble_table.num_members
         )
-        return EnsembleTable(output, num_members=1)
+        return EnsembleTable.from_table(output, num_members=1)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         if table.dim() < 3:
