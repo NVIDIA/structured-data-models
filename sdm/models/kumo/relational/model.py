@@ -478,8 +478,7 @@ class _KumoRelational(torch.nn.Module):
             assert x_context is not None
             assert x_query is not None
             x = torch.cat([x_context, x_query], dim=-2)
-            del x_context
-            del x_query
+            del x_context, x_query
         return self.icl_block(
             x=x,
             y=y,

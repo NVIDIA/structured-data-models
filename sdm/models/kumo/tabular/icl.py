@@ -94,6 +94,7 @@ class ICLBlock(torch.nn.Module):
                         key = key[..., : self.kv_heads, :].contiguous()
                         value = value[..., : self.kv_heads, :].contiguous()
                     cache[cache_key] = KVCacheEntry(key, value)
+                    del key, value
                 else:
                     x = result
                 del result

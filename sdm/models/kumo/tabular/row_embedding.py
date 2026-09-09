@@ -145,7 +145,7 @@ class RowEmbedding(torch.nn.Module):
                     readout_token = self.readout_token
                     readout_token = readout_token.view(*(1,) * len(B), 1, K, D)
                     readout_token = readout_token.expand(*B, R, K, D)
-                x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
+                x = x.transpose(-2, -3)  # [..., C, R, D]
 
             key = f"row_embedding.col_block{i}"
             result = col_block(
@@ -169,7 +169,8 @@ class RowEmbedding(torch.nn.Module):
 
             if buffer is None:
                 x = torch.cat(
-                    [readout_token.to(x.dtype), x.transpose(-2, -3)], -2
+                    [readout_token.to(x.dtype), x.transpose(-2, -3)],
+                    dim=-2,
                 )
                 x = row_block(
                     query=x[..., :K, :]
