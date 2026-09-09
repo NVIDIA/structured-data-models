@@ -138,6 +138,8 @@ class KumoRelational(ICLModel):
             model are initialized.
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+        max_keys: Maximum rows used as keys by each table's row embedding.
+            Defaults to ``20_000``. If ``None``, all eligible rows are used.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -154,6 +156,8 @@ class KumoRelational(ICLModel):
         task: TaskLike | Iterable[TaskLike] | None = None,
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        *,
+        max_keys: int | None = 20_000,
     ) -> None:
         super().__init__(task=task)
 
@@ -163,6 +167,7 @@ class KumoRelational(ICLModel):
                 num_classes=10 if task == Task.classification else 0,
                 num_quantiles=999 if task == Task.regression else 0,
                 norm_bias=task == Task.classification,
+                max_train_size=max_keys,
                 device="meta" if pretrained else device,
             )
 
@@ -258,7 +263,7 @@ class _KumoRelational(torch.nn.Module):
         num_icl_layers: int = 12,
         num_icl_heads: int = 8,
         norm_bias: bool = True,
-        max_train_size: int = 20_000,
+        max_train_size: int | None = 20_000,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
