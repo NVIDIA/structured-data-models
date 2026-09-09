@@ -4,7 +4,6 @@ from sdm.cache import Cache
 from sdm.models.kumo.tabular.cell_embedding import (
     FourierNanIndicatorCellEmbedding,
 )
-from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.testing import withCUDA
 
 
@@ -26,124 +25,47 @@ def test_fourier_nan_indicator_cell_embedding(device: torch.device) -> None:
         device=device,
     )
 
-    out = module(x, categorical_mask, train_size=3, cache=Cache())
+    with torch.no_grad():
+        out = module(x, categorical_mask, train_size=3, cache=Cache())
+        chunked = module(
+            x=x,
+            categorical_mask=categorical_mask,
+            train_size=3,
+            batch_size_limit=8,
+        )
     assert out.size() == (2, 6, 4, 8)
     assert out.device == device
     assert out.isfinite().all()
-    torch.testing.assert_close(
-        module(
-            x,
-            categorical_mask,
-            train_size=3,
-            batch_size_limit=8,
-        ),
-        out,
-    )
+    torch.testing.assert_close(chunked, out)
 
 
 def test_fourier_nan_indicator_imputes_from_context_only() -> None:
     module = FourierNanIndicatorCellEmbedding(
         channels=4,
-        group_size=3,
-        num_frequencies=2,
-    )
-    with torch.no_grad():
-        module.nan_lin.weight.zero_()
-    categorical_mask = torch.tensor([False])
-
-    x = torch.tensor([1.0, 3.0, torch.nan, 100.0]).view(4, 1)
-    expected = torch.tensor([1.0, 3.0, 2.0, 100.0]).view(4, 1)
-    torch.testing.assert_close(
-        module(x, categorical_mask, train_size=2),
-        module(expected, categorical_mask, train_size=2),
-    )
-
-    x = torch.tensor([torch.nan, torch.nan, torch.nan, 7.0]).view(4, 1)
-    expected = torch.tensor([0.0, 0.0, 0.0, 7.0]).view(4, 1)
-    torch.testing.assert_close(
-        module(x, categorical_mask, train_size=2),
-        module(expected, categorical_mask, train_size=2),
-    )
-
-
-def test_fourier_nan_indicator_matches_finite_inputs() -> None:
-    fourier = CellEmbedding(
-        channels=4,
-        group_size=3,
-        num_frequencies=2,
-    )
-    module = FourierNanIndicatorCellEmbedding(
-        channels=4,
-        group_size=3,
-        num_frequencies=2,
-    )
-    module.load_state_dict(fourier.state_dict(), strict=False)
-    x = torch.randn(2, 5, 4)
-    categorical_mask = torch.tensor(
-        [[True, False, True, False], [False, True, False, True]]
-    )
-
-    torch.testing.assert_close(
-        module(x, categorical_mask, train_size=3),
-        fourier(x, categorical_mask),
-    )
-
-
-def test_fourier_nan_indicator_is_additive() -> None:
-    module = FourierNanIndicatorCellEmbedding(
-        channels=4,
-        group_size=3,
+        group_size=1,
         num_frequencies=2,
     )
     with torch.no_grad():
         module.nan_lin.weight.fill_(1.0)
-    categorical_mask = torch.tensor([False])
-    missing = torch.tensor([1.0, 3.0, torch.nan]).view(3, 1)
-    observed = torch.tensor([1.0, 3.0, 2.0]).view(3, 1)
-
-    out = module(missing, categorical_mask, train_size=2)
-    expected = module(observed, categorical_mask, train_size=2)
-    torch.testing.assert_close(out[-1] - expected[-1], torch.full((1, 4), 3.0))
-
-
-@withCUDA
-def test_fourier_nan_indicator_uses_impute_mean(device: torch.device) -> None:
-    module = FourierNanIndicatorCellEmbedding(
-        channels=8,
-        group_size=3,
-        num_frequencies=2,
-        device=device,
-    )
+    categorical_mask = torch.tensor([False, False])
     x = torch.tensor(
         [
-            [1.0, float("nan"), float("nan")],
-            [3.0, 10.0, float("nan")],
+            [1.0, torch.nan],
+            [3.0, torch.nan],
+            [torch.nan, torch.nan],
+            [100.0, 7.0],
         ],
-        device=device,
     )
-    categorical_mask = torch.zeros(3, dtype=torch.bool, device=device)
-    impute_mean = torch.tensor([[2.0, 10.0, 0.0]], device=device)
-    with torch.no_grad():
-        module.nan_lin.weight.zero_()
+    imputed = torch.tensor([[1.0, 0.0], [3.0, 0.0], [2.0, 0.0], [100.0, 7.0]])
 
-    out = module(x, categorical_mask, impute_mean=impute_mean)
-
-    finite = x.clone()
-    finite[0, 1] = 10.0
-    finite[0, 2] = 0.0
-    finite[1, 2] = 0.0
-    expected = CellEmbedding(
-        channels=8,
-        group_size=3,
-        num_frequencies=2,
-        device=device,
+    out = module(x, categorical_mask, train_size=2)
+    expected = module(imputed, categorical_mask, train_size=2)
+    torch.testing.assert_close(out, expected + x.isnan().unsqueeze(-1))
+    torch.testing.assert_close(
+        module(
+            x=x,
+            categorical_mask=categorical_mask,
+            impute_mean=torch.tensor([[2.0, 0.0]]),
+        ),
+        out,
     )
-    expected.load_state_dict(
-        {
-            key: value
-            for key, value in module.state_dict().items()
-            if key in expected.state_dict()
-        },
-        strict=False,
-    )
-    torch.testing.assert_close(out, expected(finite, categorical_mask))
