@@ -176,9 +176,7 @@ class RowEmbedding(torch.nn.Module):
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit="auto",
-                out=None
-                if torch.is_grad_enabled() or torch.compiler.is_compiling()
-                else x,
+                out=None if torch.is_grad_enabled() else x,
             )  # [..., C, R, D]
             del key_value
 
@@ -214,7 +212,7 @@ class RowEmbedding(torch.nn.Module):
                 key_value=x,  # [..., R, K + C, D]
                 batch_size_limit="auto",
                 out=None
-                if torch.is_grad_enabled() or torch.compiler.is_compiling()
+                if torch.is_grad_enabled()
                 else x[..., :K, :]
                 if i == len(self.row_layers) - 1
                 else x,

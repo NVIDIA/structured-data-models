@@ -640,8 +640,7 @@ class TransformerBlock(torch.nn.Module):
                 flat_out = chunk.new_empty((batch_size, *query.size()[-2:]))
                 flat_out[start:end] = chunk
 
-            del chunk
-            del result
+            del chunk, result
 
         if out is None:
             assert flat_out is not None
