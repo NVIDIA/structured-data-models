@@ -37,6 +37,13 @@ class RowEmbedding(torch.nn.Module):
             **factory_kwargs,
         )
 
+        self.cell_embedding = CellEmbedding(
+            channels=channels,
+            group_size=group_size,
+            num_frequencies=num_frequencies,
+            **factory_kwargs,
+        )
+
         self.y_emb: torch.nn.Module | None = None
         self.y_lin: torch.nn.Module | None = None
         if num_classes > 0:
@@ -99,6 +106,9 @@ class RowEmbedding(torch.nn.Module):
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
+        x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
+
+        *B, R, _, D = x.size()
         R_train = y.size(-1)
         K = self.readout_token.size(-2)
 
