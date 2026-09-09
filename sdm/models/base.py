@@ -365,6 +365,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
             for i in range(recipe_execution.num_members)
         ]
         next_cache = caches[0]
+        forward_kwargs = dict(cast(dict[str, Any], self._cache["kwargs"]))
+        if not callbacks:
+            forward_kwargs.update(self._predict_kwargs(x, related_tables))
 
         compute_stream: torch.cuda.Stream | None = None
         transfer_stream: torch.cuda.Stream | None = None
@@ -425,7 +428,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         related_query_tables=query.related_tables,
                         cache=cache,
                         generator=None,
-                        **cast(dict[str, Any], self._cache["kwargs"]),
+                        **forward_kwargs,
                     )
 
                     for callback in callbacks:
@@ -505,6 +508,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
         r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################
+
+    def _predict_kwargs(
+        self,
+        x: Tensor | TableTensor | EnsembleTable,
+        related_tables: RelatedTables | None,
+    ) -> dict[str, Any]:
+        return {}
 
     def _validate_context(
         self,

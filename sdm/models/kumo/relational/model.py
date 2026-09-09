@@ -23,10 +23,12 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.relational.ckpt import remap_ckpt
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.recipe import default_recipe
-from sdm.models.kumo.relational.task import TaskGraph
+from sdm.models.kumo.relational.task import TaskGraph, _QueryGraphCache
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
+from sdm.processing.execution import RecipeExecution
+from sdm.tensor import EnsembleTable
 
 
 class KumoRelational(ICLModel):
@@ -194,6 +196,41 @@ class KumoRelational(ICLModel):
 
         return self
 
+    def _predict_kwargs(
+        self,
+        x: Tensor | TableTensor | EnsembleTable,
+        related_tables: RelatedTables | None,
+    ) -> dict[str, Any]:
+        if related_tables is None or self._cache is None:
+            return {}
+        execution = cast(RecipeExecution, self._cache["recipe_execution"])
+        if execution.num_members == 1:
+            return {}
+        processors = (
+            execution.recipe.features,
+            *(execution._related_processors or {}).values(),
+        )
+        if any(
+            Stype.id in processor.handles_stypes for processor in processors
+        ):
+            return {}
+        id_columns: list[tuple[str, ...]] = []
+        for table in (x, *related_tables.tables.values()):
+            if isinstance(table, EnsembleTable):
+                if len(set(table._locations)) != 1:
+                    return {}
+                table = table.table(0)
+            elif not isinstance(table, TableTensor) or table.dim() != 2:
+                return {}
+            id_columns.append(table.columns[Stype.id])
+        # Preprocessing may copy shared IDs, but must leave them unchanged.
+        return {
+            "query_graph_cache": _QueryGraphCache(
+                task_ids=id_columns[0],
+                table_ids=dict(zip(related_tables.tables, id_columns[1:])),
+            )
+        }
+
     def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
@@ -222,6 +259,7 @@ class KumoRelational(ICLModel):
             cache=cache,
             generator=generator,
             num_hops=kwargs.get("num_hops"),
+            query_graph_cache=kwargs.get("query_graph_cache"),
         )
 
         if classes is None:
@@ -303,6 +341,7 @@ class _KumoRelational(torch.nn.Module):
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
         num_hops: int | None = None,
+        query_graph_cache: _QueryGraphCache | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
         num_classes: int | None = None  # Extract `y` as tensor:
@@ -352,7 +391,12 @@ class _KumoRelational(torch.nn.Module):
                     Sequence[Relationship], cache["relationships"]
                 )
                 num_hops = cast(int, cache["num_hops"])
-            query = TaskGraph.from_input(
+            make_query = (
+                TaskGraph.from_input
+                if query_graph_cache is None
+                else query_graph_cache.from_input
+            )
+            query = make_query(
                 x=x_query,
                 related_tables=RelatedTables[TableTensor](
                     tables=related_query_tables.tables,

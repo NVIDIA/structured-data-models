@@ -1,10 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Self
 
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, TableTensor
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.relational.join import join_index
 
@@ -25,6 +25,8 @@ class TaskGraph:  # noqa: D101
         x: TableTensor,
         related_tables: RelatedTables[TableTensor],
         num_hops: int | None = None,
+        *,
+        graph: HomogeneousGraph | None = None,
     ) -> Self:
 
         if x.dim() != 2:
@@ -41,10 +43,11 @@ class TaskGraph:  # noqa: D101
                 f"(got {len(related_tables.task_links)})"
             )
 
-        graph = HomogeneousGraph.from_tables(
-            tables=related_tables.tables,
-            relationships=related_tables.relationships,
-        )
+        if graph is None:
+            graph = HomogeneousGraph.from_tables(
+                tables=related_tables.tables,
+                relationships=related_tables.relationships,
+            )
         readout_table = related_tables.task_links[0].table
         readout_offset = graph.start_node_offsets[readout_table]
 
@@ -108,3 +111,95 @@ class TaskGraph:  # noqa: D101
             },
             num_hops=propagated_hops if num_hops is None else num_hops,
         )
+
+
+class _QueryGraphCache:
+    """Reuse shared query structure within one predict call."""
+
+    def __init__(
+        self,
+        task_ids: tuple[str, ...],
+        table_ids: dict[str, tuple[str, ...]],
+    ) -> None:
+        self.task_ids = task_ids
+        self.table_ids = table_ids
+        self.graphs: dict[tuple, HomogeneousGraph] = {}
+        self.tasks: dict[tuple, TaskGraph] = {}
+
+    def from_input(
+        self,
+        x: TableTensor,
+        related_tables: RelatedTables[TableTensor],
+        num_hops: int | None,
+    ) -> TaskGraph:
+        tables = related_tables.tables
+        keys = [
+            (table, columns, original_ids)
+            for rel in related_tables.relationships
+            if rel.left_table in tables and rel.right_table in tables
+            for table, columns, original_ids in (
+                (
+                    tables[rel.left_table],
+                    rel.left_columns,
+                    self.table_ids[rel.left_table],
+                ),
+                (
+                    tables[rel.right_table],
+                    rel.right_columns,
+                    self.table_ids[rel.right_table],
+                ),
+            )
+        ]
+        keys.extend(
+            (table, columns, original_ids)
+            for link in related_tables.task_links
+            for table, columns, original_ids in (
+                (x, link.task_columns, self.task_ids),
+                (
+                    tables[link.table],
+                    link.table_columns,
+                    self.table_ids[link.table],
+                ),
+            )
+        )
+        if any(
+            not set(columns).issubset(table.columns[Stype.id])
+            or not set(columns).issubset(original_ids)
+            for table, columns, original_ids in keys
+        ):
+            return TaskGraph.from_input(x, related_tables, num_hops)
+
+        graph_key = (
+            tuple(
+                (
+                    name,
+                    table.size()[:-1],
+                    table.device,
+                    table.columns[Stype.id],
+                )
+                for name, table in tables.items()
+            ),
+            tuple(related_tables.relationships),
+        )
+        task_key = (
+            graph_key,
+            x.size()[:-1],
+            x.columns[Stype.id],
+            tuple(related_tables.task_links),
+            num_hops,
+        )
+        if task_key in self.tasks:
+            return replace(
+                self.tasks[task_key],
+                x=x,
+                related_tables=related_tables,
+            )
+        task = TaskGraph.from_input(
+            x=x,
+            related_tables=related_tables,
+            num_hops=num_hops,
+            graph=self.graphs.get(graph_key),
+        )
+        self.graphs[graph_key] = task.graph
+        self.tasks[task_key] = task
+        return task
