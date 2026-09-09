@@ -54,7 +54,7 @@ repos:
           - mdformat_footnote
 
   - repo: https://github.com/rapidsai/pre-commit-hooks
-    rev: v1.6.0
+    rev: 49d5f7ac8225db3ebd7d0ab3701d6336d3c208ec  # v1.6.0
     hooks:
       - id: verify-copyright
         name: Check copyright headers

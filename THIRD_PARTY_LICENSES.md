@@ -15,7 +15,7 @@ The `sdm/models/tabiclv2/` implementation contains code derived from TabICLv2. K
 
 - Source: https://github.com/google-research/tabfm
 - Code license: Apache License 2.0
-- License terms: [`LICENSE`](LICENSE)
+- License terms: [`sdm/models/tabfm/LICENSE`](sdm/models/tabfm/LICENSE)
 - Optional pretrained weights: https://huggingface.co/google/tabfm-1.0.0-pytorch
 - Weights license: [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE)
 

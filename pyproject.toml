@@ -12,6 +12,7 @@ license = "Apache-2.0"
 license-files = [
     "LICENSE",
     "THIRD_PARTY_LICENSES.md",
+    "sdm/models/tabfm/LICENSE",
     "sdm/models/tabiclv2/LICENSE",
     "sdm/models/kumo/relational/NOTICE",
     "third_party/contributor-covenant/LICENSE",
