@@ -49,8 +49,7 @@ import time
 from dataclasses import replace
 
 import numpy as np
-from examples.kumo.relational._relarena.adapter import KumoPredictor
-from examples.kumo.relational._relarena.search_space import SEARCH_SPACE
+from examples.kumo.relational.rel_arena import SEARCH_SPACE, KumoPredictor
 from relarena.dataset import InnerSplit, OuterSplit, concat_tables
 from relarena.metrics import primary_metric
 from relarena.registry import register_system

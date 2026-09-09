@@ -25,12 +25,12 @@ import argparse
 from pathlib import Path
 
 import torch
-from examples.kumo.relational._relarena.adapter import (
+from examples.kumo.relational._relarena.text import QwenDocuments
+from examples.kumo.relational.rel_arena import (
     TEXT_TABLE_CHUNK_ROWS,
     table_stypes,
     v11_precision,
 )
-from examples.kumo.relational._relarena.text import QwenDocuments
 from relarena.dataset import RelBenchDatasetTask
 
 import sdm
