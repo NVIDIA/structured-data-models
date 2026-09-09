@@ -1,4 +1,4 @@
-# ruff: noqa: D101, D102, A002
+# ruff: noqa: D101, D102, A001, A002
 
 import torch
 from torch import Tensor
@@ -19,13 +19,18 @@ class Linear(torch.nn.Linear):
                 "'out' is only supported when gradients are disabled"
             )
 
+        input = input.to(out.dtype)
         weight = self.weight.to(out.dtype).t()
-        if out.is_contiguous():
-            torch.matmul(input.to(out.dtype), weight, out=out)
+
+        if input.dim() == 2:
+            torch.matmul(input, weight, out=out)
         else:
-            # `torch.matmul` doesn't reliably support a non-contiguous
-            # batched `out=` tensor.
-            out.copy_(torch.matmul(input.to(out.dtype), weight))
+            input = input.view(-1, input.size(-2), input.size(-1))
+            torch.bmm(
+                input,
+                weight.expand(input.size(0), -1, -1),
+                out=out.view(-1, out.size(-2), out.size(-1)),
+            )
 
         if self.bias is not None:
             out += self.bias.to(out.dtype)
