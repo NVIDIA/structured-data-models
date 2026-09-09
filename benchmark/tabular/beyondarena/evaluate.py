@@ -6,7 +6,7 @@ from tabarena.contexts import BeyondArenaContext
 from tabarena.end_to_end import EndToEnd
 from tabarena.models import MethodMetadata
 
-from benchmark.tabular.system import MODEL_CONFIGS
+from benchmark.tabular.model import MODEL_CONFIGS
 
 benchmark_dir = Path(__file__).parent.parent
 result_root = benchmark_dir / "beyondarena_out"

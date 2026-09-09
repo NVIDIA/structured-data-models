@@ -7,7 +7,7 @@ from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.system import MODEL_CONFIGS
+from benchmark.tabular.model import MODEL_CONFIGS
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
