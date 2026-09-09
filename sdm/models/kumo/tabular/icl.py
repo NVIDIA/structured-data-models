@@ -100,7 +100,7 @@ class ICLBlock(torch.nn.Module):
                 del result
                 continue
 
-            key, value = layer(
+            x_context, (key, value) = layer(
                 query=x[..., :0, :] if last_layer else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
