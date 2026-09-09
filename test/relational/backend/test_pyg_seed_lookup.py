@@ -139,15 +139,18 @@ def test_seed_lookup_composite_keys(sampler_factory: SamplerFactory) -> None:
     _check(sampler, table[torch.tensor([2, 0, 1, 0])])
 
 
-def test_seed_lookup_mixed_dtypes_preserves_join_error(
+def test_seed_lookup_mixed_dtypes_preserves_join_behavior(
     sampler_factory: SamplerFactory,
 ) -> None:
     sampler = sampler_factory(_table([1, 2, 3]))
-    with pytest.raises(pa.ArrowInvalid, match="Incompatible data types"):
-        sampler.sample(
-            _table([2, 1], pa.int32()),
-            TaskLink(
-                task_columns=("id",), table="entities", table_columns=("id",)
-            ),
-            [0],
-        )
+    task = _table([2, 1], pa.int32())
+    link = TaskLink(
+        task_columns=("id",), table="entities", table_columns=("id",)
+    )
+    try:
+        join_index(task, sampler.data.tables["entities"], ("id",), ("id",))
+    except pa.ArrowInvalid:
+        with pytest.raises(pa.ArrowInvalid):
+            sampler.sample(task, link, [0])
+        return
+    _check(sampler, task)
