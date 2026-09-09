@@ -9,8 +9,8 @@ from tabarena.models import MethodMetadata
 from benchmark.tabular.system import MODEL_CONFIGS, SDMModel
 
 benchmark_dir = Path(__file__).parent.parent
-result_root = benchmark_dir / "beyondarena_out"
-output_root = benchmark_dir / "beyondarena_evals"
+result_root = benchmark_dir / "beyondarena_model_out"
+output_root = benchmark_dir / "beyondarena_model_evals"
 
 runs = []
 for model_config in MODEL_CONFIGS.values():
@@ -34,9 +34,9 @@ for model_config, result_dir in runs:
         method=model_config.name,
         ag_key=SDMModel.ag_key,
         model_key=model_config.name,
-        config_default=f"{SDMModel.ag_name}_c1_BAG_L1",
+        config_default=f"{model_config.name}_c1",
         can_hpo=False,
-        is_bag=True,
+        is_bag=False,
         compute="gpu",
         artifact_dir=output_dir / "artifacts",
     )
@@ -44,6 +44,7 @@ for model_config, result_dir in runs:
         path_raw=result_dir,
         method_metadata=method_metadata,
         task_metadata=base_context.task_metadata_collection,
+        name=model_config.name,
         backend="native",
     )
     results = processed.get_results(new_result_prefix="[SDM] ")

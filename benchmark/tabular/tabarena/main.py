@@ -3,7 +3,10 @@ r"""Run an SDM tabular model on TabArena."""
 import argparse
 from pathlib import Path
 
-from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
+from tabarena.benchmark.experiment import (
+    ModelConstraints,
+    TabArenaV0pt1ExperimentBundle,
+)
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
@@ -38,23 +41,30 @@ parser.add_argument(
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
-result_dir = Path(__file__).parent.parent / "tabarena_out" / model_config.name
+result_dir = (
+    Path(__file__).parent.parent / "tabarena_model_out" / model_config.name
+)
 result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
     "model": args.model,
     "max_context_size": args.max_context_size,
-    "batch_size": args.batch_size,
 }
 
 generator = ConfigGenerator(
     search_space={},
     model_cls=SDMModel,
-    name=model_config.name,
     manual_configs=[config],
 )
 experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
+    outer_experiments=True,
+    max_predict_batch_size=args.batch_size,
+    custom_model_constraints={
+        SDMModel.ag_key: ModelConstraints(
+            max_n_classes=model_config.max_classes,
+        )
+    },
 ).build_experiments()
 
 context = TabArenaContext()

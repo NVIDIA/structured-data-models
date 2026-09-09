@@ -25,6 +25,7 @@ class ModelConfig:
     factory: ModelFactory
     num_estimators: int
     autocast_dtype: torch.dtype
+    max_classes: int | None = None
 
 
 def _create_tabiclv2(
@@ -60,17 +61,21 @@ MODEL_CONFIGS = {
         factory=_create_kumo_tabular,
         num_estimators=8,
         autocast_dtype=torch.float16,
+        max_classes=10,
     ),
     "tabfm": ModelConfig(
         name="TabFM",
         factory=_create_tabfm,
         num_estimators=32,
         autocast_dtype=torch.bfloat16,
+        max_classes=10,
     ),
 }
 
 
 class SDMModel(AbstractTorchModel):
+    """Adapt an SDM in-context model to the AutoGluon model interface."""
+
     ag_key = "SDM"
     ag_name = "SDM"
     seed_name = "random_state"
@@ -83,9 +88,6 @@ class SDMModel(AbstractTorchModel):
         "fold_fitting_strategy": "sequential_local",
         "refit_folds": True,
     }
-    _default_auxiliary_params_extra: ClassVar[dict[str, Any]] = {
-        "drop_unique": False,
-    }
     default_num_gpus = 1
     default_resources_physical_cores_only = True
     minimum_num_gpus = 1
@@ -96,8 +98,6 @@ class SDMModel(AbstractTorchModel):
         self._config: ModelConfig | None = None
         self._device = torch.device("cpu")
         self._max_context_size: int | None = None
-        self._batch_size: int | None = None
-        self._class_labels: tuple[object, ...] = ()
         self.stypes: dict[str, sdm.Stype] = {}
         self.text_embedding_columns: tuple[str, ...] = ()
 
@@ -111,7 +111,6 @@ class SDMModel(AbstractTorchModel):
         params = dict(self._get_model_params())
         model_key = params.pop("model")
         self._max_context_size = params.pop("max_context_size", None)
-        self._batch_size = params.pop("batch_size", None)
         random_state_param = params.pop(self.seed_name, self.random_seed)
         random_state = (
             int(random_state_param) if random_state_param is not None else None
@@ -135,7 +134,7 @@ class SDMModel(AbstractTorchModel):
         if random_state is not None:
             generator = torch.Generator(self._device).manual_seed(random_state)
 
-        X = self.preprocess(X, y=y, is_train=True, **kwargs)
+        X = self.preprocess(X, y=y, is_train=True)
         if self._feature_metadata is not None:
             self.text_embedding_columns = tuple(
                 self._feature_metadata.get_features(
@@ -152,11 +151,9 @@ class SDMModel(AbstractTorchModel):
         target_name = str(y.name) if y.name is not None else "__target__"
         if self.problem_type == "regression":
             target_stype = "numerical"
-            self._class_labels = ()
         else:
             target_stype = "categorical"
             assert self.num_classes is not None
-            self._class_labels = tuple(range(self.num_classes))
         y_context = sdm.TableTensor.from_pandas(
             df=y.rename(target_name).to_frame(),
             stypes={target_name: target_stype},
@@ -214,15 +211,12 @@ class SDMModel(AbstractTorchModel):
             x_query = x_query.expand(num_estimators, *x_query.size())
 
         assert self._config is not None
-        outs = []
-        for batch in x_query.split(self._batch_size or x_query.size(-2), -2):
-            with torch.amp.autocast(
-                self._device.type,
-                self._config.autocast_dtype,
-                enabled=batch.is_cuda,
-            ):
-                outs.append(self.model.predict(batch))
-        out = torch.cat(outs, dim=-2) if len(outs) > 1 else outs[0]
+        with torch.amp.autocast(
+            self._device.type,
+            self._config.autocast_dtype,
+            enabled=x_query.is_cuda,
+        ):
+            out = self.model.predict(x_query)
 
         if self.problem_type == "regression":
             return (
@@ -233,8 +227,9 @@ class SDMModel(AbstractTorchModel):
                 .astype(np.float32)
             )
 
+        assert self.num_classes is not None
         probabilities = out.to_pandas().reindex(
-            columns=[str(label) for label in self._class_labels],
+            columns=[str(label) for label in range(self.num_classes)],
         )
         return self._convert_proba_to_unified_form(
             probabilities.to_numpy(dtype=np.float32),
@@ -244,7 +239,6 @@ class SDMModel(AbstractTorchModel):
         defaults = {
             "model": "tabiclv2",
             "max_context_size": None,
-            "batch_size": None,
         }
         for parameter, value in defaults.items():
             self._set_default_param_value(parameter, value)
@@ -262,6 +256,7 @@ class SDMModel(AbstractTorchModel):
         if self.model is None:
             return
         self.model.to(self._device)
+        # Module.to() does not move the SDM context cache.
         if self._device.type == "cpu" and self.model._cache is not None:
             self.model._cache = self.model._cache.cpu()
 
