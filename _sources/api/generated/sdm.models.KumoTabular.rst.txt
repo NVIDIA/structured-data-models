@@ -33,7 +33,7 @@ Default Recipe
      features=Sequential(
        StypeDispatch(
          categorical=Sequential(
-           AlignCategories(sort_by='value'),
+           AlignCategories(sort_by='value', min_frequency=2),
            ToNumerical(),
          ),
        ),
@@ -49,13 +49,18 @@ Default Recipe
              method='round_robin',
            ),
            ClipSigma(threshold=4.0),
+           FlipSign(),
+           SelectColumns(),
            ShuffleColumns(method='latin'),
          ),
        ),
      ),
      target=Sequential(
        StypeDispatch(
-         numerical=Standardize(),
+         numerical=Sequential(
+           Standardize(),
+           FlipSign(),
+         ),
          categorical=Sequential(
            AlignCategories(),
            ShuffleCategories(method='shift'),
@@ -65,7 +70,7 @@ Default Recipe
      output=Sequential(
        ReduceEstimators(method='mean'),
        TaskDispatch(
-         classification=Softmax(temperature=0.9),
+         classification=Softmax(),
        ),
      ),
    )
