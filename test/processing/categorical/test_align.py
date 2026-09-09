@@ -541,7 +541,7 @@ def test_align_categories_shared_query_uses_member_categories(
         categories=(("red", "blue", "green"),),
         device=device,
     )
-    query_ensemble = EnsembleTable(query, num_members=2)
+    query_ensemble = EnsembleTable.from_table(query, num_members=2)
     processor = AlignCategories().fit_ensemble(context)
     restored = AlignCategories()
     restored.load_state_dict(processor.state_dict())
@@ -608,11 +608,11 @@ def test_align_categories_regrouped_query_uses_member_categories(
 
 
 def test_align_categories_rejects_changed_ensemble_size() -> None:
-    context = EnsembleTable(
+    context = EnsembleTable.from_table(
         _table([[0]], categories=(("red",),)),
         num_members=2,
     )
-    query = EnsembleTable(
+    query = EnsembleTable.from_table(
         _table([[0]], categories=(("red",),)),
         num_members=3,
     )
@@ -745,7 +745,7 @@ def test_align_categories_batched_ensemble_uses_member_state(
         ),
         categories=("red", "blue", "green"),
     )
-    query_ensemble = EnsembleTable(query, num_members=2)
+    query_ensemble = EnsembleTable.from_table(query, num_members=2)
     processor = AlignCategories()
 
     context_output = processor.fit_transform_ensemble(context)
