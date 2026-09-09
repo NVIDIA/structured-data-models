@@ -109,7 +109,7 @@ class RowEmbedding(torch.nn.Module):
         shift = 2 ** torch.arange(G, device=x.device)
         index = torch.arange(C, device=x.device)
         index = (index.view(C, 1) + shift.view(1, G)) % C  # [C, G]
-        x = x[..., index].transpose(-2, -3).contiguous()  # [..., C, R, G]
+        x = x[..., index]  # [..., R, C, G]
 
         num_digits = 1
         if (
@@ -119,33 +119,44 @@ class RowEmbedding(torch.nn.Module):
         ):
             bases = _mixed_radix_bases(num_classes, self.num_classes)
             num_digits = len(bases)
-            x = x.expand(num_digits, *x.size())
             if y.numel() > 0:
                 y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
 
         buffer: Tensor | None = None
         if torch.is_grad_enabled():
-            x = self.lin(x)  # [..., C, R, D]
+            x = self.lin(x)  # [..., R, C, D]
+            if num_digits > 1:
+                if y.numel() > 0:
+                    x = x.repeat(num_digits, *(1,) * x.dim())
+                else:
+                    x = x.expand(num_digits, *x.size())
         else:
             buffer = torch.empty(
-                (*x.size()[:-3], K + C, R, D),
+                ((num_digits,) if num_digits > 1 else ())
+                + (*x.size()[:-3], R, K + C, D),
                 device=x.device,
                 dtype=torch.get_autocast_dtype(x.device.type)
                 if torch.is_autocast_enabled(x.device.type)
                 else x.dtype,
             )
-            x = self.lin(x, out=buffer[..., K:, :, :])  # [..., C, R, D]
+            if num_digits > 1:
+                self.lin(x, out=buffer[0, ..., K:, :])
+                buffer[1:, ..., K:, :] = buffer[:1, ..., K:, :]
+                x = buffer[..., K:, :]
+            else:
+                x = self.lin(x, out=buffer[..., :, K:, :])  # [..., R, C, D]
 
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y).unsqueeze(-3)  # [..., 1, R_train, D]
+                y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
             else:
                 assert self.y_lin is not None
-                y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-3)
+                y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
 
-            x[..., train_mask, :] += y_emb.to(x.dtype)
+            x[..., train_mask, :, :] += y_emb.to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis).
+        x = x.transpose(-2, -3)  # [..., C, R, D]
         for i, col_layer in enumerate(self.col_layers):
             key = f"row_embedding.col_layer{i}"
             if cache is not None and cache.is_replaying:
@@ -177,10 +188,7 @@ class RowEmbedding(torch.nn.Module):
                 x = result
             del result
 
-        if buffer is not None:
-            buffer = buffer.transpose(-2, -3)
-        else:
-            x = x.transpose(-2, -3)
+        x = x.transpose(-2, -3)  # [..., R, C, D]
 
         if num_digits > 1:  # Average over mixed-radix digits.
             if buffer is not None:
@@ -194,7 +202,7 @@ class RowEmbedding(torch.nn.Module):
         readout_token = readout_token.expand(*B, R, K, D)
 
         if buffer is not None:
-            buffer[..., :K, :] = readout_token
+            buffer[..., :, :K, :] = readout_token
             x = buffer
         else:
             x = torch.cat([readout_token, x], dim=-2)  # [..., R, K + C, D]
