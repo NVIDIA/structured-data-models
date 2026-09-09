@@ -122,7 +122,7 @@ def test_reduce_estimators_rejects_empty_ensemble_table() -> None:
 
     with pytest.raises(ValueError, match="at least one ensemble member"):
         sp.ReduceEstimators().transform_ensemble(
-            EnsembleTable(table, num_members=0)
+            EnsembleTable.from_table(table, num_members=0)
         )
 
 

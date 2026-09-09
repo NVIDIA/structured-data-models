@@ -29,7 +29,7 @@ def test_select_columns_round_robin_routes_members() -> None:
     out = SelectColumns(
         max_columns=2,
         method="round_robin",
-    ).fit_transform_ensemble(EnsembleTable(table, num_members=4))
+    ).fit_transform_ensemble(EnsembleTable.from_table(table, num_members=4))
 
     expected_columns = (
         ("num_0", "num_1"),

@@ -7,7 +7,7 @@ from sdm.tensor import EnsembleTable
 
 def test_shared_member_table() -> None:
     data = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    ensemble_table = EnsembleTable(data, num_members=3)
+    ensemble_table = EnsembleTable.from_table(data, num_members=3)
 
     assert ensemble_table.num_members == 3
     assert ensemble_table.num_groups == 1
@@ -120,7 +120,7 @@ def test_replace_groups_keeps_member_assignment() -> None:
 
 def test_replace_groups_rejects_group_count_mismatch() -> None:
     data = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    ensemble_table = EnsembleTable(data, num_members=2)
+    ensemble_table = EnsembleTable.from_table(data, num_members=2)
 
     with pytest.raises(ValueError, match="one replacement per group"):
         ensemble_table.replace_groups(tuple(ensemble_table) * 2)
@@ -149,7 +149,7 @@ def test_gather_members_rejects_source_count_mismatch() -> None:
 
     with pytest.raises(ValueError, match="one source member"):
         EnsembleTable.gather_members(
-            tables=(EnsembleTable(table, num_members=2),),
+            tables=(EnsembleTable.from_table(table, num_members=2),),
             member_ids=(0, 1),
         )
 
@@ -229,7 +229,7 @@ def test_concatenate_columns_regroups_different_layouts() -> None:
         ),
         member_table_ids=(1, 0, 1),
     )
-    right = EnsembleTable(
+    right = EnsembleTable.from_table(
         TableTensor.from_tensor(
             torch.tensor([[10.0], [20.0]]),
             columns=("right",),
@@ -256,8 +256,8 @@ def test_concatenate_columns_rejects_different_member_counts() -> None:
     with pytest.raises(ValueError, match="different member counts"):
         EnsembleTable.concatenate_columns(
             (
-                EnsembleTable(table, num_members=2),
-                EnsembleTable(table, num_members=3),
+                EnsembleTable.from_table(table, num_members=2),
+                EnsembleTable.from_table(table, num_members=3),
             )
         )
 
