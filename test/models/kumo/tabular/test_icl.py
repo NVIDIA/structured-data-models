@@ -32,7 +32,7 @@ def test_icl_block(
         num_heads=2,
         device=device,
         num_key_value_heads_for_query=num_key_value_heads_for_query,
-    ).eval()
+    )
     for parameter in block.parameters():
         torch.nn.init.normal_(parameter, std=0.1)
     x = torch.randn(2, 5, 8, device=device)
@@ -44,7 +44,8 @@ def test_icl_block(
     else:
         y = torch.randint(num_classes, (2, 3), device=device)
 
-    out = block(x.clone(), y)
+    with torch.no_grad():
+        out = block(x.clone(), y)
 
     assert out.size() == (2, 2, out_channels)
     assert out.dtype == x.dtype
@@ -58,18 +59,19 @@ def test_icl_block(
             num_layers=3,
             num_heads=2,
             device=device,
-        ).eval()
+        )
         mha.load_state_dict(block.state_dict())
-        assert not torch.allclose(mha(x.clone(), y), out)
+        with torch.no_grad():
+            assert not torch.allclose(mha(x.clone(), y), out)
 
     cache = Cache()
-    fit_out = block(x[..., :3, :].clone(), y, cache=cache)
-    replayed = block(
-        x[..., 3:, :].clone(),
-        y[..., :0],
-        cache=cache.freeze(),
-        batch_size_limit=1,
-    )
+    with torch.no_grad():
+        fit_out = block(x[..., :3, :].clone(), y, cache=cache)
+        replayed = block(
+            x[..., 3:, :].clone(),
+            y[..., :0],
+            cache=cache.freeze(),
+        )
 
     assert fit_out.size() == (2, 0, out_channels)
     assert cache.size() > 0

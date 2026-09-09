@@ -12,19 +12,29 @@ def test_row_embedding(device: torch.device) -> None:
         channels=16,
         num_layers=4,
         num_heads=2,
+        group_size=3,
+        num_frequencies=32,
         num_inducing_points=4,
         num_readout_tokens=2,
         device=device,
     )
-    x = torch.randn(2, 5, 3, 16, device=device)
+    x = torch.randn(2, 5, 3, device=device)
     y = torch.randn(2, 3, device=device)
+    categorical_mask = torch.zeros(2, 3, device=device, dtype=torch.bool)
 
-    out = encoder(x, y)
+    with torch.no_grad():
+        out = encoder(x, y, categorical_mask)
     assert out.size() == (2, 5, 32)
     assert out.device == device
 
     cache = Cache()
-    encoder(x[:, :3], y, cache=cache)
-    out = encoder(x[:, 3:], y[:, :0], cache=cache.freeze())
+    with torch.no_grad():
+        encoder(x[:, :3], y, categorical_mask, cache=cache)
+        out = encoder(
+            x[:, 3:],
+            y[:, :0],
+            categorical_mask,
+            cache=cache.freeze(),
+        )
     assert out.size() == (2, 2, 32)
     assert out.device == device

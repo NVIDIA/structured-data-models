@@ -56,7 +56,6 @@ class ICLBlock(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         cache: Cache | None = None,
-        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
 
@@ -82,7 +81,11 @@ class ICLBlock(torch.nn.Module):
                         else x[..., :R_train, :]
                     ),
                     return_key_value=cache is not None and cache.is_recording,
-                    batch_size_limit=batch_size_limit,
+                    out=None
+                    if torch.is_grad_enabled()
+                    else x[..., R_train:, :]
+                    if last_layer
+                    else x,
                 )
 
                 if cache is not None and cache.is_recording:
@@ -91,6 +94,7 @@ class ICLBlock(torch.nn.Module):
                         key = key[..., : self.kv_heads, :].contiguous()
                         value = value[..., : self.kv_heads, :].contiguous()
                     cache[cache_key] = KVCacheEntry(key, value)
+                    del key, value
                 else:
                     x = result
                 del result
@@ -100,7 +104,11 @@ class ICLBlock(torch.nn.Module):
                 query=x[..., :0, :] if last_layer else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
-                batch_size_limit=batch_size_limit,
+                out=None
+                if torch.is_grad_enabled()
+                else x[..., :0, :]
+                if last_layer
+                else x[..., :R_train, :],
             )
             x_query = layer(
                 query=x[..., R_train:, :],
@@ -108,8 +116,11 @@ class ICLBlock(torch.nn.Module):
                     key=key[..., : self.kv_heads, :].contiguous(),
                     value=value[..., : self.kv_heads, :].contiguous(),
                 ),
-                batch_size_limit=batch_size_limit,
+                out=None if torch.is_grad_enabled() else x[..., R_train:, :],
             )
-            x = x_query if last_layer else torch.cat([x_context, x_query], -2)
+            if last_layer:
+                x = x_query
+            elif torch.is_grad_enabled():
+                x = torch.cat([x_context, x_query], -2)
 
         return self.head(self.norm(x))
