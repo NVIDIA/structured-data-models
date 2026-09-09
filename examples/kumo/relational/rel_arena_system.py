@@ -1,16 +1,47 @@
 """Kumo system submission with validation-owned recipe selection.
 
-Unlike the MODEL example, whose selection is driven by the harness, this
-system evaluates the shared candidate policy on the complete inner validation
-split, then refits its winner on outer TRAIN+VAL. It returns masked outer
-predictions; only RelArena evaluates TEST labels. No task-specific test winners
-are used. The policy is provisional, not an optimized submission claim.
+Unlike the MODEL example, this system owns tuning and can score candidates on
+a fixed validation subset. It refits its winner on full outer TRAIN+VAL and
+returns predictions for the entire masked TEST table. The candidate policy is
+provisional, not an optimized submission claim.
+
+Run one task from the repository root, after the setup in README.relarena.md::
+
+    from pathlib import Path
+
+    from examples.kumo.relational.rel_arena_system import KumoSystem
+    from relarena.cache import CacheConfig
+    from relarena.dataset import RelBenchDatasetTask
+
+    source = RelBenchDatasetTask("rel-f1", "driver-position")
+    system = KumoSystem(
+        cache=CacheConfig(
+            directory=Path(".cache/relarena/rel-f1-driver-position"),
+            on_miss="fill",
+        ),
+    )
+    predictions = system.run(
+        source.task,
+        inner_split=source.inner_split(),
+        outer_split=source.outer_split(),
+        seed=0,
+        validation_rows=10_000,
+    )
+    print(source.task.evaluate(predictions))
+
+Omit validation_rows (or pass None) for full validation. This keyword belongs
+to KumoSystem.run; RelArena's run_system_experiment does not forward it.
+Every candidate uses the same seed-selected rows, sampled without labels.
+Tiny binary samples may lack a class and make validation scoring fail.
+An optional time_limit covers this run; account for earlier preprocessing
+separately when checking the complete per-task runtime allowance.
 """
 
 from __future__ import annotations
 
 import math
 import time
+from dataclasses import replace
 
 import numpy as np
 from examples.kumo.relational._relarena.adapter import KumoPredictor
@@ -21,12 +52,12 @@ from relarena.registry import register_system
 from relarena.runner import select_best
 from relarena.system import RelArenaSystem
 from relarena.tuner import plan_configs, run_trial
-from relbench.base import EntityTask
+from relbench.base import EntityTask, Table
 
 
 @register_system
 class KumoSystem(RelArenaSystem):
-    """Select by full validation, then refit only the winning recipe."""
+    """Select on validation, then refit only the winning recipe."""
 
     name = "sdm-kumo-system"
 
@@ -38,15 +69,52 @@ class KumoSystem(RelArenaSystem):
         outer_split: OuterSplit,
         seed: int,
         time_limit: float | None = None,
+        validation_rows: int | None = None,
     ) -> np.ndarray:
         """Return aligned outer predictions within one soft procedure budget.
 
         The caller is responsible for including data preparation before this
         method receives the splits in the complete method budget.
+
+        Args:
+            task: RelBench task defining the prediction target and metric.
+            inner_split: Training data and validation-censored database.
+            outer_split: Final-fit data and masked TEST queries.
+            seed: Seed for validation sampling and every candidate fit.
+            time_limit: Soft budget in seconds for selection, refit and
+                prediction.
+            validation_rows: Maximum validation rows per candidate, or None for
+                all rows. One uniform sample without replacement is reused for
+                every candidate; full TRAIN+VAL and TEST remain unchanged.
+
+        The actual validation count is available as ``self.validation_rows``.
         """
         deadline = (
             None if time_limit is None else time.monotonic() + time_limit
         )
+        if validation_rows is not None and validation_rows < len(
+            inner_split.eval_table
+        ):
+            rows = np.sort(
+                np.random.default_rng(seed).choice(
+                    len(inner_split.eval_table),
+                    size=validation_rows,
+                    replace=False,
+                )
+            )
+            eval_table, eval_target = [
+                Table(
+                    df=table.df.iloc[rows].reset_index(drop=True),
+                    fkey_col_to_pkey_table=table.fkey_col_to_pkey_table,
+                    pkey_col=table.pkey_col,
+                    time_col=table.time_col,
+                )
+                for table in (inner_split.eval_table, inner_split.eval_target)
+            ]
+            inner_split = replace(
+                inner_split, eval_table=eval_table, eval_target=eval_target
+            )
+        self.validation_rows = len(inner_split.eval_table)
 
         def remaining() -> float | None:
             if deadline is None:
@@ -57,6 +125,7 @@ class KumoSystem(RelArenaSystem):
             return seconds
 
         trials = []
+        assert SEARCH_SPACE.fixed_grid is not None
         for tag, config in plan_configs(
             SEARCH_SPACE, len(SEARCH_SPACE.fixed_grid), seed
         ):

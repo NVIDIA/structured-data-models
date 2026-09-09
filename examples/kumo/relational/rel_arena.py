@@ -2,6 +2,25 @@
 
 Use the same declared search space for every task. The candidate policy is
 carried from stopped V12 development; complete runtime has not been certified.
+
+Run one task from the repository root, after the setup in README.relarena.md::
+
+    from examples.kumo.relational.rel_arena import KumoModel
+    from relarena.runner import run_model_experiment
+
+    result = run_model_experiment(
+        KumoModel,
+        "rel-f1",
+        "driver-position",
+        n_trials=30,
+        seed=0,
+        cache_dir=".cache/relarena/rel-f1-driver-position",
+    )
+    print(result.tuned.test_score)
+
+RelArena scores every candidate on full validation, then refits and scores the
+winner and default on TEST. The complete per-task budget includes preprocessing
+and all trials/refits; a per-trial time limit is not a whole-task limit.
 """
 
 from examples.kumo.relational._relarena.adapter import KumoPredictor

@@ -243,6 +243,8 @@ banned-module-level-imports = [
 
 [tool.ty.analysis]
 allowed-unresolved-imports = [
+    "relbench.**",
+    "relarena.**",
     "cudf.**",
     "cupy.**",
     "pyg_lib.**",
