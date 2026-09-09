@@ -163,8 +163,12 @@ class CellEmbedding(torch.nn.Module):
             (*x.size()[:-1], 2 * x.size(-1)),
             dtype=weight.dtype,
         )
-        torch.sin(x, out=fourier[..., : x.size(-1)])
-        torch.cos(x, out=fourier[..., x.size(-1) :])
+        if torch.is_grad_enabled():
+            fourier[..., : x.size(-1)] = x.sin()
+            fourier[..., x.size(-1) :] = x.cos()
+        else:
+            torch.sin(x, out=fourier[..., : x.size(-1)])
+            torch.cos(x, out=fourier[..., x.size(-1) :])
         del x
 
         if out is None:
