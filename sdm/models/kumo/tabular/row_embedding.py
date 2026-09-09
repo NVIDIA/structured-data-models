@@ -123,21 +123,6 @@ class RowEmbedding(torch.nn.Module):
                 out=buffer[..., K:, :],
             )
 
-        buffer = torch.empty(
-            (*x.size()[:-1], K + x.size(-1), self.channels),
-            device=x.device,
-            dtype=torch.get_autocast_dtype(x.device.type)
-            if torch.is_autocast_enabled(x.device.type)
-            else x.dtype,
-        )
-        buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
-        x = self.cell_embedding(
-            x,
-            categorical_mask,
-            batch_size_limit="auto",
-            out=buffer[..., K:, :],
-        )
-
         if y.numel() > 0:
             if self.y_emb is not None:
                 y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
