@@ -104,7 +104,7 @@ class EnsembleTable(TableTensor):
 4. Update normal Processors
 5. Map old EnsembleTable logic to new
 6. Remove EnsembleProcessor logic
-7. Update buffers
+7. Introduce Parameter
 8. Remove BufferList
 9. Update Documentation  
 
