@@ -159,8 +159,17 @@ class AlignCategories(EnsembleProcessor):
             input_categories.dtype in _UNSIGNED_DTYPES
             and input_categories.is_cpu
         ):
-            # PyTorch CPU index_select is not implemented for these dtypes.
-            fitted_categories = input_categories[selected_indices]
+            # A signed view preserves large unsigned values during gathering.
+            signed_dtype = {
+                torch.uint16: torch.int16,
+                torch.uint32: torch.int32,
+                torch.uint64: torch.int64,
+            }[input_categories.dtype]
+            fitted_categories = (
+                input_categories.view(signed_dtype)
+                .index_select(0, selected_indices)
+                .view(input_categories.dtype)
+            )
         else:
             fitted_categories = input_categories.index_select(
                 0,
