@@ -47,7 +47,18 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
-class KumoTabular(ICLModel):  # noqa: D101
+class KumoTabular(ICLModel):
+    """Kumo Tabular, a foundation model for classification and regression.
+
+    Args:
+        task: The tasks to initialize. If ``None``, both classification and
+            regression are initialized.
+        size: The model size, either ``"small"`` or ``"large"`` (default).
+        pretrained: Whether to load pretrained checkpoints.
+        device: The device for model parameters. If ``None``, uses PyTorch's
+            default device.
+    """
+
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
