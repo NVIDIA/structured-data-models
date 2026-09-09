@@ -2,8 +2,10 @@
 
 import abc
 import math
+import mmap
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from pathlib import Path
+from typing import Any, ClassVar, Literal, Self, cast
 
 import numpy as np
 import pandas as pd
@@ -14,6 +16,7 @@ from autogluon.tabular.models.abstract.abstract_torch_model import (
 )
 
 import sdm
+from sdm.processing.execution import RecipeExecution
 
 Task = Literal["classification", "regression"]
 
@@ -21,6 +24,7 @@ Task = Literal["classification", "regression"]
 class SDMModel(AbstractTorchModel, abc.ABC):
     """AutoGluon adapter shared by SDM in-context tabular models."""
 
+    model_state_file_name = "sdm_model.pt"
     ag_priority = 65
     _supported_problem_types: ClassVar[list[str]] = [
         BINARY,
@@ -165,7 +169,67 @@ class SDMModel(AbstractTorchModel, abc.ABC):
 
     def _set_device(self, device: str) -> None:
         self.model.to(device)
+        if self.model._cache is not None:
+            execution = cast(
+                RecipeExecution,
+                self.model._cache["recipe_execution"],
+            )
+            execution.recipe.features.to(device)
+            execution.recipe.target.to(device)
+            execution.recipe.output.to(device)
         self._device = torch.device(device)
+
+    def save(self, path: str | None = None, verbose: bool = True) -> str:
+        path = self.path if path is None else path
+        if not self.is_fit():
+            return super().save(path=path, verbose=verbose)
+
+        device = self.get_device()
+        self.set_device("cpu")
+        fitted_model = self.model
+        self.model = None
+        try:
+            path = super().save(path=path, verbose=verbose)
+            torch.save(fitted_model, Path(path) / self.model_state_file_name)
+        finally:
+            self.model = fitted_model
+            self.set_device(device)
+        return path
+
+    @classmethod
+    def load(
+        cls,
+        path: str,
+        reset_paths: bool = True,
+        verbose: bool = True,
+    ) -> Self:
+        model = super().load(
+            path=path,
+            reset_paths=reset_paths,
+            verbose=verbose,
+        )
+        model_state_path = Path(path) / cls.model_state_file_name
+        if not model_state_path.exists():
+            return model
+        model.model = torch.load(
+            model_state_path,
+            map_location="cpu",
+            weights_only=False,
+            mmap=True,
+        )
+        model._device = torch.device("cpu")
+        model.device = "cpu"
+        model.set_device(model.suggest_device_infer(verbose=verbose))
+        return model
+
+    def prepare_for_inference(self) -> None:
+        if self.model._cache is None:
+            return
+        for tensor in self.model._cache._tensors():
+            if tensor.is_cpu:
+                # Fault mmap-backed cache pages in before timed inference.
+                pages = tensor.view(torch.uint8).flatten()[:: mmap.PAGESIZE]
+                pages.sum().item()
 
     def _more_tags(self) -> dict[str, bool]:
         return {"can_refit_full": True}
