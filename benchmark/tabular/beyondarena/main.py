@@ -5,9 +5,9 @@ from pathlib import Path
 
 from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
 from tabarena.contexts import BeyondArenaContext
-from tabarena.utils.config_utils import SystemConfigGenerator
+from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.system import MODEL_CONFIGS, SDMSystem
+from benchmark.tabular.system import MODEL_CONFIGS
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -39,24 +39,27 @@ args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
-    Path(__file__).parent.parent / "beyondarena_out" / model_config.name
+    Path(__file__).parent.parent
+    / "beyondarena_out"
+    / model_config.name
+    / "outer_model"
 )
 result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
-    "model": args.model,
     "max_context_size": args.max_context_size,
-    "batch_size": args.batch_size,
 }
+if args.batch_size is not None:
+    config["ag.max_batch_size"] = args.batch_size
 
-generator = SystemConfigGenerator(
-    model_cls=SDMSystem,
-    name=model_config.system_name,
+generator = ConfigGenerator(
+    search_space={},
+    model_cls=model_config.model_cls,
     manual_configs=[config],
 )
 experiments = BeyondArenaExperimentBundle(
     models=[(generator, 0)],
-    system_experiments=True,
+    outer_experiments=True,
     text_cache_mode="off",
 ).build_experiments()
 

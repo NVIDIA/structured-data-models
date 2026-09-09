@@ -14,7 +14,7 @@ output_root = benchmark_dir / "beyondarena_evals"
 
 runs = []
 for model_config in MODEL_CONFIGS.values():
-    result_dir = result_root / model_config.name
+    result_dir = result_root / model_config.name / "outer_model"
     if next(result_dir.rglob("results.pkl"), None) is not None:
         runs.append((model_config, result_dir))
 
@@ -30,7 +30,7 @@ for model_config, result_dir in runs:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     method_metadata = MethodMetadata.baseline(
-        method=f"{model_config.system_name}_c1",
+        method=model_config.beyondarena_method_name,
         compute="gpu",
         artifact_dir=output_dir / "artifacts",
     )

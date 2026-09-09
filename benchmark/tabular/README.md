@@ -20,6 +20,8 @@ pip install structured-data-models \
   "tabarena[data-foundry,plot] @ git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena"
 ```
 
+The SDM adapters run as standard AutoGluon models. Each benchmark split fits one model on all available training rows through TabArena's outer experiment path, without a validation split, bagging, tuning, or ensemble simulation.
+
 ______________________________________________________________________
 
 ## TabArena
