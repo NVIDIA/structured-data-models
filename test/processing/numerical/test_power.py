@@ -170,6 +170,23 @@ def test_power_transform_constant_columns_use_identity_lambda(
 
 
 @withCUDA
+def test_power_transform_preserves_nan(device: torch.device) -> None:
+    inp = torch.tensor(
+        [[1.0, float("nan")], [3.0, 10.0], [5.0, 14.0]],
+        device=device,
+    )
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
+
+    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
+    restored = processor.inverse_transform(
+        TableTensor.from_tensor(transformed)
+    ).numerical
+
+    assert torch.equal(transformed.isnan(), inp.isnan())
+    torch.testing.assert_close(restored, inp, equal_nan=True)
+
+
+@withCUDA
 def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     device: torch.device,
 ) -> None:

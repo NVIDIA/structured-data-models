@@ -5,7 +5,10 @@ from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
-from sdm.processing.numerical._stats import _constant_feature_mask
+from sdm.processing.numerical._stats import (
+    _constant_feature_mask,
+    _nanmean_var,
+)
 
 # Keep GPU execution batched; adaptive per-column stopping would resynchronize.
 # For float32 overflow-safe bounds, 44 golden steps reaches ~1.48e-8.
@@ -239,21 +242,22 @@ class PowerTransform(Processor, InvertibleMixin):
     ) -> None:
         numerical = table.numerical
         n_samples = numerical.size(-2)
-
-        var = numerical.var(dim=-2, correction=0, keepdim=True)
-        mean = numerical.mean(dim=-2, keepdim=True)
-        self.max = numerical.max(dim=-2, keepdim=True).values
+        mean, var = _nanmean_var(numerical)
+        filled = torch.where(numerical.isfinite(), numerical, mean)
+        self.max = numerical.masked_fill(
+            ~numerical.isfinite(),
+            float("-inf"),
+        ).amax(dim=-2, keepdim=True)
         constant_features = _constant_feature_mask(var, mean, n_samples)
-        self.lambdas = self._optimize_lambdas(numerical, constant_features)
+        self.lambdas = self._optimize_lambdas(filled, constant_features)
 
         lambda_eps = torch.finfo(numerical.dtype).eps
         self.upper_bound = -(1 / self.lambdas)
         self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
-            transformed = _yeojohnson_transform(numerical, self.lambdas)
-            self.mean = transformed.mean(dim=-2, keepdim=True)
-            var = transformed.var(dim=-2, correction=0, keepdim=True)
+            transformed = _yeojohnson_transform(filled, self.lambdas)
+            self.mean, var = _nanmean_var(transformed)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
             self.scale = scale

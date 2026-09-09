@@ -113,3 +113,24 @@ def test_standardize_fits_leading_batches_independently(
         ).numerical,
         query,
     )
+
+
+@withCUDA
+def test_standardize_ignores_nan_when_fitting(device: torch.device) -> None:
+    inp = torch.tensor(
+        [[1.0, float("nan")], [3.0, 10.0], [5.0, 14.0]],
+        device=device,
+    )
+    processor = Standardize().fit(TableTensor.from_tensor(inp))
+
+    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
+
+    torch.testing.assert_close(
+        processor.mean,
+        torch.tensor([[3.0, 12.0]], device=device),
+    )
+    assert transformed[0, 1].isnan()
+    torch.testing.assert_close(
+        transformed[1, 0],
+        torch.tensor(0.0, device=device),
+    )
