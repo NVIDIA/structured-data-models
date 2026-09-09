@@ -188,6 +188,10 @@ class RowEmbedding(torch.nn.Module):
                 x = result
             del result
 
+        if torch.compiler.is_compiling():
+            # Compiled column blocks return new tensors, leaving buffer stale.
+            buffer = None
+
         x = x.transpose(-2, -3)  # [..., R, C, D]
 
         if num_digits > 1:  # Average over mixed-radix digits.
