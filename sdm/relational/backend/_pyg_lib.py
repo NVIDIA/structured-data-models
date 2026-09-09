@@ -225,12 +225,13 @@ def _to_csc(
     src_time: Tensor | None = None,
 ) -> tuple[Tensor, Tensor]:
 
-    if src_time is None:  # Sort primarily by destination node:
-        perm = edge_index[1].argsort()
-    else:  # Sort secondarily by source timestamp:
-        perm = src_time[edge_index[0]].argsort()
+    # Join output order is unspecified. Canonical source-row ties keep both
+    # temporal-last and seeded uniform sampling stable across graph builds.
+    edge_index = edge_index[:, edge_index[0].argsort()]
+    if src_time is not None:
+        perm = src_time[edge_index[0]].argsort(stable=True)
         edge_index = edge_index[:, perm]
-        perm = edge_index[1].argsort(stable=True)
+    perm = edge_index[1].argsort(stable=True)
     edge_index = edge_index[:, perm]
 
     row, col = edge_index
