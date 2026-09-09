@@ -233,16 +233,11 @@ def test_predict_id_processor(device: torch.device) -> None:
 @pytest.mark.parametrize("readout", ["users", "orders"])
 def test_graph_cache_metadata(readout: str, device: torch.device) -> None:
     x, related = make_query(1000, 3, 2, device)
-    cache = _QueryGraphCache(
-        task_ids=x.columns[Stype.id],
-        table_ids={
-            name: table.columns[Stype.id]
-            for name, table in related.tables.items()
-        },
-    )
+    cache = _QueryGraphCache({tuple(related.relationships)})
     for tables in (
         related.tables,
         dict(reversed(list(related.tables.items()))),
+        {**related.tables, "lines": related.tables["lines"][:1]},
     ):
         for relationships in (
             related.relationships,
@@ -284,6 +279,18 @@ def test_graph_cache_metadata(readout: str, device: torch.device) -> None:
 
 
 @withCUDA
+def test_graph_reuse_requires_original_task_ids(device: torch.device) -> None:
+    model = fit_model(2, device)
+    x, related = make_query(1000, 3, 2, device)
+    raw = TableTensor.from_arrow(
+        x.to_arrow(),
+        stypes={**x.stypes, "id": Stype.numerical},
+        device=device,
+    )
+    assert model._predict_kwargs(raw, related) == {}
+
+
+@withCUDA
 @pytest.mark.parametrize("join_stype", [Stype.numerical, Stype.id])
 def test_graph_cache_non_id_source(
     join_stype: Stype, device: torch.device
@@ -291,7 +298,7 @@ def test_graph_cache_non_id_source(
     x = TableTensor.from_columns(
         {"key": [0.0, 1.0]}, stypes={"key": join_stype}, device=device
     )
-    cache = _QueryGraphCache(task_ids=(), table_ids={"users": ()})
+    cache = _QueryGraphCache(set())
     for order in ([0, 1], [1, 0]):
         related = RelatedTables(
             tables={"users": x[order]},

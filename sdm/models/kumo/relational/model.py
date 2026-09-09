@@ -27,7 +27,7 @@ from sdm.models.kumo.relational.task import TaskGraph, _QueryGraphCache
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
-from sdm.processing.execution import RecipeExecution
+from sdm.processing.execution import RecipeExecution, _to_ensemble_table
 from sdm.tensor import EnsembleTable
 
 
@@ -214,22 +214,38 @@ class KumoRelational(ICLModel):
             Stype.id in processor.handles_stypes for processor in processors
         ):
             return {}
-        id_columns: list[tuple[str, ...]] = []
+        id_columns: list[set[str]] = []
         for table in (x, *related_tables.tables.values()):
-            if isinstance(table, EnsembleTable):
-                if len(set(table._locations)) != 1:
-                    return {}
-                table = table.table(0)
-            elif not isinstance(table, TableTensor) or table.dim() != 2:
+            ensemble = _to_ensemble_table(table, execution._num_estimators)
+            if len(set(ensemble._locations)) != 1:
                 return {}
-            id_columns.append(table.columns[Stype.id])
-        # Preprocessing may copy shared IDs, but must leave them unchanged.
-        return {
-            "query_graph_cache": _QueryGraphCache(
-                task_ids=id_columns[0],
-                table_ids=dict(zip(related_tables.tables, id_columns[1:])),
+            id_columns.append(set(ensemble.table(0).columns[Stype.id]))
+        task_ids, *table_ids = id_columns
+        ids = dict(zip(related_tables.tables, table_ids))
+        if any(
+            not set(link.task_columns) <= task_ids
+            or not set(link.table_columns) <= ids[link.table]
+            for link in related_tables.task_links
+        ):
+            return {}
+        relationships: set[tuple[Relationship, ...]] = set()
+        for i in range(execution.num_members):
+            cache = cast(Cache, self._cache[i])
+            relationships.add(
+                cast(tuple[Relationship, ...], cache["relationships"])
+            )
+        # Only original IDs are guaranteed unchanged by preprocessing.
+        eligible = {
+            rels
+            for rels in relationships
+            if all(
+                set(rel.left_columns) <= ids[rel.left_table]
+                and set(rel.right_columns) <= ids[rel.right_table]
+                for rel in rels
+                if rel.left_table in ids and rel.right_table in ids
             )
         }
+        return {"query_graph_cache": _QueryGraphCache(eligible)}
 
     def _forward(
         self,

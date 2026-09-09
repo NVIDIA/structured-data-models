@@ -4,7 +4,7 @@ from typing import Self
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import RelatedTables, Relationship, TableTensor
 from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.relational.join import join_index
 
@@ -118,11 +118,9 @@ class _QueryGraphCache:
 
     def __init__(
         self,
-        task_ids: tuple[str, ...],
-        table_ids: dict[str, tuple[str, ...]],
+        relationships: set[tuple[Relationship, ...]],
     ) -> None:
-        self.task_ids = task_ids
-        self.table_ids = table_ids
+        self.relationships = relationships
         self.graphs: dict[tuple, HomogeneousGraph] = {}
         self.tasks: dict[tuple, TaskGraph] = {}
 
@@ -133,61 +131,18 @@ class _QueryGraphCache:
         num_hops: int | None,
     ) -> TaskGraph:
         tables = related_tables.tables
-        keys = [
-            (table, columns, original_ids)
-            for rel in related_tables.relationships
-            if rel.left_table in tables and rel.right_table in tables
-            for table, columns, original_ids in (
-                (
-                    tables[rel.left_table],
-                    rel.left_columns,
-                    self.table_ids[rel.left_table],
-                ),
-                (
-                    tables[rel.right_table],
-                    rel.right_columns,
-                    self.table_ids[rel.right_table],
-                ),
-            )
-        ]
-        keys.extend(
-            (table, columns, original_ids)
-            for link in related_tables.task_links
-            for table, columns, original_ids in (
-                (x, link.task_columns, self.task_ids),
-                (
-                    tables[link.table],
-                    link.table_columns,
-                    self.table_ids[link.table],
-                ),
-            )
-        )
-        if any(
-            not set(columns).issubset(table.columns[Stype.id])
-            or not set(columns).issubset(original_ids)
-            for table, columns, original_ids in keys
-        ):
+        relationships = tuple(related_tables.relationships)
+        if relationships not in self.relationships:
             return TaskGraph.from_input(x, related_tables, num_hops)
 
         graph_key = (
             tuple(
-                (
-                    name,
-                    table.size()[:-1],
-                    table.device,
-                    table.columns[Stype.id],
-                )
+                (name, table.size(0), table.device)
                 for name, table in tables.items()
             ),
-            tuple(related_tables.relationships),
+            relationships,
         )
-        task_key = (
-            graph_key,
-            x.size()[:-1],
-            x.columns[Stype.id],
-            tuple(related_tables.task_links),
-            num_hops,
-        )
+        task_key = (graph_key, num_hops)
         if task_key in self.tasks:
             return replace(
                 self.tasks[task_key],
