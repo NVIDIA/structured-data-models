@@ -610,11 +610,14 @@ def test_single_cat_preserves_values_and_allocates_independent_storage(
     source = StringTensor.from_list([["alpha", None], ["", "beta"]])
     if transpose:
         source = source.t()
+    assert isinstance(source, StringTensor)
     result = torch.cat([source], dim=dim)
     assert isinstance(result, StringTensor)
     assert result.equal(source)
     assert result.is_contiguous()
     assert result.storage_offset() == 0
+    assert source._valid is not None
+    assert result._valid is not None
     assert result._data.data_ptr() != source._data.data_ptr()
     assert result._offset.data_ptr() != source._offset.data_ptr()
     assert result._valid.data_ptr() != source._valid.data_ptr()
@@ -654,6 +657,7 @@ def test_single_cat_preserves_gradient() -> None:
     data = torch.tensor([1.0, 2.0], requires_grad=True)
     source = VarLenTensor.from_tensor(data)
     result = torch.cat([source])
+    assert isinstance(result, VarLenTensor)
     result._data.sum().backward()
     torch.testing.assert_close(data.grad, torch.ones_like(data))
 
