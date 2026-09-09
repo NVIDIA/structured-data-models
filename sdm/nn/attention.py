@@ -137,7 +137,7 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
-        # Branch to pass bool, not SymBool, to SDPA.
+        # SDPA needs True/False under torch.compile, so use a branch.
         enable_gqa = False
         if query.size(-2) != key.size(-2):
             enable_gqa = True
