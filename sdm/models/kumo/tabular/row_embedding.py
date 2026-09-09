@@ -109,7 +109,7 @@ class RowEmbedding(torch.nn.Module):
             x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
         else:
             buffer = torch.empty(
-                (*x.size()[:-1], K + C, D),
+                (*B, R, K + C, D),
                 device=x.device,
                 dtype=torch.get_autocast_dtype(x.device.type)
                 if torch.is_autocast_enabled(x.device.type)
@@ -158,13 +158,10 @@ class RowEmbedding(torch.nn.Module):
                 out=None if buffer is None else x,
             )
 
-            if buffer is None:
-                if cache is not None and cache.is_recording:
-                    x, cache[key] = result
-                else:
-                    x = result
-            elif cache is not None and cache.is_recording:
-                cache[key] = result[1]
+            if cache is not None and cache.is_recording:
+                x, cache[key] = result
+            else:
+                x = result
             del result
 
             if buffer is None:

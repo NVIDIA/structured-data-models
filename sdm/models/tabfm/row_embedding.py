@@ -127,23 +127,29 @@ class RowEmbedding(torch.nn.Module):
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
+        *B, R, C = x.size()
         R_train = y.size(-1)
         K = self.readout_token.size(-2)
+        D = self.channels
 
-        buffer = torch.empty(
-            (*x.size()[:-1], K + x.size(-1), self.channels),
-            device=x.device,
-            dtype=torch.get_autocast_dtype(x.device.type)
-            if torch.is_autocast_enabled(x.device.type)
-            else x.dtype,
-        )
-        buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
-        x = self.cell_embedding(
-            x,
-            categorical_mask,
-            batch_size_limit="auto",
-            out=buffer[..., K:, :],
-        )
+        buffer: Tensor | None = None
+        if torch.is_grad_enabled():
+            x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
+        else:
+            buffer = torch.empty(
+                (*B, R, K + C, D),
+                device=x.device,
+                dtype=torch.get_autocast_dtype(x.device.type)
+                if torch.is_autocast_enabled(x.device.type)
+                else x.dtype,
+            )
+            buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
+            x = self.cell_embedding(
+                x,
+                categorical_mask,
+                batch_size_limit="auto",
+                out=buffer[..., K:, :],
+            )
 
         if y.numel() > 0:
             if self.y_emb is not None:
@@ -172,15 +178,30 @@ class RowEmbedding(torch.nn.Module):
                     else x[..., :R_train, :],
                     return_key_value=cache is not None and cache.is_recording,
                     batch_size_limit="auto",
-                    out=x,
+                    out=None if buffer is None else x,
                 )  # [..., C, R, D]
 
                 if cache is not None and cache.is_recording:
-                    cache[key] = result[1]
+                    x, cache[key] = result
+                else:
+                    x = result
                 del result
 
-            x.copy_(col_proj(x))  # NOTE Double peak memory.
-            x = buffer  # [..., R, K + C, D]
+            if buffer is None:
+                x = col_proj(x.transpose(-2, -3))  # [..., R, C, D]
+                if i == 0:  # Prepend readout tokens before row-wise attention.
+                    x = torch.cat(
+                        [
+                            self.readout_token.to(x.dtype)
+                            .view(*(1,) * len(B), 1, K, D)
+                            .expand(*B, R, K, D),
+                            x,  # [..., R, C, D]
+                        ],
+                        dim=-2,
+                    )  # [..., R, K + C, D]
+            else:
+                x.copy_(col_proj(x))  # NOTE Double peak memory.
+                x = buffer  # [..., R, K + C, D]
 
             # Row-wise attention (B * R as the batch axis).
             for j, row_layer in enumerate(row_layers):
@@ -189,12 +210,15 @@ class RowEmbedding(torch.nn.Module):
                     query = x[..., :K, :]
 
                 x = row_layer(
-                    query=query,
-                    key_value=x,
+                    query=query,  # [..., R, K + C, D] or [..., R, K, D]
+                    key_value=x,  # [..., R, K + C, D]
                     batch_size_limit="auto",
-                    out=query,
-                )
+                    out=None if buffer is None else query,
+                )  # [..., R, K + C, D] or [..., R, K, D]
 
-            x.copy_(row_norm(x))  # NOTE Double peak memory.
+            if buffer is None:
+                x = row_norm(x)
+            else:
+                x.copy_(row_norm(x))  # NOTE Double peak memory.
 
         return x.flatten(-2)

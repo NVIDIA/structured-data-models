@@ -74,7 +74,11 @@ class ICLBlock(torch.nn.Module):
                     else x[..., :R_train, :]
                 ),
                 return_key_value=cache is not None and cache.is_recording,
-                out=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
+                out=None
+                if torch.is_grad_enabled()
+                else x[..., R_train:, :]
+                if i == len(self.layers) - 1
+                else x,
             )  # [..., R, D] or [..., R_test, D]
 
             if cache is not None and cache.is_recording:
