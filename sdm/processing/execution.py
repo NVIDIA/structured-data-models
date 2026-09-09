@@ -207,7 +207,7 @@ class RecipeExecution:
             groups[group_id][position] = outputs[i]
 
         table = EnsembleTable(
-            groups=tuple(
+            groups=[
                 cast(
                     TableTensor,
                     group[0].unsqueeze(0)  # type: ignore
@@ -215,7 +215,7 @@ class RecipeExecution:
                     else torch.stack(group, dim=0),  # type: ignore
                 )
                 for group in groups
-            ),
+            ],
             locations=self._y_locations,
         )
 

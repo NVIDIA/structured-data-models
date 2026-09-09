@@ -167,10 +167,8 @@ class EnsembleTable(DeviceMixin):
             )
 
         return cls(
-            groups=tuple(groups),
-            locations=tuple(
-                input_locations[index] for index in member_table_ids
-            ),
+            groups=groups,
+            locations=[input_locations[index] for index in member_table_ids],
         )
 
     def select_members(self, member_ids: Sequence[int]) -> Self:
