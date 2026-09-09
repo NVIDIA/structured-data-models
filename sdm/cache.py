@@ -179,6 +179,18 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         """Return an empty recording cache with the same configuration."""
         return self.__class__(kv_cache_offload=self._kv_cache_offload)
 
+    def _offload(self, device: torch.device) -> Self:
+        def _copy(tensor: Tensor) -> Tensor:
+            if tensor.is_cuda:
+                return _to_pinned_cpu(tensor, non_blocking=True)
+            return tensor.pin_memory()
+
+        try:
+            return self._apply_tensor(_copy)
+        finally:
+            # Keep the source cache alive and finish host writes before return.
+            torch.cuda.current_stream(device).synchronize()
+
     def _store_key_value(self, entry: KVCacheEntry) -> DeviceMixin:
         # Representation transforms, such as quantization, precede placement.
         stored: DeviceMixin = entry
@@ -189,8 +201,8 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         return stored
 
 
-def _to_pinned_cpu(tensor: Tensor) -> Tensor:
+def _to_pinned_cpu(tensor: Tensor, *, non_blocking: bool = False) -> Tensor:
     if not tensor.is_cuda:
         return tensor
     out = torch.empty_like(tensor, device="cpu", pin_memory=True)
-    return out.copy_(tensor)
+    return out.copy_(tensor, non_blocking=non_blocking)

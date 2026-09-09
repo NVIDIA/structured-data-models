@@ -10,7 +10,7 @@ from sdm.cache import Cache, KVCacheEntry, KVCacheOffload
 from sdm.callbacks import Callback
 from sdm.models import ICLModel
 from sdm.processing import InvertibleMixin, Processor
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 @dataclass
@@ -91,13 +91,18 @@ class _KVRecordingModel(_RecordingModel):
             **kwargs,
         )
         if cache is not None and cache.is_recording:
-            value = out.numerical.unsqueeze(-2)
+            value = out.numerical.unsqueeze(-2).clone()
             cache["key_value"] = KVCacheEntry(key=value, value=value)
             entry = cast(KVCacheEntry, cache["key_value"])
             self.recorded_placements.append(
                 (entry.key.device, entry.key.is_pinned())
             )
             cache["other"] = value
+        elif cache is not None:
+            entry = cast(KVCacheEntry, cache["key_value"])
+            out = out.replace_blocks(
+                numerical=out.numerical + entry.value.mean(dim=-3)
+            )
         return out
 
 
@@ -515,6 +520,45 @@ def test_fit_kv_cache_offload(
         torch.arange(16, device=device, dtype=torch.float32).view(2, 8)
     )
     assert prediction.device == device
+    expected = torch.arange(16, device=device, dtype=torch.float32).view(2, 8)
+    expected = expected + torch.arange(8, device=device) + 12
+    torch.testing.assert_close(
+        actual=prediction.numerical,
+        expected=expected.expand(num_estimators, -1, -1),
+    )
+
+
+@onlyCUDA
+@pytest.mark.parametrize("offload", ["auto", "estimator", "layer"])
+def test_fit_offloaded_cache_ready_on_cpu(
+    offload: Literal["auto"] | KVCacheOffload,
+) -> None:
+    class DelayedModel(_KVRecordingModel):
+        def _forward(
+            self,
+            x_context: TableTensor | None,
+            *args: Any,
+            **kwargs: Any,
+        ) -> TableTensor:
+            if x_context is not None:
+                torch.cuda._sleep(20_000_000)
+            return super()._forward(x_context, *args, **kwargs)
+
+    model = DelayedModel()
+    context = torch.arange(32, dtype=torch.float32).repeat(65_536, 1)
+    x = context.cuda()
+    y = torch.zeros(65_536, 1, device="cuda")
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        model.fit(x=x, y=y, num_estimators=2, kv_cache_offload=offload)
+
+    # Read the cache on CPU immediately, without synchronizing CUDA here.
+    prediction = model.predict(torch.zeros(2, 32))
+    torch.testing.assert_close(
+        actual=prediction.numerical,
+        expected=context[:2].expand(2, -1, -1),
+    )
 
 
 def test_predict_validates_cached_input_schema() -> None:

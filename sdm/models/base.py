@@ -250,11 +250,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 pre-processing and model execution.
             kv_cache_offload: Offloading policy for key/value projections.
                 ``"none"`` retains them on the compute device,
-                ``"estimator"`` moves the completed estimator cache to CPU,
+                ``"estimator"`` moves the completed estimator cache to pinned
+                CPU memory,
                 and ``"layer"`` synchronously moves each key/value entry to
                 pinned CPU memory as soon as it is recorded. ``"auto"`` uses
                 ``"estimator"`` for CUDA ensembles and ``"none"``
-                otherwise.
+                otherwise. Offloaded caches are ready to use when this method
+                returns.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
@@ -324,7 +326,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 )
 
             if x.is_cuda and cache_offload in ("estimator", "layer"):
-                estimator_cache = estimator_cache.cpu().pin_memory()
+                estimator_cache = estimator_cache._offload(x.device)
             cache[i] = estimator_cache
 
         self._cache = cache.freeze()
