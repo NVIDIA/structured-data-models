@@ -207,7 +207,7 @@ class RecipeExecution:
             groups[group_id][position] = outputs[i]
 
         table = EnsembleTable(
-            groups=[
+            groups=tuple(
                 cast(
                     TableTensor,
                     group[0].unsqueeze(0)  # type: ignore
@@ -215,7 +215,7 @@ class RecipeExecution:
                     else torch.stack(group, dim=0),  # type: ignore
                 )
                 for group in groups
-            ],
+            ),
             locations=self._y_locations,
         )
 
@@ -275,7 +275,10 @@ def _to_ensemble_table(
             for i, _ in x._locations:
                 locations.append((i, next_pos[i]))
                 next_pos[i] += 1
-            x = EnsembleTable(groups=groups, locations=locations)
+            x = EnsembleTable(
+                groups=tuple(groups),
+                locations=tuple(locations),
+            )
         if x.num_members < 1:
             raise ValueError("'num_estimators' needs to be positive")
         return x

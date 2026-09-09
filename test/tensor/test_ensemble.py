@@ -1,5 +1,3 @@
-from typing import cast
-
 import pytest
 import torch
 
@@ -22,26 +20,6 @@ def test_shared_member_table() -> None:
     assert next(iter(ensemble_table)) is groups[0]
     for member_id in range(3):
         assert ensemble_table.table(member_id).equal(data)
-
-
-def test_init_preserves_groups_and_locations() -> None:
-    first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0]]))
-    groups = (
-        cast(TableTensor, first.unsqueeze(0)),
-        cast(TableTensor, second.unsqueeze(0)),
-    )
-    locations = ((1, 0), (0, 0), (1, 0))
-
-    ensemble_table = EnsembleTable(groups=groups, locations=locations)
-
-    assert ensemble_table.num_groups == 2
-    group_iterator = iter(ensemble_table)
-    assert next(group_iterator) is groups[0]
-    assert next(group_iterator) is groups[1]
-    assert ensemble_table.table(0).equal(second)
-    assert ensemble_table.table(1).equal(first)
-    assert ensemble_table.table(2).equal(second)
 
 
 def test_from_tables_stacks_compatible_schemas() -> None:

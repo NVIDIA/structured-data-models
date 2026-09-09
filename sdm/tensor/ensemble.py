@@ -59,10 +59,8 @@ class EnsembleTable(DeviceMixin):
         assert groups[1].size() == (1, 2, 1)
 
     Args:
-        groups: Already arranged groups of compatible tables, each stacked
-            along a leading dimension. The groups are stored without
-            regrouping.
-        locations: One ``(group_index, position)`` pair per ensemble member.
+        groups: Groups of tables stacked along their leading dimension.
+        locations: ``(group, batch)`` location of each ensemble member.
     """
 
     _groups: tuple[TableTensor, ...]
@@ -71,11 +69,11 @@ class EnsembleTable(DeviceMixin):
 
     def __init__(
         self,
-        groups: Sequence[TableTensor],
-        locations: Sequence[tuple[int, int]],
+        groups: tuple[TableTensor, ...],
+        locations: tuple[tuple[int, int], ...],
     ) -> None:
-        self._groups = tuple(groups)
-        self._locations = tuple(locations)
+        self._groups = groups
+        self._locations = locations
 
     @classmethod
     def from_table(
@@ -84,14 +82,14 @@ class EnsembleTable(DeviceMixin):
         *,
         num_members: int,
     ) -> Self:
-        """Create an ensemble sharing one table across all members.
+        """Create an ensemble with one table for every member.
 
         Args:
-            table: Table shared by all ensemble members.
+            table: Table used by every ensemble member.
             num_members: Number of ensemble members.
 
         Returns:
-            An ensemble table with one shared group.
+            An ensemble table with one group.
         """
         return cls(
             groups=(cast(TableTensor, table.unsqueeze(0)),),
