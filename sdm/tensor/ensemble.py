@@ -69,11 +69,11 @@ class EnsembleTable(DeviceMixin):
 
     def __init__(
         self,
-        groups: tuple[TableTensor, ...],
-        locations: tuple[tuple[int, int], ...],
+        groups: Sequence[TableTensor],
+        locations: Sequence[tuple[int, int]],
     ) -> None:
-        self._groups = groups
-        self._locations = locations
+        self._groups = tuple(groups)
+        self._locations = tuple(locations)
 
     @classmethod
     def from_table(
