@@ -14,7 +14,6 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
-from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.tensor.table import TableSchema
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
@@ -222,17 +221,13 @@ class _KumoTabular(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.cell_embedding = CellEmbedding(
-            channels=cell_channels,
-            group_size=group_size,
-            num_frequencies=num_frequencies,
-            **factory_kwargs,
-        )
         self.row_embedding = RowEmbedding(
             num_classes=num_classes,
             channels=cell_channels,
             num_layers=num_embedding_layers,
             num_heads=num_embedding_heads,
+            group_size=group_size,
+            num_frequencies=num_frequencies,
             num_inducing_points=num_inducing_points,
             num_readout_tokens=num_readout_tokens,
             **factory_kwargs,
@@ -263,8 +258,7 @@ class _KumoTabular(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.cell_embedding(x, categorical_mask)
-        x = self.row_embedding(x, y, cache=cache)
+        x = self.row_embedding(x, y, categorical_mask, cache=cache)
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)
 
@@ -300,6 +294,10 @@ def remap_ckpt(  # noqa: D103
         if key.startswith("cls_downproject."):
             key = key.removeprefix("cls_downproject.")
             out[f"row_project.{key}"] = value
+            continue
+
+        if key.startswith("cell_embedding."):
+            out[f"row_embedding.{key}"] = value
             continue
 
         out[key] = value
