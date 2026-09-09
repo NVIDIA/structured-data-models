@@ -9,6 +9,7 @@ from collections.abc import (
 from enum import StrEnum
 from typing import NamedTuple, Self
 
+import torch
 from torch import Tensor
 
 from sdm.tensor.mixin import DeviceMixin
@@ -158,3 +159,18 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         )
         out._mode = self._mode
         return out
+
+    def offload(self) -> Self:
+        r"""Return a cache with tensor data offloaded to pinned CPU memory.
+
+        CUDA copies are asynchronous; synchronize the source stream before
+        accessing the returned CPU tensors.
+        """
+
+        def _copy(tensor: Tensor) -> Tensor:
+            if not tensor.is_cuda:
+                return tensor.pin_memory()
+            out = torch.empty_like(tensor, device="cpu", pin_memory=True)
+            return out.copy_(tensor, non_blocking=True)
+
+        return self._apply_tensor(_copy)

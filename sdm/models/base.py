@@ -307,7 +307,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 )
 
             if x.is_cuda and len(contexts) > 1:
-                estimator_cache = estimator_cache.cpu().pin_memory()
+                try:
+                    estimator_cache = estimator_cache.offload()
+                finally:
+                    # TODO: Track offload completion and wait before
+                    # prefetching this estimator's KV cache during a
+                    # subsequent predict call.
+                    torch.cuda.current_stream(x.device).synchronize()
             cache[i] = estimator_cache
 
         self._cache = cache.freeze()
