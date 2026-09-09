@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Processors for structured data tables."""
@@ -21,7 +21,6 @@ from sdm.processing.common import (
     ToNumerical,
     ShuffleColumns,
     SelectColumns,
-    SelectRows,
 )
 from sdm.processing.text import TFIDF, SentenceTransformer
 from sdm.processing.numerical import (
@@ -63,7 +62,6 @@ __all__ = [
     "ToNumerical",
     "ShuffleColumns",
     "SelectColumns",
-    "SelectRows",
     "TFIDF",
     "SentenceTransformer",
     "Clip",

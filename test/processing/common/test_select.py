@@ -1,11 +1,11 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
 import torch
 
 from sdm import Stype, TableTensor
-from sdm.processing import SelectColumns, SelectRows
+from sdm.processing import SelectColumns
 from sdm.tensor import EnsembleTable
 
 
@@ -32,7 +32,7 @@ def test_select_columns_round_robin_routes_members() -> None:
     out = SelectColumns(
         max_columns=2,
         method="round_robin",
-    ).fit_transform_ensemble(EnsembleTable(table, num_members=4))
+    ).fit_transform_ensemble(EnsembleTable.from_table(table, num_members=4))
 
     expected_columns = (
         ("num_0", "num_1"),
@@ -49,42 +49,3 @@ def test_select_columns_round_robin_routes_members() -> None:
             columns=columns,
         )
         assert out.table(member_id).equal(expected)
-
-
-@pytest.mark.parametrize("max_rows", [0, -1])
-def test_select_rows_rejects_non_positive_max_rows(max_rows: int) -> None:
-    with pytest.raises(ValueError, match="max_rows must be positive"):
-        SelectRows(max_rows=max_rows)
-
-
-def test_select_first_rows() -> None:
-    table = TableTensor.from_tensor(torch.randn(2, 3, 2))
-    out = SelectRows(max_rows=2, method="first").transform(table)
-    assert out.equal(table[:, :2])
-
-
-def test_select_rows_round_robin_routes_members() -> None:
-    table = TableTensor.from_tensor(torch.randn(5, 2))
-
-    out = SelectRows(
-        max_rows=2,
-        method="round_robin",
-    ).transform_ensemble(EnsembleTable(table, num_members=4))
-
-    expected_rows = ((0, 1), (2, 3), (4, 0), (1, 2))
-    for member_id, rows in enumerate(expected_rows):
-        assert out.table(member_id).equal(table[list(rows)])
-
-
-@pytest.mark.parametrize("num_rows", [0, 3])
-def test_select_rows_round_robin_keeps_all_rows_within_limit(
-    num_rows: int,
-) -> None:
-    table = TableTensor.from_tensor(torch.randn(num_rows, 2))
-
-    out = SelectRows(
-        max_rows=3,
-        method="round_robin",
-    ).transform_ensemble(EnsembleTable(table, num_members=2))
-
-    assert all(out.table(member_id).equal(table) for member_id in range(2))

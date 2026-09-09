@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
@@ -20,7 +20,7 @@ def _table() -> TableTensor:
 def test_random_projection() -> None:
     table = _table()
 
-    inp = EnsembleTable(table, num_members=8)
+    inp = EnsembleTable.from_table(table, num_members=8)
     out = RandomProjection(8).fit_transform_ensemble(inp)
 
     assert out.num_groups == 1

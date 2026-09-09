@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import re
@@ -144,16 +144,16 @@ def remap_ckpt(  # noqa: D103
 
     for key, value in ckpt.items():
         if key == "cell_embedder.fourier_frequencies":
-            out["cell_embedding.num_freq"] = value
+            out["row_embedding.cell_embedding.num_freq"] = value
 
         elif key == "cell_embedder.fourier_frequencies_cat":
-            out["cell_embedding.cat_freq"] = value
+            out["row_embedding.cell_embedding.cat_freq"] = value
 
         elif key.startswith("cell_embedder.in_linear."):
             out[
                 key.replace(
                     "cell_embedder.in_linear",
-                    "cell_embedding.num_lin",
+                    "row_embedding.cell_embedding.num_lin",
                 )
             ] = value
 
@@ -161,7 +161,7 @@ def remap_ckpt(  # noqa: D103
             out[
                 key.replace(
                     "cell_embedder.in_linear_cat",
-                    "cell_embedding.cat_lin",
+                    "row_embedding.cell_embedding.cat_lin",
                 )
             ] = value
 

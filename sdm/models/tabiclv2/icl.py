@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 # ruff: noqa: D101, D102
@@ -12,10 +12,6 @@ from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
-from sdm.nn.memory import (
-    attention_batch_size_limit,
-    cuda_attention_memory_limit,
-)
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
 
@@ -37,7 +33,6 @@ class ICLBlock(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_classes = num_classes
-        self.num_heads = num_heads
         self.temperature = temperature
 
         self.y_emb: torch.nn.Module | None = None
@@ -72,7 +67,6 @@ class ICLBlock(torch.nn.Module):
         *,
         num_classes: int | None = None,
         cache: Cache | None = None,
-        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if num_classes is None or num_classes <= self.num_classes:
             return self._forward(
@@ -80,7 +74,6 @@ class ICLBlock(torch.nn.Module):
                 y=y,
                 cache=cache,
                 cache_prefix="icl_block",
-                batch_size_limit=batch_size_limit,
             )
 
         if self.num_classes < 2:
@@ -94,7 +87,6 @@ class ICLBlock(torch.nn.Module):
             y=y,
             num_classes=num_classes,
             cache=cache,
-            batch_size_limit=batch_size_limit,
         )
 
     def _forward(
@@ -104,7 +96,6 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache | None,
         cache_prefix: str,
-        batch_size_limit: int | None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
 
@@ -117,41 +108,22 @@ class ICLBlock(torch.nn.Module):
 
             x[..., :R_train, :] += y_emb.to(x.dtype)
 
-        plan_attention = (
-            x.device.type == "cuda"
-            and not self.training
-            and not torch.is_grad_enabled()
-            and not torch.compiler.is_compiling()
-        )
-
-        icl_batch_size_limit = batch_size_limit
         for i, layer in enumerate(self.layers):
             key = f"{cache_prefix}.layer{i}"
-            query = x[..., R_train:, :] if i == len(self.layers) - 1 else x
-            key_value = (
-                cast(KVCacheEntry, cache[key])
-                if cache is not None and cache.is_replaying
-                else x[..., :R_train, :]
-            )
-            if i == 0 or (
-                plan_attention and cache is not None and cache.is_recording
-            ):
-                icl_batch_size_limit = attention_batch_size_limit(
-                    requested_limit=batch_size_limit,
-                    query=query,
-                    key_value=key_value,
-                    attention_memory_limit=(
-                        cuda_attention_memory_limit(x.device)
-                        if plan_attention
-                        else None
-                    ),
-                    num_heads=self.num_heads,
-                )
             result = layer(
-                query=query,
-                key_value=key_value,  # [..., R_train, D]
+                query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
+                key_value=(
+                    cast(KVCacheEntry, cache[key])
+                    if cache is not None and cache.is_replaying
+                    else x[..., :R_train, :]
+                ),
                 return_key_value=cache is not None and cache.is_recording,
-                batch_size_limit=icl_batch_size_limit,
+                # `x` is still the caller's tensor at i == 0; don't mutate.
+                out=None
+                if torch.is_grad_enabled() or i == 0
+                else x[..., R_train:, :]
+                if i == len(self.layers) - 1
+                else x,
             )
 
             if cache is not None and cache.is_recording:
@@ -169,7 +141,6 @@ class ICLBlock(torch.nn.Module):
         *,
         num_classes: int,
         cache: Cache | None,
-        batch_size_limit: int | None,
     ) -> Tensor:  # [..., R_test, C]
         *batch_shape, num_rows, channels = x.size()
         train_size = y.size(-1)
@@ -197,7 +168,6 @@ class ICLBlock(torch.nn.Module):
                     num_classes=num_classes,
                     cache=cache,
                     cache_prefix=f"icl_block.table{table_idx}.node",
-                    batch_size_limit=batch_size_limit,
                 )
                 for table_idx, (rows, tree) in enumerate(zip(flat_rows, trees))
             ]
@@ -212,7 +182,6 @@ class ICLBlock(torch.nn.Module):
                     test_rows=rows[train_size:],
                     cache=cache,
                     cache_prefix=f"icl_block.table{table_idx}.node",
-                    batch_size_limit=batch_size_limit,
                 )
                 trees.append(tree)
                 table_outputs.append(
@@ -241,14 +210,12 @@ class ICLBlock(torch.nn.Module):
         num_classes: int,
         cache: Cache,
         cache_prefix: str,
-        batch_size_limit: int | None,
     ) -> Tensor:  # [R_test, C]
         class_ids, local_log_probs = self._replay_node(
             test_rows=test_rows,
             node=node,
             cache=cache,
             cache_prefix=cache_prefix,
-            batch_size_limit=batch_size_limit,
         )
         return self._expand_log_probs(
             class_ids=class_ids,
@@ -264,7 +231,6 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache | None,
         cache_prefix: str,
-        batch_size_limit: int | None,
     ) -> tuple[Tensor, Tensor, _Node]:  # [C_node], [R_test, C_node]
         class_ids, local_labels = train_labels.unique(
             sorted=True,
@@ -286,7 +252,6 @@ class ICLBlock(torch.nn.Module):
                     num_classes=node_num_classes,
                     cache=cache,
                     cache_prefix=cache_prefix,
-                    batch_size_limit=batch_size_limit,
                 )
 
             return class_ids, local_log_probs, node
@@ -306,7 +271,6 @@ class ICLBlock(torch.nn.Module):
             num_classes=num_groups,
             cache=cache,
             cache_prefix=cache_prefix,
-            batch_size_limit=batch_size_limit,
         )
 
         child_class_ids: list[Tensor] = []
@@ -320,7 +284,6 @@ class ICLBlock(torch.nn.Module):
                 test_rows=test_rows,
                 cache=cache,
                 cache_prefix=f"{cache_prefix}.child{group_idx}",
-                batch_size_limit=batch_size_limit,
             )
             child_class_ids.append(child_ids)
             children_log_probs.append(
@@ -343,7 +306,6 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache,
         cache_prefix: str,
-        batch_size_limit: int | None,
     ) -> tuple[Tensor, Tensor]:  # [C_node], [R_test, C_node]
         class_ids = cast(Tensor, node["class_ids"])
         children = cast(list[_Node], node["children"])
@@ -361,7 +323,6 @@ class ICLBlock(torch.nn.Module):
                     num_classes=class_ids.numel(),
                     cache=cache,
                     cache_prefix=cache_prefix,
-                    batch_size_limit=batch_size_limit,
                 )
             return class_ids, local_log_probs
 
@@ -371,7 +332,6 @@ class ICLBlock(torch.nn.Module):
             num_classes=len(children),
             cache=cache,
             cache_prefix=cache_prefix,
-            batch_size_limit=batch_size_limit,
         )
         child_class_ids: list[Tensor] = []
         children_log_probs: list[Tensor] = []
@@ -381,7 +341,6 @@ class ICLBlock(torch.nn.Module):
                 node=child,
                 cache=cache,
                 cache_prefix=f"{cache_prefix}.child{group_idx}",
-                batch_size_limit=batch_size_limit,
             )
             child_class_ids.append(child_ids)
             children_log_probs.append(
@@ -401,14 +360,12 @@ class ICLBlock(torch.nn.Module):
         num_classes: int,
         cache: Cache | None,
         cache_prefix: str,
-        batch_size_limit: int | None,
     ) -> Tensor:  # [R_test, C_node]
         logits = self._forward(
             x=x,
             y=y,
             cache=cache,
             cache_prefix=cache_prefix,
-            batch_size_limit=batch_size_limit,
         )
         return (logits[:, :num_classes] / self.temperature).log_softmax(dim=-1)
 

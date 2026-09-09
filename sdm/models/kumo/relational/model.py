@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 # ruff: noqa: D205
@@ -23,6 +23,7 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.relational.ckpt import remap_ckpt
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.recipe import default_recipe
 from sdm.models.kumo.relational.task import TaskGraph
@@ -191,6 +192,7 @@ class KumoRelational(ICLModel):
                 revision="v2.1.2",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
+            ckpt = remap_ckpt(ckpt)
             model.load_state_dict(ckpt, assign=True)
 
         return self
@@ -479,8 +481,7 @@ class _KumoRelational(torch.nn.Module):
             assert x_context is not None
             assert x_query is not None
             x = torch.cat([x_context, x_query], dim=-2)
-            del x_context
-            del x_query
+            del x_context, x_query
         return self.icl_block(
             x=x,
             y=y,

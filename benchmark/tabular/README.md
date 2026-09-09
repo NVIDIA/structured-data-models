@@ -1,14 +1,14 @@
-# Tabular Foundation Models on TabArena and BeyondArena
+# Tabular Benchmarks
 
-This example benchmarks `structured-data-models` on [TabArena and BeyondArena](https://tabarena.ai).
+This directory contains benchmarks of `structured-data-models` on [TabArena and BeyondArena](https://tabarena.ai), plus a separate [TALENT integration](talent/).
 
 > [!NOTE]
 > Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
 > Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
 
-## Setup
+## TabArena and BeyondArena setup
 
-Install the source revisions of AutoGluon and TabArena used by this example. The Data Foundry extra downloads BeyondArena datasets on demand:
+Run the commands below from the repository root. Install the source revisions of AutoGluon and TabArena used by these benchmarks. The Data Foundry extra downloads BeyondArena datasets on demand:
 
 ```bash
 pip install structured-data-models \
@@ -20,6 +20,8 @@ pip install structured-data-models \
   "tabarena[data-foundry,plot] @ git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena"
 ```
 
+The SDM adapters run as standard AutoGluon models. Each benchmark split fits one model on all available training rows through TabArena's outer experiment path, without a validation split, bagging, tuning, or ensemble simulation.
+
 ______________________________________________________________________
 
 ## TabArena
@@ -29,25 +31,27 @@ ______________________________________________________________________
 - **`TabICLv2`:**
 
   ```bash
-  python tabarena_main.py --model tabiclv2
+  python -m benchmark.tabular.tabarena.main --model tabiclv2
   ```
 
 - **`KumoTabular`:**
 
   ```bash
-  python tabarena_main.py --model kumo-tabular
+  python -m benchmark.tabular.tabarena.main --model kumo-tabular
   ```
 
 - **`TabFM`:**
 
   ```bash
-  python tabarena_main.py --model tabfm
+  python -m benchmark.tabular.tabarena.main --model tabfm
   ```
 
 Pass a dataset name to run only that TabArena dataset:
 
 ```bash
-python tabarena_main.py --model kumo-tabular --dataset blood-transfusion-service-center
+python -m benchmark.tabular.tabarena.main \
+  --model kumo-tabular \
+  --dataset blood-transfusion-service-center
 ```
 
 ### Evaluate
@@ -55,7 +59,7 @@ python tabarena_main.py --model kumo-tabular --dataset blood-transfusion-service
 Evaluate all available model results with:
 
 ```bash
-python tabarena_evaluate.py
+python -m benchmark.tabular.tabarena.evaluate
 ```
 
 ______________________________________________________________________
@@ -67,31 +71,34 @@ ______________________________________________________________________
 - **`TabICLv2`:**
 
   ```bash
-  python beyondarena_main.py --model tabiclv2
+  python -m benchmark.tabular.beyondarena.main --model tabiclv2
   ```
 
 - **`KumoTabular`:**
 
   ```bash
-  python beyondarena_main.py --model kumo-tabular
+  python -m benchmark.tabular.beyondarena.main --model kumo-tabular
   ```
 
 - **`TabFM`:**
 
   ```bash
-  python beyondarena_main.py --model tabfm
+  python -m benchmark.tabular.beyondarena.main --model tabfm
   ```
 
 By default, each command evaluates the recommended `core` subset. Repeat `--subset` to combine filters:
 
 ```bash
-python beyondarena_main.py --model tabiclv2 --subset core --subset grouped
+python -m benchmark.tabular.beyondarena.main \
+  --model tabiclv2 \
+  --subset core \
+  --subset grouped
 ```
 
 Pass a dataset name to run only that BeyondArena dataset. Use `--subset lite` for its first split:
 
 ```bash
-python beyondarena_main.py \
+python -m benchmark.tabular.beyondarena.main \
   --model tabiclv2 \
   --dataset parkinsons_biomedical_voice_measurements \
   --subset lite
@@ -104,5 +111,5 @@ Available subset filters include problem types (`classification`, `regression`),
 Evaluate all available model results with:
 
 ```bash
-python beyondarena_evaluate.py
+python -m benchmark.tabular.beyondarena.evaluate
 ```

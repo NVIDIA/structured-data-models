@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 # ruff: noqa: D205
@@ -16,7 +16,6 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
-from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.recipe import default_recipe
@@ -233,9 +232,9 @@ class _TabFM(torch.nn.Module):
         num_embedding_repeats: int = 2,
         num_embedding_col_heads: int = 4,
         num_embedding_row_heads: int = 8,
-        num_inducing_points: int = 256,
         group_size: int = 3,
         num_frequencies: int = 32,
+        num_inducing_points: int = 256,
         num_readout_tokens: int = 8,
         num_icl_layers: int = 24,
         num_icl_heads: int = 8,
@@ -245,12 +244,6 @@ class _TabFM(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.cell_embedding = CellEmbedding(
-            channels=channels,
-            group_size=group_size,
-            num_frequencies=num_frequencies,
-            **factory_kwargs,
-        )
         self.row_embedding = RowEmbedding(
             num_classes=num_classes,
             channels=channels,
@@ -258,6 +251,8 @@ class _TabFM(torch.nn.Module):
             num_repeats=num_embedding_repeats,
             num_col_heads=num_embedding_col_heads,
             num_row_heads=num_embedding_row_heads,
+            group_size=group_size,
+            num_frequencies=num_frequencies,
             num_inducing_points=num_inducing_points,
             num_readout_tokens=num_readout_tokens,
             **factory_kwargs,
@@ -279,6 +274,5 @@ class _TabFM(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, 1 or num_classes]
-        x = self.cell_embedding(x, categorical_mask)
-        x = self.row_embedding(x, y, cache=cache)
+        x = self.row_embedding(x, y, categorical_mask, cache=cache)
         return self.icl_block(x, y, cache=cache)

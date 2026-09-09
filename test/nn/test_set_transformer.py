@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
@@ -100,25 +100,25 @@ def test_induced_transformer_block_kv_cache() -> None:
         return_key_value=True,
     )
     cached_out = module(query=query, key_value=kv)
-    module.eval()
-    chunked_out = module(
-        query=query,
-        key_value=key_value,
-        seqused_key_value=seqused_key_value,
-        batch_size_limit=1,
-    )
-    chunked_cache_out, chunked_kv = module(
-        query=query,
-        key_value=key_value,
-        seqused_key_value=seqused_key_value,
-        return_key_value=True,
-        batch_size_limit=1,
-    )
-    chunked_cached_out = module(
-        query=query,
-        key_value=chunked_kv,
-        batch_size_limit=1,
-    )
+    with torch.no_grad():
+        chunked_out = module(
+            query=query,
+            key_value=key_value,
+            seqused_key_value=seqused_key_value,
+            batch_size_limit=1,
+        )
+        chunked_cache_out, chunked_kv = module(
+            query=query,
+            key_value=key_value,
+            seqused_key_value=seqused_key_value,
+            return_key_value=True,
+            batch_size_limit=1,
+        )
+        chunked_cached_out = module(
+            query=query,
+            key_value=chunked_kv,
+            batch_size_limit=1,
+        )
     assert kv.key.size() == (
         batch_size,
         num_inducing_points,

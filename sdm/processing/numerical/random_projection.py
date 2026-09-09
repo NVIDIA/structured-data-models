@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from typing import Literal, cast
@@ -84,4 +84,4 @@ class RandomProjection(EnsembleProcessor):
             locations.append((group_id, group_position[group_id]))
             group_position[group_id] += 1
 
-        return EnsembleTable._from_groups(groups, locations)
+        return EnsembleTable(groups=groups, locations=locations)

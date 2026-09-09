@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from typing import Literal
@@ -59,11 +59,11 @@ def test_random_ensemble_matches_independent_shuffles() -> None:
     ensemble_generator = torch.Generator().manual_seed(7)
 
     context_output = ensemble.fit_transform_ensemble(
-        EnsembleTable(context, num_members=8),
+        EnsembleTable.from_table(context, num_members=8),
         generator=ensemble_generator,
     )
     query_output = ensemble.transform_ensemble(
-        EnsembleTable(query, num_members=8)
+        EnsembleTable.from_table(query, num_members=8)
     )
     restored = ensemble.inverse_transform_ensemble(context_output)
 
@@ -140,7 +140,7 @@ def test_latin_ensemble_couples_member_permutations(
 def test_shuffle_columns_checks_num_members(method_name: str) -> None:
     processor = ShuffleColumns(method="latin")
     processor.fit_ensemble(
-        EnsembleTable(_table(), num_members=8),
+        EnsembleTable.from_table(_table(), num_members=8),
         generator=torch.Generator().manual_seed(9),
     )
 
@@ -148,4 +148,6 @@ def test_shuffle_columns_checks_num_members(method_name: str) -> None:
         RuntimeError,
         match="was fitted with 8 ensemble members, but got 7",
     ):
-        getattr(processor, method_name)(EnsembleTable(_table(), num_members=7))
+        getattr(processor, method_name)(
+            EnsembleTable.from_table(_table(), num_members=7)
+        )

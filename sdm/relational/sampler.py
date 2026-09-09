@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -153,7 +153,10 @@ class RelationalSampler:
             )
         if task_table.dim() == 3:
             num_members, num_rows = task_table.size()[:2]
-            task_table = cast(TableTensor, task_table.flatten(0, 1))
+            task_table = cast(
+                TableTensor,
+                task_table.contiguous().flatten(0, 1),
+            )
         else:
             num_members, num_rows = None, task_table.size(0)
 

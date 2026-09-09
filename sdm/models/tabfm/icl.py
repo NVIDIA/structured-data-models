@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 # ruff: noqa: D101, D102
@@ -77,6 +77,11 @@ class ICLBlock(torch.nn.Module):
                     else x[..., :R_train, :]
                 ),
                 return_key_value=cache is not None and cache.is_recording,
+                out=None
+                if torch.is_grad_enabled()
+                else x[..., R_train:, :]
+                if i == len(self.layers) - 1
+                else x,
             )  # [..., R, D] or [..., R_test, D]
 
             if cache is not None and cache.is_recording:

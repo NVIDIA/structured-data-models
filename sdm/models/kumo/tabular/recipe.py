@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import sdm.processing as sp
@@ -9,7 +9,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         features=[
             sp.StypeDispatch(
                 categorical=[
-                    sp.AlignCategories(sort_by="value"),
+                    sp.AlignCategories(sort_by="value", min_frequency=2),
                     sp.ToNumerical(),
                 ],
             ),
@@ -25,6 +25,8 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                         method="round_robin",
                     ),
                     sp.ClipSigma(threshold=4.0),
+                    sp.FlipSign(),
+                    sp.SelectColumns(500, method="round_robin"),
                     sp.ShuffleColumns(method="latin"),
                 ],
             ),
@@ -35,13 +37,16 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.AlignCategories(),
                     sp.ShuffleCategories(method="shift"),
                 ],
-                numerical=sp.Standardize(),
+                numerical=[
+                    sp.Standardize(),
+                    sp.FlipSign(),
+                ],
             ),
         ],
         output=[
             sp.ReduceEstimators(method="mean"),
             sp.TaskDispatch(
-                classification=sp.Softmax(temperature=0.9),
+                classification=sp.Softmax(temperature=1.0),
             ),
         ],
     )

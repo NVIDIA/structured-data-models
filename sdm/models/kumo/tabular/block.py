@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 # ruff: noqa: D101
@@ -67,3 +67,27 @@ class KumoTabularTransformerBlock(TransformerBlock):
             else None,
             **factory_kwargs,
         )
+
+    def peak_bytes_per_example(
+        self,
+        element_size: int,
+        query_length: int,
+        key_value_length: int | None = None,
+    ) -> int:
+        r""":meta private:"""  # noqa: D415
+        length = max(query_length, key_value_length or 0)
+        factor = 15 if element_size <= 2 else 8
+        return factor * length * element_size * self.attn.q_dim
+
+
+if __name__ == "__main__":
+    from sdm.testing.memory import benchmark_transformer_block_memory_peak
+
+    benchmark_transformer_block_memory_peak(
+        block=lambda channels, num_heads: KumoTabularTransformerBlock(
+            channels=channels,
+            num_heads=num_heads,
+            query_log_scale=True,
+        ),
+        channels_and_heads=[(256, 4), (512, 4)],
+    )

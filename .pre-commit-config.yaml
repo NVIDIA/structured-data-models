@@ -38,6 +38,7 @@ repos:
       - id: ty
         name: Type check Python
         args:
+          - --find-links=https://data.pyg.org/whl/torch-2.14.0+cpu.html
           - --no-default-groups
           - --group=test
 
@@ -51,3 +52,12 @@ repos:
           - mdformat-gfm
           - mdformat_frontmatter
           - mdformat_footnote
+
+  - repo: https://github.com/rapidsai/pre-commit-hooks
+    rev: v1.6.0
+    hooks:
+      - id: verify-copyright
+        name: Check copyright headers
+        args: [--fix, --force-spdx, --spdx-license-identifier=Apache-2.0]
+        files: '(^|/)Makefile$|[.](css|py|pyi|sh)$'
+        exclude: '^(third_party|vendor)/'

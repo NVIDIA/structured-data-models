@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
@@ -54,12 +54,14 @@ class EnsembleProcessor(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         self._fit_ensemble(
-            EnsembleTable(table, num_members=1),
+            EnsembleTable.from_table(table, num_members=1),
             generator=generator,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        output = self._transform_ensemble(EnsembleTable(table, num_members=1))
+        output = self._transform_ensemble(
+            EnsembleTable.from_table(table, num_members=1)
+        )
         return output.table(0)
 
     def _fit_transform(
@@ -71,7 +73,7 @@ class EnsembleProcessor(Processor):
         if not self.requires_fit:
             return self._transform(table)
         output = self._fit_transform_ensemble(
-            EnsembleTable(table, num_members=1),
+            EnsembleTable.from_table(table, num_members=1),
             generator=generator,
         )
         return output.table(0)
@@ -177,7 +179,7 @@ class EnsembleInvertibleMixin(InvertibleMixin):
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         output = self._inverse_transform_ensemble(
-            EnsembleTable(table, num_members=1)
+            EnsembleTable.from_table(table, num_members=1)
         )
         return output.table(0)
 

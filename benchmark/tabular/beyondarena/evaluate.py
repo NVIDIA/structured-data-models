@@ -1,37 +1,39 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Evaluate SDM tabular model results on TabArena."""
+r"""Evaluate SDM tabular model results on BeyondArena."""
 
 from pathlib import Path
 
-from tabarena.contexts import TabArenaContext
+from tabarena.contexts import BeyondArenaContext
 from tabarena.end_to_end import EndToEnd
-
-from models import MODEL_CONFIGS
 from tabarena.models import MethodMetadata
 
-example_dir = Path(__file__).parent.parent
-result_root = example_dir / "tabarena_out"
-output_root = example_dir / "evals"
+from benchmark.tabular.model import MODEL_CONFIGS
+
+benchmark_dir = Path(__file__).parent.parent
+result_root = benchmark_dir / "beyondarena_out"
+output_root = benchmark_dir / "beyondarena_evals"
 
 runs = []
 for model_config in MODEL_CONFIGS.values():
-    result_dir = result_root / model_config.name
+    result_dir = result_root / model_config.name / "outer_model"
     if next(result_dir.rglob("results.pkl"), None) is not None:
         runs.append((model_config, result_dir))
 
 if not runs:
-    raise FileNotFoundError(f"No TabArena results found under {result_root}")
+    raise FileNotFoundError(
+        f"No BeyondArena results found under {result_root}"
+    )
 
-base_context = TabArenaContext()
+base_context = BeyondArenaContext()
 methods = []
 for model_config, result_dir in runs:
     output_dir = output_root / model_config.name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     method_metadata = MethodMetadata.baseline(
-        method=model_config.method_name,
+        method=model_config.beyondarena_method_name,
         compute="gpu",
         artifact_dir=output_dir / "artifacts",
     )
@@ -50,7 +52,7 @@ for model_config, result_dir in runs:
         processed.to_method_metadata_lst(new_result_prefix="[SDM] ")
     )
 
-context = TabArenaContext.from_new_methods(methods)
+context = BeyondArenaContext.from_new_methods(methods)
 leaderboard = context.compare(
     output_dir=output_root,
     only_valid_tasks=[method.method for method in methods],

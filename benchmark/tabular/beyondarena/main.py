@@ -1,18 +1,16 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 r"""Run an SDM tabular model on BeyondArena."""
-
-from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
 from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
 from tabarena.contexts import BeyondArenaContext
-from tabarena.utils.config_utils import SystemConfigGenerator
+from tabarena.utils.config_utils import ConfigGenerator
 
-from models import MODEL_CONFIGS, SDMSystem
+from benchmark.tabular.model import MODEL_CONFIGS
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -30,23 +28,41 @@ parser.add_argument(
     action="append",
     help="Filter tasks; repeat to combine filters (default: core).",
 )
+parser.add_argument(
+    "--max_context_size",
+    type=int,
+    help="Subsample the context to at most this many rows.",
+)
+parser.add_argument(
+    "--batch_size",
+    type=int,
+    help="Prediction batch size.",
+)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
-    Path(__file__).parent.parent / "beyondarena_out" / model_config.name
+    Path(__file__).parent.parent
+    / "beyondarena_out"
+    / model_config.name
+    / "outer_model"
 )
 result_dir.mkdir(parents=True, exist_ok=True)
 
-generator = SystemConfigGenerator(
-    model_cls=SDMSystem,
-    name=model_config.system_name,
-    manual_configs=[{"model": args.model}],
+config = {
+    "max_context_size": args.max_context_size,
+}
+if args.batch_size is not None:
+    config["ag.max_batch_size"] = args.batch_size
+
+generator = ConfigGenerator(
+    search_space={},
+    model_cls=model_config.model_cls,
+    manual_configs=[config],
 )
 experiments = BeyondArenaExperimentBundle(
     models=[(generator, 0)],
-    system_experiments=True,
-    text_cache_mode="off",
+    outer_experiments=True,
 ).build_experiments()
 
 context = BeyondArenaContext()

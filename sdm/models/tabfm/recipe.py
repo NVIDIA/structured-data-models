@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import sdm.processing as sp
@@ -26,10 +26,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     ),
                     sp.ClipSigma(threshold=4.0),
                     sp.ShuffleColumns(method="random"),
-                    sp.SelectColumns(
-                        max_columns=500,
-                        method="round_robin",
-                    ),
+                    sp.SelectColumns(500, method="round_robin"),
                 ],
             ),
         ],

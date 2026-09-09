@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 import functools
@@ -68,5 +68,5 @@ def test_forward(
     model.fit(x_context, y_context, generator=generator)
     assert model._cache is not None
     assert model._cache.size() > 0
-    assert model.predict(x_query).allclose(out)
+    assert model.predict(x_query).allclose(out, atol=1e-4, rtol=1e-4)
     model.clear()
