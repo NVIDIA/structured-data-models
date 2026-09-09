@@ -98,19 +98,22 @@ class EnsembleTable(TableTensor):
 ```
 
 ## Steps
-1. Introduce Ensemble/EnsembleData
+1. Introduce State
+2. Introduce EnsembleStorage
+1. Introduce Ensemble
 2. Introduce EnsembleTensor
 3. Update EnsembleTable
 4. Update normal Processors
 5. Map old EnsembleTable logic to new
 6. Remove EnsembleProcessor logic
-7. Introduce Parameter
 8. Remove BufferList
-9. Update Documentation  
+9. Update Documentation
+10. (optional) lift attributes of Torch/Tabletensor to Ensembletensor/EnsembleTable
 
 Open Questions:
 - Solution around custom tensor classes such as CategoricalTensor, StringTensor etc.
-- Should be have a storage class? 
+- Should be have a storage class?
+- How to do the migration? EnsembleTableNew? 
 
 Note to myself: 
 - batched TableTensors might need to be mapped to EnsembleTable in fit() otherwise today's EnsembleProcessors might break in that case. 
