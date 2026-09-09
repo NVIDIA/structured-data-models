@@ -59,7 +59,9 @@ class EnsembleTable(DeviceMixin):
         assert groups[1].size() == (1, 2, 1)
 
     Args:
-        groups: Groups of tables stacked along their leading dimension.
+        groups: Sequence of
+            :class:`~sdm.tensor.TableTensor`, optionally stacked along their
+            leading dimension.
         locations: ``(group, batch)`` location of each ensemble member.
     """
 
@@ -82,14 +84,14 @@ class EnsembleTable(DeviceMixin):
         *,
         num_members: int,
     ) -> Self:
-        """Create an ensemble with one table for every member.
+        """Create an ensemble, sharing one table across all members.
 
         Args:
-            table: Table used by every ensemble member.
+            table: Table used across members.
             num_members: Number of ensemble members.
 
         Returns:
-            An ensemble table with one group.
+            An :class:`~sdm.tensor.EnsembleTable` with one group.
         """
         return cls(
             groups=(cast(TableTensor, table.unsqueeze(0)),),
