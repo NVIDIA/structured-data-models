@@ -113,33 +113,39 @@ def _recent_context_pool(
     return pd.concat([tied.iloc[selected], newer])
 
 
+def table_stypes(table: Table, *, text: bool) -> dict[str, sdm.StypeLike]:
+    """Infer the same supported columns for prediction and precomputation."""
+    overrides = dict.fromkeys(table.fkey_col_to_pkey_table, "id")
+    if table.pkey_col is not None:
+        overrides[table.pkey_col] = "id"
+    sample = table.df.head(10_000)
+    dropped = [
+        column
+        for column in sample
+        if column not in overrides
+        and (
+            column.startswith("Unnamed:")
+            or sample[column].isna().all()
+            or multicategorical(sample[column])
+        )
+    ]
+    return sdm.infer_stypes(
+        sample.drop(columns=dropped),
+        overrides=overrides,
+        text="infer" if text else "drop",
+        unsupported="drop",
+    )
+
+
 def model_tables(db: Database, *, text: bool) -> dict[str, sdm.TableTensor]:
     """Infer supported columns, preserving relational keys and timestamps."""
-    tables = {}
-    for name in sorted(db.table_dict):
-        table = db.table_dict[name]
-        overrides = dict.fromkeys(table.fkey_col_to_pkey_table, "id")
-        if table.pkey_col is not None:
-            overrides[table.pkey_col] = "id"
-        sample = table.df.head(10_000)
-        dropped = [
-            column
-            for column in sample
-            if column not in overrides
-            and (
-                column.startswith("Unnamed:")
-                or sample[column].isna().all()
-                or multicategorical(sample[column])
-            )
-        ]
-        stypes = sdm.infer_stypes(
-            sample.drop(columns=dropped),
-            overrides=overrides,
-            text="infer" if text else "drop",
-            unsupported="drop",
+    return {
+        name: tensorize_table(
+            frame=db.table_dict[name].df,
+            stypes=table_stypes(db.table_dict[name], text=text),
         )
-        tables[name] = tensorize_table(table.df, stypes)
-    return tables
+        for name in sorted(db.table_dict)
+    }
 
 
 def tensorize_table(
@@ -362,11 +368,7 @@ class KumoPredictor(RelArenaModel):
             raise ValueError("Unknown regression transform")
         if components:
             cache_path = None
-            if config["cache_text"]:
-                if self.cache.directory is None:
-                    raise ValueError(
-                        "cache_text requires an explicit cache directory"
-                    )
+            if config["cache_text"] and self.cache.directory is not None:
                 cache_path = self.cache.directory / "qwen-documents.sqlite"
             recipe.prepend_features(
                 sp.StypeDispatch(

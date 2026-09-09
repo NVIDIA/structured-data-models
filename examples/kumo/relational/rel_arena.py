@@ -18,6 +18,11 @@ Run one task from the repository root, after the setup in README.relarena.md::
     )
     print(result.tuned.test_score)
 
+cache_dir is optional. Point it at precompute_text.py's output directory to
+reuse frozen text embeddings; missing documents are encoded and cached. Omit
+it to encode text on demand without a persistent cache. PCA remains fitted
+separately on each training context in both cases.
+
 RelArena scores every candidate on full validation, then refits and scores the
 winner and default on TEST. The complete per-task budget includes preprocessing
 and all trials/refits; a per-trial time limit is not a whole-task limit.

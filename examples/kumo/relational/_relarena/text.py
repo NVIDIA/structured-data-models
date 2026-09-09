@@ -17,6 +17,18 @@ import sdm.processing as sp
 QWEN_REVISION = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
 
 
+def _documents(table: sdm.TableTensor) -> list[str]:
+    frame = table.flatten(0, table.dim() - 2).to_pandas()
+    return [
+        "\x1f".join(
+            f"{column}={value}"
+            for column, value in zip(frame.columns, row, strict=True)
+            if not pd.isna(value) and str(value) != ""
+        )
+        for row in frame.itertuples(index=False, name=None)
+    ]
+
+
 class QwenDocuments(sp.Processor):
     """Encode canonical table-row documents with the frozen V11 text model."""
 
@@ -78,18 +90,18 @@ class QwenDocuments(sp.Processor):
             with torch.amp.autocast(vectors.device.type, enabled=False):
                 return torch.nn.functional.normalize(vectors.float(), dim=-1)
 
+    def precompute(self, table: sdm.TableTensor) -> None:
+        """Populate every nonempty document, failing if the cache is full."""
+        assert self.cache is not None
+        self.cache.encode(
+            [document for document in _documents(table) if document],
+            self._encode,
+            require_all=True,
+        )
+
     def _transform(self, table: sdm.TableTensor) -> sdm.TableTensor:
         shape = table.size()[:-1]
-        flat = table.flatten(0, table.dim() - 2)
-        frame = flat.to_pandas()
-        documents = [
-            "\x1f".join(
-                f"{column}={value}"
-                for column, value in zip(frame.columns, row, strict=True)
-                if not pd.isna(value) and str(value) != ""
-            )
-            for row in frame.itertuples(index=False, name=None)
-        ]
+        documents = _documents(table)
         codes, unique = pd.factorize(
             np.asarray(documents, dtype=object), sort=False
         )

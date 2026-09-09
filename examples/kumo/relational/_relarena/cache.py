@@ -56,6 +56,8 @@ class DocumentCache:
         self,
         documents: Sequence[str],
         encoder: Callable[[Sequence[str]], torch.Tensor],
+        *,
+        require_all: bool = False,
     ) -> torch.Tensor:
         # Preserve duplicate/order semantics even without caller deduplication.
         unique = list(dict.fromkeys(documents))
@@ -75,6 +77,11 @@ class DocumentCache:
             else:
                 vectors[index] = np.frombuffer(row[0], dtype=np.float32)
         if missing:
+            if require_all and self.rows + len(missing) > self.capacity:
+                raise RuntimeError(
+                    "Text cache is full. Increase --max-cache-gib and the "
+                    "benchmark's text_cache_max_bytes, then resume."
+                )
             # Let the encoder length-sort all misses before internal batching.
             with torch.inference_mode():
                 encoded = (

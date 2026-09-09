@@ -13,12 +13,14 @@ Each module's opening docstring shows a one-task Python example. For the system,
 
 Use RelArena commit `4dece53d3cef84f3e2b18ceb3cea13075afefdab`, RelBench 2.1.2, SDM's CUDA environment and a matching CPU PyG sampler. Text features additionally require sentence-transformers. The integration uses V11's public `KumoRelational` v2.1.2 weights (`nvidia/Kumo-Relational`, revision `6115b706c266c81b386faa5dcd0f5ff22faea444`), not PR #676's older Nemotron checkpoint.
 
+To populate the raw text cache before tuning, run `python -m examples.kumo.relational.precompute_text --dataset rel-amazon --task user-ltv --output-dir /data/relarena/amazon-user-ltv --device cuda:0`, then pass the same directory as the RelArena runner's optional `cache_dir` (or `CacheConfig.directory` for a direct system call). Omit the cache argument to encode text on demand without persistent storage; with a directory, existing embeddings are reused and missing documents are encoded and cached. [precompute_text.py](precompute_text.py) processes both censored database views without PCA or model inference; the RelBench data must already be available locally. It resumes from existing embeddings and stops with an error if the 32 GiB vector cap is insufficient. To raise it, set `--max-cache-gib` and the matching `text_cache_max_bytes` submission config. Precomputation still counts toward the runtime budget, and changed FP16 encoding batches can slightly change predictions versus an uncached run.
+
 ## Preserved behavior
 
 - Eight independently sampled contexts, each capped at 10,000 rows; one query neighborhood shared across the eight estimators. Smaller training tables use all available rows.
 - V11 neural precision and regression median/inverse-transform handling. Compilation is not enabled.
 - Canonical table/relationship and neighbor tie ordering; corrected label-independent selection among equal-time rows when the latest-80k pool is enabled.
-- Bounded text tensorization and frozen raw-Qwen vector caching before separately context-fitted PCA. The 32 GiB limit is disk vector payload, not RAM or VRAM; SQLite needs additional disk overhead. Supply a task-local cache directory through RelArena's native cache argument. Cold cache creation remains method work.
+- Bounded text tensorization and optional frozen raw-Qwen vector caching before separately context-fitted PCA. The 32 GiB limit is disk vector payload, not RAM or VRAM; SQLite needs additional disk overhead. Supply a task-local cache directory through RelArena's native cache argument to enable persistence, or omit it to compute embeddings on demand. Cold cache creation remains method work.
 - Original ten-window raw-event lag features and generic mature-label history remain distinct options. They use only the supplied phase-censored database and eligible training labels, never query labels.
 
 ## Search and runtime status
