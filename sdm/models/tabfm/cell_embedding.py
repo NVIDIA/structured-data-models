@@ -133,7 +133,7 @@ class CellEmbedding(torch.nn.Module):
                 (*B, R, C, self.channels),
                 dtype=torch.get_autocast_dtype(x.device.type)
                 if torch.is_autocast_enabled(x.device.type)
-                else x.dtype,
+                else dtype,
             )
 
         rows_per_chunk = max(1, batch_size_limit // (math.prod(B) * C))
@@ -163,8 +163,12 @@ class CellEmbedding(torch.nn.Module):
             (*x.size()[:-1], 2 * x.size(-1)),
             dtype=weight.dtype,
         )
-        torch.sin(x, out=fourier[..., : x.size(-1)])
-        torch.cos(x, out=fourier[..., x.size(-1) :])
+        if torch.is_grad_enabled():
+            fourier[..., : x.size(-1)] = x.sin()
+            fourier[..., x.size(-1) :] = x.cos()
+        else:
+            torch.sin(x, out=fourier[..., : x.size(-1)])
+            torch.cos(x, out=fourier[..., x.size(-1) :])
         del x
 
         if out is None:
