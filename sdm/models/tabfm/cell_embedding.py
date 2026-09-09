@@ -87,11 +87,7 @@ class CellEmbedding(torch.nn.Module):
         ).sum(dim=-2)  # [..., 1, C, D]
         bias = bias.to(dtype)
 
-        if (
-            self.training
-            or torch.is_grad_enabled()
-            or torch.compiler.is_compiling()
-        ):
+        if torch.is_grad_enabled() or torch.compiler.is_compiling():
             return self._forward(x, freq, weight, bias, out=out)
 
         if batch_size_limit == "auto":
@@ -133,7 +129,7 @@ class CellEmbedding(torch.nn.Module):
                 (*B, R, C, self.channels),
                 dtype=torch.get_autocast_dtype(x.device.type)
                 if torch.is_autocast_enabled(x.device.type)
-                else dtype,
+                else x.dtype,
             )
 
         rows_per_chunk = max(1, batch_size_limit // (math.prod(B) * C))
