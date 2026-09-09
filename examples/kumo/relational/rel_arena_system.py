@@ -1,11 +1,17 @@
-"""Kumo system submission with validation-owned recipe selection.
+r"""Kumo system submission with validation-owned recipe selection.
 
 Unlike the MODEL example, this system owns tuning and can score candidates on
 a fixed validation subset. It refits its winner on full outer TRAIN+VAL and
-returns predictions for the entire masked TEST table. The candidate policy is
-provisional, not an optimized submission claim.
+returns predictions for the entire masked TEST table. It compares text OFF
+against context-fitted PCA32 with all other parameters fixed, using the same
+rel_arena_search_space.py policy as the model.
 
 Run one task from the repository root, after the setup in README.relarena.md::
+
+    python -m examples.kumo.relational.rel_arena_system \
+        --datasets rel-f1 --tasks driver-position --output system-results.csv
+
+The CLI uses full validation. To choose a validation subset, call Python::
 
     from pathlib import Path
 
@@ -45,11 +51,13 @@ separately when checking the complete per-task runtime allowance.
 from __future__ import annotations
 
 import math
+import sys
 import time
 from dataclasses import replace
 
 import numpy as np
-from examples.kumo.relational.rel_arena import SEARCH_SPACE, KumoPredictor
+from examples.kumo.relational.rel_arena import KumoPredictor
+from examples.kumo.relational.rel_arena_search_space import SEARCH_SPACE
 from relarena.dataset import InnerSplit, OuterSplit, concat_tables
 from relarena.metrics import primary_metric
 from relarena.registry import register_system
@@ -176,3 +184,9 @@ class KumoSystem(RelArenaSystem):
         )
         remaining()
         return predictions
+
+
+if __name__ == "__main__":
+    from relarena.cli import main
+
+    raise SystemExit(main(["--model", KumoSystem.name, *sys.argv[1:]]))

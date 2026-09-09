@@ -41,6 +41,7 @@ class QwenDocuments(sp.Processor):
         *,
         cache_path: Path | None = None,
         max_vector_bytes: int = 32 * 1024**3,
+        batch_size: int = 256,
     ) -> None:
         super().__init__()
         from sentence_transformers import SentenceTransformer  # noqa: PLC0415
@@ -58,6 +59,7 @@ class QwenDocuments(sp.Processor):
         self.encoder.tokenizer.padding_side = "right"
         self.encoder.default_prompt_name = None
         self.encoder.eval().requires_grad_(False)
+        self.batch_size = batch_size
         # Retain the API supported by sentence-transformers 5.x as well.
         self.embedding_dim = cast(
             int,
@@ -82,7 +84,7 @@ class QwenDocuments(sp.Processor):
         with torch.inference_mode():
             vectors = self.encoder.encode(
                 list(documents),
-                batch_size=256,
+                batch_size=self.batch_size,
                 convert_to_tensor=True,
                 normalize_embeddings=False,
                 show_progress_bar=False,

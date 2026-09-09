@@ -4,7 +4,7 @@ Run from the repository root after the setup in README.relarena.md::
 
     python -m examples.kumo.relational.precompute_text \
         --dataset rel-amazon --task user-ltv --device cuda:0 \
-        --output-dir /data/relarena/amazon-user-ltv
+        --output-dir /data/relarena/amazon-user-ltv --batch-size 1024
 
 Pass the same directory as the runner's cache_dir (or CacheConfig.directory
 for a direct system call). Both phase-censored views are processed by default;
@@ -12,6 +12,9 @@ for a direct system call). Both phase-censored views are processed by default;
 are precomputed. Rows are processed in chunks; existing vectors are reused on
 restart. Use one writer per directory. Precomputation time remains part of the
 method's runtime budget.
+
+--batch-size controls GPU encoding batches (default 1024); reduce it if GPU
+memory is insufficient. --chunk-rows controls CPU table-row chunks separately.
 
 The default disk-vector cap matches the submission's 32 GiB cap; if increasing
 --max-cache-gib, also increase text_cache_max_bytes in the submission config.
@@ -50,7 +53,16 @@ def main() -> None:
         "--split", choices=("inner", "outer", "both"), default="both"
     )
     parser.add_argument(
-        "--chunk-rows", type=int, default=TEXT_TABLE_CHUNK_ROWS
+        "--chunk-rows",
+        type=int,
+        default=TEXT_TABLE_CHUNK_ROWS,
+        help="CPU table-row chunk size (independent of GPU encoding batches)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1024,
+        help="GPU encoding batch size; reduce if GPU memory is insufficient",
     )
     parser.add_argument("--max-cache-gib", type=int, default=32)
     args = parser.parse_args()
@@ -62,6 +74,7 @@ def main() -> None:
         torch.device(args.device),
         cache_path=args.output_dir / "qwen-documents.sqlite",
         max_vector_bytes=args.max_cache_gib * 1024**3,
+        batch_size=args.batch_size,
     )
     assert encoder.cache is not None
     phases = ("inner", "outer") if args.split == "both" else (args.split,)

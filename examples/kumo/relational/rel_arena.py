@@ -1,15 +1,23 @@
-"""Kumo model submission using RelArena's shared validation tuner.
+r"""Kumo model submission using RelArena's shared validation tuner.
 
 Run one task from the repository root, after the setup in README.relarena.md::
 
+    python -m examples.kumo.relational.rel_arena \
+        --datasets rel-f1 --tasks driver-position --n-trials 2 \
+        --output model-results.csv
+
+Or call the same official runner from Python::
+
     from examples.kumo.relational.rel_arena import KumoModel
+    from examples.kumo.relational.rel_arena_search_space import SEARCH_SPACE
     from relarena.runner import run_model_experiment
 
     result = run_model_experiment(
         KumoModel,
         "rel-f1",
         "driver-position",
-        n_trials=20,
+        search_space=SEARCH_SPACE,
+        n_trials=2,
         seed=0,
         cache_dir=".cache/relarena/rel-f1-driver-position",
     )
@@ -20,8 +28,9 @@ reuse frozen text embeddings; missing documents are encoded and cached. Omit
 it to encode text on demand without a persistent cache. PCA remains fitted
 separately on each training context in both cases.
 
-SEARCH_SPACE below is shared across tasks and reused by the system script.
-Its candidates are provisional; complete runtime has not been certified.
+rel_arena_search_space.py compares text OFF against context-fitted PCA32, with
+all other parameters fixed across tasks. The system uses the same candidates.
+Complete runtime has not been certified.
 RelArena scores every candidate on full validation, then refits and scores the
 winner and default on TEST. The complete per-task budget includes preprocessing
 and all trials/refits; a per-trial time limit is not a whole-task limit.
@@ -29,6 +38,7 @@ and all trials/refits; a per-trial time limit is not a whole-task limit.
 
 from __future__ import annotations
 
+import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -39,9 +49,12 @@ import pandas as pd
 import torch
 from examples.kumo.relational._relarena.lag import LAG_SPECS, RawEventLags
 from examples.kumo.relational._relarena.text import ContextPCA, QwenDocuments
+from examples.kumo.relational.rel_arena_search_space import (
+    DEFAULT,
+    SEARCH_SPACE,
+)
 from relarena.model import RelArenaModel
 from relarena.registry import register_model
-from relarena.search_space import SearchSpace
 from relbench.base import Database, EntityTask, Table, TaskType
 from relbench.datasets import dataset_registry
 from relbench.tasks import task_registry
@@ -54,6 +67,7 @@ CONTEXT_ROWS = 10_000
 ESTIMATORS = 8
 QUERY_BATCH_SIZE = 1_000
 RECENCY_POLICY = "seeded_cutoff_ties"
+TEXT_TABLE_CHUNK_ROWS = 4_096
 
 
 class _Config(TypedDict):
@@ -74,63 +88,6 @@ class _SampleKwargs(TypedDict):
     task_time_column: str
     num_neighbors: list[int]
     temporal_strategy: Literal["last", "uniform"]
-
-
-DEFAULT = {
-    "num_neighbors": [16, 16],
-    "text_pca_components": 0,
-    "regression_transform": "standard",
-    "cache_text": True,
-    "text_cache_max_bytes": 32 * 1024**3,
-    "recent_context_pool": False,
-    "max_keys": 20_000,
-    "entity_timestamps": "retain",
-    "temporal_strategy": "last",
-    "raw_event_lags": False,
-}
-TEXT_TABLE_CHUNK_ROWS = 4_096
-
-
-# Provisional candidates shared by both submissions; not an exhaustive grid.
-# Neighbors, raw-event lags, text PCA, targets, recency, entity dates.
-_CHOICES = [
-    ([16, 16], False, 0, "standard", False, "retain"),
-    ([1], False, 0, "quantile", True, "drop"),
-    ([1], False, 32, "standard", False, "retain"),
-    ([1], True, 0, "standard", False, "drop"),
-    ([1], True, 32, "quantile", True, "retain"),
-    ([1, 1], False, 0, "standard", True, "drop"),
-    ([1, 1], False, 32, "quantile", False, "retain"),
-    ([1, 1], True, 0, "quantile", False, "drop"),
-    ([1, 1], True, 32, "standard", True, "retain"),
-    ([16], False, 0, "quantile", False, "drop"),
-    ([16], False, 32, "standard", True, "retain"),
-    ([16], True, 0, "standard", False, "retain"),
-    ([16], True, 32, "quantile", True, "drop"),
-    ([16, 16], False, 32, "quantile", True, "drop"),
-    ([16, 16], True, 0, "quantile", True, "retain"),
-    ([16, 16], True, 32, "standard", False, "drop"),
-    ([64, 64], False, 0, "quantile", True, "drop"),
-    ([64, 64], False, 32, "standard", False, "retain"),
-    ([64, 64], True, 0, "standard", True, "retain"),
-    ([64, 64], True, 32, "quantile", False, "drop"),
-]
-
-SEARCH_SPACE = SearchSpace(
-    default_overrides=DEFAULT,
-    fixed_grid=[
-        {
-            **DEFAULT,
-            "num_neighbors": neighbors,
-            "raw_event_lags": raw,
-            "text_pca_components": text,
-            "regression_transform": targets,
-            "recent_context_pool": recent,
-            "entity_timestamps": dates,
-        }
-        for neighbors, raw, text, targets, recent, dates in _CHOICES
-    ],
-)
 
 
 class TargetQuantile(sp.Processor, sp.InvertibleMixin):
@@ -585,3 +542,9 @@ class KumoPredictor(RelArenaModel):
 
 
 KumoModel = register_model(search_space=SEARCH_SPACE)(KumoPredictor)
+
+
+if __name__ == "__main__":
+    from relarena.cli import main
+
+    raise SystemExit(main(["--model", KumoModel.name, *sys.argv[1:]]))
