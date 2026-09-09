@@ -60,6 +60,7 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - Express the workflow through the simplest documented public API. Pass accepted input forms directly, rely on public normalization and semantic helpers, use a one-shot call when fitted state is not reused, and use separate fit and predict steps when the lifecycle or repeated queries are part of the example.
 - Present the end-to-end data flow in execution order. Use semantic container operations, name intermediates that identify meaningful stages, keep short conventional values close to their consumers, and use comments only for non-obvious semantics or navigation.
 - Represent a self-contained workflow as one descriptively named script. Use functions for genuine repetition, separate modules for distinct responsibilities, and a README for substantial setup or operational instructions.
+- Configure benchmark examples through the framework's native protocol instead of reproducing its orchestration locally.
 
 # Core Design Principles
 

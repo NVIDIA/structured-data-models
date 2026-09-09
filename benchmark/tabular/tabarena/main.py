@@ -42,11 +42,12 @@ result_dir = (
     Path(__file__).parent.parent
     / "tabarena_out"
     / model_config.name
-    / "outer_model"
+    / "bagged_model"
 )
 result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
+    "ag_args_ensemble": {"refit_folds": True},
     "max_context_size": args.max_context_size,
 }
 if args.batch_size is not None:
@@ -59,7 +60,7 @@ generator = ConfigGenerator(
 )
 experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
-    outer_experiments=True,
+    sequential_local_fold_fitting=True,
 ).build_experiments()
 
 context = TabArenaContext()

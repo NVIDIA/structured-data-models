@@ -14,7 +14,7 @@ output_root = benchmark_dir / "evals"
 
 runs = []
 for model_config in MODEL_CONFIGS.values():
-    result_dir = result_root / model_config.name / "outer_model"
+    result_dir = result_root / model_config.name / "bagged_model"
     if next(result_dir.rglob("results.pkl"), None) is not None:
         runs.append((model_config, result_dir))
 
