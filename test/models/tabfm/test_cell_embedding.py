@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from sdm.models.tabfm.cell_embedding import CellEmbedding
@@ -23,4 +24,37 @@ def test_cell_embedding(device: torch.device) -> None:
 
     with torch.no_grad():
         out2 = module(x, categorical_mask, batch_size_limit=8)
+    torch.testing.assert_close(out1, out2)
+
+    buffer = torch.empty(6, 4, 8, device=device)
+    with torch.no_grad():
+        out3 = module(x, categorical_mask, out=buffer)
+    assert out3 is buffer
+    torch.testing.assert_close(out3, out1)
+
+    with pytest.raises(RuntimeError, match="only supported when gradients"):
+        module(x, categorical_mask, out=buffer)
+
+    out4 = module(x, categorical_mask)
+    torch.testing.assert_close(out4, out1)
+    out4.sum().backward()
+    assert module.num_lin.weight.grad is not None
+    assert module.cat_lin.weight.grad is not None
+
+
+def test_cell_embedding_batch_size_limit_dtype() -> None:
+    module = CellEmbedding(
+        channels=8,
+        group_size=3,
+        num_frequencies=2,
+        dtype=torch.float16,
+    ).eval()
+
+    x = torch.randn(6, 4)  # float32, while module parameters are float16
+    categorical_mask = torch.tensor([True, False, True, False])
+
+    with torch.no_grad():
+        out1 = module(x, categorical_mask)
+        out2 = module(x, categorical_mask, batch_size_limit=4)
+
     torch.testing.assert_close(out1, out2)
