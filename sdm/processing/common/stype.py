@@ -3,13 +3,12 @@ from typing import cast
 import torch
 from torch.nn import ModuleDict
 
-from sdm import Stype
+from sdm import EnsembleTable, Stype
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
     Processor,
 )
-from sdm.tensor import EnsembleTable
 
 
 class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -17,7 +16,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
 
     For each configured route, matching columns from a
     :class:`~sdm.tensor.TableTensor` or
-    :class:`~sdm.tensor.EnsembleTable` are passed to that processor. Ordinary
+    :class:`~sdm.EnsembleTable` are passed to that processor. Ordinary
     processors learn separate state for each compatible ensemble group, while
     ensemble-aware processors operate on all groups directly. Compatible
     members are processed together and route outputs are concatenated in

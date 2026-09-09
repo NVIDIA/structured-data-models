@@ -6,7 +6,15 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
+from sdm import (
+    EnsembleTable,
+    Recipe,
+    RelatedTables,
+    Stype,
+    TableTensor,
+    Task,
+    TaskLike,
+)
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
@@ -17,7 +25,6 @@ from sdm.processing.execution import (
     RecipeExecution,
 )
 from sdm.relational.task import RelatedTablesSchema
-from sdm.tensor import EnsembleTable
 from sdm.tensor.table import TableSchema
 
 

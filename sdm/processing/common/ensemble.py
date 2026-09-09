@@ -5,14 +5,13 @@ from typing import cast
 import torch
 from torch.nn import ModuleList
 
-from sdm import Stype
+from sdm import EnsembleTable, Stype
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
     InvertibleMixin,
     Processor,
 )
-from sdm.tensor import EnsembleTable
 
 
 class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -21,7 +20,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     The adapter turns a :class:`~sdm.processing.base.Processor` into an
     :class:`EnsembleProcessor`. It copies and fits the processor separately
     for each group of compatible tables in an
-    :class:`~sdm.tensor.EnsembleTable`.
+    :class:`~sdm.EnsembleTable`.
 
     The wrapped processor must preserve row and leading dimensions as required
     by the :class:`~sdm.processing.base.Processor` contract. A processor that
