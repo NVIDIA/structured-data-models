@@ -7,7 +7,11 @@ from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
 from tabarena.contexts import BeyondArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import MODEL_CONFIGS
+from benchmark.tabular.model import (
+    MODEL_CONFIGS,
+    SDMExperimentRunner,
+    SDMModelWrapper,
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -61,6 +65,9 @@ experiments = BeyondArenaExperimentBundle(
     models=[(generator, 0)],
     outer_experiments=True,
 ).build_experiments()
+for experiment in experiments:
+    experiment.method_cls = SDMModelWrapper
+    experiment.experiment_cls = SDMExperimentRunner
 
 context = BeyondArenaContext()
 context.build_and_run_jobs(
