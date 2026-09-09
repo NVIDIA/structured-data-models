@@ -133,7 +133,7 @@ class CellEmbedding(torch.nn.Module):
                 (*B, R, C, self.channels),
                 dtype=torch.get_autocast_dtype(x.device.type)
                 if torch.is_autocast_enabled(x.device.type)
-                else x.dtype,
+                else dtype,
             )
 
         rows_per_chunk = max(1, batch_size_limit // (math.prod(B) * C))
