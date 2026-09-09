@@ -3,13 +3,15 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import lru_cache
-from typing import Any, Literal, Self
+from typing import Any, ClassVar, Literal, Self
 
+import numpy as np
 import pandas as pd
 import torch
-from autogluon.core.data import LabelCleaner
-from tabarena.benchmark.exec_models.external import ExternalSystemModel
+from autogluon.common.features.types import S_TEXT_EMBEDDING
+from autogluon.tabular.models.abstract.abstract_torch_model import (
+    AbstractTorchModel,
+)
 
 import sdm
 
@@ -24,16 +26,7 @@ class ModelConfig:
     num_estimators: int
     autocast_dtype: torch.dtype
 
-    @property
-    def system_name(self) -> str:
-        return f"SDM{self.name}System"
 
-    @property
-    def method_name(self) -> str:
-        return f"{self.system_name}_c1_default"
-
-
-@lru_cache(maxsize=2)
 def _create_tabiclv2(
     task: Task,
     device: torch.device,
@@ -41,7 +34,6 @@ def _create_tabiclv2(
     return sdm.models.TabICLv2(task=task, device=device)
 
 
-@lru_cache(maxsize=2)
 def _create_kumo_tabular(
     task: Task,
     device: torch.device,
@@ -49,7 +41,6 @@ def _create_kumo_tabular(
     return sdm.models.KumoTabular(task=task, device=device)
 
 
-@lru_cache(maxsize=1)
 def _create_tabfm(
     task: Task,
     device: torch.device,
@@ -79,44 +70,78 @@ MODEL_CONFIGS = {
 }
 
 
-class SDMSystem(ExternalSystemModel):
-    def __init__(
-        self,
-        *,
-        model: str,
-        max_context_size: int | None = None,
-        batch_size: int | None = None,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(**kwargs)
-        self._config = MODEL_CONFIGS[model]
-        self._max_context_size = max_context_size
-        self._batch_size = batch_size
+class SDMModel(AbstractTorchModel):
+    ag_key = "SDM"
+    ag_name = "SDM"
+    seed_name = "random_state"
+    _supported_problem_types: ClassVar[list[str]] = [
+        "binary",
+        "multiclass",
+        "regression",
+    ]
+    _default_ag_args_ensemble_extra: ClassVar[dict[str, Any]] = {
+        "fold_fitting_strategy": "sequential_local",
+        "refit_folds": True,
+    }
+    _default_auxiliary_params_extra: ClassVar[dict[str, Any]] = {
+        "drop_unique": False,
+    }
+    default_num_gpus = 1
+    default_resources_physical_cores_only = True
+    minimum_num_gpus = 1
+    gpu_strongly_recommended = True
 
-    def _fit_system(
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._config: ModelConfig | None = None
+        self._device = torch.device("cpu")
+        self._max_context_size: int | None = None
+        self._batch_size: int | None = None
+        self._class_labels: tuple[object, ...] = ()
+        self.stypes: dict[str, sdm.Stype] = {}
+        self.text_embedding_columns: tuple[str, ...] = ()
+
+    def _fit(
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        *,
-        target_name: str,
-        problem_type: str,
-        random_state: int | None,
-        **_: object,
+        num_gpus: int = 0,
+        **kwargs: Any,
     ) -> Self:
+        params = dict(self._get_model_params())
+        model_key = params.pop("model")
+        self._max_context_size = params.pop("max_context_size", None)
+        self._batch_size = params.pop("batch_size", None)
+        random_state_param = params.pop(self.seed_name, self.random_seed)
+        random_state = (
+            int(random_state_param) if random_state_param is not None else None
+        )
+        if params:
+            names = ", ".join(sorted(params))
+            raise ValueError(f"Unsupported SDM model parameters: {names}")
+
+        self._config = MODEL_CONFIGS[model_key]
         self._device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
+            self._resolve_fit_device(num_gpus=num_gpus)
         )
-        self.model = self._config.factory(
-            task="regression"
-            if problem_type == "regression"
-            else "classification",
-            device=self._device,
+        task: Task = (
+            "regression"
+            if self.problem_type == "regression"
+            else "classification"
         )
+        self.model = self._config.factory(task, self._device)
 
         generator: torch.Generator | None = None
         if random_state is not None:
             generator = torch.Generator(self._device).manual_seed(random_state)
 
+        X = self.preprocess(X, y=y, is_train=True, **kwargs)
+        if self._feature_metadata is not None:
+            self.text_embedding_columns = tuple(
+                self._feature_metadata.get_features(
+                    required_special_types=[S_TEXT_EMBEDDING],
+                )
+            )
         self.stypes = sdm.infer_stypes(X)
         x_context = sdm.TableTensor.from_pandas(
             df=X,
@@ -124,15 +149,14 @@ class SDMSystem(ExternalSystemModel):
             device=self._device,
         )
 
-        target_name = target_name or "__target__"
-        if problem_type == "regression":
+        target_name = str(y.name) if y.name is not None else "__target__"
+        if self.problem_type == "regression":
             target_stype = "numerical"
+            self._class_labels = ()
         else:
             target_stype = "categorical"
-            cleaner = LabelCleaner.construct(problem_type=problem_type, y=y)
-            self._class_labels_by_key = {
-                str(label): label for label in cleaner.ordered_class_labels
-            }
+            assert self.num_classes is not None
+            self._class_labels = tuple(range(self.num_classes))
         y_context = sdm.TableTensor.from_pandas(
             df=y.rename(target_name).to_frame(),
             stypes={target_name: target_stype},
@@ -173,16 +197,23 @@ class SDMSystem(ExternalSystemModel):
 
         return self
 
-    def _predict(self, X: pd.DataFrame) -> pd.Series:
+    def _predict_proba(
+        self,
+        X: pd.DataFrame,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        X = self.preprocess(X, **kwargs)
         x_query = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self._device,
         )
         if self.expand_query:
+            assert self._config is not None
             num_estimators = self._config.num_estimators
             x_query = x_query.expand(num_estimators, *x_query.size())
 
+        assert self._config is not None
         outs = []
         for batch in x_query.split(self._batch_size or x_query.size(-2), -2):
             with torch.amp.autocast(
@@ -193,32 +224,46 @@ class SDMSystem(ExternalSystemModel):
                 outs.append(self.model.predict(batch))
         out = torch.cat(outs, dim=-2) if len(outs) > 1 else outs[0]
 
-        values = out.numerical.float().mean(dim=-1).cpu().numpy()
-        return pd.Series(values, index=X.index)
+        if self.problem_type == "regression":
+            return (
+                out.numerical.float()
+                .mean(dim=-1)
+                .cpu()
+                .numpy()
+                .astype(np.float32)
+            )
 
-    def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
-        x_query = sdm.TableTensor.from_pandas(
-            df=X,
-            stypes=self.stypes,
-            device=self._device,
+        probabilities = out.to_pandas().reindex(
+            columns=[str(label) for label in self._class_labels],
         )
-        if self.expand_query:
-            num_estimators = self._config.num_estimators
-            x_query = x_query.expand(num_estimators, *x_query.size())
-
-        outs = []
-        for batch in x_query.split(self._batch_size or x_query.size(-2), -2):
-            with torch.amp.autocast(
-                self._device.type,
-                self._config.autocast_dtype,
-                enabled=x_query.is_cuda,
-            ):
-                outs.append(self.model.predict(batch))
-        out = torch.cat(outs, dim=-2) if len(outs) > 1 else outs[0]
-
-        prob = out.to_pandas()
-        prob.index = X.index
-        prob = prob.rename(columns=self._class_labels_by_key)
-        return prob.reindex(
-            columns=tuple(self._class_labels_by_key.values()),
+        return self._convert_proba_to_unified_form(
+            probabilities.to_numpy(dtype=np.float32),
         )
+
+    def _set_default_params(self) -> None:
+        defaults = {
+            "model": "tabiclv2",
+            "max_context_size": None,
+            "batch_size": None,
+        }
+        for parameter, value in defaults.items():
+            self._set_default_param_value(parameter, value)
+
+    def get_device(self) -> str:
+        if self.model is None:
+            return self._device.type
+        try:
+            return next(self.model.parameters()).device.type
+        except StopIteration:
+            return self._device.type
+
+    def _set_device(self, device: str) -> None:
+        self._device = torch.device(device)
+        if self.model is None:
+            return
+        self.model.to(self._device)
+        if self._device.type == "cpu" and self.model._cache is not None:
+            self.model._cache = self.model._cache.cpu()
+
+    def _more_tags(self) -> dict:
+        return {"can_refit_full": True}

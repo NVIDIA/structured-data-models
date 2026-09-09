@@ -6,7 +6,7 @@ from tabarena.contexts import BeyondArenaContext
 from tabarena.end_to_end import EndToEnd
 from tabarena.models import MethodMetadata
 
-from benchmark.tabular.system import MODEL_CONFIGS
+from benchmark.tabular.system import MODEL_CONFIGS, SDMModel
 
 benchmark_dir = Path(__file__).parent.parent
 result_root = benchmark_dir / "beyondarena_out"
@@ -25,12 +25,18 @@ if not runs:
 
 base_context = BeyondArenaContext()
 methods = []
+method_names = []
 for model_config, result_dir in runs:
     output_dir = output_root / model_config.name
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    method_metadata = MethodMetadata.baseline(
-        method=f"{model_config.system_name}_c1",
+    method_metadata = MethodMetadata.config(
+        method=model_config.name,
+        ag_key=SDMModel.ag_key,
+        model_key=model_config.name,
+        config_default=f"{SDMModel.ag_name}_c1_BAG_L1",
+        can_hpo=False,
+        is_bag=True,
         compute="gpu",
         artifact_dir=output_dir / "artifacts",
     )
@@ -48,11 +54,12 @@ for model_config, result_dir in runs:
     methods.extend(
         processed.to_method_metadata_lst(new_result_prefix="[SDM] ")
     )
+    method_names.extend(results["method"].unique().tolist())
 
 context = BeyondArenaContext.from_new_methods(methods)
 leaderboard = context.compare(
     output_dir=output_root,
-    only_valid_tasks=[method.method for method in methods],
+    only_valid_tasks=method_names,
 )
 website = context.leaderboard_to_website_format(leaderboard)
 print(website.to_string(index=False))

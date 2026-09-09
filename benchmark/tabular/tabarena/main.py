@@ -5,9 +5,9 @@ from pathlib import Path
 
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
-from tabarena.utils.config_utils import SystemConfigGenerator
+from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.system import MODEL_CONFIGS, SDMSystem
+from benchmark.tabular.system import MODEL_CONFIGS, SDMModel
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -47,14 +47,14 @@ config = {
     "batch_size": args.batch_size,
 }
 
-generator = SystemConfigGenerator(
-    model_cls=SDMSystem,
-    name=model_config.system_name,
+generator = ConfigGenerator(
+    search_space={},
+    model_cls=SDMModel,
+    name=model_config.name,
     manual_configs=[config],
 )
 experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
-    system_experiments=True,
 ).build_experiments()
 
 context = TabArenaContext()
