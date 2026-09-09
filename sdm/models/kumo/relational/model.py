@@ -20,6 +20,7 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.relational.ckpt import remap_ckpt
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.recipe import default_recipe
 from sdm.models.kumo.relational.task import TaskGraph
@@ -188,6 +189,7 @@ class KumoRelational(ICLModel):
                 revision="v2.1.2",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
+            ckpt = remap_ckpt(ckpt)
             model.load_state_dict(ckpt, assign=True)
 
         return self

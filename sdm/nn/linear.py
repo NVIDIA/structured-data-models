@@ -19,11 +19,13 @@ class Linear(torch.nn.Linear):
                 "'out' is only supported when gradients are disabled"
             )
 
-        torch.matmul(
-            input.to(out.dtype),
-            self.weight.to(out.dtype).t(),
-            out=out,
-        )
+        weight = self.weight.to(out.dtype).t()
+        if out.is_contiguous():
+            torch.matmul(input.to(out.dtype), weight, out=out)
+        else:
+            # `torch.matmul` doesn't reliably support a non-contiguous
+            # batched `out=` tensor.
+            out.copy_(torch.matmul(input.to(out.dtype), weight))
 
         if self.bias is not None:
             out += self.bias.to(out.dtype)
