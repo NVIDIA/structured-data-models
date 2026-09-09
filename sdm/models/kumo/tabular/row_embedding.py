@@ -105,7 +105,7 @@ class RowEmbedding(torch.nn.Module):
         D = self.channels
 
         buffer: Tensor | None = None
-        if torch.is_grad_enabled() or torch.compiler.is_compiling():
+        if torch.is_grad_enabled():
             x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
         else:
             buffer = torch.empty(

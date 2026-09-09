@@ -82,7 +82,7 @@ class ICLBlock(torch.nn.Module):
                     ),
                     return_key_value=cache is not None and cache.is_recording,
                     out=None
-                    if torch.is_grad_enabled() or torch.compiler.is_compiling()
+                    if torch.is_grad_enabled()
                     else x[..., R_train:, :]
                     if last_layer
                     else x,
@@ -104,7 +104,7 @@ class ICLBlock(torch.nn.Module):
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
                 out=None
-                if torch.is_grad_enabled() or torch.compiler.is_compiling()
+                if torch.is_grad_enabled()
                 else x[..., :0, :]
                 if last_layer
                 else x[..., :R_train, :],
@@ -115,13 +115,11 @@ class ICLBlock(torch.nn.Module):
                     key=key[..., : self.kv_heads, :].contiguous(),
                     value=value[..., : self.kv_heads, :].contiguous(),
                 ),
-                out=None
-                if torch.is_grad_enabled() or torch.compiler.is_compiling()
-                else x[..., R_train:, :],
+                out=None if torch.is_grad_enabled() else x[..., R_train:, :],
             )
             if last_layer:
                 x = x_query
-            elif torch.is_grad_enabled() or torch.compiler.is_compiling():
+            elif torch.is_grad_enabled():
                 x = torch.cat([x_context, x_query], -2)
 
         return self.head(self.norm(x))
