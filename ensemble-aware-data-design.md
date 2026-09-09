@@ -97,8 +97,20 @@ class EnsembleTable(TableTensor):
         self._scale = table.numerical.std(dim=-2, keepdim=True)
 ```
 
+## Steps
+1. Introduce Ensemble/EnsembleData
+2. Introduce EnsembleTensor
+3. Update EnsembleTable
+4. Update normal Processors
+5. Map old EnsembleTable logic to new
+6. Remove EnsembleProcessor logic
+7. Update buffers
+8. Remove BufferList
+9. Update Documentation  
+
 Open Questions:
-- Solution around custom tensor classes such as CategoricalTensor, StringTensor etc. 
+- Solution around custom tensor classes such as CategoricalTensor, StringTensor etc.
+- Should be have a storage class? 
 
 Note to myself: 
 - batched TableTensors might need to be mapped to EnsembleTable in fit() otherwise today's EnsembleProcessors might break in that case. 
