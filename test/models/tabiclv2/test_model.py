@@ -78,8 +78,7 @@ def test_autocast_output_is_float32(
     assert out.numerical.dtype == torch.float32
 
 
-# @pytest.mark.parametrize("batch_shape", [(), (2,)])  # TODO Reenable
-@pytest.mark.parametrize("batch_shape", [()])
+@pytest.mark.parametrize("batch_shape", [(), (2,)])
 def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     model = TabICLv2(pretrained=False)
 
