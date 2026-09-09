@@ -1276,6 +1276,14 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
         )
 
     tensor_cls = tensors[0].__class__
+    if len(tensors) == 1:
+        # Keep cat's dimension check and independent contiguous storage,
+        # without constructing an index for every variable-length element.
+        tensors[0].size(dim)
+        return cast(
+            VarLenTensor,
+            tensors[0].clone(memory_format=torch.contiguous_format),
+        )
     for i, tensor in enumerate(tensors):
         if tensor.__class__ is not tensor_cls:
             raise TypeError(

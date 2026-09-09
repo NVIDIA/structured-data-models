@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from sdm import VarLenTensor
+from sdm import StringTensor, VarLenTensor
 from sdm.tensor.var_len import _compact
 from sdm.testing import onlyCUDA, withCUDA
 
@@ -600,6 +600,62 @@ def test_stack() -> None:
     assert out.storage_offset() == 0
     assert out._data.equal(torch.tensor([0, 3, 1, 2, 4]))
     assert out._offset.equal(torch.tensor([0, 1, 2, 4, 5]))
+
+
+@pytest.mark.parametrize("dim", [0, 1, -1, -2])
+@pytest.mark.parametrize("transpose", [False, True])
+def test_single_cat_preserves_values_and_allocates_independent_storage(
+    dim: int, transpose: bool
+) -> None:
+    source = StringTensor.from_list([["alpha", None], ["", "beta"]])
+    if transpose:
+        source = source.t()
+    result = torch.cat([source], dim=dim)
+    assert isinstance(result, StringTensor)
+    assert result.equal(source)
+    assert result.is_contiguous()
+    assert result.storage_offset() == 0
+    assert result._data.data_ptr() != source._data.data_ptr()
+    assert result._offset.data_ptr() != source._offset.data_ptr()
+    assert result._valid.data_ptr() != source._valid.data_ptr()
+    result._data.fill_(ord("z"))
+    result._valid.fill_(True)
+    assert source.tolist() == (
+        [["alpha", ""], [None, "beta"]]
+        if transpose
+        else [["alpha", None], ["", "beta"]]
+    )
+
+
+def test_single_cat_slice_and_invalid_dimension() -> None:
+    source = StringTensor.from_list([["first"], ["middle"], ["last"]])[1:]
+    result = torch.cat([source], dim=1)
+    assert result.tolist() == [["middle"], ["last"]]
+    assert result.storage_offset() == 0
+    with pytest.raises(IndexError):
+        torch.cat([source], dim=2)
+
+
+def test_single_cat_does_not_allocate_indices_per_text_byte() -> None:
+    source = StringTensor.from_list([["a" * 512]] * 2000)
+    with torch.profiler.profile(
+        activities=[torch.profiler.ProfilerActivity.CPU], profile_memory=True
+    ) as profiler:
+        result = torch.cat([source], dim=1)
+    assert result.equal(source)
+    # An independent byte copy is required; int64 indices per byte are not.
+    largest_allocation = max(
+        event.cpu_memory_usage for event in profiler.events()
+    )
+    assert largest_allocation < 4 * source._data.numel()
+
+
+def test_single_cat_preserves_gradient() -> None:
+    data = torch.tensor([1.0, 2.0], requires_grad=True)
+    source = VarLenTensor.from_tensor(data)
+    result = torch.cat([source])
+    result._data.sum().backward()
+    torch.testing.assert_close(data.grad, torch.ones_like(data))
 
 
 def test_pin_memory() -> None:
