@@ -49,7 +49,7 @@ def test_forward(
     assert torch.is_inference(out)
 
     torch.manual_seed(1)
-    model.fit(x_context, y_context)
+    model.fit(x_context, y_context, kv_cache_offload="layer")
     assert model._cache is not None
     assert model._cache.size() > 0
     assert model.predict(x_query).allclose(out)

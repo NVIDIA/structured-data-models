@@ -10,7 +10,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.cache import Cache
+from sdm.cache import Cache, KVCacheEntry
 from sdm.models import KumoRelational
 from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
@@ -313,7 +313,7 @@ def test_many_classes_forward_and_cache(
         expected.new_ones(2),
     )
 
-    cache = Cache(classes=classes)
+    cache = Cache(classes=classes, kv_cache_offload="layer")
     recorded = model(
         x_context=task,
         y_context=target,
@@ -325,12 +325,35 @@ def test_many_classes_forward_and_cache(
     )
     assert recorded.size() == (0, num_classes)
 
+    entries: list[KVCacheEntry] = []
+    for value in cache.values():
+        if isinstance(value, KVCacheEntry):
+            entries.append(value)
+        elif isinstance(value, Cache):
+            entries.extend(
+                nested
+                for nested in value.values()
+                if isinstance(nested, KVCacheEntry)
+            )
+    assert entries
+    if device.type == "cuda":
+        assert all(entry.key.is_cpu for entry in entries)
+        assert all(entry.value.is_cpu for entry in entries)
+        assert all(
+            entry.key.numel() == 0 or entry.key.is_pinned()
+            for entry in entries
+        )
+        assert all(
+            entry.value.numel() == 0 or entry.value.is_pinned()
+            for entry in entries
+        )
+
     predicted = model(
         x_context=None,
         y_context=None,
         x_query=task[:2],
         related_context_tables=None,
         related_query_tables=related_tables,
-        cache=cache.freeze(),
+        cache=cache.freeze().to(device, non_blocking=True),
     )
     torch.testing.assert_close(predicted, expected)
