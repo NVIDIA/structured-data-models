@@ -32,7 +32,7 @@ jobs:
           # `-e` for coverage report.
           uv pip install \
             --torch-backend=cpu \
-            --find-links=https://data.pyg.org/whl/torch-2.13.0+cpu.html \
+            --find-links=https://data.pyg.org/whl/torch-2.14.0+cpu.html \
             --group=test \
             -e .
 

@@ -4,17 +4,17 @@ from pathlib import Path
 
 from tabarena.contexts import TabArenaContext
 from tabarena.end_to_end import EndToEnd
-
-from models import MODEL_CONFIGS
 from tabarena.models import MethodMetadata
 
-example_dir = Path(__file__).parent.parent
-result_root = example_dir / "tabarena_out"
-output_root = example_dir / "evals"
+from benchmark.tabular.model import MODEL_CONFIGS
+
+benchmark_dir = Path(__file__).parent.parent
+result_root = benchmark_dir / "tabarena_out"
+output_root = benchmark_dir / "evals"
 
 runs = []
 for model_config in MODEL_CONFIGS.values():
-    result_dir = result_root / model_config.name
+    result_dir = result_root / model_config.name / "outer_model"
     if next(result_dir.rglob("results.pkl"), None) is not None:
         runs.append((model_config, result_dir))
 
@@ -28,7 +28,7 @@ for model_config, result_dir in runs:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     method_metadata = MethodMetadata.baseline(
-        method=model_config.method_name,
+        method=model_config.tabarena_method_name,
         compute="gpu",
         artifact_dir=output_dir / "artifacts",
     )

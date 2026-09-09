@@ -52,3 +52,26 @@ class TabFMTransformerBlock(TransformerBlock):
             scale=1.0,
             **factory_kwargs,
         )
+
+    def peak_bytes_per_example(
+        self,
+        element_size: int,
+        query_length: int,
+        key_value_length: int | None = None,
+    ) -> int:
+        r""":meta private:"""  # noqa: D415
+        length = max(query_length, key_value_length or 0)
+        factor = 18 if element_size <= 2 else 16
+        return factor * length * element_size * self.attn.q_dim
+
+
+if __name__ == "__main__":
+    from sdm.testing.memory import benchmark_transformer_block_memory_peak
+
+    benchmark_transformer_block_memory_peak(
+        block=lambda channels, num_heads: TabFMTransformerBlock(
+            channels=channels,
+            num_heads=num_heads,
+        ),
+        channels_and_heads=[(256, 4), (256, 8)],
+    )

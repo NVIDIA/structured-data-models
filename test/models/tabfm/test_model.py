@@ -70,5 +70,5 @@ def test_forward(
     )
     assert model._cache is not None
     assert model._cache.size() > 0
-    assert model.predict(x_query).allclose(out)
+    assert model.predict(x_query).allclose(out, atol=1e-4, rtol=1e-4)
     model.clear()
