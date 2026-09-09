@@ -90,11 +90,12 @@ class FourierNanIndicatorCellEmbedding(CellEmbedding):
                     "or impute_mean"
                 )
             # Impute from observed context rows only, with fp32 statistics.
-            train = x[..., :train_size, :].to(torch.float32)
-            observed = ~missing[..., :train_size, :]
-            count = observed.sum(dim=-2, keepdim=True).clamp(min=1)
-            mean = train.masked_fill(~observed, 0.0).sum(dim=-2, keepdim=True)
-            impute_mean = (mean / count).to(x.dtype)
+            mean = x[..., :train_size, :].nanmean(
+                dim=-2,
+                keepdim=True,
+                dtype=torch.float32,
+            )
+            impute_mean = mean.masked_fill(mean.isnan(), 0.0).to(x.dtype)
 
         if cache is not None and cache.is_recording:
             cache["cell_impute_mean"] = impute_mean
