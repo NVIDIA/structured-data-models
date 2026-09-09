@@ -1,5 +1,6 @@
 import torch
 
+from sdm.cache import Cache
 from sdm.models.kumo.tabular.cell_embedding import (
     FourierNanIndicatorCellEmbedding,
 )
@@ -25,7 +26,7 @@ def test_fourier_nan_indicator_cell_embedding(device: torch.device) -> None:
         device=device,
     )
 
-    out = module(x, categorical_mask, train_size=3)
+    out = module(x, categorical_mask, train_size=3, cache=Cache())
     assert out.size() == (2, 6, 4, 8)
     assert out.device == device
     assert out.isfinite().all()

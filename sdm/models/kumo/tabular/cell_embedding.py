@@ -1,9 +1,10 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 from torch.nn import Linear
 
+from sdm.cache import Cache
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 
 
@@ -55,6 +56,7 @@ class FourierNanIndicatorCellEmbedding(CellEmbedding):
         *,
         train_size: int | None = None,
         impute_mean: Tensor | None = None,
+        cache: Cache | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor:  # [..., R, C, D]
@@ -66,7 +68,10 @@ class FourierNanIndicatorCellEmbedding(CellEmbedding):
             train_size: Number of leading context rows used for imputation
                 when ``impute_mean`` is omitted.
             impute_mean: Optional precomputed column means with shape
-                ``[..., 1, C]`` for query-only cached inference.
+                ``[..., 1, C]``.
+            cache: Records imputation means for reuse in query-only calls.
+                Replayed means take precedence over ``train_size`` and
+                ``impute_mean``.
             batch_size_limit: Target maximum number of cells per Fourier
                 feature chunk.
             out: Optional preallocated output buffer.
@@ -76,7 +81,9 @@ class FourierNanIndicatorCellEmbedding(CellEmbedding):
         """
         missing = x.isnan()
 
-        if impute_mean is None:
+        if cache is not None and cache.is_replaying:
+            impute_mean = cast(Tensor, cache["cell_impute_mean"])
+        elif impute_mean is None:
             if train_size is None:
                 raise ValueError(
                     "FourierNanIndicatorCellEmbedding requires train_size "
@@ -88,6 +95,9 @@ class FourierNanIndicatorCellEmbedding(CellEmbedding):
             count = observed.sum(dim=-2, keepdim=True).clamp(min=1)
             mean = train.masked_fill(~observed, 0.0).sum(dim=-2, keepdim=True)
             impute_mean = (mean / count).to(x.dtype)
+
+        if cache is not None and cache.is_recording:
+            cache["cell_impute_mean"] = impute_mean
 
         x = torch.where(missing, impute_mean.to(x.dtype), x)
 
