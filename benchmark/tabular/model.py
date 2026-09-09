@@ -151,12 +151,14 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         ):
             out = self.model.predict(x_query)
 
-        values = out.numerical.float().cpu().numpy()
         if self.problem_type == REGRESSION:
-            return values.mean(axis=-1)
-        if self.problem_type == BINARY:
-            return values[:, 1]
-        return values
+            return out.numerical.float().mean(dim=-1).cpu().numpy()
+
+        assert self.num_classes is not None
+        columns = out.columns[sdm.Stype.numerical]
+        indices = [columns.index(str(i)) for i in range(self.num_classes)]
+        probabilities = out.numerical[..., indices].float().cpu().numpy()
+        return self._convert_proba_to_unified_form(probabilities)
 
     def get_device(self) -> str:
         return str(next(self.model.parameters()).device)

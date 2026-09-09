@@ -60,7 +60,6 @@ generator = ConfigGenerator(
 experiments = BeyondArenaExperimentBundle(
     models=[(generator, 0)],
     outer_experiments=True,
-    text_cache_mode="off",
 ).build_experiments()
 
 context = BeyondArenaContext()
