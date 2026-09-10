@@ -17,7 +17,7 @@ class EnsembleTable(DeviceMixin):
 
     Each ensemble member is associated with one table. Shared tables are stored
     only once. Compatible tables may be stacked into groups so processors can
-    process them together. Separate groups are never combined.
+    process them together. Initialized separate groups are never recombined.
 
     Use :meth:`table` to access a member's table. Iterate over the
     :class:`EnsembleTable` to process its groups, and :meth:`replace_groups`
@@ -250,7 +250,7 @@ class EnsembleTable(DeviceMixin):
         tables: Sequence[Self],
         member_ids: Sequence[int],
     ) -> Self:
-        """Replace members with selected members from ensemble tables.
+        """Gather selected source members into this ensemble's group layout.
 
         ``tables[i].table(member_ids[i])`` supplies output member ``i``.
 
@@ -289,7 +289,7 @@ class EnsembleTable(DeviceMixin):
 
     @property
     def num_groups(self) -> int:
-        """Return the number of explicit table groups."""
+        """Return the number of table groups."""
         return len(self._groups)
 
     def num_members_in_group(self, group_id: int) -> int:
@@ -436,9 +436,7 @@ class EnsembleTable(DeviceMixin):
         tables: Sequence[TableTensor],
         member_table_ids: Sequence[int],
     ) -> Self:
-        """Replace member tables without combining existing groups.
-
-        Compatible replacements are packed only within each current group.
+        """Replace member tables.
 
         Args:
             tables: Replacement tables available to the ensemble members.

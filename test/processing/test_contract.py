@@ -48,8 +48,7 @@ def make_table() -> EnsembleTable:
         id=ColumnarTensor((torch.arange(20, 24),)),
     )
     return EnsembleTable.from_tables(
-        tables=(table_a, table_b, table_a, table_b),
-        member_table_ids=range(4),
+        tables=(table_a, table_b), member_table_ids=(0, 1, 0, 1)
     )
 
 
