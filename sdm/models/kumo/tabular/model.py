@@ -11,6 +11,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -46,7 +47,18 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
-class KumoTabular(ICLModel):  # noqa: D101
+class KumoTabular(ICLModel):
+    """Kumo Tabular, a foundation model for classification and regression.
+
+    Args:
+        task: The tasks to initialize. If ``None``, both classification and
+            regression are initialized.
+        size: The model size, either ``"small"`` or ``"large"`` (default).
+        pretrained: Whether to load pretrained checkpoints.
+        device: The device for model parameters. If ``None``, uses PyTorch's
+            default device.
+    """
+
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
@@ -261,45 +273,3 @@ class _KumoTabular(torch.nn.Module):
         x = self.row_embedding(x, y, categorical_mask, cache=cache)
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)
-
-
-def remap_ckpt(  # noqa: D103
-    ckpt: dict[str, Tensor],
-    is_classifier: bool,
-) -> dict[str, Tensor]:
-
-    out: dict[str, Tensor] = {}
-    for key, value in ckpt.items():
-        if key == "y_encoder.weight":
-            if is_classifier:
-                out["row_embedding.y_emb.weight"] = (
-                    value.T + ckpt["y_encoder.bias"]
-                )
-            else:
-                out["row_embedding.y_lin.weight"] = value
-            continue
-
-        if is_classifier and key == "y_encoder.bias":
-            continue
-
-        if key == "table_encoder.cls_tokens":
-            out["row_embedding.readout_token"] = value
-            continue
-
-        if key.startswith("table_encoder."):
-            key = key.removeprefix("table_encoder.")
-            out[f"row_embedding.{key}"] = value
-            continue
-
-        if key.startswith("cls_downproject."):
-            key = key.removeprefix("cls_downproject.")
-            out[f"row_project.{key}"] = value
-            continue
-
-        if key.startswith("cell_embedding."):
-            out[f"row_embedding.{key}"] = value
-            continue
-
-        out[key] = value
-
-    return out

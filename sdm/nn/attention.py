@@ -644,8 +644,7 @@ class TransformerBlock(torch.nn.Module):
                 flat_out = chunk.new_empty((batch_size, *query.size()[-2:]))
                 flat_out[start:end] = chunk
 
-            del chunk
-            del result
+            del chunk, result
 
         if out is None:
             assert flat_out is not None
@@ -697,8 +696,16 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             attn_out = self.post_attn_norm(attn_out)
 
-        tmp = torch.add(attn_out, query, out=out)
-        out = torch.add(tmp, self.mlp(tmp), out=out)
+        if (
+            out is not None
+            and torch.compiler.is_compiling()
+            and not out.is_contiguous()
+        ):
+            tmp = attn_out + query
+            out.copy_(tmp + self.mlp(tmp))
+        else:
+            tmp = torch.add(attn_out, query, out=out)
+            out = torch.add(tmp, self.mlp(tmp), out=out)
 
         return (out, kv) if return_key_value else out
 
