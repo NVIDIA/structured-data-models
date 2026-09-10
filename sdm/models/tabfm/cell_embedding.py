@@ -183,17 +183,15 @@ class CellEmbedding(torch.nn.Module):
             del phase
         del x
 
-        if out is not None and out.dtype == fourier.dtype:
+        if out is None:
+            out = torch.einsum("...gf,...gdf->...d", fourier, weight)
+        else:
             weight = weight.transpose(-3, -2).flatten(-2).squeeze(-4).mT
             torch.matmul(
                 fourier.transpose(-4, -3).flatten(-2),
                 weight,
                 out=out.transpose(-3, -2),
             )
-        elif out is None:
-            out = torch.einsum("...gf,...gdf->...d", fourier, weight)
-        else:
-            out.copy_(torch.einsum("...gf,...gdf->...d", fourier, weight))
 
         out += bias.to(out.dtype)
 
