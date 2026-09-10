@@ -8,9 +8,7 @@ from torch.nn import Embedding, Linear, ModuleList, Parameter, RMSNorm
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.models.kumo.tabular.cell_embedding import (
-    FourierNanIndicatorCellEmbedding,
-)
+from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
 from sdm.nn import (
     GatedLogScale,
     InducedTransformerBlock,
@@ -37,7 +35,7 @@ class RowEmbedding(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.channels = channels
 
-        self.cell_embedding = FourierNanIndicatorCellEmbedding(
+        self.cell_embedding = CellEmbedding(
             channels=channels,
             group_size=group_size,
             num_frequencies=num_frequencies,

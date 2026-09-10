@@ -1,15 +1,13 @@
 import torch
 
 from sdm.cache import Cache
-from sdm.models.kumo.tabular.cell_embedding import (
-    FourierNanIndicatorCellEmbedding,
-)
+from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_fourier_nan_indicator_cell_embedding(device: torch.device) -> None:
-    module = FourierNanIndicatorCellEmbedding(
+def test_cell_embedding(device: torch.device) -> None:
+    module = CellEmbedding(
         channels=8,
         group_size=3,
         num_frequencies=2,
@@ -39,8 +37,8 @@ def test_fourier_nan_indicator_cell_embedding(device: torch.device) -> None:
     torch.testing.assert_close(chunked, out)
 
 
-def test_fourier_nan_indicator_imputes_from_context_only() -> None:
-    module = FourierNanIndicatorCellEmbedding(
+def test_cell_embedding_imputes_from_context_only() -> None:
+    module = CellEmbedding(
         channels=4,
         group_size=1,
         num_frequencies=2,

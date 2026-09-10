@@ -5,10 +5,10 @@ from torch import Tensor
 from torch.nn import Linear
 
 from sdm.cache import Cache
-from sdm.models.tabfm.cell_embedding import CellEmbedding
+from sdm.models.tabfm.cell_embedding import CellEmbedding as TabFMCellEmbedding
 
 
-class FourierNanIndicatorCellEmbedding(CellEmbedding):
+class CellEmbedding(TabFMCellEmbedding):
     """Embed Fourier features with an additive NaN indicator.
 
     NaNs are imputed with the observed context-row mean of their column, or
@@ -86,8 +86,7 @@ class FourierNanIndicatorCellEmbedding(CellEmbedding):
         elif impute_mean is None:
             if train_size is None:
                 raise ValueError(
-                    "FourierNanIndicatorCellEmbedding requires train_size "
-                    "or impute_mean"
+                    "CellEmbedding requires train_size or impute_mean"
                 )
             # Impute from observed context rows only, with fp32 statistics.
             mean = x[..., :train_size, :].nanmean(
