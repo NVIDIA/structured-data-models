@@ -50,6 +50,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
     #: Prediction tasks supported in this model.
     supported_tasks: ClassVar[frozenset[Task]]
 
+    #: Whether this model supports multi-target predictions.
+    supports_multi_target: ClassVar[bool]
+
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
@@ -291,6 +294,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
             estimator_cache = Cache(
                 x_schema=context.x.schema,
+                y_schema=context.y.schema,
                 related_tables_schema=context.related_tables.schema
                 if context.related_tables is not None
                 else None,
@@ -531,7 +535,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         related_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if y.size(-1) != 1:
+        if not self.supports_multi_target and y.size(-1) != 1:
             raise ValueError(
                 f"Expected target to have exactly one column "
                 f"(got {y.size(-1)})"

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from itertools import product
+from typing import Any, ClassVar, cast
 
 import torch
 
@@ -11,6 +12,7 @@ from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
 from sdm.models.timesfm3.recipe import default_recipe
+from sdm.tensor.table import TableSchema
 
 
 class TimesFM3(ICLModel):
@@ -33,6 +35,7 @@ class TimesFM3(ICLModel):
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
+    supports_multi_target: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -95,13 +98,35 @@ class TimesFM3(ICLModel):
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, Y * 9]
 
-        out = torch.zeros(
-            x_query.size()[:-1], y_context.size(-1) * 9, device=x_query.device
-        )
+        if y_context is not None:
+            columns = y_context.columns[Stype.numerical]
+        else:
+            assert cache is not None
+            y_schema = cast(TableSchema, cache["y_schema"])
+            columns = y_schema.columns[Stype.numerical]
+
+        if x_query is not None:
+            size = x_query.size()[:-1]
+        else:
+            assert x_context is not None
+            size = (
+                *x_context.size()[:-2],
+                x_context.size(-2) - x_query.size(-2)
+                if x_query is not None
+                else 0,
+            )
 
         return TableTensor(
-            columns={Stype.numerical: [f"q{i}" for i in range(10, 100, 10)]},
-            numerical=out,
+            columns={
+                Stype.numerical: [
+                    f"{name}__q{i}"
+                    for name, i in product(columns, range(10, 100, 10))
+                ]
+            },
+            numerical=torch.zeros(
+                (*size, len(columns) * 9),
+                device=next(self.parameters()).device,
+            ),
         )
 
 

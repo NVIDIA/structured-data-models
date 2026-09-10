@@ -1,10 +1,10 @@
-This package includes code derived from the TabFM implementation:
-https://github.com/google-research/tabfm
+This package includes code derived from the TimesFM 3.0 implementation:
+https://github.com/google-research/timesfm
 
 This package does not automatically download, bundle, or provide pretrained
-TabFM weights. Google's published TabFM pretrained weights are distributed
-separately under the tabfm-non-commercial-v1.0 license and are restricted to
-non-commercial, non-production use.
+TimesFM 3.0 weights. Google's published TimesFM 3.0 pretrained weights are
+distributed separately under the timesfm-non-commercial-v1.0 license and are
+restricted to non-commercial, non-production use.
 
                                  Apache License
                            Version 2.0, January 2004
