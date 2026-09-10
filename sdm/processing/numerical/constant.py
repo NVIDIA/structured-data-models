@@ -216,7 +216,7 @@ class DropConstantColumns(EnsembleProcessor):
                 )
                 for member_id, kept_indices in enumerate(self._kept_indices)
             ]
-            return EnsembleTable.from_tables(
+            return ensemble_table.replace_tables(
                 tables=tables,
                 member_table_ids=range(ensemble_table.num_members),
             )

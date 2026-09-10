@@ -19,6 +19,16 @@ from sdm import (
 from sdm.testing import onlyCUDA
 
 
+def _group_tables(
+    tables: tuple[TableTensor, ...],
+    member_table_ids: tuple[int, ...],
+) -> EnsembleTable:
+    return EnsembleTable(
+        groups=(cast(TableTensor, torch.stack(tables)),),
+        locations=tuple((0, table_id) for table_id in member_table_ids),
+    )
+
+
 def make_table() -> EnsembleTable:
     categories = (StringTensor.from_list(["a", "b"]),)
     numerical = torch.arange(12, dtype=torch.float32).reshape(4, 3)
@@ -47,9 +57,7 @@ def make_table() -> EnsembleTable:
         ),
         id=ColumnarTensor((torch.arange(20, 24),)),
     )
-    return EnsembleTable.from_tables(
-        tables=(table_a, table_b), member_table_ids=(0, 1, 0, 1)
-    )
+    return _group_tables((table_a, table_b), (0, 1, 0, 1))
 
 
 def _make_impute_mean_table() -> EnsembleTable:
@@ -57,9 +65,9 @@ def _make_impute_mean_table() -> EnsembleTable:
     table_a, table_b = table.table(0), table.table(1)
     numerical = table_b.numerical.clone()
     numerical[0, 0] = float("nan")
-    return EnsembleTable.from_tables(
-        tables=(table_a, table_b.replace_blocks(numerical=numerical)),
-        member_table_ids=(0, 1, 0, 1),
+    return _group_tables(
+        (table_a, table_b.replace_blocks(numerical=numerical)),
+        (0, 1, 0, 1),
     )
 
 
@@ -84,9 +92,7 @@ def _make_reduction_table() -> EnsembleTable:
         )
     )
     table_b = TableTensor.from_tensor(table_a.numerical + 1.0)
-    return EnsembleTable.from_tables(
-        tables=(table_a, table_b), member_table_ids=(0, 1, 0, 1)
-    )
+    return _group_tables((table_a, table_b), (0, 1, 0, 1))
 
 
 @dataclass(frozen=True)

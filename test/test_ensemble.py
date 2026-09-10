@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 import torch
 
@@ -21,7 +23,7 @@ def test_shared_member_table() -> None:
         assert ensemble_table.table(member_id).equal(data)
 
 
-def test_from_tables_stacks_compatible_schemas() -> None:
+def test_from_tables_keeps_tables_separate() -> None:
     first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0]]))
 
@@ -31,46 +33,12 @@ def test_from_tables_stacks_compatible_schemas() -> None:
     )
 
     groups = tuple(ensemble_table)
-    assert len(groups) == 1
-    assert groups[0].size() == (2, 2, 1)
+    assert len(groups) == 2
+    assert all(group.size() == (1, 2, 1) for group in groups)
     assert ensemble_table.table(0).equal(first)
     assert ensemble_table.table(1).equal(second)
     assert ensemble_table.table(2).equal(first)
     assert ensemble_table.table(3).equal(second)
-
-
-def test_from_tables_separates_incompatible_schemas() -> None:
-    first = TableTensor.from_tensor(
-        tensor=torch.tensor([[1.0], [2.0]]),
-        columns=("first",),
-    )
-    second = TableTensor.from_tensor(
-        tensor=torch.tensor([[3.0], [4.0]]),
-        columns=("second",),
-    )
-
-    ensemble_table = EnsembleTable.from_tables(
-        tables=(first, second),
-        member_table_ids=(0, 1),
-    )
-
-    assert len(tuple(ensemble_table)) == 2
-    assert ensemble_table.table(0).columns == first.columns
-    assert ensemble_table.table(1).columns == second.columns
-
-
-def test_from_tables_separates_incompatible_block_sizes() -> None:
-    first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0], [5.0]]))
-
-    ensemble_table = EnsembleTable.from_tables(
-        tables=(first, second),
-        member_table_ids=(0, 1),
-    )
-
-    assert len(tuple(ensemble_table)) == 2
-    assert ensemble_table.table(0).size() == (2, 1)
-    assert ensemble_table.table(1).size() == (3, 1)
 
 
 def test_from_tables_ignores_unused_tables() -> None:
@@ -125,12 +93,39 @@ def test_replace_groups_rejects_group_count_mismatch() -> None:
         ensemble_table.replace_groups(tuple(ensemble_table) * 2)
 
 
+def test_replace_tables_packs_only_within_existing_groups() -> None:
+    ensemble_table = EnsembleTable(
+        groups=(
+            TableTensor.from_tensor(torch.tensor([[[0.0]], [[1.0]]])),
+            TableTensor.from_tensor(torch.tensor([[[2.0]], [[3.0]]])),
+        ),
+        locations=((0, 0), (0, 1), (1, 0), (1, 1)),
+    )
+    tables = tuple(
+        TableTensor.from_tensor(torch.tensor([[float(value)]]))
+        for value in range(4)
+    )
+
+    output = ensemble_table.replace_tables(
+        tables=tables,
+        member_table_ids=range(4),
+    )
+
+    assert output.num_groups == 2
+    assert all(group.size(0) == 2 for group in output)
+    for member_id, table in enumerate(tables):
+        assert output.table(member_id).equal(table)
+
+
 def test_gather_members_preserves_member_order() -> None:
     tables = tuple(
         TableTensor.from_tensor(torch.tensor([[value]], dtype=torch.float32))
         for value in range(4)
     )
-    first = EnsembleTable.from_tables(tables[:2], member_table_ids=(0, 1))
+    first = EnsembleTable(
+        groups=(cast(TableTensor, torch.stack(tables[:2])),),
+        locations=((0, 0), (0, 1)),
+    )
     second = EnsembleTable.from_tables(tables[2:], member_table_ids=(0, 1))
 
     output = EnsembleTable.gather_members(
@@ -141,6 +136,8 @@ def test_gather_members_preserves_member_order() -> None:
     assert output.table(0).equal(tables[1])
     assert output.table(1).equal(tables[2])
     assert output.table(2).equal(tables[0])
+    assert output.num_groups == 2
+    assert sorted(group.size(0) for group in output) == [1, 2]
 
 
 def test_gather_members_rejects_source_count_mismatch() -> None:
@@ -158,9 +155,9 @@ def test_select_members_preserves_groups_and_order() -> None:
         TableTensor.from_tensor(torch.tensor([[value]], dtype=torch.float32))
         for value in range(3)
     )
-    ensemble_table = EnsembleTable.from_tables(
-        tables=tables,
-        member_table_ids=(2, 0, 1, 2),
+    ensemble_table = EnsembleTable(
+        groups=(cast(TableTensor, torch.stack(tables)),),
+        locations=((0, 2), (0, 0), (0, 1), (0, 2)),
     )
 
     output = ensemble_table.select_members((1, 3, 0))
@@ -259,17 +256,3 @@ def test_concatenate_columns_rejects_different_member_counts() -> None:
                 EnsembleTable.from_table(table, num_members=3),
             )
         )
-
-
-def test_from_tables_separates_incompatible_layouts() -> None:
-    dense = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    with torch.sparse.check_sparse_tensor_invariants():
-        sparse = TableTensor.from_tensor(
-            tensor=torch.tensor([[3.0], [4.0]]).to_sparse()
-        )
-        ensemble_table = EnsembleTable.from_tables(
-            tables=(dense, sparse),
-            member_table_ids=(0, 1),
-        )
-
-    assert len(tuple(ensemble_table)) == 2

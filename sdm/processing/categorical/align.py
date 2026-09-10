@@ -293,7 +293,7 @@ class AlignCategories(EnsembleProcessor):
             aligned_tables.extend(group_tables)
 
         member_table_ids = self._member_table_ids(ensemble_table)
-        output = EnsembleTable.from_tables(
+        output = ensemble_table.replace_tables(
             tables=aligned_tables,
             member_table_ids=member_table_ids,
         )
@@ -322,7 +322,7 @@ class AlignCategories(EnsembleProcessor):
             )
             offset = end
 
-        return EnsembleTable.from_tables(
+        return ensemble_table.replace_tables(
             tables=aligned_tables,
             member_table_ids=table_ids,
         )
