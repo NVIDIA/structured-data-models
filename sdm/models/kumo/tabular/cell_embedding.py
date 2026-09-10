@@ -108,13 +108,34 @@ class CellEmbedding(TabFMCellEmbedding):
             out=out,
         )
 
-        C = x.size(-1)
+        C, G = x.size(-1), self.group_size
         index = self._group_index(C, x.device)
-        grouped_missing = missing[..., index]  # [..., R, C, G]
-        missing_embedding = self.nan_lin(
-            grouped_missing.to(self.nan_lin.weight.dtype)
+        if torch.is_grad_enabled():
+            grouped_missing = missing[..., index].to(result.dtype)
+            return result + self.nan_lin(grouped_missing)
+
+        weight = self.nan_lin.weight.to(result.dtype).t()  # [G, D]
+        index = index.view(-1)
+        output = result
+        if output.stride(-3) < output.stride(-2):
+            # Gather in the Fourier output's column order to avoid a copy.
+            output = output.transpose(-3, -2)
+            grouped_missing = missing.mT.index_select(-2, index)
+            grouped_missing = grouped_missing.unflatten(-2, (C, G)).mT
+        else:
+            grouped_missing = missing.index_select(-1, index)
+            grouped_missing = grouped_missing.unflatten(-1, (C, G))
+        grouped_missing = grouped_missing.to(result.dtype)
+        if any(
+            output.stride(i) != output.size(i + 1) * output.stride(i + 1)
+            for i in range(output.dim() - 3)
+        ):
+            # Irregular batch strides cannot be merged without a copy.
+            output.add_(torch.matmul(grouped_missing, weight))
+            return result
+        batched_output = output.view(-1, output.size(-2), self.channels)
+        batched_output.baddbmm_(
+            grouped_missing.view(-1, output.size(-2), G),
+            weight.expand(batched_output.size(0), -1, -1),
         )
-        if out is None:
-            return result + missing_embedding
-        result.add_(missing_embedding.to(result.dtype))
         return result
