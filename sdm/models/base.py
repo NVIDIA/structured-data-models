@@ -507,7 +507,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
     def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
-        y_context: TableTensor | None,  # [..., R_context, 1]
+        y_context: TableTensor | None,  # [..., R_context, Y]
         x_query: TableTensor | None,  # [..., R_query, D]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,

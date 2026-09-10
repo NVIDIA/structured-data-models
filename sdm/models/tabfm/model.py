@@ -54,8 +54,7 @@ class TabFM(ICLModel):
         pretrained: Whether to load the pretrained checkpoint.
         accept_license: Whether to accept the `TabFM Non-Commercial License
             v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/
-            LICENSE>`__ without
-            showing the interactive license prompt.
+            LICENSE>`__ without showing the interactive license prompt.
         device: The device.
     """
 
