@@ -4,6 +4,7 @@
 """Attention modules for structured tensor models."""
 
 import math
+from collections.abc import Callable
 from typing import Any, Literal, overload
 
 import torch
@@ -444,6 +445,17 @@ class TransformerBlock(torch.nn.Module):
             **factory_kwargs,
         )
 
+    def __call__(
+        self,
+        *args: Any,
+        out: Tensor | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        r""":meta private:"""  # noqa: D415
+        # Keeps `out` out of graphs compiled via `module.compile()`, see
+        # `_call_with_out`.
+        return _call_with_out(self, super().__call__, args, kwargs, out=out)
+
     @overload
     def forward(
         self,
@@ -513,7 +525,9 @@ class TransformerBlock(torch.nn.Module):
                 projections alongside the block output.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
-            out: The output tensor.
+            out: The output tensor. When the block is compiled in place via
+                :meth:`~torch.nn.Module.compile`, the compiled graph computes
+                its result functionally and ``out`` is filled outside of it.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -745,6 +759,54 @@ class TransformerBlock(torch.nn.Module):
         )
         limit = chunk_memory_limit(device) // max(bytes_per_example, 1)
         return min(max(limit, 1), 65_535)
+
+
+def _call_with_out(
+    module: torch.nn.Module,
+    call: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    out: Tensor | None,
+) -> Any:
+    if out is not None and torch.is_grad_enabled():
+        # Same check as `forward`, raised before entering a compiled graph so
+        # the message survives every supported torch (Dynamo re-raises user
+        # exceptions verbatim only from 2.9 on; 2.7/2.8 wrap them).
+        raise RuntimeError(
+            "'out' is only supported when gradients are disabled"
+        )
+    if (
+        out is None
+        or module._compiled_call_impl is None
+        or torch.compiler.is_compiling()
+    ):
+        return call(*args, out=out, **kwargs)
+
+    query = args[0] if args else kwargs.get("query")
+    if isinstance(query, Tensor) and (
+        out.dtype != query.dtype or out.device != query.device
+    ):
+        # Eager out= casts the first residual before the MLP, and rejects
+        # unsafe casts/device mismatches. A final copy cannot reproduce it.
+        return module._call_impl(*args, out=out, **kwargs)
+
+    # A block compiled in place via `module.compile()` receives `out` as a
+    # graph input that aliases `query`/`key_value` (the pre-allocated model
+    # buffers). Writing into it makes AOTAutograd merge the aliased inputs
+    # into a synthetic base, which fails for inference tensors (they carry no
+    # `_base`): `aten.set_` cannot take a symbolic storage size, and
+    # regenerating the aliases via `as_strided` recurses without bound.
+    # Compute the graph functionally instead and fill `out` outside of it,
+    # like the non-contiguous `out.copy_(...)` path in `_forward`.
+    result = call(*args, **kwargs)
+    value = result[0] if isinstance(result, tuple) else result
+    if out.shape != value.shape:
+        # Use out= resizing/error semantics instead of copy_ broadcasting.
+        torch.add(value, 0, out=out)
+    else:
+        out.copy_(value)
+    return (out, result[1]) if isinstance(result, tuple) else out
 
 
 def _batch_shape(
