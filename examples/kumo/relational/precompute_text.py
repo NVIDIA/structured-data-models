@@ -29,7 +29,7 @@ from pathlib import Path
 
 import torch
 from examples.kumo.relational._relarena.text import QwenDocuments
-from examples.kumo.relational.rel_arena import (
+from examples.kumo.relational.rel_arena_model import (
     TEXT_TABLE_CHUNK_ROWS,
     table_stypes,
     v11_precision,

@@ -62,7 +62,7 @@ import time
 from dataclasses import replace
 
 import numpy as np
-from examples.kumo.relational.rel_arena import KumoPredictor
+from examples.kumo.relational.rel_arena_model import KumoPredictor
 from examples.kumo.relational.rel_arena_search_space import (
     SEARCH_SPACE,
     parse_search_space,

@@ -2,14 +2,14 @@ r"""Kumo model submission using RelArena's shared validation tuner.
 
 Run one task from the repository root, after the setup in README.relarena.md::
 
-    python -m examples.kumo.relational.rel_arena \
+    python -m examples.kumo.relational.rel_arena_model \
         --datasets rel-f1 --tasks driver-position --n-trials 2 \
         --search-space examples/kumo/relational/rel_arena_search_space.py \
         --output model-results.csv
 
 Or call the same official runner from Python::
 
-    from examples.kumo.relational.rel_arena import KumoModel
+    from examples.kumo.relational.rel_arena_model import KumoModel
     from examples.kumo.relational.rel_arena_search_space import SEARCH_SPACE
     from relarena.runner import run_model_experiment
 
