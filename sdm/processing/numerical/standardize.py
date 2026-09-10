@@ -54,7 +54,7 @@ class Standardize(Processor, InvertibleMixin):
             self.scale = torch.ones_like(self.mean)
             return
 
-        data_mean, var = _nanmean_var(numerical)
+        data_mean, var, count = _nanmean_var(numerical)
 
         if self.with_mean:
             self.mean = data_mean
@@ -69,7 +69,7 @@ class Standardize(Processor, InvertibleMixin):
                         _constant_feature_mask(
                             var,
                             data_mean,
-                            numerical.size(-2),
+                            count,
                         )
                     ] = 1.0
             else:

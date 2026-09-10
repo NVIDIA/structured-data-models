@@ -242,13 +242,13 @@ class PowerTransform(Processor, InvertibleMixin):
     ) -> None:
         numerical = table.numerical
         n_samples = numerical.size(-2)
-        mean, var = _nanmean_var(numerical)
+        mean, var, count = _nanmean_var(numerical)
         filled = torch.where(numerical.isfinite(), numerical, mean)
         self.max = numerical.masked_fill(
             ~numerical.isfinite(),
             float("-inf"),
         ).amax(dim=-2, keepdim=True)
-        constant_features = _constant_feature_mask(var, mean, n_samples)
+        constant_features = _constant_feature_mask(var, mean, count)
         self.lambdas = self._optimize_lambdas(filled, constant_features)
 
         lambda_eps = torch.finfo(numerical.dtype).eps
@@ -257,7 +257,7 @@ class PowerTransform(Processor, InvertibleMixin):
 
         if self.standardize:
             transformed = _yeojohnson_transform(filled, self.lambdas)
-            self.mean, var = _nanmean_var(transformed)
+            self.mean, var, _ = _nanmean_var(transformed)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
             self.scale = scale

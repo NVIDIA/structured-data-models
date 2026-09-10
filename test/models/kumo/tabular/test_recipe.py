@@ -1,6 +1,6 @@
 import torch
 
-from sdm import CategoricalTensor, TableTensor
+from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
 from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
@@ -27,10 +27,23 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
     recipe = KumoTabular.default_recipe()
 
     output = recipe.features.fit_transform_ensemble(
-        EnsembleTable(features, num_members=2)
+        EnsembleTable.from_table(features, num_members=2)
     )
+    missing_by_column = {
+        "num_0": [False, False, False, False, False],
+        "num_1": [False, True, False, False, False],
+        "num_2": [True, False, False, False, False],
+        "cat_0": [False, False, False, False, False],
+    }
 
     for member_id in range(output.num_members):
         member = output.table(member_id)
-        assert member.numerical.isnan().sum() == 3
+        expected_missing = torch.tensor(
+            [
+                missing_by_column[column]
+                for column in member.columns[Stype.numerical]
+            ],
+            device=device,
+        ).T
+        assert torch.equal(member.numerical.isnan(), expected_missing)
         assert not member.numerical.isinf().any()

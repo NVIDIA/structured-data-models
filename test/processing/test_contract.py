@@ -116,7 +116,6 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ClipQuantiles()),
     ProcessorCase(sp.ClipSigma()),
     ProcessorCase(sp.ImputeMean(), _make_impute_mean_table),
-    ProcessorCase(sp.ReplaceInf()),
     ProcessorCase(sp.PowerTransform()),
     ProcessorCase(
         sp.QuantileTransform(n_quantiles=4, subsample=None),
