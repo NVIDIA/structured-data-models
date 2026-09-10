@@ -89,10 +89,8 @@ class DropConstantColumns(EnsembleProcessor):
                 dtype=torch.bool,
             )
         if self.threshold == 1:
-            finite = data.isfinite()
-            col_min = data.masked_fill(~finite, float("inf")).amin(dim=-2)
-            col_max = data.masked_fill(~finite, float("-inf")).amax(dim=-2)
-            return finite.any(dim=-2) & (col_min != col_max)
+            # Any mismatch with the first row proves a second unique value.
+            return (data != data[..., :1, :]).any(dim=-2)
 
         # A sorted column with k unique values has k - 1 transitions.
         values = data.sort(dim=-2).values
