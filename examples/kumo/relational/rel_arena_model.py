@@ -65,7 +65,7 @@ from relbench.tasks import task_registry
 
 import sdm
 import sdm.processing as sp
-from sdm.tensor import EnsembleTable
+from sdm import EnsembleTable
 
 CONTEXT_ROWS = 10_000
 ESTIMATORS = 8
