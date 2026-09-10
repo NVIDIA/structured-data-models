@@ -255,7 +255,7 @@ class DropConstantColumns(EnsembleProcessor):
             member_ids.append(member_id)
             next_member_id_by_kept_indices[kept_indices] = member_id + 1
 
-        return EnsembleTable.gather_members(
+        return ensemble_table.gather_members(
             tables=tables,
             member_ids=member_ids,
         )

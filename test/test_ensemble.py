@@ -117,35 +117,36 @@ def test_replace_tables_packs_only_within_existing_groups() -> None:
         assert output.table(member_id).equal(table)
 
 
-def test_gather_members_preserves_member_order() -> None:
+def test_gather_members_preserves_member_order_and_sharing() -> None:
     tables = tuple(
         TableTensor.from_tensor(torch.tensor([[value]], dtype=torch.float32))
-        for value in range(4)
+        for value in range(3)
     )
+    destination = EnsembleTable.from_table(tables[0], num_members=3)
     first = EnsembleTable(
         groups=(cast(TableTensor, torch.stack(tables[:2])),),
         locations=((0, 0), (0, 1)),
     )
-    second = EnsembleTable.from_tables(tables[2:], member_table_ids=(0, 1))
+    second = EnsembleTable.from_tables(tables[2:], member_table_ids=(0,))
 
-    output = EnsembleTable.gather_members(
+    output = destination.gather_members(
         tables=(first, second, first),
-        member_ids=(1, 0, 0),
+        member_ids=(1, 0, 1),
     )
 
     assert output.table(0).equal(tables[1])
     assert output.table(1).equal(tables[2])
-    assert output.table(2).equal(tables[0])
-    assert output.num_groups == 2
-    assert sorted(group.size(0) for group in output) == [1, 2]
+    assert output.table(2).equal(tables[1])
+    assert next(iter(output)).size(0) == 2
 
 
 def test_gather_members_rejects_source_count_mismatch() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
+    ensemble_table = EnsembleTable.from_table(table, num_members=2)
 
     with pytest.raises(ValueError, match="one source member"):
-        EnsembleTable.gather_members(
-            tables=(EnsembleTable.from_table(table, num_members=2),),
+        ensemble_table.gather_members(
+            tables=(ensemble_table,),
             member_ids=(0, 1),
         )
 

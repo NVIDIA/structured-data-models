@@ -140,10 +140,9 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
                     ),
                 )
             )
-        return ensemble_table.replace_tables(
+        return EnsembleTable.from_tables(
             tables=tables,
             member_table_ids=range(len(tables)),
-            pack=False,
         )
 
     def _inverse_transform_ensemble(
@@ -183,10 +182,9 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
                     ),
                 )
             )
-        return ensemble_table.replace_tables(
+        return EnsembleTable.from_tables(
             tables=tables,
             member_table_ids=range(len(tables)),
-            pack=False,
         )
 
     def __repr__(self, *, indent: int = 0) -> str:

@@ -140,10 +140,9 @@ class ShuffleCategories(EnsembleProcessor):
                         permutations,
                     )
                 )
-            return ensemble_table.replace_tables(
+            return EnsembleTable.from_tables(
                 tables=member_tables,
                 member_table_ids=range(ensemble_table.num_members),
-                pack=False,
             )
 
         outputs: dict[int, EnsembleTable] = {}
@@ -163,7 +162,7 @@ class ShuffleCategories(EnsembleProcessor):
             member_ids.append(member_id)
             next_member_id_by_permutation[permutation_id] = member_id + 1
 
-        return EnsembleTable.gather_members(
+        return ensemble_table.gather_members(
             tables=output_tables,
             member_ids=member_ids,
         )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable, Hashable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Self, cast
 
 import torch
@@ -16,9 +16,8 @@ class EnsembleTable(DeviceMixin):
     """Store and group input tables for an ensemble.
 
     Each ensemble member is associated with one table. Shared tables are stored
-    only once. Tables are arranged into explicit groups so processors can
-    process previously grouped tables together without combining separate
-    groups.
+    only once. Compatible tables may be stacked into groups so processors can
+    process them together. Separate groups are never combined.
 
     Use :meth:`table` to access a member's table. Iterate over the
     :class:`EnsembleTable` to process its groups, and :meth:`replace_groups`
@@ -67,8 +66,6 @@ class EnsembleTable(DeviceMixin):
     _groups: tuple[TableTensor, ...]
     # Group index and position within that group, per ensemble member.
     _locations: tuple[tuple[int, int], ...]
-    # Stable origin shared by groups split from the same input group.
-    _group_origins: tuple[Hashable, ...]
 
     def __init__(
         self,
@@ -77,7 +74,6 @@ class EnsembleTable(DeviceMixin):
     ) -> None:
         self._groups = tuple(groups)
         self._locations = tuple(locations)
-        self._group_origins = tuple(object() for _ in self._groups)
 
     @classmethod
     def from_table(
@@ -189,64 +185,6 @@ class EnsembleTable(DeviceMixin):
 
         return tuple(groups), tuple(locations)
 
-    @classmethod
-    def _pack_partitions(
-        cls,
-        tables: Sequence[TableTensor],
-        member_table_ids: Sequence[int],
-        partitions: Sequence[Hashable],
-        *,
-        pack: bool = True,
-    ) -> Self:
-        member_ids_by_partition: dict[Hashable, list[int]] = {}
-        for member_id, partition in enumerate(partitions):
-            member_ids_by_partition.setdefault(partition, []).append(member_id)
-
-        groups: list[TableTensor] = []
-        group_origins: list[Hashable] = []
-        locations = [(-1, -1)] * len(member_table_ids)
-        for partition, member_ids in member_ids_by_partition.items():
-            table_ids = tuple(
-                dict.fromkeys(
-                    member_table_ids[member_id] for member_id in member_ids
-                )
-            )
-            partition_tables = tuple(
-                tables[table_id] for table_id in table_ids
-            )
-            if pack:
-                packed_groups, packed_locations = cls._pack_tables(
-                    partition_tables
-                )
-            else:
-                packed_groups = tuple(
-                    cast(TableTensor, table.unsqueeze(0))
-                    for table in partition_tables
-                )
-                packed_locations = tuple(
-                    (group_id, 0) for group_id in range(len(table_ids))
-                )
-            group_offset = len(groups)
-            groups.extend(packed_groups)
-            group_origins.extend([partition] * len(packed_groups))
-            locations_by_table_id = {
-                table_id: (group_id + group_offset, position)
-                for table_id, (group_id, position) in zip(
-                    table_ids, packed_locations, strict=True
-                )
-            }
-            for member_id in member_ids:
-                locations[member_id] = locations_by_table_id[
-                    member_table_ids[member_id]
-                ]
-
-        ensemble = cls(
-            groups=groups,
-            locations=locations,
-        )
-        ensemble._group_origins = tuple(group_origins)
-        return ensemble
-
     def select_members(self, member_ids: Sequence[int]) -> Self:
         """Return the selected ensemble members in the requested order.
 
@@ -269,7 +207,6 @@ class EnsembleTable(DeviceMixin):
             positions.setdefault(position, len(positions))
 
         groups: list[TableTensor] = []
-        group_origins: list[Hashable] = []
         group_ids: dict[int, int] = {}
         for new_group_id, (group_id, positions) in enumerate(
             positions_by_group.items()
@@ -277,7 +214,6 @@ class EnsembleTable(DeviceMixin):
             group = self._groups[group_id]
             selected_positions = tuple(positions)
             group_ids[group_id] = new_group_id
-            group_origins.append(self._group_origins[group_id])
             if selected_positions == tuple(range(group.size(0))):
                 groups.append(group)
             elif len(selected_positions) == 1:
@@ -303,20 +239,18 @@ class EnsembleTable(DeviceMixin):
 
         ensemble = copy.copy(self)
         ensemble._groups = tuple(groups)
-        ensemble._group_origins = tuple(group_origins)
         ensemble._locations = tuple(
             (group_ids[group_id], positions_by_group[group_id][position])
             for group_id, position in locations
         )
         return ensemble
 
-    @classmethod
     def gather_members(
-        cls,
+        self,
         tables: Sequence[Self],
         member_ids: Sequence[int],
     ) -> Self:
-        """Gather members from multiple ensemble tables.
+        """Replace members with selected members from ensemble tables.
 
         ``tables[i].table(member_ids[i])`` supplies output member ``i``.
 
@@ -325,19 +259,14 @@ class EnsembleTable(DeviceMixin):
             member_ids: Logical source member position for each output member.
 
         Returns:
-            An ensemble table preserving logical member order.
+            An ensemble table preserving current group boundaries.
         """
         if len(tables) != len(member_ids):
             raise ValueError("Expected one source member per ensemble table")
 
-        first = tables[0]
-        if all(table is first for table in tables[1:]):
-            return first.select_members(member_ids)
-
         outputs: list[TableTensor] = []
         output_id_by_source: dict[tuple[int, tuple[int, int]], int] = {}
         member_table_ids = []
-        partitions = []
         for table, member_id in zip(tables, member_ids, strict=True):
             location = table._locations[member_id]
             key = (id(table), location)
@@ -347,12 +276,10 @@ class EnsembleTable(DeviceMixin):
                 output_id_by_source[key] = output_id
                 outputs.append(table.table(member_id))
             member_table_ids.append(output_id)
-            partitions.append(table._group_origins[location[0]])
 
-        return cls._pack_partitions(
+        return self.replace_tables(
             tables=outputs,
             member_table_ids=member_table_ids,
-            partitions=partitions,
         )
 
     @property
@@ -470,24 +397,18 @@ class EnsembleTable(DeviceMixin):
             return first
 
         if all(table._locations == first._locations for table in tables[1:]):
-            ensemble = first.replace_groups(
+            return first.replace_groups(
                 [
                     cast(TableTensor, torch.cat(groups, dim=-1))
                     for groups in zip(*tables, strict=True)
                 ]
             )
-            ensemble._group_origins = tuple(
-                tuple(table._group_origins[group_id] for table in tables)
-                for group_id in range(ensemble.num_groups)
-            )
-            return ensemble
 
         # TODO: Concatenate compatible groups directly and unpack logical
         # members only when their layouts differ.
         outputs: list[TableTensor] = []
         output_id_by_locations: dict[tuple[tuple[int, int], ...], int] = {}
         member_table_ids = []
-        partitions = []
         for member_id in range(first.num_members):
             locations = tuple(table._locations[member_id] for table in tables)
             output_id = output_id_by_locations.get(locations)
@@ -504,38 +425,24 @@ class EnsembleTable(DeviceMixin):
                     )
                 )
             member_table_ids.append(output_id)
-            partitions.append(
-                tuple(
-                    table._group_origins[group_id]
-                    for table, (group_id, _) in zip(
-                        tables, locations, strict=True
-                    )
-                )
-            )
 
-        return cls._pack_partitions(
+        return cls.from_tables(
             tables=outputs,
             member_table_ids=member_table_ids,
-            partitions=partitions,
         )
 
     def replace_tables(
         self,
         tables: Sequence[TableTensor],
         member_table_ids: Sequence[int],
-        *,
-        pack: bool = True,
     ) -> Self:
         """Replace member tables without combining existing groups.
 
-        Compatible replacements may be packed when their members belong to
-        the same current group.
+        Compatible replacements are packed only within each current group.
 
         Args:
             tables: Replacement tables available to the ensemble members.
             member_table_ids: Index into ``tables`` for each ensemble member.
-            pack: Whether to stack compatible replacements from the same
-                original group.
 
         Returns:
             An ensemble table preserving existing group boundaries.
@@ -543,15 +450,37 @@ class EnsembleTable(DeviceMixin):
         if len(member_table_ids) != self.num_members:
             raise ValueError("Expected one replacement table per member")
 
-        return self._pack_partitions(
-            tables=tables,
-            member_table_ids=member_table_ids,
-            partitions=tuple(
-                self._group_origins[group_id]
-                for group_id, _ in self._locations
-            ),
-            pack=pack,
-        )
+        member_ids_by_group: list[list[int]] = [
+            [] for _ in range(self.num_groups)
+        ]
+        for member_id, (group_id, _) in enumerate(self._locations):
+            member_ids_by_group[group_id].append(member_id)
+
+        groups: list[TableTensor] = []
+        locations = [(-1, -1)] * self.num_members
+        for member_ids in member_ids_by_group:
+            table_ids = tuple(
+                dict.fromkeys(
+                    member_table_ids[member_id] for member_id in member_ids
+                )
+            )
+            packed_groups, packed_locations = self._pack_tables(
+                tuple(tables[table_id] for table_id in table_ids)
+            )
+            group_offset = len(groups)
+            groups.extend(packed_groups)
+            locations_by_table_id = {
+                table_id: (group_id + group_offset, position)
+                for table_id, (group_id, position) in zip(
+                    table_ids, packed_locations, strict=True
+                )
+            }
+            for member_id in member_ids:
+                locations[member_id] = locations_by_table_id[
+                    member_table_ids[member_id]
+                ]
+
+        return self.__class__(groups=groups, locations=locations)
 
     def replace_groups(self, groups: Sequence[TableTensor]) -> Self:
         """Return an ensemble table with its groups replaced.
