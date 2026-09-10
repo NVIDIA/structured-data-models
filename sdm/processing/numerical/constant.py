@@ -2,9 +2,8 @@ from typing import Literal, cast
 
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
-from sdm.tensor import EnsembleTable
 
 DropConstantColumnsMethod = Literal["unique", "variance"]
 

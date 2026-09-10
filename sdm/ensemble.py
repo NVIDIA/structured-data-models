@@ -27,7 +27,7 @@ class EnsembleTable(DeviceMixin):
     .. testcode::
 
         import torch
-        from sdm.tensor import EnsembleTable, TableTensor
+        from sdm import EnsembleTable, TableTensor
 
         estimator_table1 = TableTensor.from_tensor(
             tensor=torch.tensor([[1.0], [2.0]]),
@@ -91,7 +91,7 @@ class EnsembleTable(DeviceMixin):
             num_members: Number of ensemble members.
 
         Returns:
-            An :class:`~sdm.tensor.EnsembleTable` with one group.
+            An :class:`~sdm.EnsembleTable` with one group.
         """
         return cls(
             groups=(cast(TableTensor, table.unsqueeze(0)),),

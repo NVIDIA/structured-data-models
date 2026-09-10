@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
@@ -10,7 +10,6 @@ from sdm.processing import (
     Processor,
     Standardize,
 )
-from sdm.tensor import EnsembleTable
 
 
 # TODO: Replace these stubs with real EnsembleProcessor subclasses once they
