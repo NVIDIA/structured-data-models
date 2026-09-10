@@ -21,6 +21,41 @@ class TimesFM3(ICLModel):
     <https://research.google/blog/
     timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting>`__.
 
+    .. figure:: /images/timesfm3_light.png
+        :figclass: light-only
+        :width: 100%
+
+    .. figure:: /images/timesfm3_dark.png
+        :figclass: dark-only
+        :width: 100%
+
+    :class:`TimesFM3` is a zero-shot time-series foundation model for
+    multivariate forecasting. It extends earlier univariate TimesFM models with
+    native support for jointly forecasting multiple coevolving target series,
+    incorporating historical covariates, and using dynamic covariates that are
+    known across both the past and future forecast horizon.
+
+    Architecturally, it combines patch-based time-series tokenization with
+    alternating causal temporal attention and full variate attention, allowing
+    forecasts to use both within-series history and cross-series dependencies.
+    It decodes the full forecast horizon in a single forward pass and returns
+    nine quantile forecasts, from the 10th to the 90th percentile, for each
+    target series and query time step.
+
+    Within the :class:`~sdm.models.ICLModel` protocol, :class:`TimesFM3`
+    treats rows as ordered time steps. In a default forward pass,
+    ``x_context`` contains historical covariates, ``y_context`` contains one or
+    more past target series, and ``x_query`` contains future-known covariates
+    (which must also be present in ``x_context``).
+
+    .. note::
+        :class:`TimesFM` model weights are distributed under the
+        `TimesFM Non-Commercial License v1.0 <https://huggingface.co/google/
+        timesfm-3.0-pytorch/blob/main/LICENSE>`__.
+        Before downloading pretrained weights, users must accept the license
+        either interactively when prompted or explicitly via
+        ``accept_license=True``.
+
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         accept_license: Whether to accept the `TimesFM Non-Commercial License
