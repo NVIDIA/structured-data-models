@@ -163,10 +163,9 @@ class TimesFM3(ICLModel):
         x = kwargs["x"] if "x" in kwargs else args[0]
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
-        x = expand_query(
-            cast(dict[str, Any], self._cache["kwargs"])["_x_context_schema"],
-            x,
-        )
+
+        cache_kwargs = cast(dict[str, Any], self._cache["kwargs"])
+        x = expand_query(cache_kwargs["_x_context_schema"], x)
 
         if "x" in kwargs:
             kwargs["x"] = x
