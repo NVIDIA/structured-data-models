@@ -1,0 +1,8 @@
+﻿GatedLogScale
+=============
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: GatedLogScale
+   :members:
+   :show-inheritance:
