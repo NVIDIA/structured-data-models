@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
-from sdm.processing import Processor, TableDispatch
+from sdm import EnsembleTable, Recipe, RelatedTables, Stype, TableTensor
+from sdm.processing import Processor, Standardize, TableDispatch
 from sdm.processing.execution import RecipeExecution
 
 
@@ -44,3 +44,59 @@ def test_recipe_reject() -> None:
         Recipe(target=TableDispatch())
     with pytest.raises(ValueError, match="not supported"):
         Recipe(output=TableDispatch())
+
+
+def test_recipe_preserves_fitted_related_table_groups() -> None:
+    context = EnsembleTable.from_tables(
+        tables=(
+            TableTensor.from_tensor(torch.tensor([[1.0], [3.0]])),
+            TableTensor.from_tensor(torch.tensor([[10.0], [20.0], [30.0]])),
+        ),
+        member_table_ids=(0, 1),
+    )
+    query = EnsembleTable(
+        groups=(
+            TableTensor.from_tensor(
+                torch.tensor([[[4.0], [6.0]], [[40.0], [60.0]]])
+            ),
+        ),
+        locations=((0, 0), (0, 1)),
+    )
+    task = TableTensor.from_tensor(torch.zeros(2, 1))
+    execution = RecipeExecution(
+        Recipe(
+            features=TableDispatch(
+                related=Standardize(with_std=False),
+            )
+        )
+    )
+    execution.fit_transform(
+        x=task,
+        y=task,
+        related_tables=RelatedTables(
+            tables={"related": context},
+            relationships=(),
+            task_links=(),
+        ),
+        num_members=2,
+    )
+
+    outputs = execution.transform(
+        x=task,
+        related_tables=RelatedTables(
+            tables={"related": query},
+            relationships=(),
+            task_links=(),
+        ),
+    )
+
+    assert outputs[0].related_tables is not None
+    assert outputs[1].related_tables is not None
+    assert outputs[0].related_tables.tables["related"].numerical.tolist() == [
+        [2.0],
+        [4.0],
+    ]
+    assert outputs[1].related_tables.tables["related"].numerical.tolist() == [
+        [20.0],
+        [40.0],
+    ]
