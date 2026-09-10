@@ -12,7 +12,7 @@ import sdm
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", type=str, required=True)
 parser.add_argument("--context_size", type=int, default=10_000)
-parser.add_argument("--batch_size", type=int, default=1000)
+parser.add_argument("--batch_size", type=int, default=10_000)
 parser.add_argument("--max_test_steps", type=int, default=None)
 parser.add_argument("--num_neighbors", type=int, nargs="*", default=[16, 16])
 parser.add_argument("--num_estimators", type=int, default=1)
@@ -122,7 +122,8 @@ else:
         "table_column": "ID",
     }
 
-context = context[torch.randperm(len(context))[: args.context_size]]
+perm = context["CREATIONDATETIME"].datetime.squeeze(-1).argsort(stable=True)
+context = context[perm[-args.context_size :]]
 
 # Build Relational Data #######################################################
 dfs["sales"] = dfs["sales"].drop(labels=sale_tasks, axis=1)
