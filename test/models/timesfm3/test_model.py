@@ -7,9 +7,15 @@ from sdm.models.timesfm3 import TimesFM3
 def test_forward() -> None:
     model = TimesFM3(pretrained=False)
 
-    # Past-and-future covariates:
-    x_context = TableTensor.from_tensor(torch.randn(5, 2))
-    x_query = TableTensor.from_tensor(torch.randn(3, 2))
+    # Past and past-and-future covariates:
+    x_context = TableTensor.from_tensor(
+        torch.randn(5, 4),
+        columns=["x1", "x2", "x3", "x4"],
+    )
+    x_query = TableTensor.from_tensor(
+        torch.randn(3, 2),
+        columns=["x2", "x4"],
+    )
 
     # Target variates:
     y_context = TableTensor.from_tensor(
