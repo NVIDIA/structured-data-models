@@ -14,22 +14,14 @@ class ToNumerical(Processor):
     and the category vocabulary. ``ToNumerical`` reuses those existing ids,
     casts them to the numerical dtype, and clears the categorical block so
     numerical-only models can consume both original numerical and categorical
-    features. Missing categorical values remain ``-1`` unless
-    ``missing_as_nan`` is set, in which case codes below zero become NaN.
+    features. Missing categorical values remain ``-1``.
 
     Unhandled semantic types are preserved unchanged.
 
-    Args:
-        missing_as_nan: If ``True``, categorical missing or unseen codes are
-            written as NaN in the numerical block.
     """
 
     requires_fit = False
     handles_stypes = frozenset({Stype.numerical, Stype.categorical})
-
-    def __init__(self, *, missing_as_nan: bool = False) -> None:
-        super().__init__()
-        self.missing_as_nan = missing_as_nan
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Return ``table`` with categorical columns moved to ``numerical``."""
@@ -43,11 +35,6 @@ class ToNumerical(Processor):
         # Casting to the (floating-point) numerical dtype also unwraps a
         # CategoricalTensor to its raw ordinal ids as a plain tensor.
         categorical = table.categorical.to(table.numerical.dtype)
-        if self.missing_as_nan:
-            categorical = categorical.masked_fill(
-                table.categorical.code < 0,
-                float("nan"),
-            )
         columns = (
             *table.columns[Stype.numerical],
             *table.columns[Stype.categorical],

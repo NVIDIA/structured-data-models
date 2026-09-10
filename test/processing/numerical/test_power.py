@@ -187,6 +187,25 @@ def test_power_transform_preserves_nan(device: torch.device) -> None:
 
 
 @withCUDA
+def test_power_transform_sparse_feature_uses_finite_count(
+    device: torch.device,
+) -> None:
+    inp = torch.full((1000, 1), float("nan"), device=device)
+    inp[:4, 0] = torch.tensor(
+        [100_000.0, 100_001.0, 100_004.0, 100_016.0],
+        device=device,
+    )
+
+    processor = PowerTransform(standardize=False).fit(
+        TableTensor.from_tensor(inp)
+    )
+
+    assert not torch.equal(
+        processor.lambdas, torch.ones_like(processor.lambdas)
+    )
+
+
+@withCUDA
 def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     device: torch.device,
 ) -> None:

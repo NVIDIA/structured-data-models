@@ -7,12 +7,17 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             sp.StypeDispatch(
                 categorical=[
                     sp.AlignCategories(sort_by="value", min_frequency=2),
-                    sp.ToNumerical(missing_as_nan=True),
+                    sp.ToNumerical(),
                 ],
             ),
             sp.StypeDispatch(
                 numerical=[
-                    sp.ReplaceInf(),
+                    lambda table: table.replace_blocks(
+                        numerical=table.numerical.masked_fill(
+                            table.numerical.isinf(),
+                            float("nan"),
+                        )
+                    ),
                     sp.DropConstantColumns(),
                     sp.Standardize(epsilon=1e-6),
                     sp.Clip(min_value=-100.0, max_value=100.0),
