@@ -193,8 +193,10 @@ for batch in tqdm.tqdm(query.split(args.batch_size)[: args.max_test_steps]):
     y_query = batch[args.task.upper()].to(device)
     with torch.amp.autocast(device.type, torch.float16, enabled=True):
         out = model.predict(*sampler(x_query, **kwargs).to(device))
-    pred, target = sdm.evaluation.to_class_indices(out, y_query)
-    match = pred.argsort(dim=-1, descending=True) == target.unsqueeze(-1)
-    metric.update((match.argmax(dim=-1) + 1).reciprocal())
+    prob, target = sdm.evaluation.to_class_indices(
+        out, y_query, missing_score=0
+    )
+    match = prob.argsort(dim=-1, descending=True) == target.unsqueeze(-1)
+    metric.update((match.float().argmax(dim=-1) + 1).reciprocal())
 
 print(f"MRR: {metric.compute():.4f}")
