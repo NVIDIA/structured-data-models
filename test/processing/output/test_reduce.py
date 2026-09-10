@@ -2,8 +2,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import ColumnarTensor, TableTensor
-from sdm.tensor import EnsembleTable
+from sdm import ColumnarTensor, EnsembleTable, TableTensor
 from sdm.testing import withCUDA
 
 
@@ -122,7 +121,7 @@ def test_reduce_estimators_rejects_empty_ensemble_table() -> None:
 
     with pytest.raises(ValueError, match="at least one ensemble member"):
         sp.ReduceEstimators().transform_ensemble(
-            EnsembleTable(table, num_members=0)
+            EnsembleTable.from_table(table, num_members=0)
         )
 
 

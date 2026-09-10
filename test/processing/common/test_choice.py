@@ -4,13 +4,12 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import (
     EnsembleProcessor,
     InvertibleMixin,
     Processor,
 )
-from sdm.tensor import EnsembleTable
 
 
 class Add(Processor, InvertibleMixin):
@@ -145,10 +144,10 @@ def test_choice_round_robin_routes_members() -> None:
     processor = sp.Choice(Add(0), Add(10), method="round_robin")
 
     transformed = processor.fit_transform_ensemble(
-        EnsembleTable(context, num_members=8)
+        EnsembleTable.from_table(context, num_members=8)
     )
     query_transformed = processor.transform_ensemble(
-        EnsembleTable(query, num_members=8)
+        EnsembleTable.from_table(query, num_members=8)
     )
     restored = processor.inverse_transform_ensemble(transformed)
 
@@ -166,7 +165,7 @@ def test_choice_round_robin_routes_members() -> None:
 
 
 def test_choice_fit_ensemble_fits_selected_options() -> None:
-    table = EnsembleTable(_table(), num_members=4)
+    table = EnsembleTable.from_table(_table(), num_members=4)
     fitted = sp.Choice(sp.Standardize(), sp.Identity(), method="round_robin")
     combined = sp.Choice(sp.Standardize(), sp.Identity(), method="round_robin")
 
@@ -218,7 +217,7 @@ def test_nested_choice_routes_selected_members_locally() -> None:
     )
 
     output = processor.fit_transform_ensemble(
-        EnsembleTable(_table(), num_members=8)
+        EnsembleTable.from_table(_table(), num_members=8)
     )
 
     for member_id in range(8):
@@ -241,7 +240,11 @@ def test_choice_round_robin_uses_first_option_for_single_table() -> None:
 
 def test_choice_ensemble_requires_matching_member_count() -> None:
     processor = sp.Choice(Add(0), Add(1), method="round_robin")
-    processor.fit_transform_ensemble(EnsembleTable(_table(), num_members=8))
+    processor.fit_transform_ensemble(
+        EnsembleTable.from_table(_table(), num_members=8)
+    )
 
     with pytest.raises(RuntimeError, match="fitted with 8"):
-        processor.transform_ensemble(EnsembleTable(_table(), num_members=7))
+        processor.transform_ensemble(
+            EnsembleTable.from_table(_table(), num_members=7)
+        )

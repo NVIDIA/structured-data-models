@@ -5,16 +5,15 @@ from typing import Self
 
 import torch
 
-from sdm import TableTensor
+from sdm import EnsembleTable, TableTensor
 from sdm.processing import InvertibleMixin, Processor
-from sdm.tensor import EnsembleTable
 
 
 class EnsembleProcessor(Processor):
     r"""Base processor for ensemble-aware table transformations.
 
     An :class:`EnsembleProcessor` defines a reusable transformation on
-    :class:`~sdm.tensor.EnsembleTable` for feature, target and output
+    :class:`~sdm.EnsembleTable` for feature, target and output
     pre/post-processing across ensemble members.
     An :class:`EnsembleProcessor` learns any required state via
     :meth:`fit_ensemble` and applies the transformation via
@@ -51,12 +50,14 @@ class EnsembleProcessor(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         self._fit_ensemble(
-            EnsembleTable(table, num_members=1),
+            EnsembleTable.from_table(table, num_members=1),
             generator=generator,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        output = self._transform_ensemble(EnsembleTable(table, num_members=1))
+        output = self._transform_ensemble(
+            EnsembleTable.from_table(table, num_members=1)
+        )
         return output.table(0)
 
     def _fit_transform(
@@ -68,7 +69,7 @@ class EnsembleProcessor(Processor):
         if not self.requires_fit:
             return self._transform(table)
         output = self._fit_transform_ensemble(
-            EnsembleTable(table, num_members=1),
+            EnsembleTable.from_table(table, num_members=1),
             generator=generator,
         )
         return output.table(0)
@@ -174,7 +175,7 @@ class EnsembleInvertibleMixin(InvertibleMixin):
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         output = self._inverse_transform_ensemble(
-            EnsembleTable(table, num_members=1)
+            EnsembleTable.from_table(table, num_members=1)
         )
         return output.table(0)
 

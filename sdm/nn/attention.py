@@ -137,6 +137,10 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
+        enable_gqa = False
+        if query.size(-2) != key.size(-2):
+            enable_gqa = True
+
         out = F.scaled_dot_product_attention(
             query=query.transpose(-3, -2),  # [B, Hq, Q, C],
             key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
@@ -144,7 +148,7 @@ class SDPA(torch.nn.Module):
             attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
             if attn_mask is not None
             else None,
-            enable_gqa=query.size(-2) != key.size(-2),
+            enable_gqa=enable_gqa,
             scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
 
@@ -640,8 +644,7 @@ class TransformerBlock(torch.nn.Module):
                 flat_out = chunk.new_empty((batch_size, *query.size()[-2:]))
                 flat_out[start:end] = chunk
 
-            del chunk
-            del result
+            del chunk, result
 
         if out is None:
             assert flat_out is not None
@@ -693,8 +696,16 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             attn_out = self.post_attn_norm(attn_out)
 
-        tmp = torch.add(attn_out, query, out=out)
-        out = torch.add(tmp, self.mlp(tmp), out=out)
+        if (
+            out is not None
+            and torch.compiler.is_compiling()
+            and not out.is_contiguous()
+        ):
+            tmp = attn_out + query
+            out.copy_(tmp + self.mlp(tmp))
+        else:
+            tmp = torch.add(attn_out, query, out=out)
+            out = torch.add(tmp, self.mlp(tmp), out=out)
 
         return (out, kv) if return_key_value else out
 

@@ -27,7 +27,7 @@ class EnsembleTable(DeviceMixin):
     .. testcode::
 
         import torch
-        from sdm.tensor import EnsembleTable, TableTensor
+        from sdm import EnsembleTable, TableTensor
 
         estimator_table1 = TableTensor.from_tensor(
             tensor=torch.tensor([[1.0], [2.0]]),
@@ -59,29 +59,44 @@ class EnsembleTable(DeviceMixin):
         assert groups[1].size() == (1, 2, 1)
 
     Args:
-        table: A :class:`~sdm.tensor.TableTensor` shared by all ensemble
-            members.
-        num_members: Number of ensemble members.
+        groups: Sequence of
+            :class:`~sdm.tensor.TableTensor`, optionally stacked along their
+            leading dimension.
+        locations: ``(group, batch)`` location of each ensemble member.
     """
 
     _groups: tuple[TableTensor, ...]
     # Group index and position within that group, per ensemble member.
     _locations: tuple[tuple[int, int], ...]
 
-    def __init__(self, table: TableTensor, *, num_members: int) -> None:
-        self._groups = (cast(TableTensor, table.unsqueeze(0)),)
-        self._locations = ((0, 0),) * num_members
-
-    @classmethod
-    def _from_groups(
-        cls,
+    def __init__(
+        self,
         groups: Sequence[TableTensor],
         locations: Sequence[tuple[int, int]],
+    ) -> None:
+        self._groups = tuple(groups)
+        self._locations = tuple(locations)
+
+    @classmethod
+    def from_table(
+        cls,
+        table: TableTensor,
+        *,
+        num_members: int,
     ) -> Self:
-        out = cls.__new__(cls)
-        out._groups = tuple(groups)
-        out._locations = tuple(locations)
-        return out
+        """Create an ensemble, sharing one table across all members.
+
+        Args:
+            table: Table used across members.
+            num_members: Number of ensemble members.
+
+        Returns:
+            An :class:`~sdm.EnsembleTable` with one group.
+        """
+        return cls(
+            groups=(cast(TableTensor, table.unsqueeze(0)),),
+            locations=((0, 0),) * num_members,
+        )
 
     @classmethod
     def from_tables(
@@ -153,12 +168,10 @@ class EnsembleTable(DeviceMixin):
                 }
             )
 
-        ensemble = cls.__new__(cls)
-        ensemble._groups = tuple(groups)
-        ensemble._locations = tuple(
-            input_locations[index] for index in member_table_ids
+        return cls(
+            groups=groups,
+            locations=[input_locations[index] for index in member_table_ids],
         )
-        return ensemble
 
     def select_members(self, member_ids: Sequence[int]) -> Self:
         """Return the selected ensemble members in the requested order.

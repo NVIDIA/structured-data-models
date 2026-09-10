@@ -2,10 +2,9 @@ from typing import Literal, cast
 
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
-from sdm.tensor import EnsembleTable
 
 
 class RandomProjection(EnsembleProcessor):
@@ -81,4 +80,4 @@ class RandomProjection(EnsembleProcessor):
             locations.append((group_id, group_position[group_id]))
             group_position[group_id] += 1
 
-        return EnsembleTable._from_groups(groups, locations)
+        return EnsembleTable(groups=groups, locations=locations)

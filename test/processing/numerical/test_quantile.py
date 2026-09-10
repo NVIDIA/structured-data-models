@@ -1,9 +1,8 @@
 import pytest
 import torch
 
-from sdm import TableTensor
+from sdm import EnsembleTable, TableTensor
 from sdm.processing import EnsembleProcessorAdapter, QuantileTransform
-from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA, withCUDA
 
 
