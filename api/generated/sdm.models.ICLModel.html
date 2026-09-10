@@ -178,6 +178,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.models.ICLModel.supported_feature_stypes"><code class="docutils literal notranslate"><span class="pre">ICLModel.supported_feature_stypes</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.supported_target_stypes"><code class="docutils literal notranslate"><span class="pre">ICLModel.supported_target_stypes</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.supported_tasks"><code class="docutils literal notranslate"><span class="pre">ICLModel.supported_tasks</span></code></a></li>
+<li><a class="reference internal" href="#sdm.models.ICLModel.supports_multi_target"><code class="docutils literal notranslate"><span class="pre">ICLModel.supports_multi_target</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.supports_related_tables"><code class="docutils literal notranslate"><span class="pre">ICLModel.supports_related_tables</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.forward"><code class="docutils literal notranslate"><span class="pre">ICLModel.forward()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.fit"><code class="docutils literal notranslate"><span class="pre">ICLModel.fit()</span></code></a></li>
@@ -253,6 +254,12 @@ model are initialized.</p>
 <dt class="sig sig-object py" id="sdm.models.ICLModel.supported_tasks">
 <span class="sig-name descname"><span class="pre">supported_tasks</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.ClassVar" title="(in Python v3.14)"><span class="pre">ClassVar</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Task.html#sdm.Task" title="sdm.task.Task"><span class="pre">Task</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#sdm.models.ICLModel.supported_tasks" title="Link to this definition">#</a></dt>
 <dd><p>Prediction tasks supported in this model.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sdm.models.ICLModel.supports_multi_target">
+<span class="sig-name descname"><span class="pre">supports_multi_target</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.ClassVar" title="(in Python v3.14)"><span class="pre">ClassVar</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#sdm.models.ICLModel.supports_multi_target" title="Link to this definition">#</a></dt>
+<dd><p>Whether this model supports multi-target predictions.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -408,7 +415,7 @@ stacked estimator outputs with shape <code class="docutils literal notranslate">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=bb35faa6"></script>
+      <script src="../../_static/documentation_options.js?v=856267f9"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

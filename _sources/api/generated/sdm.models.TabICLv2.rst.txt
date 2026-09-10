@@ -6,7 +6,7 @@
 .. autoclass:: TabICLv2
    :members:
    :show-inheritance:
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_related_tables
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_related_tables
 
 
 
@@ -21,6 +21,8 @@ Capabilities
      - ``categorical``, ``numerical``
    * - **Supported Prediction Tasks**
      - ``classification``, ``regression``
+   * - **Multi-Target Support**
+     - ❌
    * - **Related Table Support**
      - ❌
 
