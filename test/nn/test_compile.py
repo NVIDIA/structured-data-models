@@ -157,9 +157,7 @@ def test_sdpa_compile_dynamic_shapes(
     module = SDPA(
         num_query_heads=4, num_key_value_heads=num_key_value_heads
     ).eval()
-    compiled = torch.compile(
-        module, backend="eager", fullgraph=True, dynamic=True
-    )
+    compiled = fullgraph(module)
     with torch.inference_mode():
         for query_rows, key_rows in [(3, 5), (7, 9), (1, 4)]:
             query = torch.randn(*batch_shape, query_rows, 4, 8, device=device)
@@ -167,6 +165,10 @@ def test_sdpa_compile_dynamic_shapes(
                 *batch_shape, key_rows, kv_heads, 8, device=device
             )
             value = torch.randn_like(key)
+            index = [query.ndim - 3, query.ndim - 2]
+            torch._dynamo.mark_dynamic(query, index)
+            torch._dynamo.mark_dynamic(key, index)
+            torch._dynamo.mark_dynamic(value, index)
             expected = module(query=query, key=key, value=value)
             out = compiled(query=query, key=key, value=value)
             torch.testing.assert_close(out, expected)
