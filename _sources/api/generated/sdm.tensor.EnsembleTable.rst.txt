@@ -1,9 +1,0 @@
-﻿EnsembleTable
-=============
-
-.. currentmodule:: sdm.tensor
-
-.. autoclass:: EnsembleTable
-   :members:
-   :show-inheritance:
-   :exclude-members: contiguous, detach_, grad, implements, is_contiguous, is_shared, item, requires_grad, requires_grad_, share_memory_, tolist

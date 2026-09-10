@@ -86,7 +86,6 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.CategoricalTensor.html">CategoricalTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.ColumnarTensor.html">ColumnarTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.TableTensor.html">TableTensor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.tensor.EnsembleTable.html">EnsembleTable</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../relational.html">sdm.relational</a><ul>
@@ -222,18 +221,18 @@ data-aria-dark="Switch to auto color mode">
 <p>Extend a <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a> by an inverse transformation.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.ensemble.EnsembleInvertibleMixin.inverse_transform_ensemble">
-<span class="sig-name descname"><span class="pre">inverse_transform_ensemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ensemble_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleInvertibleMixin.inverse_transform_ensemble" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">inverse_transform_ensemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ensemble_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleInvertibleMixin.inverse_transform_ensemble" title="Link to this definition">#</a></dt>
 <dd><p>Apply the inverse transformation to <code class="docutils literal notranslate"><span class="pre">ensemble_table</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ensemble_table</strong> (<a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><em>EnsembleTable</em></a>) – The ensemble table in transformed representation.</p>
+<dd class="field-odd"><p><strong>ensemble_table</strong> (<a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><em>EnsembleTable</em></a>) – The ensemble table in transformed representation.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The table restored to the representation before
 <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor.transform_ensemble" title="sdm.processing.ensemble.EnsembleProcessor.transform_ensemble"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_ensemble()</span></code></a>.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><em>EnsembleTable</em></a></p>
+<dd class="field-odd"><p><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><em>EnsembleTable</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -266,7 +265,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=0fd29e6b"></script>
+      <script src="../../_static/documentation_options.js?v=5a2c3449"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

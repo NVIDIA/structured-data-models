@@ -86,7 +86,6 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.CategoricalTensor.html">CategoricalTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.ColumnarTensor.html">ColumnarTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.TableTensor.html">TableTensor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.tensor.EnsembleTable.html">EnsembleTable</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../relational.html">sdm.relational</a><ul>
@@ -220,14 +219,13 @@ data-aria-dark="Switch to auto color mode">
 <p>Apply separate processor pipelines to columns grouped by semantic type.</p>
 <p>For each configured route, matching columns from a
 <a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> or
-<a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a> are passed to that processor. Ordinary
+<a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a> are passed to that processor. Ordinary
 processors learn separate state for each compatible ensemble group, while
 ensemble-aware processors operate on all groups directly. Compatible
 members are processed together and route outputs are concatenated in
 semantic type order while preserving logical member order. A route may
 change column values, names, count, or order. With the default passthrough
-behavior, unconfigured semantic types follow in input order. A
-<code class="docutils literal notranslate"><span class="pre">generator</span></code> passed during fitting is passed on to every route.</p>
+behavior, unconfigured semantic types follow in input order.</p>
 <p>Inverse transform supports routes that preserve their semantic type. Every
 active route must be invertible, and routes must not share an output
 semantic type. Passthrough columns are preserved.</p>
@@ -235,18 +233,12 @@ semantic type. Passthrough columns are preserved.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>numerical</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for numerical
-columns. A sequence is normalized to
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
+columns.</p></li>
 <li><p><strong>categorical</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for categorical
-columns. A sequence is normalized to
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
-<li><p><strong>datetime</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for datetime columns.
-A sequence is normalized to
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
-<li><p><strong>text</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for text columns. A
-sequence is normalized to <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
-<li><p><strong>id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for identifier columns. A
-sequence is normalized to <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
+columns.</p></li>
+<li><p><strong>datetime</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for datetime columns.</p></li>
+<li><p><strong>text</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for text columns.</p></li>
+<li><p><strong>id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for identifier columns.</p></li>
 </ul>
 </dd>
 </dl>
@@ -293,7 +285,7 @@ sequence is normalized to <code class="xref py py-class docutils literal notrans
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=0fd29e6b"></script>
+      <script src="../../_static/documentation_options.js?v=5a2c3449"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

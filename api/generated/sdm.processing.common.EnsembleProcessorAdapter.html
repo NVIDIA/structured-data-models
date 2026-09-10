@@ -86,7 +86,6 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.CategoricalTensor.html">CategoricalTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.ColumnarTensor.html">ColumnarTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.TableTensor.html">TableTensor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.tensor.EnsembleTable.html">EnsembleTable</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../relational.html">sdm.relational</a><ul>
@@ -219,14 +218,15 @@ data-aria-dark="Switch to auto color mode">
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>, <a class="reference internal" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html#sdm.processing.ensemble.EnsembleInvertibleMixin" title="sdm.processing.ensemble.EnsembleInvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleInvertibleMixin</span></code></a></p>
 <p>Adapt an ordinary processor to ensemble-aware processing.</p>
 <p>The adapter turns a <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> into an
-<code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code>. It copies and fits the processor separately
-for each group of compatible tables in an
-<a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a>.</p>
+<a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>. It copies and fits the
+processor separately for each group of compatible tables in an
+<a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a>.</p>
 <p>The wrapped processor must preserve row and leading dimensions as required
 by the <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> contract. A processor that
-changes the ensemble structure must implement <code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code>
-directly. Inverse transformation requires the wrapped processor to
-implement <a class="reference internal" href="sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a>.</p>
+changes the ensemble structure must implement
+<a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a> directly. Inverse
+transformation requires the wrapped processor to implement
+<a class="reference internal" href="sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>processor</strong> (<a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Processor to fit separately for each ensemble table group.</p>
@@ -275,7 +275,7 @@ implement <a class="reference internal" href="sdm.processing.base.InvertibleMixi
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=0fd29e6b"></script>
+      <script src="../../_static/documentation_options.js?v=5a2c3449"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

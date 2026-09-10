@@ -86,7 +86,6 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.CategoricalTensor.html">CategoricalTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.ColumnarTensor.html">ColumnarTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.TableTensor.html">TableTensor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.tensor.EnsembleTable.html">EnsembleTable</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../relational.html">sdm.relational</a><ul>
@@ -224,7 +223,7 @@ data-aria-dark="Switch to auto color mode">
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
 <p>Base processor for ensemble-aware table transformations.</p>
 <p>An <a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a> defines a reusable transformation on
-<a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a> for feature, target and output
+<a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a> for feature, target and output
 pre/post-processing across ensemble members.
 An <a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a> learns any required state via
 <a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor.fit_ensemble" title="sdm.processing.ensemble.EnsembleProcessor.fit_ensemble"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit_ensemble()</span></code></a> and applies the transformation via
@@ -255,12 +254,12 @@ adapted to ensemble processing.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.ensemble.EnsembleProcessor.fit_ensemble">
-<span class="sig-name descname"><span class="pre">fit_ensemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ensemble_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleProcessor.fit_ensemble" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">fit_ensemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ensemble_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleProcessor.fit_ensemble" title="Link to this definition">#</a></dt>
 <dd><p>Fit the processor on an ensemble table.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>ensemble_table</strong> (<a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><em>EnsembleTable</em></a>) – Ensemble table used to compute the processor state.</p></li>
+<li><p><strong>ensemble_table</strong> (<a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><em>EnsembleTable</em></a>) – Ensemble table used to compute the processor state.</p></li>
 <li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom number generator used for sampling.</p></li>
 </ul>
 </dd>
@@ -272,29 +271,29 @@ adapted to ensemble processing.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.ensemble.EnsembleProcessor.transform_ensemble">
-<span class="sig-name descname"><span class="pre">transform_ensemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ensemble_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleProcessor.transform_ensemble" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">transform_ensemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ensemble_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleProcessor.transform_ensemble" title="Link to this definition">#</a></dt>
 <dd><p>Transform an ensemble table with fitted state.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ensemble_table</strong> (<a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><em>EnsembleTable</em></a>) – Ensemble table to transform.</p>
+<dd class="field-odd"><p><strong>ensemble_table</strong> (<a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><em>EnsembleTable</em></a>) – Ensemble table to transform.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The transformed ensemble table.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><em>EnsembleTable</em></a></p>
+<dd class="field-odd"><p><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><em>EnsembleTable</em></a></p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.ensemble.EnsembleProcessor.fit_transform_ensemble">
-<span class="sig-name descname"><span class="pre">fit_transform_ensemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ensemble_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleProcessor.fit_transform_ensemble" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">fit_transform_ensemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ensemble_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleProcessor.fit_transform_ensemble" title="Link to this definition">#</a></dt>
 <dd><p>Fit the processor and transform an ensemble table.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>ensemble_table</strong> (<a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><em>EnsembleTable</em></a>) – Ensemble table to fit on and transform.</p></li>
+<li><p><strong>ensemble_table</strong> (<a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><em>EnsembleTable</em></a>) – Ensemble table to fit on and transform.</p></li>
 <li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom number generator used for sampling.</p></li>
 </ul>
 </dd>
@@ -302,7 +301,7 @@ adapted to ensemble processing.</p>
 <dd class="field-even"><p>The transformed ensemble table.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><em>EnsembleTable</em></a></p>
+<dd class="field-odd"><p><a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.ensemble.EnsembleTable"><em>EnsembleTable</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -335,7 +334,7 @@ adapted to ensemble processing.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=0fd29e6b"></script>
+      <script src="../../_static/documentation_options.js?v=5a2c3449"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
