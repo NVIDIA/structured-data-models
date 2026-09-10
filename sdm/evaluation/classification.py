@@ -18,6 +18,9 @@ def to_class_indices(
         pred: Prediction table whose numerical columns contain class scores.
             Column names define the class order.
         target: Single-column categorical target.
+        missing_score: Score assigned to target classes that are absent from
+            the prediction columns. If ``None``, will raise an error when a
+            ``target`` value refers to an absent class in ``pred``.
 
     >>> import torch
     >>> import sdm

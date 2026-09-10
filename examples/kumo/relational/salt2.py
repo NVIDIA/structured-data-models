@@ -83,7 +83,7 @@ dfs["sales"] = dfs["sales"].rename(
 dfs["items"] = dfs["items"].rename(
     columns={"INCOTERMSCLASSIFICATION": "ITEMINCOTERMSCLASSIFICATION"}
 )
-# 7. Join 1:1 mapping between customers and addresses:
+# 6. Join 1:1 mapping between customers and addresses:
 dfs["customers"] = pd.merge(
     left=dfs["customers"],
     right=dfs["addresses"],
