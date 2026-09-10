@@ -23,7 +23,8 @@ class _Call:
 class _RecordingModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
-    supports_related_tables: ClassVar[bool] = True
+    supports_multi_target = False
+    supports_related_tables = True
 
     def __init__(self) -> None:
         super().__init__(task=None)
@@ -60,6 +61,7 @@ class _RecordingModel(ICLModel):
 class _UnsupportedRecordingModel(_RecordingModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
+    supports_multi_target = False
     supports_related_tables = False
 
 

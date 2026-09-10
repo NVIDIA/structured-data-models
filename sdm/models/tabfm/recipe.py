@@ -23,7 +23,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     ),
                     sp.ClipSigma(threshold=4.0),
                     sp.ShuffleColumns(method="random"),
-                    sp.SelectColumns(500, method="round_robin"),
+                    sp.SelectColumns(500, method="first"),
                 ],
             ),
         ],

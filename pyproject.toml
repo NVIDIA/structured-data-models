@@ -13,6 +13,7 @@ license-files = [
     "LICENSE",
     "sdm/models/tabiclv2/LICENSE",
     "sdm/models/tabfm/LICENSE",
+    "sdm/models/timesfm3/LICENSE",
     "sdm/models/kumo/relational/NOTICE",
 ]
 authors = [
