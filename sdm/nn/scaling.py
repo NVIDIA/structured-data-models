@@ -124,7 +124,7 @@ class QASSMax(QueryScaling):
 
 
 class LogScale(QueryScaling):
-    r"""Trainable logarithmic query scaling.
+    r"""Logarithmic query scaling.
 
     For a query tensor :math:`q`, effective key length :math:`n`, and learned
     per-head coefficient :math:`a_h`, this module returns a scaled query
@@ -137,8 +137,7 @@ class LogScale(QueryScaling):
     channels.
 
     Each attention head receives an unconstrained coefficient initialized
-    independently and uniformly in ``[0, 1)``. Key lengths are clamped to at
-    least one, and the logarithm is computed in fp32.
+    independently and uniformly in ``[0, 1)``.
 
     Args:
         num_heads: The number of query attention heads.
@@ -181,7 +180,7 @@ class LogScale(QueryScaling):
 
 
 class GatedLogScale(LogScale):
-    r"""Apply gated trainable logarithmic query scaling.
+    r"""Gated logarithmic query scaling.
 
     For a query tensor :math:`q`, effective key length :math:`n`, learned
     per-head coefficient :math:`a_h`, and learned gate :math:`g`, this module
