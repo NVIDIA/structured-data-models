@@ -1,5 +1,7 @@
 # ruff: noqa: D101, D102, A001, A002
 
+import math
+
 import torch
 from torch import Tensor
 
@@ -27,11 +29,12 @@ class Linear(torch.nn.Linear):
         elif input.dim() == 2:
             torch.matmul(input, weight, out=out)
         else:
-            input = input.view(-1, input.size(-2), input.size(-1))
+            batch_size = math.prod(input.shape[:-2])
+            input = input.view(batch_size, input.size(-2), input.size(-1))
             torch.bmm(
                 input,
                 weight.expand(input.size(0), -1, -1),
-                out=out.view(-1, out.size(-2), out.size(-1)),
+                out=out.view(batch_size, out.size(-2), out.size(-1)),
             )
 
         if self.bias is not None:
