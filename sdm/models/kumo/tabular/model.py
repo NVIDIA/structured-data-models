@@ -67,6 +67,7 @@ class KumoTabular(ICLModel):
     )
     supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    _partition_context_rows: ClassVar[bool] = True
 
     def __init__(
         self,
