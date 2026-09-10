@@ -18,15 +18,16 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     """Adapt an ordinary processor to ensemble-aware processing.
 
     The adapter turns a :class:`~sdm.processing.base.Processor` into an
-    :class:`EnsembleProcessor`. It copies and fits the processor separately
-    for each group of compatible tables in an
+    :class:`~sdm.processing.ensemble.EnsembleProcessor`. It copies and fits the
+    processor separately for each group of compatible tables in an
     :class:`~sdm.EnsembleTable`.
 
     The wrapped processor must preserve row and leading dimensions as required
     by the :class:`~sdm.processing.base.Processor` contract. A processor that
-    changes the ensemble structure must implement :class:`EnsembleProcessor`
-    directly. Inverse transformation requires the wrapped processor to
-    implement :class:`~sdm.processing.base.InvertibleMixin`.
+    changes the ensemble structure must implement
+    :class:`~sdm.processing.ensemble.EnsembleProcessor` directly. Inverse
+    transformation requires the wrapped processor to implement
+    :class:`~sdm.processing.base.InvertibleMixin`.
 
     Args:
         processor: Processor to fit separately for each ensemble table group.
