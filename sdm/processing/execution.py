@@ -37,6 +37,9 @@ class RecipeExecution:
         self.recipe = recipe
 
         self._related_processors: Mapping[str, EnsembleProcessor] | None = None
+        self._related_locations: (
+            Mapping[str, tuple[tuple[int, int], ...]] | None
+        ) = None
         self._num_estimators: int | None = None
         self._y_locations: tuple[tuple[int, int], ...] | None = None
 
@@ -90,17 +93,21 @@ class RecipeExecution:
                 task_dispatcher._task = task
 
         self._related_processors = None
+        self._related_locations = None
         related_ensembles: Mapping[str, EnsembleTable] = {}
         if related_tables is not None:
             self._related_processors = {}
+            self._related_locations = {}
             for name, table in related_tables.tables.items():
                 processor = copy.deepcopy(self.recipe.features)
                 for module in processor.modules():
                     if isinstance(module, sp.TableDispatch):
                         module._route = "related"
                 self._related_processors[name] = processor
+                ensemble_table = _to_ensemble_table(table, num_members)
+                self._related_locations[name] = ensemble_table._locations
                 related_ensembles[name] = processor.fit_transform_ensemble(
-                    _to_ensemble_table(table, num_members),
+                    ensemble_table,
                     generator=generator,
                 )
                 if related_ensembles[name].num_members != self.num_members:
@@ -158,10 +165,14 @@ class RecipeExecution:
         related_ensembles: Mapping[str, EnsembleTable] = {}
         if related_tables is not None:
             assert self._related_processors is not None
+            assert self._related_locations is not None
             for name, table in related_tables.tables.items():
                 processor = self._related_processors[name]
+                ensemble_table = _to_ensemble_table(
+                    table, self._num_estimators
+                )._refine_groups(self._related_locations[name])
                 related_ensembles[name] = processor.transform_ensemble(
-                    _to_ensemble_table(table, self._num_estimators)
+                    ensemble_table
                 )
                 if related_ensembles[name].num_members != self.num_members:
                     raise ValueError(

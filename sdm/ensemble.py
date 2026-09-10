@@ -332,6 +332,41 @@ class EnsembleTable(DeviceMixin):
         index = torch.tensor(positions, device=group.device)
         return cast(TableTensor, group.index_select(0, index))
 
+    def _refine_groups(
+        self,
+        locations: Sequence[tuple[int, int]],
+    ) -> Self:
+        """Split groups along the boundaries defined by ``locations``."""
+        locations = tuple(locations)
+        if self._locations == locations:
+            return self
+
+        members_by_partition: dict[tuple[int, int], list[int]] = {}
+        for member_id, ((group_id, _), (reference_group_id, _)) in enumerate(
+            zip(self._locations, locations, strict=True)
+        ):
+            members_by_partition.setdefault(
+                (group_id, reference_group_id), []
+            ).append(member_id)
+
+        if len(members_by_partition) == self.num_groups:
+            return self
+
+        # TODO: This fallback runs when one group contains members assigned to
+        # multiple reference groups. Direct group slicing on EnsembleTable
+        # could avoid the temporary selections and non-contiguous copies.
+        groups = []
+        refined_locations = [(-1, -1)] * self.num_members
+        for member_ids in members_by_partition.values():
+            selected = self.select_members(member_ids)
+            group_id = len(groups)
+            groups.append(selected._groups[0])
+            for selected_member_id, member_id in enumerate(member_ids):
+                _, position = selected._locations[selected_member_id]
+                refined_locations[member_id] = (group_id, position)
+
+        return self.__class__(groups=groups, locations=refined_locations)
+
     def __iter__(self) -> Iterator[TableTensor]:
         """Iterate over table groups."""
         return iter(self._groups)
