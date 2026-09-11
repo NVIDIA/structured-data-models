@@ -43,6 +43,20 @@ def test_to_numerical_converts_categorical_stype() -> None:
     assert output.categorical.size(-1) == 0
 
 
+def test_to_numerical_converts_selected_missing_code_to_nan() -> None:
+    table = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[-2], [-1], [0]], dtype=torch.int64),
+            categories=(StringTensor.from_list(["seen"]),),
+        ),
+    )
+
+    output = ToNumerical(missing_code=-2).transform(table)
+
+    assert output.numerical[0, 0].isnan()
+    assert output.numerical[1:, 0].tolist() == [-1.0, 0.0]
+
+
 def test_to_numerical_is_identity_for_already_numerical_table() -> None:
     table = TableTensor.from_tensor(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
 

@@ -191,6 +191,29 @@ def test_align_categories_filters_rare_categories(
     ]
 
 
+def test_align_categories_distinguishes_missing_from_unseen() -> None:
+    context = _table(
+        [[0], [-1], [0], [1]],
+        categories=(("seen", "rare"),),
+    )
+    query = _table(
+        [[0], [1], [-1]],
+        categories=(("unseen", "seen"),),
+    )
+
+    processor = AlignCategories(min_frequency=2, missing_code=-2)
+    context_output = processor.fit_transform(context)
+    query_output = processor.transform(query)
+
+    assert context_output.categorical.code.squeeze(-1).tolist() == [
+        0,
+        -2,
+        0,
+        -1,
+    ]
+    assert query_output.categorical.code.squeeze(-1).tolist() == [-1, 0, -2]
+
+
 @withCUDA
 def test_align_categories_filters_per_ensemble_member(
     device: torch.device,

@@ -1,6 +1,6 @@
 # ruff: noqa: D101, D102
 
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import torch
 from torch import Tensor
@@ -28,6 +28,7 @@ class RowEmbedding(torch.nn.Module):
         num_frequencies: int,
         num_inducing_points: int,
         num_readout_tokens: int,
+        missing_imputation: Literal["minus_one", "mean"] = "minus_one",
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -39,6 +40,7 @@ class RowEmbedding(torch.nn.Module):
             channels=channels,
             group_size=group_size,
             num_frequencies=num_frequencies,
+            missing_imputation=missing_imputation,
             **factory_kwargs,
         )
 

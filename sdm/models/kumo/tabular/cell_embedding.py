@@ -12,8 +12,7 @@ from sdm.models.tabfm.cell_embedding import CellEmbedding as TabFMCellEmbedding
 class CellEmbedding(TabFMCellEmbedding):
     """Embed Fourier features with an additive NaN indicator.
 
-    NaNs are imputed with the observed context-row mean of their column, or
-    zero when the context has no observed value. The original NaN mask is
+    NaNs are imputed with the configured strategy. The original NaN mask is
     grouped like the values and projected without bias, so finite inputs
     follow the unchanged Fourier path. Numerical and categorical cells share
     the NaN projection.
@@ -23,6 +22,8 @@ class CellEmbedding(TabFMCellEmbedding):
         group_size: Number of circularly grouped columns per cell, using
             offsets ``2**i - 1``.
         num_frequencies: Number of learned Fourier frequencies per group.
+        missing_imputation: Whether to replace NaNs with negative ones or
+            their observed context-column mean before Fourier embedding.
         device: Device on which to initialize the module.
         dtype: Data type in which to initialize the module.
     """
@@ -32,6 +33,7 @@ class CellEmbedding(TabFMCellEmbedding):
         channels: int,
         group_size: int,
         num_frequencies: int,
+        missing_imputation: Literal["minus_one", "mean"] = "minus_one",
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -42,6 +44,7 @@ class CellEmbedding(TabFMCellEmbedding):
             device=device,
             dtype=dtype,
         )
+        self.missing_imputation = missing_imputation
         self.nan_lin = Linear(
             group_size,
             channels,
@@ -61,18 +64,16 @@ class CellEmbedding(TabFMCellEmbedding):
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor:  # [..., R, C, D]
-        """Embed cells using context-only NaN imputation.
+        """Embed cells using the configured NaN imputation.
 
         Args:
             x: Input values with shape ``[..., R, C]``.
             categorical_mask: Categorical column mask with shape ``[..., C]``.
-            train_size: Number of leading context rows used for imputation
+            train_size: Number of leading context rows used by mean imputation
                 when ``impute_mean`` is omitted.
-            impute_mean: Optional precomputed column means with shape
-                ``[..., 1, C]``.
-            cache: Records imputation means for reuse in query-only calls.
-                Replayed means take precedence over ``train_size`` and
-                ``impute_mean``.
+            impute_mean: Optional precomputed column means for mean imputation,
+                with shape ``[..., 1, C]``.
+            cache: Records means for reuse when mean imputation is configured.
             batch_size_limit: Target maximum number of cells per Fourier
                 feature chunk.
             out: Optional preallocated output buffer.
@@ -82,22 +83,30 @@ class CellEmbedding(TabFMCellEmbedding):
         """
         missing = x.isnan()
 
-        if cache is not None and cache.is_replaying:
-            impute_mean = cast(Tensor, cache["cell_impute_mean"])
-        elif impute_mean is None:
-            if train_size is None:
-                raise ValueError(
-                    "CellEmbedding requires train_size or impute_mean"
+        if self.missing_imputation == "minus_one":
+            impute_mean = x.new_full((), -1.0)
+        else:
+            assert self.missing_imputation == "mean"
+            if cache is not None and cache.is_replaying:
+                impute_mean = cast(Tensor, cache["cell_impute_mean"])
+            elif impute_mean is None:
+                if train_size is None:
+                    raise ValueError(
+                        "CellEmbedding requires train_size or impute_mean"
+                    )
+                # Impute from observed context rows only, with fp32 statistics.
+                mean = x[..., :train_size, :].nanmean(
+                    dim=-2,
+                    keepdim=True,
+                    dtype=torch.float32,
                 )
-            # Impute from observed context rows only, with fp32 statistics.
-            mean = x[..., :train_size, :].nanmean(
-                dim=-2,
-                keepdim=True,
-                dtype=torch.float32,
-            )
-            impute_mean = mean.masked_fill(mean.isnan(), 0.0).to(x.dtype)
+                impute_mean = mean.masked_fill(mean.isnan(), 0.0).to(x.dtype)
 
-        if cache is not None and cache.is_recording:
+        if (
+            self.missing_imputation == "mean"
+            and cache is not None
+            and cache.is_recording
+        ):
             cache["cell_impute_mean"] = impute_mean
 
         x = torch.where(missing, impute_mean.to(x.dtype), x)

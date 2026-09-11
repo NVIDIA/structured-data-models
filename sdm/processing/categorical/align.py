@@ -36,6 +36,9 @@ class AlignCategories(EnsembleProcessor):
         min_frequency: Minimum number of observations required to retain a
             category. Values of rarer categories receive code ``-1``.
             Must be positive.
+        missing_code: Negative code assigned to source missing values. This
+            can distinguish them from unseen or filtered categories, which
+            always receive code ``-1``.
 
     >>> import pandas as pd
     >>> import sdm
@@ -73,12 +76,16 @@ class AlignCategories(EnsembleProcessor):
         sort_by: Literal["code", "frequency", "value"] = "code",
         *,
         min_frequency: int = 1,
+        missing_code: int = -1,
     ) -> None:
         super().__init__()
         if min_frequency <= 0:
             raise ValueError("min_frequency must be positive")
+        if missing_code >= 0:
+            raise ValueError("missing_code must be negative")
         self.sort_by = sort_by
         self.min_frequency = min_frequency
+        self.missing_code = missing_code
         self._categories: BufferList[BufferList[Tensor]] = BufferList()
 
     def _fit_column(
@@ -90,7 +97,11 @@ class AlignCategories(EnsembleProcessor):
     ) -> tuple[tuple[Tensor, ...], Tensor | None]:
         batch_size = codes.size(0)
         if input_categories.numel() == 0:
-            aligned_codes = torch.full_like(codes, -1) if align_codes else None
+            aligned_codes = (
+                torch.full_like(codes, self.missing_code)
+                if align_codes
+                else None
+            )
             return (input_categories,) * batch_size, aligned_codes
 
         mask = codes >= 0
@@ -151,7 +162,11 @@ class AlignCategories(EnsembleProcessor):
         rank = observed.cumsum(dim=1, dtype=codes.dtype) - 1
         lookup = torch.full_like(counts, -1)
         lookup.scatter_(1, order, torch.where(observed, rank, -1))
-        aligned_codes = torch.where(mask, lookup.gather(1, indices), -1)
+        aligned_codes = torch.where(
+            mask,
+            lookup.gather(1, indices),
+            self.missing_code,
+        )
         return tuple(fitted_categories), aligned_codes
 
     def _fit_columns(
@@ -163,7 +178,11 @@ class AlignCategories(EnsembleProcessor):
         codes = table.categorical.code
         if codes.dim() == 2:
             codes = codes.unsqueeze(0)
-        aligned_codes = torch.full_like(codes, -1) if align_codes else None
+        aligned_codes = (
+            torch.full_like(codes, self.missing_code)
+            if align_codes
+            else None
+        )
 
         # Accumulate ragged vocabularies in batch-major order: [batch][column].
         categories_by_batch: list[list[Tensor]] = [
@@ -427,7 +446,7 @@ class AlignCategories(EnsembleProcessor):
         single_table = codes.dim() == 2
         if single_table:
             codes = codes.unsqueeze(0)
-        aligned_codes = torch.full_like(codes, -1)
+        aligned_codes = torch.full_like(codes, self.missing_code)
         lookups_by_column: list[dict[int, Tensor]] = [
             {} for _ in table.categorical.categories
         ]
@@ -511,7 +530,7 @@ class AlignCategories(EnsembleProcessor):
             aligned_codes[..., column_index] = torch.where(
                 mask,
                 lookup.gather(1, indices),
-                -1,
+                self.missing_code,
             )
 
         return tuple(
@@ -530,6 +549,8 @@ class AlignCategories(EnsembleProcessor):
             arguments.append(f"sort_by={self.sort_by!r}")
         if self.min_frequency != 1:
             arguments.append(f"min_frequency={self.min_frequency!r}")
+        if self.missing_code != -1:
+            arguments.append(f"missing_code={self.missing_code!r}")
         if not arguments:
             return super().__repr__(indent=indent)
         return (

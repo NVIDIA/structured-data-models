@@ -232,6 +232,7 @@ class _KumoTabular(torch.nn.Module):
         num_icl_layers: int = 12,
         num_icl_heads: int = 8,
         num_icl_key_value_heads_for_query: int | None = None,
+        missing_imputation: Literal["minus_one", "mean"] = "minus_one",
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -247,6 +248,7 @@ class _KumoTabular(torch.nn.Module):
             num_frequencies=num_frequencies,
             num_inducing_points=num_inducing_points,
             num_readout_tokens=num_readout_tokens,
+            missing_imputation=missing_imputation,
             **factory_kwargs,
         )
         if cell_channels * num_readout_tokens != icl_channels:

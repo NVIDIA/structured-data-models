@@ -47,6 +47,7 @@ def test_cell_embedding_imputes_from_context_only() -> None:
         channels=4,
         group_size=1,
         num_frequencies=2,
+        missing_imputation="mean",
     )
     with torch.no_grad():
         module.nan_lin.weight.fill_(1.0)
@@ -74,12 +75,34 @@ def test_cell_embedding_imputes_from_context_only() -> None:
     )
 
 
+def test_cell_embedding_imputes_minus_one_and_marks_missing() -> None:
+    module = CellEmbedding(
+        channels=4,
+        group_size=1,
+        num_frequencies=2,
+    )
+    with torch.no_grad():
+        module.nan_lin.weight.fill_(1.0)
+    categorical_mask = torch.tensor([True])
+    x = torch.tensor([[2.0], [torch.nan], [5.0]])
+    filled = x.nan_to_num(nan=-1.0)
+
+    out = module(x, categorical_mask)
+    expected = module(filled, categorical_mask)
+
+    torch.testing.assert_close(out, expected + x.isnan().unsqueeze(-1))
+
+
 @withCUDA
 def test_cell_embedding_bfloat16_out_rounding(
     device: torch.device,
 ) -> None:
     module = CellEmbedding(
-        channels=1, group_size=3, num_frequencies=1, device=device
+        channels=1,
+        group_size=3,
+        num_frequencies=1,
+        missing_imputation="mean",
+        device=device,
     )
     with torch.no_grad():
         for projection in (module.num_lin, module.cat_lin):
