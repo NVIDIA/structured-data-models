@@ -42,11 +42,13 @@ class FlipSign(Processor, InvertibleMixin):
         return table.replace_blocks(numerical=table.numerical * self.sign)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical * self.sign
-        if self.quantile_output:
-            numerical = torch.where(
+        output = self._transform(table)
+        if not self.quantile_output:
+            return output
+        return output.replace_blocks(
+            numerical=torch.where(
                 self.sign < 0,
-                numerical.flip(-1),
-                numerical,
+                output.numerical.flip(-1),
+                output.numerical,
             )
-        return table.replace_blocks(numerical=numerical)
+        )
