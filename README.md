@@ -81,5 +81,5 @@ model.predict(table[300:].drop_columns("target"))
 model.clear()
 ```
 
-Additional examples are available in [`examples/`](examples).
+Additional examples are listed in [`examples/`](examples).
 Benchmark suites for reproducing reported results live in [`benchmark/`](benchmark).
