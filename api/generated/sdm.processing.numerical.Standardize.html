@@ -218,7 +218,8 @@ data-aria-dark="Switch to auto color mode">
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
 <p>Center and scale each feature column.</p>
 <p>Constant columns use a unit scale to keep the transform finite and
-invertible.</p>
+invertible. NaN and infinite values are ignored when fitting statistics
+and preserved during the transform.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -273,7 +274,7 @@ preserves exact constant-column handling.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=a1994904"></script>
+      <script src="../../_static/documentation_options.js?v=99bdf77f"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
