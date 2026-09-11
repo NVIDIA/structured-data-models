@@ -1,7 +1,7 @@
 import sdm.processing as sp
 
 
-def default_recipe(max_columns: int | None = None) -> sp.Recipe:  # noqa: D103
+def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
         features=[
             sp.StypeDispatch(
@@ -13,10 +13,7 @@ def default_recipe(max_columns: int | None = None) -> sp.Recipe:  # noqa: D103
             sp.StypeDispatch(
                 numerical=[
                     sp.ShuffleColumns(method="latin"),
-                    sp.SelectColumns(
-                        500 if max_columns is None else max_columns,
-                        method="first",
-                    ),
+                    sp.SelectColumns(500, method="first"),
                     sp.ImputeMean(),
                     sp.DropConstantColumns(),
                     sp.Standardize(epsilon=1e-6),
