@@ -45,7 +45,8 @@ Set cache_dir to an empty directory to cache newly computed Qwen embeddings
 across tuning, refitting, and test prediction. No precomputation is required.
 Omit it to disable persistent caching. PCA remains fitted separately on each
 training context. Alternatively, point cache_dir at precompute_text.py's output
-directory to reuse existing embeddings; missing documents are encoded and cached.
+directory to reuse existing embeddings; missing documents are encoded and
+cached.
 run_system_experiment accepts cache_dir; when constructing KumoSystem directly,
 set CacheConfig.directory as shown above.
 
