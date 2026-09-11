@@ -8,9 +8,8 @@ import torch
 from torch import Tensor
 
 import sdm.processing as sp
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import EnsembleTable, Recipe, RelatedTables, Stype, TableTensor
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
-from sdm.tensor import EnsembleTable
 
 
 class MemberContext(NamedTuple):

@@ -11,11 +11,11 @@ import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
 )
-from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA
 
 

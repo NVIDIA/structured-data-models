@@ -4,11 +4,11 @@ import torch
 import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
 )
-from sdm.tensor import EnsembleTable
 
 
 def _mixed_table() -> TableTensor:

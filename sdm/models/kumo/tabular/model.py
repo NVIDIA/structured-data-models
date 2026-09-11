@@ -65,6 +65,7 @@ class KumoTabular(ICLModel):
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
+    supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(

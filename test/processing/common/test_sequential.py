@@ -6,8 +6,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.tensor import EnsembleTable
+from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
 
 
 def _mixed_table(numerical: torch.Tensor | None = None) -> TableTensor:

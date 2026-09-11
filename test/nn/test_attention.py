@@ -654,6 +654,33 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     torch.testing.assert_close(out1, out3)
 
 
+def test_transformer_block_chunked_noncontiguous_out() -> None:
+    channels = 8
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        mlp=torch.nn.Identity(),
+    ).eval()
+
+    base = torch.randn(2, 3, 4, channels)
+    query = base.transpose(-2, -3)
+    buffer = torch.empty_like(base).transpose(-2, -3)
+
+    assert not query.is_contiguous()
+    assert not buffer.is_contiguous()
+
+    expected = module(query=query)
+    with torch.no_grad():
+        actual = module(
+            query=query,
+            batch_size_limit=1,
+            out=buffer,
+        )
+
+    assert actual is buffer
+    torch.testing.assert_close(actual, expected)
+
+
 def test_transformer_block_kv_cache() -> None:
     batch_size = 2
     query_len = 3

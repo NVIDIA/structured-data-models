@@ -1,8 +1,7 @@
 import pytest
 import torch
 
-from sdm import TableTensor
-from sdm.tensor import EnsembleTable
+from sdm import EnsembleTable, TableTensor
 
 
 def test_shared_member_table() -> None:

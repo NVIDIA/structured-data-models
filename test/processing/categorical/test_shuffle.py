@@ -5,12 +5,12 @@ import torch
 
 from sdm import (
     CategoricalTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
 )
 from sdm.processing import ShuffleCategories
-from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 

@@ -106,10 +106,10 @@ The `structured-data-models` package takes advantage of this to avoid duplicatin
 ```
 
 This shared-by-default, split-when-needed behavior is captured by {py:class}`~sdm.processing.ensemble.EnsembleProcessor`.
-An {py:class}`~sdm.processing.ensemble.EnsembleProcessor` is a regular {py:class}`~sdm.processing.base.Processor` that operates on an {py:class}`~sdm.tensor.EnsembleTable`, allowing a processing step to split ensemble members into separate groups when their transformed views diverge.
+An {py:class}`~sdm.processing.ensemble.EnsembleProcessor` is a regular {py:class}`~sdm.processing.base.Processor` that operates on an {py:class}`~sdm.EnsembleTable`, allowing a processing step to split ensemble members into separate groups when their transformed views diverge.
 This lets a {py:class}`~sdm.processing.recipe.Recipe` stay shared by default and branch only at steps that actually introduce member-specific behavior.
 
-The underlying {py:class}`~sdm.tensor.EnsembleTable` stores members by layout rather than by estimator.
+The underlying {py:class}`~sdm.EnsembleTable` stores members by layout rather than by estimator.
 Members that see the same table share storage, while compatible member tables are stacked into one leading dimension of a single {py:class}`~sdm.tensor.TableTensor`.
 Regular processors can therefore operate on whole groups, leveraging PyTorch vectorization and GPU parallelism, and only fall back to separate groups when storage layout diverges.
 
