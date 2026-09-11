@@ -82,3 +82,4 @@ model.clear()
 ```
 
 More examples are listed under [`examples/`](examples), grouped by model architecture.
+Benchmark suites for reproducing reported results are available in [`benchmark/`](benchmark).
