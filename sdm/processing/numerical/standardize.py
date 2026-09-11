@@ -20,8 +20,8 @@ class Standardize(Processor, InvertibleMixin):
     """Center and scale each feature column.
 
     Constant columns use a unit scale to keep the transform finite and
-    invertible. NaN values are ignored when fitting statistics and preserved
-    during the transform.
+    invertible. NaN and infinite values are ignored when fitting statistics
+    and preserved during the transform.
 
     Args:
         with_mean: If ``True``, center each column by its fitted mean.
