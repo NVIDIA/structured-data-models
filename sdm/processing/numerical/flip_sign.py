@@ -45,9 +45,10 @@ class FlipSign(Processor, InvertibleMixin):
         output = self._transform(table)
         if not self.quantile_output:
             return output
-        return output.replace_blocks(
-            numerical=output.numerical.where(
-                self.sign > 0,
-                output.numerical.flip(-1),
-            )
+        torch.where(
+            condition=self.sign > 0,
+            input=output.numerical,
+            other=output.numerical.flip(-1),
+            out=output.numerical,
         )
+        return output
