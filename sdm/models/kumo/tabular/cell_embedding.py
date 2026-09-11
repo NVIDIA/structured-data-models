@@ -1,3 +1,4 @@
+import math
 from typing import Literal, cast
 
 import torch
@@ -112,14 +113,30 @@ class CellEmbedding(TabFMCellEmbedding):
         index = self._group_index(C, x.device)
         grouped_missing = missing.index_select(-1, index.view(-1))
         grouped_missing = grouped_missing.unflatten(-1, (C, G))
-        grouped_missing = grouped_missing.to(result.dtype)
-        if out is None:
-            return result + self.nan_lin(grouped_missing)
+        if torch.is_grad_enabled() or torch.compiler.is_compiling():
+            projected = self.nan_lin(
+                grouped_missing.to(self.nan_lin.weight.dtype)
+            ).to(result.dtype)
+            if out is not None:
+                return result.add_(projected)
+            return result + projected
 
-        weight = self.nan_lin.weight.to(result.dtype).t()  # [G, D]
-        output = result.view(-1, C, self.channels)
-        output.baddbmm_(
-            grouped_missing.view(-1, C, G),
-            weight.expand(output.size(0), -1, -1),
+        batch_size_limit = self._resolve_batch_size_limit(
+            x=x,
+            batch_size_limit=batch_size_limit,
         )
+        rows_per_chunk = max(1, x.size(-2))
+        if batch_size_limit is not None:
+            cells_per_row = max(1, math.prod(x.shape[:-2]) * C)
+            rows_per_chunk = max(1, batch_size_limit // cells_per_row)
+        # Match the separate projection/add rounding in the differentiable
+        # path, while bounding the temporary projection during inference.
+        for start in range(0, x.size(-2), rows_per_chunk):
+            grouped = grouped_missing[
+                ..., start : start + rows_per_chunk, :, :
+            ]
+            projected = self.nan_lin(grouped.to(self.nan_lin.weight.dtype))
+            result[..., start : start + rows_per_chunk, :, :].add_(
+                projected.to(result.dtype)
+            )
         return result

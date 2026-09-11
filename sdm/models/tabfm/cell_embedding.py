@@ -95,36 +95,15 @@ class CellEmbedding(torch.nn.Module):
         if torch.is_grad_enabled() or torch.compiler.is_compiling():
             return self._forward(x, freq, weight, bias, out=out)
 
-        if batch_size_limit == "auto":
-            batch_size_limit = None
-            if x.is_cuda:
-                if torch.is_autocast_enabled(x.device.type):
-                    element_size = torch.empty(
-                        size=(),
-                        dtype=torch.get_autocast_dtype(x.device.type),
-                    ).element_size()
-                else:
-                    element_size = x.element_size()
-
-                bytes_per_example = (
-                    2 * self.group_size * self.num_frequencies * element_size
-                    + 2 * self.channels * element_size
-                )
-
-                fixed_bytes = (
-                    freq.numel() * freq.element_size()
-                    + weight.numel() * weight.element_size()
-                    + bias.numel() * bias.element_size()
-                )
-
-                memory_limit = int(
-                    torch.cuda.get_device_properties(x.device).total_memory
-                    * torch.cuda.get_per_process_memory_fraction(x.device)
-                    * float(os.getenv("SDM_CHUNK_MEMORY_FRACTION", "0.05"))
-                )
-                memory_limit -= fixed_bytes
-                batch_size_limit = memory_limit // max(bytes_per_example, 1)
-                batch_size_limit = max(batch_size_limit, 1)
+        batch_size_limit = self._resolve_batch_size_limit(
+            x=x,
+            batch_size_limit=batch_size_limit,
+            fixed_bytes=(
+                freq.numel() * freq.element_size()
+                + weight.numel() * weight.element_size()
+                + bias.numel() * bias.element_size()
+            ),
+        )
 
         if batch_size_limit is None:
             return self._forward(x, freq, weight, bias, out=out)
@@ -137,7 +116,7 @@ class CellEmbedding(torch.nn.Module):
                 else x.dtype,
             )
 
-        rows_per_chunk = max(1, batch_size_limit // (math.prod(B) * C))
+        rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
         for start in range(0, R, rows_per_chunk):
             self._forward(
                 x=x[..., start : start + rows_per_chunk, :, :],
@@ -148,6 +127,36 @@ class CellEmbedding(torch.nn.Module):
             )
 
         return out
+
+    def _resolve_batch_size_limit(
+        self,
+        x: Tensor,
+        batch_size_limit: int | Literal["auto"] | None,
+        fixed_bytes: int = 0,
+    ) -> int | None:
+        if batch_size_limit != "auto":
+            return batch_size_limit
+        if not x.is_cuda:
+            return None
+
+        element_size = (
+            torch.empty(
+                (), dtype=torch.get_autocast_dtype(x.device.type)
+            ).element_size()
+            if torch.is_autocast_enabled(x.device.type)
+            else x.element_size()
+        )
+        bytes_per_example = (
+            2 * self.group_size * self.num_frequencies + 2 * self.channels
+        ) * element_size
+        memory_limit = int(
+            torch.cuda.get_device_properties(x.device).total_memory
+            * torch.cuda.get_per_process_memory_fraction(x.device)
+            * float(os.getenv("SDM_CHUNK_MEMORY_FRACTION", "0.05"))
+        )
+        return max(
+            1, (memory_limit - fixed_bytes) // max(bytes_per_example, 1)
+        )
 
     def _forward(
         self,
@@ -183,12 +192,17 @@ class CellEmbedding(torch.nn.Module):
             del phase
         del x
 
-        if out is None:
-            out = torch.einsum("...gf,...gdf->...d", fourier, weight)
+        weight = weight.transpose(-3, -2).flatten(-2).squeeze(-4).mT
+        fourier = fourier.transpose(-4, -3).flatten(-2)
+        if out is None or out.dtype != weight.dtype:
+            projected = torch.matmul(fourier, weight).transpose(-3, -2)
+            if out is None:
+                out = projected
+            else:
+                out.copy_(projected)
         else:
-            weight = weight.transpose(-3, -2).flatten(-2).squeeze(-4).mT
             torch.matmul(
-                fourier.transpose(-4, -3).flatten(-2),
+                fourier,
                 weight,
                 out=out.transpose(-3, -2),
             )

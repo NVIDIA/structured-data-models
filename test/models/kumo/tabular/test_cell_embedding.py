@@ -72,3 +72,41 @@ def test_cell_embedding_imputes_from_context_only() -> None:
         ),
         out,
     )
+
+
+@withCUDA
+def test_cell_embedding_bfloat16_out_rounding(
+    device: torch.device,
+) -> None:
+    module = CellEmbedding(
+        channels=1, group_size=3, num_frequencies=1, device=device
+    )
+    with torch.no_grad():
+        for projection in (module.num_lin, module.cat_lin):
+            projection.weight.zero_()
+            projection.bias.fill_(-0.5)
+        module.nan_lin.weight.copy_(
+            torch.tensor([[1.0, 0.5, 1 / 256]], device=device)
+        )
+    x = torch.full((3, 2), torch.nan, device=device)
+    categorical_mask = torch.tensor([False, True], device=device)
+
+    with (
+        torch.inference_mode(),
+        torch.autocast(device.type, dtype=torch.bfloat16),
+    ):
+        expected = module(x, categorical_mask, train_size=2)
+        buffer = torch.empty_like(expected)
+        actual = module(
+            x=x,
+            categorical_mask=categorical_mask,
+            train_size=2,
+            batch_size_limit=2,
+            out=buffer,
+        )
+
+    # Rounding the NaN projection before adding cancels the Fourier result;
+    # fused accumulation instead leaves 1/256 in the output.
+    assert actual is buffer
+    torch.testing.assert_close(expected, torch.zeros_like(expected))
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
