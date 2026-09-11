@@ -92,9 +92,9 @@ class KumoTabular(ICLModel):
         self.eval()
 
     @classmethod
-    def default_recipe(cls, max_columns: int | None = None) -> Recipe:
+    def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return default_recipe(max_columns=max_columns)
+        return default_recipe()
 
     def _load_from_pretrained(
         self,
