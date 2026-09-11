@@ -186,8 +186,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
 
 
 class SDMModelWrapper(AGModelWrapper):
-    """AutoGluon wrapper that releases SDM model resources."""
-
     def cleanup(self) -> None:
         model = getattr(self, "model", None)
         cleanup = getattr(model, "cleanup", None)
@@ -196,8 +194,6 @@ class SDMModelWrapper(AGModelWrapper):
 
 
 class SDMExperimentRunner(OOFExperimentRunner):
-    """Experiment runner that always releases an initialized model."""
-
     def run(self) -> dict:
         try:
             return self._run()
