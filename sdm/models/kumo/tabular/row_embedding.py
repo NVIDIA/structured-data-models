@@ -59,7 +59,7 @@ class RowEmbedding(torch.nn.Module):
             layout="split_half",
             theta=100_000,
             requires_grad=False,
-            partial_rotary_factor=0.25,
+            partial_rotary_factor=1.0,
             **factory_kwargs,
         )
 
