@@ -36,7 +36,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 ],
                 numerical=[
                     sp.Standardize(),
-                    sp.FlipSign(),
+                    sp.FlipSign(quantile_output=True),
                 ],
             ),
         ],

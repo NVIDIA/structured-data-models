@@ -5,18 +5,26 @@ from sdm.processing import InvertibleMixin, Processor
 
 
 class FlipSign(Processor, InvertibleMixin):
-    """Randomly negate numerical feature columns.
+    """Randomly negate numerical columns.
 
     Args:
         probability: Probability of negating a numerical column.
+        quantile_output: Whether inverse transformation operates on ordered
+            quantile predictions. Quantiles are reversed for negated targets.
     """
 
     handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
-    def __init__(self, probability: float = 0.5) -> None:
+    def __init__(
+        self,
+        probability: float = 0.5,
+        *,
+        quantile_output: bool = False,
+    ) -> None:
         super().__init__()
         self.probability = probability
+        self.quantile_output = quantile_output
         self.register_buffer("sign", torch.empty(0))
 
     def _fit(
@@ -34,4 +42,11 @@ class FlipSign(Processor, InvertibleMixin):
         return table.replace_blocks(numerical=table.numerical * self.sign)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return self._transform(table)
+        numerical = table.numerical * self.sign
+        if self.quantile_output:
+            numerical = torch.where(
+                self.sign < 0,
+                numerical.flip(-1),
+                numerical,
+            )
+        return table.replace_blocks(numerical=numerical)
