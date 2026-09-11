@@ -18,7 +18,7 @@ def test_flip_sign() -> None:
 def test_flip_sign_inverse_preserves_ordered_predictions() -> None:
     target = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     prediction = TableTensor.from_tensor(torch.tensor([[1.0, 2.0, 3.0]]))
-    processor = FlipSign(probability=1.0, quantile_output=True).fit(target)
+    processor = FlipSign(probability=1.0, flip_order=True).fit(target)
 
     restored = processor.inverse_transform(prediction)
 

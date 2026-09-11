@@ -9,8 +9,9 @@ class FlipSign(Processor, InvertibleMixin):
 
     Args:
         probability: Probability of negating a numerical column.
-        quantile_output: Whether inverse transformation operates on ordered
-            quantile predictions. Quantiles are reversed for negated targets.
+        flip_order: Whether to reverse output values along the column
+            dimension for negated targets during inverse transformation.
+            Useful for ordered predictions such as quantiles.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -20,11 +21,11 @@ class FlipSign(Processor, InvertibleMixin):
         self,
         probability: float = 0.5,
         *,
-        quantile_output: bool = False,
+        flip_order: bool = False,
     ) -> None:
         super().__init__()
         self.probability = probability
-        self.quantile_output = quantile_output
+        self.flip_order = flip_order
         self.register_buffer("sign", torch.empty(0))
 
     def _fit(
@@ -43,7 +44,7 @@ class FlipSign(Processor, InvertibleMixin):
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         output = self._transform(table)
-        if not self.quantile_output:
+        if not self.flip_order:
             return output
         torch.where(
             condition=self.sign > 0,
