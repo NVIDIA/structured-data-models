@@ -12,9 +12,10 @@ def default_recipe(max_columns: int | None = None) -> sp.Recipe:  # noqa: D103
             ),
             sp.StypeDispatch(
                 numerical=[
+                    sp.ShuffleColumns(method="latin"),
                     sp.SelectColumns(
                         500 if max_columns is None else max_columns,
-                        method="round_robin",
+                        method="first",
                     ),
                     sp.ImputeMean(),
                     sp.DropConstantColumns(),
@@ -27,7 +28,6 @@ def default_recipe(max_columns: int | None = None) -> sp.Recipe:  # noqa: D103
                     ),
                     sp.ClipSigma(threshold=4.0),
                     sp.FlipSign(),
-                    sp.ShuffleColumns(method="latin"),
                 ],
             ),
         ],
