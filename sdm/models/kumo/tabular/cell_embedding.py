@@ -108,13 +108,18 @@ class CellEmbedding(TabFMCellEmbedding):
             out=out,
         )
 
-        C = x.size(-1)
+        C, G = x.size(-1), self.group_size
         index = self._group_index(C, x.device)
-        grouped_missing = missing[..., index]  # [..., R, C, G]
-        missing_embedding = self.nan_lin(
-            grouped_missing.to(self.nan_lin.weight.dtype)
-        )
+        grouped_missing = missing.index_select(-1, index.view(-1))
+        grouped_missing = grouped_missing.unflatten(-1, (C, G))
+        grouped_missing = grouped_missing.to(result.dtype)
         if out is None:
-            return result + missing_embedding
-        result.add_(missing_embedding.to(result.dtype))
+            return result + self.nan_lin(grouped_missing)
+
+        weight = self.nan_lin.weight.to(result.dtype).t()  # [G, D]
+        output = result.view(-1, C, self.channels)
+        output.baddbmm_(
+            grouped_missing.view(-1, C, G),
+            weight.expand(output.size(0), -1, -1),
+        )
         return result

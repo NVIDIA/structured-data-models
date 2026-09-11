@@ -151,31 +151,47 @@ class CellEmbedding(torch.nn.Module):
 
     def _forward(
         self,
-        x: Tensor,  # [..., G]
-        freq: Tensor,  # [..., G, F]
-        weight: Tensor,  # [..., G, D, 2F]
-        bias: Tensor,  # [..., D]
+        x: Tensor,  # [..., R, C, G]
+        freq: Tensor,  # [..., 1, C, G, F]
+        weight: Tensor,  # [..., 1, C, G, D, 2F]
+        bias: Tensor,  # [..., 1, C, D]
         *,
         out: Tensor | None = None,
     ) -> Tensor:
 
-        x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., G, F]
+        *B, R, C, G = x.size()
+        F = freq.size(-1)
+        if torch.is_grad_enabled():
+            x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., R, C, G, F]
+        else:
+            phase = x.new_empty((*B, C, R, G, F), dtype=torch.float32)
+            if x.dtype == torch.float64:
+                x = x.float()
+            torch.mul(x.unsqueeze(-1), freq, out=phase.transpose(-4, -3))
+            x = phase.transpose(-4, -3)
+
+        # Store rows within each column so the projection uses views.
         fourier = x.new_empty(
-            (*x.size()[:-1], 2 * x.size(-1)),
-            dtype=weight.dtype,
-        )
+            (*B, C, R, G, 2 * F), dtype=weight.dtype
+        ).transpose(-4, -3)
         if torch.is_grad_enabled():
             fourier[..., : x.size(-1)] = x.sin()
             fourier[..., x.size(-1) :] = x.cos()
         else:
             torch.sin(x, out=fourier[..., : x.size(-1)])
             torch.cos(x, out=fourier[..., x.size(-1) :])
+            del phase
         del x
 
         if out is None:
             out = torch.einsum("...gf,...gdf->...d", fourier, weight)
         else:
-            out.copy_(torch.einsum("...gf,...gdf->...d", fourier, weight))
+            weight = weight.transpose(-3, -2).flatten(-2).squeeze(-4).mT
+            torch.matmul(
+                fourier.transpose(-4, -3).flatten(-2),
+                weight,
+                out=out.transpose(-3, -2),
+            )
 
         out += bias.to(out.dtype)
 

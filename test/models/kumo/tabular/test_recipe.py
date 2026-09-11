@@ -1,8 +1,7 @@
 import torch
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
-from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 

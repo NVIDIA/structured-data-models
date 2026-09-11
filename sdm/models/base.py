@@ -6,7 +6,15 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
+from sdm import (
+    EnsembleTable,
+    Recipe,
+    RelatedTables,
+    Stype,
+    TableTensor,
+    Task,
+    TaskLike,
+)
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
@@ -17,7 +25,6 @@ from sdm.processing.execution import (
     RecipeExecution,
 )
 from sdm.relational.task import RelatedTablesSchema
-from sdm.tensor import EnsembleTable
 from sdm.tensor.table import TableSchema
 
 
@@ -42,6 +49,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     #: Prediction tasks supported in this model.
     supported_tasks: ClassVar[frozenset[Task]]
+
+    #: Whether this model supports multi-target predictions.
+    supports_multi_target: ClassVar[bool]
 
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
@@ -284,6 +294,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
             estimator_cache = Cache(
                 x_schema=context.x.schema,
+                y_schema=context.y.schema,
                 related_tables_schema=context.related_tables.schema
                 if context.related_tables is not None
                 else None,
@@ -500,7 +511,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
     def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
-        y_context: TableTensor | None,  # [..., R_context, 1]
+        y_context: TableTensor | None,  # [..., R_context, Y]
         x_query: TableTensor | None,  # [..., R_query, D]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,
@@ -524,7 +535,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         related_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if y.size(-1) != 1:
+        if not self.supports_multi_target and y.size(-1) != 1:
             raise ValueError(
                 f"Expected target to have exactly one column "
                 f"(got {y.size(-1)})"

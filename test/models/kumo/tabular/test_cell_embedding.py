@@ -23,18 +23,23 @@ def test_cell_embedding(device: torch.device) -> None:
         device=device,
     )
 
+    expected = module(x, categorical_mask, train_size=3)
     with torch.no_grad():
         out = module(x, categorical_mask, train_size=3, cache=Cache())
+        buffer = out.new_empty((2, 6, 5, 8))[..., 1:, :]
         chunked = module(
             x=x,
             categorical_mask=categorical_mask,
             train_size=3,
             batch_size_limit=8,
+            out=buffer,
         )
     assert out.size() == (2, 6, 4, 8)
     assert out.device == device
     assert out.isfinite().all()
-    torch.testing.assert_close(chunked, out)
+    assert chunked is buffer
+    torch.testing.assert_close(out, expected)
+    torch.testing.assert_close(chunked, expected)
 
 
 def test_cell_embedding_imputes_from_context_only() -> None:

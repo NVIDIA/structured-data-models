@@ -4,13 +4,12 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import (
     EnsembleProcessor,
     InvertibleMixin,
     Processor,
 )
-from sdm.tensor import EnsembleTable
 
 
 class Add(Processor, InvertibleMixin):

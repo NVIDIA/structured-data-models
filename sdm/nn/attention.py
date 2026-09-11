@@ -593,7 +593,7 @@ class TransformerBlock(torch.nn.Module):
         flat_key: Tensor | None = None
         flat_value: Tensor | None = None
 
-        if out is not None:
+        if out is not None and (out.dim() <= 3 or out.is_contiguous()):
             flat_out = out.view(batch_size, *query.size()[-2:])
 
         for start in range(0, batch_size, batch_size_limit):
@@ -640,7 +640,14 @@ class TransformerBlock(torch.nn.Module):
             else:
                 chunk = result
 
-            if flat_out is None:
+            if flat_out is None and out is not None:
+                flat_index = torch.arange(start, end, device=out.device)
+                batch_indices: list[Tensor] = []
+                for size in reversed(batch_shape):
+                    batch_indices.append(flat_index % size)
+                    flat_index = flat_index // size
+                out[tuple(reversed(batch_indices))] = chunk
+            elif flat_out is None:
                 flat_out = chunk.new_empty((batch_size, *query.size()[-2:]))
                 flat_out[start:end] = chunk
 
