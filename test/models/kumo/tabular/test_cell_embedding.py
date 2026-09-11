@@ -64,14 +64,6 @@ def test_cell_embedding_imputes_from_context_only() -> None:
     out = module(x, categorical_mask, train_size=2)
     expected = module(imputed, categorical_mask, train_size=2)
     torch.testing.assert_close(out, expected + x.isnan().unsqueeze(-1))
-    torch.testing.assert_close(
-        module(
-            x=x,
-            categorical_mask=categorical_mask,
-            impute_mean=torch.tensor([[2.0, 0.0]]),
-        ),
-        out,
-    )
 
 
 @withCUDA

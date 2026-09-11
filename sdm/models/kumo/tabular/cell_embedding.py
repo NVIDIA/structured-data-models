@@ -56,7 +56,6 @@ class CellEmbedding(TabFMCellEmbedding):
         categorical_mask: Tensor,  # [..., C]
         *,
         train_size: int | None = None,
-        impute_mean: Tensor | None = None,
         cache: Cache | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
@@ -66,13 +65,10 @@ class CellEmbedding(TabFMCellEmbedding):
         Args:
             x: Input values with shape ``[..., R, C]``.
             categorical_mask: Categorical column mask with shape ``[..., C]``.
-            train_size: Number of leading context rows used for imputation
-                when ``impute_mean`` is omitted.
-            impute_mean: Optional precomputed column means with shape
-                ``[..., 1, C]``.
+            train_size: Number of leading context rows used for imputation.
+                Required unless replaying a cache.
             cache: Records imputation means for reuse in query-only calls.
-                Replayed means take precedence over ``train_size`` and
-                ``impute_mean``.
+                Replayed means take precedence over ``train_size``.
             batch_size_limit: Target maximum number of cells per Fourier
                 feature chunk.
             out: Optional preallocated output buffer.
@@ -84,11 +80,9 @@ class CellEmbedding(TabFMCellEmbedding):
 
         if cache is not None and cache.is_replaying:
             impute_mean = cast(Tensor, cache["cell_impute_mean"])
-        elif impute_mean is None:
+        else:
             if train_size is None:
-                raise ValueError(
-                    "CellEmbedding requires train_size or impute_mean"
-                )
+                raise ValueError("CellEmbedding requires train_size")
             # Impute from observed context rows only, with fp32 statistics.
             mean = x[..., :train_size, :].nanmean(
                 dim=-2,
