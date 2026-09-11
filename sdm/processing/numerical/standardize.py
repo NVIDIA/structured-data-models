@@ -2,14 +2,18 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
-from sdm.processing.numerical._stats import _constant_feature_mask
+from sdm.processing.numerical._stats import (
+    _constant_feature_mask,
+    _nanmean_var,
+)
 
 
 class Standardize(Processor, InvertibleMixin):
     """Center and scale each feature column.
 
     Constant columns use a unit scale to keep the transform finite and
-    invertible.
+    invertible. NaN values are ignored when fitting statistics and preserved
+    during the transform.
 
     Args:
         with_mean: If ``True``, center each column by its fitted mean.
@@ -50,7 +54,7 @@ class Standardize(Processor, InvertibleMixin):
             self.scale = torch.ones_like(self.mean)
             return
 
-        data_mean = numerical.mean(dim=-2, keepdim=True)
+        data_mean, var, count = _nanmean_var(numerical)
 
         if self.with_mean:
             self.mean = data_mean
@@ -59,18 +63,13 @@ class Standardize(Processor, InvertibleMixin):
 
         if self.with_std:
             if numerical.size(-2) > 1:
-                var = numerical.var(
-                    dim=-2,
-                    correction=0,
-                    keepdim=True,
-                )
                 scale = var.sqrt()
                 if self.epsilon == 0:
                     scale[
                         _constant_feature_mask(
                             var,
                             data_mean,
-                            numerical.size(-2),
+                            count,
                         )
                     ] = 1.0
             else:
