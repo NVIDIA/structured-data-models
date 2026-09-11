@@ -14,6 +14,7 @@ from autogluon.tabular.models.abstract.abstract_torch_model import (
 )
 
 import sdm
+import sdm.processing as sp
 
 Task = Literal["classification", "regression"]
 
@@ -116,12 +117,11 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             num_estimators = None
         self._expand_query = num_estimators is None
 
-        recipe = None
-        max_columns = params["max_columns"]
-        if max_columns is not None:
-            if not isinstance(self.model, sdm.models.KumoTabular):
-                raise ValueError("'max_columns' requires KumoTabular")
-            recipe = self.model.default_recipe(max_columns=max_columns)
+        recipe = self.model.default_recipe()
+        if params["max_columns"] is not None:
+            for processor in recipe.features.modules():
+                if isinstance(processor, sp.SelectColumns):
+                    processor.max_columns = params["max_columns"]
 
         with torch.amp.autocast(
             self._device.type,
