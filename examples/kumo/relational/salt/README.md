@@ -1,16 +1,16 @@
 # Kumo Relational on SALT
 
-This benchmark evaluates `KumoRelational` on the [SALT (Sales Autocompletion Linked Business Tables Dataset)](https://huggingface.co/datasets/SAP/SALT) benchmark.
+This example evaluates `KumoRelational` on the [SALT (Sales Autocompletion Linked Business Tables Dataset)](https://huggingface.co/datasets/SAP/SALT) benchmark.
 
 ## Run
 
 ```bash
-python -m benchmark.relational.salt.kumo --task=SALESOFFICE
-python -m benchmark.relational.salt.kumo --task=SALESGROUP
-python -m benchmark.relational.salt.kumo --task=CUSTOMERPAYMENTTERMS
-python -m benchmark.relational.salt.kumo --task=SHIPPINGCONDITION
-python -m benchmark.relational.salt.kumo --task=HEADERINCOTERMSCLASSIFICATION
-python -m benchmark.relational.salt.kumo --task=PLANT
-python -m benchmark.relational.salt.kumo --task=SHIPPINGPOINT
-python -m benchmark.relational.salt.kumo --task=ITEMINCOTERMSCLASSIFICATION
+python main.py --task=SALESOFFICE
+python main.py --task=SALESGROUP
+python main.py --task=CUSTOMERPAYMENTTERMS
+python main.py --task=SHIPPINGCONDITION
+python main.py --task=HEADERINCOTERMSCLASSIFICATION
+python main.py --task=PLANT
+python main.py --task=SHIPPINGPOINT
+python main.py --task=ITEMINCOTERMSCLASSIFICATION
 ```
