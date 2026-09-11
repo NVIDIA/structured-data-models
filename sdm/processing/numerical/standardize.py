@@ -12,8 +12,8 @@ class Standardize(Processor, InvertibleMixin):
     """Center and scale each feature column.
 
     Constant columns use a unit scale to keep the transform finite and
-    invertible. NaN values are ignored when fitting statistics and preserved
-    during the transform.
+    invertible. NaN and infinite values are ignored when fitting statistics
+    and preserved during the transform.
 
     Args:
         with_mean: If ``True``, center each column by its fitted mean.
@@ -49,37 +49,45 @@ class Standardize(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
-        if numerical.size(-1) == 0:
-            self.mean = numerical.sum(dim=-2, keepdim=True)
+        if numerical.size(-1) == 0 or not (self.with_mean or self.with_std):
+            self.mean = numerical.new_zeros(
+                (*numerical.shape[:-2], 1, numerical.size(-1))
+            )
             self.scale = torch.ones_like(self.mean)
             return
 
-        data_mean, var, count = _nanmean_var(numerical)
+        finite = numerical.isfinite()
+        finite_or_nan = numerical.masked_fill(~finite, float("nan"))
+        mean = finite_or_nan.nanmean(dim=-2, keepdim=True)
+        mean = torch.where(mean.isnan(), torch.zeros_like(mean), mean)
 
         if self.with_mean:
-            self.mean = data_mean
+            self.mean = mean
         else:
-            self.mean = torch.zeros_like(data_mean)
+            self.mean = torch.zeros_like(mean)
 
         if self.with_std:
             if numerical.size(-2) > 1:
+                finite_or_nan.sub_(mean).square_()
+                var = finite_or_nan.nanmean(dim=-2, keepdim=True)
+                var.masked_fill_(var.isnan(), 0.0)
                 scale = var.sqrt()
                 if self.epsilon == 0:
                     scale[
                         _constant_feature_mask(
                             var,
-                            data_mean,
-                            count,
+                            mean,
+                            finite.sum(dim=-2, keepdim=True),
                         )
                     ] = 1.0
             else:
                 if self.epsilon == 0:
-                    scale = torch.ones_like(data_mean)
+                    scale = torch.ones_like(mean)
                 else:
-                    scale = torch.zeros_like(data_mean)
+                    scale = torch.zeros_like(mean)
             self.scale = scale + self.epsilon
         else:
-            self.scale = torch.ones_like(data_mean)
+            self.scale = torch.ones_like(mean)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` using the fitted mean and scale."""
