@@ -55,6 +55,58 @@ def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
 
 
 @withCUDA
+def test_unique_filter_preserves_nan_and_infinity_semantics(
+    device: torch.device,
+) -> None:
+    data = (
+        torch.tensor(
+            [
+                [torch.nan, torch.nan, torch.inf, -torch.inf, -0.0, 1.0],
+                [torch.nan, 1.0, torch.inf, -torch.inf, 0.0, 2.0],
+                [torch.nan, 1.0, torch.inf, -torch.inf, 0.0, 1.0],
+            ],
+            device=device,
+        )
+        .T.contiguous()
+        .T
+    )
+    original = data.clone()
+    table = TableTensor.from_tensor(data)
+
+    output = DropConstantColumns().fit_transform(table)
+
+    assert output.columns[Stype.numerical] == ("0", "1", "5")
+    torch.testing.assert_close(
+        output.numerical,
+        data[:, [0, 1, 5]],
+        equal_nan=True,
+    )
+    torch.testing.assert_close(data, original, equal_nan=True)
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.uint16,
+        torch.uint32,
+        torch.uint64,
+        torch.float8_e4m3fn,
+        torch.float8_e5m2,
+        torch.complex64,
+    ],
+)
+def test_unique_filter_handles_dtypes_without_extrema_reductions(
+    dtype: torch.dtype,
+) -> None:
+    numerical = torch.ones((5, 3)).to(dtype)
+    table = TableTensor(numerical=numerical)
+
+    output = DropConstantColumns().fit_transform(table)
+
+    assert output.numerical.shape == (5, 0)
+
+
+@withCUDA
 def test_variance_filter(device: torch.device) -> None:
     data = torch.tensor(
         [

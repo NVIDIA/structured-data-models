@@ -9,11 +9,17 @@ def _check_categorical_codes(table: TableTensor) -> None:
     Args:
         table: The table whose categorical codes are validated.
     """
-    columns = table.columns[Stype.categorical]
-    for index, category in enumerate(table.categorical.categories):
-        codes = table.categorical[..., index]
-        if (codes >= category.numel()).any():
-            raise ValueError(
-                f"Categorical column {columns[index]!r} contains a code "
-                "outside its category vocabulary."
-            )
+    codes = table.categorical.code
+    if codes.numel() == 0:
+        return
+    bounds = codes.new_tensor(
+        [category.numel() for category in table.categorical.categories]
+    )
+    invalid = codes.amax(dim=tuple(range(codes.dim() - 1))) >= bounds
+    if invalid.any():
+        index = int(invalid.nonzero()[0, 0].item())
+        columns = table.columns[Stype.categorical]
+        raise ValueError(
+            f"Categorical column {columns[index]!r} contains a code "
+            "outside its category vocabulary."
+        )

@@ -231,3 +231,89 @@ def test_power_transform_fits_leading_batches_independently(
         rtol=2e-5,
         atol=2e-5,
     )
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_power_transform_logarithmic_limits_preserve_expanded_input(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    values = torch.tensor(
+        [-3.0, -1.0, -0.125, 0.0, 0.125, 1.0, 3.0],
+        device=device,
+        dtype=dtype,
+    )
+    inp = values.view(1, -1, 1).expand(2, -1, 4)
+    original = inp.clone()
+    table = TableTensor.from_tensor(inp)
+    processor = PowerTransform(standardize=False).fit(table)
+    processor.lambdas.copy_(
+        inp.new_tensor([0, torch.finfo(dtype).eps / 2, 1, 2])
+    )
+    state = {name: value.clone() for name, value in processor.named_buffers()}
+
+    zero_lambda = torch.where(
+        values >= 0,
+        values.log1p(),
+        values - values.square() / 2,
+    )
+    two_lambda = torch.where(
+        values >= 0,
+        values + values.square() / 2,
+        -(-values).log1p(),
+    )
+    expected = torch.stack(
+        [zero_lambda, zero_lambda, values, two_lambda], dim=-1
+    ).expand_as(inp)
+
+    transformed = processor.transform(table)
+    before_inverse = transformed.numerical.clone()
+    inverse = processor.inverse_transform(transformed)
+    repeated = processor.transform(table)
+
+    torch.testing.assert_close(transformed.numerical, expected)
+    torch.testing.assert_close(inverse.numerical, inp)
+    torch.testing.assert_close(repeated.numerical, expected)
+    torch.testing.assert_close(transformed.numerical, before_inverse)
+    torch.testing.assert_close(inp, original)
+    for name, value in processor.named_buffers():
+        torch.testing.assert_close(value, state[name])
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_power_transform_inverse_preserves_domain_and_overflow_behavior(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    context = torch.tensor(
+        [[-1.0], [0.0], [1.0]], device=device, dtype=dtype
+    ).expand(-1, 5)
+    processor = PowerTransform(standardize=False).fit(
+        TableTensor.from_tensor(context)
+    )
+    processor.lambdas.copy_(context.new_tensor([-1, 0, 1, 2, 3]))
+    processor.upper_bound.copy_(
+        context.new_tensor([1, torch.inf, torch.inf, torch.inf, torch.inf])
+    )
+    query = context.new_tensor(
+        [
+            [1, torch.inf, torch.inf, -torch.inf, -1],
+            [2, -torch.inf, -torch.inf, torch.inf, -2],
+        ]
+    )
+    original = query.clone()
+    expected = context.new_tensor(
+        [
+            [1 / torch.finfo(dtype).eps - 1, 1, 1, -torch.inf, -torch.inf],
+            [torch.nan, -torch.inf, -torch.inf, 1, torch.nan],
+        ]
+    )
+
+    actual = processor.inverse_transform(
+        TableTensor.from_tensor(query)
+    ).numerical
+
+    torch.testing.assert_close(actual, expected, equal_nan=True)
+    torch.testing.assert_close(query, original)

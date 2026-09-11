@@ -48,3 +48,47 @@ def test_softmax_rejects_nonpositive_temperature(
 ) -> None:
     with pytest.raises(ValueError, match="positive"):
         Softmax(temperature=temperature)
+
+
+@withCUDA
+@pytest.mark.parametrize("temperature", [1.0, 0.7])
+@pytest.mark.parametrize("dtype", [torch.int64, torch.float32, torch.float64])
+def test_softmax_preserves_noncontiguous_logits(
+    device: torch.device,
+    temperature: float,
+    dtype: torch.dtype,
+) -> None:
+    logits = torch.arange(12, dtype=dtype, device=device).view(3, 4).t()
+    before = logits.clone()
+    expected = (logits / temperature).softmax(dim=-1)
+
+    output = Softmax(temperature=temperature).transform(
+        TableTensor(numerical=logits)
+    )
+
+    torch.testing.assert_close(output.numerical, expected)
+    torch.testing.assert_close(logits, before)
+
+
+@withCUDA
+@pytest.mark.parametrize("temperature", [1.0, 0.7])
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32]
+)
+def test_softmax_preserves_autocast_dtype(
+    device: torch.device,
+    temperature: float,
+    dtype: torch.dtype,
+) -> None:
+    logits = torch.tensor(
+        [[-3.0, 0.0, 2.0], [4.0, -1.0, 1.0]],
+        device=device,
+        dtype=dtype,
+    )
+    with torch.autocast(device.type, dtype=torch.bfloat16):
+        expected = (logits / temperature).softmax(dim=-1)
+        actual = Softmax(temperature=temperature).transform(
+            TableTensor(numerical=logits)
+        )
+
+    torch.testing.assert_close(actual.numerical, expected)

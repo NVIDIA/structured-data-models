@@ -176,6 +176,8 @@ class EnsembleTable(DeviceMixin):
     def select_members(self, member_ids: Sequence[int]) -> Self:
         """Return the selected ensemble members in the requested order.
 
+        Selected groups may share storage with this ensemble.
+
         Args:
             member_ids: Logical member positions to select.
 
@@ -201,6 +203,11 @@ class EnsembleTable(DeviceMixin):
         ):
             group = self._groups[group_id]
             selected_positions = tuple(positions)
+            step = (
+                selected_positions[1] - selected_positions[0]
+                if len(selected_positions) > 1
+                else 1
+            )
             group_ids[group_id] = new_group_id
             if selected_positions == tuple(range(group.size(0))):
                 groups.append(group)
@@ -211,6 +218,12 @@ class EnsembleTable(DeviceMixin):
                         group.narrow(0, selected_positions[0], 1),
                     )
                 )
+            elif step > 0 and selected_positions == tuple(
+                range(selected_positions[0], selected_positions[-1] + 1, step)
+            ):
+                start = selected_positions[0]
+                stop = selected_positions[-1] + 1
+                groups.append(group[start:stop:step])
             else:
                 groups.append(
                     cast(
@@ -401,6 +414,9 @@ class EnsembleTable(DeviceMixin):
                 ]
             )
 
+        if (output := cls._concatenate_numerical(tables)) is not None:
+            return output
+
         # TODO: Concatenate compatible groups directly and unpack logical
         # members only when their layouts differ.
         outputs: list[TableTensor] = []
@@ -427,6 +443,68 @@ class EnsembleTable(DeviceMixin):
             tables=outputs,
             member_table_ids=member_table_ids,
         )
+
+    @classmethod
+    def _concatenate_numerical(cls, tables: Sequence[Self]) -> Self | None:
+        if any(len(table._groups) == 0 for table in tables):
+            return None
+        first = tables[0]._groups[0]
+        if first.device.type not in (
+            "cpu",
+            "cuda",
+        ) or torch.is_autocast_enabled(first.device.type):
+            return None
+
+        # Homogeneous numerical tables form one compatible output group.
+        dtype = first.numerical.dtype
+        columns: list[str] = []
+        for table in tables:
+            ref = table._groups[0]
+            for group in table:
+                numerical = group.numerical
+                if (
+                    type(group) is not TableTensor
+                    or type(numerical) is not Tensor
+                    or numerical.layout != torch.strided
+                    or numerical.is_quantized
+                    or numerical.requires_grad
+                    or group.dim() != 3
+                    or numerical.size(-1) == 0
+                    or group.size(-1) != numerical.size(-1)
+                    or group.columns != ref.columns
+                    or numerical.size()[1:] != ref.numerical.size()[1:]
+                    or numerical.dtype != ref.numerical.dtype
+                    or numerical.size(-2) != first.numerical.size(-2)
+                    or numerical.device != first.device
+                ):
+                    return None
+            dtype = torch.promote_types(dtype, ref.numerical.dtype)
+            columns.extend(ref.columns[Stype.numerical])
+
+        output_ids: dict[tuple[tuple[int, int], ...], int] = {}
+        locations = []
+        for member_id in range(tables[0].num_members):
+            sources = tuple(table._locations[member_id] for table in tables)
+            output_id = output_ids.setdefault(sources, len(output_ids))
+            locations.append((0, output_id))
+
+        numerical = first.numerical.new_empty(
+            (len(output_ids), first.size(-2), len(columns)), dtype=dtype
+        )
+        for sources, output_id in output_ids.items():
+            start = 0
+            for table, (group_id, position) in zip(
+                tables, sources, strict=True
+            ):
+                source = table._groups[group_id].numerical[position]
+                stop = start + source.size(-1)
+                numerical[output_id, :, start:stop].copy_(source)
+                start = stop
+
+        group = first.__class__(
+            columns={Stype.numerical: columns}, numerical=numerical
+        )
+        return cls(groups=(group,), locations=locations)
 
     def replace_groups(self, groups: Sequence[TableTensor]) -> Self:
         """Return an ensemble table with its groups replaced.

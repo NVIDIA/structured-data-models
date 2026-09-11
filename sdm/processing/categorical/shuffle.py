@@ -65,9 +65,8 @@ class ShuffleCategories(EnsembleProcessor):
                     generator=generator,
                     device=device,
                 )
-                permutation = (
-                    torch.arange(n_classes, device=device) - offset
-                ) % n_classes
+                permutation = torch.arange(n_classes, device=device)
+                permutation.sub_(offset).remainder_(n_classes)
             else:
                 assert self.method == "random"
                 permutation = torch.randperm(
@@ -84,7 +83,19 @@ class ShuffleCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-
+        if ensemble_table.num_members == 1:
+            self._permutations = BufferList(
+                [
+                    BufferList(
+                        self._draw_permutations(
+                            ensemble_table.table(0),
+                            generator=generator,
+                        )
+                    )
+                ]
+            )
+            self._permutation_ids = (0,)
+            return
         permutations_by_id = []
         permutation_ids = []
         permutation_id_by_key: dict[
@@ -172,16 +183,25 @@ class ShuffleCategories(EnsembleProcessor):
         table: TableTensor,
         permutations: BufferList[Tensor],
     ) -> TableTensor:
-        code = table.categorical.code.clone()
-        valid_mask = table.categorical.isfinite()
+        code = torch.empty_like(table.categorical.code)
         categories: list[Tensor] = []
         for index, (category, permutation) in enumerate(
             zip(table.categorical.categories, permutations, strict=True)
         ):
-            codes = code[..., index]
-            valid = valid_mask[..., index]
-            valid_codes = codes[valid].to(torch.long)
-            codes[valid] = permutation[valid_codes].to(codes.dtype)
+            codes = table.categorical.code[..., index]
+            if category.numel() == 0:
+                code[..., index].copy_(codes)
+                categories.append(category)
+                continue
+            indices = codes.clamp_min(0)
+            remapped = (
+                permutation.to(code.dtype)
+                .index_select(0, indices.reshape(-1))
+                .view_as(codes)
+            )
+            torch.where(codes < 0, codes, remapped, out=remapped)
+            code[..., index].copy_(remapped)
+            del indices, remapped
             categories.append(category[permutation.argsort()])
 
         categorical = CategoricalTensor(

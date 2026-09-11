@@ -198,7 +198,7 @@ class _CuDFTokenizer:
             max_input_chars_per_word=wordpiece.max_input_chars_per_word,
         )
 
-    def tokenize(self, text: StringTensor) -> tuple[Tensor, Tensor]:
+    def tokenize(self, text: StringTensor) -> tuple[Tensor, Tensor, Tensor]:
         device = text.device
         ser = text.to_cudf()
         ser = ser.fillna("") if text.is_nullable else ser
@@ -209,15 +209,28 @@ class _CuDFTokenizer:
         lengths = torch.from_dlpack(ser.list.len().to_cupy())
 
         num_strings = text.numel()
-        offsets = torch.zeros(
+        offsets = torch.empty(
             num_strings + 1,
             device=device,
             dtype=torch.int32,
         )
+        offsets[0] = 0
         torch.cumsum(lengths, dim=0, out=offsets[1:])
-        lengths.clamp_(max=self._max_length - 2)
+        lengths.clamp_(max=self._max_length - 2).add_(2)
+        return flat_values, offsets, lengths
+
+    def batch(
+        self,
+        flat_values: Tensor,
+        offsets: Tensor,
+        lengths: Tensor,
+        indices: Tensor,
+        max_length: int,
+    ) -> dict[str, Tensor]:
+        device = flat_values.device
+        lengths = lengths[indices].sub_(2)
         input_ids = torch.full(
-            (num_strings, self._max_length),
+            (indices.numel(), max_length),
             self._pad_token_id,
             device=device,
             dtype=torch.int32,
@@ -225,30 +238,36 @@ class _CuDFTokenizer:
         input_ids[:, 0] = self._cls_token_id
 
         if flat_values.numel() > 0:
-            max_content = self._max_length - 2
+            max_content = max_length - 2
             col_idx = torch.arange(
                 max_content,
                 device=device,
                 dtype=torch.int32,
             ).unsqueeze(0)
-            mask = col_idx < lengths.unsqueeze(1)
-            src = col_idx + offsets[:-1].unsqueeze(1)
-            safe_src = torch.where(mask, src, torch.zeros_like(src))
-            input_ids[:, 1 : max_content + 1] = torch.where(
-                mask,
-                flat_values[safe_src],
-                input_ids[:, 1 : max_content + 1],
+            padding = col_idx >= lengths.unsqueeze(1)
+            src = col_idx + offsets[indices].unsqueeze(1)
+            src.masked_fill_(padding, 0)
+            tokens = input_ids[:, 1 : max_content + 1]
+            torch.where(
+                padding,
+                tokens,
+                flat_values[src],
+                out=tokens,
             )
 
-        input_ids[torch.arange(num_strings, device=device), lengths + 1] = (
-            self._sep_token_id
+        input_ids[
+            torch.arange(indices.numel(), device=device), lengths.add_(1)
+        ] = self._sep_token_id
+        attention_mask = torch.empty_like(input_ids)
+        torch.lt(
+            torch.arange(
+                max_length, device=device, dtype=torch.int32
+            ).unsqueeze(0),
+            lengths.add_(1).unsqueeze(1),
+            out=attention_mask,
         )
-        attention_mask = (
-            torch.arange(self._max_length, device=device).unsqueeze(0)
-            < (lengths + 2).unsqueeze(1)
-        ).to(torch.int32)
 
-        return input_ids, attention_mask
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
 class _Encoder(torch.nn.Module):
@@ -270,7 +289,11 @@ class _Encoder(torch.nn.Module):
     def __deepcopy__(self, memo: dict[int, Any]) -> _Encoder:
         return self
 
-    def _forward_cpu(self, text: StringTensor) -> Tensor:
+    def _forward_cpu(
+        self,
+        text: StringTensor,
+        out: Tensor | None = None,
+    ) -> Tensor:
         array = text.to_arrow()
         if text.is_nullable:
             array = pc.fill_null(array, "")
@@ -282,18 +305,32 @@ class _Encoder(torch.nn.Module):
             batch_size=self._batch_size,
         )
         assert isinstance(emb, Tensor)
-        return emb
+        return emb if out is None else out.copy_(emb.reshape_as(out))
 
-    def _forward_cudf(self, text: StringTensor) -> Tensor:
+    @staticmethod
+    def _write_embeddings(
+        out: Tensor,
+        indices: Tensor,
+        embeddings: Tensor,
+    ) -> None:
+        if out.dim() == 2:
+            out[indices] = embeddings.to(out.dtype)
+        else:
+            # A numerical prefix leaves gaps between rows of text embeddings.
+            columns = out.size(1)
+            rows = indices.div(columns, rounding_mode="floor")
+            out[rows, indices.remainder(columns)] = embeddings.to(out.dtype)
+
+    def _forward_cudf(
+        self,
+        text: StringTensor,
+        out: Tensor | None = None,
+        indices: Tensor | None = None,
+    ) -> Tensor:
         assert self._cudf_tokenizer is not None
         self._model.eval()
-        input_ids, attention_mask = self._cudf_tokenizer.tokenize(text)
-
-        seq_lengths = attention_mask.sum(dim=1)
+        flat_values, offsets, seq_lengths = self._cudf_tokenizer.tokenize(text)
         sort_idx = seq_lengths.argsort()
-        sorted_input_ids = input_ids[sort_idx]
-        sorted_attention_mask = attention_mask[sort_idx]
-        sorted_seq_lengths = seq_lengths[sort_idx]
 
         device = text.device
         num_strings = text.numel()
@@ -307,33 +344,60 @@ class _Encoder(torch.nn.Module):
         batch_ends -= 1
         # Triggers a host device sync to get chunk sizes to
         # minimize the padding
-        batch_max_lengths = sorted_seq_lengths[batch_ends].tolist()
+        batch_max_lengths = seq_lengths[sort_idx[batch_ends]].tolist()
 
-        embeddings = torch.empty(
-            num_strings,
-            self._embedding_dim,
-            device=device,
-            dtype=torch.float32,
-        )
-        for i, start in enumerate(range(0, num_strings, self._batch_size)):
-            end = min(start + self._batch_size, num_strings)
-            max_len = batch_max_lengths[i]
-            features: dict[str, Tensor] = {
-                "input_ids": sorted_input_ids[start:end, :max_len],
-                "attention_mask": sorted_attention_mask[start:end, :max_len],
-            }
-            features = self._model(features)
-            embeddings[sort_idx[start:end]] = features["sentence_embedding"]
+        if out is None:
+            out = torch.empty(
+                num_strings,
+                self._embedding_dim,
+                device=device,
+                dtype=torch.float32,
+            )
+        # Amortize token gathering while bounding padding memory.
+        batches_per_window = 16
+        for first in range(0, len(batch_max_lengths), batches_per_window):
+            last = min(first + batches_per_window, len(batch_max_lengths))
+            window_indices = sort_idx[
+                first * self._batch_size : last * self._batch_size
+            ]
+            tokens = self._cudf_tokenizer.batch(
+                flat_values=flat_values,
+                offsets=offsets,
+                lengths=seq_lengths,
+                indices=window_indices,
+                max_length=batch_max_lengths[last - 1],
+            )
+            for i in range(first, last):
+                start = (i - first) * self._batch_size
+                end = start + self._batch_size
+                batch_indices = window_indices[start:end]
+                features = {
+                    name: tensor[start:end, : batch_max_lengths[i]]
+                    for name, tensor in tokens.items()
+                }
+                features = self._model(features)
+                self._write_embeddings(
+                    out=out,
+                    indices=(
+                        batch_indices
+                        if indices is None
+                        else indices[batch_indices]
+                    ),
+                    embeddings=features["sentence_embedding"].float(),
+                )
+                del features
+            del tokens
 
-        return embeddings
+        return out
 
-    def forward(self, text: StringTensor) -> Tensor:
+    @torch.no_grad()
+    def forward(self, text: StringTensor, out: Tensor | None = None) -> Tensor:
         if text.device.type == "cpu":
-            return self._forward_cpu(text)
+            return self._forward_cpu(text, out=out)
 
         tokenizer = self._cudf_tokenizer
         if tokenizer is None:
-            return self._forward_cpu(text)
+            return self._forward_cpu(text, out=out)
 
         series = text.to_cudf()
         series = series.fillna("") if text.is_nullable else series
@@ -347,12 +411,13 @@ class _Encoder(torch.nn.Module):
             words.str.byte_count() >= _CUDF_WORDPIECE_MAX_BYTES
         )
         cpu_indices = torch.from_dlpack(words[use_cpu].index.unique().values)
+        del series, words, use_cpu
 
         num_strings = text.numel()
         if cpu_indices.numel() == 0:
-            return self._forward_cudf(text)
+            return self._forward_cudf(text, out=out)
         if cpu_indices.numel() == num_strings:
-            return self._forward_cpu(text)
+            return self._forward_cpu(text, out=out)
 
         use_cudf = torch.ones(
             num_strings,
@@ -361,20 +426,27 @@ class _Encoder(torch.nn.Module):
         )
         use_cudf[cpu_indices] = False
         cudf_indices = use_cudf.nonzero().flatten()
+        del use_cudf
 
         # Tokenize each subset with the matching path, then restore the
         # original input order through indexed assignment.
-        embeddings = torch.empty(
-            num_strings,
-            self._embedding_dim,
-            device=text.device,
-            dtype=torch.float32,
-        )
+        if out is None:
+            out = torch.empty(
+                num_strings,
+                self._embedding_dim,
+                device=text.device,
+                dtype=torch.float32,
+            )
         cudf_text = cast(StringTensor, text[cudf_indices])
+        self._forward_cudf(cudf_text, out=out, indices=cudf_indices)
+        del cudf_text
         cpu_text = cast(StringTensor, text[cpu_indices])
-        embeddings[cudf_indices] = self._forward_cudf(cudf_text)
-        embeddings[cpu_indices] = self._forward_cpu(cpu_text)
-        return embeddings
+        self._write_embeddings(
+            out=out,
+            indices=cpu_indices,
+            embeddings=self._forward_cpu(cpu_text).float(),
+        )
+        return out
 
 
 class SentenceTransformer(Processor):
@@ -419,30 +491,43 @@ class SentenceTransformer(Processor):
             for i in range(self._embedding_dim)
         )
 
-        if table.text.numel() == 0:
+        num_numerical = table.numerical.size(-1)
+        num_output = num_numerical + len(output_columns)
+        if (
+            table.text.numel() == 0
+            or num_numerical
+            or (table.is_cuda and table.dtype != torch.float32)
+        ):
             numerical = torch.empty(
-                (*batch_shape, len(output_columns)),
+                (*batch_shape, num_output),
                 dtype=table.dtype,
                 device=table.device,
             )
+            numerical[..., :num_numerical].copy_(table.numerical)
+            if table.text.numel():
+                self._model(
+                    cast(StringTensor, table.text.reshape(-1)),
+                    out=numerical[..., num_numerical:].view(
+                        -1, len(columns), self._embedding_dim
+                    ),
+                )
         else:
-            text = cast(StringTensor, table.text.movedim(-1, 0).reshape(-1))
+            text = cast(StringTensor, table.text.reshape(-1))
             emb = self._model(text)
             emb = emb.to(device=table.device, dtype=table.dtype)
-            numerical = (
-                emb.reshape(len(columns), *batch_shape, self._embedding_dim)
-                .movedim(0, -2)
-                .reshape(*batch_shape, len(output_columns))
-            )
+            numerical = emb.reshape(*batch_shape, num_output)
 
-        out = torch.cat(
-            [
-                table.drop_stypes(Stype.text),
-                TableTensor(
-                    columns={Stype.numerical: output_columns},
-                    numerical=numerical,
+        return TableTensor(
+            columns={
+                **table.columns,
+                Stype.text: (),
+                Stype.numerical: (
+                    *table.columns[Stype.numerical],
+                    *output_columns,
                 ),
-            ],
-            dim=-1,
+            },
+            numerical=numerical,
+            categorical=table.categorical,
+            datetime=table.datetime,
+            id=table.id,
         )
-        return cast(TableTensor, out)

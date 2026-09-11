@@ -1,3 +1,6 @@
+import math
+from typing import Literal
+
 import pytest
 import torch
 
@@ -148,6 +151,30 @@ def test_quantile_transform_single_quantile_maps_to_zero(
 
 
 @withCUDA
+@pytest.mark.parametrize("n_quantiles", [1, 4])
+@pytest.mark.parametrize("output_distribution", ["uniform", "normal"])
+def test_quantile_transform_preserves_expanded_inputs_and_fitted_grid(
+    device: torch.device,
+    n_quantiles: int,
+    output_distribution: Literal["uniform", "normal"],
+) -> None:
+    values = torch.tensor([0.0, 1.0, 1.0, 2.0], device=device)
+    table = TableTensor.from_tensor(values[:, None].expand(-1, 3))
+    processor = QuantileTransform(
+        n_quantiles=n_quantiles,
+        subsample=None,
+        output_distribution=output_distribution,
+    ).fit(table)
+    transformed = processor.transform(table)
+    before = transformed.numerical.clone()
+    processor.inverse_transform(transformed)
+
+    torch.testing.assert_close(table.numerical, values[:, None].expand(-1, 3))
+    torch.testing.assert_close(transformed.numerical, before)
+    torch.testing.assert_close(processor.transform(table).numerical, before)
+
+
+@withCUDA
 def test_quantile_transform_normal_distribution_is_finite_at_bounds(
     device: torch.device,
 ) -> None:
@@ -253,3 +280,97 @@ def test_quantile_transform_adapter_matches_grouped_tables(
         )
         assert query_output.table(member_id).equal(expected_queries[table_id])
         assert restored.table(member_id).equal(expected_restored[table_id])
+
+
+@withCUDA
+@pytest.mark.parametrize("output_distribution", ["uniform", "normal"])
+@pytest.mark.parametrize("batch_shape", [(2,), (2, 3)])
+def test_quantile_transform_interpolates_repeated_grids_in_batched_views(
+    device: torch.device,
+    output_distribution: Literal["uniform", "normal"],
+    batch_shape: tuple[int, ...],
+) -> None:
+    offsets = torch.arange(70, device=device, dtype=torch.float64)[::2]
+    context_values = torch.tensor(
+        [-3.0, -2.0, -2.0, -2.0, 0.0, 7.0, 7.0, 9.0],
+        device=device,
+        dtype=torch.float64,
+    )
+    query_values = torch.tensor(
+        [-2.5, -2.0, -1.0, 7.0, 8.0],
+        device=device,
+        dtype=torch.float64,
+    )
+    context = context_values[:, None] + offsets
+    query = query_values[:, None] + offsets
+    batch_offsets = (
+        torch.arange(
+            math.prod(batch_shape), device=device, dtype=context.dtype
+        )
+        .reshape(*batch_shape, 1, 1)
+        .mul_(100)
+    )
+    context = context + batch_offsets
+    query = query + batch_offsets
+    query = query.transpose(-3, -2).contiguous().transpose(-3, -2)
+    original = query.clone()
+    processor = QuantileTransform(
+        n_quantiles=8,
+        subsample=None,
+        output_distribution=output_distribution,
+    ).fit(TableTensor.from_tensor(context))
+    expected = query.new_tensor([0.5, 2.0, 3.5, 5.5, 6.5]).div_(7)
+    if output_distribution == "normal":
+        expected = torch.special.ndtri(expected)
+
+    transformed = processor.transform(TableTensor.from_tensor(query))
+    inverse = processor.inverse_transform(transformed)
+
+    torch.testing.assert_close(
+        transformed.numerical, expected[None, :, None].expand_as(query)
+    )
+    torch.testing.assert_close(inverse.numerical, query)
+    torch.testing.assert_close(query, original)
+    torch.testing.assert_close(
+        processor.transform(TableTensor.from_tensor(query)).numerical,
+        transformed.numerical,
+    )
+
+
+@withCUDA
+@pytest.mark.parametrize("output_distribution", ["uniform", "normal"])
+def test_quantile_transform_preserves_float32_queries_with_float64_fit(
+    device: torch.device,
+    output_distribution: Literal["uniform", "normal"],
+) -> None:
+    context = torch.tensor(
+        [[-2.0, 1.0], [0.0, 1.0], [0.0, 3.0], [4.0, 5.0]],
+        device=device,
+        dtype=torch.float64,
+    )
+    query = torch.tensor(
+        [[-1.0, 2.0], [0.0, 3.0], [3.0, 4.0]],
+        device=device,
+        dtype=torch.float32,
+    )
+    original = query.clone()
+    processor = QuantileTransform(
+        n_quantiles=4,
+        subsample=None,
+        output_distribution=output_distribution,
+    ).fit(TableTensor.from_tensor(context))
+
+    transformed = processor.transform(TableTensor.from_tensor(query))
+    expected = processor.transform(TableTensor.from_tensor(query.double()))
+    inverse = processor.inverse_transform(transformed)
+    expected_inverse = processor.inverse_transform(
+        TableTensor.from_tensor(transformed.numerical.double())
+    )
+
+    torch.testing.assert_close(
+        transformed.numerical, expected.numerical.float()
+    )
+    torch.testing.assert_close(
+        inverse.numerical, expected_inverse.numerical.float()
+    )
+    torch.testing.assert_close(query, original)

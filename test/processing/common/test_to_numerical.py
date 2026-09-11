@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from sdm import (
@@ -8,6 +9,7 @@ from sdm import (
     TableTensor,
 )
 from sdm.processing import ToNumerical
+from sdm.testing import withCUDA
 
 
 def _table() -> TableTensor:
@@ -57,6 +59,7 @@ def test_to_numerical_preserves_unhandled_stype() -> None:
 
     output = ToNumerical().transform(table)
 
+    assert output is table
     assert output.columns[Stype.numerical] == ("num_0",)
     assert output.columns[Stype.id] == ("id_0",)
     assert torch.equal(output.id, table.id)
@@ -79,3 +82,45 @@ def test_to_numerical_converts_categorical_only_table() -> None:
         output.numerical,
         table.categorical.code.to(table.numerical.dtype),
     )
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.float32, torch.float64]
+)
+def test_to_numerical_mixed_strided_and_expanded_blocks(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    numerical = torch.arange(24, dtype=dtype, device=device).view(2, 3, 4)
+    numerical = numerical[..., ::2]
+    code = torch.tensor(
+        [[0, 1], [-1, 0], [1, -1]],
+        dtype=torch.int32,
+        device=device,
+    ).expand(2, -1, -1)
+    table = TableTensor(
+        numerical=numerical,
+        categorical=CategoricalTensor(
+            code=code,
+            categories=(
+                torch.arange(2, device=device),
+                torch.arange(2, device=device),
+            ),
+        ),
+    )
+    original = table.clone()
+
+    output = ToNumerical().transform(table)
+
+    assert output.numerical.dtype == dtype
+    assert output.columns[Stype.numerical] == (
+        "num_0",
+        "num_1",
+        "cat_0",
+        "cat_1",
+    )
+    torch.testing.assert_close(output.numerical[..., :2], numerical)
+    torch.testing.assert_close(output.numerical[..., 2:], code.to(dtype))
+    output.numerical.zero_()
+    assert table.equal(original)

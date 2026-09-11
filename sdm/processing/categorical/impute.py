@@ -44,10 +44,9 @@ class ImputeMode(Processor):
         _check_categorical_codes(table)
         fill_values: list[torch.Tensor] = []
         columns = table.columns[Stype.categorical]
-        observed_mask = data.isfinite()
         for index, category in enumerate(table.categorical.categories):
             codes = data[..., index]  # [*batch, n_samples]
-            observed = observed_mask[..., index]
+            observed = codes >= 0
             if not bool(observed.any(dim=-1).all()):
                 raise ValueError(
                     "Cannot fit 'ImputeMode' because categorical "
@@ -62,10 +61,11 @@ class ImputeMode(Processor):
             )
             counts.scatter_add_(
                 -1,
-                codes.clamp_min(0).to(torch.long),
+                codes.to(dtype=torch.long, copy=True).clamp_min_(0),
                 observed.to(torch.long),
             )
             fill_values.append(counts.argmax(dim=-1, keepdim=True))
+            del counts, observed
 
         self._fill_values = (
             torch.stack(fill_values, dim=-1)
@@ -112,6 +112,8 @@ class ImputeMode(Processor):
         for index, (actual, expected) in enumerate(
             zip(table.categorical.categories, self._categories)
         ):
+            if actual is expected:
+                continue
             expected = expected.to(device=actual.device)
             if not actual.equal(expected):
                 raise ValueError(

@@ -41,6 +41,19 @@ class ClipQuantiles(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
+        if (
+            self.q_low == 0.0
+            and self.q_high == 1.0
+            and numerical.dtype in (torch.float32, torch.float64)
+            and numerical.numel() > 0
+            and numerical.size(-2) <= 2**24
+        ):
+            # Quantile limits its reduction to 2**24 rows and floating inputs.
+            q_low, q_high = numerical.aminmax(dim=-2, keepdim=True)
+            # Match quantile's interpolation of infinite endpoints to NaN.
+            self.lower_bound = q_low.lerp_(q_low, 0.0)
+            self.upper_bound = q_high.lerp_(q_high, 0.0)
+            return
         quantiles = numerical.new_tensor([self.q_low, self.q_high])
         q_low, q_high = torch.quantile(
             numerical,

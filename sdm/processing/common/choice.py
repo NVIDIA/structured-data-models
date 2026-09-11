@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Literal, cast
 
 import torch
@@ -78,14 +79,14 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     def _tables_by_option(
         self,
         ensemble_table: EnsembleTable,
-    ) -> dict[int, EnsembleTable]:
+    ) -> Iterator[tuple[int, EnsembleTable]]:
         member_ids_by_option: dict[int, list[int]] = {}
         for member_id, option_id in enumerate(self._option_ids):
             member_ids_by_option.setdefault(option_id, []).append(member_id)
-        return {
-            option_id: ensemble_table.select_members(member_ids)
-            for option_id, member_ids in sorted(member_ids_by_option.items())
-        }
+        # A selection can materialize full groups; retain only the current
+        # route's input while its processor runs.
+        for option_id, member_ids in sorted(member_ids_by_option.items()):
+            yield option_id, ensemble_table.select_members(member_ids)
 
     def _gather_outputs(
         self,
@@ -119,8 +120,9 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             ensemble_table,
             generator=generator,
         )
-        for option_id, table in self._tables_by_option(ensemble_table).items():
+        for option_id, table in self._tables_by_option(ensemble_table):
             self.options[option_id].fit_ensemble(table, generator=generator)
+            del table
 
     def _fit_transform_ensemble(
         self,
@@ -132,15 +134,14 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             ensemble_table,
             generator=generator,
         )
-        outputs = {
-            option_id: self.options[option_id].fit_transform_ensemble(
+        outputs = {}
+        for option_id, table in self._tables_by_option(ensemble_table):
+            processor = self.options[option_id]
+            outputs[option_id] = processor.fit_transform_ensemble(
                 table,
                 generator=generator,
             )
-            for option_id, table in self._tables_by_option(
-                ensemble_table
-            ).items()
-        }
+            del table
         return self._gather_outputs(outputs)
 
     def _transform_ensemble(
@@ -148,12 +149,12 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         self._check_num_members(ensemble_table)
-        outputs = {
-            option_id: self.options[option_id].transform_ensemble(table)
-            for option_id, table in self._tables_by_option(
-                ensemble_table
-            ).items()
-        }
+        outputs = {}
+        for option_id, table in self._tables_by_option(ensemble_table):
+            outputs[option_id] = self.options[option_id].transform_ensemble(
+                table
+            )
+            del table
         return self._gather_outputs(outputs)
 
     def _inverse_transform_ensemble(
@@ -162,13 +163,14 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         self._check_num_members(ensemble_table)
         outputs = {}
-        for option_id, table in self._tables_by_option(ensemble_table).items():
+        for option_id, table in self._tables_by_option(ensemble_table):
             processor = self.options[option_id]
             if not isinstance(processor, EnsembleInvertibleMixin):
                 raise TypeError(
                     f"{processor.__class__.__name__!r} is not invertible."
                 )
             outputs[option_id] = processor.inverse_transform_ensemble(table)
+            del table
         return self._gather_outputs(outputs)
 
     def __repr__(self, *, indent: int = 0) -> str:

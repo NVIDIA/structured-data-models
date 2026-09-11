@@ -31,12 +31,18 @@ class ImputeMean(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
-        mean = torch.nanmean(
-            numerical,
+        # Match nanmean without widening a full-table mask to int64.
+        count_dtype = (
+            torch.int32 if numerical.size(-2) <= 2**31 - 1 else torch.int64
+        )
+        count = numerical.isnan().sum(
             dim=-2,
             keepdim=True,
+            dtype=count_dtype,
         )
-        self._mean = torch.where(mean.isnan(), self.fill_value, mean)
+        count.neg_().add_(numerical.size(-2))
+        mean = numerical.nansum(dim=-2, keepdim=True).div_(count)
+        self._mean = mean.masked_fill_(mean.isnan(), self.fill_value)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Replace NaNs with the fitted per-column means."""

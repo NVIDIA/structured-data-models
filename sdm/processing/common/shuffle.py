@@ -75,7 +75,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
                         base = base[base < n_features]
                         rows = rows[rows < n_features]
                     pattern = member_id % n_features
-                    permutation = base[(pattern - rows) % n_features]
+                    permutation = base[(pattern - rows).remainder_(n_features)]
                 permutations.append(permutation)
         else:
             assert self.method == "random"

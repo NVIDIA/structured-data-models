@@ -16,7 +16,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def make_table() -> EnsembleTable:
@@ -212,6 +212,69 @@ def test_fit_transform_matches_fit_then_transform(
     assert actual.num_members == expected.num_members
     for member_id in range(actual.num_members):
         assert actual.table(member_id).equal(expected.table(member_id))
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    "case",
+    PROCESSOR_CASES,
+    ids=lambda case: type(case.processor).__name__,
+)
+def test_processing_preserves_inputs_and_repeated_outputs(
+    case: ProcessorCase,
+    device: torch.device,
+) -> None:
+    table = case.make_table().to(device)
+    before = [cast(TableTensor, group.clone()) for group in table]
+    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    output = processor.fit_transform_ensemble(table)
+    output_before = [cast(TableTensor, group.clone()) for group in output]
+
+    if isinstance(case.processor, sp.InvertibleMixin):
+        cast(sp.EnsembleInvertibleMixin, processor).inverse_transform_ensemble(
+            output
+        )
+    repeated = processor.transform_ensemble(table)
+
+    for actual, expected in zip((*table, *output), (*before, *output_before)):
+        torch.testing.assert_close(
+            actual.numerical, expected.numerical, equal_nan=True
+        )
+        for stype in expected.active_stypes - {Stype.numerical}:
+            columns = expected.columns[stype]
+            assert actual.select_columns(columns).equal(
+                expected.select_columns(columns)
+            )
+    for member_id in range(output.num_members):
+        assert output.table(member_id).equal(repeated.table(member_id))
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    "processor", [sp.Standardize(), sp.ClipSigma(), sp.PowerTransform()]
+)
+def test_numerical_transform_preserves_dtype_promotion(
+    processor: sp.Processor,
+    device: torch.device,
+) -> None:
+    context = TableTensor.from_tensor(
+        torch.tensor(
+            [[-2.0], [0.0], [1.0], [8.0]], device=device, dtype=torch.float64
+        )
+    )
+    query = TableTensor.from_tensor(
+        torch.tensor([[-100.0], [0.5], [100.0]], device=device)
+    )
+    processor = deepcopy(processor).fit(context)
+    output = processor.transform(query)
+    expected = processor.transform(
+        query.replace_blocks(numerical=query.numerical.double())
+    )
+
+    assert output.dtype == torch.float64
+    torch.testing.assert_close(
+        output.numerical, expected.numerical, rtol=1e-6, atol=1e-6
+    )
 
 
 @pytest.mark.parametrize(

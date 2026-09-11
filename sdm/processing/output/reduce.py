@@ -69,43 +69,102 @@ class ReduceEstimators(EnsembleProcessor):
 
             numerical = group.numerical
             columns = group.columns[Stype.numerical]
-            if columns != reference_columns:
-                column_to_index = {
-                    column: index for index, column in enumerate(columns)
-                }
-                numerical = torch.cat(
-                    tensors=[
-                        numerical.narrow(
-                            dim=-1,
-                            start=column_to_index[column],
-                            length=1,
-                        )
-                        for column in reference_columns
-                    ],
-                    dim=-1,
-                )
-
             if numerical.shape[1:] != reference.numerical.shape:
                 raise ValueError(
                     "Expected ensemble members to have the same shape."
                 )
 
-            counts = numerical.new_tensor(
-                [
-                    counts_by_location[(group_id, position)]
-                    for position in range(group.size(0))
-                ]
+            multiplicities = [
+                counts_by_location[(group_id, position)]
+                for position in range(group.size(0))
+            ]
+            contiguous_members = numerical[:1].is_contiguous() and (
+                numerical.size(0) <= 1 or numerical.stride(0) != 0
             )
-            partial = torch.tensordot(
-                a=counts,
-                b=numerical,
-                dims=([0], [0]),
-            )
-            total = partial if total is None else total + partial
+            autocast = torch.is_autocast_enabled(numerical.device.type)
+            if (
+                columns == reference_columns
+                and contiguous_members
+                and not autocast
+                and (
+                    total is None
+                    or (
+                        total.dtype == numerical.dtype
+                        and numerical.dtype
+                        not in (torch.float16, torch.bfloat16)
+                    )
+                )
+            ):
+                # Accumulate the weighted group directly into the only output.
+                counts = numerical.new_tensor(multiplicities)
+                matrix = numerical.flatten(1)
+                if total is None:
+                    total = torch.mm(counts.unsqueeze(0), matrix).view(
+                        numerical.shape[1:]
+                    )
+                else:
+                    target = total.view(1, -1)
+                    torch.addmm(
+                        target, counts.unsqueeze(0), matrix, out=target
+                    )
+                continue
+
+            if (
+                contiguous_members
+                or autocast
+                or numerical.dtype not in (torch.float32, torch.float64)
+            ):
+                # Keep GEMM's accumulation precision for low-precision inputs.
+                counts = numerical.new_tensor(multiplicities)
+                partial = torch.tensordot(
+                    a=counts,
+                    b=numerical,
+                    dims=([0], [0]),
+                )
+            else:
+                # Flattening a strided member would copy the entire group.
+                accumulate = (
+                    columns == reference_columns
+                    and total is not None
+                    and total.dtype == numerical.dtype
+                )
+                if accumulate:
+                    assert total is not None
+                    partial = total
+                    partial.add_(numerical[0], alpha=multiplicities[0])
+                else:
+                    partial = numerical.new_empty(numerical.shape[1:])
+                    torch.mul(numerical[0], multiplicities[0], out=partial)
+                for position, count in enumerate(multiplicities[1:], start=1):
+                    partial.add_(numerical[position], alpha=count)
+                if accumulate:
+                    del partial
+                    continue
+
+            if columns == reference_columns:
+                total = partial if total is None else total.add_(partial)
+            else:
+                # Reorder the reduced columns, not every input estimator.
+                column_to_index = {
+                    column: index
+                    for index, column in enumerate(reference_columns)
+                }
+                indices = torch.tensor(
+                    [column_to_index[column] for column in columns],
+                    device=numerical.device,
+                    dtype=torch.int64,
+                )
+                if total is None:
+                    total = torch.zeros_like(partial)
+                if total.dtype == partial.dtype:
+                    total.index_add_(-1, indices, partial)
+                else:
+                    total.add_(partial.index_select(-1, indices.argsort()))
+            del partial
 
         assert total is not None
         output = reference.replace_blocks(
-            numerical=total / ensemble_table.num_members
+            numerical=total.div_(ensemble_table.num_members)
         )
         return EnsembleTable.from_table(output, num_members=1)
 

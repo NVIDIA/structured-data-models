@@ -114,3 +114,76 @@ def test_clip_quantiles_fits_leading_batches_independently(
             device=device,
         ),
     )
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_clip_quantiles_default_matches_quantile_with_nonfinite_values(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    context = torch.tensor(
+        [
+            [
+                [-3.0, 1.0, 4.0, 2.0],
+                [-torch.inf, 1.0, 2.0, 3.0],
+                [1.0, 2.0, torch.inf, 3.0],
+                [1.0, torch.nan, 2.0, 3.0],
+            ],
+            [
+                [-0.0, 0.0, -0.0, 0.0],
+                [torch.inf, torch.inf, torch.inf, torch.inf],
+                [-torch.inf, -torch.inf, -torch.inf, -torch.inf],
+                [torch.nan, torch.nan, torch.nan, torch.nan],
+            ],
+        ],
+        device=device,
+        dtype=dtype,
+    ).transpose(-2, -1)
+    original = context.clone()
+    bounds = torch.quantile(
+        context,
+        context.new_tensor([0.0, 1.0]),
+        dim=-2,
+        keepdim=True,
+    )
+
+    processor = ClipQuantiles().fit(TableTensor.from_tensor(context))
+    transformed = processor.transform(
+        TableTensor.from_tensor(context)
+    ).numerical
+
+    torch.testing.assert_close(
+        processor.lower_bound, bounds[0], equal_nan=True
+    )
+    torch.testing.assert_close(
+        processor.upper_bound, bounds[1], equal_nan=True
+    )
+    torch.testing.assert_close(
+        transformed,
+        context.clamp(min=bounds[0], max=bounds[1]),
+        equal_nan=True,
+    )
+    torch.testing.assert_close(context, original, equal_nan=True)
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.int64])
+def test_clip_quantiles_default_rejects_unsupported_dtypes(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    context = torch.ones((3, 2), device=device, dtype=dtype)
+
+    with pytest.raises(RuntimeError, match="float or double"):
+        ClipQuantiles().fit(TableTensor(numerical=context))
+
+
+@withCUDA
+def test_clip_quantiles_default_rejects_empty_rows(
+    device: torch.device,
+) -> None:
+    context = torch.empty((0, 2), device=device)
+
+    with pytest.raises(RuntimeError, match="non-empty"):
+        ClipQuantiles().fit(TableTensor.from_tensor(context))

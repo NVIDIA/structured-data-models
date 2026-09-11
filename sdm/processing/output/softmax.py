@@ -30,10 +30,14 @@ class Softmax(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Return ``softmax(table / temperature)`` over the last dimension."""
-        numerical = torch.softmax(
-            table.numerical / self.temperature,
-            dim=-1,
-        )
+        if self.temperature == 1.0 and table.numerical.is_floating_point():
+            numerical = table.numerical.softmax(dim=-1)
+        else:
+            numerical = table.numerical / self.temperature
+            if torch.is_autocast_enabled(numerical.device.type):
+                numerical = numerical.softmax(dim=-1)
+            else:
+                torch.softmax(numerical, dim=-1, out=numerical)
         return table.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:

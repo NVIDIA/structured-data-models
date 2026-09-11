@@ -25,25 +25,24 @@ class ToNumerical(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Return ``table`` with categorical columns moved to ``numerical``."""
-        # Already numerical-only: nothing to move.
-        if all(
-            stype == Stype.numerical or block.size(-1) == 0
-            for stype, block in table.items()
-        ):
+        if table.categorical.size(-1) == 0:
             return table
 
-        # Casting to the (floating-point) numerical dtype also unwraps a
-        # CategoricalTensor to its raw ordinal ids as a plain tensor.
-        categorical = table.categorical.to(table.numerical.dtype)
         columns = (
             *table.columns[Stype.numerical],
             *table.columns[Stype.categorical],
         )
-        numerical = (
-            categorical
-            if table.numerical.size(-1) == 0
-            else torch.cat((table.numerical, categorical), dim=-1)
-        )
+        if table.numerical.size(-1) == 0:
+            numerical = table.categorical.to(table.numerical.dtype)
+        else:
+            numerical = table.numerical.new_empty(
+                (*table.numerical.shape[:-1], len(columns))
+            )
+            width = table.numerical.size(-1)
+            numerical[..., :width].copy_(table.numerical)
+            # Copying casts directly into the output, without a full-sized
+            # floating-point copy of the categorical codes before joining.
+            numerical[..., width:].copy_(table.categorical.code)
         out = table.__class__(
             columns={Stype.numerical: columns},
             numerical=numerical,

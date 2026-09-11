@@ -64,29 +64,29 @@ class Standardize(Processor, InvertibleMixin):
                     correction=0,
                     keepdim=True,
                 )
-                scale = var.sqrt()
                 if self.epsilon == 0:
-                    scale[
-                        _constant_feature_mask(
-                            var,
-                            data_mean,
-                            numerical.size(-2),
-                        )
-                    ] = 1.0
+                    constant = _constant_feature_mask(
+                        var,
+                        data_mean,
+                        numerical.size(-2),
+                    )
+                    scale = var.sqrt_().masked_fill_(constant, 1.0)
+                else:
+                    scale = var.sqrt_()
             else:
                 if self.epsilon == 0:
                     scale = torch.ones_like(data_mean)
                 else:
                     scale = torch.zeros_like(data_mean)
-            self.scale = scale + self.epsilon
+            self.scale = scale.add_(self.epsilon)
         else:
             self.scale = torch.ones_like(data_mean)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` using the fitted mean and scale."""
-        numerical = (table.numerical - self.mean) / self.scale
+        numerical = (table.numerical - self.mean).div_(self.scale)
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical * self.scale + self.mean
+        numerical = (table.numerical * self.scale).add_(self.mean)
         return table.replace_blocks(numerical=numerical)

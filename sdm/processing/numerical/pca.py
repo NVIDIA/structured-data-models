@@ -28,7 +28,9 @@ class PCA(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        self._fit_components(table)
 
+    def _fit_components(self, table: TableTensor) -> torch.Tensor:
         if table.numerical.size(-1) == 0:
             raise ValueError(
                 f"{self.__class__.__name__!r} requires 'table' to have "
@@ -36,8 +38,9 @@ class PCA(Processor):
             )
 
         self.mean = table.numerical.mean(dim=-2, keepdim=True)
+        centered = table.numerical - self.mean
         _, _, vh = torch.linalg.svd(
-            table.numerical - self.mean,
+            centered,
             full_matrices=False,
         )
         num_components = min(
@@ -46,9 +49,26 @@ class PCA(Processor):
             table.numerical.size(-1),
         )
         self.components = vh[..., :num_components, :].transpose(-2, -1)
+        if num_components < vh.size(-2):
+            # Retain only the selected components, not the full SVD storage.
+            self.components = self.components.clone()
+        return centered
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        return self._project(table, self._fit_components(table))
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        x = (table.numerical - self.mean) @ self.components
+        return self._project(table, table.numerical - self.mean)
+
+    def _project(
+        self, table: TableTensor, centered: torch.Tensor
+    ) -> TableTensor:
+        x = centered @ self.components
         out = TableTensor(
             columns={Stype.numerical: [f"pca_{i}" for i in range(x.size(-1))]},
             numerical=x,

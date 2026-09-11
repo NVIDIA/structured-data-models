@@ -3,7 +3,7 @@ import torch
 
 from sdm import EnsembleTable, StringTensor, Stype, TableTensor
 from sdm.processing import TFIDF
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_preserves_leading_dimensions() -> None:
@@ -341,3 +341,80 @@ def test_tfidf_failed_refit_preserves_ensemble_state(
     output = processor.transform_ensemble(ensemble_table)
     for member_id in range(ensemble_table.num_members):
         assert output.table(member_id).equal(expected.table(member_id))
+
+
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.float32, torch.float64]
+)
+@pytest.mark.parametrize("idf_dtype", [torch.float32, torch.float64])
+@withCUDA
+def test_mixed_columns_preserve_values_and_promote_dtype(
+    dtype: torch.dtype,
+    idf_dtype: torch.dtype,
+    device: torch.device,
+) -> None:
+    if device.type == "cuda":
+        pytest.importorskip("cudf")
+    text = StringTensor.from_list(
+        [
+            [["ab ab", ""], ["ac", None]],
+            [["unseen", ""], ["ab ac", ""]],
+        ],
+        device=device,
+    )
+    numerical = torch.arange(16, dtype=dtype, device=device).reshape(2, 4, 2)
+    table = TableTensor(
+        columns={"numerical": ("a", "b"), "text": ("words", "empty")},
+        numerical=numerical[:, ::2],
+        datetime=torch.arange(4, device=device).reshape(2, 2, 1),
+        text=text,
+    )
+    context = TableTensor.from_tensor(
+        StringTensor.from_list([["ab ac", ""]], device=device)
+    )
+    processor = TFIDF(ngram_range=(2, 3)).fit(context).to(dtype=idf_dtype)
+    original = table.clone()
+    state = {name: value.clone() for name, value in processor.named_buffers()}
+    encoded = processor.transform(table.select_stypes(Stype.text))
+
+    output = processor.transform(table)
+    repeated = processor.transform(table)
+    expected = torch.cat((table.numerical, encoded.numerical), dim=-1)
+
+    torch.testing.assert_close(output.numerical, expected, rtol=0, atol=0)
+    assert output.columns[Stype.numerical] == (
+        "a",
+        "b",
+        *encoded.columns[Stype.numerical],
+    )
+    assert output.datetime.equal(table.datetime)
+    assert output.text.size(-1) == 0
+    assert output.equal(repeated)
+    assert table.equal(original)
+    for name, value in processor.named_buffers():
+        assert value.equal(state[name])
+
+
+def test_empty_vocabulary_preserves_fitted_dtype() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([[""]]))
+    processor = TFIDF(ngram_range=(2, 2)).fit(table).double()
+
+    output = processor.transform(table)
+
+    assert output.numerical.dtype == torch.float64
+    assert output.numerical.shape == (1, 0)
+
+
+def test_empty_vocabulary_with_non_numerical_columns() -> None:
+    table = TableTensor(
+        numerical=torch.empty(1, 0, dtype=torch.float64),
+        datetime=torch.zeros(1, 1, dtype=torch.int64),
+        text=StringTensor.from_list([[""]]),
+    )
+    processor = TFIDF(ngram_range=(2, 2)).fit(table).double()
+
+    output = processor.transform(table)
+
+    assert output.numerical.dtype == torch.get_default_dtype()
+    assert output.numerical.shape == (1, 0)
+    assert output.datetime.equal(table.datetime)

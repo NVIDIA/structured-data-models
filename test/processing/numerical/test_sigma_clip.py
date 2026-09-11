@@ -114,3 +114,43 @@ def test_clip_sigma_fits_leading_batches_independently(
             device=device,
         ),
     )
+
+
+@withCUDA
+@pytest.mark.parametrize("threshold", [0.1, 1.5])
+def test_clip_sigma_matches_masked_fit_on_noncontiguous_data(
+    device: torch.device,
+    threshold: float,
+) -> None:
+    data = (
+        torch.tensor(
+            [[-100.0, 2.0], [-1.0, 2.0], [1.0, 2.0], [100.0, 2.0]],
+            dtype=torch.float64,
+            device=device,
+        )
+        .T.contiguous()
+        .T
+    )
+    original = data.clone()
+    mean = data.mean(dim=-2, keepdim=True)
+    std = data.std(dim=-2, keepdim=True).clamp_min(1e-6)
+    keep = (data >= mean - threshold * std) & (data <= mean + threshold * std)
+    count = keep.sum(dim=-2, keepdim=True)
+    clean_mean = torch.where(keep, data, 0.0).sum(
+        dim=-2, keepdim=True
+    ) / count.clamp_min(1)
+    centered = (data - clean_mean).masked_fill(~keep, 0.0)
+    clean_std = (
+        centered.square().sum(dim=-2, keepdim=True)
+        / (count - (count > 1).to(count.dtype)).clamp_min(1)
+    ).sqrt()
+    mean = torch.where(count > 0, clean_mean, mean)
+    std = torch.where(count > 0, clean_std, std).clamp_min(1e-6)
+
+    processor = ClipSigma(threshold=threshold).fit(
+        TableTensor.from_tensor(data)
+    )
+
+    torch.testing.assert_close(processor.lower_bound, mean - threshold * std)
+    torch.testing.assert_close(processor.upper_bound, mean + threshold * std)
+    torch.testing.assert_close(data, original)

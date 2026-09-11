@@ -58,13 +58,62 @@ class RandomProjection(EnsembleProcessor):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         groups = []
-        for i in range(ensemble_table.num_groups):
-            group = ensemble_table.expanded_group(i)
+        for i, group in enumerate(ensemble_table):
+            positions = tuple(
+                position
+                for group_id, position in ensemble_table._locations
+                if group_id == i
+            )
+            if (
+                (
+                    (
+                        group.size(0) > 1
+                        and positions != tuple(range(group.size(0)))
+                    )
+                    or (
+                        group.size(0) == 1
+                        and len(positions) > 1
+                        and any(size > 1 for size in group.size()[1:-2])
+                    )
+                )
+                and self._weights[i].shape[:-2]
+                == (len(positions), *group.numerical.shape[1:-2])
+                and not torch.is_autocast_enabled(group.device.type)
+            ):
+                numerical = group.numerical.new_empty(
+                    (
+                        len(positions),
+                        *group.numerical.shape[1:-1],
+                        self.channels,
+                    )
+                )
+                # Write projections directly instead of gathering a full copy
+                # of each input member or flattening expanded batch dimensions.
+                for member, position in enumerate(positions):
+                    torch.matmul(
+                        group.numerical[position],
+                        self._weights[i][member].transpose(-1, -2),
+                        out=numerical[member],
+                    )
+                group = group.drop_stypes(Stype.numerical)
+                if group.size(0) == 1:
+                    group = cast(
+                        TableTensor,
+                        group.expand(len(positions), *group.size()[1:]),
+                    )
+                else:
+                    index = torch.tensor(positions, device=group.device)
+                    group = cast(TableTensor, group.index_select(0, index))
+            else:
+                group = ensemble_table.expanded_group(i)
+                numerical = group.numerical @ self._weights[i].transpose(
+                    -1, -2
+                )
             projected = TableTensor(
                 columns={
                     Stype.numerical: [f"rp_{i}" for i in range(self.channels)]
                 },
-                numerical=group.numerical @ self._weights[i].transpose(-1, -2),
+                numerical=numerical,
             )
             group = cast(
                 TableTensor,

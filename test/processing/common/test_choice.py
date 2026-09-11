@@ -10,6 +10,7 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
 )
+from sdm.testing import withCUDA
 
 
 class Add(Processor, InvertibleMixin):
@@ -248,3 +249,38 @@ def test_choice_ensemble_requires_matching_member_count() -> None:
         processor.transform_ensemble(
             EnsembleTable.from_table(_table(), num_members=7)
         )
+
+
+@withCUDA
+def test_choice_preserves_repeated_members_across_groups(
+    device: torch.device,
+) -> None:
+    sources = [
+        TableTensor.from_tensor(
+            tensor=torch.full((3, 2), float(i), device=device),
+            columns=("a", "b") if i < 4 else ("c", "d"),
+        )
+        for i in range(8)
+    ]
+    member_ids = (0, 4, 1, 5, 2, 6, 3, 7, 0, 5, 2, 6)
+    ensemble = EnsembleTable.from_tables(
+        tables=sources,
+        member_table_ids=member_ids,
+    )
+    processor = sp.Choice(Add(1), Add(10), Add(100), method="round_robin")
+
+    transformed = processor.fit_transform_ensemble(ensemble)
+    repeated = processor.transform_ensemble(ensemble)
+    restored = processor.inverse_transform_ensemble(transformed)
+
+    for member_id, source_id in enumerate(member_ids):
+        source = sources[source_id]
+        output = transformed.table(member_id)
+        assert output.columns == source.columns
+        torch.testing.assert_close(
+            output.numerical,
+            source.numerical + (1, 10, 100)[member_id % 3],
+        )
+        assert repeated.table(member_id).equal(output)
+        assert restored.table(member_id).equal(source)
+        assert ensemble.table(member_id).equal(source)

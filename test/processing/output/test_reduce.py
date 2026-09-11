@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pytest
 import torch
 
@@ -145,3 +147,198 @@ def test_reduce_estimators_composes_with_following_processor(
         output.table(0).numerical,
         torch.full((1, 2), 0.5, device=device),
     )
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("batch_shape", [(), (2, 3)])
+@pytest.mark.parametrize("layout", ["contiguous", "strided", "expanded"])
+def test_reduce_estimators_preserves_strided_batched_inputs(
+    device: torch.device,
+    dtype: torch.dtype,
+    batch_shape: tuple[int, ...],
+    layout: Literal["contiguous", "strided", "expanded"],
+) -> None:
+    values = torch.randn(4, *batch_shape, 6, 3, device=device, dtype=dtype)
+    if layout == "strided":
+        values = values.transpose(-1, -2)
+    elif layout == "expanded":
+        values = values[:1].expand_as(values)
+    before = values.clone()
+    ensemble = EnsembleTable(
+        groups=(
+            TableTensor(numerical=values[:2]),
+            TableTensor(numerical=values[2:]),
+        ),
+        locations=((0, 1), (1, 0), (0, 1), (0, 0), (1, 1)),
+    )
+    expected = torch.stack(
+        [ensemble.table(i).numerical for i in range(ensemble.num_members)]
+    ).mean(dim=0)
+    processor = sp.ReduceEstimators()
+
+    actual = processor.transform_ensemble(ensemble)
+    repeated = processor.transform_ensemble(ensemble)
+
+    torch.testing.assert_close(actual.table(0).numerical, expected)
+    torch.testing.assert_close(
+        repeated.table(0).numerical, actual.table(0).numerical
+    )
+    torch.testing.assert_close(values, before)
+
+
+@withCUDA
+@pytest.mark.parametrize("strided", [False, True])
+def test_reduce_estimators_aligns_first_stored_group_to_first_member(
+    device: torch.device,
+    strided: bool,
+) -> None:
+    first = torch.randn(2, 3, 10, 3, device=device)
+    second = torch.randn(2, 3, 10, 3, device=device)
+    if strided:
+        first, second = first[..., ::2, :], second[..., ::2, :]
+    ensemble = EnsembleTable(
+        groups=(
+            TableTensor.from_tensor(first, columns=("c", "a", "b")),
+            TableTensor.from_tensor(second, columns=("a", "b", "c")),
+        ),
+        locations=((1, 0), (0, 1), (0, 0), (1, 0)),
+    )
+    expected = second[0] * 2 + first[1][..., [1, 2, 0]]
+    expected = (expected + first[0][..., [1, 2, 0]]) / 4
+
+    actual = sp.ReduceEstimators().transform_ensemble(ensemble).table(0)
+
+    assert actual.columns == ensemble.table(0).columns
+    torch.testing.assert_close(actual.numerical, expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("reordered", [False, True])
+def test_reduce_estimators_preserves_mixed_group_dtype_arithmetic(
+    device: torch.device,
+    reordered: bool,
+) -> None:
+    first = torch.tensor([[[1.0, 2.0]]], device=device)
+    second = torch.tensor(
+        [[[-1.0 + 1e-9, -2.0 + 1e-9]]],
+        dtype=torch.float64,
+        device=device,
+    )
+    if reordered:
+        second = second.flip(-1)
+    ensemble = EnsembleTable(
+        groups=(
+            TableTensor.from_tensor(first, columns=("a", "b")),
+            TableTensor.from_tensor(
+                second, columns=("b", "a") if reordered else ("a", "b")
+            ),
+        ),
+        locations=((0, 0), (1, 0)),
+    )
+    expected = first[0].clone()
+    expected.add_(second[0].flip(-1) if reordered else second[0]).div_(2)
+
+    actual = sp.ReduceEstimators().transform_ensemble(ensemble).table(0)
+
+    assert actual.numerical.dtype == torch.float32
+    torch.testing.assert_close(actual.numerical, expected, rtol=1e-5, atol=0)
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    ("dtype", "large"), [(torch.float16, 2048), (torch.bfloat16, 256)]
+)
+@pytest.mark.parametrize("strided", [False, True])
+def test_reduce_estimators_preserves_low_precision_group_accumulation(
+    device: torch.device,
+    dtype: torch.dtype,
+    large: int,
+    strided: bool,
+) -> None:
+    first = torch.full((1, 2, 2), -large, device=device, dtype=dtype)
+    second = (
+        torch.tensor([1.0, float(large)], device=device, dtype=dtype)
+        .view(2, 1, 1)
+        .expand(2, 2, 2)
+    )
+    if not strided:
+        second = second.contiguous()
+    ensemble = EnsembleTable(
+        groups=(TableTensor(numerical=first), TableTensor(numerical=second)),
+        locations=((0, 0), (1, 0), (1, 1)),
+    )
+    expected = torch.tensordot(first.new_ones(1), first, dims=([0], [0]))
+    expected.add_(
+        torch.tensordot(second.new_ones(2), second, dims=([0], [0]))
+    ).div_(3)
+
+    actual = sp.ReduceEstimators().transform_ensemble(ensemble).table(0)
+
+    torch.testing.assert_close(actual.numerical, expected, rtol=0, atol=0)
+
+
+@withCUDA
+@pytest.mark.parametrize("strided", [False, True])
+def test_reduce_estimators_preserves_unused_nonfinite_members(
+    device: torch.device,
+    strided: bool,
+) -> None:
+    values = torch.tensor(
+        [
+            [[1.0, 2.0, 3.0, 4.0]],
+            [[float("nan"), float("inf"), -float("inf"), 5.0]],
+        ],
+        device=device,
+    ).expand(2, 3, 4)
+    if not strided:
+        values = values.contiguous()
+    ensemble = EnsembleTable(
+        groups=(TableTensor(numerical=values),), locations=((0, 0),)
+    )
+    # Zero-weight nonfinite values propagate through the existing contraction.
+    expected = torch.tensordot(
+        values.new_tensor([1, 0]), values, dims=([0], [0])
+    )
+
+    actual = sp.ReduceEstimators().transform_ensemble(ensemble).table(0)
+
+    torch.testing.assert_close(actual.numerical, expected, equal_nan=True)
+
+
+@withCUDA
+def test_reduce_estimators_preserves_empty_rows(device: torch.device) -> None:
+    ensemble = EnsembleTable(
+        groups=(
+            TableTensor(numerical=torch.empty(2, 0, 3, device=device)),
+            TableTensor(numerical=torch.empty(1, 0, 3, device=device)),
+        ),
+        locations=((0, 0), (1, 0), (0, 1)),
+    )
+
+    actual = sp.ReduceEstimators().transform_ensemble(ensemble).table(0)
+
+    assert actual.numerical.shape == (0, 3)
+    assert actual.columns == ensemble.table(0).columns
+
+
+@withCUDA
+def test_reduce_estimators_preserves_autocast_reduction(
+    device: torch.device,
+) -> None:
+    first = torch.randn(2, 3, 8, device=device).transpose(-1, -2)
+    second = torch.randn(1, 8, 3, device=device)
+    ensemble = EnsembleTable(
+        groups=(TableTensor(numerical=first), TableTensor(numerical=second)),
+        locations=((0, 0), (1, 0), (0, 1), (0, 1)),
+    )
+    with torch.autocast(device.type, dtype=torch.bfloat16):
+        expected = torch.tensordot(
+            first.new_tensor([1, 2]), first, dims=([0], [0])
+        )
+        expected.add_(
+            torch.tensordot(second.new_ones(1), second, dims=([0], [0]))
+        ).div_(4)
+        actual = sp.ReduceEstimators().transform_ensemble(ensemble).table(0)
+
+    torch.testing.assert_close(actual.numerical, expected)

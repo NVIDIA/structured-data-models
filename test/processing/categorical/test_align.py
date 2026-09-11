@@ -9,6 +9,44 @@ from sdm.processing import AlignCategories
 from sdm.testing import withCUDA
 
 
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+def test_align_categories_preserves_expanded_input_and_fitted_state(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    context = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[2, -1], [0, -1]], dtype=dtype, device=device),
+            categories=(
+                torch.tensor([9, 4, 7], device=device),
+                torch.empty(0, device=device),
+            ),
+        )
+    )
+    values = torch.tensor([[0, -9]], dtype=dtype, device=device).expand(7, 2)
+    query = TableTensor(
+        categorical=CategoricalTensor(
+            code=values,
+            categories=(
+                torch.tensor([7, 9], device=device),
+                torch.empty(0, device=device),
+            ),
+        )
+    )
+    processor = AlignCategories().fit(context)
+
+    first = processor.transform(query)
+    second = processor.transform(query)
+
+    assert first.equal(second)
+    assert first.categorical.code.dtype == dtype
+    assert first.categorical.code.tolist() == [[1, -1]] * 7
+    first.categorical.code.fill_(-1)
+    assert values.tolist() == [[0, -9]] * 7
+    assert processor.transform(query).equal(second)
+
+
 def _table(
     values: list[list[int]],
     *,
@@ -501,3 +539,47 @@ def test_align_categories_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output.table(member_id).equal(expected_query)
         assert fitted_query_output.table(member_id).equal(expected_query)
+
+
+@withCUDA
+@pytest.mark.parametrize("sort_by", ["code", "frequency"])
+def test_align_categories_preserves_batched_member_assignments(
+    device: torch.device,
+    sort_by: Literal["code", "frequency"],
+) -> None:
+    categories = (torch.arange(3, device=device),)
+    context_tables = tuple(
+        TableTensor(
+            categorical=CategoricalTensor(
+                code=torch.tensor(values, dtype=torch.int32, device=device),
+                categories=categories,
+            )
+        )
+        for values in ([[0], [1], [2], [0]], [[2], [2], [1], [0]])
+    )
+    query_tables = tuple(table[:2] for table in context_tables)
+    member_ids = (1, 0, 1, 0)
+    context = EnsembleTable.from_tables(
+        tables=context_tables, member_table_ids=member_ids
+    )
+    query = EnsembleTable.from_tables(
+        tables=query_tables, member_table_ids=member_ids
+    )
+    original_codes = tuple(
+        table.categorical.code.clone() for table in context_tables
+    )
+    processor = AlignCategories(sort_by=sort_by)
+
+    fitted_output = processor.fit_transform_ensemble(context)
+    output = processor.transform_ensemble(query)
+
+    for member_id, table_id in enumerate(member_ids):
+        reference = AlignCategories(sort_by=sort_by)
+        expected_fit = reference.fit_transform(context_tables[table_id])
+        expected_query = reference.transform(query_tables[table_id])
+        assert fitted_output.table(member_id).equal(expected_fit)
+        assert output.table(member_id).equal(expected_query)
+        assert torch.equal(
+            context_tables[table_id].categorical.code,
+            original_codes[table_id],
+        )

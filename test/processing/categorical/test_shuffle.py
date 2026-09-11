@@ -198,3 +198,45 @@ def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
     )
 
     assert output.equal(expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_categories_preserves_strided_input_and_missing_codes(
+    device: torch.device,
+    dtype: torch.dtype,
+    method: Literal["shift", "random"],
+) -> None:
+    values = torch.tensor(
+        [[0, -7, 1], [2, -1, -3], [-2, -9, 0]],
+        dtype=dtype,
+        device=device,
+    ).t()
+    values = values.contiguous().t()
+    categories = (
+        torch.arange(3, device=device),
+        torch.empty(0, device=device),
+        torch.arange(2, device=device),
+    )
+    table = TableTensor(
+        categorical=CategoricalTensor(code=values, categories=categories)
+    )
+    original = values.clone()
+    processor = ShuffleCategories(method=method).fit(table)
+
+    first = processor.transform(table)
+    second = processor.transform(table)
+
+    assert torch.equal(values, original)
+    assert first.equal(second)
+    assert first.categorical.code.dtype == dtype
+    missing = original < 0
+    assert torch.equal(first.categorical.code[missing], original[missing])
+    assert (
+        first.categorical[..., [0, 2]].tolist()
+        == table.categorical[..., [0, 2]].tolist()
+    )
+    first.categorical.code.fill_(-1)
+    assert torch.equal(values, original)
+    assert processor.transform(table).equal(second)

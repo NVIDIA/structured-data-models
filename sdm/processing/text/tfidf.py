@@ -208,6 +208,7 @@ class TFIDF(EnsembleProcessor):
                 }
             ).explode("gram")
             parts.append(long.dropna(subset=["gram"]))
+            del long, grams, padded_eligable
 
         # word shorter than min_n: count it once
         short = pad_len < min_n
@@ -215,17 +216,21 @@ class TFIDF(EnsembleProcessor):
             cudf.DataFrame({"doc": doc_index[short], "gram": padded[short]})
         )
 
-        flat = cudf.concat(parts, ignore_index=True).sort_values("doc")
+        flat = cudf.concat(parts, ignore_index=True)
+        del parts, padded, flat_words, words, s, doc_index, pad_len
+        del keep, short, eligible
+        flat = flat.sort_values("doc")
 
         counts = (
             flat.groupby("doc").size().reindex(range(n_docs), fill_value=0)
         )
-        offset = torch.zeros(
+        offset = torch.empty(
             n_docs + 1,
             dtype=torch.int64,
             device=tensor.device,
         )
-        offset[1:] = from_dlpack(counts.cumsum().astype("int64").to_dlpack())
+        offset[0] = 0
+        torch.cumsum(from_dlpack(counts.to_dlpack()), dim=0, out=offset[1:])
 
         ngrams = tensor.from_cudf(
             flat["gram"].reset_index(drop=True), device=tensor.device
@@ -265,35 +270,44 @@ class TFIDF(EnsembleProcessor):
                 )
                 codes = torch.from_dlpack(
                     encoded.cat.codes.astype("int64").to_dlpack()
-                ).to(device)
+                )
+                del values, encoded
             else:
                 encoded = flat.to_arrow().dictionary_encode()
                 vocabulary = encoded.dictionary
                 codes = arrow_as_tensor(
                     encoded.indices, dtype=torch.int64, device=device
                 )  # [n_ngrams]
+                del encoded
+            del flat
             vocab_size = len(vocabulary)
-            # Map each n-gram back to its document via the offsets.
-            doc_ids = torch.repeat_interleave(
-                torch.arange(n_docs, device=device),
-                offsets.diff(),
-            )  # [n_ngrams]
 
             # Smoothed idf per n-gram from its document frequency: count each
             # n-gram once per document, then apply sklearn's smoothing.
             if vocab_size == 0:
                 idf = torch.empty(0, device=device)
             else:
+                # Map n-grams to documents without synchronizing CUDA to
+                # discover the already known number of repeated entries.
+                doc_ids = torch.repeat_interleave(
+                    torch.arange(n_docs, device=device),
+                    offsets.diff(),
+                    output_size=codes.numel(),
+                )  # [n_ngrams]
                 unique_codes = (
-                    doc_ids * vocab_size + codes
-                ).unique() % vocab_size
+                    doc_ids.mul_(vocab_size)
+                    .add_(codes)
+                    .unique()
+                    .remainder_(vocab_size)
+                )
+                del doc_ids
                 document_freq = torch.bincount(
                     unique_codes, minlength=vocab_size
                 )
-                idf = ((1 + n_docs) / (1 + document_freq)).log() + 1.0
-            term_counts = torch.bincount(
-                codes, minlength=vocab_size
-            )  # [vocab_size]
+                del unique_codes
+                idf = ((1 + n_docs) / document_freq.add_(1)).log_().add_(1.0)
+                del document_freq
+            del offsets
 
             # Keep the max_features n-grams with the highest term frequency,
             # matching scikit-learn: rank by corpus occurrence, break ties by
@@ -302,10 +316,15 @@ class TFIDF(EnsembleProcessor):
                 self.max_features is not None
                 and len(vocabulary) > self.max_features
             ):
+                term_counts = torch.bincount(
+                    codes, minlength=vocab_size
+                )  # [vocab_size]
                 ranked = term_counts.argsort(descending=True, stable=True)
                 keep = ranked[: self.max_features].sort().values
                 vocabulary = vocabulary.take(pa.array(keep.tolist()))
                 idf = idf[keep]
+                del term_counts, ranked, keep
+            del codes
             vocabularies.append(vocabulary)
             idfs.append(idf)
 
@@ -392,13 +411,29 @@ class TFIDF(EnsembleProcessor):
         n_rows = math.prod(leading_shape)
 
         vocab_sizes = [len(vocabulary) for vocabulary in state.vocabularies]
-        column_offsets = [0, *accumulate(vocab_sizes)]
+        remainder = table.drop_stypes(Stype.text)
+        numerical_width = table.numerical.size(-1)
+        column_offsets = list(accumulate(vocab_sizes, initial=numerical_width))
         total_width = column_offsets[-1]
-        numerical = torch.zeros(
+        if total_width == numerical_width and numerical_width:
+            return remainder
+        output_dtype = (
+            torch.promote_types(dtype, table.numerical.dtype)
+            if numerical_width
+            else dtype
+        )
+        if total_width == 0 and remainder.size(-1) > 0:
+            # Empty numerical blocks do not participate in concatenation's
+            # dtype promotion.
+            output_dtype = torch.get_default_dtype()
+        numerical = torch.empty(
             (*leading_shape, total_width),
-            dtype=dtype,
+            dtype=output_dtype,
             device=device,
         )
+        numerical[..., :numerical_width].copy_(table.numerical)
+        if output_dtype == dtype:
+            numerical[..., numerical_width:].zero_()
         flat_numerical = numerical.view(n_rows, total_width)
         names: list[str] = []
         for column in range(table.text.size(-1)):
@@ -411,6 +446,20 @@ class TFIDF(EnsembleProcessor):
             ]
 
             if vocab_size > 0:
+                # Normalize in the fitted dtype before any promotion caused
+                # by existing numerical columns, matching concatenation.
+                if output_dtype == dtype:
+                    values = column_slice
+                    flat_values = flat_numerical.view(-1)
+                    row_stride = total_width
+                    start = column_start
+                else:
+                    values = torch.zeros(
+                        (n_rows, vocab_size), dtype=dtype, device=device
+                    )
+                    flat_values = values.view(-1)
+                    row_stride = vocab_size
+                    start = 0
                 column_text = cast(
                     StringTensor,
                     table.text[..., column].reshape(-1),
@@ -429,9 +478,8 @@ class TFIDF(EnsembleProcessor):
                         .astype(cudf.CategoricalDtype(categories=vocabulary))
                         .cat.codes
                     )
-                    codes = torch.from_dlpack(
-                        encoded.astype("int64").to_cupy(na_value=-1)
-                    ).to(device)
+                    codes = torch.from_dlpack(encoded.to_cupy(na_value=-1))
+                    del encoded
                 else:
                     codes = arrow_as_tensor(
                         pc.call_function(
@@ -439,36 +487,51 @@ class TFIDF(EnsembleProcessor):
                             [flat.to_arrow()],
                             options=pc.SetLookupOptions(value_set=vocabulary),
                         ).fill_null(-1),
-                        dtype=torch.int64,
                         device=device,
                     )  # [n_ngrams]
+                del flat
                 doc_ids = torch.repeat_interleave(
                     torch.arange(n_rows, device=device),
                     offsets.diff(),
+                    output_size=codes.numel(),
                 )  # [n_ngrams]
-                mask = (codes >= 0) & (codes < vocab_size)
-                flat_index = doc_ids[mask] * vocab_size + codes[mask]
-                counts = column_slice.new_zeros(n_rows, vocab_size)
-                counts.view(-1).scatter_add_(
+                del offsets
+                mask = codes < 0
+                doc_ids.mul_(row_stride).add_(codes).add_(mask).add_(start)
+                del codes
+                # Unknown code -1 contributes zero to its document's first
+                # feature, avoiding contention on a shared destination.
+                # Keeping fixed-size indices avoids CUDA's dynamic boolean
+                # indexing allocation and host synchronization.
+                flat_values.scatter_add_(
                     0,
-                    flat_index,
-                    torch.ones_like(flat_index, dtype=dtype),
+                    doc_ids,
+                    mask.logical_not_().to(dtype),
                 )
-                counts.mul_(idf)
-                norm = counts.norm(dim=1, keepdim=True).clamp_min_(1e-12)
-                column_slice.copy_(counts.div_(norm))
+                del doc_ids, mask
+                values.mul_(idf)
+                norm = values.norm(dim=1, keepdim=True).clamp_min_(1e-12)
+                values.div_(norm)
+                if output_dtype != dtype:
+                    column_slice.copy_(values)
+                del values, flat_values, norm
             names.extend(
                 f"{text_names[column]}_{i}" for i in range(vocab_size)
             )
 
-        out = table.__class__(
-            columns={Stype.numerical: tuple(names)},
+        return table.__class__(
+            columns={
+                **remainder.columns,
+                Stype.numerical: (
+                    *table.columns[Stype.numerical],
+                    *names,
+                ),
+            },
             numerical=numerical,
+            categorical=remainder.categorical,
+            datetime=remainder.datetime,
+            id=remainder.id,
         )
-        remainder = table.drop_stypes(Stype.text)
-        if remainder.size(-1) == 0:
-            return out
-        return cast(TableTensor, torch.cat((remainder, out), dim=-1))
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (

@@ -164,3 +164,48 @@ def test_impute_mode_composes_before_to_numerical() -> None:
             [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.0, 1.0]],
         ),
     )
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+def test_impute_mode_preserves_expanded_input_and_fitted_state(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    context = _table([[1, 0], [1, 1]], device=device)
+    processor = sp.ImputeMode().fit(context)
+    values = torch.tensor([[-8, 1]], dtype=dtype, device=device).expand(7, 2)
+    query = TableTensor(
+        categorical=CategoricalTensor(
+            code=values,
+            categories=context.categorical.categories,
+        ),
+    )
+
+    first = processor.transform(query)
+    second = processor.transform(query)
+
+    assert first.equal(second)
+    assert first.categorical.code.dtype == dtype
+    assert first.categorical.code.tolist() == [[1, 1]] * 7
+    first.categorical.code.fill_(-1)
+    assert values.tolist() == [[-8, 1]] * 7
+    assert processor.transform(query).equal(second)
+
+
+def test_impute_mode_rejects_out_of_range_code_in_later_batch() -> None:
+    processor = sp.ImputeMode().fit(
+        _table([[[0, 0], [1, 1]], [[1, 1], [2, 0]]])
+    )
+
+    with pytest.raises(ValueError, match=r"cat_1.*outside.*vocabulary"):
+        processor.transform(_table([[[0, 0]], [[-1, 2]]]))
+
+
+def test_impute_mode_accepts_empty_query() -> None:
+    context = _table([[0, 0], [1, 1]])
+    processor = sp.ImputeMode().fit(context)
+
+    output = processor.transform(context[:0])
+
+    assert output.equal(context[:0])

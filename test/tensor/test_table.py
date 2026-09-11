@@ -419,6 +419,60 @@ def test_select_stypes() -> None:
     assert mixed.id.size() == (2, 0)
 
 
+@withCUDA
+@pytest.mark.parametrize("inference", [False, True])
+def test_select_contiguous_columns_shares_storage(
+    device: torch.device, inference: bool
+) -> None:
+    values = torch.arange(32, device=device).view(8, 4)
+    tensor = TableTensor(
+        columns={
+            stype: tuple(f"{stype}_{i}" for i in range(4)) for stype in Stype
+        },
+        numerical=values.float()[::2],
+        categorical=CategoricalTensor(
+            code=values.remainder(4)[::2],
+            categories=tuple(torch.arange(4, device=device) for _ in range(4)),
+        ),
+        datetime=values[::2],
+        text=cast(
+            StringTensor,
+            StringTensor.from_list(
+                [
+                    [f"{row}:{column}" for column in range(4)]
+                    for row in range(8)
+                ],
+                device=device,
+            )[::2],
+        ),
+        id=cast(
+            ColumnarTensor,
+            ColumnarTensor(tuple(values[:, i] for i in range(4)))[::2],
+        ),
+    )
+
+    with torch.inference_mode(inference):
+        out = tensor.select_columns(
+            [f"{stype}_{i}" for stype in reversed(Stype) for i in (2, 1)]
+        )
+
+    for stype, block in tensor.items():
+        assert out.columns[stype] == (f"{stype}_1", f"{stype}_2")
+        assert out.blocks[stype].equal(block[..., 1:3])
+    for selected, original in (
+        (out.numerical, tensor.numerical),
+        (out.categorical.code, tensor.categorical.code),
+        (out.datetime, tensor.datetime),
+        (out.id[..., 0], tensor.id[..., 1]),
+    ):
+        assert (
+            selected.untyped_storage().data_ptr()
+            == original.untyped_storage().data_ptr()
+        )
+    out.numerical.fill_(-1)
+    assert tensor.numerical[..., 1:3].eq(-1).all()
+
+
 def test_drop_stypes() -> None:
     tensor = TableTensor(
         columns={
@@ -962,6 +1016,133 @@ def test_cat_stack_reorder() -> None:
     assert out.numerical.equal(
         torch.stack([tensor1.numerical, tensor2.numerical.flip(1)], dim=0)
     )
+
+
+@withCUDA
+@pytest.mark.parametrize("dim", [0, 1, -2])
+@pytest.mark.parametrize("inference", [False, True])
+@pytest.mark.parametrize(
+    ("dtype1", "dtype2"),
+    [
+        (torch.float32, torch.float32),
+        (torch.int32, torch.int32),
+        (torch.float32, torch.float64),
+    ],
+)
+def test_stack_reorder_preserves_inputs(
+    device: torch.device,
+    dim: int,
+    inference: bool,
+    dtype1: torch.dtype,
+    dtype2: torch.dtype,
+) -> None:
+    values = torch.arange(96, device=device).reshape(2, 8, 6)
+    first = values.to(dtype1)[:, ::2, ::2]
+    second = (values + 100).to(dtype2)[:, ::2, ::2]
+    tensors = [
+        TableTensor(
+            columns={"numerical": columns},
+            numerical=numerical,
+            categorical=CategoricalTensor(
+                code=torch.empty((2, 4, 0), dtype=torch.int64, device=device),
+                categories=(),
+            ),
+        )
+        for columns, numerical in (
+            (("a", "b", "c"), first),
+            (("c", "a", "b"), second),
+        )
+    ]
+    expected = torch.stack([first, second[..., [1, 2, 0]]], dim=dim)
+    originals = [first.clone(), second.clone()]
+
+    with torch.inference_mode(inference):
+        out = cast(
+            TableTensor,
+            torch.stack(cast(list[torch.Tensor], tensors), dim=dim),
+        )
+        assert out.columns == tensors[0].columns
+        torch.testing.assert_close(out.numerical, expected)
+        assert out.categorical.code.dtype == torch.int64
+        out.numerical.fill_(-1)
+
+    for tensor, original in zip(tensors, originals):
+        torch.testing.assert_close(tensor.numerical, original)
+
+
+@pytest.mark.parametrize(
+    "dtype", [torch.float32, torch.bfloat16, torch.float16]
+)
+def test_stack_reorder_autocast(dtype: torch.dtype) -> None:
+    values = torch.arange(12, dtype=dtype).reshape(4, 3)
+    first = TableTensor(
+        columns={"numerical": ("a", "b", "c")}, numerical=values
+    )
+    second = TableTensor(
+        columns={"numerical": ("c", "a", "b")}, numerical=values + 20
+    )
+
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        if dtype == torch.float16:
+            with pytest.raises(RuntimeError, match="Unexpected floating"):
+                torch.stack([first, second])
+        else:
+            out = cast(TableTensor, torch.stack([first, second]))
+            expected = torch.stack([values, second.numerical[..., [1, 2, 0]]])
+            torch.testing.assert_close(out.numerical, expected)
+
+
+def test_stack_reorder_rejects_mismatched_shapes() -> None:
+    first = TableTensor(
+        columns={"numerical": ("a", "b")}, numerical=torch.ones(4, 2)
+    )
+    second = TableTensor(
+        columns={"numerical": ("b", "a")}, numerical=torch.ones(1, 2)
+    )
+
+    with pytest.raises(RuntimeError, match="stack expects each tensor"):
+        torch.stack([first, second])
+
+
+def test_stack_reorder_mixed_columns() -> None:
+    values = torch.arange(12).reshape(4, 3)
+    codes = torch.tensor([[0, 2], [1, 0], [0, 1], [1, 2]])
+    first = TableTensor(
+        columns={
+            "numerical": ("a", "b", "c"),
+            "categorical": ("country", "segment"),
+        },
+        numerical=values.float(),
+        categorical=CategoricalTensor(
+            code=codes,
+            categories=(torch.arange(2), torch.arange(3) + 10),
+        ),
+    )
+    second = TableTensor(
+        columns={
+            "numerical": ("c", "a", "b"),
+            "categorical": ("segment", "country"),
+        },
+        numerical=(values + 20).float(),
+        categorical=CategoricalTensor(
+            code=codes.flip(1),
+            categories=(torch.arange(3) + 10, torch.arange(2)),
+        ),
+    )
+
+    out = cast(TableTensor, torch.stack([first, second]))
+    assert out.columns == first.columns
+    torch.testing.assert_close(
+        out.numerical,
+        torch.stack([first.numerical, second.numerical[:, [1, 2, 0]]]),
+    )
+    torch.testing.assert_close(
+        out.categorical.code, torch.stack([codes, codes])
+    )
+    for actual, expected in zip(
+        out.categorical.categories, first.categorical.categories
+    ):
+        torch.testing.assert_close(actual, expected)
 
 
 def test_pin_memory() -> None:
