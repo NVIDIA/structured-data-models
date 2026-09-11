@@ -41,10 +41,13 @@ The CLI uses full validation. To choose a validation subset, call Python::
     )
     print(source.task.evaluate(predictions))
 
-cache is optional: KumoSystem() encodes text on demand without a persistent
-cache. Set CacheConfig.directory to precompute_text.py's output directory to
-reuse embeddings; missing documents are encoded and cached. PCA remains
-context-fitted. run_system_experiment also accepts the optional cache_dir.
+Set cache_dir to an empty directory to cache newly computed Qwen embeddings
+across tuning, refitting, and test prediction. No precomputation is required.
+Omit it to disable persistent caching. PCA remains fitted separately on each
+training context. Alternatively, point cache_dir at precompute_text.py's output
+directory to reuse existing embeddings; missing documents are encoded and cached.
+run_system_experiment accepts cache_dir; when constructing KumoSystem directly,
+set CacheConfig.directory as shown above.
 
 Omit validation_rows (or pass None) for full validation. This keyword belongs
 to KumoSystem.run; RelArena's run_system_experiment does not forward it.

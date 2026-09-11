@@ -24,10 +24,11 @@ Or call the same official runner from Python::
     )
     print(result.tuned.test_score)
 
-cache_dir is optional. Point it at precompute_text.py's output directory to
-reuse frozen text embeddings; missing documents are encoded and cached. Omit
-it to encode text on demand without a persistent cache. PCA remains fitted
-separately on each training context in both cases.
+Set cache_dir to an empty directory to cache newly computed Qwen embeddings
+across tuning, refitting, and test prediction. No precomputation is required.
+Omit it to disable persistent caching. PCA remains fitted separately on each
+training context. Alternatively, point cache_dir at precompute_text.py's output
+directory to reuse existing embeddings; missing documents are encoded and cached.
 
 rel_arena_search_space.py compares text OFF against context-fitted PCA32, with
 all other parameters fixed across tasks. The system uses the same candidates.
