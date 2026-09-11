@@ -39,23 +39,19 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         self.requires_fit = processor.requires_fit
 
         self._group_processors: ModuleList[Processor] = ModuleList()
-        self._fitted_locations: tuple[tuple[int, int], ...] | None = ()
+        self._fitted_locations: tuple[tuple[int, int], ...] = ()
 
     def get_extra_state(
         self,
-    ) -> tuple[int, tuple[tuple[int, int], ...] | None]:
+    ) -> tuple[int, tuple[tuple[int, int], ...]]:
         r""":meta private:"""  # noqa: D415
         return len(self._group_processors), self._fitted_locations
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        if isinstance(state, int):
-            num_groups = state
-            self._fitted_locations = None
-        else:
-            num_groups, self._fitted_locations = cast(
-                tuple[int, tuple[tuple[int, int], ...] | None], state
-            )
+        num_groups, self._fitted_locations = cast(
+            tuple[int, tuple[tuple[int, int], ...]], state
+        )
         self._group_processors = ModuleList(
             [copy.deepcopy(self.processor) for _ in range(num_groups)]
         )
@@ -107,6 +103,9 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         if self.requires_fit:
+            ensemble_table = ensemble_table._split_groups(
+                self._fitted_locations
+            )
             processors = self._processors_for_groups(ensemble_table)
         else:
             processors = repeat(self.processor, ensemble_table.num_groups)
@@ -124,6 +123,9 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         if self.requires_fit:
+            ensemble_table = ensemble_table._split_groups(
+                self._fitted_locations
+            )
             processors = self._processors_for_groups(ensemble_table)
         else:
             processors = repeat(self.processor, ensemble_table.num_groups)
@@ -142,8 +144,6 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> tuple[Processor, ...]:
-        if self._fitted_locations is None:
-            return tuple(self._group_processors)
         if ensemble_table._locations == self._fitted_locations:
             return tuple(self._group_processors)
 
@@ -155,14 +155,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
             fitted_group_id, fitted_position = self._fitted_locations[
                 member_id
             ]
-            previous_fitted_group_id = fitted_group_by_group.setdefault(
-                group_id, fitted_group_id
-            )
-            if previous_fitted_group_id != fitted_group_id:
-                raise RuntimeError(
-                    "Cannot apply fitted processor state to an ensemble "
-                    "group containing members from different fitted groups"
-                )
+            fitted_group_by_group[group_id] = fitted_group_id
             locations_by_fitted_group.setdefault(fitted_group_id, []).append(
                 (group_id, position, fitted_position)
             )
