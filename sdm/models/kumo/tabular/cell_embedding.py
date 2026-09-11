@@ -117,9 +117,7 @@ class CellEmbedding(TabFMCellEmbedding):
             projected = self.nan_lin(
                 grouped_missing.to(self.nan_lin.weight.dtype)
             ).to(result.dtype)
-            if out is not None:
-                return result.add_(projected)
-            return result + projected
+            return result.add_(projected)
 
         batch_size_limit = self._resolve_batch_size_limit(
             x=x,
