@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from sdm import TableTensor
@@ -42,28 +43,84 @@ def test_standardize_fit_transform_and_inverse_round_trip(
 
     assert torch.allclose(processor.mean, expected_mean)
     assert torch.allclose(processor.scale, expected_scale)
-    transformed = processor.transform(inp).numerical
-    assert torch.allclose(transformed, expected)
+    out = processor.transform(inp).numerical
+    assert torch.allclose(out, expected)
     assert torch.allclose(
-        processor.inverse_transform(
-            TableTensor.from_tensor(transformed)
-        ).numerical,
+        processor.inverse_transform(TableTensor.from_tensor(out)).numerical,
         inp.numerical,
     )
 
 
 @withCUDA
-def test_standardize_without_mean_or_std(device: torch.device) -> None:
-    inp = torch.tensor([[1.0, 2.0], [3.0, 6.0]], device=device)
+@pytest.mark.parametrize("with_mean", [True, False])
+@pytest.mark.parametrize("with_std", [True, False])
+def test_standardize_with_mean_and_std_options(
+    device: torch.device,
+    with_mean: bool,
+    with_std: bool,
+) -> None:
+    inp = torch.tensor(
+        [
+            [1.0, 2.0, float("nan")],
+            [3.0, 6.0, float("inf")],
+            [float("nan"), float("inf"), -float("inf")],
+        ],
+        device=device,
+    )
 
-    processor = Standardize(with_mean=False, with_std=False).fit(
+    processor = Standardize(with_mean=with_mean, with_std=with_std).fit(
         TableTensor.from_tensor(inp)
     )
 
-    assert torch.equal(processor.mean, torch.zeros((1, 2), device=device))
-    assert torch.equal(processor.scale, torch.ones((1, 2), device=device))
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-    assert torch.equal(transformed, inp)
+    if with_mean:
+        expected_mean = torch.tensor([[2.0, 4.0, 0.0]], device=device)
+    else:
+        expected_mean = torch.tensor([[0.0, 0.0, 0.0]], device=device)
+
+    if with_std:
+        expected_scale = torch.tensor([[1.0, 2.0, 1.0]], device=device)
+    else:
+        expected_scale = torch.tensor([[1.0, 1.0, 1.0]], device=device)
+
+    torch.testing.assert_close(processor.mean, expected_mean)
+    torch.testing.assert_close(processor.scale, expected_scale)
+    out = processor.transform(TableTensor.from_tensor(inp)).numerical
+
+    if with_mean and with_std:
+        expected = [
+            [-1.0, -1.0, float("nan")],
+            [1.0, 1.0, float("inf")],
+            [float("nan"), float("inf"), -float("inf")],
+        ]
+    elif with_mean:
+        expected = [
+            [-1.0, -2.0, float("nan")],
+            [1.0, 2.0, float("inf")],
+            [float("nan"), float("inf"), -float("inf")],
+        ]
+    elif with_std:
+        expected = [
+            [1.0, 1.0, float("nan")],
+            [3.0, 3.0, float("inf")],
+            [float("nan"), float("inf"), -float("inf")],
+        ]
+    else:
+        expected = [
+            [1.0, 2.0, float("nan")],
+            [3.0, 6.0, float("inf")],
+            [float("nan"), float("inf"), -float("inf")],
+        ]
+
+    torch.testing.assert_close(
+        out,
+        torch.tensor(expected, device=device),
+        equal_nan=True,
+    )
+    torch.testing.assert_close(
+        processor.inverse_transform(TableTensor.from_tensor(out)).numerical,
+        inp,
+        equal_nan=True,
+    )
 
 
 @withCUDA
@@ -73,14 +130,12 @@ def test_standardize_single_sample_uses_unit_scale(
     inp = torch.tensor([[42.0, -2.0]], device=device)
 
     processor = Standardize().fit(TableTensor.from_tensor(inp))
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
+    out = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.equal(processor.scale, torch.ones((1, 2), device=device))
-    assert torch.equal(transformed, torch.zeros_like(inp))
+    assert torch.equal(out, torch.zeros_like(inp))
     assert torch.equal(
-        processor.inverse_transform(
-            TableTensor.from_tensor(transformed)
-        ).numerical,
+        processor.inverse_transform(TableTensor.from_tensor(out)).numerical,
         inp,
     )
 
@@ -96,7 +151,7 @@ def test_standardize_fits_leading_batches_independently(
     query = torch.tensor([[[4.0]], [[16.0]]], device=device)
 
     processor = Standardize().fit(TableTensor.from_tensor(context))
-    transformed = processor.transform(TableTensor.from_tensor(query)).numerical
+    out = processor.transform(TableTensor.from_tensor(query)).numerical
 
     assert torch.equal(
         processor.mean,
@@ -106,11 +161,9 @@ def test_standardize_fits_leading_batches_independently(
         processor.scale,
         torch.tensor([[[1.0]], [[2.0]]], device=device),
     )
-    assert torch.equal(transformed, torch.full_like(query, 2.0))
+    assert torch.equal(out, torch.full_like(query, 2.0))
     assert torch.equal(
-        processor.inverse_transform(
-            TableTensor.from_tensor(transformed)
-        ).numerical,
+        processor.inverse_transform(TableTensor.from_tensor(out)).numerical,
         query,
     )
 
@@ -123,15 +176,15 @@ def test_standardize_ignores_nan_when_fitting(device: torch.device) -> None:
     )
     processor = Standardize().fit(TableTensor.from_tensor(inp))
 
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
+    out = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     torch.testing.assert_close(
         processor.mean,
         torch.tensor([[3.0, 12.0]], device=device),
     )
-    assert transformed[0, 1].isnan()
+    assert out[0, 1].isnan()
     torch.testing.assert_close(
-        transformed[1, 0],
+        out[1, 0],
         torch.tensor(0.0, device=device),
     )
 
