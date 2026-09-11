@@ -12,8 +12,6 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
             sp.StypeDispatch(
                 numerical=[
-                    sp.ShuffleColumns(method="latin"),
-                    sp.SelectColumns(500, method="first"),
                     sp.ImputeMean(),
                     sp.DropConstantColumns(),
                     sp.Standardize(epsilon=1e-6),
@@ -25,6 +23,8 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     ),
                     sp.ClipSigma(threshold=4.0),
                     sp.FlipSign(),
+                    sp.ShuffleColumns(method="latin"),
+                    sp.SelectColumns(500, method="first"),
                 ],
             ),
         ],
