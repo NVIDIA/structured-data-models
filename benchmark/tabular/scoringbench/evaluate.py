@@ -72,7 +72,7 @@ def main() -> None:
     official = (
         args.official_results
         if args.official_results is not None
-        else source / "output"
+        else source / "output" / "output_univariate_scoringbench_d1_n3000"
     )
     official_files = sorted(official.glob("*.parquet"))
     sdm_files = sorted(args.result_dir.glob("*.parquet"))

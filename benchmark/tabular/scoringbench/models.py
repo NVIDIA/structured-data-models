@@ -20,11 +20,9 @@ import sdm
 
 ModelFactory = Callable[[torch.device], sdm.models.ICLModel]
 
-# ScoringBench's reference TabICL adapter evaluates these exact levels. SDM
-# exposes the model's 999 native thousandth levels, which are interpolated to
-# match the reference adapter.
-QUANTILE_LEVELS = np.linspace(0.005, 0.995, 200)
-MODEL_QUANTILE_COLUMNS = tuple(f"q{index:03d}" for index in range(1, 1000))
+# SDM quantile models expose 999 native thousandth probability levels.
+QUANTILE_LEVELS = np.linspace(0.001, 0.999, 999)
+QUANTILE_COLUMNS = tuple(f"q{index:03d}" for index in range(1, 1000))
 
 
 @dataclass(frozen=True)
@@ -133,34 +131,8 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
                     ),
                 )
             columns = out.columns[sdm.Stype.numerical]
-            positions = [
-                columns.index(column) for column in MODEL_QUANTILE_COLUMNS
-            ]
-            quantiles = out.numerical[..., positions]
-            model_levels = torch.linspace(
-                0.0,
-                1.0,
-                len(MODEL_QUANTILE_COLUMNS) + 2,
-                device=quantiles.device,
-                dtype=quantiles.dtype,
-            )[1:-1]
-            levels = quantiles.new_tensor(QUANTILE_LEVELS)
-            lower = (
-                torch.searchsorted(
-                    model_levels[:-1].contiguous(),
-                    levels.contiguous(),
-                    right=True,
-                )
-                - 1
-            ).clamp(0, len(MODEL_QUANTILE_COLUMNS) - 2)
-            upper = lower + 1
-            weight = (levels - model_levels[lower]) / (
-                model_levels[upper] - model_levels[lower]
-            )
-            interpolated = quantiles[..., lower] + weight * (
-                quantiles[..., upper] - quantiles[..., lower]
-            )
-            chunks.append(interpolated.float().cpu().numpy())
+            positions = [columns.index(column) for column in QUANTILE_COLUMNS]
+            chunks.append(out.numerical[..., positions].float().cpu().numpy())
         return np.concatenate(chunks)
 
     def predict_distribution(
