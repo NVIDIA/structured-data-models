@@ -253,15 +253,13 @@ class PowerTransform(Processor, InvertibleMixin):
         var = finite_or_nan.nanmean(dim=-2, keepdim=True)
         var.masked_fill_(var.isnan(), 0.0)
         filled = torch.where(finite, numerical, mean)
-        self.max = numerical.masked_fill(~finite, float("-inf")).amax(
-            dim=-2,
-            keepdim=True,
-        )
+        self.max = filled.amax(dim=-2, keepdim=True)
         constant_features = _constant_feature_mask(
             var,
             mean,
             finite.sum(dim=-2, keepdim=True),
         )
+        del finite_or_nan, finite
         self.lambdas = self._optimize_lambdas(filled, constant_features)
 
         lambda_eps = torch.finfo(numerical.dtype).eps

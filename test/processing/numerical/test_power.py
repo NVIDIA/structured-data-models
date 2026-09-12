@@ -220,29 +220,39 @@ def test_power_transform_sparse_feature_uses_finite_count(
 def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     device: torch.device,
 ) -> None:
-    # This column fits a positive lambda, whose inverse-domain has no finite
+    # The first column fits a positive lambda, whose inverse-domain has no
     # upper bound, so ``upper_bound`` must be +inf (matching the lambda == 0
     # case). A non-finite model output must fall back to the fitted per-column
-    # max.
+    # max, or zero for the entirely missing second column.
     inp = torch.tensor(
-        [[0.0], [1.0], [4.0], [9.0], [16.0], [25.0], [36.0], [49.0]],
+        [
+            [0.0, float("nan")],
+            [1.0, float("nan")],
+            [4.0, float("nan")],
+            [9.0, float("nan")],
+            [16.0, float("nan")],
+            [25.0, float("nan")],
+            [36.0, float("nan")],
+            [49.0, float("nan")],
+        ],
         dtype=torch.float64,
         device=device,
     )
 
-    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
+    processor = PowerTransform()
+    processor.fit(TableTensor.from_tensor(inp))
     assert (processor.lambdas > 0).all()
     assert torch.isinf(processor.upper_bound).all()
 
     extreme = torch.tensor(
-        [[float("inf")]], dtype=torch.float64, device=device
+        [[float("inf"), float("inf")]], dtype=inp.dtype, device=device
     )
-    inverse = processor.inverse_transform(
-        TableTensor.from_tensor(extreme)
-    ).numerical
+    out = processor.inverse_transform(TableTensor.from_tensor(extreme))
 
-    assert torch.isfinite(inverse).all()
-    assert torch.equal(inverse, processor.max.reshape_as(inverse))
+    torch.testing.assert_close(
+        out.numerical,
+        torch.tensor([[49.0, 0.0]], dtype=inp.dtype, device=device),
+    )
 
 
 @withCUDA
