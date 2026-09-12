@@ -161,6 +161,7 @@ def test_missing_values_pass_through_fit_predict() -> None:
         torch.tensor(
             [
                 [float("nan"), 203.0],
+                [float("inf"), 203.0],
                 [104.0, float("-inf")],
             ]
         )
@@ -174,3 +175,6 @@ def test_missing_values_pass_through_fit_predict() -> None:
     assert direct.numerical.isfinite().all()
     assert cached.numerical.isfinite().all()
     assert cached.shape == direct.shape
+    # NaN and infinity should produce the same predictions.
+    torch.testing.assert_close(direct.numerical[0], direct.numerical[1])
+    torch.testing.assert_close(cached.numerical[0], cached.numerical[1])
