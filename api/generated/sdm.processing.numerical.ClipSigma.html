@@ -219,7 +219,9 @@ data-aria-dark="Switch to auto color mode">
 <p>Two-stage z-score outlier clipping with soft logarithmic bounds.</p>
 <p>The first pass masks values outside the initial z-score bounds, then the
 second pass refits bounds on the remaining values. The transform applies
-logarithmic soft clipping instead of hard truncation.</p>
+logarithmic soft clipping instead of hard truncation. NaN and infinite
+values are ignored when fitting statistics and preserved during the
+transform.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Positive z-score multiplier setting how many standard
@@ -269,7 +271,7 @@ deviations from the mean mark the soft clipping bounds.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=99bdf77f"></script>
+      <script src="../../_static/documentation_options.js?v=0cfa8111"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
