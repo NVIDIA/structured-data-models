@@ -2,10 +2,7 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
-from sdm.processing.numerical._stats import (
-    _constant_feature_mask,
-    _nanmean_var,
-)
+from sdm.processing.numerical._stats import _constant_feature_mask
 
 
 class Standardize(Processor, InvertibleMixin):
