@@ -1,22 +1,7 @@
 import torch
-from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
-
-
-def _finite_std(
-    inp: Tensor,
-    finite: Tensor,
-    mean: Tensor,
-) -> Tensor:
-    count = finite.sum(dim=-2, keepdim=True)
-    correction = (count > 1).to(dtype=inp.dtype)
-    centered = torch.where(finite, inp - mean, 0.0)
-    return (
-        centered.square().sum(dim=-2, keepdim=True)
-        / (count - correction).clamp_min(1)
-    ).sqrt()
 
 
 class ClipSigma(Processor):
@@ -24,8 +9,9 @@ class ClipSigma(Processor):
 
     The first pass masks values outside the initial z-score bounds, then the
     second pass refits bounds on the remaining values. The transform applies
-    logarithmic soft clipping instead of hard truncation. NaN values are
-    ignored when fitting and preserved during the transform.
+    logarithmic soft clipping instead of hard truncation. NaN and infinite
+    values are ignored when fitting statistics and preserved during the
+    transform.
 
     Args:
         threshold: Positive z-score multiplier setting how many standard
@@ -58,10 +44,13 @@ class ClipSigma(Processor):
         numerical = table.numerical
         min_std = numerical.new_tensor(1e-6)
         finite = numerical.isfinite()
-        safe = numerical.masked_fill(~finite, float("nan"))
-        mean = safe.nanmean(dim=-2, keepdim=True)
-        mean = torch.where(mean.isnan(), torch.zeros_like(mean), mean)
-        std = torch.maximum(_finite_std(numerical, finite, mean), min_std)
+        finite_or_nan = numerical.masked_fill(~finite, float("nan"))
+        mean = finite_or_nan.nanmean(dim=-2, keepdim=True)
+        mean.masked_fill_(mean.isnan(), 0.0)
+        finite_or_nan.sub_(mean).square_()
+        std = finite_or_nan.nansum(dim=-2, keepdim=True)
+        std.div_(finite.sum(dim=-2, keepdim=True).sub_(1).clamp_min_(1))
+        std.sqrt_().clamp_min_(min_std)
         lower_bound = mean - self.threshold * std
         upper_bound = mean + self.threshold * std
         outlier_mask = finite & (

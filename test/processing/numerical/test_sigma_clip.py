@@ -117,10 +117,16 @@ def test_clip_sigma_fits_leading_batches_independently(
 
 
 @withCUDA
-def test_clip_sigma_preserves_nan(device: torch.device) -> None:
+@pytest.mark.parametrize(
+    "missing", [float("nan"), float("inf"), -float("inf")]
+)
+def test_clip_sigma_preserves_nonfinite(
+    device: torch.device,
+    missing: float,
+) -> None:
     inp = torch.tensor(
         [
-            [0.0, float("nan")],
+            [0.0, missing],
             [1.0, 10.0],
             [2.0, 12.0],
             [100.0, 14.0],
@@ -128,11 +134,19 @@ def test_clip_sigma_preserves_nan(device: torch.device) -> None:
         device=device,
     )
 
-    transformed = (
-        ClipSigma(threshold=1.0)
-        .fit_transform(TableTensor.from_tensor(inp))
-        .numerical
-    )
+    processor = ClipSigma(threshold=1.0)
+    out = processor.fit_transform(TableTensor.from_tensor(inp))
 
-    assert torch.equal(transformed.isnan(), inp.isnan())
-    assert transformed[~inp.isnan()].isfinite().all()
+    torch.testing.assert_close(
+        out.numerical,
+        torch.tensor(
+            [
+                [0.0, missing],
+                [1.0, 10.0],
+                [2.0, 12.0],
+                [6.6151205, 14.0],
+            ],
+            device=device,
+        ),
+        equal_nan=True,
+    )
