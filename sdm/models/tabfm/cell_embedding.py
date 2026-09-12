@@ -33,6 +33,13 @@ class CellEmbedding(torch.nn.Module):
         self.num_lin = Linear(2 * num_frequencies, channels, **factory_kwargs)
         self.cat_lin = Linear(2 * num_frequencies, channels, **factory_kwargs)
 
+    def _group_index(self, num_columns: int, device: torch.device) -> Tensor:
+        index = torch.arange(num_columns, device=device)
+        shift = 2 ** torch.arange(self.group_size, device=device) - 1
+        return (
+            index.view(num_columns, 1) + shift.view(1, self.group_size)
+        ) % num_columns
+
     def forward(
         self,
         x: Tensor,  # [..., R, C],
@@ -49,9 +56,7 @@ class CellEmbedding(torch.nn.Module):
         *B, R, C = x.size()
 
         # Feature grouping:
-        index = torch.arange(C, device=x.device)
-        shift = 2 ** torch.arange(self.group_size, device=x.device) - 1
-        index = (index.view(C, 1) + shift.view(1, self.group_size)) % C
+        index = self._group_index(C, x.device)
         x = x[..., index]  # [..., R, C, G]
 
         # Compute Fourier features per semantic type (row-agnostic):
@@ -90,36 +95,15 @@ class CellEmbedding(torch.nn.Module):
         if torch.is_grad_enabled() or torch.compiler.is_compiling():
             return self._forward(x, freq, weight, bias, out=out)
 
-        if batch_size_limit == "auto":
-            batch_size_limit = None
-            if x.is_cuda:
-                if torch.is_autocast_enabled(x.device.type):
-                    element_size = torch.empty(
-                        size=(),
-                        dtype=torch.get_autocast_dtype(x.device.type),
-                    ).element_size()
-                else:
-                    element_size = x.element_size()
-
-                bytes_per_example = (
-                    2 * self.group_size * self.num_frequencies * element_size
-                    + 2 * self.channels * element_size
-                )
-
-                fixed_bytes = (
-                    freq.numel() * freq.element_size()
-                    + weight.numel() * weight.element_size()
-                    + bias.numel() * bias.element_size()
-                )
-
-                memory_limit = int(
-                    torch.cuda.get_device_properties(x.device).total_memory
-                    * torch.cuda.get_per_process_memory_fraction(x.device)
-                    * float(os.getenv("SDM_CHUNK_MEMORY_FRACTION", "0.05"))
-                )
-                memory_limit -= fixed_bytes
-                batch_size_limit = memory_limit // max(bytes_per_example, 1)
-                batch_size_limit = max(batch_size_limit, 1)
+        batch_size_limit = self._resolve_batch_size_limit(
+            x=x,
+            batch_size_limit=batch_size_limit,
+            fixed_bytes=(
+                freq.numel() * freq.element_size()
+                + weight.numel() * weight.element_size()
+                + bias.numel() * bias.element_size()
+            ),
+        )
 
         if batch_size_limit is None:
             return self._forward(x, freq, weight, bias, out=out)
@@ -132,7 +116,7 @@ class CellEmbedding(torch.nn.Module):
                 else x.dtype,
             )
 
-        rows_per_chunk = max(1, batch_size_limit // (math.prod(B) * C))
+        rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
         for start in range(0, R, rows_per_chunk):
             self._forward(
                 x=x[..., start : start + rows_per_chunk, :, :],
@@ -144,33 +128,84 @@ class CellEmbedding(torch.nn.Module):
 
         return out
 
+    def _resolve_batch_size_limit(
+        self,
+        x: Tensor,
+        batch_size_limit: int | Literal["auto"] | None,
+        fixed_bytes: int = 0,
+    ) -> int | None:
+        if batch_size_limit != "auto":
+            return batch_size_limit
+        if not x.is_cuda:
+            return None
+
+        element_size = (
+            torch.empty(
+                (), dtype=torch.get_autocast_dtype(x.device.type)
+            ).element_size()
+            if torch.is_autocast_enabled(x.device.type)
+            else x.element_size()
+        )
+        bytes_per_example = (
+            2 * self.group_size * self.num_frequencies + 2 * self.channels
+        ) * element_size
+        memory_limit = int(
+            torch.cuda.get_device_properties(x.device).total_memory
+            * torch.cuda.get_per_process_memory_fraction(x.device)
+            * float(os.getenv("SDM_CHUNK_MEMORY_FRACTION", "0.05"))
+        )
+        return max(
+            1, (memory_limit - fixed_bytes) // max(bytes_per_example, 1)
+        )
+
     def _forward(
         self,
-        x: Tensor,  # [..., G]
-        freq: Tensor,  # [..., G, F]
-        weight: Tensor,  # [..., G, D, 2F]
-        bias: Tensor,  # [..., D]
+        x: Tensor,  # [..., R, C, G]
+        freq: Tensor,  # [..., 1, C, G, F]
+        weight: Tensor,  # [..., 1, C, G, D, 2F]
+        bias: Tensor,  # [..., 1, C, D]
         *,
         out: Tensor | None = None,
     ) -> Tensor:
 
-        x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., G, F]
+        *B, R, C, G = x.size()
+        F = freq.size(-1)
+        if torch.is_grad_enabled():
+            x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., R, C, G, F]
+        else:
+            phase = x.new_empty((*B, C, R, G, F), dtype=torch.float32)
+            if x.dtype == torch.float64:
+                x = x.float()
+            torch.mul(x.unsqueeze(-1), freq, out=phase.transpose(-4, -3))
+            x = phase.transpose(-4, -3)
+
+        # Store rows within each column so the projection uses views.
         fourier = x.new_empty(
-            (*x.size()[:-1], 2 * x.size(-1)),
-            dtype=weight.dtype,
-        )
+            (*B, C, R, G, 2 * F), dtype=weight.dtype
+        ).transpose(-4, -3)
         if torch.is_grad_enabled():
             fourier[..., : x.size(-1)] = x.sin()
             fourier[..., x.size(-1) :] = x.cos()
         else:
             torch.sin(x, out=fourier[..., : x.size(-1)])
             torch.cos(x, out=fourier[..., x.size(-1) :])
+            del phase
         del x
 
-        if out is None:
-            out = torch.einsum("...gf,...gdf->...d", fourier, weight)
+        weight = weight.transpose(-3, -2).flatten(-2).squeeze(-4).mT
+        fourier = fourier.transpose(-4, -3).flatten(-2)
+        if out is None or out.dtype != weight.dtype:
+            projected = torch.matmul(fourier, weight).transpose(-3, -2)
+            if out is None:
+                out = projected
+            else:
+                out.copy_(projected)
         else:
-            out.copy_(torch.einsum("...gf,...gdf->...d", fourier, weight))
+            torch.matmul(
+                fourier,
+                weight,
+                out=out.transpose(-3, -2),
+            )
 
         out += bias.to(out.dtype)
 
