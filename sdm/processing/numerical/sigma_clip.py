@@ -1,22 +1,7 @@
 import torch
-from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
-
-
-def _finite_std(
-    inp: Tensor,
-    finite: Tensor,
-    mean: Tensor,
-) -> Tensor:
-    count = finite.sum(dim=-2, keepdim=True)
-    correction = (count > 1).to(dtype=inp.dtype)
-    centered = torch.where(finite, inp - mean, 0.0)
-    return (
-        centered.square().sum(dim=-2, keepdim=True)
-        / (count - correction).clamp_min(1)
-    ).sqrt()
 
 
 class ClipSigma(Processor):
@@ -61,8 +46,11 @@ class ClipSigma(Processor):
         finite = numerical.isfinite()
         finite_or_nan = numerical.masked_fill(~finite, float("nan"))
         mean = finite_or_nan.nanmean(dim=-2, keepdim=True)
-        mean = torch.where(mean.isnan(), torch.zeros_like(mean), mean)
-        std = torch.maximum(_finite_std(numerical, finite, mean), min_std)
+        mean.masked_fill_(mean.isnan(), 0.0)
+        finite_or_nan.sub_(mean).square_()
+        std = finite_or_nan.nansum(dim=-2, keepdim=True)
+        std.div_(finite.sum(dim=-2, keepdim=True).sub_(1).clamp_min_(1))
+        std.sqrt_().clamp_min_(min_std)
         lower_bound = mean - self.threshold * std
         upper_bound = mean + self.threshold * std
         outlier_mask = finite & (
