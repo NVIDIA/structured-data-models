@@ -19,13 +19,17 @@ def test_row_embedding(device: torch.device) -> None:
         device=device,
     )
     x = torch.randn(2, 5, 3, device=device)
+    x[0, 0, 0] = torch.nan
+    x[0, 4, 1] = torch.nan
+    x[1, 1, 2] = torch.nan
+    x[1, 3, 0] = torch.nan
     y = torch.randn(2, 3, device=device)
     categorical_mask = torch.zeros(2, 3, device=device, dtype=torch.bool)
 
     with torch.no_grad():
-        out = encoder(x, y, categorical_mask)
-    assert out.size() == (2, 5, 32)
-    assert out.device == device
+        expected = encoder(x, y, categorical_mask)
+    assert expected.size() == (2, 5, 32)
+    assert expected.device == device
 
     cache = Cache()
     with torch.no_grad():
@@ -38,3 +42,4 @@ def test_row_embedding(device: torch.device) -> None:
         )
     assert out.size() == (2, 2, 32)
     assert out.device == device
+    torch.testing.assert_close(out, expected[:, 3:], atol=1e-5, rtol=1e-5)

@@ -1,4 +1,12 @@
 import sdm.processing as sp
+from sdm import TableTensor
+
+
+def _replace_inf(table: TableTensor) -> TableTensor:
+    numerical = table.numerical
+    return table.replace_blocks(
+        numerical=numerical.masked_fill(numerical.isinf(), float("nan"))
+    )
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
@@ -12,7 +20,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
             sp.StypeDispatch(
                 numerical=[
-                    sp.ImputeMean(),
+                    _replace_inf,
                     sp.DropConstantColumns(),
                     sp.Standardize(epsilon=1e-6),
                     sp.Clip(min_value=-100.0, max_value=100.0),
@@ -36,7 +44,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 ],
                 numerical=[
                     sp.Standardize(),
-                    sp.FlipSign(),
+                    sp.FlipSign(flip_order=True),
                 ],
             ),
         ],

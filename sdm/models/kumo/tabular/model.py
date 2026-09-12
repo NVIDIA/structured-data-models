@@ -113,11 +113,15 @@ class KumoTabular(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Tabular",
                 filename=filename,
-                revision="v1.0.1",
+                revision="v1.0.3",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(ckpt, is_classifier=task == Task.classification)
-            model.load_state_dict(ckpt, assign=True)
+            ckpt = remap_ckpt(
+                ckpt=ckpt["model"],
+                is_classifier=task == Task.classification,
+                num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
+            )
+            model.load_state_dict(ckpt, strict=True, assign=True)
 
         return model
 
