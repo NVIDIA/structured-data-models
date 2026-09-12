@@ -1,17 +1,7 @@
 import torch
-from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
-
-
-def _std(
-    inp: Tensor,
-    *,
-    dim: int,
-) -> Tensor:
-    correction = 1 if inp.size(dim) > 1 else 0
-    return inp.std(dim=dim, correction=correction, keepdim=True)
 
 
 class ClipSigma(Processor):
@@ -19,7 +9,9 @@ class ClipSigma(Processor):
 
     The first pass masks values outside the initial z-score bounds, then the
     second pass refits bounds on the remaining values. The transform applies
-    logarithmic soft clipping instead of hard truncation.
+    logarithmic soft clipping instead of hard truncation. NaN and infinite
+    values are ignored when fitting statistics and preserved during the
+    transform.
 
     Args:
         threshold: Positive z-score multiplier setting how many standard
@@ -51,20 +43,21 @@ class ClipSigma(Processor):
     ) -> None:
         numerical = table.numerical
         min_std = numerical.new_tensor(1e-6)
-
-        mean = numerical.mean(dim=-2, keepdim=True)
-        std = torch.maximum(
-            _std(
-                numerical,
-                dim=-2,
-            ),
-            min_std,
-        )
+        finite = numerical.isfinite()
+        finite_or_nan = numerical.masked_fill(~finite, float("nan"))
+        mean = finite_or_nan.nanmean(dim=-2, keepdim=True)
+        mean.masked_fill_(mean.isnan(), 0.0)
+        finite_or_nan.sub_(mean).square_()
+        std = finite_or_nan.nansum(dim=-2, keepdim=True)
+        std.div_(finite.sum(dim=-2, keepdim=True).sub_(1).clamp_min_(1))
+        std.sqrt_().clamp_min_(min_std)
         lower_bound = mean - self.threshold * std
         upper_bound = mean + self.threshold * std
-        outlier_mask = (numerical < lower_bound) | (numerical > upper_bound)
+        outlier_mask = finite & (
+            (numerical < lower_bound) | (numerical > upper_bound)
+        )
 
-        keep = ~outlier_mask
+        keep = finite & ~outlier_mask
         count = keep.sum(dim=-2, keepdim=True)
         safe_count = count.clamp_min(1)
         clean_sum = torch.where(
