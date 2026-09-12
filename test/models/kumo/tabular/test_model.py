@@ -9,10 +9,7 @@ from sdm.models.kumo.tabular import KumoTabular
 
 
 def _build(task: Literal["classification", "regression"]) -> KumoTabular:
-    model = KumoTabular(
-        task=task,
-        pretrained=False,
-    )
+    model = KumoTabular(task=task, pretrained=False)
     # Residual branches are zero-initialized, so an untrained model maps every
     # row onto the same constant. Randomize them to make the prediction depend
     # on the features it is given.
