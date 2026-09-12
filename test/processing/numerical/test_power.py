@@ -170,6 +170,53 @@ def test_power_transform_constant_columns_use_identity_lambda(
 
 
 @withCUDA
+@pytest.mark.parametrize("standardize", [False, True])
+def test_power_transform_preserves_nan(
+    device: torch.device,
+    standardize: bool,
+) -> None:
+    inp = torch.tensor(
+        [
+            [1.0, float("nan"), float("nan"), 4.0],
+            [3.0, 10.0, float("nan"), float("nan")],
+            [5.0, 14.0, float("nan"), float("nan")],
+        ],
+        device=device,
+    )
+    original = inp.clone()
+    processor = PowerTransform(standardize=standardize)
+    processor.fit(TableTensor.from_tensor(inp))
+
+    out = processor.transform(TableTensor.from_tensor(inp))
+
+    assert torch.equal(out.numerical.isnan(), inp.isnan())
+    assert torch.equal(out.numerical.isfinite(), inp.isfinite())
+    torch.testing.assert_close(
+        processor.inverse_transform(out).numerical,
+        inp,
+        equal_nan=True,
+    )
+    torch.testing.assert_close(inp, original, equal_nan=True)
+
+
+@withCUDA
+def test_power_transform_sparse_feature_uses_finite_count(
+    device: torch.device,
+) -> None:
+    inp = torch.full((1000, 1), float("nan"), device=device)
+    inp[:4, 0] = torch.tensor(
+        [100_000.0, 100_001.0, 100_004.0, 100_016.0],
+        device=device,
+    )
+    processor = PowerTransform(standardize=False)
+    processor.fit(TableTensor.from_tensor(inp))
+
+    assert not torch.equal(
+        processor.lambdas, torch.ones_like(processor.lambdas)
+    )
+
+
+@withCUDA
 def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     device: torch.device,
 ) -> None:
