@@ -41,7 +41,7 @@ Default Recipe
        ),
        StypeDispatch(
          numerical=Sequential(
-           ImputeMean(),
+           Callable(_replace_inf),
            DropConstantColumns(),
            Standardize(),
            Clip(-100.0, 100.0),
