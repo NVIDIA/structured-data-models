@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 TASKS=(
   plant
   shippingpoint
