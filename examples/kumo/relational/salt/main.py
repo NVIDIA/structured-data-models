@@ -14,7 +14,7 @@ parser.add_argument("--task", type=str, required=True)
 parser.add_argument("--context_size", type=int, default=50_000)
 parser.add_argument("--batch_size", type=int, default=10_000)
 parser.add_argument("--max_test_steps", type=int, default=None)
-parser.add_argument("--num_neighbors", type=int, nargs="*", default=[4, 4])
+parser.add_argument("--num_neighbors", type=int, nargs="*")
 parser.add_argument("--num_estimators", type=int, default=1)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
@@ -34,6 +34,10 @@ item_tasks = [
     "SHIPPINGPOINT",
     "ITEMINCOTERMSCLASSIFICATION",
 ]
+
+
+if args.num_neighbors is None:
+    args.num_neighbors = [4, 4] if args.task.upper() in sale_tasks else [4]
 
 
 # Load and sanitize raw data ##################################################
@@ -122,7 +126,10 @@ else:
         "table_column": "ID",
     }
 
-perm = context["CREATIONDATETIME"].datetime.squeeze(-1).argsort(stable=True)
+if args.task.upper() in sale_tasks:
+    perm = context["CREATIONDATETIME"].datetime.flatten().argsort(stable=True)
+else:
+    perm = torch.randperm(len(context))
 context = context[perm[-args.context_size :]]
 
 # Build Relational Data #######################################################
