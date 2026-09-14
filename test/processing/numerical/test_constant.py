@@ -140,3 +140,45 @@ def test_drop_constant_columns_requires_fitted_member_count() -> None:
         processor.transform_ensemble(
             EnsembleTable.from_table(table, num_members=1)
         )
+
+
+@withCUDA
+def test_unique_filter_counts_nan_once(device: torch.device) -> None:
+    data = torch.tensor(
+        [
+            [float("nan"), 1.0, 1.0, 1.0, float("inf"), float("inf")],
+            [float("nan"), 1.0, float("nan"), 2.0, float("inf"), float("nan")],
+            [float("nan"), 1.0, 1.0, float("nan"), float("inf"), float("inf")],
+            [float("nan"), 1.0, float("nan"), 2.0, float("inf"), float("nan")],
+        ],
+        device=device,
+    )
+    table = TableTensor.from_tensor(data)
+
+    output = DropConstantColumns().fit_transform(table)
+
+    assert output.columns[Stype.numerical] == ("2", "3", "5")
+    torch.testing.assert_close(
+        output.numerical, data[:, [2, 3, 5]], equal_nan=True
+    )
+
+
+@withCUDA
+def test_unique_filter_counts_nan_once_with_higher_threshold(
+    device: torch.device,
+) -> None:
+    table = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [1.0, 1.0, float("nan")],
+                [1.0, 2.0, float("nan")],
+                [float("nan"), float("nan"), float("nan")],
+                [float("nan"), float("nan"), float("nan")],
+            ],
+            device=device,
+        )
+    )
+
+    output = DropConstantColumns(threshold=2).fit_transform(table)
+
+    assert output.columns[Stype.numerical] == ("1",)

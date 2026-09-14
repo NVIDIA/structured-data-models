@@ -12,8 +12,10 @@ class DropConstantColumns(EnsembleProcessor):
     """Remove non-informative numerical columns learned during fit.
 
     With ``method="unique"``, columns are retained when they have more than
-    ``threshold`` distinct values. When the number of samples is less than or
-    equal to ``threshold``, all columns are preserved.
+    ``threshold`` distinct values. NaN is counted once as a distinct value, so
+    varying missingness can make an otherwise constant column informative. When
+    the number of samples is less than or equal to ``threshold``, all columns
+    are preserved.
 
     With ``method="variance"``, columns are retained when their sample
     standard deviation is greater than ``tolerance``.
@@ -89,11 +91,13 @@ class DropConstantColumns(EnsembleProcessor):
             )
         if self.threshold == 1:
             # Any mismatch with the first row proves a second unique value.
-            return (data != data[..., :1, :]).any(dim=-2)
+            different = (data != data[..., :1, :]).any(dim=-2)
+            return different & ~data.isnan().all(dim=-2)
 
         # A sorted column with k unique values has k - 1 transitions.
         values = data.sort(dim=-2).values
-        changed = values[..., 1:, :] != values[..., :-1, :]
+        left, right = values[..., :-1, :], values[..., 1:, :]
+        changed = (right != left) & ~(right.isnan() & left.isnan())
         return changed.sum(dim=-2) >= self.threshold
 
     @staticmethod
