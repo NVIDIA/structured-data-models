@@ -36,14 +36,14 @@ class EnsembleData(abc.ABC, Generic[T]):
 
     @property
     def num_members(self) -> int:
-        """Return the number of logical ensemble members."""
+        """Return the number of ensemble members."""
         return len(self._locations)
 
     def member(self, member_id: int) -> T:
-        """Return the value associated with one logical member.
+        """Return the value associated with one ensemble member.
 
         Args:
-            member_id: Zero-based logical member index.
+            member_id: Zero-based ensemble member index.
         """
         group_id, position = self._locations[member_id]
         return self._select_member(self._groups[group_id], position)
@@ -207,7 +207,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
         """Return the selected ensemble members in the requested order.
 
         Args:
-            member_ids: Logical member positions to select.
+            member_ids: Member positions to select.
 
         Returns:
             An ensemble table containing the selected members.
@@ -275,10 +275,10 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
 
         Args:
             tables: Source ensemble table for each output member.
-            member_ids: Logical source member position for each output member.
+            member_ids: Source member position for each output member.
 
         Returns:
-            An ensemble table preserving logical member order.
+            An ensemble table preserving member order.
         """
         if len(tables) != len(member_ids):
             raise ValueError("Expected one source member per ensemble table")
@@ -330,7 +330,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
         return group[position]
 
     def expanded_group(self, group_id: int) -> TableTensor:
-        """Return the logical members assigned to one group.
+        """Return the ensemble members assigned to one group.
 
         Args:
             group_id: Zero-based group index.
@@ -371,7 +371,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
             stypes: The semantic type or semantic types to select.
 
         Returns:
-            An ensemble table preserving its logical member assignment.
+            An ensemble table preserving its member assignment.
         """
         if isinstance(stypes, (str, Stype)):
             stypes = (stypes,)
@@ -387,13 +387,13 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
 
     @classmethod
     def concatenate_columns(cls, tables: Sequence[Self]) -> Self:
-        r"""Concatenate ensemble tables column-wise by logical member.
+        r"""Concatenate ensemble tables column-wise by ensemble member.
 
         Args:
-            tables: Ensemble tables with the same number of logical members.
+            tables: Ensemble tables with the same number of members.
 
         Returns:
-            An ensemble table preserving logical member order.
+            An ensemble table preserving member order.
         """
         if len(tables) == 0:
             raise ValueError("Expected at least one ensemble table")
