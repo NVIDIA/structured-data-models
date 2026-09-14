@@ -4,7 +4,7 @@ This benchmark evaluates `structured-data-models` on the corrected 300-dataset [
 
 ## Setup
 
-Run the commands below from the repository root. Install SDM and the tested TALENT revision:
+Run the commands below from the repository root:
 
 ```bash
 pip install structured-data-models \
@@ -52,4 +52,5 @@ Evaluate all available model results with:
 python -m benchmark.tabular.talent.evaluate
 ```
 
-Install `matplotlib` and `scikit-posthocs`, then add `--plot-cd` to generate critical-difference diagrams as PNG files. The evaluator downloads TALENT's published result tables by default; pass their local directory with `--official-results` to run offline.
+Install `matplotlib` and `scikit-posthocs`, then add `--plot-cd` to generate critical-difference diagrams as PNG files.
+The evaluator downloads TALENT's published result tables by default; pass their local directory with `--official-results` to run offline.
