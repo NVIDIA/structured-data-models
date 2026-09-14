@@ -6,8 +6,8 @@ from typing import Literal, cast
 import torch
 from torch.nn import ModuleList
 
+from sdm import EnsembleTable
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
-from sdm.tensor import EnsembleTable
 
 
 class Choice(EnsembleProcessor, EnsembleInvertibleMixin):

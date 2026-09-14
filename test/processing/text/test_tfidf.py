@@ -4,9 +4,8 @@
 import pytest
 import torch
 
-from sdm import StringTensor, Stype, TableTensor
+from sdm import EnsembleTable, StringTensor, Stype, TableTensor
 from sdm.processing import TFIDF
-from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA
 
 

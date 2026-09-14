@@ -8,7 +8,7 @@ from sdm.processing import InvertibleMixin, Processor
 
 
 class FlipSign(Processor, InvertibleMixin):
-    """Randomly negate numerical feature columns.
+    """Randomly negate numerical columns.
 
     Args:
         probability: Probability of negating a numerical column.
@@ -17,7 +17,10 @@ class FlipSign(Processor, InvertibleMixin):
     handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
-    def __init__(self, probability: float = 0.5) -> None:
+    def __init__(
+        self,
+        probability: float = 0.5,
+    ) -> None:
         super().__init__()
         self.probability = probability
         self.register_buffer("sign", torch.empty(0))

@@ -8,16 +8,15 @@ from typing import Self
 
 import torch
 
-from sdm import TableTensor
+from sdm import EnsembleTable, TableTensor
 from sdm.processing import InvertibleMixin, Processor
-from sdm.tensor import EnsembleTable
 
 
 class EnsembleProcessor(Processor):
     r"""Base processor for ensemble-aware table transformations.
 
     An :class:`EnsembleProcessor` defines a reusable transformation on
-    :class:`~sdm.tensor.EnsembleTable` for feature, target and output
+    :class:`~sdm.EnsembleTable` for feature, target and output
     pre/post-processing across ensemble members.
     An :class:`EnsembleProcessor` learns any required state via
     :meth:`fit_ensemble` and applies the transformation via

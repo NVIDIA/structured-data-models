@@ -6,9 +6,8 @@ from typing import Literal, cast
 import torch
 from torch.nn import ModuleDict
 
-from sdm import Stype
+from sdm import EnsembleTable, Stype
 from sdm.processing import EnsembleProcessor, Processor
-from sdm.tensor import EnsembleTable
 
 
 class TableDispatch(EnsembleProcessor):

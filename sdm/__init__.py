@@ -16,6 +16,7 @@ from sdm.tensor import (
     ColumnarTensor,
     TableTensor,
 )
+from sdm.ensemble import EnsembleTable
 from sdm.relational import (
     Relationship,
     RelationalData,
@@ -23,7 +24,7 @@ from sdm.relational import (
     RelatedTables,
 )
 from sdm.processing import Recipe
-from sdm import callbacks, models, evaluation, explain
+from sdm import models, evaluation, explain
 
 try:
     __version__ = version("structured-data-models")
@@ -43,12 +44,12 @@ __all__ = [
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
+    "EnsembleTable",
     "Relationship",
     "RelationalData",
     "TaskLink",
     "RelatedTables",
     "Recipe",
-    "callbacks",
     "models",
     "evaluation",
     "explain",

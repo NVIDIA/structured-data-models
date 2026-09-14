@@ -1,14 +1,10 @@
 # Tabular Benchmarks
 
-This directory contains benchmarks of `structured-data-models` on [TabArena and BeyondArena](https://tabarena.ai), plus a separate [TALENT integration](talent/).
-
-> [!NOTE]
-> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
-> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
+This directory contains benchmarks of `structured-data-models` on TabArena/BeyondArena, [ScoringBench](scoringbench/), and [TALENT](talent/).
 
 ## TabArena and BeyondArena setup
 
-Run the commands below from the repository root. Install the source revisions of AutoGluon and TabArena used by these benchmarks. The Data Foundry extra downloads BeyondArena datasets on demand:
+Run the commands below from the repository root:
 
 ```bash
 pip install structured-data-models \
@@ -20,9 +16,11 @@ pip install structured-data-models \
   "tabarena[data-foundry,plot] @ git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena"
 ```
 
-The SDM adapters run as standard AutoGluon models. Each benchmark split fits one model on all available training rows through TabArena's outer experiment path, without a validation split, bagging, tuning, or ensemble simulation.
-
 ______________________________________________________________________
+
+> [!NOTE]
+> Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
+> Review the license before running the `TabFM` benchmark, which will download its weights noninteractively.
 
 ## TabArena
 
@@ -86,7 +84,8 @@ ______________________________________________________________________
   python -m benchmark.tabular.beyondarena.main --model tabfm
   ```
 
-By default, each command evaluates the recommended `core` subset. Repeat `--subset` to combine filters:
+By default, each command evaluates the recommended `core` subset.
+Repeat `--subset` to combine filters:
 
 ```bash
 python -m benchmark.tabular.beyondarena.main \
@@ -95,7 +94,8 @@ python -m benchmark.tabular.beyondarena.main \
   --subset grouped
 ```
 
-Pass a dataset name to run only that BeyondArena dataset. Use `--subset lite` for its first split:
+Pass a dataset name to run only that BeyondArena dataset.
+Use `--subset lite` for its first split:
 
 ```bash
 python -m benchmark.tabular.beyondarena.main \

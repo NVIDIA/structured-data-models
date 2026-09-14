@@ -8,7 +8,7 @@ from typing import Any, cast
 import torch
 from torch.nn import GELU, Linear, RMSNorm, Sequential
 
-from sdm.nn import LogScale, RotaryEmbedding, TransformerBlock
+from sdm.nn import QueryScaling, RotaryEmbedding, TransformerBlock
 
 
 class KumoTabularTransformerBlock(TransformerBlock):
@@ -16,7 +16,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
         self,
         channels: int,
         num_heads: int,
-        query_log_scale: bool,
+        query_scaling: QueryScaling | None,
         rope: RotaryEmbedding | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -62,9 +62,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
             key_value_norm=RMSNorm(channels, **factory_kwargs),
             query_transform=Sequential(*query_transforms),
             key_transform=Sequential(*key_transforms),
-            query_scaling=LogScale(num_heads, **factory_kwargs)
-            if query_log_scale
-            else None,
+            query_scaling=query_scaling,
             **factory_kwargs,
         )
 
@@ -81,13 +79,14 @@ class KumoTabularTransformerBlock(TransformerBlock):
 
 
 if __name__ == "__main__":
+    from sdm.nn import LogScale
     from sdm.testing.memory import benchmark_transformer_block_memory_peak
 
     benchmark_transformer_block_memory_peak(
         block=lambda channels, num_heads: KumoTabularTransformerBlock(
             channels=channels,
             num_heads=num_heads,
-            query_log_scale=True,
+            query_scaling=LogScale(num_heads=num_heads),
         ),
         channels_and_heads=[(256, 4), (512, 4)],
     )

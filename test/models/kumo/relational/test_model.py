@@ -231,6 +231,8 @@ def test_forward(
     assert out.dtype == x.dtype
     assert out.device == x.device
     assert torch.is_inference(out)
+    if dtype.is_floating_point:
+        assert (out.numerical.diff(dim=-1) >= 0).all()
 
     assert (
         model(

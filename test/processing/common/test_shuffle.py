@@ -6,9 +6,8 @@ from typing import Literal
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import ShuffleColumns
-from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 

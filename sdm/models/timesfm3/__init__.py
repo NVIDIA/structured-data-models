@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Model callbacks."""
+"""TimesFM."""
 
-from sdm.callbacks.base import Callback
+from sdm.models.timesfm3.model import TimesFM3
 
 
 __all__ = [
-    "Callback",
+    "TimesFM3",
 ]

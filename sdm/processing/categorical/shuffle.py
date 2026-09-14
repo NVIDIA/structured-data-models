@@ -6,10 +6,9 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
-from sdm.tensor import EnsembleTable
 
 
 class ShuffleCategories(EnsembleProcessor):

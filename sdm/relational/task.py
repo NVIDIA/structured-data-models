@@ -17,10 +17,9 @@ from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, cast
 
 from torch import Tensor
 
-from sdm import TableTensor
+from sdm import EnsembleTable, TableTensor
 from sdm.relational import RelationalData, Relationship
 from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID
-from sdm.tensor import EnsembleTable
 from sdm.tensor.mixin import DeviceMixin
 from sdm.tensor.table import TableSchema
 

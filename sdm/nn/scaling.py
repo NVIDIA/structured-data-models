@@ -127,7 +127,7 @@ class QASSMax(QueryScaling):
 
 
 class LogScale(QueryScaling):
-    r"""Trainable logarithmic query scaling.
+    r"""Logarithmic query scaling.
 
     For a query tensor :math:`q`, effective key length :math:`n`, and learned
     per-head coefficient :math:`a_h`, this module returns a scaled query
@@ -140,8 +140,7 @@ class LogScale(QueryScaling):
     channels.
 
     Each attention head receives an unconstrained coefficient initialized
-    independently and uniformly in ``[0, 1)``. Key lengths are clamped to at
-    least one, and the logarithm is computed in fp32.
+    independently and uniformly in ``[0, 1)``.
 
     Args:
         num_heads: The number of query attention heads.
@@ -181,3 +180,57 @@ class LogScale(QueryScaling):
             *((1,) * (query.dim() - 2)), -1, 1
         )
         return query * log_key_len[..., None, None] * head_scale
+
+
+class GatedLogScale(LogScale):
+    r"""Gated logarithmic query scaling.
+
+    For a query tensor :math:`q`, effective key length :math:`n`, learned
+    per-head coefficient :math:`a_h`, and learned gate :math:`g`, this module
+    returns
+
+    .. math::
+
+        \tilde{q}_{hi} = q_{hi} \cdot a_h \cdot \log(\max(n, 1))
+        \cdot \left(1 + \tanh(g(q_h)_i)\right).
+
+    The multiplicative gate is initialized to one and bounded between zero and
+    two. Per-head coefficients are initialized independently and uniformly in
+    ``[0, 1)``.
+
+    Args:
+        channels: The number of channels per attention head.
+        num_heads: The number of query attention heads.
+        hidden_channels: The hidden width of the gate MLP.
+        device: The device.
+        dtype: The dtype.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        num_heads: int,
+        hidden_channels: int,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__(num_heads=num_heads, device=device, dtype=dtype)
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        self.gate = Sequential(
+            Linear(channels, hidden_channels, **factory_kwargs),
+            GELU(),
+            Linear(hidden_channels, channels, **factory_kwargs),
+        )
+        torch.nn.init.zeros_(cast(Linear, self.gate[-1]).weight)
+        torch.nn.init.zeros_(cast(Linear, self.gate[-1]).bias)
+
+    def forward(
+        self,
+        query: Tensor,  # [..., S, H, C]
+        *,
+        key_len: Tensor | int,  # [..., 1] or [..., S] or scalar
+    ) -> Tensor:  # [..., S, H, C]
+        r""":meta private:"""  # noqa: D415
+        query_scaled = super().forward(query=query, key_len=key_len)
+        return query_scaled * (1 + self.gate(query).tanh())

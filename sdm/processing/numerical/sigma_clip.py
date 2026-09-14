@@ -2,19 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
-from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
-
-
-def _std(
-    inp: Tensor,
-    *,
-    dim: int,
-) -> Tensor:
-    correction = 1 if inp.size(dim) > 1 else 0
-    return inp.std(dim=dim, correction=correction, keepdim=True)
 
 
 class ClipSigma(Processor):
@@ -22,7 +12,9 @@ class ClipSigma(Processor):
 
     The first pass masks values outside the initial z-score bounds, then the
     second pass refits bounds on the remaining values. The transform applies
-    logarithmic soft clipping instead of hard truncation.
+    logarithmic soft clipping instead of hard truncation. NaN and infinite
+    values are ignored when fitting statistics and preserved during the
+    transform.
 
     Args:
         threshold: Positive z-score multiplier setting how many standard
@@ -41,8 +33,6 @@ class ClipSigma(Processor):
         if threshold <= 0:
             raise ValueError("threshold must be positive.")
         self.threshold = threshold
-        self.register_buffer("_mean", torch.empty(0))
-        self.register_buffer("_std", torch.empty(0))
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
@@ -52,50 +42,41 @@ class ClipSigma(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
-        min_std = numerical.new_tensor(1e-6)
 
-        mean = numerical.mean(dim=-2, keepdim=True)
-        std = torch.maximum(
-            _std(
-                numerical,
-                dim=-2,
-            ),
-            min_std,
-        )
-        lower_bound = mean - self.threshold * std
-        upper_bound = mean + self.threshold * std
-        outlier_mask = (numerical < lower_bound) | (numerical > upper_bound)
+        finite = table.numerical.isfinite()
+        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
 
-        keep = ~outlier_mask
-        count = keep.sum(dim=-2, keepdim=True)
-        safe_count = count.clamp_min(1)
-        clean_sum = torch.where(
-            keep,
-            numerical,
-            0.0,
-        ).sum(dim=-2, keepdim=True)
-        mean_clean = clean_sum / safe_count
-        centered = torch.where(
-            keep,
-            numerical - mean_clean,
-            0.0,
-        )
-        correction = (count > 1).to(count.dtype)
-        denominator = (count - correction).clamp_min(1)
-        std_clean = (
-            centered.square().sum(dim=-2, keepdim=True) / denominator
-        ).sqrt()
+        # Compute finite mean and standard deviation:
+        mean = finite_or_nan.nanmean(-2, keepdim=True)
+        mean.masked_fill_(mean.isnan(), 0.0)
 
-        has_clean = count > 0
-        self._mean = torch.where(has_clean, mean_clean, mean)
-        self._std = torch.where(has_clean, std_clean, std)
-        self._std = torch.maximum(self._std, min_std)
-        self.lower_bound = self._mean - self.threshold * self._std
-        self.upper_bound = self._mean + self.threshold * self._std
+        var = (finite_or_nan - mean).square().nansum(-2, keepdim=True)
+        var /= (finite.sum(-2, keepdim=True) - 1).clamp_(min=1)
+        std = var.sqrt().clamp(min=1e-6)
+
+        # Find values within range:
+        lower = mean - self.threshold * std
+        upper = mean + self.threshold * std
+        keep = finite & (finite_or_nan >= lower) & (finite_or_nan <= upper)
+        count = keep.sum(-2, keepdim=True)
+
+        # Compute mean and standard deviation of kept values:
+        kept_mean = torch.where(keep, finite_or_nan, 0.0).sum(-2, keepdim=True)
+        kept_mean /= count.clamp(min=1)
+
+        centered = torch.where(keep, finite_or_nan - kept_mean, 0.0)
+        denominator = (count - 1).clamp(min=1)
+        kept_var = centered.square().sum(-2, keepdim=True) / denominator
+        kept_std = kept_var.sqrt().clamp(min=1e-6)
+
+        has_kept = count > 0
+        mean = torch.where(has_kept, kept_mean, mean)
+        std = torch.where(has_kept, kept_std, std)
+
+        self.lower_bound = mean - self.threshold * std
+        self.upper_bound = mean + self.threshold * std
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        """Clip ``table`` using the fitted soft lower and upper bounds."""
         numerical = table.numerical
         log_abs = numerical.abs().log1p()
         clipped = torch.maximum(-log_abs + self.lower_bound, numerical)

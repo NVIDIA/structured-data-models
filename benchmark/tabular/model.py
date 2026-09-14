@@ -15,8 +15,11 @@ from autogluon.core.constants import BINARY, MULTICLASS, REGRESSION
 from autogluon.tabular.models.abstract.abstract_torch_model import (
     AbstractTorchModel,
 )
+from tabarena.benchmark.exec_models import AGModelWrapper
+from tabarena.benchmark.experiment import OOFExperimentRunner
 
 import sdm
+import sdm.processing as sp
 
 Task = Literal["classification", "regression"]
 
@@ -52,6 +55,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             self.default_num_estimators,
         )
         self._set_default_param_value("max_context_size", None)
+        self._set_default_param_value("max_columns", None)
 
     def _fit(
         self,
@@ -118,6 +122,12 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             num_estimators = None
         self._expand_query = num_estimators is None
 
+        recipe = self.model.default_recipe()
+        if params["max_columns"] is not None:
+            for processor in recipe.features.modules():
+                if isinstance(processor, sp.SelectColumns):
+                    processor.max_columns = params["max_columns"]
+
         with torch.amp.autocast(
             self._device.type,
             self.autocast_dtype,
@@ -126,6 +136,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             self.model.fit(
                 x=x_context,
                 y=y_context,
+                recipe=recipe,
                 num_estimators=num_estimators,
                 generator=generator,
             )
@@ -170,8 +181,32 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self.model.to(device)
         self._device = torch.device(device)
 
+    def cleanup(self) -> None:
+        self.model.clear()
+        if self._device.type == "cuda":
+            torch.cuda.synchronize(self._device)
+            torch._C._host_emptyCache()
+            torch.cuda.empty_cache()
+
     def _more_tags(self) -> dict[str, bool]:
         return {"can_refit_full": True}
+
+
+class SDMModelWrapper(AGModelWrapper):
+    def cleanup(self) -> None:
+        model = getattr(self, "model", None)
+        cleanup = getattr(model, "cleanup", None)
+        if callable(cleanup):
+            cleanup()
+
+
+class SDMExperimentRunner(OOFExperimentRunner):
+    def run(self) -> dict:
+        try:
+            return self._run()
+        finally:
+            if self.cleanup and getattr(self, "model", None) is not None:
+                self._cleanup()
 
 
 class SDMTabICLv2Model(SDMModel):

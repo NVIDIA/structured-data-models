@@ -206,6 +206,9 @@ def _optimize_lambdas(
 class PowerTransform(Processor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
+    NaN and infinite values are imputed when fitting statistics. NaN values are
+    preserved during the transform.
+
     Args:
         standardize: If ``True``, zero-mean and unit-variance the transformed
             features using statistics fitted after the power transform.
@@ -240,25 +243,36 @@ class PowerTransform(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
-        n_samples = numerical.size(-2)
 
-        var = numerical.var(dim=-2, correction=0, keepdim=True)
-        mean = numerical.mean(dim=-2, keepdim=True)
-        self.max = numerical.max(dim=-2, keepdim=True).values
-        constant_features = _constant_feature_mask(var, mean, n_samples)
-        self.lambdas = self._optimize_lambdas(numerical, constant_features)
+        finite = table.numerical.isfinite()
+        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
 
-        lambda_eps = torch.finfo(numerical.dtype).eps
+        mean = finite_or_nan.nanmean(-2, keepdim=True)
+        mean.masked_fill_(mean.isnan(), 0.0)
+        var = (finite_or_nan - mean).square().nanmean(-2, keepdim=True)
+        del finite_or_nan
+        var.masked_fill_(var.isnan(), 0.0)
+        constant_features = _constant_feature_mask(
+            var,
+            mean,
+            num_samples=finite.sum(dim=-2, keepdim=True),
+        )
+        filled = torch.where(finite, table.numerical, mean)
+        self.max = filled.amax(dim=-2, keepdim=True)
+        del finite
+
+        self.lambdas = self._optimize_lambdas(filled, constant_features)
+
+        lambda_eps = torch.finfo(filled.dtype).eps
         self.upper_bound = -(1 / self.lambdas)
         self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
-            transformed = _yeojohnson_transform(numerical, self.lambdas)
+            transformed = _yeojohnson_transform(filled, self.lambdas)
             self.mean = transformed.mean(dim=-2, keepdim=True)
             var = transformed.var(dim=-2, correction=0, keepdim=True)
             scale = var.sqrt()
-            scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
+            scale[_constant_feature_mask(var, self.mean, table.size(-2))] = 1.0
             self.scale = scale
         else:
             self.mean = torch.zeros_like(self.lambdas)

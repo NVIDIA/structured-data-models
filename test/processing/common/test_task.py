@@ -7,8 +7,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import TableTensor
-from sdm.tensor import EnsembleTable
+from sdm import EnsembleTable, TableTensor
 
 
 def _numerical_table(

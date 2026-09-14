@@ -7,7 +7,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from sdm.nn import LogScale, QASSMax
+from sdm.nn import GatedLogScale, LogScale, QASSMax
 from sdm.testing import withCUDA
 
 
@@ -79,3 +79,18 @@ def test_log_scale(
         out,
         query * expected_scale * expected_head_scale,
     )
+
+
+@withCUDA
+def test_gated_log_scale_forward(device: torch.device) -> None:
+    module = GatedLogScale(
+        channels=2,
+        num_heads=3,
+        hidden_channels=4,
+        device=device,
+    )
+    query = torch.ones(2, 3, 3, 2, device=device)
+    out = module(query, key_len=7)
+    assert out.shape == query.shape
+    assert out.dtype == query.dtype
+    assert out.device == query.device

@@ -6,9 +6,8 @@ from typing import Literal
 
 import torch
 
-from sdm import Stype, StypeLike, TableTensor
+from sdm import EnsembleTable, Stype, StypeLike, TableTensor
 from sdm.processing import EnsembleProcessor
-from sdm.tensor import EnsembleTable
 
 
 class SelectColumns(EnsembleProcessor):

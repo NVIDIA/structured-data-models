@@ -11,6 +11,7 @@ from torch.nn import GELU, Embedding, Linear, ModuleList, RMSNorm, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
+from sdm.nn import LogScale
 
 
 class ICLBlock(torch.nn.Module):
@@ -40,7 +41,10 @@ class ICLBlock(torch.nn.Module):
             KumoTabularTransformerBlock(
                 channels=channels,
                 num_heads=num_heads,
-                query_log_scale=True,
+                query_scaling=LogScale(
+                    num_heads=num_heads,
+                    **factory_kwargs,
+                ),
                 **factory_kwargs,
             )
             for _ in range(num_layers)

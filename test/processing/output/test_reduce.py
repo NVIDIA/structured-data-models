@@ -5,8 +5,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import ColumnarTensor, TableTensor
-from sdm.tensor import EnsembleTable
+from sdm import ColumnarTensor, EnsembleTable, TableTensor
 from sdm.testing import withCUDA
 
 

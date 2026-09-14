@@ -147,6 +147,38 @@ def test_sdpa_compile(
 
 @withCUDA
 @pytest.mark.parametrize(
+    ("num_key_value_heads", "kv_heads"),
+    [(1, 1), (2, 2), (4, 4), (4, 1), (4, 2)],
+)
+@pytest.mark.parametrize("batch_shape", [(), (2, 1)])
+def test_sdpa_compile_dynamic_shapes(
+    device: torch.device,
+    num_key_value_heads: int,
+    kv_heads: int,
+    batch_shape: tuple[int, ...],
+) -> None:
+    module = SDPA(
+        num_query_heads=4, num_key_value_heads=num_key_value_heads
+    ).eval()
+    compiled = fullgraph(module)
+    with torch.inference_mode():
+        for query_rows, key_rows in [(3, 5), (7, 9), (1, 4)]:
+            query = torch.randn(*batch_shape, query_rows, 4, 8, device=device)
+            key = torch.randn(
+                *batch_shape, key_rows, kv_heads, 8, device=device
+            )
+            value = torch.randn_like(key)
+            index = [query.ndim - 3, query.ndim - 2]
+            torch._dynamo.mark_dynamic(query, index)
+            torch._dynamo.mark_dynamic(key, index)
+            torch._dynamo.mark_dynamic(value, index)
+            expected = module(query=query, key=key, value=value)
+            out = compiled(query=query, key=key, value=value)
+            torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+@pytest.mark.parametrize(
     ("num_key_value_heads", "qassmax", "self_attn"),
     [
         (None, False, True),

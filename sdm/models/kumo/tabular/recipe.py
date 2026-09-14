@@ -15,9 +15,8 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
             sp.StypeDispatch(
                 numerical=[
-                    sp.ImputeMean(),
                     sp.DropConstantColumns(),
-                    sp.Standardize(epsilon=1e-6),
+                    sp.Standardize(eps=1e-6),
                     sp.Clip(min_value=-100.0, max_value=100.0),
                     sp.Choice(
                         sp.Identity(),
@@ -26,8 +25,8 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     ),
                     sp.ClipSigma(threshold=4.0),
                     sp.FlipSign(),
-                    sp.SelectColumns(500, method="round_robin"),
                     sp.ShuffleColumns(method="latin"),
+                    sp.SelectColumns(500, method="first"),
                 ],
             ),
         ],
@@ -44,9 +43,8 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
         ],
         output=[
+            sp.TaskDispatch(regression=sp.SortQuantiles()),
             sp.ReduceEstimators(method="mean"),
-            sp.TaskDispatch(
-                classification=sp.Softmax(temperature=1.0),
-            ),
+            sp.TaskDispatch(classification=sp.Softmax(temperature=1.0)),
         ],
     )

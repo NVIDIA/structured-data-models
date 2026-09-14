@@ -15,6 +15,7 @@ from sdm.models import ICLModel
 class _LinearModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical})
+    supports_multi_target = False
     supports_related_tables = True
 
     def _forward(

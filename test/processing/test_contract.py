@@ -14,11 +14,11 @@ import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
 )
-from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA
 
 
@@ -133,6 +133,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ImputeMode()),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
+    ProcessorCase(sp.SortQuantiles()),
     ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(

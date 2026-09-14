@@ -11,8 +11,13 @@ from torch.nn import Embedding, Linear, ModuleList, Parameter, RMSNorm
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.models.tabfm.cell_embedding import CellEmbedding
-from sdm.nn import InducedTransformerBlock, RotaryEmbedding
+from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
+from sdm.nn import (
+    GatedLogScale,
+    InducedTransformerBlock,
+    LogScale,
+    RotaryEmbedding,
+)
 
 
 class RowEmbedding(torch.nn.Module):
@@ -57,7 +62,7 @@ class RowEmbedding(torch.nn.Module):
             layout="split_half",
             theta=100_000,
             requires_grad=False,
-            partial_rotary_factor=0.25,
+            partial_rotary_factor=1.0,
             **factory_kwargs,
         )
 
@@ -68,13 +73,16 @@ class RowEmbedding(torch.nn.Module):
                 inducing_block=KumoTabularTransformerBlock(
                     channels=channels,
                     num_heads=num_heads,
-                    query_log_scale=True,
+                    query_scaling=LogScale(
+                        num_heads=num_heads,
+                        **factory_kwargs,
+                    ),
                     **factory_kwargs,
                 ),
                 output_block=KumoTabularTransformerBlock(
                     channels=channels,
                     num_heads=num_heads,
-                    query_log_scale=False,
+                    query_scaling=None,
                     **factory_kwargs,
                 ),
                 **factory_kwargs,
@@ -85,7 +93,12 @@ class RowEmbedding(torch.nn.Module):
             KumoTabularTransformerBlock(
                 channels=channels,
                 num_heads=num_heads,
-                query_log_scale=False,
+                query_scaling=GatedLogScale(
+                    channels=channels // num_heads,
+                    num_heads=num_heads,
+                    hidden_channels=64,
+                    **factory_kwargs,
+                ),
                 rope=rope,
                 **factory_kwargs,
             )
@@ -109,7 +122,12 @@ class RowEmbedding(torch.nn.Module):
 
         buffer: Tensor | None = None
         if torch.is_grad_enabled():
-            x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
+            x = self.cell_embedding(
+                x=x,
+                categorical_mask=categorical_mask,
+                train_size=R_train,
+                cache=cache,
+            )  # [..., R, C, D]
         else:
             buffer = torch.empty(
                 (*B, R, K + C, D),
@@ -120,8 +138,10 @@ class RowEmbedding(torch.nn.Module):
             )
             buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
             x = self.cell_embedding(
-                x,
-                categorical_mask,
+                x=x,
+                categorical_mask=categorical_mask,
+                train_size=R_train,
+                cache=cache,
                 batch_size_limit="auto",
                 out=buffer[..., K:, :],
             )

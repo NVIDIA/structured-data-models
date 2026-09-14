@@ -4,9 +4,8 @@
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import DropConstantColumns
-from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 
@@ -58,35 +57,9 @@ def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
     assert DropConstantColumns(threshold=2).fit_transform(table) is table
 
 
-@withCUDA
-def test_variance_filter(device: torch.device) -> None:
-    data = torch.tensor(
-        [
-            [1.0, 1.0, 1.0, 8.0],
-            [1.0, 1.0000005, 2.0, 8.0],
-            [1.0, 0.9999995, 3.0, 8.0],
-            [1.0, 1.0000002, 4.0, 8.0],
-        ],
-        dtype=torch.float64,
-        device=device,
-    )
-    table = TableTensor.from_tensor(data)
-
-    output = DropConstantColumns(method="variance").fit_transform(table)
-
-    assert output.columns[Stype.numerical] == ("2",)
-    assert output.numerical.equal(data[:, [2]])
-
-
 def test_drop_constant_columns_rejects_invalid_arguments() -> None:
-    with pytest.raises(ValueError, match="tolerance must be None"):
-        DropConstantColumns(tolerance=1e-6)
-    with pytest.raises(ValueError, match="threshold must be None"):
-        DropConstantColumns(method="variance", threshold=1)
     with pytest.raises(ValueError, match="threshold must be positive"):
         DropConstantColumns(threshold=0)
-    with pytest.raises(ValueError, match="tolerance must be non-negative"):
-        DropConstantColumns(method="variance", tolerance=-1.0)
 
 
 @withCUDA
