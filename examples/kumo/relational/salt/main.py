@@ -122,7 +122,10 @@ else:
         "table_column": "ID",
     }
 
-perm = context["CREATIONDATETIME"].datetime.squeeze(-1).argsort(stable=True)
+if args.task.upper() in sale_tasks:
+    perm = context["CREATIONDATETIME"].datetime.flatten().argsort(stable=True)
+else:
+    perm = torch.randperm(len(context))
 context = context[perm[-args.context_size :]]
 
 # Build Relational Data #######################################################
