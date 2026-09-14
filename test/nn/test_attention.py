@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from sdm.cache import KVCacheEntry
 from sdm.nn import (
     SDPA,
     Attention,
@@ -14,7 +15,7 @@ from sdm.nn import (
     SoftplusScale,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def reference_sdpa(
@@ -719,3 +720,107 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+
+
+def test_attention_key_value_cache_dtype_mismatch() -> None:
+    # Replaying a cache recorded under a different dtype must be rejected for
+    # both the key *and* the value stream.
+    torch.manual_seed(0)
+    module = Attention(channels=8, num_query_heads=2)
+    query = torch.randn(2, 3, 8)
+    cached = KVCacheEntry(
+        key=torch.randn(2, 5, 2, 4, dtype=torch.bfloat16),
+        value=torch.randn(2, 5, 2, 4, dtype=torch.bfloat16),
+    )
+    with pytest.raises(ValueError, match="cached under dtypes"):
+        module(query=query, key_value=cached)
+
+    # A value-only mismatch must be caught as well.
+    cached = KVCacheEntry(
+        key=torch.randn(2, 5, 2, 4),
+        value=torch.randn(2, 5, 2, 4, dtype=torch.bfloat16),
+    )
+    with pytest.raises(ValueError, match="cached under dtypes"):
+        module(query=query, key_value=cached)
+
+
+@onlyCUDA
+def test_attention_key_value_cache_autocast() -> None:
+    torch.manual_seed(0)
+    device = torch.device("cuda:0")
+    module = Attention(channels=8, num_query_heads=2, device=device)
+    query = torch.randn(2, 3, 8, device=device)
+    key_value = torch.randn(2, 5, 8, device=device)
+
+    # Caching and replaying under the same autocast context is valid even
+    # though the pre-projection query stays float32.
+    with torch.amp.autocast("cuda", torch.bfloat16):
+        out, cached = module(
+            query=query, key_value=key_value, return_key_value=True
+        )
+        replayed = module(query=query, key_value=cached)
+    torch.testing.assert_close(replayed, out)
+
+
+@withCUDA
+def test_sdpa_seqused_key_value_over_range(device: torch.device) -> None:
+    # An over-range count saturates the key mask (every key visible), so the
+    # query-scaling key length must saturate with it: unclamped, `QASSMax`
+    # would sharpen the logits against keys that do not exist. Both counts
+    # take the masked kernel path, so the outputs must match exactly.
+    torch.manual_seed(0)
+    module = SDPA(
+        num_query_heads=2,
+        query_scaling=QASSMax(channels=4, num_heads=2, device=device),
+    )
+    query = torch.randn(2, 3, 2, 4, device=device)
+    key = torch.randn(2, 5, 2, 4, device=device)
+    value = torch.randn(2, 5, 2, 4, device=device)
+
+    def run(count: int) -> Tensor:
+        return module(
+            query=query,
+            key=key,
+            value=value,
+            seqused_key_value=torch.tensor(
+                [count, count],
+                dtype=torch.int32,
+                device=device,
+            ),
+        )
+
+    torch.testing.assert_close(run(12), run(5))
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_sdpa_seqused_key_value_layout_invariant(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    # The count reaches `QASSMax` as tensor data (`log(key_len)` through a
+    # linear layer), so a non-contiguous count must round like its contiguous
+    # copy or the output would depend on the caller's memory layout. CUDA
+    # rounds the float32 case identically either way; the reduced-precision
+    # case is the one that detects a layout-dependent kernel.
+    torch.manual_seed(0)
+    module = SDPA(
+        num_query_heads=2,
+        query_scaling=QASSMax(channels=4, num_heads=2, device=device),
+    ).to(dtype)
+    query = torch.randn(3, 2, 3, 2, 4, device=device, dtype=dtype)
+    key = torch.randn(3, 2, 5, 2, 4, device=device, dtype=dtype)
+    value = torch.randn(3, 2, 5, 2, 4, device=device, dtype=dtype)
+    counts = torch.tensor([[4, 1, 7], [2, 5, 3]], dtype=torch.int32)
+    counts = counts.to(device).t()  # [3, 2], strides (1, 3).
+    assert not counts.is_contiguous()
+
+    def run(seqused_key_value: Tensor) -> Tensor:
+        return module(
+            query=query,
+            key=key,
+            value=value,
+            seqused_key_value=seqused_key_value,
+        )
+
+    assert torch.equal(run(counts), run(counts.contiguous()))

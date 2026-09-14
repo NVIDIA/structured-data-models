@@ -10,6 +10,7 @@ from torch.nn import Parameter
 
 from sdm.cache import KVCacheEntry
 from sdm.nn import TransformerBlock
+from sdm.nn.attention import _call_with_out
 
 
 class InducedTransformerBlock(torch.nn.Module):
@@ -61,6 +62,17 @@ class InducedTransformerBlock(torch.nn.Module):
             torch.empty(num_inducing_points, channels, **factory_kwargs)
         )
         torch.nn.init.trunc_normal_(self.inducing_points, std=0.02)
+
+    def __call__(
+        self,
+        *args: Any,
+        out: Tensor | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        r""":meta private:"""  # noqa: D415
+        # Keeps `out` out of graphs compiled via `module.compile()`, see
+        # `_call_with_out`.
+        return _call_with_out(self, super().__call__, args, kwargs, out=out)
 
     @overload
     def forward(
@@ -131,7 +143,9 @@ class InducedTransformerBlock(torch.nn.Module):
                 projections for the final attention site alongside the output.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
-            out: The output tensor.
+            out: The output tensor. When the block is compiled in place via
+                :meth:`~torch.nn.Module.compile`, the compiled graph computes
+                its result functionally and ``out`` is filled outside of it.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
