@@ -354,13 +354,9 @@ class EnsembleTable(DeviceMixin):
         groups = []
         refined_locations = [(-1, -1)] * self.num_members
         for group_id, partitions in enumerate(partitions_by_group):
-            if len(partitions) == 0:
-                continue
-
-            packed_positions = []
-            partition_sizes = []
+            group = self._groups[group_id]
             for members in partitions.values():
-                output_group_id = len(groups) + len(partition_sizes)
+                output_group_id = len(groups)
                 output_position_by_source: dict[int, int] = {}
                 for member_id, source_position in members:
                     output_position = output_position_by_source.setdefault(
@@ -370,22 +366,18 @@ class EnsembleTable(DeviceMixin):
                         output_group_id,
                         output_position,
                     )
-                packed_positions.extend(output_position_by_source)
-                partition_sizes.append(len(output_position_by_source))
 
-            group = self._groups[group_id]
-            if tuple(packed_positions) == tuple(range(group.size(0))):
-                packed_group = group
-            else:
-                index = torch.tensor(packed_positions, device=group.device)
-                packed_group = cast(TableTensor, group.index_select(0, index))
-
-            offset = 0
-            for size in partition_sizes:
-                groups.append(
-                    cast(TableTensor, packed_group.narrow(0, offset, size))
-                )
-                offset += size
+                positions = tuple(output_position_by_source)
+                start = positions[0]
+                if positions == tuple(range(start, start + len(positions))):
+                    output = cast(
+                        TableTensor,
+                        group.narrow(0, start, len(positions)),
+                    )
+                else:
+                    index = torch.tensor(positions, device=group.device)
+                    output = cast(TableTensor, group.index_select(0, index))
+                groups.append(output)
 
         return self.__class__(groups=groups, locations=refined_locations)
 
