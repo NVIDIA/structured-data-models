@@ -159,7 +159,6 @@ class CellEmbedding(torch.nn.Module):
         bias: Tensor,  # [..., 1, C, D]
         *,
         out: Tensor | None = None,
-        **kwargs: Tensor,  # [..., R, C, G]
     ) -> Tensor:
 
         *B, R, C, G = x.size()
