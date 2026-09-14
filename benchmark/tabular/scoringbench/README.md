@@ -1,12 +1,12 @@
 # Tabular Probabilistic Regression on ScoringBench
 
-This benchmark evaluates `structured-data-models` on the univariate [ScoringBench](https://github.com/jonaslandsgesell/ScoringBench) benchmark. KumoTabular and TabICLv2 pass all 999 native regression quantiles to ScoringBench.
+This benchmark evaluates `structured-data-models` on the univariate [ScoringBench](https://scoringbench.com) benchmark.
 
 ScoringBench owns the evaluation protocol, including five-fold cross-validation and fold-local feature imputation. Numerical columns are imputed with the training median and categorical columns with the training mode before they reach the model.
 
 ## Setup
 
-Run the commands below from the repository root. Install SDM and clone the tested ScoringBench revision:
+Run the commands below from the repository root:
 
 ```bash
 pip install structured-data-models
@@ -19,14 +19,6 @@ pip install -r ScoringBench/requirements.txt
 
 ## Run
 
-- **KumoTabular:**
-
-  ```bash
-  python -m benchmark.tabular.scoringbench.main \
-    --scoringbench-path /path/to/ScoringBench \
-    --model kumo-tabular
-  ```
-
 - **TabICLv2:**
 
   ```bash
@@ -35,7 +27,16 @@ pip install -r ScoringBench/requirements.txt
     --model tabiclv2
   ```
 
-Pass `--dataset cpu_act` to run one dataset, `--dataset-index 0` to select by validated index, or `--lite` to use two folds. Results are written under `benchmark/tabular/scoringbench_out/univariate/raw/` and completed folds are reused automatically.
+- **KumoTabular:**
+
+  ```bash
+  python -m benchmark.tabular.scoringbench.main \
+    --scoringbench-path /path/to/ScoringBench \
+    --model kumo-tabular
+  ```
+
+Pass `--dataset cpu_act` to run one dataset, `--dataset-index 0` to select by validated index, or `--lite` to use two folds.
+Results are written under `benchmark/tabular/scoringbench_out/univariate/raw/` and completed folds are reused automatically.
 
 ## Evaluate
 

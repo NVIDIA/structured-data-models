@@ -1,5 +1,3 @@
-"""Run an SDM probabilistic regressor on univariate ScoringBench."""
-
 from __future__ import annotations
 
 import argparse

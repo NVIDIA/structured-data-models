@@ -216,5 +216,7 @@ __marimo__/
 
 # Tabular benchmarks
 tabarena_out/
+ScoringBench/
 scoringbench_out/
 evals/
+datasets.json

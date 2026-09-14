@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -18,20 +18,12 @@ from scoringbench.univariate.wrappers import (
 
 import sdm
 
-ModelFactory = Callable[[torch.device], sdm.models.ICLModel]
-
-# SDM quantile models expose 999 native thousandth probability levels.
-QUANTILE_LEVELS = np.linspace(0.001, 0.999, 999)
-QUANTILE_COLUMNS = tuple(f"q{index:03d}" for index in range(1, 1000))
-
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """Configuration for an SDM ScoringBench model."""
-
     name: str
     method: str
-    factory: ModelFactory
+    factory: Callable[[torch.device], sdm.models.ICLModel]
     autocast_dtype: torch.dtype
     num_estimators: int
 
@@ -63,8 +55,6 @@ MODEL_CONFIGS = {
 
 
 class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
-    """Run an SDM quantile model through ScoringBench's wrapper contract."""
-
     config: ClassVar[ModelConfig]
 
     def __init__(
@@ -74,75 +64,65 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
         seed: int = 42,
         batch_size: int | None = None,
     ) -> None:
-        self.device = torch.device(
-            "cuda"
-            if device is None and torch.cuda.is_available()
-            else device or "cpu"
-        )
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        self.device = torch.device(device)
         self.seed = seed
         self.batch_size = batch_size
-        # ScoringBench constructs wrappers outside its fit timer. Constructing
-        # the model here matches the timing boundary of its native wrappers.
         self.model = self.config.factory(self.device)
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> SDMQuantileWrapper:
         self._set_train_range(y)
         self.stypes = sdm.infer_stypes(X)
-        self.x_context = sdm.TableTensor.from_pandas(
+
+        x_context = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self.device,
         )
         target_name = str(y.name) if y.name is not None else "__target__"
-        self.y_context = sdm.TableTensor.from_pandas(
+        y_context = sdm.TableTensor.from_pandas(
             df=y.rename(target_name).to_frame(),
             stypes={target_name: "numerical"},
             device=self.device,
         )
+
+        generator = torch.Generator(device=self.device).manual_seed(self.seed)
+        with torch.amp.autocast(
+            self.device.type,
+            self.config.autocast_dtype,
+            enabled=x_context.is_cuda,
+        ):
+            self.model.fit(
+                x=x_context,
+                y=y_context,
+                num_estimators=self.config.num_estimators,
+                generator=generator,
+            )
+
         return self
 
-    def _batches(self, X: pd.DataFrame) -> Iterator[pd.DataFrame]:
-        if self.batch_size is None or len(X) <= self.batch_size:
-            yield X
-            return
-        for start in range(0, len(X), self.batch_size):
-            yield X.iloc[start : start + self.batch_size]
+    def predict_distribution(self, X: pd.DataFrame) -> DistributionPrediction:
+        x_query = sdm.TableTensor.from_pandas(
+            df=X,
+            stypes=self.stypes,
+            device=self.device,
+        )
 
-    def _predict_quantiles(self, X: pd.DataFrame) -> np.ndarray:
-        chunks = []
-        for batch in self._batches(X):
-            x_query = sdm.TableTensor.from_pandas(
-                df=batch,
-                stypes=self.stypes,
-                device=self.device,
-            )
+        outs = []
+        for batch in x_query.split(self.batch_size or len(x_query), dim=-2):
             with torch.amp.autocast(
                 self.device.type,
                 self.config.autocast_dtype,
                 enabled=x_query.is_cuda,
             ):
-                out = self.model(
-                    x_context=self.x_context,
-                    y_context=self.y_context,
-                    x_query=x_query,
-                    num_estimators=self.config.num_estimators,
-                    generator=torch.Generator(device=self.device).manual_seed(
-                        self.seed
-                    ),
-                )
-            columns = out.columns[sdm.Stype.numerical]
-            positions = [columns.index(column) for column in QUANTILE_COLUMNS]
-            chunks.append(out.numerical[..., positions].float().cpu().numpy())
-        return np.concatenate(chunks)
+                outs.append(self.model.predict(x=batch).numerical)
 
-    def predict_distribution(
-        self,
-        X: pd.DataFrame,
-    ) -> DistributionPrediction:
         assert self._y_train_range is not None
         return quantiles_to_distribution(
-            self._predict_quantiles(X),
-            QUANTILE_LEVELS,
+            torch.cat(outs, dim=-2).cpu().numpy(),
+            np.linspace(0.001, 0.999, 999),
             train_range=self._y_train_range,
         )
 
