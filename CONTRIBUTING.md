@@ -43,20 +43,23 @@ Remember, if you are unsure about anything, don't hesitate to comment on issues 
 
 ### Signing Off Your Work
 
-* We require that all contributors "sign-off" on their commits. This certifies that the contribution is your original work, or you have rights to submit it under the same license, or a compatible license.
+- We require that all contributors "sign-off" on their commits. This certifies that the contribution is your original work, or you have rights to submit it under the same license, or a compatible license.
 
-  * Any contribution which contains commits that are not Signed-Off will not be accepted.
+  - Any contribution which contains commits that are not Signed-Off will not be accepted.
 
-* To sign off on a commit you simply use the `--signoff` (or `-s`) option when committing your changes:
+- To sign off on a commit you simply use the `--signoff` (or `-s`) option when committing your changes:
+
   ```bash
   $ git commit -s -m "Add cool feature."
   ```
+
   This will append the following to your commit message:
+
   ```
   Signed-off-by: Your Name <your@email.com>
   ```
 
-* Full text of the DCO (https://developercertificate.org/):
+- Full text of the DCO (https://developercertificate.org/):
 
   ```
     Developer Certificate of Origin
@@ -94,7 +97,7 @@ Remember, if you are unsure about anything, don't hesitate to comment on issues 
         maintained indefinitely and may be redistributed consistent with
         this project or the open source license(s) involved.
   ```
-  
+
 ### Managing PR labels
 
 Each PR must be labeled according to whether it is a "breaking" or "non-breaking" change (using GitHub labels). This is used to highlight changes that users should know about when upgrading.
