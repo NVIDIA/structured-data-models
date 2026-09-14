@@ -59,3 +59,6 @@ class Standardize(Processor, InvertibleMixin):
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical * self.scale + self.mean
         return table.replace_blocks(numerical=numerical)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return f"{' ' * indent}{self.__class__.__name__}(eps={self.eps})"
