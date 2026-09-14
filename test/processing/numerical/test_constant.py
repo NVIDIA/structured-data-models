@@ -161,4 +161,3 @@ def test_unique_filter_nan(device: torch.device) -> None:
     torch.testing.assert_close(
         output.numerical, data[:, [2, 3, 5]], equal_nan=True
     )
-
