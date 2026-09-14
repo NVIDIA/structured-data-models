@@ -34,6 +34,7 @@ jobs:
             --torch-backend=cpu \
             --find-links=https://data.pyg.org/whl/torch-2.13.0+cpu.html \
             --group=test \
+            'torch<2.14' \
             -e .
 
       - name: Run tests

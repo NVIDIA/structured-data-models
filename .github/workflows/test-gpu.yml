@@ -73,6 +73,7 @@ jobs:
             --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             --index-strategy=unsafe-best-match \
             --group=test \
+            'torch<2.14' \
             .
 
       - name: GPU sanity check
@@ -151,6 +152,7 @@ jobs:
             --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             --index-strategy=unsafe-best-match \
             . \
+            'torch<2.14' \
             'autogluon.common@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=common' \
             'autogluon.core@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=core' \
             'autogluon.features@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=features' \
