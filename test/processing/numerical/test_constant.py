@@ -158,6 +158,4 @@ def test_unique_filter_nan(device: torch.device) -> None:
     output = DropConstantColumns(threshold=2).fit_transform(table)
 
     assert output.columns[Stype.numerical] == ("3",)
-    torch.testing.assert_close(
-        output.numerical, data[:, [3]], equal_nan=True
-    )
+    torch.testing.assert_close(output.numerical, data[:, [3]], equal_nan=True)
