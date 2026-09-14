@@ -77,6 +77,7 @@ members of the project's leadership.
 
 This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 1.4,
 available at https://www.contributor-covenant.org/version/1/4/code-of-conduct.html
+under the MIT License distributed in [`third_party/contributor-covenant/LICENSE`](third_party/contributor-covenant/LICENSE).
 
 For answers to common questions about this code of conduct, see
 https://www.contributor-covenant.org/faq
