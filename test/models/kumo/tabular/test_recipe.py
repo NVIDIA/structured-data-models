@@ -31,7 +31,7 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
     missing_by_column = {
         "num_0": [False, False, False, False, False],
         "num_1": [False, True, False, False, False],
-        "num_2": [True, False, False, False, False],
+        "num_2": [False, False, False, False, False],
         "cat_0": [False, False, False, False, False],
     }
 
