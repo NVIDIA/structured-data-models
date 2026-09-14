@@ -14,7 +14,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 numerical=[
                     sp.ImputeMean(),
                     sp.DropConstantColumns(),
-                    sp.Standardize(epsilon=1e-6),
+                    sp.Standardize(eps=1e-6),
                     sp.Clip(min_value=-100.0, max_value=100.0),
                     sp.Choice(
                         sp.Identity(),
@@ -23,7 +23,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     ),
                     sp.ClipSigma(threshold=4.0),
                     sp.ShuffleColumns(method="random"),
-                    sp.SelectColumns(500, method="round_robin"),
+                    sp.SelectColumns(500, method="first"),
                 ],
             ),
         ],

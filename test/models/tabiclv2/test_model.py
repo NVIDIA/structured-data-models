@@ -32,6 +32,7 @@ def test_forward(
         torch.manual_seed(1)
         out = model(x_context, y_context, x_query)
         assert out.size() == (R_query, 999)
+        assert (out.numerical.diff(dim=-1) >= 0).all()
     else:
         y_context = torch.randint(
             low=0,

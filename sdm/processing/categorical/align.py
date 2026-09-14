@@ -7,6 +7,7 @@ from torch import Tensor
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
@@ -14,7 +15,6 @@ from sdm import (
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
-from sdm.tensor import EnsembleTable
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 

@@ -3,13 +3,12 @@ from typing import cast
 import torch
 from torch.nn import ModuleDict
 
-from sdm import Stype
+from sdm import EnsembleTable, Stype
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
     Processor,
 )
-from sdm.tensor import EnsembleTable
 
 
 class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -17,14 +16,13 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
 
     For each configured route, matching columns from a
     :class:`~sdm.tensor.TableTensor` or
-    :class:`~sdm.tensor.EnsembleTable` are passed to that processor. Ordinary
+    :class:`~sdm.EnsembleTable` are passed to that processor. Ordinary
     processors learn separate state for each compatible ensemble group, while
     ensemble-aware processors operate on all groups directly. Compatible
     members are processed together and route outputs are concatenated in
     semantic type order while preserving logical member order. A route may
     change column values, names, count, or order. With the default passthrough
-    behavior, unconfigured semantic types follow in input order. A
-    ``generator`` passed during fitting is passed on to every route.
+    behavior, unconfigured semantic types follow in input order.
 
     Inverse transform supports routes that preserve their semantic type. Every
     active route must be invertible, and routes must not share an output
@@ -32,18 +30,12 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
 
     Args:
         numerical: Processor or stateless callable route for numerical
-            columns. A sequence is normalized to
-            :class:`~sdm.processing.Sequential`.
+            columns.
         categorical: Processor or stateless callable route for categorical
-            columns. A sequence is normalized to
-            :class:`~sdm.processing.Sequential`.
+            columns.
         datetime: Processor or stateless callable route for datetime columns.
-            A sequence is normalized to
-            :class:`~sdm.processing.Sequential`.
-        text: Processor or stateless callable route for text columns. A
-            sequence is normalized to :class:`~sdm.processing.Sequential`.
-        id: Processor or stateless callable route for identifier columns. A
-            sequence is normalized to :class:`~sdm.processing.Sequential`.
+        text: Processor or stateless callable route for text columns.
+        id: Processor or stateless callable route for identifier columns.
     """
 
     def __init__(

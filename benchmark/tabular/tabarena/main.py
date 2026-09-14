@@ -7,7 +7,10 @@ from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import MODEL_CONFIGS
+from benchmark.tabular.model import (
+    MODEL_CONFIGS,
+    SDMExperimentRunner,
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -31,6 +34,11 @@ parser.add_argument(
     help="Subsample the context to at most this many rows.",
 )
 parser.add_argument(
+    "--max_columns",
+    type=int,
+    help="Select at most this many columns per estimator.",
+)
+parser.add_argument(
     "--batch_size",
     type=int,
     help="Prediction batch size.",
@@ -49,6 +57,7 @@ result_dir.mkdir(parents=True, exist_ok=True)
 config = {
     "ag_args_ensemble": {"refit_folds": True},
     "max_context_size": args.max_context_size,
+    "max_columns": args.max_columns,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
@@ -62,6 +71,8 @@ experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
     sequential_local_fold_fitting=True,
 ).build_experiments()
+for experiment in experiments:
+    experiment.experiment_cls = SDMExperimentRunner
 
 context = TabArenaContext()
 context.build_and_run_jobs(

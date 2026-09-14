@@ -4,7 +4,7 @@ from typing import Generic, Literal, NamedTuple, Self, TypeVar, cast
 import torch
 from torch import Tensor
 
-from sdm import ColumnarTensor, Stype, TableTensor
+from sdm import ColumnarTensor, EnsembleTable, Stype, TableTensor
 from sdm.relational import (
     RelatedTables,
     RelationalData,
@@ -15,7 +15,6 @@ from sdm.relational.backend import (
     CuGraphRelationalSampler,
     PyGLibRelationalSampler,
 )
-from sdm.tensor import EnsembleTable
 from sdm.tensor.mixin import DeviceMixin
 
 T = TypeVar("T", bound=TableTensor | EnsembleTable)

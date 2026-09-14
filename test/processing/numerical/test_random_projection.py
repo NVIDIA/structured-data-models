@@ -1,8 +1,7 @@
 import torch
 
-from sdm import CategoricalTensor, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, TableTensor
 from sdm.processing import RandomProjection
-from sdm.tensor import EnsembleTable
 
 
 def _table() -> TableTensor:
