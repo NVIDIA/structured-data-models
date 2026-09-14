@@ -18,7 +18,7 @@ from sdm import (
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.models.callback import Callback
+from sdm.models._callback import Callback
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,

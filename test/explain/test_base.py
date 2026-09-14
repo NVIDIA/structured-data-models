@@ -3,7 +3,8 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
-from sdm.models import Callback, TabICLv2
+from sdm.models import TabICLv2
+from sdm.models._callback import Callback
 
 
 class MyCallback(Callback):
