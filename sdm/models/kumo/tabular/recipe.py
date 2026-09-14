@@ -22,7 +22,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 numerical=[
                     _replace_inf,
                     sp.DropConstantColumns(),
-                    sp.Standardize(epsilon=1e-6),
+                    sp.Standardize(eps=1e-6),
                     sp.Clip(min_value=-100.0, max_value=100.0),
                     sp.Choice(
                         sp.Identity(),
