@@ -22,8 +22,8 @@ The current implementation generally improves results with more in-context examp
 | Task               | KumoRFM-1 | KumoRFM-2 | 1 estimator<br>50K context | 8 estimators<br>50K context | 1 estimator<br>100K context | 8 estimators<br>100K context |
 | ------------------ | --------: | --------: | -------------------------: | --------------------------: | --------------------------: | ---------------------------: |
 | Plant              |      0.99 |      0.99 |                     0.9898 |                      0.9913 |                      0.9901 |                       0.9932 |
-| ShippingPoint      |      0.99 |      0.98 |                      0.978 |                      0.9816 |                      0.9799 |                       0.9838 |
-| Item Incoterm      |      0.79 |      0.78 |                     0.8057 |                       0.809 |                      0.8078 |                       0.8101 |
+| ShippingPoint      |      0.99 |      0.98 |                     0.9780 |                      0.9816 |                      0.9799 |                       0.9838 |
+| Item Incoterm      |      0.79 |      0.78 |                     0.8057 |                      0.8090 |                      0.8078 |                       0.8101 |
 | Header Incoterm    |      0.81 |      0.81 |                     0.8405 |                      0.8504 |                      0.8422 |                       0.8479 |
 | Sales Office       |         1 |         1 |                     0.9993 |                      0.9994 |                      0.9994 |                       0.9994 |
 | Sales Group        |      0.38 |      0.61 |                     0.5983 |                      0.6273 |                      0.6124 |                       0.6186 |
