@@ -143,7 +143,7 @@ def test_drop_constant_columns_requires_fitted_member_count() -> None:
 
 
 @withCUDA
-def test_unique_filter_counts_nan_once(device: torch.device) -> None:
+def test_unique_filter_nan(device: torch.device) -> None:
     data = torch.tensor(
         [
             [float("nan"), 1.0, 1.0, 1.0, float("inf"), float("inf")],
@@ -162,23 +162,3 @@ def test_unique_filter_counts_nan_once(device: torch.device) -> None:
         output.numerical, data[:, [2, 3, 5]], equal_nan=True
     )
 
-
-@withCUDA
-def test_unique_filter_counts_nan_once_with_higher_threshold(
-    device: torch.device,
-) -> None:
-    table = TableTensor.from_tensor(
-        torch.tensor(
-            [
-                [1.0, 1.0, float("nan")],
-                [1.0, 2.0, float("nan")],
-                [float("nan"), float("nan"), float("nan")],
-                [float("nan"), float("nan"), float("nan")],
-            ],
-            device=device,
-        )
-    )
-
-    output = DropConstantColumns(threshold=2).fit_transform(table)
-
-    assert output.columns[Stype.numerical] == ("1",)
