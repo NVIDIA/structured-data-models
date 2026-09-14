@@ -168,6 +168,22 @@ Beyond precision, the shape dimension (all measured on GB200):
   the first ICL layer hands its output to the later blocks' ``out=``
   buffers, which CUDA graph trees (``mode="reduce-overhead"``) reject,
   so the driver refuses that combination.
+* **cuDNN variable-length attention** (``c20``): ``c18`` plus native
+  padding-mask attention for the padded train-row key/value streams
+  (``seqused_train``; column padding keeps the boolean key mask in row
+  attention) - requires the optional ``cudnn`` extra,
+  ``nvidia-cudnn-frontend``. Measured: large fresh-table stream 42.5 ->
+  28 ms (1.5x; 10 execution graphs, 0 fallbacks); small tables ~1 ms
+  slower per fresh table (13-14 -> 14-15 ms) from per-call graph
+  execution overhead; the on-grid p50 is unchanged (~18 ms) because
+  exact-fit tables pass no ``seqused_*`` and never reach the path.
+  Both sides of that comparison run under the cuDNN-first SDPA
+  priority; the unbucketed flash-priority ``c21`` serves the same large
+  stream at ~24 ms per fresh table once warm (~27 ms over a process's
+  first eight fresh tables).
+  The cell aborts rather than publishing boolean-mask numbers under the
+  variable-length label when the package is missing or a served shape
+  falls back to the mask.
 * **Compile-cache artifacts** (measured with a separate script, not
   part of this grid): ``torch.compiler.save_cache_artifacts`` after a
   warm run and ``load_cache_artifacts`` at boot cut cold compile to
@@ -207,7 +223,13 @@ import sdm
 from sdm import Recipe
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models import TabICLv2
-from sdm.nn import InducedTransformerBlock, QASSMax, TransformerBlock
+from sdm.nn import (
+    InducedTransformerBlock,
+    QASSMax,
+    TransformerBlock,
+    cudnn_varlen_stats,
+    enable_cudnn_varlen,
+)
 from sdm.processing.execution import RecipeExecution
 
 # `sdpa_kernel` priorities a configuration's second field can select:
@@ -237,7 +259,8 @@ def sdpa_backends(
 
 CONFIGS = {
     # name: (precision, sdpa_priority, compile_kwargs, te_recipe) with an
-    # optional fifth element enabling shape-bucketed padding.
+    # optional fifth element enabling shape-bucketed padding and an
+    # optional sixth enabling cuDNN variable-length attention.
     "c0-fp32": ("fp32", False, None, None),
     "c1-tf32": ("tf32", False, None, None),
     "c2-bf16-autocast": ("bf16-autocast", False, None, None),
@@ -338,6 +361,18 @@ CONFIGS = {
         False,
         {"fullgraph": True, "dynamic": True, "regional": True},
         None,
+    ),
+    # c18 plus cuDNN variable-length attention for the padded train-row
+    # key/value streams (column padding keeps the boolean key mask;
+    # requires the optional nvidia-cudnn-frontend package). The sixth
+    # tuple element enables the path.
+    "c20-bucket-regional-varlen": (
+        "bf16-full",
+        True,
+        {"fullgraph": True, "dynamic": True, "regional": True},
+        None,
+        True,
+        True,
     ),
 }
 
@@ -650,6 +685,18 @@ def bucketed_cell(config: str) -> bool:
     return bool(extras and extras[0])
 
 
+def varlen_engaged(built: int, failed: int, exercised: bool) -> bool:
+    """Whether numbers may be published under the variable-length label.
+
+    ``built``/``failed`` are the :func:`sdm.nn.cudnn_varlen_stats` counts
+    after the cell ran and ``exercised`` records whether any call passed
+    ``seqused`` counts: no shape may have degraded to the masked fallback,
+    and once counts were passed at least one execution graph must exist.
+    A cell that never passed counts is legitimately idle.
+    """
+    return not failed and (built > 0 or not exercised)
+
+
 def cuda_cache_file_count() -> int:
     """Count the files in the CUDA driver's JIT cache directory.
 
@@ -736,6 +783,19 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
     device = torch.device("cuda")
     result: dict[str, Any] = dict(spec)
     cuda_cache_files_before = cuda_cache_file_count()
+    # Whether this cell ever passed a non-empty seqused_* set, i.e. actually
+    # requested the variable-length path. Exact-fit tables skip seqused by
+    # design (masking costs), so a cell can be legitimately varlen-idle.
+    varlen_exercised = [False]
+    if len(extras) > 1 and extras[1]:
+        result["cudnn_varlen_active"] = enable_cudnn_varlen(True)
+        if not result["cudnn_varlen_active"]:
+            raise RuntimeError(
+                f"config '{config}' requests the cuDNN variable-length "
+                f"path but it is inert (nvidia-cudnn-frontend missing or "
+                f"unimportable); refusing to publish boolean-mask numbers "
+                f"under the variable-length label"
+            )
 
     model = TabICLv2(pretrained=True, device=device)
     apply_precision(model, precision)
@@ -786,6 +846,12 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
         "cudnn": torch.backends.cudnn.version(),
         "sdm": sdm.__version__,
     }
+    if result.get("cudnn_varlen_active"):
+        # The variable-length path runs cudnn-frontend execution graphs,
+        # so its numbers are attributable to that package version too.
+        result["environment"]["cudnn_frontend"] = importlib.import_module(
+            "cudnn"
+        ).__version__
 
     def call(x: Tensor, y: Tensor, **kwargs: Any) -> Tensor:
         # `x` holds the in-context rows followed by the query rows; `y`
@@ -816,6 +882,8 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
     def bucketed_call(x: Tensor, y: Tensor) -> Tensor:
         """Pad to bucketed shapes, run, and slice the true test rows."""
         x, y, seqused, num_test = pad_to_buckets(x, y)
+        if seqused:
+            varlen_exercised[0] = True
         out = call(x, y, **seqused)
         return out[..., :num_test, :]
 
@@ -911,6 +979,7 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
                     else:
                         yw = torch.zeros(*batch_shape, train_b, device=device)
                     xw, yw = cast_inputs(xw, yw, precision)
+                    varlen_exercised[0] = True
                     for _ in range(2):  # Graph capture needs a re-visit.
                         # Only the masked family is warmed here. The unmasked
                         # family serves exactly-on-grid tables, which for
@@ -985,6 +1054,8 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
             x_padded, y, seqused, _ = pad_to_buckets(x_train, y)
             x_train = x_padded[..., : y.size(-1), :]
             fit_kwargs.update(seqused)
+            if seqused:
+                varlen_exercised[0] = True
 
         uses_cudagraphs = compile_kwargs is not None and "reduce-overhead" in (
             str(compile_kwargs.get("mode", ""))
@@ -1158,6 +1229,36 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
         result["accuracy"] = accuracy_block(task, out.float().cpu(), ref)
     else:
         result["accuracy"] = {"pass": None, "missing_reference": True}
+
+    if result.get("cudnn_varlen_active"):
+        # Import availability alone does not prove the kernel served the
+        # cell: an unsupported shape degrades to the masked fallback
+        # inside the op (probed once per shape, negatively cached, warned
+        # once), and the warning is lost on green runs because the parent
+        # keeps subprocess stderr only on failure.
+        built, failed = cudnn_varlen_stats()
+        result["cudnn_varlen_graphs_built"] = built
+        result["cudnn_varlen_build_failures"] = failed
+        result["cudnn_varlen_exercised"] = varlen_exercised[0]
+        # Exact-fit cells (canonical shapes land on the bucket grid) never
+        # pass seqused, so the varlen path is legitimately idle and the
+        # numbers are mask-free by construction; demanding engagement there
+        # is a false alarm. The gate fires when varlen was REQUESTED but a
+        # shape degraded (failed > 0) or nothing engaged. For this model
+        # and these workloads every dispatch-level eligibility term is
+        # cell-constant (dtype, heads, head dim, and the eager chunking
+        # cap on the flattened batch), so eligibility rejection is
+        # all-or-nothing per cell and lands in the nothing-engaged
+        # branch; per-call op-level metadata fallbacks are unreachable
+        # from TabICLv2's call sites and are not counted here.
+        if not varlen_engaged(built, failed, varlen_exercised[0]):
+            raise RuntimeError(
+                f"config '{config}' requests the cuDNN variable-length "
+                f"path but it did not fully engage ({built} execution "
+                f"graph(s) built, {failed} shape(s) degraded to the "
+                f"masked fallback); refusing to publish boolean-mask "
+                f"numbers under the variable-length label"
+            )
     result["environment"]["cuda_cache_files_added"] = (
         cuda_cache_file_count() - cuda_cache_files_before
     )

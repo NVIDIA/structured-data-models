@@ -76,6 +76,32 @@ def test_bucketed_cell(benchmark: ModuleType) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("built", "failed", "exercised", "expected"),
+    [
+        # Counts were passed and every shape built a graph.
+        (10, 0, True, True),
+        # Exact-fit cells never pass counts, so an idle path is fine.
+        (0, 0, False, True),
+        # Counts were passed but nothing engaged (wheel missing, or every
+        # shape rejected at dispatch): boolean-mask numbers, not varlen.
+        (0, 0, True, False),
+        # A shape degraded to the masked fallback, even if others built.
+        (10, 1, True, False),
+        # Degradation fails regardless of whether counts were passed.
+        (0, 1, False, False),
+    ],
+)
+def test_varlen_engaged(
+    benchmark: ModuleType,
+    built: int,
+    failed: int,
+    exercised: bool,
+    expected: bool,
+) -> None:
+    assert benchmark.varlen_engaged(built, failed, exercised) is expected
+
+
 def test_bucket_grids(benchmark: ModuleType) -> None:
     # Counts round up to the grid, grid sizes map to themselves, zero rows
     # stay zero, and counts beyond the grid round up to the next multiple of
