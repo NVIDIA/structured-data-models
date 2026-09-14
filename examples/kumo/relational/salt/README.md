@@ -29,4 +29,4 @@ The current implementation generally improves results with more in-context examp
 | Sales Group        |      0.38 |      0.61 |                     0.5983 |                      0.6273 |                      0.6124 |                       0.6186 |
 | Payment Terms      |      0.66 |      0.68 |                     0.6722 |                      0.6896 |                      0.6985 |                       0.7067 |
 | Shipping Condition |      0.78 |      0.79 |                     0.8121 |                      0.8233 |                      0.8175 |                       0.8263 |
-| Avg                |       0.8 |      0.83 |                  0.8369875 |                   0.8464875 |                    0.843475 |                      0.84825 |
+| Avg                |       0.8 |      0.83 |                     0.8370 |                      0.8465 |                      0.8435 |                       0.8483 |
