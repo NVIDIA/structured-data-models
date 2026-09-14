@@ -19,7 +19,7 @@ The `sdm/models/tabiclv2/` implementation contains code derived from TabICLv2. K
 - Optional pretrained weights: https://huggingface.co/google/tabfm-1.0.0-pytorch
 - Weights license: [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE)
 
-The `sdm/models/tabfm/` implementation contains code derived from TabFM. The TabFM weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
+The `sdm/models/tabfm/` implementation contains code derived from TabFM. KumoTabular reuses a TabFM-derived cell embedding. The TabFM weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
 ## TimesFM 3.0
 
@@ -38,3 +38,7 @@ Portions of [`CONTRIBUTING.md`](CONTRIBUTING.md) are adapted from the [PyTorch c
 ## Contributor Covenant
 
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) is adapted from [Contributor Covenant version 1.4](https://www.contributor-covenant.org/version/1/4/code-of-conduct/), distributed under the MIT License. The complete copyright notice and license terms are distributed in [`third_party/contributor-covenant/LICENSE`](third_party/contributor-covenant/LICENSE).
+
+## Developer Certificate of Origin
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) reproduces the [Developer Certificate of Origin version 1.1](https://developercertificate.org/), copyright 2004 and 2006 The Linux Foundation and its contributors. The document permits verbatim copying and distribution and is reproduced without changes.
