@@ -81,3 +81,7 @@ model.clear()
 ```
 
 More examples are listed under [`examples/`](examples), grouped by model architecture.
+
+## License
+
+NVIDIA-authored source code is licensed under the [Apache License 2.0](LICENSE). Derived code, documentation, and separately distributed model assets are described in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
