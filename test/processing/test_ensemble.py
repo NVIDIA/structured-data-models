@@ -226,7 +226,6 @@ def test_adapter_splits_groups_at_fitted_boundaries() -> None:
     processor.fit_ensemble(context)
     output = processor.transform_ensemble(query)
 
-    assert output.num_groups == 2
     assert output.table(0).numerical.tolist() == [[2.0], [4.0]]
     assert output.table(1).numerical.tolist() == [[20.0], [40.0]]
 

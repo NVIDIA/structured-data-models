@@ -250,7 +250,7 @@ class EnsembleTable(DeviceMixin):
         tables: Sequence[Self],
         member_ids: Sequence[int],
     ) -> Self:
-        """Gather selected source members into this ensemble's group layout.
+        """Gather members from multiple ensemble tables.
 
         ``tables[i].table(member_ids[i])`` supplies output member ``i``.
 
@@ -331,34 +331,27 @@ class EnsembleTable(DeviceMixin):
 
     def _split_groups(
         self,
-        fitted_locations: Sequence[tuple[int, int]],
+        reference_locations: Sequence[tuple[int, int]],
     ) -> Self:
-        """Split current groups that cross fitted group boundaries."""
-        fitted_locations = tuple(fitted_locations)
-        if len(fitted_locations) != self.num_members:
-            raise ValueError("Expected the same number of ensemble members")
-
-        members_by_partition: dict[tuple[int, int], list[int]] = {}
-        fitted_group_by_group: dict[int, int] = {}
-        needs_split = False
-        for member_id, ((group_id, _), (fitted_group_id, _)) in enumerate(
-            zip(self._locations, fitted_locations, strict=True)
-        ):
-            previous_fitted_group_id = fitted_group_by_group.setdefault(
-                group_id, fitted_group_id
-            )
-            needs_split |= previous_fitted_group_id != fitted_group_id
-            members_by_partition.setdefault(
-                (group_id, fitted_group_id), []
-            ).append(member_id)
-
-        if not needs_split:
+        """Split groups that cross reference group boundaries."""
+        reference_locations = tuple(reference_locations)
+        if self._locations == reference_locations:
             return self
 
-        # TODO: This fallback occurs when one transform group contains members
-        # from multiple fit groups. It can avoid temporary EnsembleTables and
-        # copies for non-contiguous positions by slicing the original groups
-        # directly while preserving the same fit-group partitions.
+        members_by_partition: dict[tuple[int, int], list[int]] = {}
+        for member_id, ((group_id, _), (reference_group_id, _)) in enumerate(
+            zip(self._locations, reference_locations, strict=True)
+        ):
+            members_by_partition.setdefault(
+                (group_id, reference_group_id), []
+            ).append(member_id)
+
+        if len(members_by_partition) == self.num_groups:
+            return self
+
+        # TODO: This fallback runs when one current group contains members from
+        # multiple reference groups. Direct group slicing on EnsembleTable
+        # could avoid the temporary selections and non-contiguous copies.
         groups = []
         locations = [(-1, -1)] * self.num_members
         for member_ids in members_by_partition.values():
