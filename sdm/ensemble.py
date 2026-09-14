@@ -334,36 +334,58 @@ class EnsembleTable(DeviceMixin):
 
     def _refine_groups(
         self,
-        locations: Sequence[tuple[int, int]],
+        reference_group_ids: Sequence[int],
     ) -> Self:
-        """Split groups along the boundaries defined by ``locations``."""
-        locations = tuple(locations)
-        if self._locations == locations:
+        """Split current groups by each member's reference group ID."""
+        partitions_by_group: list[dict[int, list[tuple[int, int]]]] = [
+            {} for _ in range(self.num_groups)
+        ]
+        for member_id, (
+            (group_id, position),
+            reference_group_id,
+        ) in enumerate(zip(self._locations, reference_group_ids, strict=True)):
+            partitions_by_group[group_id].setdefault(
+                reference_group_id, []
+            ).append((member_id, position))
+
+        if all(len(partitions) <= 1 for partitions in partitions_by_group):
             return self
 
-        members_by_partition: dict[tuple[int, int], list[int]] = {}
-        for member_id, ((group_id, _), (reference_group_id, _)) in enumerate(
-            zip(self._locations, locations, strict=True)
-        ):
-            members_by_partition.setdefault(
-                (group_id, reference_group_id), []
-            ).append(member_id)
-
-        if len(members_by_partition) == self.num_groups:
-            return self
-
-        # TODO: This fallback runs when one group contains members assigned to
-        # multiple reference groups. Direct group slicing on EnsembleTable
-        # could avoid the temporary selections and non-contiguous copies.
         groups = []
         refined_locations = [(-1, -1)] * self.num_members
-        for member_ids in members_by_partition.values():
-            selected = self.select_members(member_ids)
-            group_id = len(groups)
-            groups.append(selected._groups[0])
-            for selected_member_id, member_id in enumerate(member_ids):
-                _, position = selected._locations[selected_member_id]
-                refined_locations[member_id] = (group_id, position)
+        for group_id, partitions in enumerate(partitions_by_group):
+            if len(partitions) == 0:
+                continue
+
+            packed_positions = []
+            partition_sizes = []
+            for members in partitions.values():
+                output_group_id = len(groups) + len(partition_sizes)
+                output_position_by_source: dict[int, int] = {}
+                for member_id, source_position in members:
+                    output_position = output_position_by_source.setdefault(
+                        source_position, len(output_position_by_source)
+                    )
+                    refined_locations[member_id] = (
+                        output_group_id,
+                        output_position,
+                    )
+                packed_positions.extend(output_position_by_source)
+                partition_sizes.append(len(output_position_by_source))
+
+            group = self._groups[group_id]
+            if tuple(packed_positions) == tuple(range(group.size(0))):
+                packed_group = group
+            else:
+                index = torch.tensor(packed_positions, device=group.device)
+                packed_group = cast(TableTensor, group.index_select(0, index))
+
+            offset = 0
+            for size in partition_sizes:
+                groups.append(
+                    cast(TableTensor, packed_group.narrow(0, offset, size))
+                )
+                offset += size
 
         return self.__class__(groups=groups, locations=refined_locations)
 
