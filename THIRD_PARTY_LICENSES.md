@@ -19,7 +19,7 @@ The `sdm/models/tabiclv2/` implementation contains code derived from TabICLv2. K
 - Optional pretrained weights: https://huggingface.co/google/tabfm-1.0.0-pytorch
 - Weights license: [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE)
 
-The `sdm/models/tabfm/` implementation contains code derived from TabFM. KumoTabular reuses a TabFM-derived cell embedding. The TabFM weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
+The `sdm/models/tabfm/` implementation contains code derived from TabFM. The TabFM weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
 ## TimesFM 3.0
 
