@@ -14,7 +14,7 @@ class DropConstantColumns(EnsembleProcessor):
 
     Columns are retained when they have more than ``threshold`` distinct
     values. When the number of samples is less than or equal to ``threshold``,
-    all columns are preserved.
+    all columns are preserved. NaN is counted once as a distinct value.
 
     Only numerical columns are supported. Convert other feature stypes before
     this step, for example with :class:`~sdm.processing.ToNumerical`.
@@ -64,11 +64,13 @@ class DropConstantColumns(EnsembleProcessor):
             )
         if self.threshold == 1:
             # Any mismatch with the first row proves a second unique value.
-            return (data != data[..., :1, :]).any(dim=-2)
+            different = (data != data[..., :1, :]).any(dim=-2)
+            return different & ~data.isnan().all(dim=-2)
 
         # A sorted column with k unique values has k - 1 transitions.
         values = data.sort(dim=-2).values
-        changed = values[..., 1:, :] != values[..., :-1, :]
+        left, right = values[..., :-1, :], values[..., 1:, :]
+        changed = (right != left) & ~(right.isnan() & left.isnan())
         return changed.sum(dim=-2) >= self.threshold
 
     @staticmethod
