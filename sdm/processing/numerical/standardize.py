@@ -21,6 +21,8 @@ class Standardize(Processor, InvertibleMixin):
 
     def __init__(self, *, eps: float = 0.0) -> None:
         super().__init__()
+        if eps < 0:
+            raise ValueError("epsilon must be non-negative.")
         self.eps = eps
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
