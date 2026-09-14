@@ -1,6 +1,6 @@
 # Tabular Benchmarks
 
-This directory contains benchmarks of `structured-data-models` on [TabArena and BeyondArena](https://tabarena.ai), [ScoringBench](scoringbench/), and [TALENT](talent/).
+This directory contains benchmarks of `structured-data-models` on TabArena/BeyondArena, [ScoringBench](scoringbench/), and [TALENT](talent/).
 
 > [!NOTE]
 > Weights of `TabFM` are distributed under the [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE).
