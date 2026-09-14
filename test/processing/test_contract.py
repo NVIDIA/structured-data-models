@@ -107,6 +107,7 @@ def _make_processor_pair(
 PROCESSOR_CASES = (
     ProcessorCase(sp.Identity()),
     ProcessorCase(sp.Callable(lambda table: table)),
+    ProcessorCase(sp.ReplaceBlocks(numerical=lambda block: block + 1)),
     ProcessorCase(sp.DropStypes(Stype.id)),
     ProcessorCase(sp.ToNumerical()),
     ProcessorCase(sp.ShuffleColumns()),

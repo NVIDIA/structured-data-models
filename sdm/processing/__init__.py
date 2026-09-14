@@ -8,6 +8,7 @@ from sdm.processing.ensemble import (
 from sdm.processing.common import (
     Identity,
     Callable,
+    ReplaceBlocks,
     Sequential,
     DropStypes,
     StypeDispatch,
@@ -49,6 +50,7 @@ __all__ = [
     "EnsembleProcessorAdapter",
     "Identity",
     "Callable",
+    "ReplaceBlocks",
     "Sequential",
     "DropStypes",
     "StypeDispatch",
