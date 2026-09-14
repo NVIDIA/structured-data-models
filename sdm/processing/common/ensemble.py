@@ -39,17 +39,17 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         self.requires_fit = processor.requires_fit
 
         self._processors: ModuleList[Processor] = ModuleList()
-        self._processor_locations: tuple[tuple[int, int], ...] = ()
+        self._locations: tuple[tuple[int, int], ...] = ()
 
     def get_extra_state(
         self,
     ) -> tuple[int, tuple[tuple[int, int], ...]]:
         r""":meta private:"""  # noqa: D415
-        return len(self._processors), self._processor_locations
+        return len(self._processors), self._locations
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        num_processors, self._processor_locations = cast(
+        num_processors, self._locations = cast(
             tuple[int, tuple[tuple[int, int], ...]], state
         )
         self._processors = ModuleList(
@@ -67,7 +67,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._processor_locations = ensemble_table._locations
+        self._locations = ensemble_table._locations
         self._processors = ModuleList()
         for group_id, group in enumerate(ensemble_table):
             if group_id == 0:
@@ -86,7 +86,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         if not self.requires_fit:
             return self._transform_ensemble(ensemble_table)
 
-        self._processor_locations = ensemble_table._locations
+        self._locations = ensemble_table._locations
         outputs = []
         self._processors = ModuleList()
         for group_id, group in enumerate(ensemble_table):
@@ -104,7 +104,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         if self.requires_fit:
             ensemble_table = ensemble_table._split_groups(
-                self._processor_locations
+                self._locations
             )
             processors = self._processors_for_groups(ensemble_table)
         else:
@@ -124,7 +124,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         if self.requires_fit:
             ensemble_table = ensemble_table._split_groups(
-                self._processor_locations
+                self._locations
             )
             processors = self._processors_for_groups(ensemble_table)
         else:
@@ -144,13 +144,13 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> tuple[Processor, ...]:
-        if ensemble_table._locations == self._processor_locations:
+        if ensemble_table._locations == self._locations:
             return tuple(self._processors)
 
         processor_id_by_group: dict[int, int] = {}
         member_ids_by_processor: dict[int, list[int]] = {}
         for member_id, (group_id, _) in enumerate(ensemble_table._locations):
-            processor_id, _ = self._processor_locations[member_id]
+            processor_id, _ = self._locations[member_id]
             processor_id_by_group[group_id] = processor_id
             member_ids_by_processor.setdefault(processor_id, []).append(
                 member_id
@@ -158,7 +158,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
 
         for member_ids in member_ids_by_processor.values():
             fitted_positions = tuple(
-                self._processor_locations[member_id][1]
+                self._locations[member_id][1]
                 for member_id in member_ids
             )
             if len(set(fitted_positions)) == 1:
