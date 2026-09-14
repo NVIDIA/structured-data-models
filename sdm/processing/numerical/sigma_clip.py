@@ -41,7 +41,7 @@ class ClipSigma(Processor):
     ) -> None:
 
         finite = table.numerical.isfinite()
-        finite_or_nan = table.numerical.masked_fill(~finite, float("nan"))
+        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
 
         # Compute finite mean and standard deviation:
         mean = finite_or_nan.nanmean(-2, keepdim=True)
