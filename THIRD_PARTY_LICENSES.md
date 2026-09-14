@@ -21,16 +21,6 @@ The `sdm/models/tabiclv2/` implementation contains code derived from TabICLv2. K
 
 The `sdm/models/tabfm/` implementation contains code derived from TabFM. The TabFM weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
-## TimesFM 3.0
-
-- Source: https://github.com/google-research/timesfm
-- Code license: Apache License 2.0
-- License terms: [`sdm/models/timesfm3/LICENSE`](sdm/models/timesfm3/LICENSE)
-- Optional pretrained weights: https://huggingface.co/google/timesfm-3.0-pytorch
-- Weights license: [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE)
-
-The `sdm/models/timesfm3/` implementation contains code derived from TimesFM 3.0. The TimesFM 3.0 weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
-
 ## PyTorch contribution guide
 
 Portions of [`CONTRIBUTING.md`](CONTRIBUTING.md) are adapted from the [PyTorch contribution guide](https://github.com/pytorch/pytorch/blob/main/CONTRIBUTING.md), distributed under the BSD 3-Clause License. The complete copyright notices and license terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).
