@@ -34,7 +34,7 @@ class CellEmbedding(TabFMCellEmbedding):
             dtype=dtype,
         )
 
-    def forward(
+    def forward(  # type: ignore
         self,
         x: Tensor,  # [..., R, C]
         categorical_mask: Tensor,  # [..., C]
@@ -66,7 +66,7 @@ class CellEmbedding(TabFMCellEmbedding):
             missing=missing,
         )
 
-    def _forward(
+    def _forward(  # type: ignore
         self,
         x: Tensor,  # [..., R, C, G]
         freq: Tensor,  # [..., 1, C, G, F]
