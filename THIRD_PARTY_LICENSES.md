@@ -38,7 +38,3 @@ Portions of [`CONTRIBUTING.md`](CONTRIBUTING.md) are adapted from the [PyTorch c
 ## Contributor Covenant
 
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) is adapted from [Contributor Covenant version 1.4](https://www.contributor-covenant.org/version/1/4/code-of-conduct/), distributed under the MIT License. The complete copyright notice and license terms are distributed in [`third_party/contributor-covenant/LICENSE`](third_party/contributor-covenant/LICENSE).
-
-## Developer Certificate of Origin
-
-[`CONTRIBUTING.md`](CONTRIBUTING.md) reproduces the [Developer Certificate of Origin version 1.1](https://developercertificate.org/), copyright 2004 and 2006 The Linux Foundation and its contributors. The document permits verbatim copying and distribution and is reproduced without changes.
