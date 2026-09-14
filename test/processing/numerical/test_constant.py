@@ -155,9 +155,9 @@ def test_unique_filter_nan(device: torch.device) -> None:
     )
     table = TableTensor.from_tensor(data)
 
-    output = DropConstantColumns().fit_transform(table)
+    output = DropConstantColumns(threshold=2).fit_transform(table)
 
-    assert output.columns[Stype.numerical] == ("2", "3", "5")
+    assert output.columns[Stype.numerical] == ("3",)
     torch.testing.assert_close(
-        output.numerical, data[:, [2, 3, 5]], equal_nan=True
+        output.numerical, data[:, [3]], equal_nan=True
     )
