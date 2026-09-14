@@ -122,7 +122,13 @@ def test_unique_filter_nan(device: torch.device) -> None:
         [
             [float("nan"), float("nan"), 1.0, float("inf"), float("inf")],
             [float("nan"), float("nan"), 2.0, float("inf"), float("nan")],
-            [float("nan"), float("nan"), float("nan"), float("inf"), float("inf")],
+            [
+                float("nan"),
+                float("nan"),
+                float("nan"),
+                float("inf"),
+                float("inf"),
+            ],
             [float("nan"), 1.0, 2.0, float("inf"), float("nan")],
         ],
         device=device,
