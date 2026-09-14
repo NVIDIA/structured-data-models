@@ -1,4 +1,3 @@
-import pytest
 import torch
 
 from sdm import TableTensor
@@ -52,13 +51,7 @@ def test_standardize_fit_transform_and_inverse_round_trip(
 
 
 @withCUDA
-@pytest.mark.parametrize("with_mean", [True, False])
-@pytest.mark.parametrize("with_std", [True, False])
-def test_standardize_with_mean_and_std_options(
-    device: torch.device,
-    with_mean: bool,
-    with_std: bool,
-) -> None:
+def test_standardize(device: torch.device) -> None:
     inp = torch.tensor(
         [
             [1.0, 2.0, float("nan")],
@@ -68,47 +61,21 @@ def test_standardize_with_mean_and_std_options(
         device=device,
     )
 
-    processor = Standardize(with_mean=with_mean, with_std=with_std)
+    processor = Standardize()
     processor.fit(TableTensor.from_tensor(inp))
 
-    if with_mean:
-        expected_mean = torch.tensor([[2.0, 4.0, 0.0]], device=device)
-    else:
-        expected_mean = torch.tensor([[0.0, 0.0, 0.0]], device=device)
-
-    if with_std:
-        expected_scale = torch.tensor([[1.0, 2.0, 1.0]], device=device)
-    else:
-        expected_scale = torch.tensor([[1.0, 1.0, 1.0]], device=device)
+    expected_mean = torch.tensor([[2.0, 4.0, 0.0]], device=device)
+    expected_scale = torch.tensor([[1.0, 2.0, 1.0]], device=device)
 
     torch.testing.assert_close(processor.mean, expected_mean)
     torch.testing.assert_close(processor.scale, expected_scale)
     out = processor.transform(TableTensor.from_tensor(inp))
 
-    if with_mean and with_std:
-        expected = [
-            [-1.0, -1.0, float("nan")],
-            [1.0, 1.0, float("inf")],
-            [float("nan"), float("inf"), -float("inf")],
-        ]
-    elif with_mean:
-        expected = [
-            [-1.0, -2.0, float("nan")],
-            [1.0, 2.0, float("inf")],
-            [float("nan"), float("inf"), -float("inf")],
-        ]
-    elif with_std:
-        expected = [
-            [1.0, 1.0, float("nan")],
-            [3.0, 3.0, float("inf")],
-            [float("nan"), float("inf"), -float("inf")],
-        ]
-    else:
-        expected = [
-            [1.0, 2.0, float("nan")],
-            [3.0, 6.0, float("inf")],
-            [float("nan"), float("inf"), -float("inf")],
-        ]
+    expected = [
+        [-1.0, -1.0, float("nan")],
+        [1.0, 1.0, float("inf")],
+        [float("nan"), float("inf"), -float("inf")],
+    ]
 
     torch.testing.assert_close(
         out.numerical,

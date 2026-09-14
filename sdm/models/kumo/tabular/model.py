@@ -208,7 +208,7 @@ class KumoTabular(ICLModel):
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=out.sort(dim=-1)[0],
+                numerical=out,
             )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},

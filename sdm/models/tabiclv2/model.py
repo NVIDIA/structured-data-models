@@ -213,7 +213,7 @@ class TabICLv2(ICLModel):
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=out.sort(dim=-1)[0],
+                numerical=out,
             )
 
         out = self.models[Task.classification](

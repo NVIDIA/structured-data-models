@@ -203,10 +203,8 @@ def _optimize_lambdas(
 class PowerTransform(Processor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
-    Fitting replaces NaN and infinite values with each feature's finite mean,
-    or zero when no finite values are available, before learning the power
-    transform and standardization statistics. NaNs are preserved during the
-    transform and inverse transform.
+    NaN and infinite values are imputed when fitting statistics. NaN values are
+    preserved during the transform.
 
     Args:
         standardize: If ``True``, zero-mean and unit-variance the transformed
@@ -242,40 +240,36 @@ class PowerTransform(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
-        n_samples = numerical.size(-2)
 
-        finite = numerical.isfinite()
-        finite_or_nan = numerical.masked_fill(~finite, float("nan"))
-        mean = finite_or_nan.nanmean(dim=-2, keepdim=True)
+        finite = table.numerical.isfinite()
+        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
+
+        mean = finite_or_nan.nanmean(-2, keepdim=True)
         mean.masked_fill_(mean.isnan(), 0.0)
-        finite_or_nan.sub_(mean).square_()
-        var = finite_or_nan.nanmean(dim=-2, keepdim=True)
+        var = (finite_or_nan - mean).square().nanmean(-2, keepdim=True)
+        del finite_or_nan
         var.masked_fill_(var.isnan(), 0.0)
-        filled = torch.where(finite, numerical, mean)
-        self.max = filled.amax(dim=-2, keepdim=True)
         constant_features = _constant_feature_mask(
             var,
             mean,
-            finite.sum(dim=-2, keepdim=True),
+            num_samples=finite.sum(dim=-2, keepdim=True),
         )
-        del finite_or_nan, finite
+        filled = torch.where(finite, table.numerical, mean)
+        self.max = filled.amax(dim=-2, keepdim=True)
+        del finite
+
         self.lambdas = self._optimize_lambdas(filled, constant_features)
 
-        lambda_eps = torch.finfo(numerical.dtype).eps
+        lambda_eps = torch.finfo(filled.dtype).eps
         self.upper_bound = -(1 / self.lambdas)
         self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
             transformed = _yeojohnson_transform(filled, self.lambdas)
-            transformed.masked_fill_(~transformed.isfinite(), float("nan"))
-            self.mean = transformed.nanmean(dim=-2, keepdim=True)
-            self.mean.masked_fill_(self.mean.isnan(), 0.0)
-            transformed.sub_(self.mean).square_()
-            var = transformed.nanmean(dim=-2, keepdim=True)
-            var.masked_fill_(var.isnan(), 0.0)
+            self.mean = transformed.mean(dim=-2, keepdim=True)
+            var = transformed.var(dim=-2, correction=0, keepdim=True)
             scale = var.sqrt()
-            scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
+            scale[_constant_feature_mask(var, self.mean, table.size(-2))] = 1.0
             self.scale = scale
         else:
             self.mean = torch.zeros_like(self.lambdas)
