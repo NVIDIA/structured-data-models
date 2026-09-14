@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import abc
 import copy
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Self, cast
+from typing import Generic, Self, TypeVar, cast
 
 import torch
 from torch import Tensor
@@ -11,8 +12,50 @@ from sdm import Stype, StypeLike
 from sdm.tensor import TableTensor
 from sdm.tensor.mixin import DeviceMixin
 
+T = TypeVar("T")
 
-class EnsembleTable(DeviceMixin):
+
+class EnsembleData(abc.ABC, Generic[T]):
+    """Store logical ensemble members in physical groups.
+
+    Args:
+        groups: Physical values referenced by the logical members.
+        locations: Group index and position within that group for every
+            logical member.
+    """
+
+    _groups: tuple[T, ...]
+    _locations: tuple[tuple[int, int], ...]
+
+    def __init__(
+        self,
+        groups: Sequence[T],
+        locations: Sequence[tuple[int, int]],
+    ) -> None:
+        self._groups = tuple(groups)
+        self._locations = tuple(locations)
+
+    @property
+    def num_members(self) -> int:
+        """Return the number of logical ensemble members."""
+        return len(self._locations)
+
+    def member(self, member_id: int) -> T:
+        """Return the value associated with one logical member.
+
+        Args:
+            member_id: Zero-based logical member index.
+        """
+        group_id, position = self._locations[member_id]
+        return self._select_member(self._groups[group_id], position)
+
+    @staticmethod
+    @abc.abstractmethod
+    def _select_member(group: T, position: int) -> T:
+        pass
+
+
+class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
     """Store and group input tables for an ensemble.
 
     Each ensemble member is associated with one table. Shared tables are stored
@@ -20,7 +63,7 @@ class EnsembleTable(DeviceMixin):
     form a group, so processors can process them together. Incompatible tables
     remain in separate groups.
 
-    Use :meth:`table` to access a member's table. Iterate over the
+    Use :meth:`member` to access a member's table. Iterate over the
     :class:`EnsembleTable` to process its groups, and :meth:`replace_groups`
     to build an ensemble table from the processed groups.
 
@@ -49,8 +92,8 @@ class EnsembleTable(DeviceMixin):
 
         # Access tables in member order.
         assert ensemble.num_members == 4
-        assert ensemble.table(0).equal(estimator_table1)
-        assert ensemble.table(3).equal(estimator_table1)
+        assert ensemble.member(0).equal(estimator_table1)
+        assert ensemble.member(3).equal(estimator_table1)
 
         # Iterate over two groups of compatible tables.
         groups = tuple(ensemble)
@@ -64,18 +107,6 @@ class EnsembleTable(DeviceMixin):
             leading dimension.
         locations: ``(group, batch)`` location of each ensemble member.
     """
-
-    _groups: tuple[TableTensor, ...]
-    # Group index and position within that group, per ensemble member.
-    _locations: tuple[tuple[int, int], ...]
-
-    def __init__(
-        self,
-        groups: Sequence[TableTensor],
-        locations: Sequence[tuple[int, int]],
-    ) -> None:
-        self._groups = tuple(groups)
-        self._locations = tuple(locations)
 
     @classmethod
     def from_table(
@@ -241,7 +272,7 @@ class EnsembleTable(DeviceMixin):
     ) -> Self:
         """Gather members from multiple ensemble tables.
 
-        ``tables[i].table(member_ids[i])`` supplies output member ``i``.
+        ``tables[i].member(member_ids[i])`` supplies output member ``i``.
 
         Args:
             tables: Source ensemble table for each output member.
@@ -271,18 +302,13 @@ class EnsembleTable(DeviceMixin):
             if output_id is None:
                 output_id = len(outputs)
                 output_id_by_source[key] = output_id
-                outputs.append(table.table(member_id))
+                outputs.append(table.member(member_id))
             member_table_ids.append(output_id)
 
         return cls.from_tables(
             tables=outputs,
             member_table_ids=member_table_ids,
         )
-
-    @property
-    def num_members(self) -> int:
-        """Return the number of ensemble members."""
-        return len(self._locations)
 
     @property
     def num_groups(self) -> int:
@@ -297,14 +323,12 @@ class EnsembleTable(DeviceMixin):
         """
         return sum(i == group_id for i, _ in self._locations)
 
-    def table(self, member_id: int) -> TableTensor:
-        """Return the table associated with one ensemble member.
-
-        Args:
-            member_id: Zero-based member index.
-        """
-        group_index, position = self._locations[member_id]
-        return self._groups[group_index][position]
+    @staticmethod
+    def _select_member(
+        group: TableTensor,
+        position: int,
+    ) -> TableTensor:
+        return group[position]
 
     def expanded_group(self, group_id: int) -> TableTensor:
         """Return the logical members assigned to one group.
@@ -416,7 +440,7 @@ class EnsembleTable(DeviceMixin):
                     cast(
                         TableTensor,
                         torch.cat(
-                            tuple(table.table(member_id) for table in tables),
+                            tuple(table.member(member_id) for table in tables),
                             dim=-1,
                         ),
                     )

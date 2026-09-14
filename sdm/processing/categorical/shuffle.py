@@ -93,11 +93,11 @@ class ShuffleCategories(EnsembleProcessor):
 
         for member_id in range(ensemble_table.num_members):
             permutations = self._draw_permutations(
-                ensemble_table.table(member_id),
+                ensemble_table.member(member_id),
                 generator=generator,
             )
             key = (
-                ensemble_table.table(member_id).categorical.device,
+                ensemble_table.member(member_id).categorical.device,
                 tuple(
                     tuple(permutation.tolist()) for permutation in permutations
                 ),
@@ -136,7 +136,7 @@ class ShuffleCategories(EnsembleProcessor):
                 permutations = self._permutations[permutation_id]
                 member_tables.append(
                     self._permute(
-                        ensemble_table.table(member_id),
+                        ensemble_table.member(member_id),
                         permutations,
                     )
                 )

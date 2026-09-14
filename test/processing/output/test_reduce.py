@@ -85,7 +85,7 @@ def test_reduce_estimators_reduces_members_in_order(
 
     assert output.num_members == 1
     torch.testing.assert_close(
-        output.table(0).numerical,
+        output.member(0).numerical,
         (first.numerical + 2 * second.numerical) / 3,
     )
 
@@ -109,9 +109,9 @@ def test_reduce_estimators_reduces_across_storage_groups(
 
     output = sp.ReduceEstimators().transform_ensemble(table)
 
-    assert output.table(0).columns == first.columns
+    assert output.member(0).columns == first.columns
     torch.testing.assert_close(
-        output.table(0).numerical,
+        output.member(0).numerical,
         torch.tensor([[4.0, 10.0 / 3.0]], device=device),
     )
 
@@ -142,6 +142,6 @@ def test_reduce_estimators_composes_with_following_processor(
 
     assert output.num_members == 1
     torch.testing.assert_close(
-        output.table(0).numerical,
+        output.member(0).numerical,
         torch.full((1, 2), 0.5, device=device),
     )

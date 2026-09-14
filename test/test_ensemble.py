@@ -18,7 +18,7 @@ def test_shared_member_table() -> None:
     assert groups[0].size() == (1, 2, 1)
     assert next(iter(ensemble_table)) is groups[0]
     for member_id in range(3):
-        assert ensemble_table.table(member_id).equal(data)
+        assert ensemble_table.member(member_id).equal(data)
 
 
 def test_from_tables_stacks_compatible_schemas() -> None:
@@ -33,10 +33,10 @@ def test_from_tables_stacks_compatible_schemas() -> None:
     groups = tuple(ensemble_table)
     assert len(groups) == 1
     assert groups[0].size() == (2, 2, 1)
-    assert ensemble_table.table(0).equal(first)
-    assert ensemble_table.table(1).equal(second)
-    assert ensemble_table.table(2).equal(first)
-    assert ensemble_table.table(3).equal(second)
+    assert ensemble_table.member(0).equal(first)
+    assert ensemble_table.member(1).equal(second)
+    assert ensemble_table.member(2).equal(first)
+    assert ensemble_table.member(3).equal(second)
 
 
 def test_from_tables_separates_incompatible_schemas() -> None:
@@ -55,8 +55,8 @@ def test_from_tables_separates_incompatible_schemas() -> None:
     )
 
     assert len(tuple(ensemble_table)) == 2
-    assert ensemble_table.table(0).columns == first.columns
-    assert ensemble_table.table(1).columns == second.columns
+    assert ensemble_table.member(0).columns == first.columns
+    assert ensemble_table.member(1).columns == second.columns
 
 
 def test_from_tables_separates_incompatible_block_sizes() -> None:
@@ -69,8 +69,8 @@ def test_from_tables_separates_incompatible_block_sizes() -> None:
     )
 
     assert len(tuple(ensemble_table)) == 2
-    assert ensemble_table.table(0).size() == (2, 1)
-    assert ensemble_table.table(1).size() == (3, 1)
+    assert ensemble_table.member(0).size() == (2, 1)
+    assert ensemble_table.member(1).size() == (3, 1)
 
 
 def test_from_tables_ignores_unused_tables() -> None:
@@ -85,7 +85,7 @@ def test_from_tables_ignores_unused_tables() -> None:
 
     assert len(groups) == 1
     assert groups[0].size() == (1, 2, 1)
-    assert ensemble_table.table(0).equal(first)
+    assert ensemble_table.member(0).equal(first)
 
 
 def test_replace_groups_keeps_member_assignment() -> None:
@@ -111,10 +111,10 @@ def test_replace_groups_keeps_member_assignment() -> None:
 
     assert replaced.num_members == 3
     assert replaced.num_groups == ensemble_table.num_groups
-    assert replaced.table(0).numerical.tolist() == [[-3.0], [-4.0]]
-    assert replaced.table(1).numerical.tolist() == [[-1.0], [-2.0]]
-    assert replaced.table(2).equal(replaced.table(0))
-    assert ensemble_table.table(0).equal(second)
+    assert replaced.member(0).numerical.tolist() == [[-3.0], [-4.0]]
+    assert replaced.member(1).numerical.tolist() == [[-1.0], [-2.0]]
+    assert replaced.member(2).equal(replaced.member(0))
+    assert ensemble_table.member(0).equal(second)
 
 
 def test_replace_groups_rejects_group_count_mismatch() -> None:
@@ -138,9 +138,9 @@ def test_gather_members_preserves_member_order() -> None:
         member_ids=(1, 0, 0),
     )
 
-    assert output.table(0).equal(tables[1])
-    assert output.table(1).equal(tables[2])
-    assert output.table(2).equal(tables[0])
+    assert output.member(0).equal(tables[1])
+    assert output.member(1).equal(tables[2])
+    assert output.member(2).equal(tables[0])
 
 
 def test_gather_members_rejects_source_count_mismatch() -> None:
@@ -168,9 +168,9 @@ def test_select_members_preserves_groups_and_order() -> None:
     assert output.num_members == 3
     assert output.num_groups == 1
     assert next(iter(output)).size(0) == 2
-    assert output.table(0).equal(tables[0])
-    assert output.table(1).equal(tables[2])
-    assert output.table(2).equal(tables[2])
+    assert output.member(0).equal(tables[0])
+    assert output.member(1).equal(tables[2])
+    assert output.member(2).equal(tables[2])
 
 
 def test_concatenate_columns_preserves_member_order() -> None:
@@ -203,15 +203,15 @@ def test_concatenate_columns_preserves_member_order() -> None:
 
     output = EnsembleTable.concatenate_columns((left, right))
 
-    assert output.table(0).numerical.tolist() == [
+    assert output.member(0).numerical.tolist() == [
         [3.0, 30.0],
         [4.0, 40.0],
     ]
-    assert output.table(1).numerical.tolist() == [
+    assert output.member(1).numerical.tolist() == [
         [1.0, 10.0],
         [2.0, 20.0],
     ]
-    assert output.table(2).equal(output.table(0))
+    assert output.member(2).equal(output.member(0))
 
 
 def test_concatenate_columns_regroups_different_layouts() -> None:
@@ -238,15 +238,15 @@ def test_concatenate_columns_regroups_different_layouts() -> None:
 
     output = EnsembleTable.concatenate_columns((left, right))
 
-    assert output.table(0).numerical.tolist() == [
+    assert output.member(0).numerical.tolist() == [
         [3.0, 10.0],
         [4.0, 20.0],
     ]
-    assert output.table(1).numerical.tolist() == [
+    assert output.member(1).numerical.tolist() == [
         [1.0, 10.0],
         [2.0, 20.0],
     ]
-    assert output.table(2).equal(output.table(0))
+    assert output.member(2).equal(output.member(0))
 
 
 def test_concatenate_columns_rejects_different_member_counts() -> None:

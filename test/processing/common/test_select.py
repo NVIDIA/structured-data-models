@@ -44,4 +44,4 @@ def test_select_columns_round_robin_routes_members() -> None:
             table.numerical[..., indices],
             columns=columns,
         )
-        assert out.table(member_id).equal(expected)
+        assert out.member(member_id).equal(expected)

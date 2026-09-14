@@ -351,7 +351,7 @@ class RelatedTables(DeviceMixin, Generic[T]):
                         "'to_graphviz' requires each 'EnsembleTable' to have "
                         "a unique table schema"
                     )
-                tables[name] = table.table(0)
+                tables[name] = table.member(0)
                 continue
             tables[name] = table
 

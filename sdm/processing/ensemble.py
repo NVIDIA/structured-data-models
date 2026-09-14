@@ -58,7 +58,7 @@ class EnsembleProcessor(Processor):
         output = self._transform_ensemble(
             EnsembleTable.from_table(table, num_members=1)
         )
-        return output.table(0)
+        return output.member(0)
 
     def _fit_transform(
         self,
@@ -72,7 +72,7 @@ class EnsembleProcessor(Processor):
             EnsembleTable.from_table(table, num_members=1),
             generator=generator,
         )
-        return output.table(0)
+        return output.member(0)
 
     def _fit_ensemble(
         self,
@@ -118,7 +118,7 @@ class EnsembleProcessor(Processor):
             return self
         if self.requires_fit:
             self._fit_ensemble(ensemble_table, generator=generator)
-            self._set_fitted(ensemble_table.table(0).device)
+            self._set_fitted(ensemble_table.member(0).device)
         return self
 
     def transform_ensemble(
@@ -166,7 +166,7 @@ class EnsembleProcessor(Processor):
             generator=generator,
         )
         if self.requires_fit:
-            self._set_fitted(ensemble_table.table(0).device)
+            self._set_fitted(ensemble_table.member(0).device)
         return output
 
 
@@ -177,7 +177,7 @@ class EnsembleInvertibleMixin(InvertibleMixin):
         output = self._inverse_transform_ensemble(
             EnsembleTable.from_table(table, num_members=1)
         )
-        return output.table(0)
+        return output.member(0)
 
     @abc.abstractmethod
     def _inverse_transform_ensemble(

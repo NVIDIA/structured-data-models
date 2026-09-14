@@ -173,7 +173,7 @@ class DropConstantColumns(EnsembleProcessor):
             list[tuple[int, torch.Tensor]],
         ] = {}
         for member_id in range(masks.num_members):
-            table = masks.table(member_id)
+            table = masks.member(member_id)
             key = (table.numerical.size(-1), table.device)
             masks_by_size_and_device.setdefault(key, []).append(
                 (member_id, table.numerical[0].bool())
@@ -211,7 +211,7 @@ class DropConstantColumns(EnsembleProcessor):
         ):
             tables = [
                 self._select_columns(
-                    ensemble_table.table(member_id),
+                    ensemble_table.member(member_id),
                     kept_indices,
                 )
                 for member_id, kept_indices in enumerate(self._kept_indices)

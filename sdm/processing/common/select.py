@@ -58,7 +58,7 @@ class SelectColumns(EnsembleProcessor):
         assert self.method == "round_robin"
         tables: list[TableTensor] = []
         for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
+            table = ensemble_table.member(member_id)
             columns: dict[StypeLike, tuple[str, ...]] = {}
             blocks = {}
             for stype, block in table.items():

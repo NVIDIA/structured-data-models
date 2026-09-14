@@ -46,7 +46,7 @@ class ReduceEstimators(EnsembleProcessor):
         if ensemble_table.num_members == 0:
             raise ValueError("Expected at least one ensemble member.")
 
-        reference = ensemble_table.table(0)
+        reference = ensemble_table.member(0)
         extra = reference.active_stypes - self.handles_stypes
         if extra:
             found = ", ".join(sorted(extra))
