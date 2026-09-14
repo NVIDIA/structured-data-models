@@ -9,9 +9,6 @@ from sdm.cache import KVCacheEntry
 from sdm.nn import InducedTransformerBlock, QASSMax, TransformerBlock
 from sdm.testing import withCUDA
 
-# Unlike `test_compile.py`, this module is not gated behind `FULL_TEST` so the
-# regression test below runs on every CI run.
-
 
 @pytest.fixture(autouse=True)
 def _reset_dynamo() -> Iterator[None]:
