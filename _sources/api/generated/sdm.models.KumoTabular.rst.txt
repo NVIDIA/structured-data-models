@@ -41,9 +41,9 @@ Default Recipe
        ),
        StypeDispatch(
          numerical=Sequential(
+           DropConstantColumns(),
            Standardize(eps=1e-06),
            Clip(-100.0, 100.0),
-           DropConstantColumns(),
            Choice(
              Identity(),
              PowerTransform(),
