@@ -12,9 +12,9 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
             sp.StypeDispatch(
                 numerical=[
-                    sp.DropConstantColumns(),
                     sp.Standardize(eps=1e-6),
                     sp.Clip(min_value=-100.0, max_value=100.0),
+                    sp.DropConstantColumns(),
                     sp.Choice(
                         sp.Identity(),
                         sp.PowerTransform(),
