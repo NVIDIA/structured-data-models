@@ -41,79 +41,60 @@ into three categories:
 
 Remember, if you are unsure about anything, don't hesitate to comment on issues and ask for clarifications!
 
-### Developer Certificate of Origin (DCO)
+### Signing Off Your Work
 
-**This project will only accept contributions under the Apache-2.0 license.**
-By submitting a pull request you agree that your contribution is licensed under the Apache License, Version 2.0 (see [LICENSE](https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE)).
+* We require that all contributors "sign-off" on their commits. This certifies that the contribution is your original work, or you have rights to submit it under the same license, or a compatible license.
 
-All contributions to `structured-data-models` are made under the [Developer Certificate of Origin](https://developercertificate.org/).
-This is a lightweight, well-understood mechanism (used by the Linux kernel, GitLab, NVIDIA TensorRT, and many other projects) that lets you attest that you have the right to submit your contribution under the project's license — without requiring a separate Contributor License Agreement.
+  * Any contribution which contains commits that are not Signed-Off will not be accepted.
 
-Full text of the [Developer Certificate of Origin](https://developercertificate.org/):
+* To sign off on a commit you simply use the `--signoff` (or `-s`) option when committing your changes:
+  ```bash
+  $ git commit -s -m "Add cool feature."
+  ```
+  This will append the following to your commit message:
+  ```
+  Signed-off-by: Your Name <your@email.com>
+  ```
 
-```
-Developer Certificate of Origin
-Version 1.1
+* Full text of the DCO (https://developercertificate.org/):
 
-Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+  ```
+    Developer Certificate of Origin
+    Version 1.1
 
-Everyone is permitted to copy and distribute verbatim copies of this
-license document, but changing it is not allowed.
+    Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+
+    Everyone is permitted to copy and distribute verbatim copies of this
+    license document, but changing it is not allowed.
 
 
-Developer's Certificate of Origin 1.1
+    Developer's Certificate of Origin 1.1
 
-By making a contribution to this project, I certify that:
+    By making a contribution to this project, I certify that:
 
-(a) The contribution was created in whole or in part by me and I
-    have the right to submit it under the open source license
-    indicated in the file; or
+    (a) The contribution was created in whole or in part by me and I
+        have the right to submit it under the open source license
+        indicated in the file; or
 
-(b) The contribution is based upon previous work that, to the best
-    of my knowledge, is covered under an appropriate open source
-    license and I have the right under that license to submit that
-    work with modifications, whether created in whole or in part
-    by me, under the same open source license (unless I am
-    permitted to submit under a different license), as indicated
-    in the file; or
+    (b) The contribution is based upon previous work that, to the best
+        of my knowledge, is covered under an appropriate open source
+        license and I have the right under that license to submit that
+        work with modifications, whether created in whole or in part
+        by me, under the same open source license (unless I am
+        permitted to submit under a different license), as indicated
+        in the file; or
 
-(c) The contribution was provided directly to me by some other
-    person who certified (a), (b) or (c) and I have not modified
-    it.
+    (c) The contribution was provided directly to me by some other
+        person who certified (a), (b) or (c) and I have not modified
+        it.
 
-(d) I understand and agree that this project and the contribution
-    are public and that a record of the contribution (including all
-    personal information I submit with it, including my sign-off) is
-    maintained indefinitely and may be redistributed consistent with
-    this project or the open source license(s) involved.
-```
-
-Pull requests without DCO sign-off will be asked to rebase before merge.
-This is a hard gate; please don't take a plite ping personally.
-
-NVIDIA contributors and external contributors follow the *same* DCO process.
-NVIDIA-internal IP review, where applicable, is handled by NVIDIA reviewers on your behalf — you do not need to engage with it as an outside contributor.
-
-### Signing Your Work
-
-We require that all contributors sign-off on their commits.
-This certifies that the contribution is your original work, or you have rights to submit it under the same license, or a compatible license.
-Any contribution which contains commits that are not Signed-Off will not be accepted.
-
-To sign off on a commit, use the `--signoff` (or `-s`) option when committing your changes:
-
-```bash
-$ git commit -s -m "Add cool feature."
-```
-
-This will append the following trailer to your commit message:
-
-```
-Signed-off-by: Your Name <your@email.com>
-```
-
-The `user.name` and `user.email` git config values must be set to your real name and a verifiable email address — sign-offs from anonymous or pseudonymous identities cannot be accepted.
-
+    (d) I understand and agree that this project and the contribution
+        are public and that a record of the contribution (including all
+        personal information I submit with it, including my sign-off) is
+        maintained indefinitely and may be redistributed consistent with
+        this project or the open source license(s) involved.
+  ```
+  
 ### Managing PR labels
 
 Each PR must be labeled according to whether it is a "breaking" or "non-breaking" change (using GitHub labels). This is used to highlight changes that users should know about when upgrading.
