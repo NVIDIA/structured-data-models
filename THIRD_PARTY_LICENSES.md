@@ -21,7 +21,7 @@ The `sdm/models/tabiclv2/` implementation contains code derived from TabICLv2.
 
 The `sdm/models/tabfm/` implementation contains code derived from TabFM. The TabFM weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
-## TimesFM3
+## TimesFM 3.0
 
 - Source: https://github.com/google-research/timesfm
 - Code license: Apache License 2.0
@@ -30,12 +30,6 @@ The `sdm/models/tabfm/` implementation contains code derived from TabFM. The Tab
 - Weights license: [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE)
 
 The `sdm/models/timesfm3/` implementation contains code derived from TimesFM 3.0. The TimesFM 3.0 weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
-
-## KumoRelational
-
-- Notice: [`sdm/models/kumo/relational/NOTICE`](sdm/models/kumo/relational/NOTICE)
-
-KumoRelational reuses TabICLv2-derived model components and initializes from pretrained TabICLv2 weights.
 
 ## PyTorch contribution guide
 
