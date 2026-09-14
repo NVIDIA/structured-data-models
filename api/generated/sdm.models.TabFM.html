@@ -294,7 +294,7 @@ v1.0</a> without showing the interactive license prompt.</p></li>
 </span><span data-line="10">      <span class="n">numerical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
 </span><span data-line="11">        <span class="n">ImputeMean</span><span class="p">(),</span>
 </span><span data-line="12">        <span class="n">DropConstantColumns</span><span class="p">(),</span>
-</span><span data-line="13">        <span class="n">Standardize</span><span class="p">(),</span>
+</span><span data-line="13">        <span class="n">Standardize</span><span class="p">(</span><span class="n">eps</span><span class="o">=</span><span class="mf">1e-06</span><span class="p">),</span>
 </span><span data-line="14">        <span class="n">Clip</span><span class="p">(</span><span class="o">-</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>
 </span><span data-line="15">        <span class="n">Choice</span><span class="p">(</span>
 </span><span data-line="16">          <span class="n">Identity</span><span class="p">(),</span>
@@ -308,7 +308,7 @@ v1.0</a> without showing the interactive license prompt.</p></li>
 </span><span data-line="24">    <span class="p">),</span>
 </span><span data-line="25">  <span class="p">),</span>
 </span><span data-line="26">  <span class="n">target</span><span class="o">=</span><span class="n">StypeDispatch</span><span class="p">(</span>
-</span><span data-line="27">    <span class="n">numerical</span><span class="o">=</span><span class="n">Standardize</span><span class="p">(),</span>
+</span><span data-line="27">    <span class="n">numerical</span><span class="o">=</span><span class="n">Standardize</span><span class="p">(</span><span class="n">eps</span><span class="o">=</span><span class="mf">0.0</span><span class="p">),</span>
 </span><span data-line="28">    <span class="n">categorical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
 </span><span data-line="29">      <span class="n">AlignCategories</span><span class="p">(</span><span class="n">sort_by</span><span class="o">=</span><span class="s1">'value'</span><span class="p">),</span>
 </span><span data-line="30">      <span class="n">ShuffleCategories</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'shift'</span><span class="p">),</span>
@@ -350,7 +350,7 @@ v1.0</a> without showing the interactive license prompt.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=58c222cc"></script>
+      <script src="../../_static/documentation_options.js?v=1edc08df"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

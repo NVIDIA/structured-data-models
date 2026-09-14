@@ -43,7 +43,7 @@ Default Recipe
          numerical=Sequential(
            Callable(_replace_inf),
            DropConstantColumns(),
-           Standardize(),
+           Standardize(eps=1e-06),
            Clip(-100.0, 100.0),
            Choice(
              Identity(),
@@ -60,7 +60,7 @@ Default Recipe
      target=Sequential(
        StypeDispatch(
          numerical=Sequential(
-           Standardize(),
+           Standardize(eps=0.0),
            FlipSign(),
          ),
          categorical=Sequential(
