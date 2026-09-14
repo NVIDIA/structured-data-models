@@ -8,7 +8,13 @@ from sdm import Recipe, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.nn import Attention, TransformerBlock
+from sdm.nn import (
+    Attention,
+    TransformerBlock,
+    _cudnn_varlen,
+    cudnn_varlen_stats,
+    enable_cudnn_varlen,
+)
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -1126,4 +1132,116 @@ def test_autocast_compile(device: torch.device) -> None:
     torch.testing.assert_close(
         predicted.numerical,
         expected_predicted.numerical,
+    )
+
+
+@pytest.mark.cuda
+def test_cudnn_varlen_toggle_and_degrade() -> None:
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False)
+    _randomize_residual_exits(model)
+
+    R_context, R_query, C = 11, 6, 5
+    x_context = torch.randn(R_context, C)
+    x_query = torch.randn(R_query, C)
+    y_context = torch.randint(0, 10, (R_context, 1))
+
+    # Pad in-context rows exactly as bucketed serving does. Padded targets
+    # repeat real ones so padding cannot widen the class set (which would
+    # change the number of output columns).
+    x_context_padded = torch.cat([x_context, torch.full((5, C), 123.0)])
+    y_context_padded = torch.cat([y_context, y_context[:5]])
+    seqused_train = torch.tensor(R_context, dtype=torch.int32)
+
+    expected = model(
+        x_context_padded,
+        y_context_padded,
+        x_query,
+        recipe=Recipe(),
+        seqused_train=seqused_train,
+    )
+
+    # Without the optional dependency (or on CPU) the boolean-mask path
+    # keeps serving exactly, and disabling always reports inactive.
+    active = enable_cudnn_varlen(True)
+    if not _cudnn_varlen.is_available():
+        assert not active
+    try:
+        out = model(
+            x_context_padded,
+            y_context_padded,
+            x_query,
+            recipe=Recipe(),
+            seqused_train=seqused_train,
+        )
+        torch.testing.assert_close(
+            out.numerical,
+            expected.numerical,
+            atol=1e-3,
+            rtol=1e-3,
+        )
+    finally:
+        assert enable_cudnn_varlen(False) is False
+
+
+@onlyCUDA
+def test_cudnn_varlen_equivalence() -> None:
+    if not _cudnn_varlen.is_available():
+        pytest.skip("requires nvidia-cudnn-frontend")
+    device = torch.device("cuda")
+
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False, device=device).to(torch.bfloat16)
+    _randomize_residual_exits(model)
+
+    R_context, R_query, C = 96, 32, 8
+    x_context = torch.randn(R_context, C, device=device, dtype=torch.bfloat16)
+    x_query = torch.randn(R_query, C, device=device, dtype=torch.bfloat16)
+    y_context = torch.randint(0, 10, (R_context, 1), device=device)
+
+    # Pad in-context rows so the call takes the `seqused_key_value` branch
+    # the variable-length path replaces; padded targets repeat real ones.
+    x_context_padded = torch.cat(
+        [
+            x_context,
+            torch.full((32, C), 123.0, device=device, dtype=torch.bfloat16),
+        ]
+    )
+    y_context_padded = torch.cat([y_context, y_context[:32]])
+    seqused_train = torch.tensor(R_context, dtype=torch.int32, device=device)
+
+    expected = model(
+        x_context_padded,
+        y_context_padded,
+        x_query,
+        recipe=Recipe(),
+        seqused_train=seqused_train,
+    )
+    # The toggle must actually engage (the dependency is installed on
+    # this CI job), and at least one execution graph must be built by
+    # the enabled forward - otherwise a silent permanent degrade to the
+    # bit-identical masked fallback would keep this equivalence check
+    # green without ever running the real kernel.
+    assert enable_cudnn_varlen(True) is True
+    try:
+        out = model(
+            x_context_padded,
+            y_context_padded,
+            x_query,
+            recipe=Recipe(),
+            seqused_train=seqused_train,
+        )
+        assert cudnn_varlen_stats()[0] >= 1, (
+            "cuDNN varlen path never engaged (all shapes degraded)"
+        )
+    finally:
+        enable_cudnn_varlen(False)
+
+    # The variable-length kernels differ from the masked kernels, so
+    # allow kernel-switch-scale noise (same class as the padding tests).
+    torch.testing.assert_close(
+        out.numerical,
+        expected.numerical,
+        atol=1e-2,
+        rtol=1e-2,
     )

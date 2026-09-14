@@ -33,6 +33,8 @@ pip install structured-data-models
 > [!NOTE]
 > For CUDA workloads, we highly recommend installing [`cudf`](https://docs.rapids.ai/install) as an additional dependency to keep dataframe-style operations on GPU and avoid unnecessary data movement.
 
+The optional `cudnn` extra (`pip install "structured-data-models[cudnn]"`) adds cuDNN variable-length attention for padded inputs, enabled via `sdm.nn.enable_cudnn_varlen()` (Linux only; on other platforms the extra installs nothing and the boolean-mask path is used).
+
 ## Model Families
 
 **Tabular Foundation Models:**
