@@ -257,7 +257,7 @@ class PowerTransform(Processor, InvertibleMixin):
         constant_features = _constant_feature_mask(
             var,
             mean,
-            finite.sum(dim=-2, keepdim=True),
+            num_samples=finite.sum(dim=-2, keepdim=True),
         )
         del finite_or_nan, finite
         self.lambdas = self._optimize_lambdas(filled, constant_features)

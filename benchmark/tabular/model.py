@@ -182,12 +182,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self.model.clear()
         if self._device.type == "cuda":
             torch.cuda.synchronize(self._device)
-            empty_host_cache = getattr(
-                torch.accelerator,
-                "empty_host_cache",
-                torch._C._host_emptyCache,
-            )
-            empty_host_cache()
+            torch._C._host_emptyCache()
             torch.cuda.empty_cache()
 
     def _more_tags(self) -> dict[str, bool]:

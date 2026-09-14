@@ -13,29 +13,17 @@ class Standardize(Processor, InvertibleMixin):
     and preserved during the transform.
 
     Args:
-        with_mean: If ``True``, center each column by its fitted mean.
-        with_std: If ``True``, scale each column by its fitted standard
-            deviation.
-        epsilon: Value added to each fitted standard deviation. The default
-            preserves exact constant-column handling.
+        eps: Value added to each fitted standard deviation.
     """
 
     handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
-    def __init__(
-        self,
-        *,
-        with_mean: bool = True,
-        with_std: bool = True,
-        epsilon: float = 0.0,
-    ) -> None:
+    def __init__(self, *, eps: float = 0.0) -> None:
         super().__init__()
-        if epsilon < 0:
+        if eps < 0:
             raise ValueError("epsilon must be non-negative.")
-        self.with_mean = with_mean
-        self.with_std = with_std
-        self.epsilon = epsilon
+        self.eps = eps
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
 
@@ -45,49 +33,28 @@ class Standardize(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
-        if numerical.size(-1) == 0 or not (self.with_mean or self.with_std):
-            self.mean = numerical.new_zeros(
-                (*numerical.shape[:-2], 1, numerical.size(-1))
+
+        finite = table.numerical.isfinite()
+        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
+
+        self.mean = finite_or_nan.nanmean(-2, keepdim=True)
+        self.mean.masked_fill_(self.mean.isnan(), 0.0)
+
+        var = (finite_or_nan - self.mean).square().nanmean(-2, keepdim=True)
+        var.masked_fill_(var.isnan(), 0.0)
+
+        self.scale = var.sqrt()
+        if self.eps == 0:
+            mask = _constant_feature_mask(
+                var,
+                self.mean,
+                num_samples=finite.sum(-2, keepdim=True),
             )
-            self.scale = torch.ones_like(self.mean)
-            return
-
-        finite = numerical.isfinite()
-        finite_or_nan = numerical.masked_fill(~finite, float("nan"))
-        mean = finite_or_nan.nanmean(dim=-2, keepdim=True)
-        mean = torch.where(mean.isnan(), torch.zeros_like(mean), mean)
-
-        if self.with_mean:
-            self.mean = mean
+            self.scale[mask] = 1.0
         else:
-            self.mean = torch.zeros_like(mean)
-
-        if self.with_std:
-            if numerical.size(-2) > 1:
-                finite_or_nan.sub_(mean).square_()
-                var = finite_or_nan.nanmean(dim=-2, keepdim=True)
-                var.masked_fill_(var.isnan(), 0.0)
-                scale = var.sqrt()
-                if self.epsilon == 0:
-                    scale[
-                        _constant_feature_mask(
-                            var,
-                            mean,
-                            finite.sum(dim=-2, keepdim=True),
-                        )
-                    ] = 1.0
-            else:
-                if self.epsilon == 0:
-                    scale = torch.ones_like(mean)
-                else:
-                    scale = torch.zeros_like(mean)
-            self.scale = scale + self.epsilon
-        else:
-            self.scale = torch.ones_like(mean)
+            self.scale += self.eps
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        """Transform ``table`` using the fitted mean and scale."""
         numerical = (table.numerical - self.mean) / self.scale
         return table.replace_blocks(numerical=numerical)
 
