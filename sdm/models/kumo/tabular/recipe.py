@@ -44,14 +44,13 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 ],
                 numerical=[
                     sp.Standardize(),
-                    sp.FlipSign(flip_order=True),
+                    sp.FlipSign(),
                 ],
             ),
         ],
         output=[
+            sp.TaskDispatch(regression=sp.SortQuantiles()),
             sp.ReduceEstimators(method="mean"),
-            sp.TaskDispatch(
-                classification=sp.Softmax(temperature=1.0),
-            ),
+            sp.TaskDispatch(classification=sp.Softmax(temperature=1.0)),
         ],
     )
