@@ -220,7 +220,7 @@ data-aria-dark="Switch to auto color mode">
 <p>Remove non-informative numerical columns learned during fit.</p>
 <p>Columns are retained when they have more than <code class="docutils literal notranslate"><span class="pre">threshold</span></code> distinct
 values. When the number of samples is less than or equal to <code class="docutils literal notranslate"><span class="pre">threshold</span></code>,
-all columns are preserved.</p>
+all columns are preserved. NaN is counted once as a distinct value.</p>
 <p>Only numerical columns are supported. Convert other feature stypes before
 this step, for example with <code class="xref py py-class docutils literal notranslate"><span class="pre">ToNumerical</span></code>.
 Fitting expects data with shape <code class="docutils literal notranslate"><span class="pre">[N,</span> <span class="pre">C]</span></code>, where <code class="docutils literal notranslate"><span class="pre">N</span></code> is the number of
@@ -277,7 +277,7 @@ Must be positive.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=12aaebbb"></script>
+      <script src="../../_static/documentation_options.js?v=4dd47d01"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
