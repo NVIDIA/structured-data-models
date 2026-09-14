@@ -16,12 +16,11 @@ T = TypeVar("T")
 
 
 class EnsembleData(abc.ABC, Generic[T]):
-    """Store logical ensemble members in physical groups.
+    """Represent an ordered collection of ensemble member values.
 
     Args:
-        groups: Physical values referenced by the logical members.
-        locations: Group index and position within that group for every
-            logical member.
+        groups: Values containing the ensemble members.
+        locations: Group index and position for each ensemble member.
     """
 
     _groups: tuple[T, ...]
