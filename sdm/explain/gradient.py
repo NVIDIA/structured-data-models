@@ -8,9 +8,8 @@ import torch
 from torch import Tensor
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor
-from sdm.callbacks import Callback
 from sdm.explain.base import ICLExplainer
-from sdm.models import ICLModel
+from sdm.models import Callback, ICLModel
 
 
 @dataclass(frozen=True)

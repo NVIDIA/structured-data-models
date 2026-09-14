@@ -7,8 +7,7 @@ import torch
 import sdm.processing as sp
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.callbacks import Callback
-from sdm.models import ICLModel
+from sdm.models import Callback, ICLModel
 from sdm.processing import InvertibleMixin, Processor
 
 
