@@ -403,12 +403,15 @@ model are initialized.</p></li>
 </span><span data-line="46">    <span class="p">),</span>
 </span><span data-line="47">  <span class="p">),</span>
 </span><span data-line="48">  <span class="n">output</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="49">    <span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'mean'</span><span class="p">),</span>
-</span><span data-line="50">    <span class="n">TaskDispatch</span><span class="p">(</span>
-</span><span data-line="51">      <span class="n">classification</span><span class="o">=</span><span class="n">Softmax</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mf">0.9</span><span class="p">),</span>
-</span><span data-line="52">    <span class="p">),</span>
-</span><span data-line="53">  <span class="p">),</span>
-</span><span data-line="54"><span class="p">)</span>
+</span><span data-line="49">    <span class="n">TaskDispatch</span><span class="p">(</span>
+</span><span data-line="50">      <span class="n">regression</span><span class="o">=</span><span class="n">SortQuantiles</span><span class="p">(),</span>
+</span><span data-line="51">    <span class="p">),</span>
+</span><span data-line="52">    <span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'mean'</span><span class="p">),</span>
+</span><span data-line="53">    <span class="n">TaskDispatch</span><span class="p">(</span>
+</span><span data-line="54">      <span class="n">classification</span><span class="o">=</span><span class="n">Softmax</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mf">0.9</span><span class="p">),</span>
+</span><span data-line="55">    <span class="p">),</span>
+</span><span data-line="56">  <span class="p">),</span>
+</span><span data-line="57"><span class="p">)</span>
 </span></pre></div>
 </div>
 </section>
@@ -438,7 +441,7 @@ model are initialized.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=7ba4988f"></script>
+      <script src="../../_static/documentation_options.js?v=c549a39f"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

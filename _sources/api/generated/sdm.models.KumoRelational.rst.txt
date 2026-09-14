@@ -79,6 +79,9 @@ Default Recipe
        ),
      ),
      output=Sequential(
+       TaskDispatch(
+         regression=SortQuantiles(),
+       ),
        ReduceEstimators(method='mean'),
        TaskDispatch(
          classification=Softmax(temperature=0.9),
