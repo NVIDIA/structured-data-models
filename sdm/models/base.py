@@ -77,6 +77,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
+    #: Whether :meth:`forward`/:meth:`fit` accept padded inputs via
+    #: ``seqused_train``/``seqused_cols``; models without support reject
+    #: the keywords with a ``ValueError``.
+    supports_seqused: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -864,6 +869,15 @@ class ICLModel(torch.nn.Module, abc.ABC):
         seqused_train: Tensor | None,
         seqused_cols: Tensor | None,
     ) -> None:
+        # Runs ahead of `clear()` in `fit` and ahead of pre-processing in
+        # `forward`, mirroring the `supports_related_tables` check.
+        if (
+            seqused_train is not None or seqused_cols is not None
+        ) and not self.supports_seqused:
+            raise ValueError(
+                f"{self.__class__.__name__!r} does not support the "
+                f"'seqused_train'/'seqused_cols' padding keywords"
+            )
         # Only metadata is checked; reading the counts would sync the device
         # on every call. Out-of-range counts are clamped where consumed.
         if seqused_train is not None and seqused_train.dtype != torch.int32:

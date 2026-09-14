@@ -1,3 +1,5 @@
+from typing import Any
+
 import pandas as pd
 import pytest
 import torch
@@ -5,6 +7,7 @@ import torch
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    Recipe,
     RelatedTables,
     RelationalData,
     Stype,
@@ -254,6 +257,60 @@ def test_forward(
         ),
     ).allclose(out, atol=1e-4, rtol=1e-4)
     model.clear()
+
+
+def test_seqused_rejected(relational_data: RelationalData) -> None:
+    model = KumoRelational(pretrained=False)
+    related_tables = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    x = TableTensor.from_pandas(
+        df=pd.DataFrame(
+            {
+                "user_id": [0, 1, 2, 3],
+                "timestamp": pd.to_datetime(
+                    ["2024-01-03", "2024-01-04", None, "2024-01-06"]
+                ),
+            }
+        ),
+        stypes={"user_id": "id", "timestamp": "datetime"},
+    )
+    y = TableTensor(numerical=torch.randn(4, 1))
+
+    # This model does not mask padded rows or columns
+    # (`supports_seqused` is `False`), so the padding keywords must be
+    # rejected before any state mutation instead of silently dropped -
+    # on both entry points.
+    for key in ("seqused_train", "seqused_cols"):
+        kwargs: dict[str, Any] = {key: torch.tensor(2, dtype=torch.int32)}
+        with pytest.raises(ValueError, match=key):
+            model(
+                x_context=x,
+                y_context=y,
+                x_query=x,
+                related_context_tables=related_tables,
+                related_query_tables=related_tables,
+                recipe=Recipe(),
+                num_hops=1,
+                **kwargs,
+            )
+        with pytest.raises(ValueError, match=key):
+            model.fit(
+                x,
+                y,
+                related_tables,
+                recipe=Recipe(),
+                num_hops=1,
+                **kwargs,
+            )
 
 
 @withCUDA

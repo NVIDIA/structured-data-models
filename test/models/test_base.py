@@ -32,6 +32,7 @@ class _RecordingModel(ICLModel):
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_multi_target = False
     supports_related_tables = True
+    supports_seqused = True
 
     def __init__(self) -> None:
         super().__init__(task=None)
