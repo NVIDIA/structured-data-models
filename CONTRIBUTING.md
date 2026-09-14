@@ -41,7 +41,7 @@ into three categories:
 
 Remember, if you are unsure about anything, don't hesitate to comment on issues and ask for clarifications!
 
-## Developer Certificate of Origin (DCO)
+### Developer Certificate of Origin (DCO)
 
 **This project will only accept contributions under the Apache-2.0 license.**
 By submitting a pull request you agree that your contribution is licensed under the Apache License, Version 2.0 (see [LICENSE](https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE)).
