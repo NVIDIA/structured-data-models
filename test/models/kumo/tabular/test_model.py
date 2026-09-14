@@ -144,3 +144,36 @@ def test_fit_predict(
         atol=1e-4,
         rtol=1e-4,
     )
+
+
+def test_missing_values_pass_through_fit_predict() -> None:
+    model = _build("regression")
+    x_context = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [100.0, float("inf")],
+                [float("nan"), 201.0],
+                [102.0, 202.0],
+            ]
+        )
+    )
+    x_query = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [float("nan"), 203.0],
+                [float("inf"), 203.0],
+                [104.0, float("-inf")],
+            ]
+        )
+    )
+    target = _reg_target()
+
+    direct = model(x_context, target, x_query)
+    model.fit(x_context, target)
+    cached = model.predict(x_query)
+
+    assert direct.numerical.isfinite().all()
+    assert cached.numerical.isfinite().all()
+    assert cached.shape == direct.shape
+    assert (direct.numerical.diff(dim=-1) >= 0).all()
+    assert (cached.numerical.diff(dim=-1) >= 0).all()

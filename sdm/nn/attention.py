@@ -137,6 +137,10 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
+        enable_gqa = False
+        if query.size(-2) != key.size(-2):
+            enable_gqa = True
+
         out = F.scaled_dot_product_attention(
             query=query.transpose(-3, -2),  # [B, Hq, Q, C],
             key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
@@ -144,7 +148,7 @@ class SDPA(torch.nn.Module):
             attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
             if attn_mask is not None
             else None,
-            enable_gqa=query.size(-2) != key.size(-2),
+            enable_gqa=enable_gqa,
             scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
 
@@ -589,7 +593,7 @@ class TransformerBlock(torch.nn.Module):
         flat_key: Tensor | None = None
         flat_value: Tensor | None = None
 
-        if out is not None:
+        if out is not None and (out.dim() <= 3 or out.is_contiguous()):
             flat_out = out.view(batch_size, *query.size()[-2:])
 
         for start in range(0, batch_size, batch_size_limit):
@@ -636,7 +640,14 @@ class TransformerBlock(torch.nn.Module):
             else:
                 chunk = result
 
-            if flat_out is None:
+            if flat_out is None and out is not None:
+                flat_index = torch.arange(start, end, device=out.device)
+                batch_indices: list[Tensor] = []
+                for size in reversed(batch_shape):
+                    batch_indices.append(flat_index % size)
+                    flat_index = flat_index // size
+                out[tuple(reversed(batch_indices))] = chunk
+            elif flat_out is None:
                 flat_out = chunk.new_empty((batch_size, *query.size()[-2:]))
                 flat_out[start:end] = chunk
 

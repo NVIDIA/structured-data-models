@@ -118,6 +118,7 @@ class TabICLv2(ICLModel):
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
+    supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -212,7 +213,7 @@ class TabICLv2(ICLModel):
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=out.sort(dim=-1)[0],
+                numerical=out,
             )
 
         out = self.models[Task.classification](

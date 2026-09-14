@@ -47,13 +47,25 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
-class KumoTabular(ICLModel):  # noqa: D101
+class KumoTabular(ICLModel):
+    """Kumo Tabular, a foundation model for classification and regression.
+
+    Args:
+        task: The tasks to initialize. If ``None``, both classification and
+            regression are initialized.
+        size: The model size, either ``"small"`` or ``"large"`` (default).
+        pretrained: Whether to load pretrained checkpoints.
+        device: The device for model parameters. If ``None``, uses PyTorch's
+            default device.
+    """
+
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
+    supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -101,11 +113,15 @@ class KumoTabular(ICLModel):  # noqa: D101
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Tabular",
                 filename=filename,
-                revision="v1.0.1",
+                revision="v1.0.3",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(ckpt, is_classifier=task == Task.classification)
-            model.load_state_dict(ckpt, assign=True)
+            ckpt = remap_ckpt(
+                ckpt=ckpt["model"],
+                is_classifier=task == Task.classification,
+                num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
+            )
+            model.load_state_dict(ckpt, strict=True, assign=True)
 
         return model
 
@@ -192,7 +208,7 @@ class KumoTabular(ICLModel):  # noqa: D101
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=out.sort(dim=-1)[0],
+                numerical=out,
             )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},

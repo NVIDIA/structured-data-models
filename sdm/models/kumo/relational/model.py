@@ -146,6 +146,7 @@ class KumoRelational(ICLModel):
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
+    supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = True
 
     def __init__(
@@ -229,7 +230,7 @@ class KumoRelational(ICLModel):
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=out.sort(dim=-1)[0],
+                numerical=out,
             )
 
         return TableTensor(
