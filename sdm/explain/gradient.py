@@ -10,7 +10,7 @@ from torch import Tensor
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.explain.base import ICLExplainer
 from sdm.models import ICLModel
-from sdm.models._callback import Callback
+from sdm.models.callback import Callback
 
 
 @dataclass(frozen=True)

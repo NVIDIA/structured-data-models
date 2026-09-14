@@ -8,7 +8,7 @@ import sdm.processing as sp
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
-from sdm.models._callback import Callback
+from sdm.models.callback import Callback
 from sdm.processing import InvertibleMixin, Processor
 
 
