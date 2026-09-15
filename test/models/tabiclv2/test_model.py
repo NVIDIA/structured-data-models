@@ -264,9 +264,10 @@ def test_compile(dtype: torch.dtype) -> None:
 
 
 @onlyCUDA
-def test_fp8_fit_predict() -> None:
-    if torch.cuda.get_device_capability() not in {(8, 9), (12, 0)}:
-        pytest.skip("FP8 integration supports Ada and RTX Blackwell")
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_fp8_fit_predict(dtype: torch.dtype) -> None:
+    if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
+        pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
     model = TabICLv2(
         task="regression",
         pretrained=False,
@@ -276,7 +277,10 @@ def test_fp8_fit_predict() -> None:
     x = torch.randn(8193, 3, device="cuda")
     y = torch.randn(8193, 1, device="cuda")
     query = torch.randn(17, 3, device="cuda")
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+    with (
+        torch.inference_mode(),
+        torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
+    ):
         expected = model(x, y, query, recipe=Recipe(), num_estimators=1)
         model.fit(x, y, recipe=Recipe(), num_estimators=1)
         actual = model.predict(query)

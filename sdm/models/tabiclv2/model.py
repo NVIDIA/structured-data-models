@@ -118,7 +118,7 @@ class TabICLv2(ICLModel):
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
         attention_quantization: Set to ``"fp8"`` to quantize eligible ICL
-            attention and its cache during FP16/BF16 CUDA inference on Ada
+            attention and its cache during CUDA inference on Ada, Hopper,
             and RTX Blackwell GPUs. Requires Triton and more than 8192
             context rows.
             Weights and the final ICL layer remain unquantized. Other inputs

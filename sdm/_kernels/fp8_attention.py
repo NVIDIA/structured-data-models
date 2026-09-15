@@ -23,15 +23,9 @@ def supports_fp8(query: Tensor) -> bool:
         and not torch.is_grad_enabled()
         and not torch.compiler.is_compiling()
         and query.is_cuda
-        and (
-            query.dtype in {torch.float16, torch.bfloat16}
-            or (
-                query.dtype == torch.float32
-                and torch.is_autocast_enabled("cuda")
-            )
-        )
         and query.size(-1) in {32, 64, 128, 256}
-        and torch.cuda.get_device_capability(query.device) in {(8, 9), (12, 0)}
+        and torch.cuda.get_device_capability(query.device)
+        in {(8, 9), (9, 0), (12, 0)}
     )
 
 
@@ -43,8 +37,6 @@ def fp8_attention(
     scale: float | None = None,
 ) -> tuple[Tensor, QuantizedKVCacheEntry]:
     assert _triton is not None
-    # RMSNorm keeps Q/K in FP32. Match SDPA's autocast input conversion before
-    # quantizing, without ever dequantizing cached FP8 keys and values.
     if torch.is_autocast_enabled("cuda"):
         dtype = torch.get_autocast_dtype("cuda")
         query = query.to(dtype)

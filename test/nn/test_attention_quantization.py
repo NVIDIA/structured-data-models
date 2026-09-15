@@ -28,10 +28,12 @@ def test_fp8_small_context_fallback(device: torch.device) -> None:
 
 
 @onlyCUDA
-@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32]
+)
 def test_fp8_context_cache_and_chunking(dtype: torch.dtype) -> None:
-    if torch.cuda.get_device_capability() not in {(8, 9), (12, 0)}:
-        pytest.skip("FP8 integration supports Ada and RTX Blackwell")
+    if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
+        pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
     module = TabICLv2TransformerBlock(
         channels=128,
         num_heads=2,
@@ -45,7 +47,10 @@ def test_fp8_context_cache_and_chunking(dtype: torch.dtype) -> None:
     context = torch.randn(2, 1, 8193, 128, device="cuda")
     query = torch.randn(2, 1, 129, 128, device="cuda")
     joined = torch.cat([context, query], dim=-2)
-    with torch.inference_mode(), torch.autocast("cuda", dtype=dtype):
+    with (
+        torch.inference_mode(),
+        torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
+    ):
         expected = reference(joined, context)
         full = module(joined, context)
         _, cache = module(
@@ -80,10 +85,16 @@ def test_fp8_context_cache_and_chunking(dtype: torch.dtype) -> None:
     assert cache.key.dtype == torch.float8_e4m3fn
     assert cache.value.dtype == torch.float8_e4m3fn
     assert cache.query_scale.dtype == torch.float32
-    with torch.inference_mode(), pytest.raises(ValueError, match="dtype"):
+    with (
+        torch.inference_mode(),
+        torch.autocast(
+            "cuda", dtype=torch.float16, enabled=dtype == torch.float32
+        ),
+        pytest.raises(ValueError, match="dtype"),
+    ):
         module(query, cache)
     with (
-        torch.autocast("cuda", dtype=dtype),
+        torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
         pytest.raises(ValueError, match="inference"),
     ):
         module(query, cache)
