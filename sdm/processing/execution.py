@@ -41,6 +41,7 @@ class RecipeExecution:
             Mapping[str, tuple[tuple[int, int], ...]] | None
         ) = None
         self._num_estimators: int | None = None
+        self._x_locations: tuple[tuple[int, int], ...] | None = None
         self._y_locations: tuple[tuple[int, int], ...] | None = None
 
     @property
@@ -121,6 +122,7 @@ class RecipeExecution:
                 module._route = "task"
 
         x = _to_ensemble_table(x, num_members)
+        self._x_locations = x._locations
         x = self.recipe.features.fit_transform_ensemble(x, generator=generator)
         if x.num_members != self.num_members:
             raise ValueError(
@@ -155,7 +157,9 @@ class RecipeExecution:
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
+        assert self._x_locations is not None
         x = _to_ensemble_table(x, self._num_estimators)
+        x = _align_to_fitted_groups(x, self._x_locations)
         x = self.recipe.features.transform_ensemble(x)
         if x.num_members != self.num_members:
             raise ValueError(
@@ -267,8 +271,12 @@ def _align_to_fitted_groups(
     ensemble_table: EnsembleTable,
     fitted_locations: Sequence[tuple[int, int]],
 ) -> EnsembleTable:
-    """Align query groups with the fitted related-table groups."""
+    """Align query groups with the fitted table groups."""
     fitted_locations = tuple(fitted_locations)
+    if ensemble_table.num_members != len(fitted_locations):
+        raise ValueError(
+            "Expected inputs to map to the same number of ensemble members"
+        )
     if ensemble_table._locations == fitted_locations:
         return ensemble_table
 
@@ -300,7 +308,7 @@ def _align_to_fitted_groups(
             len(sources) > 1 for sources in sources_by_position
         ):
             raise ValueError(
-                "Cannot align query tables with fitted related-table groups"
+                "Cannot align query tables with fitted table groups"
             )
 
         if len(sources_by_position) == 1:
@@ -334,8 +342,7 @@ def _align_to_fitted_groups(
             packed_groups, _ = EnsembleTable._pack_tables(tables)
             if len(packed_groups) != 1:
                 raise ValueError(
-                    "Cannot align query tables with fitted related-table "
-                    "groups"
+                    "Cannot align query tables with fitted table groups"
                 )
             output = packed_groups[0]
         groups.append(output)

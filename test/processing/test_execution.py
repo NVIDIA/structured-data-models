@@ -6,7 +6,69 @@ import torch
 
 import sdm.processing as sp
 from sdm import EnsembleTable, Recipe, RelatedTables, TableTensor
+from sdm.models import KumoRelational
 from sdm.processing.execution import RecipeExecution
+
+
+def test_relational_recipe_uses_fitted_task_states_for_shared_query() -> None:
+    values = torch.arange(8 * 32).reshape(8, 32).float() / 20
+    x = TableTensor.from_tensor(
+        torch.stack((values, values.square(), torch.ones_like(values)), dim=-1)
+    )
+    y = TableTensor.from_tensor(values.unsqueeze(-1))
+    query_values = torch.arange(6).float() / 3
+    query = torch.stack(
+        (query_values, query_values.square(), torch.ones_like(query_values)),
+        dim=-1,
+    )
+    execution = RecipeExecution(KumoRelational.default_recipe())
+    execution.fit_transform(x=x, y=y, related_tables=None)
+    expected = execution.transform(
+        x=TableTensor.from_tensor(query.unsqueeze(0).expand(8, -1, -1)),
+        related_tables=None,
+    )
+
+    shared_query = EnsembleTable.from_table(
+        TableTensor.from_tensor(query), num_members=8
+    )
+    for _ in range(2):
+        actual = execution.transform(x=shared_query, related_tables=None)
+        assert len(actual) == 8
+        for output, reference in zip(actual, expected, strict=True):
+            assert output.x.size(-1) == 2
+            assert output.x.equal(reference.x)
+
+
+def test_sequence_uses_separate_task_states_for_shared_query() -> None:
+    tables = (
+        TableTensor.from_tensor(torch.tensor([[0.0], [2.0]])),
+        TableTensor.from_tensor(torch.tensor([[10.0], [14.0], [18.0]])),
+    )
+    x = EnsembleTable.from_tables(tables, (0, 1))
+    query = TableTensor.from_tensor(torch.tensor([[2.0], [6.0], [10.0]]))
+    execution = RecipeExecution(Recipe(features=sp.Standardize()))
+    execution.fit_transform(x=x, y=x, related_tables=None)
+    actual = execution.transform(
+        x=EnsembleTable.from_table(query, num_members=2), related_tables=None
+    )
+
+    for output, table in zip(actual, tables, strict=True):
+        assert output.x.equal(sp.Standardize().fit(table).transform(query))
+
+
+@pytest.mark.parametrize("num_members", [1, 3])
+def test_sequence_rejects_changed_task_member_count(num_members: int) -> None:
+    x = TableTensor.from_tensor(
+        torch.tensor([[[0.0], [2.0]], [[10.0], [14.0]]])
+    )
+    execution = RecipeExecution(Recipe(features=sp.Standardize()))
+    execution.fit_transform(x=x, y=x, related_tables=None)
+
+    with pytest.raises(ValueError, match="same number of ensemble members"):
+        execution.transform(
+            x=EnsembleTable.from_table(x[0], num_members=num_members),
+            related_tables=None,
+        )
 
 
 def test_sequence_uses_batched_fit_states_for_shared_query() -> None:
