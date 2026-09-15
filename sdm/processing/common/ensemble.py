@@ -122,7 +122,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         if self.requires_fit:
-            processors = self._processors_for_groups(ensemble_table)
+            processors = self._aligned_processors(ensemble_table)
         else:
             processors = repeat(self.processor, ensemble_table.num_groups)
 
@@ -142,34 +142,44 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> tuple[Processor, ...]:
         if ensemble_table._locations == self._fitted_locations:
             return tuple(self._processors)
-        # One fitted processor per transform ensemble group.
-        # Multiple transform groups can share the same fitted processor.
-        processors = [None] * ensemble_table.num_groups
-        group_members_by_processor = {}
-        for member_id, (group_id, batch_id) in enumerate(ensemble_table._locations):
-            processor_group_id, processor_batch_id = self._fitted_locations[member_id]
+
+        # One fitted processor per transform ensemble group. Multiple
+        # transform groups can share the same fitted processor.
+        processors: list[Processor | None] = [None] * ensemble_table.num_groups
+        # Current and fitted batch of every member sharing a fitted processor.
+        batches_by_processor: dict[int, list[tuple[int, int, int]]] = {}
+        for member_id, (group_id, batch_id) in enumerate(
+            ensemble_table._locations
+        ):
+            fitted_group_id, fitted_batch_id = self._fitted_locations[
+                member_id
+            ]
+            processor = self._processors[fitted_group_id]
             if processors[group_id] is None:
-                processors[group_id] = self._processors[processor_group_id]
-            # Check that the processor is the same for all members of the group.
-            elif processors[group_id] is not self._processors[processor_group_id]:
+                processors[group_id] = processor
+            elif processors[group_id] is not processor:
                 raise RuntimeError(
                     "Cannot apply fitted processor state to an ensemble "
                     "group containing members from different fitted groups"
                 )
-        # A processor fitted on a stacked TensorTable stores
-        # per-batch state. It can operate only stacked TensorTables with
-        # the same layout, but not splits or reordered tensors.
-        for locations in group_members_by_processor.values():
-            if len({fitted for _, _, fitted in locations}) > 1 and (
-                len({group for group, _, _ in locations}) > 1
-                or any(current != fitted for _, current, fitted in locations)
+            batches_by_processor.setdefault(fitted_group_id, []).append(
+                (group_id, batch_id, fitted_batch_id)
+            )
+
+        # A processor fitted on a stacked tensor table stores per-batch state.
+        # It can only operate on stacked tensor tables with the same layout,
+        # but not on splits or reordered batches.
+        for batches in batches_by_processor.values():
+            if len({fitted for _, _, fitted in batches}) > 1 and (
+                len({group for group, _, _ in batches}) > 1
+                or any(current != fitted for _, current, fitted in batches)
             ):
                 raise RuntimeError(
                     "Cannot apply position-dependent fitted processor state "
                     "after its ensemble group was split or reordered"
                 )
 
-        return tuple(processors)
+        return tuple(cast(Processor, processor) for processor in processors)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return self.processor.__repr__(indent=indent)
