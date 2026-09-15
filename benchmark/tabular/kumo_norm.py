@@ -19,6 +19,7 @@ import json
 import random
 import statistics
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import torch
@@ -36,7 +37,7 @@ def native_normalization(model: nn.Module) -> None:
         for name, child in list(parent.named_children()):
             if isinstance(child, _RMSNormForLinear):
                 norm = nn.RMSNorm(
-                    child.normalized_shape,
+                    torch.Size(child.normalized_shape),
                     eps=child.eps,
                     elementwise_affine=child.elementwise_affine,
                     device="cuda",
@@ -78,7 +79,10 @@ def run(args: argparse.Namespace) -> None:
     custom = custom.cuda().eval()
     native = copy.deepcopy(custom)
     native_normalization(native)
-    models = {"native_eager": native, "custom_eager": custom}
+    models: dict[str, Callable[..., Tensor]] = {
+        "native_eager": native,
+        "custom_eager": custom,
+    }
     for name, model in list(models.items()):
         models[name.replace("eager", "compiled")] = torch.compile(
             model,
