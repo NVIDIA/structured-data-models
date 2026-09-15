@@ -96,18 +96,19 @@ class ICLBlock(torch.nn.Module):
                 )
 
                 if cache is not None and cache.is_recording:
-                    x, (key, value) = result
-                    if self.kv_heads is not None:
-                        key = key[..., : self.kv_heads, :].contiguous()
-                        value = value[..., : self.kv_heads, :].contiguous()
-                    cache[cache_key] = KVCacheEntry(key, value)
-                    del key, value
+                    x, entry = result
+                    cache[cache_key] = (
+                        entry.select_heads(self.kv_heads)
+                        if self.kv_heads is not None
+                        else entry
+                    )
+                    del entry
                 else:
                     x = result
                 del result
                 continue
 
-            x_context, (key, value) = layer(
+            x_context, entry = layer(
                 query=x[..., :0, :] if last_layer else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
@@ -119,10 +120,7 @@ class ICLBlock(torch.nn.Module):
             )
             x_query = layer(
                 query=x[..., R_train:, :],
-                key_value=KVCacheEntry(
-                    key=key[..., : self.kv_heads, :].contiguous(),
-                    value=value[..., : self.kv_heads, :].contiguous(),
-                ),
+                key_value=entry.select_heads(self.kv_heads),
                 out=None if torch.is_grad_enabled() else x[..., R_train:, :],
             )
             if last_layer:
