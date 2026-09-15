@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import copy
 from itertools import repeat
 from typing import cast
@@ -143,16 +146,21 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         if ensemble_table._locations == self._locations:
             return tuple(self._processors)
 
-        processor_id_by_group: dict[int, int] = {}
+        # One fitted processor per current group, in iteration order.
+        processors: list[Processor | None] = [None] * ensemble_table.num_groups
+        # Members that shared a fitted group, with their current vs fitted
+        # (group, position) so stacked leading-dim state can be checked.
         locations_by_processor: dict[int, list[tuple[int, int, int]]] = {}
         for member_id, (group_id, position) in enumerate(
             ensemble_table._locations
         ):
             processor_id, fitted_position = self._locations[member_id]
-            previous_processor_id = processor_id_by_group.setdefault(
-                group_id, processor_id
-            )
-            if previous_processor_id != processor_id:
+            processor = self._processors[processor_id]
+            aligned = processors[group_id]
+            if aligned is None:
+                processors[group_id] = processor
+            elif aligned is not processor:
+                # A stacked transform would mix incompatible fitted states.
                 raise RuntimeError(
                     "Cannot apply fitted processor state to an ensemble "
                     "group containing members from different fitted groups"
@@ -161,6 +169,9 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
                 (group_id, position, fitted_position)
             )
 
+        # A fitted group with more than one stacked position stores
+        # per-position state. It can stay stacked, but not split across
+        # groups or reorder those positions.
         for locations in locations_by_processor.values():
             if len({fitted for _, _, fitted in locations}) > 1 and (
                 len({group for group, _, _ in locations}) > 1
@@ -171,10 +182,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
                     "after its ensemble group was split or reordered"
                 )
 
-        return tuple(
-            self._processors[processor_id_by_group[group_id]]
-            for group_id in range(ensemble_table.num_groups)
-        )
+        return tuple(cast(Processor, processor) for processor in processors)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return self.processor.__repr__(indent=indent)
