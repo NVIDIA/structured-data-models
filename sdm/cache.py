@@ -35,8 +35,8 @@ class KVCacheEntry(DeviceMixin):
         """Retain the leading key/value heads for grouped-query attention."""
         return replace(
             self,
-            key=self.key[..., :num_heads, :].clone(),
-            value=self.value[..., :num_heads, :].clone(),
+            key=self.key[..., :num_heads, :].contiguous(),
+            value=self.value[..., :num_heads, :].contiguous(),
         )
 
     def _tensors(self) -> Iterator[Tensor]:
@@ -66,8 +66,8 @@ class QuantizedKVCacheEntry(KVCacheEntry):
         """Retain leading K/V heads and scales, keeping all query scales."""
         return replace(
             super().select_heads(num_heads),
-            key_scale=self.key_scale[..., :num_heads, :].clone(),
-            value_scale=self.value_scale[..., :num_heads, :].clone(),
+            key_scale=self.key_scale[..., :num_heads, :].contiguous(),
+            value_scale=self.value_scale[..., :num_heads, :].contiguous(),
         )
 
     def _tensors(self) -> Iterator[Tensor]:

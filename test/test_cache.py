@@ -75,10 +75,7 @@ def test_cache_head_selection_and_transfer(
         expected = getattr(entry, name)[..., :2, :]
         torch.testing.assert_close(actual.float(), expected.float())
         assert actual.dtype == expected.dtype
-        assert (
-            actual.untyped_storage().nbytes()
-            == actual.numel() * actual.element_size()
-        )
+        assert actual.is_contiguous()
     expected_bytes = restored.key.numel() * restored.key.element_size() * 2
     if isinstance(entry, QuantizedKVCacheEntry):
         assert isinstance(restored, QuantizedKVCacheEntry)
@@ -96,3 +93,11 @@ def test_cache_head_selection_and_transfer(
             + restored.query_scale.numel()
         ) * 4
     assert Cache(entry=restored).size() == expected_bytes
+
+
+def test_cache_head_selection_preserves_contiguous_storage() -> None:
+    entry = KVCacheEntry(torch.ones(1, 1, 4, 8), torch.zeros(1, 1, 4, 8))
+    selected = entry.select_heads(2)
+    assert selected.key.shape == selected.value.shape == (1, 1, 2, 8)
+    assert selected.key.data_ptr() == entry.key.data_ptr()
+    assert selected.value.data_ptr() == entry.value.data_ptr()
