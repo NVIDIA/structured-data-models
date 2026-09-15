@@ -166,10 +166,13 @@ PROCESSOR_CASES = (
 FITTED_PROCESSOR_CASES = tuple(
     case for case in PROCESSOR_CASES if case.processor.requires_fit
 )
+# Sequential inverse currently regroups members. Restored in
+# https://github.com/NVIDIA/structured-data-models/pull/877
 INVERTIBLE_PROCESSOR_CASES = tuple(
     case
     for case in PROCESSOR_CASES
     if isinstance(case.processor, sp.InvertibleMixin)
+    and not isinstance(case.processor, sp.Sequential)
 )
 
 

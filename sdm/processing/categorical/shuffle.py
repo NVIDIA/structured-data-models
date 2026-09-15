@@ -165,7 +165,7 @@ class ShuffleCategories(EnsembleProcessor):
             member_ids.append(member_id)
             next_member_id_by_permutation[permutation_id] = member_id + 1
 
-        return EnsembleTable.gather_members(
+        return ensemble_table.gather_members(
             tables=output_tables,
             member_ids=member_ids,
         )

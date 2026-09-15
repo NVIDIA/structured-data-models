@@ -374,7 +374,7 @@ class TFIDF(EnsembleProcessor):
                 )
             member_table_ids.append(table_id)
 
-        return EnsembleTable.from_tables(
+        return ensemble_table.replace_tables(
             output_tables,
             member_table_ids,
         )
