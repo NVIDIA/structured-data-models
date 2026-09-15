@@ -62,7 +62,7 @@ class KumoTabular(ICLModel):
         device: The device for model parameters. If ``None``, uses PyTorch's
             default device.
         attention_quantization: Set to ``"fp8"`` for eligible ICL attention
-            and its cache during FP16/BF16 CUDA inference on Ada or RTX
+            and its cache during CUDA inference on Ada, Hopper, or RTX
             Blackwell. Requires Triton and more than 8192 context rows.
             Weights and the final ICL layer remain unquantized. Defaults to
             ``None``. Other inputs use ordinary attention; fitted FP8 caches

@@ -41,11 +41,13 @@ def test_model_fp8_opt_in(model_cls: type[torch.nn.Module]) -> None:
 
 
 @onlyCUDA
-@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32]
+)
 @pytest.mark.parametrize("heads", [None, 1, 2])
 def test_fp8_icl_cache(heads: int | None, dtype: torch.dtype) -> None:
-    if torch.cuda.get_device_capability() not in {(8, 9), (12, 0)}:
-        pytest.skip("FP8 integration supports Ada and RTX Blackwell")
+    if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
+        pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
     block = KumoICLBlock(
         num_classes=0,
         out_channels=5,
@@ -62,7 +64,10 @@ def test_fp8_icl_cache(heads: int | None, dtype: torch.dtype) -> None:
     cast(Attention, block.layers[0].attn).attention_quantization = "fp8"
     x = torch.randn(2, 8226, 256, device="cuda")
     y = torch.randn(2, 8193, device="cuda")
-    with torch.inference_mode(), torch.autocast("cuda", dtype=dtype):
+    with (
+        torch.inference_mode(),
+        torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
+    ):
         expected = reference(x.clone(), y)
         actual = block(x.clone(), y)
         cache = Cache()
@@ -97,8 +102,8 @@ def test_fp8_icl_cache(heads: int | None, dtype: torch.dtype) -> None:
 @onlyCUDA
 @pytest.mark.parametrize("kind", ["kumo-small", "kumo-large"])
 def test_fp8_model_fit_predict(kind: str) -> None:
-    if torch.cuda.get_device_capability() not in {(8, 9), (12, 0)}:
-        pytest.skip("FP8 integration supports Ada and RTX Blackwell")
+    if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
+        pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
     kwargs: dict[str, Any] = {
         "task": "regression",
         "pretrained": False,
