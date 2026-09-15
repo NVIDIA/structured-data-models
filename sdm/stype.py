@@ -100,7 +100,6 @@ def infer_stypes(
     """
     overrides = overrides or {}
 
-    t = time.perf_counter()
     fn: Callable[[str, object, Policy, Policy], Stype | None] | None = None
     columns: Iterable[tuple[Hashable, object]] | None = None
     if isinstance(table, pa.Table):
