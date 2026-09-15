@@ -9,20 +9,18 @@ from collections.abc import (
     Mapping,
     MutableMapping,
 )
+from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import NamedTuple, Self
+from typing import Self
 
+import torch
 from torch import Tensor
 
 from sdm.tensor.mixin import DeviceMixin
 
 
-class _KVCacheEntry(NamedTuple):
-    key: Tensor
-    value: Tensor
-
-
-class KVCacheEntry(_KVCacheEntry, DeviceMixin):
+@dataclass
+class KVCacheEntry(DeviceMixin):
     r"""Cached key/value projections for a single transformer block.
 
     Args:
@@ -30,12 +28,60 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Cached value projection tensor.
     """
 
+    key: Tensor
+    value: Tensor
+
+    def select_heads(self, num_heads: int) -> Self:
+        """Retain the leading key/value heads for grouped-query attention."""
+        return replace(
+            self,
+            key=self.key[..., :num_heads, :].clone(),
+            value=self.value[..., :num_heads, :].clone(),
+        )
+
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
         yield self.value
 
     def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
-        return self.__class__(key=fn(self.key), value=fn(self.value))
+        return replace(self, key=fn(self.key), value=fn(self.value))
+
+
+@dataclass
+class QuantizedKVCacheEntry(KVCacheEntry):
+    """FP8 attention projections and their per-head dequantization scales.
+
+    Keys and values have shape ``[..., rows, heads, channels]``. Scales have
+    shape ``[..., 1, heads, 1]``. The query scale is learned from context
+    queries and reused for prediction. ``dtype`` is the attention output dtype.
+    """
+
+    key_scale: Tensor
+    value_scale: Tensor
+    query_scale: Tensor
+    dtype: torch.dtype
+
+    def select_heads(self, num_heads: int) -> Self:
+        """Retain leading K/V heads and scales, keeping all query scales."""
+        return replace(
+            super().select_heads(num_heads),
+            key_scale=self.key_scale[..., :num_heads, :].clone(),
+            value_scale=self.value_scale[..., :num_heads, :].clone(),
+        )
+
+    def _tensors(self) -> Iterator[Tensor]:
+        yield from super()._tensors()
+        yield self.key_scale
+        yield self.value_scale
+        yield self.query_scale
+
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return replace(
+            super()._apply_tensor(fn),
+            key_scale=fn(self.key_scale),
+            value_scale=fn(self.value_scale),
+            query_scale=fn(self.query_scale),
+        )
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):
