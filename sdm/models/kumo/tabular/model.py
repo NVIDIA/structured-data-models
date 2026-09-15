@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -113,10 +116,14 @@ class KumoTabular(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Tabular",
                 filename=filename,
-                revision="v1.0.1",
+                revision="v1.0.3",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(ckpt, is_classifier=task == Task.classification)
+            ckpt = remap_ckpt(
+                ckpt=ckpt["model"],
+                is_classifier=task == Task.classification,
+                num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
+            )
             model.load_state_dict(ckpt, assign=True)
 
         return model
@@ -204,7 +211,7 @@ class KumoTabular(ICLModel):
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=out.sort(dim=-1)[0],
+                numerical=out,
             )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},

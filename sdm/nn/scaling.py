@@ -1,3 +1,10 @@
+# Portions derived from TabICLv2:
+# Copyright (c) 2025, Soda team @ Inria
+# Licensed under the BSD 3-Clause License; see sdm/models/tabiclv2/LICENSE.
+
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import abc
 from typing import Any, cast
 

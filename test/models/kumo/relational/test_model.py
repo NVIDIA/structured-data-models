@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pandas as pd
 import pytest
 import torch
@@ -228,6 +231,8 @@ def test_forward(
     assert out.dtype == x.dtype
     assert out.device == x.device
     assert torch.is_inference(out)
+    if dtype.is_floating_point:
+        assert (out.numerical.diff(dim=-1) >= 0).all()
 
     assert (
         model(

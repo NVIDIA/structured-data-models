@@ -1,10 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
-from sdm.callbacks import Callback
 from sdm.models import TabICLv2
+from sdm.models.callback import Callback
 
 
 class MyCallback(Callback):

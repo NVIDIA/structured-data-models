@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 import torch
 
@@ -192,8 +195,8 @@ def test_stype_dispatch_ensemble_fits_routes_per_group() -> None:
         tables=(first, second),
         member_table_ids=(0, 1, 0),
     )
-    processor = sp.StypeDispatch(numerical=sp.Standardize(with_std=False))
-    combined = sp.StypeDispatch(numerical=sp.Standardize(with_std=False))
+    processor = sp.StypeDispatch(numerical=sp.Standardize())
+    combined = sp.StypeDispatch(numerical=sp.Standardize())
 
     processor.fit_ensemble(table)
     transformed = processor.transform_ensemble(table)

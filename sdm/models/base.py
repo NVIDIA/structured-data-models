@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import abc
 import copy
 from collections.abc import Iterable, Sequence
@@ -18,7 +21,7 @@ from sdm import (
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.callbacks import Callback
+from sdm.models.callback import Callback
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,

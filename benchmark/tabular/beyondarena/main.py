@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 r"""Run an SDM tabular model on BeyondArena."""
 
 import argparse
@@ -7,7 +10,11 @@ from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
 from tabarena.contexts import BeyondArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import MODEL_CONFIGS
+from benchmark.tabular.model import (
+    MODEL_CONFIGS,
+    SDMExperimentRunner,
+    SDMModelWrapper,
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -31,6 +38,11 @@ parser.add_argument(
     help="Subsample the context to at most this many rows.",
 )
 parser.add_argument(
+    "--max_columns",
+    type=int,
+    help="Select at most this many columns per estimator.",
+)
+parser.add_argument(
     "--batch_size",
     type=int,
     help="Prediction batch size.",
@@ -48,6 +60,7 @@ result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
     "max_context_size": args.max_context_size,
+    "max_columns": args.max_columns,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
@@ -61,6 +74,9 @@ experiments = BeyondArenaExperimentBundle(
     models=[(generator, 0)],
     outer_experiments=True,
 ).build_experiments()
+for experiment in experiments:
+    experiment.method_cls = SDMModelWrapper
+    experiment.experiment_cls = SDMExperimentRunner
 
 context = BeyondArenaContext()
 context.build_and_run_jobs(

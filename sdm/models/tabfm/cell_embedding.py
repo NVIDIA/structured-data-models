@@ -1,4 +1,22 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # ruff: noqa: D101, D102
+
 import math
 import os
 from typing import Any, Literal
@@ -40,6 +58,7 @@ class CellEmbedding(torch.nn.Module):
         *,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
+        **kwargs: Tensor,  # [..., R, C],
     ) -> Tensor:  # [..., R, C, D]
         if out is not None and torch.is_grad_enabled():
             raise RuntimeError(
@@ -53,6 +72,7 @@ class CellEmbedding(torch.nn.Module):
         shift = 2 ** torch.arange(self.group_size, device=x.device) - 1
         index = (index.view(C, 1) + shift.view(1, self.group_size)) % C
         x = x[..., index]  # [..., R, C, G]
+        kwargs = {key: value[..., index] for key, value in kwargs.items()}
 
         # Compute Fourier features per semantic type (row-agnostic):
         categorical_mask = categorical_mask[..., None, index]  # [..., 1, C, G]
@@ -88,7 +108,7 @@ class CellEmbedding(torch.nn.Module):
         bias = bias.to(dtype)
 
         if torch.is_grad_enabled() or torch.compiler.is_compiling():
-            return self._forward(x, freq, weight, bias, out=out)
+            return self._forward(x, freq, weight, bias, out=out, **kwargs)
 
         if batch_size_limit == "auto":
             batch_size_limit = None
@@ -122,7 +142,7 @@ class CellEmbedding(torch.nn.Module):
                 batch_size_limit = max(batch_size_limit, 1)
 
         if batch_size_limit is None:
-            return self._forward(x, freq, weight, bias, out=out)
+            return self._forward(x, freq, weight, bias, out=out, **kwargs)
 
         if out is None:
             out = x.new_empty(
@@ -132,7 +152,7 @@ class CellEmbedding(torch.nn.Module):
                 else x.dtype,
             )
 
-        rows_per_chunk = max(1, batch_size_limit // (math.prod(B) * C))
+        rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
         for start in range(0, R, rows_per_chunk):
             self._forward(
                 x=x[..., start : start + rows_per_chunk, :, :],
@@ -140,25 +160,38 @@ class CellEmbedding(torch.nn.Module):
                 weight=weight,
                 bias=bias,
                 out=out[..., start : start + rows_per_chunk, :, :],
+                **{
+                    key: value[..., start : start + rows_per_chunk, :, :]
+                    for key, value in kwargs.items()
+                },
             )
 
         return out
 
     def _forward(
         self,
-        x: Tensor,  # [..., G]
-        freq: Tensor,  # [..., G, F]
-        weight: Tensor,  # [..., G, D, 2F]
-        bias: Tensor,  # [..., D]
+        x: Tensor,  # [..., R, C, G]
+        freq: Tensor,  # [..., 1, C, G, F]
+        weight: Tensor,  # [..., 1, C, G, D, 2F]
+        bias: Tensor,  # [..., 1, C, D]
         *,
         out: Tensor | None = None,
     ) -> Tensor:
 
-        x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., G, F]
-        fourier = x.new_empty(
-            (*x.size()[:-1], 2 * x.size(-1)),
-            dtype=weight.dtype,
-        )
+        *B, R, C, G = x.size()
+        F = freq.size(-1)
+
+        if torch.is_grad_enabled():
+            x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., R, C, G, F]
+        else:
+            tmp = x.new_empty((*B, C, R, G, F), dtype=torch.float32)
+            torch.mul(x.unsqueeze(-1), freq, out=tmp.transpose(-4, -3))
+            x = tmp.transpose(-4, -3)  # [..., R, C, G, F]
+            del tmp
+
+        # Store rows within each column so the projection uses views.
+        fourier = x.new_empty((*B, C, R, G, 2 * F), dtype=weight.dtype)
+        fourier = fourier.transpose(-4, -3)  # [..., R, C, G, 2F]
         if torch.is_grad_enabled():
             fourier[..., : x.size(-1)] = x.sin()
             fourier[..., x.size(-1) :] = x.cos()
@@ -167,17 +200,24 @@ class CellEmbedding(torch.nn.Module):
             torch.cos(x, out=fourier[..., x.size(-1) :])
         del x
 
-        if out is None:
-            out = torch.einsum("...gf,...gdf->...d", fourier, weight)
+        # weight: [..., C, G*2F, D]
+        weight = weight.transpose(-3, -2).flatten(-2).squeeze(-4).mT
+        # fourier: [..., C, R, G*2F]
+        fourier = fourier.transpose(-4, -3).flatten(-2)
+        if out is None or out.dtype != weight.dtype:
+            # projected: [..., R, C, D]
+            projected = torch.matmul(fourier, weight).transpose(-3, -2)
+            if out is None:
+                out = projected
+            else:
+                out.copy_(projected)
         else:
-            out.copy_(torch.einsum("...gf,...gdf->...d", fourier, weight))
+            torch.matmul(
+                fourier,
+                weight,
+                out=out.transpose(-3, -2),
+            )
 
         out += bias.to(out.dtype)
 
         return out
-
-    def peak_bytes_per_example(self, element_size: int) -> int:
-        r""":meta private:"""  # noqa: D415
-        return (5 * self.group_size * self.num_frequencies * 4) + (
-            self.channels * element_size
-        )

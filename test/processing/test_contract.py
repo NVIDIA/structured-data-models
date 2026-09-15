@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import inspect
 from collections.abc import Callable
 from copy import deepcopy
@@ -130,6 +133,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ImputeMode()),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
+    ProcessorCase(sp.SortQuantiles()),
     ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import sdm.processing as sp
 
 
@@ -14,7 +17,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 numerical=[
                     sp.ImputeMean(),
                     sp.DropConstantColumns(),
-                    sp.Standardize(epsilon=1e-6),
+                    sp.Standardize(eps=1e-6),
                     sp.Clip(min_value=-100.0, max_value=100.0),
                     sp.Choice(
                         sp.Identity(),

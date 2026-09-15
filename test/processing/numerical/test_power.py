@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 import torch
 
@@ -170,32 +173,89 @@ def test_power_transform_constant_columns_use_identity_lambda(
 
 
 @withCUDA
+@pytest.mark.parametrize("standardize", [False, True])
+def test_power_transform_preserves_nan(
+    device: torch.device,
+    standardize: bool,
+) -> None:
+    inp = torch.tensor(
+        [
+            [1.0, float("nan"), float("nan"), 4.0],
+            [3.0, 10.0, float("nan"), float("nan")],
+            [5.0, 14.0, float("nan"), float("nan")],
+        ],
+        device=device,
+    )
+    original = inp.clone()
+    processor = PowerTransform(standardize=standardize)
+    processor.fit(TableTensor.from_tensor(inp))
+
+    out = processor.transform(TableTensor.from_tensor(inp))
+
+    assert torch.equal(out.numerical.isnan(), inp.isnan())
+    assert torch.equal(out.numerical.isfinite(), inp.isfinite())
+    torch.testing.assert_close(
+        processor.inverse_transform(out).numerical,
+        inp,
+        equal_nan=True,
+    )
+    torch.testing.assert_close(inp, original, equal_nan=True)
+
+
+@withCUDA
+def test_power_transform_sparse_feature_uses_finite_count(
+    device: torch.device,
+) -> None:
+    inp = torch.full((1000, 1), float("nan"), device=device)
+    inp[:4, 0] = torch.tensor(
+        [100_000.0, 100_001.0, 100_004.0, 100_016.0],
+        device=device,
+    )
+    processor = PowerTransform(standardize=False)
+    processor.fit(TableTensor.from_tensor(inp))
+
+    assert not torch.equal(
+        processor.lambdas, torch.ones_like(processor.lambdas)
+    )
+
+
+@withCUDA
 def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     device: torch.device,
 ) -> None:
-    # This column fits a positive lambda, whose inverse-domain has no finite
+    # The first column fits a positive lambda, whose inverse-domain has no
     # upper bound, so ``upper_bound`` must be +inf (matching the lambda == 0
     # case). A non-finite model output must fall back to the fitted per-column
-    # max.
+    # max, or zero for the entirely missing second column.
     inp = torch.tensor(
-        [[0.0], [1.0], [4.0], [9.0], [16.0], [25.0], [36.0], [49.0]],
+        [
+            [0.0, float("nan")],
+            [1.0, float("nan")],
+            [4.0, float("nan")],
+            [9.0, float("nan")],
+            [16.0, float("nan")],
+            [25.0, float("nan")],
+            [36.0, float("nan")],
+            [49.0, float("nan")],
+        ],
         dtype=torch.float64,
         device=device,
     )
 
-    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
+    processor = PowerTransform()
+    processor.fit(TableTensor.from_tensor(inp))
     assert (processor.lambdas > 0).all()
     assert torch.isinf(processor.upper_bound).all()
 
     extreme = torch.tensor(
-        [[float("inf")]], dtype=torch.float64, device=device
+        [[float("inf"), float("inf")]], dtype=inp.dtype, device=device
     )
-    inverse = processor.inverse_transform(
-        TableTensor.from_tensor(extreme)
-    ).numerical
+    out = processor.inverse_transform(TableTensor.from_tensor(extreme))
 
-    assert torch.isfinite(inverse).all()
-    assert torch.equal(inverse, processor.max.reshape_as(inverse))
+    torch.testing.assert_close(
+        out.numerical,
+        torch.tensor([[49.0, 0.0]], dtype=inp.dtype, device=device),
+    )
 
 
 @withCUDA

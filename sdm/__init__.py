@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Structured data modeling primitives."""
 
 from importlib.metadata import PackageNotFoundError, version
@@ -21,7 +24,7 @@ from sdm.relational import (
     RelatedTables,
 )
 from sdm.processing import Recipe
-from sdm import callbacks, models, evaluation, explain
+from sdm import models, evaluation, explain
 
 try:
     __version__ = version("structured-data-models")
@@ -47,7 +50,6 @@ __all__ = [
     "TaskLink",
     "RelatedTables",
     "Recipe",
-    "callbacks",
     "models",
     "evaluation",
     "explain",

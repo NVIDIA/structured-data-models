@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 import torch
 
@@ -32,6 +35,7 @@ def test_forward(
         torch.manual_seed(1)
         out = model(x_context, y_context, x_query)
         assert out.size() == (R_query, 999)
+        assert (out.numerical.diff(dim=-1) >= 0).all()
     else:
         y_context = torch.randint(
             low=0,
