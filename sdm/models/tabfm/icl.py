@@ -57,6 +57,12 @@ class ICLBlock(torch.nn.Module):
             for _ in range(num_layers)
         )
 
+        # The final layer has no context queries to calibrate FP8 scales.
+        for layer in self.layers[:-1]:
+            cast(
+                TabFMTransformerBlock, layer
+            ).attn._supports_quantized_attention = True
+
         self.norm = RMSNorm(channels, eps=1e-6, **factory_kwargs)
         self.head = Sequential(
             Linear(channels, 2 * channels, **factory_kwargs),
