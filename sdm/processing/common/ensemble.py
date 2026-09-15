@@ -25,9 +25,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     processor separately for each group of compatible tables in an
     :class:`~sdm.EnsembleTable`.
 
-    Groups created by later processors reuse the processor fitted for their
-    original group. The wrapped processor must preserve row and leading
-    dimensions as required
+    The wrapped processor must preserve row and leading dimensions as required
     by the :class:`~sdm.processing.base.Processor` contract. A processor that
     changes the ensemble structure must implement
     :class:`~sdm.processing.ensemble.EnsembleProcessor` directly. Inverse
@@ -108,44 +106,9 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         if self.requires_fit:
-            if ensemble_table._locations == self._fitted_locations:
-                processors = self._processors
-            else:
-                # One fitted processor per transform ensemble group.
-                # Multiple transform groups can share the same fitted processor.
-                processors = [None] * ensemble_table.num_groups
-                # Group members that share the same fitted processor.
-                group_members_by_processor = {}
-                for member_id, (group_id, batch_id) in enumerate(ensemble_table._locations):
-                    processor_group_id, processor_batch_id = self._fitted_locations[member_id]
-                    if processors[group_id] is None:
-                        processors[group_id] = self._processors[processor_group_id]
-                    # Check that the processor is the same for all members of the group.
-                    elif processors[group_id] is not self._processors[processor_group_id]:
-                        raise RuntimeError(
-                            "Cannot apply fitted processor state to an ensemble "
-                            "group containing members from different fitted groups"
-                        )
-                    group_members_by_processor.setdefault(processor_group_id, []).append(
-                            (group_id, batch_id, processor_batch_id)
-                        )
-
-                # A fitted group with more than one stacked batch stores
-                # per-batch state. It can stay stacked, but not split across
-                # groups or reorder those positions.
-                for locations in group_members_by_processor.values():
-                    if len({fitted for _, _, fitted in locations}) > 1 and (
-                        len({group for group, _, _ in locations}) > 1
-                        or any(current != fitted for _, current, fitted in locations)
-                    ):
-                        raise RuntimeError(
-                            "Cannot apply position-dependent fitted processor state "
-                            "after its ensemble group was split or reordered"
-                        )
-
+            processors = self._aligned_processors(ensemble_table)
         else:
             processors = repeat(self.processor, ensemble_table.num_groups)
-
         outputs = [
             processor.transform(group)
             for group, processor in zip(
@@ -173,40 +136,31 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
             outputs.append(processor.inverse_transform(group))
         return ensemble_table.replace_groups(outputs)
 
-    def _processors_for_groups(
+    def _aligned_processors(
         self,
         ensemble_table: EnsembleTable,
     ) -> tuple[Processor, ...]:
         if ensemble_table._locations == self._fitted_locations:
             return tuple(self._processors)
-
-        # One fitted processor per current group, in iteration order.
-        processors: list[Processor | None] = [None] * ensemble_table.num_groups
-        # Members that shared a fitted group, with their current vs fitted
-        # (group, position) so stacked leading-dim state can be checked.
-        locations_by_processor: dict[int, list[tuple[int, int, int]]] = {}
-        for member_id, (group_id, position) in enumerate(
-            ensemble_table._locations
-        ):
-            processor_id, fitted_position = self._fitted_locations[member_id]
-            processor = self._processors[processor_id]
-            aligned = processors[group_id]
-            if aligned is None:
-                processors[group_id] = processor
-            elif aligned is not processor:
-                # A stacked transform would mix incompatible fitted states.
+        # One fitted processor per transform ensemble group.
+        # Multiple transform groups can share the same fitted processor.
+        processors = [None] * ensemble_table.num_groups
+        # Group members that share the same fitted processor.
+        group_members_by_processor = {}
+        for member_id, (group_id, batch_id) in enumerate(ensemble_table._locations):
+            processor_group_id, processor_batch_id = self._fitted_locations[member_id]
+            if processors[group_id] is None:
+                processors[group_id] = self._processors[processor_group_id]
+            # Check that the processor is the same for all members of the group.
+            elif processors[group_id] is not self._processors[processor_group_id]:
                 raise RuntimeError(
                     "Cannot apply fitted processor state to an ensemble "
                     "group containing members from different fitted groups"
                 )
-            locations_by_processor.setdefault(processor_id, []).append(
-                (group_id, position, fitted_position)
-            )
-
-        # A fitted group with more than one stacked position stores
-        # per-position state. It can stay stacked, but not split across
-        # groups or reorder those positions.
-        for locations in locations_by_processor.values():
+        # A fitted group with more than one stacked tensor stores
+        # per-batch state. It can stay stacked, but not split across
+        # groups or reorder those tensors.
+        for locations in group_members_by_processor.values():
             if len({fitted for _, _, fitted in locations}) > 1 and (
                 len({group for group, _, _ in locations}) > 1
                 or any(current != fitted for _, current, fitted in locations)
@@ -216,7 +170,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
                     "after its ensemble group was split or reordered"
                 )
 
-        return tuple(cast(Processor, processor) for processor in processors)
+        return tuple(processors)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return self.processor.__repr__(indent=indent)
