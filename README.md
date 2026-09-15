@@ -84,4 +84,12 @@ More examples are listed under [`examples/`](examples), grouped by model archite
 
 ## License
 
-NVIDIA-authored source code is licensed under the [Apache License 2.0](LICENSE). Derived code, documentation, and separately distributed model assets are described in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+The NVIDIA-authored source code is licensed under the [Apache License 2.0](LICENSE).
+
+Third-party software and separately distributed model assets are documented in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md):
+
+- `sdm/models/tabiclv2/` contains code derived from TabICLv2 under the BSD 3-Clause License; its terms are distributed in [`sdm/models/tabiclv2/LICENSE`](sdm/models/tabiclv2/LICENSE).
+- `sdm/models/tabfm/` contains code derived from TabFM under the Apache License 2.0; its terms are distributed in [`sdm/models/tabfm/LICENSE`](sdm/models/tabfm/LICENSE).
+- [`sdm/models/kumo/relational/NOTICE`](sdm/models/kumo/relational/NOTICE) documents KumoRelational's reuse of TabICLv2-derived components and pretrained weights.
+- `third_party/pytorch/` contains the BSD 3-Clause License for material adapted from PyTorch in [`CONTRIBUTING.md`](CONTRIBUTING.md); its terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).
+- `third_party/contributor-covenant/` contains the MIT License for Contributor Covenant version 1.4; its terms are distributed in [`third_party/contributor-covenant/LICENSE`](third_party/contributor-covenant/LICENSE).

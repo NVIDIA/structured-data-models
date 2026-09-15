@@ -9,7 +9,7 @@ This project contains code or documentation derived from the following third-par
 - License terms: [`sdm/models/tabiclv2/LICENSE`](sdm/models/tabiclv2/LICENSE)
 - Pretrained weights: https://huggingface.co/jingang/TabICL
 
-The `sdm/models/tabiclv2/` implementation contains code derived from TabICLv2. KumoRelational reuses TabICLv2-derived components as documented in [`sdm/models/kumo/relational/NOTICE`](sdm/models/kumo/relational/NOTICE).
+The `sdm/models/tabiclv2/` implementation contains code derived from TabICLv2.
 
 ## TabFM
 

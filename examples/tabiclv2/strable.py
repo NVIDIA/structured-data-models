@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """TabICLv2 on STRABLE example.
 
 Predict CLEAR Corpus readability with TabICLv2 and optional text features.

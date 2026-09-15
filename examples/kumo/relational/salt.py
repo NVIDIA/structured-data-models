@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Benchmark KumoRelational on RelBench SALT autocomplete tasks.
 
 Without arguments, this runs all eight SALT tasks. Pass ``--task`` to run one
