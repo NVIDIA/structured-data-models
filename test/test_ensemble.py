@@ -26,6 +26,16 @@ def test_shared_member_table() -> None:
         assert ensemble_table.table(member_id).equal(data)
 
 
+def test_rejects_unreferenced_group_position() -> None:
+    group = TableTensor.from_tensor(torch.tensor([[[1.0]], [[2.0]], [[3.0]]]))
+
+    with pytest.raises(
+        ValueError,
+        match="every group position to be referenced",
+    ):
+        EnsembleTable(groups=(group,), locations=((0, 0), (0, 2)))
+
+
 def test_from_tables_keeps_tables_separate() -> None:
     first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0]]))

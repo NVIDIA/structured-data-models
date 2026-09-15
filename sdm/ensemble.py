@@ -63,7 +63,8 @@ class EnsembleTable(DeviceMixin):
         groups: Sequence of
             :class:`~sdm.tensor.TableTensor`, optionally stacked along their
             leading dimension.
-        locations: ``(group, batch)`` location of each ensemble member.
+        locations: ``(group, batch)`` location of each ensemble member. Every
+            position in every group must be referenced.
     """
 
     _groups: tuple[TableTensor, ...]
@@ -77,6 +78,13 @@ class EnsembleTable(DeviceMixin):
     ) -> None:
         self._groups = tuple(groups)
         self._locations = tuple(locations)
+        expected_locations = {
+            (group_id, position)
+            for group_id, group in enumerate(self._groups)
+            for position in range(group.size(0))
+        }
+        if set(self._locations) != expected_locations:
+            raise ValueError("Expected every group position to be referenced")
 
     @classmethod
     def from_table(
