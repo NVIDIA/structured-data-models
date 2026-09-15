@@ -10,11 +10,8 @@ from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import (
-    MODEL_CONFIGS,
-    SDMExperimentRunner,
-    SDMModelWrapper,
-)
+from benchmark.tabular.model import MODEL_CONFIGS
+from benchmark.tabular.run import run_jobs
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -74,17 +71,10 @@ experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
     outer_experiments=True,
 ).build_experiments()
-for experiment in experiments:
-    experiment.method_cls = SDMModelWrapper
-    experiment.experiment_cls = SDMExperimentRunner
-
 context = TabArenaContext()
-context.build_and_run_jobs(
-    experiments,
-    expname=result_dir,
+jobs = context.build_jobs(
+    experiments=experiments,
     subset=args.subset,
-    register=False,
-    build_kwargs=(
-        {"dataset_names": [args.dataset]} if args.dataset is not None else None
-    ),
+    dataset_names=[args.dataset] if args.dataset is not None else None,
 )
+run_jobs(context=context, jobs=jobs, result_dir=result_dir)
