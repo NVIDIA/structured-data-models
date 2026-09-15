@@ -139,6 +139,14 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(
+        sp.MissingDispatch(
+            sparse=sp.Identity(),
+            dense=sp.ImputeMean(),
+            min_cell_frac=0.5,
+        ),
+        _make_impute_mean_table,
+    ),
+    ProcessorCase(
         sp.Sequential(
             sp.StypeDispatch(
                 numerical=sp.Choice(
