@@ -59,3 +59,23 @@ def test_default_recipe_numerical_missing() -> None:
     assert count(default_recipe("impute"), sp.Choice) == 1
     assert count(default_recipe("mix"), sp.ImputeMean) == 1
     assert count(default_recipe("mix"), sp.Choice) == 2
+
+
+def test_default_recipe_variants() -> None:
+    def count(recipe: sp.Recipe, cls: type) -> int:
+        return sum(isinstance(p, cls) for p in recipe.features.modules())
+
+    assert count(default_recipe(numeric_transform="power"), sp.Choice) == 0
+    assert (
+        count(
+            default_recipe(numeric_transform="quantile"), sp.QuantileTransform
+        )
+        == 1
+    )
+    assert (
+        count(default_recipe(shuffle_categories_max=30), sp.ShuffleCategories)
+        == 1
+    )
+    assert (
+        count(default_recipe(interactions=True), sp.PairwiseInteractions) == 1
+    )
