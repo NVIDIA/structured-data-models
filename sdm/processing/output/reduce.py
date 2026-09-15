@@ -5,6 +5,7 @@ from collections import Counter
 from typing import Literal
 
 import torch
+from torch import Tensor
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
@@ -24,8 +25,11 @@ class ReduceEstimators(EnsembleProcessor):
     Ensemble transformation returns one member containing the reduction.
 
     Args:
-        method: Reduction applied across ensemble members. Currently only
-            ``"mean"`` is supported.
+        method: Reduction applied across ensemble members. ``"mean"``
+            averages all members. ``"trimmed"`` sorts the members of every
+            output value, drops the lowest and the highest ``int(0.2 * E)``
+            members, and averages the rest, which is the plain mean for
+            fewer than five members.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -34,13 +38,26 @@ class ReduceEstimators(EnsembleProcessor):
     def __init__(
         self,
         *,
-        method: Literal["mean"] = "mean",
+        method: Literal["mean", "trimmed"] = "mean",
     ) -> None:
         super().__init__()
-        # TODO: Support `method="median"` when required by a model recipe.
-        if method != "mean":
-            raise ValueError("method must be 'mean'")
         self.method = method
+
+    def _reduce(self, numerical: Tensor) -> Tensor:
+        # numerical: [E, ..., R, O]
+        if self.method == "mean":
+            return numerical.mean(dim=0)
+        if self.method == "trimmed":
+            cut = int(0.2 * numerical.size(0))
+            if cut == 0:
+                return numerical.mean(dim=0)
+            ordered = numerical.sort(dim=0).values
+            return ordered.narrow(
+                dim=0,
+                start=cut,
+                length=numerical.size(0) - 2 * cut,
+            ).mean(dim=0)
+        raise AssertionError(f"Unknown method {self.method!r}")
 
     def _transform_ensemble(
         self,
@@ -57,13 +74,9 @@ class ReduceEstimators(EnsembleProcessor):
                 f"Expected a numerical-only output table (also found {found})."
             )
         reference_columns = reference.columns[Stype.numerical]
-        counts_by_location = Counter(
-            ensemble_table._locations[member_id]
-            for member_id in range(ensemble_table.num_members)
-        )
 
-        total = None
-        for group_id, group in enumerate(ensemble_table):
+        groups: list[Tensor] = []
+        for group in ensemble_table:
             if group.stypes != reference.stypes:
                 raise ValueError(
                     "Expected ensemble members to have the same column names "
@@ -92,24 +105,36 @@ class ReduceEstimators(EnsembleProcessor):
                 raise ValueError(
                     "Expected ensemble members to have the same shape."
                 )
+            groups.append(numerical)
 
-            counts = numerical.new_tensor(
+        if self.method == "mean":
+            counts_by_location = Counter(ensemble_table._locations)
+            total = None
+            for group_id, numerical in enumerate(groups):
+                counts = numerical.new_tensor(
+                    [
+                        counts_by_location[(group_id, position)]
+                        for position in range(numerical.size(0))
+                    ]
+                )
+                partial = torch.tensordot(
+                    a=counts,
+                    b=numerical,
+                    dims=([0], [0]),
+                )
+                total = partial if total is None else total + partial
+            assert total is not None
+            reduced = total / ensemble_table.num_members
+        else:
+            members = torch.stack(
                 [
-                    counts_by_location[(group_id, position)]
-                    for position in range(group.size(0))
+                    groups[group_id][position]
+                    for group_id, position in ensemble_table._locations
                 ]
-            )
-            partial = torch.tensordot(
-                a=counts,
-                b=numerical,
-                dims=([0], [0]),
-            )
-            total = partial if total is None else total + partial
+            )  # [E, ..., R, O]
+            reduced = self._reduce(members)
 
-        assert total is not None
-        output = reference.replace_blocks(
-            numerical=total / ensemble_table.num_members
-        )
+        output = reference.replace_blocks(numerical=reduced)
         return EnsembleTable.from_table(output, num_members=1)
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -127,13 +152,9 @@ class ReduceEstimators(EnsembleProcessor):
                 f"Expected a numerical-only output table (also found {found})."
             )
 
-        if self.method == "mean":
-            numerical = table.numerical.mean(dim=0)
-        else:
-            raise ValueError("method must be 'mean'")
         return table.__class__(
             columns={Stype.numerical: table.columns[Stype.numerical]},
-            numerical=numerical,
+            numerical=self._reduce(table.numerical),
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
