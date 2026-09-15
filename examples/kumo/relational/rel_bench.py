@@ -51,7 +51,7 @@ data = sdm.RelationalData(
             "right_column": cast(str, db.table_dict[right_table].pkey_col),
         }
         for left_table, table in db.table_dict.items()
-        for left_column, right_table in (table.fkey_col_to_pkey_table.items())
+        for left_column, right_table in table.fkey_col_to_pkey_table.items()
     ],
 )
 sampler = data.sampler(

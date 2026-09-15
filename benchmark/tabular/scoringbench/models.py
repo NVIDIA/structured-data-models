@@ -73,20 +73,31 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
         self.model = self.config.factory(self.device)
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> SDMQuantileWrapper:
+        from time import perf_counter
+
+        t = perf_counter()
         self._set_train_range(y)
+        print("set train range", perf_counter() - t)
+        t = perf_counter()
         self.stypes = sdm.infer_stypes(X)
+        print("stypes", perf_counter() - t)
+        t = perf_counter()
 
         x_context = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self.device,
         )
+        print("x context", perf_counter() - t)
+        t = perf_counter()
         target_name = str(y.name) if y.name is not None else "__target__"
         y_context = sdm.TableTensor.from_pandas(
             df=y.rename(target_name).to_frame(),
             stypes={target_name: "numerical"},
             device=self.device,
         )
+        print("y context", perf_counter() - t)
+        t = perf_counter()
 
         generator = torch.Generator(device=self.device).manual_seed(self.seed)
         with torch.amp.autocast(
@@ -100,15 +111,22 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
                 num_estimators=self.config.num_estimators,
                 generator=generator,
             )
+        print("fit model", perf_counter() - t)
 
         return self
 
     def predict_distribution(self, X: pd.DataFrame) -> DistributionPrediction:
+        from time import perf_counter
+
+        t = perf_counter()
+
         x_query = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self.device,
         )
+        print("create data", perf_counter() - t)
+        t = perf_counter()
 
         outs = []
         for batch in x_query.split(self.batch_size or len(x_query), dim=-2):
@@ -118,13 +136,19 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
                 enabled=x_query.is_cuda,
             ):
                 outs.append(self.model.predict(x=batch).numerical)
+        print("model predict", perf_counter() - t)
+        t = perf_counter()
 
         assert self._y_train_range is not None
-        return quantiles_to_distribution(
+        bla = quantiles_to_distribution(
             torch.cat(outs, dim=-2).cpu().numpy(),
             np.linspace(0.001, 0.999, 999),
             train_range=self._y_train_range,
         )
+        print("to distribution", perf_counter() - t)
+        t = perf_counter()
+        raise NotImplementedError
+        return bla
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         return self.predict_distribution(X).mean
