@@ -32,6 +32,13 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Cached value projection tensor.
     """
 
+    def select_heads(self, num_heads: int) -> Self:
+        """Retain the leading key/value heads for grouped-query attention."""
+        return self.__class__(
+            key=self.key[..., :num_heads, :].clone(),
+            value=self.value[..., :num_heads, :].clone(),
+        )
+
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
         yield self.value
@@ -55,6 +62,17 @@ class QuantizedKVCacheEntry(DeviceMixin):
     value_scale: Tensor
     query_scale: Tensor
     dtype: torch.dtype
+
+    def select_heads(self, num_heads: int) -> Self:
+        """Retain leading K/V heads and scales, keeping all query scales."""
+        return self.__class__(
+            key=self.key[..., :num_heads, :].clone(),
+            value=self.value[..., :num_heads, :].clone(),
+            key_scale=self.key_scale[..., :num_heads, :].clone(),
+            value_scale=self.value_scale[..., :num_heads, :].clone(),
+            query_scale=self.query_scale,
+            dtype=self.dtype,
+        )
 
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key

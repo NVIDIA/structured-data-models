@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -34,6 +34,7 @@ from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.recipe import default_recipe
 from sdm.models.tabfm.row_embedding import RowEmbedding
+from sdm.nn import TransformerBlock
 from sdm.tensor.table import TableSchema
 
 
@@ -73,6 +74,13 @@ class TabFM(ICLModel):
             v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/
             LICENSE>`__ without showing the interactive license prompt.
         device: The device.
+        attention_quantization: Set to ``"fp8"`` for eligible ICL attention
+            and its cache during FP16/BF16 CUDA inference on Ada or RTX
+            Blackwell. Requires Triton and more than 8192 context rows.
+            Weights and the final ICL layer remain unquantized. Defaults to
+            ``None``. Other inputs use ordinary attention; fitted FP8 caches
+            require supported inference with the same dtype and do not
+            support ``torch.compile``. Cached prediction is not always faster.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -90,10 +98,12 @@ class TabFM(ICLModel):
         pretrained: bool = True,
         accept_license: bool = False,
         device: torch.device | str | None = None,
+        *,
+        attention_quantization: Literal["fp8"] | None = None,
     ) -> None:
         super().__init__(task=task)
 
-        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        self.models: ModuleDict = ModuleDict()
         for task in self.tasks:
             self.models[task] = _TabFM(
                 num_classes=10 if task == Task.classification else 0,
@@ -103,6 +113,14 @@ class TabFM(ICLModel):
         if pretrained:
             self._load_from_pretrained(accept_license, device=device)
 
+        if attention_quantization == "fp8":
+            for network in self.models.values():
+                for layer in cast(_TabFM, network).icl_block.layers[:-1]:
+                    cast(
+                        TransformerBlock, layer
+                    ).attn.attention_quantization = "fp8"
+        else:
+            assert attention_quantization is None
         self.eval()
 
     @classmethod

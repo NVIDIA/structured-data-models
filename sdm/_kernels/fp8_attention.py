@@ -23,8 +23,14 @@ def supports_fp8(query: Tensor) -> bool:
         and not torch.is_grad_enabled()
         and not torch.compiler.is_compiling()
         and query.is_cuda
-        and query.dtype in {torch.float16, torch.bfloat16}
-        and query.size(-1) in {32, 64, 128}
+        and (
+            query.dtype in {torch.float16, torch.bfloat16}
+            or (
+                query.dtype == torch.float32
+                and torch.is_autocast_enabled("cuda")
+            )
+        )
+        and query.size(-1) in {32, 64, 128, 256}
         and torch.cuda.get_device_capability(query.device) in {(8, 9), (12, 0)}
     )
 
@@ -37,6 +43,13 @@ def fp8_attention(
     scale: float | None = None,
 ) -> tuple[Tensor, QuantizedKVCacheEntry]:
     assert _triton is not None
+    # RMSNorm keeps Q/K in FP32. Match SDPA's autocast input conversion before
+    # quantizing, without ever dequantizing cached FP8 keys and values.
+    if torch.is_autocast_enabled("cuda"):
+        dtype = torch.get_autocast_dtype("cuda")
+        query = query.to(dtype)
+        if cache is None:
+            key, value = key.to(dtype), value.to(dtype)
     batch_shape = torch.broadcast_shapes(
         query.shape[:-3], key.shape[:-3], value.shape[:-3]
     )
@@ -68,6 +81,7 @@ def fp8_attention(
         )
     q, qs = _triton.quantize(q, qs)
     blackwell = torch.cuda.get_device_capability(query.device) == (12, 0)
+    wide = query.size(-1) == 256
     result = _triton.quantized_attention(
         q,
         k,
@@ -76,10 +90,11 @@ def fp8_attention(
         ks,
         vs,
         query.dtype,
-        128,
+        64 if wide else 128,
         scale,
-        tile=64 if blackwell or k.size(-2) < 32768 else 128,
-        stages=4 if blackwell else 2,
+        tile=64 if wide or blackwell or k.size(-2) < 32768 else 128,
+        warps=8 if wide else 4,
+        stages=4 if blackwell and not wide else 2,
         fused_accumulation=True,
         transposed_value=True,
         accumulation_chunk=0 if blackwell else 16,

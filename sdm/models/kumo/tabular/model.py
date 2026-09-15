@@ -18,6 +18,7 @@ from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
+from sdm.nn import TransformerBlock
 from sdm.tensor.table import TableSchema
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
@@ -60,6 +61,13 @@ class KumoTabular(ICLModel):
         pretrained: Whether to load pretrained checkpoints.
         device: The device for model parameters. If ``None``, uses PyTorch's
             default device.
+        attention_quantization: Set to ``"fp8"`` for eligible ICL attention
+            and its cache during FP16/BF16 CUDA inference on Ada or RTX
+            Blackwell. Requires Triton and more than 8192 context rows.
+            Weights and the final ICL layer remain unquantized. Defaults to
+            ``None``. Other inputs use ordinary attention; fitted FP8 caches
+            require supported inference with the same dtype and do not
+            support ``torch.compile``. Cached prediction is not always faster.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -77,10 +85,12 @@ class KumoTabular(ICLModel):
         size: Literal["small", "large"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        *,
+        attention_quantization: Literal["fp8"] | None = None,
     ) -> None:
         super().__init__(task=task)
 
-        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        self.models: ModuleDict = ModuleDict()
         for task in self.tasks:
             self.models[task] = _KumoTabular(
                 num_classes=10 if task == Task.classification else 0,
@@ -90,8 +100,16 @@ class KumoTabular(ICLModel):
             )
 
         if pretrained:
-            self.models[task] = self._load_from_pretrained(size, device=device)
+            self._load_from_pretrained(size, device=device)
 
+        if attention_quantization == "fp8":
+            for network in self.models.values():
+                for layer in cast(_KumoTabular, network).icl_block.layers[:-1]:
+                    cast(
+                        TransformerBlock, layer
+                    ).attn.attention_quantization = "fp8"
+        else:
+            assert attention_quantization is None
         self.eval()
 
     @classmethod
@@ -103,7 +121,7 @@ class KumoTabular(ICLModel):
         self,
         size: Literal["small", "large"],
         device: torch.device | str | None,
-    ) -> _KumoTabular:
+    ) -> None:
         device = torch.get_default_device() if device is None else device
 
         for task, model in self.models.items():
@@ -125,8 +143,6 @@ class KumoTabular(ICLModel):
                 num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
             )
             model.load_state_dict(ckpt, assign=True)
-
-        return model
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415
