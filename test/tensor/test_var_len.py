@@ -9,7 +9,8 @@ import torch
 from torch import Tensor
 
 from sdm import VarLenTensor
-from sdm.testing import onlyCUDA
+from sdm.tensor.var_len import _compact
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_dtype_conversion() -> None:
@@ -94,6 +95,59 @@ def test_offset_dtype() -> None:
     )
     assert isinstance(out, VarLenTensor)
     assert out._offset.dtype == torch.int64
+
+
+@withCUDA
+@pytest.mark.parametrize("offset_dtype", [torch.int32, torch.int64])
+def test_repeated_index_select_preserves_offset_dtype(
+    device: torch.device,
+    offset_dtype: torch.dtype,
+) -> None:
+    tensor = VarLenTensor(
+        data=torch.arange(5, device=device),
+        offset=torch.tensor([0, 2, 5], dtype=offset_dtype, device=device),
+        valid=None,
+        size=(2,),
+    )
+
+    output = tensor.index_select(0, torch.tensor([1, 0, 1], device=device))
+
+    assert isinstance(output, VarLenTensor)
+    assert output.tolist() == [[2, 3, 4], [0, 1], [2, 3, 4]]
+    assert output.data_offset[1].dtype == offset_dtype
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "total"),
+    [
+        ([0, 0], [2**30, 2**30], 2**31),
+        ([2**30] * 3, [2**31 - 1] * 3, 3 * (2**30 - 1)),
+    ],
+)
+def test_compact_promotes_cumulative_offsets(
+    monkeypatch: pytest.MonkeyPatch,
+    start: list[int],
+    end: list[int],
+    total: int,
+) -> None:
+    class AllocationBoundary(Exception):
+        pass
+
+    def check_allocation(
+        *, end: Tensor, dtype: torch.dtype, device: torch.device
+    ) -> Tensor:
+        assert end.item() == total
+        assert dtype == torch.int64
+        assert device.type == "cpu"
+        raise AllocationBoundary
+
+    # Inspect valid repeated-interval metadata before allocating large indices.
+    monkeypatch.setattr(torch, "arange", check_allocation)
+    with pytest.raises(AllocationBoundary):
+        _compact(
+            torch.tensor(start, dtype=torch.int32),
+            torch.tensor(end, dtype=torch.int32),
+        )
 
 
 def test_arrow() -> None:
