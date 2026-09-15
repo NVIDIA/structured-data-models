@@ -12,6 +12,161 @@ from sdm.processing import AlignCategories
 from sdm.testing import withCUDA
 
 
+@pytest.mark.parametrize("sort_by", ["code", "frequency", "value"])
+def test_align_categories_batched_frequency_and_refit(
+    sort_by: Literal["code", "frequency", "value"],
+) -> None:
+    context = _batched_table(
+        torch.tensor([[[0], [0], [1], [1]], [[1], [1], [2], [-1]]]),
+        categories=("red", "blue", "rare"),
+    )
+    query = _batched_table(
+        torch.tensor([[[0], [1], [2]], [[0], [1], [2]]]),
+        categories=("red", "blue", "rare"),
+    )
+    processor = AlignCategories(sort_by=sort_by, min_frequency=2)
+    processor.fit(context)
+    output = processor.transform(query)
+    expected_categories = (
+        ["red", "blue"] if sort_by == "code" else ["blue", "red"]
+    )
+    assert output.categorical.categories[0].tolist() == expected_categories
+    red = expected_categories.index("red")
+    blue = expected_categories.index("blue")
+    assert output.categorical.code.tolist() == [
+        [[red], [blue], [-1]],
+        [[-1], [blue], [-1]],
+    ]
+    processor.fit(query[0])
+    assert processor.transform(query[0]).shape == query[0].shape
+
+
+@pytest.mark.parametrize("shape", [(0, 3, 1), (2, 0, 1)])
+def test_align_categories_empty_batches(shape: tuple[int, int, int]) -> None:
+    table = _batched_table(
+        torch.empty(shape, dtype=torch.int32),
+        categories=("red", "blue"),
+    )
+    assert AlignCategories().fit_transform(table).shape == table.shape
+
+
+def test_align_categories_unbatched_fit_broadcasts_to_query_batches() -> None:
+    context = _table([[0], [1]], categories=(("red", "blue"),))
+    query = _batched_table(
+        torch.tensor([[[0], [1], [2]]]).expand(3, -1, -1),
+        categories=("blue", "red", "unseen"),
+    )
+    output = AlignCategories().fit(context).transform(query)
+    assert output.shape == query.shape
+    assert output.categorical.code.tolist() == [[[1], [0], [-1]]] * 3
+
+
+def _batched_table(
+    codes: torch.Tensor,
+    *,
+    categories: tuple[str, ...],
+) -> TableTensor:
+    return TableTensor(
+        categorical=CategoricalTensor(
+            code=codes,
+            categories=(
+                StringTensor.from_list(categories, device=codes.device),
+            ),
+        ),
+    )
+
+
+@withCUDA
+def test_align_categories_preserves_batched_shape_and_state(
+    device: torch.device,
+) -> None:
+    context = _batched_table(
+        torch.tensor(
+            [[[0], [0], [1]], [[0], [1], [1]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+        categories=("red", "blue", "green"),
+    )
+    query = _batched_table(
+        torch.tensor(
+            [[[0], [1], [2]], [[0], [1], [2]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+        categories=("blue", "red", "green"),
+    )
+    processor = AlignCategories(min_frequency=2)
+
+    context_output = processor.fit_transform(context)
+    query_output = processor.transform(query)
+    restored = AlignCategories(min_frequency=2)
+    restored.load_state_dict(processor.state_dict())
+
+    assert context_output.shape == context.shape
+    assert context_output.categorical.code.tolist() == [
+        [[0], [0], [-1]],
+        [[-1], [1], [1]],
+    ]
+    assert query_output.shape == query.shape
+    assert query_output.categorical.categories[0].tolist() == ["red", "blue"]
+    assert query_output.categorical.code.tolist() == [
+        [[-1], [0], [-1]],
+        [[1], [-1], [-1]],
+    ]
+    assert restored.transform(query).equal(query_output)
+
+
+@withCUDA
+def test_align_categories_broadcasts_multiple_batch_dimensions(
+    device: torch.device,
+) -> None:
+    context = _batched_table(
+        torch.tensor(
+            [[[[0], [0]], [[1], [1]]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+        categories=("red", "blue", "green"),
+    )
+    query_codes = torch.tensor(
+        [[[[0], [1], [2]], [[0], [1], [2]]]],
+        dtype=torch.int32,
+        device=device,
+    ).expand(3, -1, -1, -1)
+    query = _batched_table(
+        query_codes,
+        categories=("red", "blue", "green"),
+    )
+    processor = AlignCategories()
+
+    context_output = processor.fit_transform(context)
+    output = processor.transform(query)
+
+    expected = torch.tensor(
+        [[[[0], [-1], [-1]], [[-1], [1], [-1]]]],
+        dtype=torch.int32,
+        device=device,
+    ).expand(3, -1, -1, -1)
+    assert context_output.shape == context.shape
+    assert output.shape == query.shape
+    assert torch.equal(output.categorical.code, expected)
+
+
+def test_align_categories_rejects_incompatible_batch_shape() -> None:
+    context = _batched_table(
+        torch.tensor([[[0]], [[1]]], dtype=torch.int32),
+        categories=("red", "blue"),
+    )
+    query = _batched_table(
+        torch.tensor([[[0]], [[1]], [[0]]], dtype=torch.int32),
+        categories=("red", "blue"),
+    )
+
+    with pytest.raises(ValueError, match="fitted batch shape must broadcast"):
+        AlignCategories().fit(context).transform(query)
+
+
 def _table(
     values: list[list[int]],
     *,
