@@ -3,7 +3,7 @@ import torch
 import sdm.processing as sp
 from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
-from sdm.models.kumo.tabular.recipe import default_recipe
+from sdm.models.kumo.tabular.recipe import default_recipe, slot_recipe
 from sdm.testing import withCUDA
 
 
@@ -59,3 +59,30 @@ def test_default_recipe_numerical_missing() -> None:
     assert count(default_recipe("impute"), sp.Choice) == 1
     assert count(default_recipe("mix"), sp.ImputeMean) == 1
     assert count(default_recipe("mix"), sp.Choice) == 2
+
+
+def test_default_recipe_variants() -> None:
+    def count(recipe: sp.Recipe, cls: type) -> int:
+        return sum(isinstance(p, cls) for p in recipe.features.modules())
+
+    assert count(default_recipe(numeric_transform="power"), sp.Choice) == 0
+    assert (
+        count(
+            default_recipe(numeric_transform="quantile"), sp.QuantileTransform
+        )
+        == 1
+    )
+    assert (
+        count(default_recipe(shuffle_categories_max=30), sp.ShuffleCategories)
+        == 1
+    )
+
+
+def test_slot_recipe_has_one_option_per_slot() -> None:
+    recipe = slot_recipe(
+        [("identity", None), ("power", 30), ("quantile", None)]
+    )
+    choices = [
+        p for p in recipe.features.modules() if isinstance(p, sp.Choice)
+    ]
+    assert sorted(len(c.options) for c in choices) == [3, 3]

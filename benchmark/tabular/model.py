@@ -1,9 +1,10 @@
 """SDM model adapters for TabArena and BeyondArena."""
 
 import abc
+import logging
 import math
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 import numpy as np
 import pandas as pd
@@ -17,9 +18,10 @@ from tabarena.benchmark.experiment import OOFExperimentRunner
 
 import sdm
 import sdm.processing as sp
-from sdm.models.kumo.tabular.recipe import default_recipe
+from sdm.models.kumo.tabular.recipe import default_recipe, slot_recipe
 
 Task = Literal["classification", "regression"]
+logger = logging.getLogger(__name__)
 
 
 class SDMModel(AbstractTorchModel, abc.ABC):
@@ -50,6 +52,10 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
         return self.model.default_recipe()
 
+    def _recipes(self, params: dict[str, Any]) -> dict[str, sp.Recipe]:
+        """Candidate recipes; several turn on context-fitted slots."""
+        return {"default": self._recipe(params)}
+
     def _set_default_params(self) -> None:
         self._set_default_param_value(
             "num_estimators",
@@ -59,6 +65,9 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._set_default_param_value("max_columns", None)
         self._set_default_param_value("checkpoint", None)
         self._set_default_param_value("numerical_missing", "nan")
+        self._set_default_param_value("recipe_ensemble", None)
+        self._set_default_param_value("ensemble_folds", 3)
+        self._set_default_param_value("ensemble_iterations", 20)
 
     def _fit(
         self,
@@ -125,12 +134,45 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             num_estimators = None
         self._expand_query = num_estimators is None
 
-        recipe = self._recipe(params)
-        if params["max_columns"] is not None:
-            for processor in recipe.features.modules():
-                if isinstance(processor, sp.SelectColumns):
-                    processor.max_columns = params["max_columns"]
+        recipes = self._recipes(params)
+        for recipe in recipes.values():
+            if params["max_columns"] is not None:
+                for processor in recipe.features.modules():
+                    if isinstance(processor, sp.SelectColumns):
+                        processor.max_columns = params["max_columns"]
 
+        self._x_context, self._y_context = x_context, y_context
+        self._num_estimators_fit = num_estimators
+        weights = dict.fromkeys(recipes, 1.0)
+        if len(recipes) > 1 and not self._expand_query:
+            weights = self._ensemble_weights(
+                recipes=recipes,
+                y=y.to_numpy(),
+                folds=params["ensemble_folds"],
+                iterations=params["ensemble_iterations"],
+            )
+        recipe = next(iter(recipes.values()))
+        if len(recipes) > 1:
+            recipe = self._slot_recipe(weights, params)
+        self._fit_member(recipe, x_context, y_context)
+
+    def _slot_recipe(
+        self, weights: dict[str, float], params: dict[str, Any]
+    ) -> sp.Recipe:
+        raise NotImplementedError
+
+    def _generator(self) -> torch.Generator | None:
+        seed = self.random_seed
+        if seed is None:
+            return None
+        return torch.Generator(self._device).manual_seed(seed)
+
+    def _fit_member(
+        self,
+        recipe: sp.Recipe,
+        x_context: sdm.TableTensor,
+        y_context: sdm.TableTensor,
+    ) -> None:
         with torch.amp.autocast(
             self._device.type,
             self.autocast_dtype,
@@ -140,9 +182,66 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 x=x_context,
                 y=y_context,
                 recipe=recipe,
-                num_estimators=num_estimators,
-                generator=generator,
+                num_estimators=self._num_estimators_fit,
+                generator=self._generator(),
             )
+
+    def _ensemble_weights(
+        self,
+        recipes: dict[str, sp.Recipe],
+        y: np.ndarray,
+        folds: int,
+        iterations: int,
+    ) -> dict[str, float]:
+        """Caruana selection weights from k-fold out-of-fold context scores."""
+        n = len(y)
+        perm = torch.randperm(n, generator=torch.Generator().manual_seed(0))
+        parts = perm.chunk(folds)
+        truth: list[np.ndarray] = []
+        oof: dict[str, list[np.ndarray]] = {name: [] for name in recipes}
+        for k in range(folds):
+            hold = parts[k]
+            rest = torch.cat([parts[j] for j in range(folds) if j != k])
+            if len(np.unique(y[rest.numpy()])) < len(np.unique(y)):
+                continue
+            truth.append(y[hold.numpy()])
+            hold_dev, rest_dev = hold.to(self._device), rest.to(self._device)
+            for name, recipe in recipes.items():
+                self._fit_member(
+                    recipe,
+                    self._x_context[rest_dev],
+                    self._y_context[rest_dev],
+                )
+                oof[name].append(
+                    self._predict_tensor(self._x_context[hold_dev])
+                )
+        y_true = np.concatenate(truth)
+        preds = {name: np.concatenate(v) for name, v in oof.items()}
+
+        def error(proba: np.ndarray) -> float:
+            score = proba[:, 1] if proba.shape[1] == 2 else proba
+            return float(self.eval_metric.error(y_true, score))
+
+        chosen: list[str] = []
+        current: np.ndarray | None = None
+        for _ in range(iterations):
+            best = min(
+                recipes,
+                key=lambda name: error(
+                    preds[name]
+                    if current is None
+                    else (current * len(chosen) + preds[name])
+                    / (len(chosen) + 1)
+                ),
+            )
+            chosen.append(best)
+            current = (
+                preds[best]
+                if current is None or len(chosen) == 1
+                else (current * (len(chosen) - 1) + preds[best]) / len(chosen)
+            )
+        counts = {name: chosen.count(name) for name in recipes}
+        return {name: counts[name] / iterations for name in recipes}
 
     def _predict_proba(
         self,
@@ -156,11 +255,13 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             device=self._device,
         )
         if self._expand_query:
-            x_query = x_query.expand(
-                self._num_estimators,
-                *x_query.size(),
+            x_query = cast(
+                sdm.TableTensor,
+                x_query.expand(self._num_estimators, *x_query.size()),
             )
+        return self._finish_proba(self._predict_tensor(x_query))
 
+    def _predict_tensor(self, x_query: sdm.TableTensor) -> np.ndarray:
         with torch.amp.autocast(
             self._device.type,
             self.autocast_dtype,
@@ -174,8 +275,12 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         assert self.num_classes is not None
         columns = out.columns[sdm.Stype.numerical]
         indices = [columns.index(str(i)) for i in range(self.num_classes)]
-        probabilities = out.numerical[..., indices].float().cpu().numpy()
-        return self._convert_proba_to_unified_form(probabilities)
+        return out.numerical[..., indices].float().cpu().numpy()
+
+    def _finish_proba(self, values: np.ndarray) -> np.ndarray:
+        if self.problem_type == REGRESSION:
+            return values
+        return self._convert_proba_to_unified_form(values)
 
     def get_device(self) -> str:
         return str(next(self.model.parameters()).device)
@@ -246,6 +351,37 @@ class SDMKumoTabularModel(SDMModel):
     def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
         return default_recipe(numerical_missing=params["numerical_missing"])
 
+    def _recipes(self, params: dict[str, Any]) -> dict[str, sp.Recipe]:
+        names = params["recipe_ensemble"]
+        if not names:
+            return {"default": self._recipe(params)}
+        return {name: default_recipe(**parse_recipe(name)) for name in names}
+
+    def _slot_recipe(
+        self, weights: dict[str, float], params: dict[str, Any]
+    ) -> sp.Recipe:
+        """One recipe whose estimator slots follow the candidate weights."""
+        names = list(weights)
+        raw = np.array([weights[n] for n in names]) * self._num_estimators
+        counts = np.floor(raw).astype(int)
+        for i in np.argsort(-(raw - counts))[
+            : self._num_estimators - counts.sum()
+        ]:
+            counts[i] += 1
+        slots = []
+        for name, count in zip(names, counts):
+            kwargs = parse_recipe(name)
+            slots += [
+                (
+                    kwargs.get("numeric_transform", "round_robin"),
+                    kwargs.get("shuffle_categories_max"),
+                )
+            ] * int(count)
+        logger.log(20, "slots=%s", dict(zip(names, counts.tolist())))
+        return slot_recipe(
+            slots, numerical_missing=params["numerical_missing"]
+        )
+
 
 class SDMTabFMModel(SDMModel):
     ag_key = "SDM-TABFM"
@@ -263,6 +399,24 @@ class SDMTabFMModel(SDMModel):
             accept_license=True,
             device=device,
         )
+
+
+def parse_recipe(name: str) -> dict[str, Any]:
+    """default_recipe kwargs from a '+'-joined name.
+
+    First token is the NaN policy (nan, impute, mix); then identity, power
+    or quantile, and catshuffle<N>.
+    """
+    tokens = name.split("+")
+    kwargs: dict[str, Any] = {"numerical_missing": tokens[0]}
+    for token in tokens[1:]:
+        if token in ("identity", "power", "quantile"):
+            kwargs["numeric_transform"] = token
+        elif token.startswith("catshuffle"):
+            kwargs["shuffle_categories_max"] = int(token[len("catshuffle") :])
+        else:
+            raise ValueError(f"unknown recipe token {token!r} in {name!r}")
+    return kwargs
 
 
 @dataclass(frozen=True)

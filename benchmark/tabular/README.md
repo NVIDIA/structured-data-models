@@ -53,13 +53,18 @@ python -m benchmark.tabular.tabarena.main \
 ```
 
 Run a local kumo-scm checkpoint under a run name, mean-imputing numerical
-NaNs on every other estimator (`--numerical_missing {nan,impute,mix}`):
+NaNs on every other estimator (`--numerical_missing {nan,impute,mix}`).
+With `--recipe_ensemble`, 3-fold cross-validation on the training rows
+decides how many of the 8 estimators follow each listed recipe
+(`identity`, `power` or `quantile`, optionally `+catshuffle<N>`); the
+prediction is still one 8-estimator model:
 
 ```bash
 python -m benchmark.tabular.tabarena.main \
   --model kumo-tabular \
   --checkpoint /path/to/final.pt \
   --numerical_missing mix \
+  --recipe_ensemble mix+identity,mix+power,mix+quantile,mix+identity+catshuffle30,mix+power+catshuffle30,mix+quantile+catshuffle30 \
   --name my-run \
   --output_root /path/to/tabarena_out
 ```

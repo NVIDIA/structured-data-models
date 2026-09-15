@@ -56,6 +56,11 @@ parser.add_argument(
     help="KumoTabular NaN handling: keep, mean-impute, or alternate both.",
 )
 parser.add_argument(
+    "--recipe_ensemble",
+    help="Comma-separated KumoTabular recipes; context cross-validation "
+    "decides how many of the estimators follow each one.",
+)
+parser.add_argument(
     "--name",
     help="Result directory name (default: the model name).",
 )
@@ -78,6 +83,9 @@ config = {
     "max_columns": args.max_columns,
     "checkpoint": args.checkpoint,
     "numerical_missing": args.numerical_missing,
+    "recipe_ensemble": (
+        args.recipe_ensemble.split(",") if args.recipe_ensemble else None
+    ),
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
