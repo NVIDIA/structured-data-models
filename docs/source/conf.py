@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import importlib
 from datetime import date
 from importlib.metadata import PackageNotFoundError
@@ -12,7 +15,7 @@ from sphinx.ext.autosummary.generate import AutosummaryEntry
 
 project = "Structured Data Models"
 author = "NVIDIA"
-copyright = f"{date.today().year}, NVIDIA"  # noqa: A001
+copyright = f"{date.today().year}, NVIDIA CORPORATION & AFFILIATES."  # noqa: A001
 
 try:
     release = package_version("structured-data-models")
