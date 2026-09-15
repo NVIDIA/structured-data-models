@@ -100,18 +100,19 @@ def infer_stypes(
     """
     overrides = overrides or {}
 
+    t = time.perf_counter()
     fn: Callable[[str, object, Policy, Policy], Stype | None] | None = None
     columns: Iterable[tuple[Hashable, object]] | None = None
     if isinstance(table, pa.Table):
         fn = _infer_arrow_stype
         columns = zip(table.column_names, table.columns)
-    if importlib.util.find_spec("pandas") is not None:
+    if fn is None and importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
             fn = _infer_pandas_stype
             columns = table.items()
-    if importlib.util.find_spec("cudf") is not None:
+    if fn is None and importlib.util.find_spec("cudf") is not None:
         import cudf
 
         if isinstance(table, cudf.DataFrame):
