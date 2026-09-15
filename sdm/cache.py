@@ -49,11 +49,12 @@ class KVCacheEntry(DeviceMixin):
 
 @dataclass
 class QuantizedKVCacheEntry(KVCacheEntry):
-    """FP8 attention projections and their per-head dequantization scales.
+    """Quantized attention projections with per-head scaling metadata.
 
     Keys and values have shape ``[..., rows, heads, channels]``. Scales have
     shape ``[..., 1, heads, 1]``. The query scale is learned from context
-    queries and reused for prediction. ``dtype`` is the attention output dtype.
+    queries and reused for prediction. The key/value tensor dtypes identify
+    their storage formats; ``dtype`` is the attention output dtype.
     """
 
     key_scale: Tensor
