@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -57,6 +58,8 @@ class KumoTabular(ICLModel):
         pretrained: Whether to load pretrained checkpoints.
         device: The device for model parameters. If ``None``, uses PyTorch's
             default device.
+        checkpoint: A local kumo-scm checkpoint for the single initialized
+            task, used instead of the published weights.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -74,6 +77,7 @@ class KumoTabular(ICLModel):
         size: Literal["small", "large"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        checkpoint: str | Path | None = None,
     ) -> None:
         super().__init__(task=task)
 
@@ -87,7 +91,9 @@ class KumoTabular(ICLModel):
             )
 
         if pretrained:
-            self.models[task] = self._load_from_pretrained(size, device=device)
+            self.models[task] = self._load_from_pretrained(
+                size, device=device, checkpoint=checkpoint
+            )
 
         self.eval()
 
@@ -100,6 +106,7 @@ class KumoTabular(ICLModel):
         self,
         size: Literal["small", "large"],
         device: torch.device | str | None,
+        checkpoint: str | Path | None = None,
     ) -> _KumoTabular:
         device = torch.get_default_device() if device is None else device
 
@@ -110,7 +117,7 @@ class KumoTabular(ICLModel):
                 assert task == Task.regression
                 filename = f"{size}/regressor.pt"
 
-            path = download_checkpoint(
+            path = checkpoint or download_checkpoint(
                 repo_id="nvidia/Kumo-Tabular",
                 filename=filename,
                 revision="v1.0.3",

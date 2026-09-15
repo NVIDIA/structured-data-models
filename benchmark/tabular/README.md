@@ -52,12 +52,30 @@ python -m benchmark.tabular.tabarena.main \
   --dataset blood-transfusion-service-center
 ```
 
+Run a local kumo-scm checkpoint under a run name, mean-imputing numerical
+NaNs on every other estimator (`--numerical_missing {nan,impute,mix}`):
+
+```bash
+python -m benchmark.tabular.tabarena.main \
+  --model kumo-tabular \
+  --checkpoint /path/to/final.pt \
+  --numerical_missing mix \
+  --name my-run \
+  --output_root /path/to/tabarena_out
+```
+
 ### Evaluate
 
 Evaluate all available model results with:
 
 ```bash
 python -m benchmark.tabular.tabarena.evaluate
+```
+
+Score named runs instead (repeat `--name`):
+
+```bash
+python -m benchmark.tabular.tabarena.evaluate --output_root /path/to/tabarena_out --name my-run
 ```
 
 ______________________________________________________________________

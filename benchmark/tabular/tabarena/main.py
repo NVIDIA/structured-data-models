@@ -44,20 +44,40 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+parser.add_argument(
+    "--checkpoint",
+    type=Path,
+    help="Local kumo-scm checkpoint for --model kumo-tabular.",
+)
+parser.add_argument(
+    "--numerical_missing",
+    choices=("nan", "impute", "mix"),
+    default="nan",
+    help="KumoTabular NaN handling: keep, mean-impute, or alternate both.",
+)
+parser.add_argument(
+    "--name",
+    help="Result directory name (default: the model name).",
+)
+parser.add_argument(
+    "--output_root",
+    type=Path,
+    default=Path(__file__).parent.parent / "tabarena_out",
+    help="Directory holding one result directory per run.",
+)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
-    Path(__file__).parent.parent
-    / "tabarena_out"
-    / model_config.name
-    / "outer_model"
+    args.output_root / (args.name or model_config.name) / "outer_model"
 )
 result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
+    "checkpoint": args.checkpoint,
+    "numerical_missing": args.numerical_missing,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size

@@ -1,7 +1,23 @@
+from typing import Literal
+
 import sdm.processing as sp
 
+NumericalMissing = Literal["nan", "impute", "mix"]
 
-def default_recipe() -> sp.Recipe:  # noqa: D103
+
+def default_recipe(numerical_missing: NumericalMissing = "nan") -> sp.Recipe:
+    r"""Default recipe.
+
+    ``numerical_missing`` keeps NaN, mean-imputes, or alternates both across
+    estimators (``mix``).
+    """
+    missing: list[sp.Processor] = []
+    if numerical_missing == "impute":
+        missing = [sp.ImputeMean()]
+    elif numerical_missing == "mix":
+        missing = [
+            sp.Choice(sp.Identity(), sp.ImputeMean(), method="round_robin")
+        ]
     return sp.Recipe(
         features=[
             sp.StypeDispatch(
@@ -12,6 +28,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
             sp.StypeDispatch(
                 numerical=[
+                    *missing,
                     sp.DropConstantColumns(),
                     sp.Standardize(eps=1e-6),
                     sp.Clip(min_value=-100.0, max_value=100.0),

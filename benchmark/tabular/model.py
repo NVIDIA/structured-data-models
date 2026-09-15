@@ -17,6 +17,7 @@ from tabarena.benchmark.experiment import OOFExperimentRunner
 
 import sdm
 import sdm.processing as sp
+from sdm.models.kumo.tabular.recipe import default_recipe
 
 Task = Literal["classification", "regression"]
 
@@ -38,13 +39,16 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     default_num_estimators: ClassVar[int]
     autocast_dtype: ClassVar[torch.dtype]
 
-    @staticmethod
     @abc.abstractmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.ICLModel:
         pass
+
+    def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
+        return self.model.default_recipe()
 
     def _set_default_params(self) -> None:
         self._set_default_param_value(
@@ -53,6 +57,8 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
+        self._set_default_param_value("checkpoint", None)
+        self._set_default_param_value("numerical_missing", "nan")
 
     def _fit(
         self,
@@ -119,7 +125,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             num_estimators = None
         self._expand_query = num_estimators is None
 
-        recipe = self.model.default_recipe()
+        recipe = self._recipe(params)
         if params["max_columns"] is not None:
             for processor in recipe.features.modules():
                 if isinstance(processor, sp.SelectColumns):
@@ -212,8 +218,8 @@ class SDMTabICLv2Model(SDMModel):
     default_num_estimators = 8
     autocast_dtype = torch.float16
 
-    @staticmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.TabICLv2:
@@ -226,12 +232,19 @@ class SDMKumoTabularModel(SDMModel):
     default_num_estimators = 8
     autocast_dtype = torch.float16
 
-    @staticmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
-        return sdm.models.KumoTabular(task=task, device=device)
+        return sdm.models.KumoTabular(
+            task=task,
+            device=device,
+            checkpoint=self._get_model_params()["checkpoint"],
+        )
+
+    def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
+        return default_recipe(numerical_missing=params["numerical_missing"])
 
 
 class SDMTabFMModel(SDMModel):
@@ -240,8 +253,8 @@ class SDMTabFMModel(SDMModel):
     default_num_estimators = 32
     autocast_dtype = torch.bfloat16
 
-    @staticmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.TabFM:
