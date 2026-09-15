@@ -123,6 +123,7 @@ PROCESSOR_CASES = (
     ProcessorCase(
         sp.QuantileTransform(n_quantiles=4, subsample=None),
     ),
+    ProcessorCase(sp.SquashTransform()),
     ProcessorCase(sp.Standardize()),
     ProcessorCase(sp.FlipSign()),
     ProcessorCase(sp.DropConstantColumns()),
