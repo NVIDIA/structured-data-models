@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
 import pytest
@@ -519,7 +519,7 @@ def test_align_categories_routes_fitted_member_vocabularies(
         categories=(("red", "blue", "green"),),
         device=device,
     )
-    other_context = context_table.clone()
+    other_context = cast(TableTensor, context_table.clone())
     other_context.categorical.code.fill_(1)
     context = EnsembleTable.from_tables(
         tables=(context_table, other_context),
@@ -536,7 +536,7 @@ def test_align_categories_routes_fitted_member_vocabularies(
         )
     elif layout == "stacked":
         inputs = EnsembleTable(
-            groups=(torch.stack((query, query)),),
+            groups=(cast(TableTensor, torch.stack((query, query))),),
             locations=((0, 0), (0, 1), (0, 0)),
         )
     else:
@@ -571,7 +571,7 @@ def test_align_categories_split_stacked_context(
     device: torch.device,
 ) -> None:
     table = _table([[0], [0]], categories=(("red", "blue"),), device=device)
-    stacked = torch.stack((table, table))
+    stacked = cast(TableTensor, torch.stack((table, table)))
     stacked.categorical.code[1].fill_(1)
     context = EnsembleTable(groups=(stacked,), locations=((0, 1), (0, 0)))
     query = _table([[0], [1]], categories=(("red", "blue"),), device=device)
