@@ -504,3 +504,99 @@ def test_align_categories_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output.table(member_id).equal(expected_query)
         assert fitted_query_output.table(member_id).equal(expected_query)
+
+
+@withCUDA
+@pytest.mark.parametrize("fit_transform", [False, True])
+@pytest.mark.parametrize("layout", ["reordered", "stacked", "shared"])
+def test_align_categories_routes_fitted_member_vocabularies(
+    device: torch.device,
+    fit_transform: bool,
+    layout: str,
+) -> None:
+    context_table = _table(
+        [[0], [0]],
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    other_context = context_table.clone()
+    other_context.categorical.code.fill_(1)
+    context = EnsembleTable.from_tables(
+        tables=(context_table, other_context),
+        member_table_ids=(1, 0, 1),
+    )
+    query = _table(
+        [[0], [1], [2], [-1]],
+        categories=(("green", "red", "blue"),),
+        device=device,
+    )
+    if layout == "reordered":
+        inputs = EnsembleTable.from_tables(
+            tables=(query, query), member_table_ids=(0, 1, 0)
+        )
+    elif layout == "stacked":
+        inputs = EnsembleTable(
+            groups=(torch.stack((query, query)),),
+            locations=((0, 0), (0, 1), (0, 0)),
+        )
+    else:
+        inputs = EnsembleTable.from_table(query, num_members=3)
+    processor = AlignCategories()
+    if fit_transform:
+        processor.fit_transform_ensemble(context)
+    else:
+        processor.fit_ensemble(context)
+    restored = AlignCategories()
+    restored.load_state_dict(processor.state_dict())
+
+    for fitted in (processor, restored):
+        output = fitted.transform_ensemble(inputs)
+        assert output.num_members == 3
+        for member_id in range(3):
+            expected = (
+                AlignCategories()
+                .fit(context.table(member_id))
+                .transform(query)
+            )
+            assert output.table(member_id).equal(expected)
+        # Members 0 and 2 share both query input and fitted vocabulary.
+        assert (
+            output.table(0).categorical.code.data_ptr()
+            == output.table(2).categorical.code.data_ptr()
+        )
+
+
+@withCUDA
+def test_align_categories_split_stacked_context(
+    device: torch.device,
+) -> None:
+    table = _table([[0], [0]], categories=(("red", "blue"),), device=device)
+    stacked = torch.stack((table, table))
+    stacked.categorical.code[1].fill_(1)
+    context = EnsembleTable(groups=(stacked,), locations=((0, 1), (0, 0)))
+    query = _table([[0], [1]], categories=(("red", "blue"),), device=device)
+    inputs = EnsembleTable.from_tables((query, query), member_table_ids=(0, 1))
+    processor = AlignCategories().fit_ensemble(context)
+    output = processor.transform_ensemble(inputs)
+    for member_id in range(2):
+        expected = (
+            AlignCategories().fit(context.table(member_id)).transform(query)
+        )
+        assert output.table(member_id).equal(expected)
+
+
+@pytest.mark.parametrize("members", [1, 3])
+def test_align_categories_rejects_changed_member_count(members: int) -> None:
+    table = _table([[0]], categories=(("red",),))
+    processor = AlignCategories().fit_ensemble(
+        EnsembleTable.from_table(table, num_members=2)
+    )
+    restored = AlignCategories()
+    restored.load_state_dict(processor.state_dict())
+    for fitted in (processor, restored):
+        with pytest.raises(
+            RuntimeError, match="same number of ensemble members"
+        ):
+            fitted.transform_ensemble(
+                EnsembleTable.from_table(table, num_members=members)
+            )
