@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -29,6 +29,7 @@ from sdm.models.kumo.relational.recipe import default_recipe
 from sdm.models.kumo.relational.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
+from sdm.nn import TransformerBlock
 from sdm.processing import Recipe, Standardize
 
 
@@ -141,6 +142,13 @@ class KumoRelational(ICLModel):
             model are initialized.
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+        attention_quantization: Set to ``"fp8"`` for eligible ICL attention
+            and its cache during CUDA inference on Ada, Hopper, or RTX
+            Blackwell. Requires Triton and more than 8192 context rows.
+            Weights and the final ICL layer remain unquantized. Defaults to
+            ``None``. Other inputs use ordinary attention; fitted FP8 caches
+            require supported inference with the same dtype and do not
+            support ``torch.compile``. Cached prediction is not always faster.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -157,10 +165,12 @@ class KumoRelational(ICLModel):
         task: TaskLike | Iterable[TaskLike] | None = None,
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        *,
+        attention_quantization: Literal["fp8"] | None = None,
     ) -> None:
         super().__init__(task=task)
 
-        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        self.models: ModuleDict = ModuleDict()
         for task in self.tasks:
             self.models[task] = _KumoRelational(
                 num_classes=10 if task == Task.classification else 0,
@@ -172,6 +182,16 @@ class KumoRelational(ICLModel):
         if pretrained:
             self._load_from_pretrained(device=device)
 
+        if attention_quantization == "fp8":
+            for network in self.models.values():
+                for layer in cast(_KumoRelational, network).icl_block.layers[
+                    :-1
+                ]:
+                    cast(
+                        TransformerBlock, layer
+                    ).attn.attention_quantization = "fp8"
+        else:
+            assert attention_quantization is None
         self.eval()
 
     def _load_from_pretrained(
