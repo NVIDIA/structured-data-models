@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Compare native and custom normalization in complete KumoTabular forwards.
 
 Run each shape in a fresh process, on an otherwise idle CUDA GPU::
