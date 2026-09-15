@@ -52,12 +52,29 @@ python -m benchmark.tabular.tabarena.main \
   --dataset blood-transfusion-service-center
 ```
 
+Run a local checkpoint under a run name, with every cache under one directory:
+
+```bash
+python -m benchmark.tabular.tabarena.main \
+  --model kumo-tabular \
+  --checkpoint /path/to/final.pt \
+  --name my-run \
+  --output_root /path/to/tabarena_out \
+  --cache_root /path/to/cache
+```
+
 ### Evaluate
 
 Evaluate all available model results with:
 
 ```bash
 python -m benchmark.tabular.tabarena.evaluate
+```
+
+Evaluate named runs of one model instead (repeat `--name` to combine runs):
+
+```bash
+python -m benchmark.tabular.tabarena.evaluate --model kumo-tabular --name my-run --output_root /path/to/tabarena_out
 ```
 
 ______________________________________________________________________

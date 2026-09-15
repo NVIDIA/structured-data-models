@@ -41,9 +41,9 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     default_num_estimators: ClassVar[int]
     autocast_dtype: ClassVar[torch.dtype]
 
-    @staticmethod
     @abc.abstractmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.ICLModel:
@@ -56,6 +56,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
+        self._set_default_param_value("checkpoint", None)
 
     def _fit(
         self,
@@ -215,8 +216,8 @@ class SDMTabICLv2Model(SDMModel):
     default_num_estimators = 8
     autocast_dtype = torch.float16
 
-    @staticmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.TabICLv2:
@@ -229,12 +230,16 @@ class SDMKumoTabularModel(SDMModel):
     default_num_estimators = 8
     autocast_dtype = torch.float16
 
-    @staticmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
-        return sdm.models.KumoTabular(task=task, device=device)
+        return sdm.models.KumoTabular(
+            task=task,
+            device=device,
+            checkpoint=self._get_model_params()["checkpoint"],
+        )
 
 
 class SDMTabFMModel(SDMModel):
@@ -243,8 +248,8 @@ class SDMTabFMModel(SDMModel):
     default_num_estimators = 32
     autocast_dtype = torch.bfloat16
 
-    @staticmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.TabFM:
