@@ -142,6 +142,7 @@ class EnsembleTable(DeviceMixin):
     def _pack_tables(
         tables: Sequence[TableTensor],
     ) -> tuple[tuple[TableTensor, ...], tuple[tuple[int, int], ...]]:
+        """Pack compatible tables and return their resulting locations."""
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
         for index, table in enumerate(tables):
             # Shape, schema, block layout, device, and categorical vocabularies
@@ -171,7 +172,7 @@ class EnsembleTable(DeviceMixin):
         groups: list[TableTensor] = []
         locations = [(-1, -1)] * len(tables)
         for indices in compatible_groups.values():
-            group_index = len(groups)
+            group_id = len(groups)
             groups.append(
                 cast(TableTensor, tables[indices[0]].unsqueeze(0))
                 if len(indices) == 1
@@ -349,77 +350,118 @@ class EnsembleTable(DeviceMixin):
         if self._locations == locations:
             return self
 
-        positions_by_group: dict[int, dict[int, tuple[int, int]]] = {}
-        can_rearrange = True
-        for source, (group_id, position) in zip(
-            self._locations, locations, strict=True
-        ):
-            positions = positions_by_group.setdefault(group_id, {})
-            if positions.setdefault(position, source) != source:
-                can_rearrange = False
-                break
-
-        groups: list[TableTensor] = []
-        if can_rearrange:
-            for group_id in range(len(positions_by_group)):
-                positions = positions_by_group[group_id]
-                sources = tuple(
-                    positions[position] for position in range(len(positions))
-                )
-                source_group_ids = {group_id for group_id, _ in sources}
-                if len(source_group_ids) != 1:
-                    can_rearrange = False
-                    break
-
-                source_group_id = sources[0][0]
-                source_group = self._groups[source_group_id]
-                source_positions = tuple(
-                    position for _, position in sources
-                )
-                start = source_positions[0]
-                if all(
-                    position == start for position in source_positions[1:]
-                ):
-                    output = source_group.narrow(0, start, 1).expand(
-                        len(source_positions), *source_group.size()[1:]
-                    )
-                elif source_positions == tuple(
-                    range(start, start + len(source_positions))
-                ):
-                    output = source_group.narrow(
-                        0, start, len(source_positions)
-                    )
-                else:
-                    index = torch.tensor(
-                        source_positions, device=source_group.device
-                    )
-                    output = source_group.index_select(0, index)
-                groups.append(cast(TableTensor, output))
-
-        if can_rearrange:
+        groups = self._reconstruct_groups(locations)
+        if groups is not None:
             return self.__class__(groups=groups, locations=locations)
         if strict:
             raise ValueError(
                 "Cannot reconstruct the requested ensemble group locations"
             )
+        return self._split_groups(
+            tuple(group_id for group_id, _ in locations)
+        )
 
-        reference_group_ids = tuple(group_id for group_id, _ in locations)
+    def _reconstruct_groups(
+        self,
+        locations: Sequence[tuple[int, int]],
+    ) -> tuple[TableTensor, ...] | None:
+        """Reconstruct groups or return ``None`` if the layout is incompatible."""
+        # Map every target batch position to its current source location.
+        sources_by_target_group: dict[int, dict[int, tuple[int, int]]] = {}
+        for source_location, (target_group_id, target_position) in zip(
+            self._locations, locations, strict=True
+        ):
+            sources_by_position = sources_by_target_group.setdefault(
+                target_group_id, {}
+            )
+            existing_source = sources_by_position.get(target_position)
+            if (
+                existing_source is not None
+                and existing_source != source_location
+            ):
+                return None
+            sources_by_position[target_position] = source_location
+
+        groups = []
+        for target_group_id in range(len(sources_by_target_group)):
+            sources_by_position = sources_by_target_group[target_group_id]
+            source_locations = tuple(
+                sources_by_position[position]
+                for position in range(len(sources_by_position))
+            )
+            group = self._reconstruct_group(source_locations)
+            if group is None:
+                return None
+            groups.append(group)
+        return tuple(groups)
+
+    def _reconstruct_group(
+        self,
+        source_locations: Sequence[tuple[int, int]],
+    ) -> TableTensor | None:
+        """Reconstruct one group, or return ``None`` if packing fails."""
+        source_group_id = source_locations[0][0]
+        if all(
+            group_id == source_group_id
+            for group_id, _ in source_locations[1:]
+        ):
+            source_group = self._groups[source_group_id]
+            source_positions = tuple(
+                position for _, position in source_locations
+            )
+            start = source_positions[0]
+
+            # Reuse storage for shared or contiguous source positions.
+            if all(
+                position == start for position in source_positions[1:]
+            ):
+                return cast(
+                    TableTensor,
+                    source_group.narrow(0, start, 1).expand(
+                        len(source_positions), *source_group.size()[1:]
+                    ),
+                )
+            if source_positions == tuple(
+                range(start, start + len(source_positions))
+            ):
+                return cast(
+                    TableTensor,
+                    source_group.narrow(0, start, len(source_positions)),
+                )
+            index = torch.tensor(
+                source_positions, device=source_group.device
+            )
+            return cast(TableTensor, source_group.index_select(0, index))
+
+        # Pack across current groups only when the target layout requires it.
+        groups, _ = self._pack_tables(
+            tuple(
+                self._groups[group_id][position]
+                for group_id, position in source_locations
+            )
+        )
+        if len(groups) == 1:
+            return groups[0]
+        return None
+
+    def _split_groups(self, target_group_ids: Sequence[int]) -> Self:
+        """Split current groups along the requested group boundaries."""
         partitions_by_group: list[dict[int, list[tuple[int, int]]]] = [
             {} for _ in range(self.num_groups)
         ]
         for member_id, (
             (group_id, position),
-            reference_group_id,
-        ) in enumerate(zip(self._locations, reference_group_ids, strict=True)):
+            target_group_id,
+        ) in enumerate(zip(self._locations, target_group_ids, strict=True)):
             partitions_by_group[group_id].setdefault(
-                reference_group_id, []
+                target_group_id, []
             ).append((member_id, position))
 
         if all(len(partitions) <= 1 for partitions in partitions_by_group):
             return self
 
         groups = []
-        refined_locations = [(-1, -1)] * self.num_members
+        locations = [(-1, -1)] * self.num_members
         for group_id, partitions in enumerate(partitions_by_group):
             group = self._groups[group_id]
             for members in partitions.values():
@@ -429,7 +471,7 @@ class EnsembleTable(DeviceMixin):
                     output_position = output_position_by_source.setdefault(
                         source_position, len(output_position_by_source)
                     )
-                    refined_locations[member_id] = (
+                    locations[member_id] = (
                         output_group_id,
                         output_position,
                     )
@@ -446,7 +488,7 @@ class EnsembleTable(DeviceMixin):
                     output = cast(TableTensor, group.index_select(0, index))
                 groups.append(output)
 
-        return self.__class__(groups=groups, locations=refined_locations)
+        return self.__class__(groups=groups, locations=locations)
 
     def __iter__(self) -> Iterator[TableTensor]:
         """Iterate over table groups."""

@@ -202,6 +202,23 @@ def test_rearrange_groups_rejects_unavailable_sharing() -> None:
     assert output._locations == ensemble_table._locations
 
 
+def test_rearrange_groups_batches_compatible_groups() -> None:
+    first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
+    second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0]]))
+    ensemble_table = EnsembleTable(
+        groups=(first.unsqueeze(0), second.unsqueeze(0)),
+        locations=((0, 0), (1, 0)),
+    )
+    locations = ((0, 0), (0, 1))
+
+    output = ensemble_table._rearrange_groups(locations)
+
+    assert output._locations == locations
+    assert output.num_groups == 1
+    assert output.table(0).equal(first)
+    assert output.table(1).equal(second)
+
+
 def test_rearrange_groups_rejects_unavailable_batching() -> None:
     tables = (
         TableTensor.from_tensor(
