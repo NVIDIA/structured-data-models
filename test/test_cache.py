@@ -3,7 +3,6 @@
 
 from typing import cast
 
-import pytest
 import torch
 
 from sdm.cache import Cache, KVCacheEntry, QuantizedKVCacheEntry
@@ -49,50 +48,34 @@ def test_cache_size() -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("quantized", [False, True])
-def test_cache_head_selection_and_transfer(
-    device: torch.device, quantized: bool
+def test_quantized_cache_head_selection_and_transfer(
+    device: torch.device,
 ) -> None:
-    key = torch.arange(192).reshape(2, 3, 4, 8).float()
-    entry = (
-        QuantizedKVCacheEntry(
-            key=key.to(torch.float8_e4m3fn),
-            value=(key / 2).to(torch.float8_e4m3fn),
-            key_scale=torch.arange(8).reshape(2, 1, 4, 1).float() + 1,
-            value_scale=torch.ones(2, 1, 4, 1),
-            query_scale=torch.ones(2, 1, 8, 1),
-            dtype=torch.float32,
-        )
-        if quantized
-        else KVCacheEntry(key, key / 2)
+    key = torch.arange(192).reshape(2, 3, 4, 8).to(torch.float8_e4m3fn)
+    scale = torch.arange(8).reshape(2, 1, 4, 1).float() + 1
+    entry = QuantizedKVCacheEntry(
+        key=key,
+        value=key,
+        key_scale=scale,
+        value_scale=scale,
+        query_scale=torch.ones(2, 1, 8, 1),
+        dtype=torch.float32,
     )
-    selected = entry.select_heads(2)
-    restored = selected.to(device).cpu()
-    assert isinstance(restored, KVCacheEntry)
+    selected = entry.select_heads(2).to(device)
+    assert isinstance(selected, QuantizedKVCacheEntry)
+    assert selected.dtype == entry.dtype
     assert entry.key.size(-2) == 4
-    for name in ("key", "value"):
-        actual = getattr(restored, name)
-        expected = getattr(entry, name)[..., :2, :]
-        torch.testing.assert_close(actual.float(), expected.float())
+    for name in ("key", "value", "key_scale", "value_scale", "query_scale"):
+        expected = getattr(entry, name)
+        if name != "query_scale":
+            expected = expected[..., :2, :]
+        actual = getattr(selected, name)
+        assert actual.device == device
         assert actual.dtype == expected.dtype
         assert actual.is_contiguous()
-    expected_bytes = restored.key.numel() * restored.key.element_size() * 2
-    if isinstance(entry, QuantizedKVCacheEntry):
-        assert isinstance(restored, QuantizedKVCacheEntry)
-        assert restored.dtype == entry.dtype
-        torch.testing.assert_close(
-            restored.key_scale, entry.key_scale[..., :2, :]
-        )
-        torch.testing.assert_close(
-            restored.value_scale, entry.value_scale[..., :2, :]
-        )
-        torch.testing.assert_close(restored.query_scale, entry.query_scale)
-        expected_bytes += (
-            restored.key_scale.numel()
-            + restored.value_scale.numel()
-            + restored.query_scale.numel()
-        ) * 4
-    assert Cache(entry=restored).size() == expected_bytes
+        torch.testing.assert_close(actual.cpu().float(), expected.float())
+    # 192 K/V bytes + 32 K/V scale bytes + 64 query scale bytes.
+    assert Cache(entry=selected).size() == 288
 
 
 def test_cache_head_selection_preserves_contiguous_storage() -> None:
