@@ -23,7 +23,8 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     The adapter turns a :class:`~sdm.processing.base.Processor` into an
     :class:`~sdm.processing.ensemble.EnsembleProcessor`. It copies and fits the
     processor separately for each group of compatible tables in an
-    :class:`~sdm.EnsembleTable`.
+    :class:`~sdm.EnsembleTable`. Fitted transforms and inverse transforms
+    require the same number of logical members used during fitting.
 
     The wrapped processor must preserve row and leading dimensions as required
     by the :class:`~sdm.processing.base.Processor` contract. A processor that
@@ -140,6 +141,12 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> tuple[Processor, ...]:
+        if ensemble_table.num_members != len(self._fitted_locations):
+            raise RuntimeError(
+                f"{self.__class__.__name__} was fitted with "
+                f"{len(self._fitted_locations)} ensemble members, but got "
+                f"{ensemble_table.num_members}"
+            )
         if ensemble_table._locations == self._fitted_locations:
             return tuple(self._processors)
 
