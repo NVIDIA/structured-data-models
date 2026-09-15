@@ -145,7 +145,6 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         # One fitted processor per transform ensemble group.
         # Multiple transform groups can share the same fitted processor.
         processors = [None] * ensemble_table.num_groups
-        # Group members that share the same fitted processor.
         group_members_by_processor = {}
         for member_id, (group_id, batch_id) in enumerate(ensemble_table._locations):
             processor_group_id, processor_batch_id = self._fitted_locations[member_id]
