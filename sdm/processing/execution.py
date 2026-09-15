@@ -170,7 +170,11 @@ class RecipeExecution:
                 processor = self._related_processors[name]
                 ensemble_table = _to_ensemble_table(
                     table, self._num_estimators
-                )._rearrange_groups(self._related_locations[name])
+                )
+                ensemble_table = _align_to_fitted_groups(
+                    ensemble_table,
+                    self._related_locations[name],
+                )
                 related_ensembles[name] = processor.transform_ensemble(
                     ensemble_table
                 )
@@ -257,6 +261,86 @@ class RecipeExecution:
             out = torch.stack(list(outputs), dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
+
+
+def _align_to_fitted_groups(
+    ensemble_table: EnsembleTable,
+    fitted_locations: Sequence[tuple[int, int]],
+) -> EnsembleTable:
+    """Align query groups with the fitted related-table groups."""
+    fitted_locations = tuple(fitted_locations)
+    if ensemble_table._locations == fitted_locations:
+        return ensemble_table
+
+    members_by_fitted_position: list[dict[int, list[int]]] = [
+        {} for _ in range(max(group for group, _ in fitted_locations) + 1)
+    ]
+    for member_id, (group, position) in enumerate(fitted_locations):
+        members_by_fitted_position[group].setdefault(position, []).append(
+            member_id
+        )
+
+    groups = []
+    locations = list(fitted_locations)
+    for group_id, fitted_positions in enumerate(members_by_fitted_position):
+        positions_and_members = tuple(sorted(fitted_positions.items()))
+        sources_by_position = tuple(
+            tuple(
+                dict.fromkeys(
+                    ensemble_table._locations[member_id]
+                    for member_id in member_ids
+                )
+            )
+            for _, member_ids in positions_and_members
+        )
+
+        # A fitted position may fan out only when its state can broadcast over
+        # the entire group; otherwise states could map to the wrong queries.
+        if len(sources_by_position) > 1 and any(
+            len(sources) > 1 for sources in sources_by_position
+        ):
+            raise ValueError(
+                "Cannot align query tables with fitted related-table groups"
+            )
+
+        if len(sources_by_position) == 1:
+            source_locations = sources_by_position[0]
+            position_by_source = {
+                source: position
+                for position, source in enumerate(source_locations)
+            }
+            for member_id in positions_and_members[0][1]:
+                locations[member_id] = (
+                    group_id,
+                    position_by_source[ensemble_table._locations[member_id]],
+                )
+        else:
+            source_locations = tuple(
+                sources[0] for sources in sources_by_position
+            )
+
+        tables = tuple(
+            ensemble_table._groups[group][position]
+            for group, position in source_locations
+        )
+        # Reuse one shared query without materializing a copy per fitted state.
+        if all(source == source_locations[0] for source in source_locations):
+            table = tables[0]
+            output = cast(
+                TableTensor,
+                table.unsqueeze(0).expand(len(tables), *table.size()),
+            )
+        else:
+            packed_groups, _ = EnsembleTable._pack_tables(tables)
+            if len(packed_groups) != 1:
+                raise ValueError(
+                    "Cannot align query tables with fitted related-table "
+                    "groups"
+                )
+            output = packed_groups[0]
+        groups.append(output)
+
+    return EnsembleTable(groups=groups, locations=locations)
 
 
 def _to_ensemble_table(
