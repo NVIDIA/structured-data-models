@@ -156,9 +156,9 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
                     "Cannot apply fitted processor state to an ensemble "
                     "group containing members from different fitted groups"
                 )
-        # A fitted group with more than one stacked tensor stores
-        # per-batch state. It can stay stacked, but not split across
-        # groups or reorder those tensors.
+        # A processor fitted on a stacked TensorTable stores
+        # per-batch state. It can operate only stacked TensorTables with
+        # the same layout, but not splits or reordered tensors.
         for locations in group_members_by_processor.values():
             if len({fitted for _, _, fitted in locations}) > 1 and (
                 len({group for group, _, _ in locations}) > 1
