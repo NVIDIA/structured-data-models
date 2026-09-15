@@ -187,6 +187,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.EnsembleTable.expanded_group"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.expanded_group()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.EnsembleTable.select_stypes"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.select_stypes()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.EnsembleTable.concatenate_columns"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.concatenate_columns()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.EnsembleTable.replace_tables"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.replace_tables()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.EnsembleTable.replace_groups"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.replace_groups()</span></code></a></li>
 </ul>
 </li>
@@ -227,9 +228,8 @@ data-aria-dark="Switch to auto color mode">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.</span></span><span class="sig-name descname"><span class="pre">EnsembleTable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">locations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.EnsembleTable" title="Link to this definition">#</a></dt>
 <dd><p>Store and group input tables for an ensemble.</p>
 <p>Each ensemble member is associated with one table. Shared tables are stored
-only once. Compatible tables are stacked along a leading dimension and
-form a group, so processors can process them together. Incompatible tables
-remain in separate groups.</p>
+only once. Compatible tables may be stacked into groups so processors can
+process them together. Initialized separate groups are never recombined.</p>
 <p>Use <a class="reference internal" href="#sdm.EnsembleTable.table" title="sdm.EnsembleTable.table"><code class="xref py py-meth docutils literal notranslate"><span class="pre">table()</span></code></a> to access a member’s table. Iterate over the
 <a class="reference internal" href="#sdm.EnsembleTable" title="sdm.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a> to process its groups, and <a class="reference internal" href="#sdm.EnsembleTable.replace_groups" title="sdm.EnsembleTable.replace_groups"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replace_groups()</span></code></a>
 to build an ensemble table from the processed groups.</p>
@@ -259,11 +259,10 @@ to build an ensemble table from the processed groups.</p>
 </span><span data-line="24"><span class="k">assert</span> <span class="n">ensemble</span><span class="o">.</span><span class="n">table</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">estimator_table1</span><span class="p">)</span>
 </span><span data-line="25"><span class="k">assert</span> <span class="n">ensemble</span><span class="o">.</span><span class="n">table</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">estimator_table1</span><span class="p">)</span>
 </span><span data-line="26">
-</span><span data-line="27"><span class="c1"># Iterate over two groups of compatible tables.</span>
+</span><span data-line="27"><span class="c1"># Each distinct input table remains in its own group.</span>
 </span><span data-line="28"><span class="n">groups</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">ensemble</span><span class="p">)</span>
-</span><span data-line="29"><span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">groups</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
-</span><span data-line="30"><span class="k">assert</span> <span class="n">groups</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-</span><span data-line="31"><span class="k">assert</span> <span class="n">groups</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+</span><span data-line="29"><span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">groups</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+</span><span data-line="30"><span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">group</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">groups</span><span class="p">)</span>
 </span></pre></div>
 </div>
 <dl class="field-list simple">
@@ -300,7 +299,8 @@ leading dimension.</p></li>
 <dt class="sig sig-object py" id="sdm.EnsembleTable.from_tables">
 <span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_tables</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">member_table_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.EnsembleTable.from_tables" title="Link to this definition">#</a></dt>
 <dd><p>Create an ensemble table from tables and their member assignments.</p>
-<p><code class="docutils literal notranslate"><span class="pre">member_table_ids</span></code> contains one table index per member. For
+<p>Each referenced input table forms a separate group.
+<code class="docutils literal notranslate"><span class="pre">member_table_ids</span></code> contains one table index per member. For
 example, <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">1,</span> <span class="pre">0)</span></code> assigns the first table to members 0 and 2 and
 the second table to member 1.</p>
 <dl class="field-list simple">
@@ -338,7 +338,7 @@ the second table to member 1.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.EnsembleTable.gather_members">
-<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">gather_members</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">member_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.EnsembleTable.gather_members" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">gather_members</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">member_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.EnsembleTable.gather_members" title="Link to this definition">#</a></dt>
 <dd><p>Gather members from multiple ensemble tables.</p>
 <p><code class="docutils literal notranslate"><span class="pre">tables[i].table(member_ids[i])</span></code> supplies output member <code class="docutils literal notranslate"><span class="pre">i</span></code>.</p>
 <dl class="field-list simple">
@@ -349,7 +349,7 @@ the second table to member 1.</p>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>An ensemble table preserving logical member order.</p>
+<dd class="field-even"><p>An ensemble table preserving current group boundaries.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><em>Self</em></a></p>
@@ -366,7 +366,7 @@ the second table to member 1.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="sdm.EnsembleTable.num_groups">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_groups</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><a class="headerlink" href="#sdm.EnsembleTable.num_groups" title="Link to this definition">#</a></dt>
-<dd><p>Return the number of groups of compatible tables.</p>
+<dd><p>Return the number of table groups.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -446,6 +446,26 @@ the second table to member 1.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="sdm.EnsembleTable.replace_tables">
+<span class="sig-name descname"><span class="pre">replace_tables</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">member_table_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.EnsembleTable.replace_tables" title="Link to this definition">#</a></dt>
+<dd><p>Replace member tables.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tables</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference internal" href="../generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a><em>]</em>) – Replacement tables available to the ensemble members.</p></li>
+<li><p><strong>member_table_ids</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>]</em>) – Index into <code class="docutils literal notranslate"><span class="pre">tables</span></code> for each ensemble member.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>An ensemble table preserving existing group boundaries.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><em>Self</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="sdm.EnsembleTable.replace_groups">
 <span class="sig-name descname"><span class="pre">replace_groups</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.EnsembleTable.replace_groups" title="Link to this definition">#</a></dt>
 <dd><p>Return an ensemble table with its groups replaced.</p>
@@ -477,7 +497,7 @@ assignment.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=4df00e64"></script>
+      <script src="../../_static/documentation_options.js?v=f498d0d2"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
