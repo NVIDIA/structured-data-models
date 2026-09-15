@@ -95,12 +95,9 @@ def fp8_attention(
         tile=64 if wide or blackwell or k.size(-2) < 32768 else 128,
         warps=8 if wide else 4,
         stages=4 if blackwell and not wide else 2,
-        fused_accumulation=True,
-        transposed_value=True,
         accumulation_chunk=0 if blackwell else 16,
         lift_exp=blackwell,
         fused_softmax=blackwell,
-        context_splits=1,
     )
     if cache is None:
         cache = QuantizedKVCacheEntry(

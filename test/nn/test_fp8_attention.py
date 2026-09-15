@@ -8,7 +8,6 @@ import torch
 
 pytest.importorskip("triton")
 from sdm._kernels.triton.fp8_attention import (
-    fp8_attention,
     quantize,
     quantized_attention,
 )
@@ -23,9 +22,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize(
     ("batch", "queries", "context"), [(2, 129, 513), (1, 129, 8192)]
 )
-def test_fp8_masked_heads_and_split_context(
-    batch: int, queries: int, context: int
-) -> None:
+def test_fp8_partial_tiles(batch: int, queries: int, context: int) -> None:
     with torch.inference_mode():
         q = torch.randn(
             batch, 8, queries, 64, device="cuda", dtype=torch.float16
@@ -34,7 +31,19 @@ def test_fp8_masked_heads_and_split_context(
             batch, 8, context, 64, device="cuda", dtype=torch.float16
         )
         v = torch.randn_like(k)
-        actual = fp8_attention(q, k, v)
+        q8, qs = quantize(q)
+        k8, ks = quantize(k)
+        v8, vs = quantize(v)
+        actual = quantized_attention(
+            q8,
+            k8,
+            v8.transpose(-1, -2).contiguous(),
+            qs,
+            ks,
+            vs,
+            q.dtype,
+            128,
+        )
         expected = torch.nn.functional.scaled_dot_product_attention(q, k, v)
         assert actual.isfinite().all()
         relative_rms = (
@@ -44,12 +53,8 @@ def test_fp8_masked_heads_and_split_context(
 
 
 @pytest.mark.parametrize("scale", [None, 1.0])
-@pytest.mark.parametrize(
-    ("tile", "fused"), [(64, False), (128, False), (128, True)]
-)
-def test_grouped_heads_and_model_scale(
-    scale: float | None, tile: int, fused: bool
-) -> None:
+@pytest.mark.parametrize("tile", [64, 128])
+def test_grouped_heads_and_model_scale(scale: float | None, tile: int) -> None:
     with torch.inference_mode():
         q = (
             torch.randn(2, 8, 129, 64, device="cuda", dtype=torch.float16)
@@ -66,7 +71,7 @@ def test_grouped_heads_and_model_scale(
         actual = quantized_attention(
             q8,
             k8,
-            v8,
+            v8.transpose(-1, -2).contiguous(),
             qs,
             ks,
             vs,
@@ -74,7 +79,6 @@ def test_grouped_heads_and_model_scale(
             128,
             scale,
             tile=tile,
-            fused_accumulation=fused,
         )
         expected = torch.nn.functional.scaled_dot_product_attention(
             q, k, v, enable_gqa=True, scale=scale
@@ -101,14 +105,10 @@ def test_periodic_attention_matches_cached_query_slice(
         v8, vs = quantize(v)
         v8 = v8.transpose(-1, -2).contiguous()
         opts: dict[str, Any] = {
-            "fused_accumulation": True,
-            "context_splits": 1,
             "accumulation_chunk": accumulation_chunk,
-            "transposed_value": True,
             "tile": tile,
             "lift_exp": optimized,
             "fused_softmax": optimized,
-            "specialize_single": optimized,
         }
         full = quantized_attention(
             q8, k8, v8, qs, ks, vs, q.dtype, 128, **opts
@@ -149,40 +149,3 @@ def test_quantization_reads_strided_heads_without_fp16_copy() -> None:
         actual.float(), expected.float(), rtol=0, atol=0
     )
     torch.testing.assert_close(actual_scale, expected_scale, rtol=0, atol=0)
-
-
-def test_split_lifted_softmax_preserves_attention_normalization() -> None:
-    with torch.inference_mode():
-        q = torch.randn(1, 2, 129, 64, device="cuda", dtype=torch.float16)
-        k = torch.randn(1, 2, 8193, 64, device="cuda", dtype=torch.float16)
-        v = torch.randn_like(k)
-        q8, qs = quantize(q)
-        k8, ks = quantize(k)
-        v8, vs = quantize(v)
-        opts: dict[str, Any] = {
-            "fused_accumulation": True,
-            "transposed_value": True,
-            "lift_exp": True,
-            "fused_softmax": True,
-            "tile": 64,
-            "stages": 3,
-        }
-        output = quantized_attention(
-            q8,
-            k8,
-            v8.transpose(-1, -2).contiguous(),
-            qs,
-            ks,
-            vs,
-            q.dtype,
-            128,
-            context_splits=8,
-            **opts,
-        )
-        reference = torch.nn.functional.scaled_dot_product_attention(q, k, v)
-        relative_rms = (
-            (output.float() - reference.float()).square().mean()
-            / reference.float().square().mean()
-        ).sqrt()
-        assert relative_rms < 0.08
-        assert output.isfinite().all()
