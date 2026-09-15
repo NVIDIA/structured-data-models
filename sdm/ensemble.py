@@ -332,11 +332,78 @@ class EnsembleTable(DeviceMixin):
         index = torch.tensor(positions, device=group.device)
         return cast(TableTensor, group.index_select(0, index))
 
-    def _refine_groups(
+    def _rearrange_groups(
         self,
-        reference_group_ids: Sequence[int],
+        locations: Sequence[tuple[int, int]],
+        *,
+        strict: bool = True,
     ) -> Self:
-        """Split current groups by each member's reference group ID."""
+        """Rearrange groups to match the requested member locations.
+
+        Args:
+            locations: Requested ``(group, batch)`` location of each member.
+            strict: Whether to fail if the requested sharing or batching cannot
+                be reconstructed.
+        """
+        locations = tuple(locations)
+        if self._locations == locations:
+            return self
+
+        positions_by_group: dict[int, dict[int, tuple[int, int]]] = {}
+        can_rearrange = True
+        for source, (group_id, position) in zip(
+            self._locations, locations, strict=True
+        ):
+            positions = positions_by_group.setdefault(group_id, {})
+            if positions.setdefault(position, source) != source:
+                can_rearrange = False
+                break
+
+        groups: list[TableTensor] = []
+        if can_rearrange:
+            for group_id in range(len(positions_by_group)):
+                positions = positions_by_group[group_id]
+                sources = tuple(
+                    positions[position] for position in range(len(positions))
+                )
+                source_group_ids = {group_id for group_id, _ in sources}
+                if len(source_group_ids) != 1:
+                    can_rearrange = False
+                    break
+
+                source_group_id = sources[0][0]
+                source_group = self._groups[source_group_id]
+                source_positions = tuple(
+                    position for _, position in sources
+                )
+                start = source_positions[0]
+                if all(
+                    position == start for position in source_positions[1:]
+                ):
+                    output = source_group.narrow(0, start, 1).expand(
+                        len(source_positions), *source_group.size()[1:]
+                    )
+                elif source_positions == tuple(
+                    range(start, start + len(source_positions))
+                ):
+                    output = source_group.narrow(
+                        0, start, len(source_positions)
+                    )
+                else:
+                    index = torch.tensor(
+                        source_positions, device=source_group.device
+                    )
+                    output = source_group.index_select(0, index)
+                groups.append(cast(TableTensor, output))
+
+        if can_rearrange:
+            return self.__class__(groups=groups, locations=locations)
+        if strict:
+            raise ValueError(
+                "Cannot reconstruct the requested ensemble group locations"
+            )
+
+        reference_group_ids = tuple(group_id for group_id, _ in locations)
         partitions_by_group: list[dict[int, list[tuple[int, int]]]] = [
             {} for _ in range(self.num_groups)
         ]
