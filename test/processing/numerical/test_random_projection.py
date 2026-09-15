@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import cast
+
 import pytest
 import torch
 
@@ -38,20 +40,25 @@ def _ensemble(table: TableTensor, layout: str) -> EnsembleTable:
         return EnsembleTable.from_table(table, num_members=3)
     if layout == "stacked":
         return EnsembleTable(
-            groups=(torch.stack([table] * 3),),
+            groups=(cast(TableTensor, torch.stack([table] * 3)),),
             locations=((0, 0), (0, 1), (0, 2)),
         )
     if layout == "reordered":
         return EnsembleTable(
-            groups=(torch.stack([table] * 3),),
+            groups=(cast(TableTensor, torch.stack([table] * 3)),),
             locations=((0, 2), (0, 0), (0, 1)),
         )
     if layout == "shared_split":
         return EnsembleTable.from_tables(
-            tables=(table, table.clone()), member_table_ids=(1, 0, 1)
+            tables=(table, cast(TableTensor, table.clone())),
+            member_table_ids=(1, 0, 1),
         )
     return EnsembleTable.from_tables(
-        tables=(table, table.clone(), table.clone()),
+        tables=(
+            table,
+            cast(TableTensor, table.clone()),
+            cast(TableTensor, table.clone()),
+        ),
         member_table_ids=(2, 0, 1),
     )
 
@@ -128,13 +135,16 @@ def test_projection_preserves_grouped_random_draws() -> None:
 def test_projection_preserves_unreferenced_groups() -> None:
     table = _table()
     context = EnsembleTable(
-        groups=(table.unsqueeze(0), table.unsqueeze(0)),
+        groups=(
+            cast(TableTensor, table.unsqueeze(0)),
+            cast(TableTensor, table.unsqueeze(0)),
+        ),
         locations=((1, 0),),
     )
     processor = RandomProjection(8)
     expected = processor.fit_transform_ensemble(context)
     query = EnsembleTable(
-        groups=(table.unsqueeze(0),) * 3,
+        groups=(cast(TableTensor, table.unsqueeze(0)),) * 3,
         locations=((0, 0),),
     )
 
