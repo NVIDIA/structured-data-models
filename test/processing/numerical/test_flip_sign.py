@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import pytest
 import torch
 
 from sdm import EnsembleTable, TableTensor
@@ -50,7 +49,6 @@ def test_flip_sign_draws_independent_member_signs() -> None:
         assert query_output.table(member_id).numerical.equal(
             query.numerical * signs[member_id]
         )
-
 
 
 def test_flip_sign_inside_choice() -> None:
