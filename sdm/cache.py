@@ -32,7 +32,14 @@ class KVCacheEntry(DeviceMixin):
     value: Tensor
 
     def select_heads(self, num_heads: int) -> Self:
-        """Retain the leading key/value heads for grouped-query attention."""
+        """Retain the leading key/value heads for grouped-query attention.
+
+        Args:
+            num_heads: Number of leading K/V heads to retain.
+
+        Returns:
+            An entry with contiguous K/V slices, reusing storage when possible.
+        """
         return replace(
             self,
             key=self.key[..., :num_heads, :].contiguous(),
@@ -55,6 +62,14 @@ class QuantizedKVCacheEntry(KVCacheEntry):
     shape ``[..., 1, heads, 1]``. The query scale is learned from context
     queries and reused for prediction. The key/value tensor dtypes identify
     their storage formats; ``dtype`` is the attention output dtype.
+
+    Args:
+        key: Quantized key projections.
+        value: Quantized value projections.
+        key_scale: Per-head key dequantization scales.
+        value_scale: Per-head value dequantization scales.
+        query_scale: Per-query-head scales derived from the context.
+        dtype: Attention output dtype.
     """
 
     key_scale: Tensor
@@ -63,7 +78,14 @@ class QuantizedKVCacheEntry(KVCacheEntry):
     dtype: torch.dtype
 
     def select_heads(self, num_heads: int) -> Self:
-        """Retain leading K/V heads and scales, keeping all query scales."""
+        """Retain leading K/V heads and scales, keeping all query scales.
+
+        Args:
+            num_heads: Number of leading K/V heads to retain.
+
+        Returns:
+            A quantized entry with selected K/V heads and matching scales.
+        """
         return replace(
             super().select_heads(num_heads),
             key_scale=self.key_scale[..., :num_heads, :].contiguous(),
