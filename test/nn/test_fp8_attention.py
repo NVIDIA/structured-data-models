@@ -107,8 +107,8 @@ def test_periodic_attention_matches_cached_query_slice(
         opts: dict[str, Any] = {
             "accumulation_chunk": accumulation_chunk,
             "tile": tile,
-            "lift_exp": optimized,
-            "fused_softmax": optimized,
+            "scale_weights_in_exp": optimized,
+            "fuse_score_scale": optimized,
         }
         full = quantized_attention(
             q8, k8, v8, qs, ks, vs, q.dtype, 128, **opts

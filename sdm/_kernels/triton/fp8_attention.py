@@ -28,9 +28,10 @@ def attention_kernel(
     BM: tl.constexpr,
     BN: tl.constexpr,
     ACC_CHUNK: tl.constexpr = 0,
-    LIFT_EXP: tl.constexpr = False,
-    FUSED_SOFTMAX: tl.constexpr = False,
+    SCALE_WEIGHTS_IN_EXP: tl.constexpr = False,
+    FUSE_SCORE_SCALE: tl.constexpr = False,
 ):
+    # Each program owns BM query rows for one head and visits every K/V tile.
     block, head = tl.program_id(0), tl.program_id(1)
     kv_head = (head // HQ) * HK + (head % HQ) // (HQ // HK)
     rows = block * BM + tl.arange(0, BM)
@@ -41,12 +42,13 @@ def attention_kernel(
         rows[:, None] < M,
         0.0,
     )
-    scale = (
+    # Restore Q/K magnitudes and convert natural-exponential scores to base 2.
+    score_scale = (
         tl.load(QS + head) * tl.load(KS + kv_head) * SCALE * 1.4426950408889634
     )
-    vmax = tl.load(VS + kv_head)
-    maximum = tl.full((BM,), -float("inf"), tl.float32)
-    denominator = tl.full((BM,), 0, tl.float32)
+    value_scale = tl.load(VS + kv_head)
+    row_max = tl.full((BM,), -float("inf"), tl.float32)
+    weight_sum = tl.full((BM,), 0, tl.float32)
     acc = tl.full((BM, D), 0, tl.float32)
     if ACC_CHUNK > 0:
         outer_acc = tl.full((BM, D), 0, tl.float32)
@@ -58,23 +60,27 @@ def attention_kernel(
             indices[None, :] < N,
             0.0,
         )
+        # QK^T: [BM, D] @ [D, BN] -> [BM, BN].
         score = tl.dot(q, k, max_num_imprecise_acc=32)
-        if FUSED_SOFTMAX and SCALE > 0:
+        # Scale after max() so score * scale - shift can fuse.
+        if FUSE_SCORE_SCALE and SCALE > 0:
             score = tl.where(indices[None, :] < N, score, -float("inf"))
-            new_max = tl.maximum(maximum, tl.max(score, 1) * scale)
-            shift = new_max - 8.0 if LIFT_EXP else new_max
-            p = tl.exp2(score * scale - shift[:, None])
+            new_max = tl.maximum(row_max, tl.max(score, 1) * score_scale)
+            # exp2(x + 8) = 256 * exp2(x): scale weights before FP8 conversion.
+            shift = new_max - 8.0 if SCALE_WEIGHTS_IN_EXP else new_max
+            weights = tl.exp2(score * score_scale - shift[:, None])
         else:
             score = tl.where(
-                indices[None, :] < N, score * scale, -float("inf")
+                indices[None, :] < N, score * score_scale, -float("inf")
             )
-            new_max = tl.maximum(maximum, tl.max(score, 1))
-            if LIFT_EXP:
-                p = tl.exp2(score - (new_max[:, None] - 8.0))
+            new_max = tl.maximum(row_max, tl.max(score, 1))
+            if SCALE_WEIGHTS_IN_EXP:
+                weights = tl.exp2(score - (new_max[:, None] - 8.0))
             else:
-                p = tl.exp2(score - new_max[:, None])
-        correction = tl.exp2(maximum - new_max)
-        denominator = denominator * correction + tl.sum(p, 1)
+                weights = tl.exp2(score - new_max[:, None])
+        # Rescale previous tiles when the running maximum increases.
+        correction = tl.exp2(row_max - new_max)
+        weight_sum = weight_sum * correction + tl.sum(weights, 1)
         acc *= correction[:, None]
         v_offsets = indices[:, None] + dims[None, :] * N
         v = tl.load(
@@ -82,9 +88,11 @@ def attention_kernel(
             indices[:, None] < N,
             0.0,
         )
-        # Lift softmax probabilities by 256 to retain precision in FP8.
+        # Weighted V: scale unnormalized weights by 256 unless exp2 did it.
         acc = tl.dot(
-            (p if LIFT_EXP else p * 256.0).to(tl.float8e4nv),
+            (weights if SCALE_WEIGHTS_IN_EXP else weights * 256.0).to(
+                tl.float8e4nv
+            ),
             v,
             acc,
             max_num_imprecise_acc=32,
@@ -97,11 +105,12 @@ def attention_kernel(
                 )
                 outer_max = new_max
                 acc = tl.full((BM, D), 0, tl.float32)
-        maximum = new_max
+        row_max = new_max
     if ACC_CHUNK > 0:
         acc = outer_acc
-    out = acc * vmax / denominator[:, None]
-    if not LIFT_EXP:
+    # Normalize and restore V's scale; an exp2 factor of 256 cancels here.
+    out = acc * value_scale / weight_sum[:, None]
+    if not SCALE_WEIGHTS_IN_EXP:
         out *= 1.0 / 256.0
     tl.store(
         Out + head * M * D + rows[:, None] * D + dims[None, :],
@@ -168,9 +177,16 @@ def quantized_attention(
     warps: int = 4,
     stages: int = 2,
     accumulation_chunk: int = 0,
-    lift_exp: bool = False,
-    fused_softmax: bool = False,
+    scale_weights_in_exp: bool = False,
+    fuse_score_scale: bool = False,
 ) -> torch.Tensor:
+    """Run tiled attention on per-head scaled FP8 inputs.
+
+    ``scale_weights_in_exp`` applies the weight factor 256 inside exp2;
+    otherwise it is applied before the weighted-value multiplication.
+    ``fuse_score_scale`` permits fused score scaling and max subtraction.
+    Both select arithmetic variants, not different attention operations.
+    """
     b, h, m, d = q.shape
     n = k.size(-2)
     # Q/K are [batch, heads, sequence, channels]; V is transposed.
@@ -192,8 +208,8 @@ def quantized_attention(
         block,
         tile,
         accumulation_chunk,
-        lift_exp,
-        fused_softmax,
+        scale_weights_in_exp,
+        fuse_score_scale,
         num_warps=warps,
         num_stages=stages,
     )
