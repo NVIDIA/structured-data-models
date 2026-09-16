@@ -336,3 +336,32 @@ def test_power_transform_fit_is_independent_of_input_precision() -> None:
         rtol=1e-4,
         atol=1e-4,
     )
+
+
+def test_power_transform_round_trips_at_the_fitted_bound() -> None:
+    values = torch.cat(
+        (torch.randn(1900, 1) * 0.01, torch.full((100, 1), 4.3))
+    )
+    processor = PowerTransform()
+    out = processor.fit_transform(TableTensor(numerical=values))
+
+    # Values at the fitted bound sit on the asymptote of the inverse, so
+    # single-precision rounding leaves them approximate but finite.
+    restored = processor.inverse_transform(out).numerical
+    assert restored.isfinite().all()
+    spike = values == 4.3
+    torch.testing.assert_close(
+        restored[~spike], values[~spike], rtol=1e-3, atol=1e-3
+    )
+    assert (restored[spike] - 4.3).abs().max() < 0.5
+
+
+def test_power_transform_keeps_far_queries_finite() -> None:
+    values = -torch.randn(2000, 1).mul(3).exp()
+    processor = PowerTransform().fit(TableTensor(numerical=values))
+
+    out = processor.transform(
+        TableTensor(numerical=torch.tensor([[10.0], [100.0]]))
+    )
+    assert out.numerical.dtype == torch.float32
+    assert out.numerical.isfinite().all()
