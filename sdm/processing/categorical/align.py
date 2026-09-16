@@ -156,7 +156,12 @@ class AlignCategories(EnsembleProcessor):
             return tuple(fitted_categories), None
 
         rank = observed.cumsum(dim=1, dtype=codes.dtype) - 1
-        lookup = torch.full_like(counts, -1)
+        lookup = torch.full(
+            counts.shape,
+            -1,
+            dtype=codes.dtype,
+            device=counts.device,
+        )
         lookup.scatter_(1, order, torch.where(observed, rank, -1))
         aligned_codes = torch.where(mask, lookup.gather(1, indices), -1)
         return tuple(fitted_categories), aligned_codes
