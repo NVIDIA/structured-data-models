@@ -283,11 +283,6 @@ def main() -> None:
         target=sp.Identity(),
         output=default_recipe.output,
     )
-    print(
-        f"fine-tuning {args.model} for {args.max_epochs} epochs "
-        f"({args.steps_per_epoch} steps each), "
-        f"checkpointing to {checkpoint_path}..."
-    )
     finetune(
         model,
         train_recipe,
