@@ -4,13 +4,7 @@
 """Full fine-tuning of TabICLv2.
 
 Fine-tunes every parameter of ``sdm.models.TabICLv2`` with gradient descent
-on resampled in-context batches, using ``torch.optim.AdamW`` directly against
-the model's public ``forward()`` API. No changes to `sdm` are required: a
-custom ``Recipe`` swaps target processing for an identity pass-through so
-query labels (encoded once, consistently, from the full labeled pool) can be
-compared against the model's raw per-estimator output inside a training
-``Callback``, mirroring how ``sdm.explain.GradientExplainer`` already
-differentiates through the model.
+on resampled in-context batches per iteration.
 """
 
 import argparse
