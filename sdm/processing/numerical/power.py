@@ -70,7 +70,8 @@ def _yeojohnson_inverse_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
 
 
 def _yeojohnson_bounds(inp: Tensor) -> tuple[Tensor, Tensor]:
-    max_abs = inp.abs().max(dim=-2, keepdim=True).values
+    finite = inp.isfinite()
+    max_abs = inp.abs().nan_to_num(nan=0.0).amax(dim=-2, keepdim=True)
     log1p_max_x = (20 * max_abs).log1p()
     log1p_max_x = torch.where(
         max_abs == 0,
@@ -87,8 +88,9 @@ def _yeojohnson_bounds(inp: Tensor) -> tuple[Tensor, Tensor]:
     positive_lower = lower_bound
     positive_upper = upper_bound
 
-    all_negative = (inp < 0).all(dim=-2, keepdim=True)
-    any_negative = (inp < 0).any(dim=-2, keepdim=True)
+    negative = inp < 0
+    all_negative = (negative | ~finite).all(dim=-2, keepdim=True)
+    any_negative = negative.any(dim=-2, keepdim=True)
 
     mixed_lower = torch.maximum(2 - positive_upper, positive_lower)
     mixed_upper = torch.minimum(2 - mixed_lower, positive_upper)
@@ -113,6 +115,7 @@ def _yeojohnson_log_likelihood(
     positive_log: Tensor,
     negative_log: Tensor,
     log_jacobian: Tensor,
+    count: Tensor,
 ) -> Tensor:
     transformed = _yeojohnson_transform(
         inp,
@@ -120,9 +123,11 @@ def _yeojohnson_log_likelihood(
         positive_log=positive_log,
         negative_log=negative_log,
     )
-    variance = transformed.var(dim=-2, correction=0, keepdim=True)
+    # NaN cells are left out of the statistics.
+    mean = transformed.nanmean(dim=-2, keepdim=True)
+    variance = (transformed - mean).square().nanmean(dim=-2, keepdim=True)
     tiny = torch.finfo(inp.dtype).tiny
-    loglike = -inp.size(-2) / 2 * variance.log() + (lambdas - 1) * log_jacobian
+    loglike = -count / 2 * variance.log() + (lambdas - 1) * log_jacobian
     return torch.where(
         variance.isfinite() & (variance >= tiny),
         loglike,
@@ -138,10 +143,11 @@ def _optimize_lambdas(
     # the golden-section search only changes the per-feature lambdas.
     positive_log = inp.clamp_min(0).log1p()
     negative_log = (-inp).clamp_min(0).log1p()
-    log_jacobian = torch.where(inp >= 0, positive_log, -negative_log).sum(
+    log_jacobian = torch.where(inp >= 0, positive_log, -negative_log).nansum(
         dim=-2,
         keepdim=True,
     )
+    count = inp.isfinite().sum(dim=-2, keepdim=True)
 
     left, right = _yeojohnson_bounds(inp)
     identity = torch.ones_like(left)
@@ -157,6 +163,7 @@ def _optimize_lambdas(
         positive_log,
         negative_log,
         log_jacobian,
+        count,
     )
     fd = _yeojohnson_log_likelihood(
         inp,
@@ -164,6 +171,7 @@ def _optimize_lambdas(
         positive_log,
         negative_log,
         log_jacobian,
+        count,
     )
 
     for _ in range(_YEOJOHNSON_OPTIMIZATION_STEPS):
@@ -191,6 +199,7 @@ def _optimize_lambdas(
             positive_log,
             negative_log,
             log_jacobian,
+            count,
         )
         fc = torch.where(choose_right, old_fd, new_score)
         fd = torch.where(choose_right, new_score, old_fc)
@@ -206,8 +215,8 @@ def _optimize_lambdas(
 class PowerTransform(Processor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
-    NaN and infinite values are imputed when fitting statistics. NaN values are
-    preserved during the transform.
+    NaN and infinite values are left out of the fitted statistics. NaN values
+    are preserved during the transform.
 
     Args:
         standardize: If ``True``, zero-mean and unit-variance the transformed
@@ -250,29 +259,40 @@ class PowerTransform(Processor, InvertibleMixin):
         mean = finite_or_nan.nanmean(-2, keepdim=True)
         mean.masked_fill_(mean.isnan(), 0.0)
         var = (finite_or_nan - mean).square().nanmean(-2, keepdim=True)
-        del finite_or_nan
         var.masked_fill_(var.isnan(), 0.0)
         constant_features = _constant_feature_mask(
             var,
             mean,
             num_samples=finite.sum(dim=-2, keepdim=True),
         )
-        filled = torch.where(finite, table.numerical, mean)
-        self.max = filled.amax(dim=-2, keepdim=True)
+        self.max = torch.where(finite, table.numerical, mean).amax(
+            dim=-2,
+            keepdim=True,
+        )
+        count = finite.sum(dim=-2, keepdim=True)
         del finite
 
-        self.lambdas = self._optimize_lambdas(filled, constant_features)
+        self.lambdas = self._optimize_lambdas(finite_or_nan, constant_features)
 
-        lambda_eps = torch.finfo(filled.dtype).eps
+        lambda_eps = torch.finfo(finite_or_nan.dtype).eps
         self.upper_bound = -(1 / self.lambdas)
         self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
-            transformed = _yeojohnson_transform(filled, self.lambdas)
-            self.mean = transformed.mean(dim=-2, keepdim=True)
-            var = transformed.var(dim=-2, correction=0, keepdim=True)
+            transformed = _yeojohnson_transform(finite_or_nan, self.lambdas)
+            self.mean = transformed.nanmean(dim=-2, keepdim=True)
+            self.mean.masked_fill_(self.mean.isnan(), 0.0)
+            var = (
+                (transformed - self.mean)
+                .square()
+                .nanmean(
+                    dim=-2,
+                    keepdim=True,
+                )
+            )
+            var.masked_fill_(var.isnan(), 0.0)
             scale = var.sqrt()
-            scale[_constant_feature_mask(var, self.mean, table.size(-2))] = 1.0
+            scale[_constant_feature_mask(var, self.mean, count)] = 1.0
             self.scale = scale
         else:
             self.mean = torch.zeros_like(self.lambdas)
