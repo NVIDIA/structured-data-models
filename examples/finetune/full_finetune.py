@@ -270,7 +270,6 @@ def main() -> None:
     val_frame = val_frame.reset_index(drop=True)
     test_frame = test_frame.reset_index(drop=True)
 
-
     context = sdm.TableTensor.from_pandas(
         df=train_frame,
         stypes=stypes,
