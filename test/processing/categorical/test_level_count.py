@@ -3,6 +3,7 @@
 
 from typing import cast
 
+import pytest
 import torch
 
 from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
@@ -65,11 +66,29 @@ def test_add_level_counts_uses_fitted_counts() -> None:
     )
 
 
-def test_add_level_counts_maps_unseen_codes_to_zero() -> None:
+def test_add_level_counts_rejects_code_outside_category_vocabulary() -> None:
     context = _context()
     query = _table(torch.tensor([60]), torch.tensor([0]))
-    output = AddLevelCounts().fit(context).transform(query)
-    assert output.numerical[0, 0] == 0
+    processor = AddLevelCounts().fit(context)
+
+    with pytest.raises(ValueError, match="outside its category vocabulary"):
+        processor.transform(query)
+
+
+def test_add_level_counts_requires_fitted_category_vocabulary() -> None:
+    context = _context()
+    categories = (torch.arange(59, -1, -1), torch.arange(3))
+    query = TableTensor(
+        columns={Stype.categorical: ("city", "kind")},
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0, 0]], dtype=torch.int32),
+            categories=categories,
+        ),
+    )
+    processor = AddLevelCounts().fit(context)
+
+    with pytest.raises(ValueError, match="match the fitted values and order"):
+        processor.transform(query)
 
 
 def test_add_level_counts_keeps_threshold_cardinality_table() -> None:
@@ -126,3 +145,23 @@ def test_add_level_counts_preserves_dtype_and_device(
     output = AddLevelCounts().fit_transform(context)
     assert output.numerical.dtype == torch.float64
     assert output.device == device
+
+
+def test_add_level_counts_avoids_float16_count_overflow() -> None:
+    num_rows = 70_000
+    context = TableTensor(
+        columns={Stype.categorical: ("city",)},
+        numerical=torch.empty(num_rows, 0, dtype=torch.float16),
+        categorical=CategoricalTensor(
+            code=torch.zeros(num_rows, 1, dtype=torch.int32),
+            categories=(torch.tensor([0]),),
+        ),
+    )
+
+    output = AddLevelCounts(min_cardinality=0).fit_transform(context)
+
+    expected = torch.tensor(num_rows, dtype=torch.float32).log1p().half()
+    torch.testing.assert_close(
+        output.numerical[:, 0],
+        expected.expand(num_rows),
+    )

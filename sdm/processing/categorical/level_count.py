@@ -9,6 +9,7 @@ from torch import Tensor
 from sdm import Stype, TableTensor
 from sdm.nn._buffer import BufferList
 from sdm.processing import Processor
+from sdm.processing.categorical._categorical import _check_categorical_codes
 
 
 class AddLevelCounts(Processor):
@@ -18,10 +19,14 @@ class AddLevelCounts(Processor):
     of each category code in every categorical column. A column whose number
     of observed categories exceeds ``min_cardinality`` receives one numerical
     column ``<column>__count`` holding ``log1p`` of the fitted count of each
-    row's code. Rows with code ``-1`` (missing or unknown values) receive
-    ``log1p`` of the number of fitted rows with code ``-1``, and codes
-    outside the fitted category vocabulary receive ``0``. Categorical columns
-    stay unchanged.
+    row's code. Rows with a negative code (missing or unknown values) receive
+    ``log1p`` of the number of fitted rows with a negative code. Categorical
+    columns stay unchanged.
+
+    Transform inputs must use the fitted per-column category vocabularies.
+    The processor raises if they do not match. Column names are not validated.
+    Use :class:`~sdm.processing.AlignCategories` before this processor when
+    training and transform inputs were tensorized independently.
 
     Args:
         min_cardinality: Number of observed categories a column must exceed
@@ -35,6 +40,7 @@ class AddLevelCounts(Processor):
         super().__init__()
         self.min_cardinality = min_cardinality
         self._columns: tuple[int, ...] = ()
+        self._categories: BufferList[Tensor] = BufferList()
         self._log_counts: BufferList[Tensor] = BufferList()
         self.register_buffer("_log_unknown", torch.empty(0))
 
@@ -53,8 +59,14 @@ class AddLevelCounts(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         codes = table.categorical.code  # [*batch, num_rows, num_columns]
+        _check_categorical_codes(table)
         observed = codes >= 0
         dtype = table.numerical.dtype
+        count_dtype = (
+            torch.float32
+            if dtype in {torch.float16, torch.bfloat16}
+            else dtype
+        )
         log_counts = []
         cardinalities = []
         for index, categories in enumerate(table.categorical.categories):
@@ -69,7 +81,7 @@ class AddLevelCounts(Processor):
                     codes[..., index].clamp_min(0).long(),
                     observed[..., index].long(),
                 )
-            log_counts.append(counts.to(dtype).log1p())
+            log_counts.append(counts.to(count_dtype).log1p().to(dtype))
             cardinalities.append((counts > 0).sum(dim=-1))
 
         selected = torch.stack(cardinalities, dim=-1)
@@ -78,16 +90,19 @@ class AddLevelCounts(Processor):
         self._columns = tuple(
             index for index, flag in enumerate(selected.tolist()) if flag
         )
+        self._categories = BufferList(table.categorical.categories)
         self._log_counts = BufferList(
             log_counts[index] for index in self._columns
         )
-        unknown = (~observed).sum(dim=-2).to(dtype).log1p()
+        unknown = (~observed).sum(dim=-2).to(count_dtype).log1p().to(dtype)
         self._log_unknown = unknown[..., list(self._columns)]
 
     def _transform(self, table: TableTensor) -> TableTensor:
         if not self._columns:
             return table
 
+        self._check_categories(table)
+        _check_categorical_codes(table)
         codes = table.categorical.code
         outs = []
         for position, index in enumerate(self._columns):
@@ -117,6 +132,26 @@ class AddLevelCounts(Processor):
             numerical=torch.stack(outs, dim=-1).to(table.numerical.dtype),
         )
         return cast(TableTensor, torch.cat([table, out_table], dim=-1))
+
+    def _check_categories(self, table: TableTensor) -> None:
+        columns = table.columns[Stype.categorical]
+        if len(table.categorical.categories) != len(self._categories):
+            raise ValueError(
+                f"Expected {len(self._categories)} fitted categorical "
+                f"columns (got {len(columns)})."
+            )
+        for index, (actual, expected) in enumerate(
+            zip(table.categorical.categories, self._categories)
+        ):
+            expected = expected.to(device=actual.device)
+            if not actual.equal(expected):
+                raise ValueError(
+                    "Expected the category vocabulary for categorical column "
+                    f"{columns[index]!r} to match the fitted values and "
+                    "order. "
+                    "Use 'AlignCategories' before this processor for "
+                    "independently tensorized inputs."
+                )
 
     def __repr__(self, *, indent: int = 0) -> str:
         if self.min_cardinality == 50:
