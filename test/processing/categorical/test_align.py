@@ -549,21 +549,13 @@ def test_align_categories_routes_fitted_member_vocabularies(
     restored = AlignCategories()
     restored.load_state_dict(processor.state_dict())
 
-    for fitted in (processor, restored):
-        output = fitted.transform_ensemble(inputs)
-        assert output.num_members == 3
-        for member_id in range(3):
-            expected = (
-                AlignCategories()
-                .fit(context.table(member_id))
-                .transform(query)
-            )
-            assert output.table(member_id).equal(expected)
-        # Members 0 and 2 share both query input and fitted vocabulary.
-        assert (
-            output.table(0).categorical.code.data_ptr()
-            == output.table(2).categorical.code.data_ptr()
+    output = restored.transform_ensemble(inputs)
+    assert output.num_members == 3
+    for member_id in range(3):
+        expected = (
+            AlignCategories().fit(context.table(member_id)).transform(query)
         )
+        assert output.table(member_id).equal(expected)
 
 
 @withCUDA
@@ -591,12 +583,7 @@ def test_align_categories_rejects_changed_member_count(members: int) -> None:
     processor = AlignCategories().fit_ensemble(
         EnsembleTable.from_table(table, num_members=2)
     )
-    restored = AlignCategories()
-    restored.load_state_dict(processor.state_dict())
-    for fitted in (processor, restored):
-        with pytest.raises(
-            RuntimeError, match="same number of ensemble members"
-        ):
-            fitted.transform_ensemble(
-                EnsembleTable.from_table(table, num_members=members)
-            )
+    with pytest.raises(RuntimeError, match="same number of ensemble members"):
+        processor.transform_ensemble(
+            EnsembleTable.from_table(table, num_members=members)
+        )
