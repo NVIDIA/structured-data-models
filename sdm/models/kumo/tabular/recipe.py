@@ -34,7 +34,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         target=[
             sp.StypeDispatch(
                 categorical=[
-                    sp.AlignCategories(),
+                    sp.AlignCategories(shared_categories=True),
                     ecoc,
                     sp.ShuffleCategories(method="shift"),
                 ],

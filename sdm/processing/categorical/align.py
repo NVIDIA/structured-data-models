@@ -39,6 +39,7 @@ class AlignCategories(EnsembleProcessor):
         min_frequency: Minimum number of observations required to retain a
             category. Values of rarer categories receive code ``-1``.
             Must be positive.
+        shared_categories: Whether ensemble members use one category set.
 
     >>> import pandas as pd
     >>> import sdm
@@ -76,12 +77,14 @@ class AlignCategories(EnsembleProcessor):
         sort_by: Literal["code", "frequency", "value"] = "code",
         *,
         min_frequency: int = 1,
+        shared_categories: bool = False,
     ) -> None:
         super().__init__()
         if min_frequency <= 0:
             raise ValueError("min_frequency must be positive")
         self.sort_by = sort_by
         self.min_frequency = min_frequency
+        self.shared_categories = shared_categories
         self._categories: BufferList[BufferList[Tensor]] = BufferList()
 
     def _fit_column(
@@ -98,9 +101,10 @@ class AlignCategories(EnsembleProcessor):
 
         mask = codes >= 0
         indices = codes.clamp_min(0).long()
-        # Count categories independently per batch: [B, N] -> [B, K].
         counts = codes.new_zeros((batch_size, input_categories.numel()))
         counts.scatter_add_(1, indices, mask.to(codes.dtype))
+        if self.shared_categories:
+            counts = counts.sum(dim=0, keepdim=True).expand_as(counts)
 
         if self.sort_by == "frequency":
             order = counts.argsort(dim=1, descending=True, stable=True)
@@ -533,6 +537,8 @@ class AlignCategories(EnsembleProcessor):
             arguments.append(f"sort_by={self.sort_by!r}")
         if self.min_frequency != 1:
             arguments.append(f"min_frequency={self.min_frequency!r}")
+        if self.shared_categories:
+            arguments.append("shared_categories=True")
         if not arguments:
             return super().__repr__(indent=indent)
         return (
