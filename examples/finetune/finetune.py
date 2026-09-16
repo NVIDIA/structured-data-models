@@ -1,13 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Full fine-tuning of TabICLv2.
+"""Full fine-tuning of KumoTabular ("kumo-small") or TabICLv2.
 
-Fine-tunes every parameter of ``sdm.models.TabICLv2`` with gradient descent
-on resampled in-context batches per iteration.
+Fine-tunes every parameter of the selected model with gradient descent on
+resampled in-context batches per iteration. Evaluates in-context against a
+held-out split every epoch and checkpoints whenever that metric improves.
 """
 
 import argparse
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
@@ -53,65 +55,6 @@ class _TrainingCallback(Callback):
         return out
 
 
-def finetune(
-    model: sdm.models.ICLModel,
-    recipe: sp.Recipe,
-    pool: sdm.TableTensor,
-    target_column: str,
-    *,
-    task: str,
-    steps: int,
-    context_size: int,
-    query_size: int,
-    lr: float,
-    generator: torch.Generator,
-) -> None:
-    """Full fine-tune every parameter of ``model`` in place.
-
-    Each step resamples a disjoint context/query batch from ``pool``, runs
-    the model's differentiable ``forward()`` path, and backpropagates a
-    supervised loss on the query rows computed inside a training callback.
-    """
-    model.train()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-    quantile_levels = torch.linspace(0.001, 0.999, 999, device=pool.device)
-    log_every = max(1, steps // 10)
-
-    for step in range(1, steps + 1):
-        row = torch.randperm(
-            pool.size(0),
-            generator=generator,
-            device=pool.device,
-        )[: context_size + query_size]
-        context, query = pool[row].split(context_size)
-        x_context = context.drop_columns(target_column)
-        y_context = context[:, target_column]
-        x_query = query.drop_columns(target_column)
-
-        if task == "classification":
-            y_query = query[:, target_column].categorical.code
-            y_query = y_query.squeeze(-1).long()
-        else:
-            y_query = query[:, target_column].numerical.squeeze(-1)
-
-        callback = _TrainingCallback(task, y_query, quantile_levels)
-        optimizer.zero_grad()
-        model(
-            x_context=x_context,
-            y_context=y_context,
-            x_query=x_query,
-            recipe=recipe,
-            num_estimators=1,
-            callbacks=[callback],
-            generator=generator,
-        )
-        optimizer.step()
-
-        if step % log_every == 0 or step == steps:
-            assert callback.loss is not None
-            print(f"  step {step:4d}/{steps}  loss={callback.loss.item():.4f}")
-
-
 def evaluate(
     model: sdm.models.ICLModel,
     context: sdm.TableTensor,
@@ -145,20 +88,129 @@ def evaluate(
         return (pred - target).pow(2).mean().sqrt().item()  # RMSE
 
 
+def finetune(
+    model: sdm.models.ICLModel,
+    recipe: sp.Recipe,
+    pool: sdm.TableTensor,
+    eval_context: sdm.TableTensor,
+    eval_query: sdm.TableTensor,
+    target_column: str,
+    *,
+    task: str,
+    max_epochs: int,
+    steps_per_epoch: int,
+    context_size: int,
+    query_size: int,
+    lr: float,
+    num_estimators: int,
+    checkpoint_path: Path,
+    generator: torch.Generator,
+) -> None:
+    """Full fine-tune every parameter of ``model`` in place.
+
+    Each step resamples a disjoint context/query batch from ``pool``, runs
+    the model's differentiable ``forward()`` path, and backpropagates a
+    supervised loss on the query rows computed inside a training callback.
+    After every epoch, ``model`` is evaluated in-context against
+    ``eval_context``/``eval_query`` and checkpointed to ``checkpoint_path``
+    whenever that metric improves on the best seen so far.
+    """
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    quantile_levels = torch.linspace(0.001, 0.999, 999, device=pool.device)
+    higher_is_better = task == "classification"
+    metric_name = "accuracy" if task == "classification" else "RMSE"
+
+    def current_metric() -> float:
+        return evaluate(
+            model,
+            eval_context,
+            eval_query,
+            target_column,
+            task=task,
+            num_estimators=num_estimators,
+            generator=generator,
+        )
+
+    best_metric = current_metric()
+    print(f"epoch   0 (zero-shot)  {metric_name}={best_metric:.4f}")
+    torch.save(model.state_dict(), checkpoint_path)
+
+    for epoch in range(1, max_epochs + 1):
+        model.train()
+        total_loss = 0.0
+        for _ in range(steps_per_epoch):
+            row = torch.randperm(
+                pool.size(0),
+                generator=generator,
+                device=pool.device,
+            )[: context_size + query_size]
+            context, query = pool[row].split(context_size)
+            x_context = context.drop_columns(target_column)
+            y_context = context[:, target_column]
+            x_query = query.drop_columns(target_column)
+
+            if task == "classification":
+                y_query = query[:, target_column].categorical.code
+                y_query = y_query.squeeze(-1).long()
+            else:
+                y_query = query[:, target_column].numerical.squeeze(-1)
+
+            callback = _TrainingCallback(task, y_query, quantile_levels)
+            optimizer.zero_grad()
+            model(
+                x_context=x_context,
+                y_context=y_context,
+                x_query=x_query,
+                recipe=recipe,
+                num_estimators=1,
+                callbacks=[callback],
+                generator=generator,
+            )
+            optimizer.step()
+            assert callback.loss is not None
+            total_loss += callback.loss.item()
+
+        metric_value = current_metric()
+        improved = (
+            metric_value > best_metric
+            if higher_is_better
+            else metric_value < best_metric
+        )
+        status = "  (improved, checkpointed)" if improved else ""
+        print(
+            f"epoch {epoch:3d}/{max_epochs}  "
+            f"loss={total_loss / steps_per_epoch:.4f}  "
+            f"{metric_name}={metric_value:.4f}{status}"
+        )
+        if improved:
+            best_metric = metric_value
+            torch.save(model.state_dict(), checkpoint_path)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model",
+        choices=("kumo-small", "tabiclv2"),
+        default="tabiclv2",
+    )
     parser.add_argument(
         "--task",
         choices=("classification", "regression"),
         default="classification",
     )
-    parser.add_argument("--steps", type=int, default=300)
+    parser.add_argument("--max-epochs", type=int, default=10)
+    parser.add_argument("--steps-per-epoch", type=int, default=30)
     parser.add_argument("--context-size", type=int, default=256)
     parser.add_argument("--query-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--num-estimators", type=int, default=8)
+    parser.add_argument("--checkpoint-path", type=Path, default=None)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
+    checkpoint_path = args.checkpoint_path or Path(
+        f"checkpoint-{args.model}-{args.task}.pt"
+    )
 
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -216,19 +268,14 @@ def main() -> None:
         device=device,
     )
 
-    model = sdm.models.TabICLv2(task=args.task, device=device)
-
-    baseline = evaluate(
-        model,
-        eval_context,
-        eval_query,
-        target_column,
-        task=args.task,
-        num_estimators=args.num_estimators,
-        generator=generator,
-    )
-    metric = "accuracy" if args.task == "classification" else "RMSE"
-    print(f"zero-shot {metric}: {baseline:.4f}")
+    if args.model == "kumo-small":
+        model = sdm.models.KumoTabular(
+            task=args.task,
+            size="small",
+            device=device,
+        )
+    else:
+        model = sdm.models.TabICLv2(task=args.task, device=device)
 
     default_recipe = model.default_recipe()
     train_recipe = sp.Recipe(
@@ -236,30 +283,28 @@ def main() -> None:
         target=sp.Identity(),
         output=default_recipe.output,
     )
-    print(f"fine-tuning for {args.steps} steps...")
+    print(
+        f"fine-tuning {args.model} for {args.max_epochs} epochs "
+        f"({args.steps_per_epoch} steps each), "
+        f"checkpointing to {checkpoint_path}..."
+    )
     finetune(
         model,
         train_recipe,
         train_pool,
-        target_column,
-        task=args.task,
-        steps=args.steps,
-        context_size=args.context_size,
-        query_size=args.query_size,
-        lr=args.lr,
-        generator=generator,
-    )
-
-    finetuned = evaluate(
-        model,
         eval_context,
         eval_query,
         target_column,
         task=args.task,
+        max_epochs=args.max_epochs,
+        steps_per_epoch=args.steps_per_epoch,
+        context_size=args.context_size,
+        query_size=args.query_size,
+        lr=args.lr,
         num_estimators=args.num_estimators,
+        checkpoint_path=checkpoint_path,
         generator=generator,
     )
-    print(f"fine-tuned {metric}: {finetuned:.4f}")
 
 
 if __name__ == "__main__":
