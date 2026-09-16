@@ -70,7 +70,7 @@ jobs:
           uv pip install \
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
-            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
+            --find-links=https://data.pyg.org/whl/torch-2.14.0+cu130.html \
             --index-strategy=unsafe-best-match \
             --group=test \
             .
@@ -113,7 +113,6 @@ jobs:
     needs: trigger
     if: needs.trigger.outputs.full_test == 'true'
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
-    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v7
@@ -129,6 +128,12 @@ jobs:
         with:
           path: /home/runner/.cache/huggingface/hub
           key: relbench-3-${{ runner.os }}-${{ runner.arch }}-rel-f1
+
+      - name: Cache BeyondArena dataset
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: /home/runner/.cache/data_foundry
+          key: beyondarena-1-${{ runner.os }}-${{ runner.arch }}-parkinsons-biomedical-voice-measurements
 
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
@@ -148,9 +153,10 @@ jobs:
           uv pip install \
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
-            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
+            --find-links=https://data.pyg.org/whl/torch-2.14.0+cu130.html \
             --index-strategy=unsafe-best-match \
             . \
+            'TALENT@git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6' \
             'autogluon.common@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=common' \
             'autogluon.core@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=core' \
             'autogluon.features@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=features' \
@@ -162,7 +168,7 @@ jobs:
             'pylibcugraph-cu13>=26.6,<26.8' \
             'relbench>=3.0.1' \
             scikit-learn \
-            'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena' \
+            'tabarena[data-foundry,plot]@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena' \
             torchmetrics \
             tqdm
 
@@ -171,13 +177,53 @@ jobs:
           nvidia-smi
           python -c 'import torch; assert torch.cuda.is_available(), "CUDA not available to torch"'
 
-      - name: Run examples
-        timeout-minutes: 10
+      - name: Run TabICLv2 quickstart example
+        timeout-minutes: 2
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python examples/tabiclv2/quickstart.py
+
+      - name: Run TabICLv2 Strable example
+        timeout-minutes: 2
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
           python examples/tabiclv2/strable.py --text-processor tfidf
+
+      - name: Run Kumo RelBench example
+        timeout-minutes: 2
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
           python examples/kumo/relational/rel_bench.py --dataset rel-f1 --task driver-position
-          python examples/tabarena/main.py --model tabiclv2 --dataset blood-transfusion-service-center
-          python examples/tabarena/evaluate.py
+
+      - name: Test TabArena benchmark
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -m benchmark.tabular.tabarena.main --model tabiclv2 --dataset blood-transfusion-service-center
+          python -m benchmark.tabular.tabarena.evaluate
+
+      - name: Test BeyondArena benchmark
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -m benchmark.tabular.beyondarena.main --model tabiclv2 --dataset parkinsons_biomedical_voice_measurements --subset lite
+          python -m benchmark.tabular.beyondarena.evaluate
+
+      - name: Test TALENT benchmark
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          TALENT_ARCHIVE=$(hf download \
+            LAMDA-Tabular/TALENT dataset-latest.zip \
+            --repo-type dataset \
+            --revision 7bd276bcb7f6b4c0998025855528bd76bd88f13d \
+            --quiet)
+          unzip -q "${TALENT_ARCHIVE}" 'data/boston/*' -d "${RUNNER_TEMP}/talent"
+          python -m benchmark.tabular.talent.main --model tabiclv2 --dataset-path "${RUNNER_TEMP}/talent/data" --dataset boston
+          python -m benchmark.tabular.talent.evaluate

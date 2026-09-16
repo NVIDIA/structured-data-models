@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -7,8 +10,8 @@ import torch
 import sdm.processing as sp
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.callbacks import Callback
 from sdm.models import ICLModel
+from sdm.models.callback import Callback
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -23,7 +26,8 @@ class _Call:
 class _RecordingModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
-    supports_related_tables: ClassVar[bool] = True
+    supports_multi_target = False
+    supports_related_tables = True
 
     def __init__(self) -> None:
         super().__init__(task=None)
@@ -60,6 +64,7 @@ class _RecordingModel(ICLModel):
 class _UnsupportedRecordingModel(_RecordingModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
+    supports_multi_target = False
     supports_related_tables = False
 
 

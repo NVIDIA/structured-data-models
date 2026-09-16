@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import math
 import re
 from itertools import accumulate
@@ -9,9 +12,8 @@ import torch
 from torch import Tensor
 from torch.utils.dlpack import from_dlpack
 
-from sdm import StringTensor, Stype, TableTensor
+from sdm import EnsembleTable, StringTensor, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
-from sdm.tensor import EnsembleTable
 from sdm.tensor.io import arrow_as_tensor
 
 
@@ -36,7 +38,7 @@ class TFIDF(EnsembleProcessor):
     weights per text column. Transform replaces text with concatenated
     numerical features (one per retained n-gram), applies those idf weights,
     L2-normalizes each row, and ignores n-grams unseen at fit time.
-    When fitted on an :class:`~sdm.tensor.EnsembleTable`, distinct member
+    When fitted on an :class:`~sdm.EnsembleTable`, distinct member
     tables learn independent vocabularies and can produce different numerical
     schemas; members assigned the same table share fitted state.
 
@@ -372,7 +374,7 @@ class TFIDF(EnsembleProcessor):
                 )
             member_table_ids.append(table_id)
 
-        return EnsembleTable.from_tables(
+        return ensemble_table.replace_tables(
             output_tables,
             member_table_ids,
         )

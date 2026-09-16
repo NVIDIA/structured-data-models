@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -8,9 +11,9 @@ import torch
 from torch import Tensor
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor
-from sdm.callbacks import Callback
 from sdm.explain.base import ICLExplainer
 from sdm.models import ICLModel
+from sdm.models.callback import Callback
 
 
 @dataclass(frozen=True)

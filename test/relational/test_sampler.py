@@ -1,4 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from textwrap import dedent
+from typing import cast
 
 import pytest
 import torch
@@ -143,7 +147,35 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
     assert len(related_tables.tables) == 3
     assert all(t.num_members == 2 for t in related_tables.tables.values())
 
-    user = next(iter(related_tables.tables["users"]))
-    assert user.columns[Stype.id] == ("user_id", "__example__")
-    assert user.id[..., 0].equal(torch.tensor([[3, 2, 1, 0], [0, 1, 2, 3]]))
-    assert user.id[..., 1].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
+    users = related_tables.tables["users"]
+    for member_id, expected in enumerate(([3, 2, 1, 0], [0, 1, 2, 3])):
+        user = users.table(member_id)
+        assert user.columns[Stype.id] == ("user_id", "__example__")
+        assert user.id[..., 0].equal(torch.tensor(expected))
+        assert user.id[..., 1].equal(torch.tensor([0, 1, 2, 3]))
+
+
+def test_batch_sampler_accepts_expanded_task_rows(
+    relational_data: RelationalData,
+) -> None:
+    pytest.importorskip("pyg_lib")
+    task_table = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.tensor([3, 2]),)),
+    )
+    task_table = cast(
+        TableTensor,
+        task_table.unsqueeze(0).expand(2, -1, -1),
+    )
+
+    sampled = relational_data.sampler()(
+        task_table=task_table,
+        task_link={
+            "task_column": "user_id",
+            "table": "users",
+            "table_columns": "user_id",
+        },
+        num_neighbors=[1],
+    )
+
+    assert sampled.task_table.id[..., 0].equal(torch.tensor([[3, 2], [3, 2]]))

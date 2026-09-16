@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -110,6 +113,14 @@ def test_infer_stypes_pandas_object_strings() -> None:
         "user_id": Stype.id,
         "segment_id": Stype.categorical,
     }
+
+
+def test_infer_stypes_pandas_period() -> None:
+    table = pd.DataFrame(
+        {"year": pd.period_range("2020", periods=3, freq="Y")}
+    )
+
+    assert infer_stypes(table) == {"year": Stype.datetime}
 
 
 def test_id_detection() -> None:

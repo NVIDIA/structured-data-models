@@ -1,9 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import SelectColumns
-from sdm.tensor import EnsembleTable
 
 
 def test_select_columns_rejects_negative_max_columns() -> None:
@@ -29,7 +31,7 @@ def test_select_columns_round_robin_routes_members() -> None:
     out = SelectColumns(
         max_columns=2,
         method="round_robin",
-    ).fit_transform_ensemble(EnsembleTable(table, num_members=4))
+    ).fit_transform_ensemble(EnsembleTable.from_table(table, num_members=4))
 
     expected_columns = (
         ("num_0", "num_1"),

@@ -1,10 +1,10 @@
 This package includes code derived from the TabFM implementation:
 https://github.com/google-research/tabfm
 
-This package does not download, bundle, or provide pretrained TabFM weights.
-Google's published TabFM pretrained weights are distributed separately under
-the tabfm-non-commercial-v1.0 license and are restricted to non-commercial,
-non-production use.
+This package does not automatically download, bundle, or provide pretrained
+TabFM weights. Google's published TabFM pretrained weights are distributed
+separately under the tabfm-non-commercial-v1.0 license and are restricted to
+non-commercial, non-production use.
 
                                  Apache License
                            Version 2.0, January 2004
@@ -153,7 +153,7 @@ non-production use.
       Contributor provides its Contributions) on an "AS IS" BASIS,
       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
       implied, including, without limitation, any warranties or conditions
-      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR [118;1:3uA
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
       PARTICULAR PURPOSE. You are solely responsible for determining the
       appropriateness of using or redistributing the Work and assume any
       risks associated with Your exercise of permissions under this License.

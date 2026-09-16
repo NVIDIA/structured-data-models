@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 import torch
 
@@ -113,4 +116,40 @@ def test_clip_sigma_fits_leading_batches_independently(
             dtype=torch.float64,
             device=device,
         ),
+    )
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    "missing", [float("nan"), float("inf"), -float("inf")]
+)
+def test_clip_sigma_preserves_nonfinite(
+    device: torch.device,
+    missing: float,
+) -> None:
+    inp = torch.tensor(
+        [
+            [0.0, missing],
+            [1.0, 10.0],
+            [2.0, 12.0],
+            [100.0, 14.0],
+        ],
+        device=device,
+    )
+
+    processor = ClipSigma(threshold=1.0)
+    out = processor.fit_transform(TableTensor.from_tensor(inp))
+
+    torch.testing.assert_close(
+        out.numerical,
+        torch.tensor(
+            [
+                [0.0, missing],
+                [1.0, 10.0],
+                [2.0, 12.0],
+                [6.6151205, 14.0],
+            ],
+            device=device,
+        ),
+        equal_nan=True,
     )

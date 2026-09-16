@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -11,10 +14,10 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
-from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.tensor.table import TableSchema
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
@@ -47,13 +50,25 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
-class KumoTabular(ICLModel):  # noqa: D101
+class KumoTabular(ICLModel):
+    """Kumo Tabular, a foundation model for classification and regression.
+
+    Args:
+        task: The tasks to initialize. If ``None``, both classification and
+            regression are initialized.
+        size: The model size, either ``"small"`` or ``"large"`` (default).
+        pretrained: Whether to load pretrained checkpoints.
+        device: The device for model parameters. If ``None``, uses PyTorch's
+            default device.
+    """
+
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
+    supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -101,10 +116,14 @@ class KumoTabular(ICLModel):  # noqa: D101
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Tabular",
                 filename=filename,
-                revision="v1.0.1",
+                revision="v1.0.3",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(ckpt, is_classifier=task == Task.classification)
+            ckpt = remap_ckpt(
+                ckpt=ckpt["model"],
+                is_classifier=task == Task.classification,
+                num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
+            )
             model.load_state_dict(ckpt, assign=True)
 
         return model
@@ -192,7 +211,7 @@ class KumoTabular(ICLModel):  # noqa: D101
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=out.sort(dim=-1)[0],
+                numerical=out,
             )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
@@ -222,17 +241,13 @@ class _KumoTabular(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.cell_embedding = CellEmbedding(
-            channels=cell_channels,
-            group_size=group_size,
-            num_frequencies=num_frequencies,
-            **factory_kwargs,
-        )
         self.row_embedding = RowEmbedding(
             num_classes=num_classes,
             channels=cell_channels,
             num_layers=num_embedding_layers,
             num_heads=num_embedding_heads,
+            group_size=group_size,
+            num_frequencies=num_frequencies,
             num_inducing_points=num_inducing_points,
             num_readout_tokens=num_readout_tokens,
             **factory_kwargs,
@@ -263,45 +278,6 @@ class _KumoTabular(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.cell_embedding(x, categorical_mask)
-        x = self.row_embedding(x, y, cache=cache)
+        x = self.row_embedding(x, y, categorical_mask, cache=cache)
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)
-
-
-def remap_ckpt(  # noqa: D103
-    ckpt: dict[str, Tensor],
-    is_classifier: bool,
-) -> dict[str, Tensor]:
-
-    out: dict[str, Tensor] = {}
-    for key, value in ckpt.items():
-        if key == "y_encoder.weight":
-            if is_classifier:
-                out["row_embedding.y_emb.weight"] = (
-                    value.T + ckpt["y_encoder.bias"]
-                )
-            else:
-                out["row_embedding.y_lin.weight"] = value
-            continue
-
-        if is_classifier and key == "y_encoder.bias":
-            continue
-
-        if key == "table_encoder.cls_tokens":
-            out["row_embedding.readout_token"] = value
-            continue
-
-        if key.startswith("table_encoder."):
-            key = key.removeprefix("table_encoder.")
-            out[f"row_embedding.{key}"] = value
-            continue
-
-        if key.startswith("cls_downproject."):
-            key = key.removeprefix("cls_downproject.")
-            out[f"row_project.{key}"] = value
-            continue
-
-        out[key] = value
-
-    return out

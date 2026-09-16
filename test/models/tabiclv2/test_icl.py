@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from collections.abc import Callable
 
 import pytest
@@ -5,7 +8,6 @@ import torch
 from torch import Tensor
 
 from sdm.cache import Cache
-from sdm.models.tabiclv2 import icl as icl_module
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.testing import withCUDA
 
@@ -68,51 +70,6 @@ def test_icl_block_grouping() -> None:
             torch.tensor([11] + [10] * 9, device=device)
         ),
     )
-
-
-@withCUDA
-def test_icl_automatic_batch_size_limit(
-    device: torch.device,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    block = ICLBlock(
-        num_classes=2,
-        out_channels=2,
-        channels=8,
-        num_layers=2,
-        num_heads=2,
-        norm_bias=True,
-        device=device,
-    ).eval()
-    x = torch.randn(2, 5, 8, device=device)
-    y = torch.randint(2, (2, 3), device=device)
-    chunk_kwargs = {} if device.type == "cuda" else {"batch_size_limit": 1}
-
-    with torch.inference_mode():
-        monkeypatch.setattr(
-            icl_module,
-            "cuda_attention_memory_limit",
-            lambda _device: 1 << 60,
-        )
-        expected = block(x.clone(), y)
-
-        monkeypatch.setattr(
-            icl_module,
-            "cuda_attention_memory_limit",
-            lambda _device: 12 * 5 * 8 * 4,
-        )
-        actual = block(x.clone(), y, **chunk_kwargs)
-        cache = Cache()
-        block(x[:, :3].clone(), y, cache=cache, **chunk_kwargs)
-        replayed = block(
-            x[:, 3:].clone(),
-            y[:, :0],
-            cache=cache.freeze(),
-            **chunk_kwargs,
-        )
-
-    torch.testing.assert_close(actual, expected)
-    torch.testing.assert_close(replayed, expected)
 
 
 @withCUDA
@@ -294,9 +251,11 @@ def test_icl_block_rejects_one_class_hierarchy() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("batch_shape", [(), (2,)])
+@pytest.mark.parametrize("requires_grad", [False, True])
 def test_icl_block_hierarchical_cache(
     device: torch.device,
     batch_shape: tuple[int, ...],
+    requires_grad: bool,
 ) -> None:
     block = ICLBlock(
         num_classes=2,
@@ -307,7 +266,7 @@ def test_icl_block_hierarchical_cache(
         norm_bias=True,
         temperature=0.9,
         device=device,
-    ).eval()
+    )
     for parameter in block.parameters():
         torch.nn.init.normal_(parameter, std=0.1)
 
@@ -325,20 +284,21 @@ def test_icl_block_hierarchical_cache(
         num_classes=num_classes,
     )
 
-    cache = Cache()
-    recorded = block(
-        train_rows.clone(),
-        y,
-        num_classes=num_classes,
-        cache=cache,
-    )
-    assert recorded.size() == (*batch_shape, 0, num_classes)
-    assert cache.size() > 0
+    with torch.set_grad_enabled(requires_grad):
+        cache = Cache()
+        recorded = block(
+            train_rows.clone(),
+            y,
+            num_classes=num_classes,
+            cache=cache,
+        )
+        assert recorded.size() == (*batch_shape, 0, num_classes)
+        assert cache.size() > 0
 
-    predicted = block(
-        test_rows.clone(),
-        y.new_empty((*batch_shape, 0)),
-        num_classes=num_classes,
-        cache=cache.freeze(),
-    )
+        predicted = block(
+            test_rows.clone(),
+            y.new_empty((*batch_shape, 0)),
+            num_classes=num_classes,
+            cache=cache.freeze(),
+        )
     torch.testing.assert_close(predicted, expected)

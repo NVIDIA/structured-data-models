@@ -1,11 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import Literal, cast
 
 import torch
 from torch.nn import ModuleDict
 
-from sdm import Stype
+from sdm import EnsembleTable, Stype
 from sdm.processing import EnsembleProcessor, Processor
-from sdm.tensor import EnsembleTable
 
 
 class TableDispatch(EnsembleProcessor):

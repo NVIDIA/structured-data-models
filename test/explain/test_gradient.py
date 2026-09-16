@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import Any
 
 import pytest
@@ -12,6 +15,7 @@ from sdm.models import ICLModel
 class _LinearModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical})
+    supports_multi_target = False
     supports_related_tables = True
 
     def _forward(

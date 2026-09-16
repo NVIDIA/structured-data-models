@@ -1,10 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Generic, Literal, NamedTuple, Self, TypeVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import ColumnarTensor, Stype, TableTensor
+from sdm import ColumnarTensor, EnsembleTable, Stype, TableTensor
 from sdm.relational import (
     RelatedTables,
     RelationalData,
@@ -15,7 +18,6 @@ from sdm.relational.backend import (
     CuGraphRelationalSampler,
     PyGLibRelationalSampler,
 )
-from sdm.tensor import EnsembleTable
 from sdm.tensor.mixin import DeviceMixin
 
 T = TypeVar("T", bound=TableTensor | EnsembleTable)

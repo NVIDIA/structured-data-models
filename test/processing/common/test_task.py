@@ -1,11 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from textwrap import dedent
 
 import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import TableTensor
-from sdm.tensor import EnsembleTable
+from sdm import EnsembleTable, TableTensor
 
 
 def _numerical_table(

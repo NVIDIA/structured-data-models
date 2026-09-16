@@ -1,12 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
-from sdm.tensor import EnsembleTable
 
 
 class ShuffleCategories(EnsembleProcessor):
@@ -163,7 +165,7 @@ class ShuffleCategories(EnsembleProcessor):
             member_ids.append(member_id)
             next_member_id_by_permutation[permutation_id] = member_id + 1
 
-        return EnsembleTable.gather_members(
+        return ensemble_table.gather_members(
             tables=output_tables,
             member_ids=member_ids,
         )

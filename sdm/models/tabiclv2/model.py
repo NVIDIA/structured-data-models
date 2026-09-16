@@ -1,3 +1,9 @@
+# Copyright (c) 2025, Soda team @ Inria
+# Licensed under the BSD 3-Clause License; see LICENSE.
+
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # ruff: noqa: D205
 
 from __future__ import annotations
@@ -118,6 +124,7 @@ class TabICLv2(ICLModel):
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
+    supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -212,7 +219,7 @@ class TabICLv2(ICLModel):
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=out.sort(dim=-1)[0],
+                numerical=out,
             )
 
         out = self.models[Task.classification](

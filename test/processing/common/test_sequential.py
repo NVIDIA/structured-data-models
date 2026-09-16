@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pickle
 from textwrap import dedent
 from typing import Any, cast
@@ -6,8 +9,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.tensor import EnsembleTable
+from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
 
 
 def _mixed_table(numerical: torch.Tensor | None = None) -> TableTensor:
@@ -138,7 +140,7 @@ def test_repr() -> None:
         sp.Sequential(sp.Standardize(), sp.PowerTransform())
     ) == dedent("""\
         Sequential(
-          Standardize(),
+          Standardize(eps=0.0),
           PowerTransform(),
         )""")
     assert repr(sp.Sequential(lambda table: table)) == dedent("""\

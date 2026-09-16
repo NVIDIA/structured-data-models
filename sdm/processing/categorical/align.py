@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from collections.abc import Sequence
 from typing import Literal, cast
 
@@ -7,6 +10,7 @@ from torch import Tensor
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
@@ -14,7 +18,6 @@ from sdm import (
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
-from sdm.tensor import EnsembleTable
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
@@ -293,7 +296,7 @@ class AlignCategories(EnsembleProcessor):
             aligned_tables.extend(group_tables)
 
         member_table_ids = self._member_table_ids(ensemble_table)
-        output = EnsembleTable.from_tables(
+        output = ensemble_table.replace_tables(
             tables=aligned_tables,
             member_table_ids=member_table_ids,
         )
@@ -322,7 +325,7 @@ class AlignCategories(EnsembleProcessor):
             )
             offset = end
 
-        return EnsembleTable.from_tables(
+        return ensemble_table.replace_tables(
             tables=aligned_tables,
             member_table_ids=table_ids,
         )

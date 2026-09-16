@@ -213,3 +213,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Tabular benchmarks
+tabarena_out/
+ScoringBench/
+scoringbench_out/
+evals/
+datasets.json

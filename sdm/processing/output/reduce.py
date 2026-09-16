@@ -1,11 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from collections import Counter
 from typing import Literal
 
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
-from sdm.tensor import EnsembleTable
 
 
 class ReduceEstimators(EnsembleProcessor):
@@ -108,7 +110,7 @@ class ReduceEstimators(EnsembleProcessor):
         output = reference.replace_blocks(
             numerical=total / ensemble_table.num_members
         )
-        return EnsembleTable(output, num_members=1)
+        return EnsembleTable.from_table(output, num_members=1)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         if table.dim() < 3:

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import argparse
 import math
 from typing import Any, cast
@@ -17,7 +20,7 @@ parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument("--batch_size", type=int, default=1000)
 parser.add_argument("--max_test_steps", type=int, default=None)
 parser.add_argument("--num_neighbors", type=int, nargs="*", default=[16, 16])
-parser.add_argument("--num_estimators", type=int, default=2)
+parser.add_argument("--num_estimators", type=int, default=1)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 
@@ -27,7 +30,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Collect Relational Data #####################################################
 dataset = relbench.load_dataset(args.dataset)
 task = dataset.load_task(args.task)
-db = task.get_db(upto_test_timestamp=True)
+db = task.get_db(upto_test_timestamp=False)
 data = sdm.RelationalData(
     tables={
         name: sdm.TableTensor.from_pandas(
@@ -85,13 +88,9 @@ task_table = sdm.TableTensor.from_pandas(
         else "categorical",
     },
 )
-
 context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
-context_size = min(len(context), args.context_size)
-num_repeats = math.ceil(args.num_estimators * context_size / len(context))
-perm = torch.cat([torch.randperm(len(context)) for _ in range(num_repeats)])
-perm = perm[: args.num_estimators * context_size]
-context = context[perm].unflatten(0, (args.num_estimators, context_size))
+perm = torch.randperm(len(context))[: args.context_size * args.num_estimators]
+context = context[torch.randperm(len(context))[: args.context_size]]
 
 # Execute Model ###############################################################
 model = sdm.models.KumoRelational(device=device)
@@ -111,6 +110,7 @@ with torch.amp.autocast(device.type, torch.float16, enabled=True):
         x=context.drop_columns(task.target_col),
         y=context[task.target_col],
         related_tables=related_tables,
+        num_estimators=args.num_estimators,
     )
 
 if task.task_type == relbench.base.TaskType.REGRESSION:
@@ -123,8 +123,6 @@ else:
 metric = metric.to(device)
 for batch in tqdm.tqdm(query.split(args.batch_size)[: args.max_test_steps]):
     x_query = batch.drop_columns(task.target_col)
-    x_query = x_query.expand(args.num_estimators, *x_query.size())
-    print(x_query.shape, x_query.stride())
     y_query = batch[task.target_col].to(device)
     with torch.amp.autocast(device.type, torch.float16, enabled=True):
         out = model.predict(*sampler(x_query, **kwargs).to(device))

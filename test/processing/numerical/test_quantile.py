@@ -1,9 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from typing import cast
+
 import pytest
 import torch
 
-from sdm import TableTensor
+from sdm import EnsembleTable, TableTensor
 from sdm.processing import EnsembleProcessorAdapter, QuantileTransform
-from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -219,8 +223,14 @@ def test_quantile_transform_adapter_matches_grouped_tables(
         TableTensor.from_tensor(query_values.flip(0)),
     )
     member_table_ids = (1, 0, 1)
-    context = EnsembleTable.from_tables(contexts, member_table_ids)
-    query = EnsembleTable.from_tables(queries, member_table_ids)
+    context = EnsembleTable(
+        groups=(cast(TableTensor, torch.stack(contexts)),),
+        locations=tuple((0, table_id) for table_id in member_table_ids),
+    )
+    query = EnsembleTable(
+        groups=(cast(TableTensor, torch.stack(queries)),),
+        locations=tuple((0, table_id) for table_id in member_table_ids),
+    )
     processor = EnsembleProcessorAdapter(
         QuantileTransform(n_quantiles=8, subsample=subsample)
     )

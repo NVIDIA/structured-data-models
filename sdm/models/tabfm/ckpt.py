@@ -1,3 +1,20 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import re
 from collections import defaultdict
 from itertools import product
@@ -141,16 +158,16 @@ def remap_ckpt(  # noqa: D103
 
     for key, value in ckpt.items():
         if key == "cell_embedder.fourier_frequencies":
-            out["cell_embedding.num_freq"] = value
+            out["row_embedding.cell_embedding.num_freq"] = value
 
         elif key == "cell_embedder.fourier_frequencies_cat":
-            out["cell_embedding.cat_freq"] = value
+            out["row_embedding.cell_embedding.cat_freq"] = value
 
         elif key.startswith("cell_embedder.in_linear."):
             out[
                 key.replace(
                     "cell_embedder.in_linear",
-                    "cell_embedding.num_lin",
+                    "row_embedding.cell_embedding.num_lin",
                 )
             ] = value
 
@@ -158,7 +175,7 @@ def remap_ckpt(  # noqa: D103
             out[
                 key.replace(
                     "cell_embedder.in_linear_cat",
-                    "cell_embedding.cat_lin",
+                    "row_embedding.cell_embedding.cat_lin",
                 )
             ] = value
 

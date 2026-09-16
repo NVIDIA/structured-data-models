@@ -1,11 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import torch
 
-from sdm import Stype, StypeLike
+from sdm import EnsembleTable, Stype, StypeLike, TableTensor
 from sdm.processing import EnsembleProcessor
-from sdm.tensor import EnsembleTable
 
 
 class SelectColumns(EnsembleProcessor):
@@ -13,7 +15,6 @@ class SelectColumns(EnsembleProcessor):
 
     Args:
         max_columns: The maximum number of columns to keep per semantic type.
-            Must be positive.
         method: The column selection method.
             ``"first"`` keeps the first columns according to their order within
             each semantic block. ``"round_robin"`` assigns each ensemble
@@ -40,6 +41,9 @@ class SelectColumns(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        if all(group.size(-1) <= self.max_columns for group in ensemble_table):
+            return ensemble_table
+
         if self.method == "first":
             groups = []
             for group in ensemble_table:
@@ -55,7 +59,7 @@ class SelectColumns(EnsembleProcessor):
             return ensemble_table.replace_groups(groups)
 
         assert self.method == "round_robin"
-        tables = []
+        tables: list[TableTensor] = []
         for member_id in range(ensemble_table.num_members):
             table = ensemble_table.table(member_id)
             columns: dict[StypeLike, tuple[str, ...]] = {}
@@ -94,7 +98,7 @@ class SelectColumns(EnsembleProcessor):
                     **blocks,
                 )
             )
-        return EnsembleTable.from_tables(
+        return ensemble_table.replace_tables(
             tables=tables,
             member_table_ids=range(len(tables)),
         )

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 import functools
@@ -390,10 +393,23 @@ class TableTensor(Tensor):
                 in ``df`` but not included in ``stypes`` will be ignored.
             device: The device.
         """
+        import pandas as pd
+
+        df = df[stypes.keys()]
+        # Resolve period ordinals before Arrow casts them as timestamps, which
+        # would interpret the ordinals as microseconds since the Unix epoch.
+        period_timestamps = {}
+        for name, stype in stypes.items():
+            if Stype(stype) != Stype.datetime:
+                continue
+            if not isinstance(df[name].dtype, pd.PeriodDtype):
+                continue
+            period_timestamps[name] = df[name].dt.to_timestamp(how="start")
+        if period_timestamps:
+            df = df.assign(**period_timestamps)
+
         return cls.from_arrow(
-            table=pa.Table.from_pandas(
-                df[stypes.keys()], preserve_index=False
-            ),
+            table=pa.Table.from_pandas(df, preserve_index=False),
             stypes=stypes,
             device=device,
         )

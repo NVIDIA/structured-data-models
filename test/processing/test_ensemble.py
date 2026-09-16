@@ -1,7 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
@@ -10,7 +13,6 @@ from sdm.processing import (
     Processor,
     Standardize,
 )
-from sdm.tensor import EnsembleTable
 
 
 # TODO: Replace these stubs with real EnsembleProcessor subclasses once they
@@ -59,7 +61,7 @@ class InvertibleIdentityEnsembleProcessor(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        return EnsembleTable(ensemble_table.table(0), num_members=1)
+        return EnsembleTable.from_table(ensemble_table.table(0), num_members=1)
 
 
 class _StatelessProcessor(Processor, InvertibleMixin):
@@ -100,7 +102,7 @@ def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
 
 def test_ensemble_processor_requires_fit_before_transform() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
-    ensemble_table = EnsembleTable(table, num_members=2)
+    ensemble_table = EnsembleTable.from_table(table, num_members=2)
     processor = IdentityEnsembleProcessor()
 
     with pytest.raises(RuntimeError, match="not fitted"):
@@ -112,7 +114,7 @@ def test_ensemble_processor_requires_fit_before_transform() -> None:
 
 def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
-    ensemble_table = EnsembleTable(table, num_members=2)
+    ensemble_table = EnsembleTable.from_table(table, num_members=2)
     processor = InvertibleIdentityEnsembleProcessor()
 
     with pytest.raises(RuntimeError, match="not fitted"):
@@ -128,7 +130,7 @@ def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
 
 def test_ensemble_processor_noops() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1, dtype=torch.int64))
-    ensemble_table = EnsembleTable(table, num_members=2)
+    ensemble_table = EnsembleTable.from_table(table, num_members=2)
     processor = IdentityEnsembleProcessor()
 
     assert processor.fit_ensemble(ensemble_table) is processor
@@ -157,11 +159,11 @@ def test_ensemble_processor_uses_fused_table_tensor_lifecycle() -> None:
 
 
 def test_ensemble_processor_passthrough_for_empty_supported_blocks() -> None:
-    empty_ensemble_table = EnsembleTable(
+    empty_ensemble_table = EnsembleTable.from_table(
         TableTensor.from_tensor(torch.empty(2, 0)),
         num_members=2,
     )
-    ensemble_table = EnsembleTable(
+    ensemble_table = EnsembleTable.from_table(
         TableTensor.from_tensor(torch.ones(2, 1)),
         num_members=2,
     )
@@ -195,20 +197,20 @@ def _two_group_ensemble_table() -> EnsembleTable:
 
 def test_adapter_fits_each_group_separately() -> None:
     ensemble_table = _two_group_ensemble_table()
-    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+    processor = EnsembleProcessorAdapter(Standardize())
 
     processor.fit_ensemble(ensemble_table)
     output = processor.transform_ensemble(ensemble_table)
 
     assert output.num_members == 3
-    assert output.table(0).numerical.tolist() == [[-2.0], [2.0]]
+    assert output.table(0).numerical.tolist() == [[-1.0], [1.0]]
     assert output.table(1).numerical.tolist() == [[-1.0], [1.0]]
     assert output.table(2).equal(output.table(0))
 
 
 def test_adapter_inverse_restores_input() -> None:
     ensemble_table = _two_group_ensemble_table()
-    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+    processor = EnsembleProcessorAdapter(Standardize())
 
     output = processor.fit_transform_ensemble(ensemble_table)
     restored = processor.inverse_transform_ensemble(output)

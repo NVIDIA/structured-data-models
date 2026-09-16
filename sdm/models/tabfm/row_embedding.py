@@ -1,3 +1,20 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # ruff: noqa: D101, D102
 
 from typing import Any, cast
@@ -16,11 +33,8 @@ from torch.nn import (
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabfm.block import TabFMTransformerBlock
+from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding
-
-# TODO: Derive these limits from available CUDA memory.
-_COL_BATCH_SIZE_LIMIT = 16
-_ROW_BATCH_SIZE_LIMIT = 2048
 
 
 class RowEmbedding(torch.nn.Module):
@@ -32,6 +46,8 @@ class RowEmbedding(torch.nn.Module):
         num_repeats: int,
         num_col_heads: int,
         num_row_heads: int,
+        group_size: int,
+        num_frequencies: int,
         num_inducing_points: int,
         num_readout_tokens: int,
         device: torch.device | str | None = None,
@@ -39,6 +55,14 @@ class RowEmbedding(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.channels = channels
+
+        self.cell_embedding = CellEmbedding(
+            channels=channels,
+            group_size=group_size,
+            num_frequencies=num_frequencies,
+            **factory_kwargs,
+        )
 
         self.y_emb: torch.nn.Module | None = None
         self.y_mlp: torch.nn.Module | None = None
@@ -113,19 +137,40 @@ class RowEmbedding(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,  # [..., R, C, D]
+        x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
+        categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
-        *B, R, _, D = x.size()
+        *B, R, C = x.size()
         R_train = y.size(-1)
         K = self.readout_token.size(-2)
+        D = self.channels
+
+        buffer: Tensor | None = None
+        if torch.is_grad_enabled():
+            x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
+        else:
+            buffer = torch.empty(
+                (*B, R, K + C, D),
+                device=x.device,
+                dtype=torch.get_autocast_dtype(x.device.type)
+                if torch.is_autocast_enabled(x.device.type)
+                else x.dtype,
+            )
+            buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
+            x = self.cell_embedding(
+                x,
+                categorical_mask,
+                batch_size_limit="auto",
+                out=buffer[..., K:, :],
+            )
 
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y).unsqueeze(-2)
+                y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
             else:
                 assert self.y_mlp is not None
                 y_emb = self.y_mlp(y.unsqueeze(-1)).unsqueeze(-2)
@@ -140,20 +185,17 @@ class RowEmbedding(torch.nn.Module):
             )
         ):
             # Column-wise induced set attention (B * C as the batch axis).
-            # Materialize once to avoid repeated copies in the column layers.
-            x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
+            x = x.transpose(-2, -3)
             for j, col_layer in enumerate(col_layers):
                 key = f"row_embedding.col_layer{i}.{j}"
-                if cache is not None and cache.is_replaying:
-                    key_value = cast(KVCacheEntry, cache[key])
-                else:
-                    key_value = x[..., :R_train, :]
-
                 result = col_layer(
                     query=x,  # [..., C, R, D]
-                    key_value=key_value,  # [..., C, R_train, D]
+                    key_value=cast(KVCacheEntry, cache[key])
+                    if cache is not None and cache.is_replaying
+                    else x[..., :R_train, :],
                     return_key_value=cache is not None and cache.is_recording,
-                    batch_size_limit=_COL_BATCH_SIZE_LIMIT,
+                    batch_size_limit="auto",
+                    out=None if buffer is None else x,
                 )  # [..., C, R, D]
 
                 if cache is not None and cache.is_recording:
@@ -162,18 +204,21 @@ class RowEmbedding(torch.nn.Module):
                     x = result
                 del result
 
-            x = col_proj(x.transpose(-2, -3))  # [..., R, C, D]
-
-            if i == 0:  # Prepend readout tokens before row-wise attention.
-                x = torch.cat(
-                    [
-                        self.readout_token.to(x.dtype)
-                        .view(*(1,) * len(B), 1, K, D)
-                        .expand(*B, R, K, D),
-                        x,  # [..., R, C, D]
-                    ],
-                    dim=-2,
-                )  # [..., R, K + C, D]
+            if buffer is None:
+                x = col_proj(x.transpose(-2, -3))  # [..., R, C, D]
+                if i == 0:  # Prepend readout tokens before row-wise attention.
+                    x = torch.cat(
+                        [
+                            self.readout_token.to(x.dtype)
+                            .view(*(1,) * len(B), 1, K, D)
+                            .expand(*B, R, K, D),
+                            x,  # [..., R, C, D]
+                        ],
+                        dim=-2,
+                    )  # [..., R, K + C, D]
+            else:
+                x.copy_(col_proj(x))  # NOTE Double peak memory.
+                x = buffer  # [..., R, K + C, D]
 
             # Row-wise attention (B * R as the batch axis).
             for j, row_layer in enumerate(row_layers):
@@ -184,9 +229,13 @@ class RowEmbedding(torch.nn.Module):
                 x = row_layer(
                     query=query,  # [..., R, K + C, D] or [..., R, K, D]
                     key_value=x,  # [..., R, K + C, D]
-                    batch_size_limit=_ROW_BATCH_SIZE_LIMIT,
+                    batch_size_limit="auto",
+                    out=None if buffer is None else query,
                 )  # [..., R, K + C, D] or [..., R, K, D]
 
-            x = row_norm(x)
+            if buffer is None:
+                x = row_norm(x)
+            else:
+                x.copy_(row_norm(x))  # NOTE Double peak memory.
 
         return x.flatten(-2)

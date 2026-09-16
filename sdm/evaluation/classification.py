@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import cast
 
 import torch
@@ -9,6 +12,8 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 def to_class_indices(
     pred: TableTensor,
     target: TableTensor | CategoricalTensor,
+    *,
+    missing_score: float | None = None,
 ) -> tuple[Tensor, Tensor]:
     r"""Convert classification predictions and targets to class-index form.
 
@@ -16,6 +21,9 @@ def to_class_indices(
         pred: Prediction table whose numerical columns contain class scores.
             Column names define the class order.
         target: Single-column categorical target.
+        missing_score: Score assigned to target classes that are absent from
+            the prediction columns. If ``None``, will raise an error when a
+            ``target`` value refers to an absent class in ``pred``.
 
     >>> import torch
     >>> import sdm
@@ -86,11 +94,18 @@ def to_class_indices(
             dtype=category.dtype,
             device=category.device,
         )
+
     match = category.unsqueeze(-1) == classes.unsqueeze(0)  # [C_t, C_p]
-    if not match.any(dim=-1)[code].all():
+    if missing_score is None and not match.any(dim=-1)[code].all():
         raise ValueError("Target contains classes missing from prediction")
 
-    return pred[..., match.to(torch.int64).argmax(dim=-1)], code
+    matched_target, matched_pred = match.nonzero(as_tuple=True)
+    aligned = pred.new_full(
+        (*pred.size()[:-1], category.size(0)),
+        fill_value=missing_score or 0,
+    )
+    aligned[..., matched_target] = pred[..., matched_pred]
+    return aligned, code
 
 
 def to_binary_class(

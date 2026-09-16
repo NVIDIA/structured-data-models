@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # ruff: noqa: D205
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.relational.ckpt import remap_ckpt
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.recipe import default_recipe
 from sdm.models.kumo.relational.task import TaskGraph
@@ -145,6 +149,7 @@ class KumoRelational(ICLModel):
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
+    supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = True
 
     def __init__(
@@ -185,9 +190,10 @@ class KumoRelational(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Relational",
                 filename=filename,
-                revision="v2.1.1",
+                revision="v2.1.2",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
+            ckpt = remap_ckpt(ckpt)
             model.load_state_dict(ckpt, assign=True)
 
         return self
@@ -227,7 +233,7 @@ class KumoRelational(ICLModel):
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=out.sort(dim=-1)[0],
+                numerical=out,
             )
 
         return TableTensor(
@@ -476,8 +482,7 @@ class _KumoRelational(torch.nn.Module):
             assert x_context is not None
             assert x_query is not None
             x = torch.cat([x_context, x_query], dim=-2)
-            del x_context
-            del x_query
+            del x_context, x_query
         return self.icl_block(
             x=x,
             y=y,

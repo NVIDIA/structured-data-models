@@ -1,6 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import torch
 
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
+from sdm.nn import LogScale
 from sdm.testing import withCUDA
 
 
@@ -9,7 +13,7 @@ def test_transformer_block(device: torch.device) -> None:
     block = KumoTabularTransformerBlock(
         channels=32,
         num_heads=4,
-        query_log_scale=True,
+        query_scaling=LogScale(num_heads=4, device=device),
         device=device,
     )
     query = torch.randn(2, 5, 32, device=device)

@@ -1,3 +1,9 @@
+# Copyright (c) 2025, Soda team @ Inria
+# Licensed under the BSD 3-Clause License; see LICENSE.
+
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # ruff: noqa: D101
 
 from typing import Any, cast
@@ -48,3 +54,28 @@ class TabICLv2TransformerBlock(TransformerBlock):
             key_transform=rope,
             **factory_kwargs,
         )
+
+    def peak_bytes_per_example(
+        self,
+        element_size: int,
+        query_length: int,
+        key_value_length: int | None = None,
+    ) -> int:
+        r""":meta private:"""  # noqa: D415
+        length = max(query_length, key_value_length or 0)
+        factor = 10 if element_size <= 2 else 8
+        return factor * length * element_size * self.attn.q_dim
+
+
+if __name__ == "__main__":
+    from sdm.testing.memory import benchmark_transformer_block_memory_peak
+
+    benchmark_transformer_block_memory_peak(
+        block=lambda channels, num_heads: TabICLv2TransformerBlock(
+            channels=channels,
+            num_heads=num_heads,
+            norm_bias=True,
+            qassmax=True,
+        ),
+        channels_and_heads=[(128, 8), (512, 8)],
+    )

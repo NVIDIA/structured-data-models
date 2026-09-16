@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import Literal
 
 import pytest
@@ -5,12 +8,12 @@ import torch
 
 from sdm import (
     CategoricalTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
 )
 from sdm.processing import ShuffleCategories
-from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 
@@ -170,10 +173,12 @@ def test_shuffle_categories_ensemble_matches_independent_processors(
 def test_shuffle_categories_requires_fitted_member_count() -> None:
     table = _table([[0], [1]], (("a", "b"),))
     processor = ShuffleCategories(method="shift")
-    processor.fit_ensemble(EnsembleTable(table, num_members=2))
+    processor.fit_ensemble(EnsembleTable.from_table(table, num_members=2))
 
     with pytest.raises(RuntimeError, match="same number"):
-        processor.transform_ensemble(EnsembleTable(table, num_members=1))
+        processor.transform_ensemble(
+            EnsembleTable.from_table(table, num_members=1)
+        )
 
 
 def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
@@ -182,7 +187,7 @@ def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
         (("a", "b", "c"), ("x", "y")),
     )
     processor = ShuffleCategories(method="random").fit_ensemble(
-        EnsembleTable(table, num_members=2),
+        EnsembleTable.from_table(table, num_members=2),
         generator=torch.Generator().manual_seed(0),
     )
     output = processor.fit_transform(

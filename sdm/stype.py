@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 import importlib.util
@@ -105,13 +108,13 @@ def infer_stypes(
     if isinstance(table, pa.Table):
         fn = _infer_arrow_stype
         columns = zip(table.column_names, table.columns)
-    if importlib.util.find_spec("pandas") is not None:
+    if fn is None and importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
             fn = _infer_pandas_stype
             columns = table.items()
-    if importlib.util.find_spec("cudf") is not None:
+    if fn is None and importlib.util.find_spec("cudf") is not None:
         import cudf
 
         if isinstance(table, cudf.DataFrame):
@@ -244,7 +247,7 @@ def _infer_pandas_stype(
             return None if text == "drop" else Stype.text
         return Stype.categorical
 
-    if is_datetime64_any_dtype(dtype):
+    if is_datetime64_any_dtype(dtype) or isinstance(dtype, pd.PeriodDtype):
         return Stype.datetime
 
     raise TypeError(f"Unsupported pandas type '{dtype}' for column {name!r}")
