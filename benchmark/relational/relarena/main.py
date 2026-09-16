@@ -1,9 +1,10 @@
-from itertools import product
 import math
 import sys
 from functools import lru_cache
+from itertools import product
 
 import numpy as np
+import pandas as pd
 import torch
 from relarena.model import RelArenaModel
 from relarena.registry import register_model
@@ -13,6 +14,69 @@ from relbench.base import Database, EntityTask, Table, TaskType
 import sdm
 
 DEFAULT_CONFIG = {}  # TODO
+
+
+def add_lag_target_features(
+    df: pd.DataFrame,
+    history: pd.DataFrame,
+    task: EntityTask,
+    *,
+    num_lags: int,
+) -> pd.DataFrame:
+    if num_lags == 0:
+        return df
+
+    entity_col = task.entity_col
+    time_col = task.time_col
+    target_col = task.target_col
+    history_time_col = "__history_time__"
+    lookup_time_col = "__lookup_time__"
+    row_col = "__row__"
+
+    out = df.copy()
+    right = history[[entity_col, time_col, target_col]].rename(
+        columns={time_col: history_time_col}
+    )
+    right = right.sort_values([history_time_col, entity_col])
+
+    left = pd.DataFrame(
+        {
+            entity_col: out[entity_col].to_numpy(),
+            lookup_time_col: out[time_col].to_numpy(),
+            row_col: np.arange(len(out)),
+        }
+    )
+
+    for lag in range(1, num_lags + 1):
+        lag_col = f"{target_col}_lag_{lag}"
+        if task.task_type == TaskType.REGRESSION:
+            out[lag_col] = np.nan
+        else:
+            out[lag_col] = pd.Series(pd.NA, index=out.index, dtype="object")
+
+        left = left.sort_values([lookup_time_col, entity_col])
+        merged = pd.merge_asof(
+            left,
+            right,
+            by=entity_col,
+            left_on=lookup_time_col,
+            right_on=history_time_col,
+            direction="backward",
+            allow_exact_matches=False,
+        )
+
+        mask = merged[history_time_col].notna()
+        if mask.any():
+            rows = merged.loc[mask, row_col].to_numpy()
+            out.loc[out.index[rows], lag_col] = merged.loc[
+                mask, target_col
+            ].to_numpy()
+
+        left = merged.loc[mask, [entity_col, row_col, history_time_col]]
+        left = left.rename(columns={history_time_col: lookup_time_col})
+
+    return out
+
 
 def search_space(stats: TaskStats) -> SearchSpace:
     if stats.num_train_nodes < 2_000:
@@ -26,7 +90,7 @@ def search_space(stats: TaskStats) -> SearchSpace:
         num_estimators = [8]
 
     context_size = [20_000]
-    lag_target = [False, True]
+    num_lags = [0, 10]
 
     if context_size[0] < stats.num_train_nodes:
         ensemble_context = [True]
@@ -37,7 +101,7 @@ def search_space(stats: TaskStats) -> SearchSpace:
         "context_size",
         "num_neighbors",
         "num_estimators",
-        "lag_target",
+        "num_lags",
         "ensemble_context",
     )
 
@@ -47,25 +111,19 @@ def search_space(stats: TaskStats) -> SearchSpace:
             context_size,
             num_neighbors,
             num_estimators,
-            lag_target,
+            num_lags,
             ensemble_context,
         )
     ]
 
     return SearchSpace(
         default_overrides=fixed_grid[0],  # Dummy
-        fixed_grid=fixed_grid
+        fixed_grid=fixed_grid,
     )
 
 
 @lru_cache(maxsize=1)
-def get_sampler(
-    db: Database,
-    task: EntityTask,
-    train_table: Table,
-    lag_targets: bool,
-) -> sdm.relational.RelationalSampler:
-
+def get_sampler(db: Database) -> sdm.relational.RelationalSampler:
     tables = {
         name: sdm.TableTensor.from_pandas(
             df=table.df,
@@ -81,19 +139,6 @@ def get_sampler(
         )
         for name, table in db.table_dict.items()
     }
-    if lag_targets:
-        history = train_table.df.copy()
-        history[task.time_col] -= task.timedelta
-        tables["history"] = sdm.TableTensor.from_pandas(
-            history,
-            stypes={
-                task.entity_col: "id",
-                task.time_col: "datetime",
-                task.target_col: "numerical"
-                if task.task_type == TaskType.REGRESSION
-                else "categorical",
-            },
-        )
     relationships = [
         {
             "left_table": name,
@@ -104,15 +149,6 @@ def get_sampler(
         for name, table in db.table_dict.items()
         for column, other in table.fkey_col_to_pkey_table.items()
     ]
-    if lag_targets:
-        relationships.append(
-            {
-                "left_table": "history",
-                "left_column": task.entity_col,
-                "right_table": task.entity_table,
-                "right_column": db.table_dict[task.entity_table].pkey_col,
-            }
-        )
 
     return sdm.RelationalData(tables, relationships).sampler(
         time_columns={
@@ -138,14 +174,31 @@ class KumoRelationalModel(RelArenaModel):
         time_limit: float | None = None,
     ) -> None:
 
+        if task.task_type == TaskType.REGRESSION:
+            self.target_stype = "numerical"
+        else:
+            self.target_stype = "categorical"
+
+        self.history = train_table.df
+        context_df = add_lag_target_features(
+            train_table.df,
+            train_table.df,
+            task,
+            num_lags=self.config["num_lags"],
+        )
         context = sdm.TableTensor.from_pandas(
-            df=train_table.df,
+            df=context_df,
             stypes={
                 task.entity_col: "id",
                 task.time_col: "datetime",
-                task.target_col: "numerical"
-                if task.task_type == TaskType.REGRESSION
-                else "categorical",
+                task.target_col: self.target_stype,
+                **dict.fromkeys(
+                    (
+                        f"{task.target_col}_lag_{lag}"
+                        for lag in range(1, self.config["num_lags"] + 1)
+                    ),
+                    self.target_stype,
+                ),
             },
         )
 
@@ -170,12 +223,7 @@ class KumoRelationalModel(RelArenaModel):
             perm = torch.randperm(len(context), generator=generator)
             context = context[perm[:context_size]]
 
-        self.sampler = get_sampler(
-            db=db,
-            task=task,
-            train_table=train_table,
-            lag_targets=self.config["lag_target"],
-        )
+        self.sampler = get_sampler(db)
         context, related_tables = self.sampler(
             context,
             task_link={
@@ -210,11 +258,24 @@ class KumoRelationalModel(RelArenaModel):
         table: Table,
     ) -> np.ndarray:
 
+        query_df = add_lag_target_features(
+            table.df,
+            self.history,
+            task,
+            num_lags=self.config["num_lags"],
+        )
         query = sdm.TableTensor.from_pandas(
-            df=table.df,
+            df=query_df,
             stypes={
                 task.entity_col: "id",
                 task.time_col: "datetime",
+                **dict.fromkeys(
+                    (
+                        f"{task.target_col}_lag_{lag}"
+                        for lag in range(1, self.config["num_lags"] + 1)
+                    ),
+                    self.target_stype,
+                ),
             },
         )
         if self.expand_query:
