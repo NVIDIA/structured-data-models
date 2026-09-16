@@ -33,6 +33,9 @@ def attention_kernel(
 ):
     """Write attention outputs for one query tile and head per program.
 
+    Each program keeps a ``[BM, D]`` query tile and loops over context tiles
+    of ``BN`` rows. Both matrix multiplications use the full head width D.
+
     Args:
         Q: FP8 queries shaped ``[batch, HQ, M, D]``.
         K: FP8 keys shaped ``[batch, HK, N, D]``.
@@ -50,8 +53,10 @@ def attention_kernel(
         BM: Query rows handled by each program.
         BN: Context rows processed per iteration.
         ACC_CHUNK: Tiles per FP32 accumulator flush; zero disables it.
-        SCALE_WEIGHTS_IN_EXP: Include the weight factor 256 inside exp2.
-        FUSE_SCORE_SCALE: Permit fused score scaling and max subtraction.
+        SCALE_WEIGHTS_IN_EXP: Scale weights via ``exp2(x + 8)`` instead of
+            multiplying ``exp2(x)`` by 256 afterward.
+        FUSE_SCORE_SCALE: Move positive score scaling after the maximum
+            reduction to permit fused scaling and maximum subtraction.
     """
     block, head = tl.program_id(0), tl.program_id(1)
     kv_head = (head // HQ) * HK + (head % HQ) // (HQ // HK)
@@ -75,19 +80,19 @@ def attention_kernel(
         outer_acc = tl.full((BM, D), 0, tl.float32)
         outer_max = tl.full((BM,), -float("inf"), tl.float32)
     for start in range(tl.cdiv(N, BN)):
+        # 1. Tiled QK^T multiplication: [BM, D] @ [D, BN] -> [BM, BN].
         indices = start * BN + cols
         k = tl.load(
             K + kv_head * N * D + indices[None, :] * D + dims[:, None],
             indices[None, :] < N,
             0.0,
         )
-        # QK^T: [BM, D] @ [D, BN] -> [BM, BN].
         score = tl.dot(q, k, max_num_imprecise_acc=32)
-        # Scale after max() so score * scale - shift can fuse.
+
+        # 2. Online softmax: update row maxima and weight sums across tiles.
         if FUSE_SCORE_SCALE and SCALE > 0:
             score = tl.where(indices[None, :] < N, score, -float("inf"))
             new_max = tl.maximum(row_max, tl.max(score, 1) * score_scale)
-            # exp2(x + 8) = 256 * exp2(x): scale weights before FP8 conversion.
             shift = new_max - 8.0 if SCALE_WEIGHTS_IN_EXP else new_max
             weights = tl.exp2(score * score_scale - shift[:, None])
         else:
@@ -99,17 +104,17 @@ def attention_kernel(
                 weights = tl.exp2(score - (new_max[:, None] - 8.0))
             else:
                 weights = tl.exp2(score - new_max[:, None])
-        # Rescale previous tiles when the running maximum increases.
         correction = tl.exp2(row_max - new_max)
         weight_sum = weight_sum * correction + tl.sum(weights, 1)
         acc *= correction[:, None]
+
+        # 3. Tiled weights-V multiplication: [BM, BN] @ [BN, D] -> [BM, D].
         v_offsets = indices[:, None] + dims[None, :] * N
         v = tl.load(
             V + kv_head * N * D + v_offsets,
             indices[:, None] < N,
             0.0,
         )
-        # Weighted V: scale unnormalized weights by 256 unless exp2 did it.
         acc = tl.dot(
             (weights if SCALE_WEIGHTS_IN_EXP else weights * 256.0).to(
                 tl.float8e4nv
@@ -129,7 +134,7 @@ def attention_kernel(
         row_max = new_max
     if ACC_CHUNK > 0:
         acc = outer_acc
-    # Normalize and restore V's scale; an exp2 factor of 256 cancels here.
+    # After all tiles, divide accumulated weighted values by the weight sum.
     out = acc * value_scale / weight_sum[:, None]
     if not SCALE_WEIGHTS_IN_EXP:
         out *= 1.0 / 256.0
