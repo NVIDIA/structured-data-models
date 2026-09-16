@@ -71,7 +71,9 @@ def _scale_estimators(
     target with more classes needs one group of estimators for every code.
     """
     if num_estimators is None:
-        return None
+        if not isinstance(y, TableTensor) or y.dim() > 2:
+            return None
+        num_estimators = 1
     table = y.table(0) if isinstance(y, EnsembleTable) else y
     if not isinstance(table, TableTensor):
         return num_estimators
