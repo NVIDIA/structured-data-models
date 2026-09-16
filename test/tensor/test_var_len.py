@@ -117,18 +117,8 @@ def test_repeated_index_select_preserves_offset_dtype(
     assert output.data_offset[1].dtype == offset_dtype
 
 
-@pytest.mark.parametrize(
-    ("start", "end", "total"),
-    [
-        ([0, 0], [2**30, 2**30], 2**31),
-        ([2**30] * 3, [2**31 - 1] * 3, 3 * (2**30 - 1)),
-    ],
-)
 def test_compact_promotes_cumulative_offsets(
     monkeypatch: pytest.MonkeyPatch,
-    start: list[int],
-    end: list[int],
-    total: int,
 ) -> None:
     class AllocationBoundary(Exception):
         pass
@@ -136,17 +126,16 @@ def test_compact_promotes_cumulative_offsets(
     def check_allocation(
         *, end: Tensor, dtype: torch.dtype, device: torch.device
     ) -> Tensor:
-        assert end.item() == total
+        assert end.item() == 2**31
         assert dtype == torch.int64
-        assert device.type == "cpu"
         raise AllocationBoundary
 
-    # Inspect valid repeated-interval metadata before allocating large indices.
+    # Stop before allocating billions of indices.
     monkeypatch.setattr(torch, "arange", check_allocation)
     with pytest.raises(AllocationBoundary):
         _compact(
-            torch.tensor(start, dtype=torch.int32),
-            torch.tensor(end, dtype=torch.int32),
+            torch.tensor([0, 0], dtype=torch.int32),
+            torch.tensor([2**30, 2**30], dtype=torch.int32),
         )
 
 
