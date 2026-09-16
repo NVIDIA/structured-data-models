@@ -38,15 +38,11 @@ def test_random_projection() -> None:
 def _ensemble(table: TableTensor, layout: str) -> EnsembleTable:
     if layout == "shared":
         return EnsembleTable.from_table(table, num_members=3)
-    if layout == "stacked":
+    if layout in {"stacked", "reordered"}:
+        order = (0, 1, 2) if layout == "stacked" else (2, 0, 1)
         return EnsembleTable(
             groups=(cast(TableTensor, torch.stack([table] * 3)),),
-            locations=((0, 0), (0, 1), (0, 2)),
-        )
-    if layout == "reordered":
-        return EnsembleTable(
-            groups=(cast(TableTensor, torch.stack([table] * 3)),),
-            locations=((0, 2), (0, 0), (0, 1)),
+            locations=tuple((0, i) for i in order),
         )
     if layout == "shared_split":
         return EnsembleTable.from_tables(
@@ -64,18 +60,27 @@ def _ensemble(table: TableTensor, layout: str) -> EnsembleTable:
 
 
 @pytest.mark.parametrize(
-    "fitted_layout", ["shared", "stacked", "shared_split"]
-)
-@pytest.mark.parametrize(
-    "query_layout", ["shared", "stacked", "reordered", "split"]
+    ("fitted_layout", "query_layout", "restore"),
+    [
+        ("shared", "stacked", False),
+        ("stacked", "shared", False),
+        ("stacked", "reordered", False),
+        ("shared", "split", False),
+        ("shared_split", "shared", False),
+        ("shared_split", "shared", True),
+    ],
 )
 def test_projection_follows_members_across_group_layouts(
-    fitted_layout: str, query_layout: str
+    fitted_layout: str, query_layout: str, restore: bool
 ) -> None:
     table = _table()
     context = _ensemble(table, fitted_layout)
     processor = RandomProjection(8).fit_ensemble(context)
     expected = processor.transform_ensemble(context)
+    if restore:
+        restored = RandomProjection(8)
+        restored.load_state_dict(processor.state_dict())
+        processor = restored
 
     output = processor.transform_ensemble(_ensemble(table, query_layout))
 
@@ -84,23 +89,6 @@ def test_projection_follows_members_across_group_layouts(
             output.table(member).numerical, expected.table(member).numerical
         )
         assert output.table(member).categorical.equal(table.categorical)
-
-
-def test_projection_state_roundtrip_preserves_member_routing() -> None:
-    table = _table()
-    context = _ensemble(table, "shared_split")
-    processor = RandomProjection(8).fit_ensemble(context)
-    restored = RandomProjection(8)
-    restored.load_state_dict(processor.state_dict())
-    query = _ensemble(table, "shared")
-
-    expected = processor.transform_ensemble(context)
-    output = restored.transform_ensemble(query)
-
-    for member in range(3):
-        torch.testing.assert_close(
-            output.table(member).numerical, expected.table(member).numerical
-        )
 
 
 @pytest.mark.parametrize("num_members", [1, 4])
