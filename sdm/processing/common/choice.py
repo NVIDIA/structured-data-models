@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import Literal, cast
 
 import torch
@@ -89,6 +92,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
 
     def _gather_outputs(
         self,
+        ensemble_table: EnsembleTable,
         outputs: dict[int, EnsembleTable],
     ) -> EnsembleTable:
         tables = []
@@ -99,7 +103,10 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             member_id = next_member_id_by_option.get(option_id, 0)
             member_ids.append(member_id)
             next_member_id_by_option[option_id] = member_id + 1
-        return EnsembleTable.gather_members(tables, member_ids)
+        return ensemble_table.gather_members(
+            tables=tables,
+            member_ids=member_ids,
+        )
 
     def _check_num_members(self, ensemble_table: EnsembleTable) -> None:
         if len(self._option_ids) != ensemble_table.num_members:
@@ -141,7 +148,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
                 ensemble_table
             ).items()
         }
-        return self._gather_outputs(outputs)
+        return self._gather_outputs(ensemble_table, outputs)
 
     def _transform_ensemble(
         self,
@@ -154,7 +161,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
                 ensemble_table
             ).items()
         }
-        return self._gather_outputs(outputs)
+        return self._gather_outputs(ensemble_table, outputs)
 
     def _inverse_transform_ensemble(
         self,
@@ -169,7 +176,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
                     f"{processor.__class__.__name__!r} is not invertible."
                 )
             outputs[option_id] = processor.inverse_transform_ensemble(table)
-        return self._gather_outputs(outputs)
+        return self._gather_outputs(ensemble_table, outputs)
 
     def __repr__(self, *, indent: int = 0) -> str:
         inner = ",\n".join(

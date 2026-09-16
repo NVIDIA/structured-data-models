@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
@@ -95,7 +98,7 @@ class SelectColumns(EnsembleProcessor):
                     **blocks,
                 )
             )
-        return EnsembleTable.from_tables(
+        return ensemble_table.replace_tables(
             tables=tables,
             member_table_ids=range(len(tables)),
         )

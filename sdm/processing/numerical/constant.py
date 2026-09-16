@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import cast
 
 import torch
@@ -190,7 +193,7 @@ class DropConstantColumns(EnsembleProcessor):
                 )
                 for member_id, kept_indices in enumerate(self._kept_indices)
             ]
-            return EnsembleTable.from_tables(
+            return ensemble_table.replace_tables(
                 tables=tables,
                 member_table_ids=range(ensemble_table.num_members),
             )
@@ -229,7 +232,7 @@ class DropConstantColumns(EnsembleProcessor):
             member_ids.append(member_id)
             next_member_id_by_kept_indices[kept_indices] = member_id + 1
 
-        return EnsembleTable.gather_members(
+        return ensemble_table.gather_members(
             tables=tables,
             member_ids=member_ids,
         )

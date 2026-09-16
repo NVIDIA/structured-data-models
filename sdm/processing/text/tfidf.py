@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import math
 import re
 from itertools import accumulate
@@ -371,7 +374,7 @@ class TFIDF(EnsembleProcessor):
                 )
             member_table_ids.append(table_id)
 
-        return EnsembleTable.from_tables(
+        return ensemble_table.replace_tables(
             output_tables,
             member_table_ids,
         )
