@@ -34,14 +34,13 @@ parser.add_argument(
 parser.add_argument(
     "--cache_root",
     type=Path,
-    help="Parent directory of the TabArena, OpenML and weight caches.",
+    help="Parent directory of every TabArena cache.",
 )
 args = parser.parse_args()
 
 result_root = args.output_root
 output_root = benchmark_dir / "evals"
 
-# One (label, TabArena method name, result directory) per run:
 if args.name:
     if args.model is None:
         parser.error("--name requires --model")
@@ -64,7 +63,9 @@ else:
         for model_config in MODEL_CONFIGS.values()
     ]
 runs = [
-    run for run in runs if next(run[2].rglob("results.pkl"), None) is not None
+    (label, method, result_dir)
+    for label, method, result_dir in runs
+    if next(result_dir.rglob("results.pkl"), None) is not None
 ]
 if not runs:
     raise FileNotFoundError(f"No TabArena results found under {result_root}")

@@ -23,6 +23,13 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
         features=[
             sp.StypeDispatch(
+                # Large, mostly incomplete tables keep their missing cells
+                # for the model; every other table is imputed.
+                numerical=sp.MissingDispatch(
+                    dense=sp.ImputeMean(),
+                    min_rows=20_000,
+                    min_row_frac=0.5,
+                ),
                 categorical=[
                     sp.AlignCategories(sort_by="value"),
                     sp.AddLevelCounts(min_cardinality=50),
@@ -30,13 +37,6 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
             sp.StypeDispatch(
                 numerical=[
-                    # Large, mostly incomplete tables keep their missing
-                    # cells for the model; every other table is imputed.
-                    sp.MissingDispatch(
-                        dense=sp.ImputeMean(),
-                        min_rows=20_000,
-                        min_row_frac=0.5,
-                    ),
                     sp.DropConstantColumns(),
                     *_normalize(),
                     sp.FlipSign(),
@@ -68,14 +68,14 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 ],
             ),
         ],
-        output=[
-            sp.TaskDispatch(
-                classification=sp.ReduceEstimators(method="mean"),
-                regression=[
-                    sp.ReduceQuantiles(),
-                    sp.ReduceEstimators(method="trimmed"),
-                ],
-            ),
-            sp.TaskDispatch(classification=sp.Softmax(temperature=1.0)),
-        ],
+        output=sp.TaskDispatch(
+            classification=[
+                sp.ReduceEstimators(method="mean"),
+                sp.Softmax(temperature=1.0),
+            ],
+            regression=[
+                sp.ReduceQuantiles(),
+                sp.ReduceEstimators(method="trimmed"),
+            ],
+        ),
     )

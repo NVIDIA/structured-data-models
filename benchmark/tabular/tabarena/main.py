@@ -66,9 +66,11 @@ parser.add_argument(
 parser.add_argument(
     "--cache_root",
     type=Path,
-    help="Parent directory of the TabArena, OpenML and weight caches.",
+    help="Parent directory of every TabArena cache.",
 )
 args = parser.parse_args()
+if args.checkpoint is not None and args.model != "kumo-tabular":
+    parser.error("--checkpoint is only supported for --model kumo-tabular")
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
@@ -79,8 +81,9 @@ result_dir.mkdir(parents=True, exist_ok=True)
 config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
-    "checkpoint": args.checkpoint,
 }
+if args.checkpoint is not None:
+    config["checkpoint"] = args.checkpoint
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
 

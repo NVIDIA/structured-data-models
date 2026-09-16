@@ -49,7 +49,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     ) -> sdm.models.ICLModel:
         pass
 
-    def _stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
+    def _infer_stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
         return sdm.infer_stypes(X)
 
     def _set_default_params(self) -> None:
@@ -59,7 +59,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
-        self._set_default_param_value("checkpoint", None)
 
     def _fit(
         self,
@@ -87,7 +86,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             )
 
         X = self.preprocess(X, y=y)
-        self.stypes = self._stypes(X)
+        self.stypes = self._infer_stypes(X)
         x_context = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
@@ -233,6 +232,10 @@ class SDMKumoTabularModel(SDMModel):
     default_num_estimators = 8
     autocast_dtype = torch.float16
 
+    def _set_default_params(self) -> None:
+        super()._set_default_params()
+        self._set_default_param_value("checkpoint", None)
+
     def _create_model(
         self,
         task: Task,
@@ -244,7 +247,7 @@ class SDMKumoTabularModel(SDMModel):
             checkpoint=self._get_model_params()["checkpoint"],
         )
 
-    def _stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
+    def _infer_stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
         # A numeric column of two or three distinct values (missing counted
         # as one) holds category codes once the table is large enough for
         # that to be evidence.

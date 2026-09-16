@@ -61,8 +61,8 @@ class KumoTabular(ICLModel):
         pretrained: Whether to load pretrained checkpoints.
         device: The device for model parameters. If ``None``, uses PyTorch's
             default device.
-        checkpoint: A local checkpoint in the training format, loaded for the
-            single initialized task instead of the published weights.
+        checkpoint: A local checkpoint in the training format, loaded instead
+            of the published weights. Requires a single task.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -83,6 +83,8 @@ class KumoTabular(ICLModel):
         checkpoint: str | Path | None = None,
     ) -> None:
         super().__init__(task=task)
+        if checkpoint is not None and len(self.tasks) != 1:
+            raise ValueError("A checkpoint holds the weights of one task")
 
         self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
         for task in self.tasks:
@@ -116,22 +118,21 @@ class KumoTabular(ICLModel):
         device = torch.get_default_device() if device is None else device
 
         for task, model in self.models.items():
-            if checkpoint is not None:
-                path = checkpoint
-            elif task == Task.classification:
-                path = download_checkpoint(
-                    repo_id="nvidia/Kumo-Tabular",
-                    filename=f"{size}/classifier.pt",
-                    revision="v1.0.3",
-                )
+            if task == Task.classification:
+                filename = f"{size}/classifier.pt"
             else:
                 assert task == Task.regression
-                path = download_checkpoint(
+                filename = f"{size}/regressor.pt"
+
+            path = (
+                checkpoint
+                if checkpoint is not None
+                else download_checkpoint(
                     repo_id="nvidia/Kumo-Tabular",
-                    filename=f"{size}/regressor.pt",
+                    filename=filename,
                     revision="v1.0.3",
                 )
-
+            )
             ckpt = torch.load(path, map_location=device, weights_only=True)
             ckpt = remap_ckpt(
                 ckpt=ckpt["model"],

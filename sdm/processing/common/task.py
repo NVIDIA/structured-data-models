@@ -53,7 +53,7 @@ class TaskDispatch(EnsembleProcessor):
             for stype in processor.handles_stypes
         )
 
-    def _route(self) -> EnsembleProcessor | None:
+    def _selected(self) -> EnsembleProcessor | None:
         if self._task is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved task; use it "
@@ -69,7 +69,7 @@ class TaskDispatch(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        processor = self._route()
+        processor = self._selected()
         if processor is not None:
             processor.fit(table, generator=generator)
 
@@ -79,13 +79,13 @@ class TaskDispatch(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        processor = self._route()
+        processor = self._selected()
         if processor is None:
             return table
         return processor.fit_transform(table, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        processor = self._route()
+        processor = self._selected()
         if processor is None:
             return table
         return processor.transform(table)
@@ -96,7 +96,7 @@ class TaskDispatch(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        processor = self._route()
+        processor = self._selected()
         if processor is not None:
             processor.fit_ensemble(ensemble_table, generator=generator)
 
@@ -106,7 +106,7 @@ class TaskDispatch(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        processor = self._route()
+        processor = self._selected()
         if processor is None:
             return ensemble_table
         return processor.fit_transform_ensemble(
@@ -118,7 +118,7 @@ class TaskDispatch(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        processor = self._route()
+        processor = self._selected()
         if processor is None:
             return ensemble_table
         return processor.transform_ensemble(ensemble_table)
