@@ -150,6 +150,16 @@ def quantize_kernel(
 def quantize(
     x: torch.Tensor, scale: torch.Tensor | None = None
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Quantize a tensor to FP8 using per-head scales.
+
+    Args:
+        x: Input with shape ``[batch, heads, rows, channels]``.
+        scale: Contiguous scales shaped ``[batch, heads, 1, 1]``. If omitted,
+            derive scales from each head's maximum absolute input value.
+
+    Returns:
+        The contiguous FP8 tensor and its dequantization scales.
+    """
     if scale is None:
         scale = (
             x.abs().amax(dim=(-2, -1), keepdim=True).float().clamp_min(1e-12)
@@ -182,10 +192,26 @@ def quantized_attention(
 ) -> torch.Tensor:
     """Run tiled attention on per-head scaled FP8 inputs.
 
-    ``scale_weights_in_exp`` applies the weight factor 256 inside exp2;
-    otherwise it is applied before the weighted-value multiplication.
-    ``fuse_score_scale`` permits fused score scaling and max subtraction.
-    Both select arithmetic variants, not different attention operations.
+    Args:
+        q: Contiguous FP8 queries shaped ``[batch, query_heads, queries, D]``.
+        k: Contiguous FP8 keys shaped ``[batch, kv_heads, context, D]``.
+        v: Contiguous FP8 values shaped ``[batch, kv_heads, D, context]``.
+        qs: Query scales shaped ``[batch, query_heads, 1, 1]``.
+        ks: Key scales shaped ``[batch, kv_heads, 1, 1]``.
+        vs: Value scales shaped ``[batch, kv_heads, 1, 1]``.
+        dtype: Output dtype.
+        block: Query rows handled by each program.
+        scale: Attention score multiplier. Defaults to ``1 / sqrt(D)``.
+        tile: Context rows processed per loop iteration.
+        warps: Cooperating warps per program.
+        stages: Software pipeline stages.
+        accumulation_chunk: Tiles per FP32 accumulator flush; zero disables it.
+        scale_weights_in_exp: Apply the weight factor 256 inside exp2 instead
+            of before the weighted-value multiplication.
+        fuse_score_scale: Permit fused score scaling and maximum subtraction.
+
+    Returns:
+        Attention output with the query shape and requested dtype.
     """
     b, h, m, d = q.shape
     n = k.size(-2)
