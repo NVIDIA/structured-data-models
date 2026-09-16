@@ -12,6 +12,7 @@ def test_flip_sign() -> None:
     table = TableTensor.from_tensor(torch.randn(2, 5, 3))
 
     processor = FlipSign()
+    assert processor.sign.size() == (0,)
     out = processor.fit_transform(table)
     assert processor.sign.size() == (2, 1, 3)
     assert ((processor.sign == -1) | (processor.sign == 1)).all()
@@ -22,12 +23,12 @@ def test_flip_sign() -> None:
 def _signs(before: TableTensor, after: TableTensor) -> torch.Tensor:
     sign = after.numerical / before.numerical
     assert ((sign == -1) | (sign == 1)).all()
-    assert (sign == sign[:1]).all()
-    return sign[0]
+    assert (sign == sign[..., :1, :]).all()
+    return sign[..., :1, :]
 
 
 def test_flip_sign_ensemble_draws_independent_member_signs() -> None:
-    table = TableTensor.from_tensor(torch.randn(20, 64))
+    table = TableTensor.from_tensor(torch.ones(2, 20, 64))
     ensemble = EnsembleTable.from_table(table, num_members=8)
     processor = FlipSign()
 
@@ -54,7 +55,7 @@ def test_flip_sign_ensemble_draws_independent_member_signs() -> None:
     for member_id in range(restored.num_members):
         assert restored.table(member_id).equal(table)
 
-    query = TableTensor.from_tensor(torch.randn(5, 64))
+    query = TableTensor.from_tensor(torch.full((2, 5, 64), 2.0))
     query_output = processor.transform_ensemble(
         EnsembleTable.from_table(query, num_members=8)
     )

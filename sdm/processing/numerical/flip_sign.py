@@ -23,6 +23,7 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
 
     handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
+    _empty_sign: Tensor
 
     def __init__(
         self,
@@ -30,11 +31,14 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> None:
         super().__init__()
         self.probability = probability
+        self.register_buffer("_empty_sign", torch.empty(0), persistent=False)
         self._signs: BufferList[Tensor] = BufferList()
 
     @property
     def sign(self) -> Tensor:
-        """Signs of the first ensemble member, shaped ``(*batch, 1, C)``."""
+        """Signs of the first ensemble member, or empty before fitting."""
+        if len(self._signs) == 0:
+            return self._empty_sign
         return self._signs[0]
 
     @staticmethod
