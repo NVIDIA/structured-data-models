@@ -183,6 +183,7 @@ def test_power_transform_preserves_nan(
             [1.0, float("nan"), float("nan"), 4.0],
             [3.0, 10.0, float("nan"), float("nan")],
             [5.0, 14.0, float("nan"), float("nan")],
+            [7.0, 12.0, float("nan"), float("nan")],
         ],
         device=device,
     )
@@ -290,4 +291,26 @@ def test_power_transform_fits_leading_batches_independently(
         torch.stack(expected),
         rtol=2e-5,
         atol=2e-5,
+    )
+
+
+def test_power_transform_fits_on_finite_values_only() -> None:
+    values = torch.randn(200, 1).exp()
+    missing = torch.zeros(200, dtype=torch.bool)
+    missing[::3] = True
+    with_missing = values.masked_fill(missing.unsqueeze(-1), float("nan"))
+
+    fitted_with_missing = PowerTransform().fit(
+        TableTensor(numerical=with_missing)
+    )
+    fitted_on_finite = PowerTransform().fit(
+        TableTensor(numerical=values[~missing])
+    )
+    query = TableTensor(numerical=torch.randn(50, 1).exp())
+
+    torch.testing.assert_close(
+        fitted_with_missing.transform(query).numerical,
+        fitted_on_finite.transform(query).numerical,
+        rtol=1e-3,
+        atol=1e-4,
     )
