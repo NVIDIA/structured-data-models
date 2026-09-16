@@ -77,10 +77,10 @@ class EnsembleTable(DeviceMixin):
     ) -> None:
         self._groups = tuple(groups)
         self._locations = tuple(locations)
-        self._validate_locations(self._groups, self._locations)
+        self._validate(self._groups, self._locations)
 
     @staticmethod
-    def _validate_locations(
+    def _validate(
         groups: Sequence[TableTensor],
         locations: Sequence[tuple[int, int]],
     ) -> None:
@@ -89,10 +89,17 @@ class EnsembleTable(DeviceMixin):
             for group_id, group in enumerate(groups)
             for position in range(group.size(0))
         }
-        if set(locations) != expected_locations:
+        actual_locations = set(locations)
+        missing_locations = expected_locations - actual_locations
+        if missing_locations:
             raise ValueError(
-                "Expected 'locations' to reference every group position"
+                f"Missing locations for group positions: "
+                f"{sorted(missing_locations)}"
             )
+
+        invalid_locations = actual_locations - expected_locations
+        if invalid_locations:
+            raise ValueError(f"Invalid locations: {sorted(invalid_locations)}")
 
     @classmethod
     def from_table(
@@ -105,11 +112,14 @@ class EnsembleTable(DeviceMixin):
 
         Args:
             table: Table used across members.
-            num_members: Number of ensemble members.
+            num_members: Positive number of ensemble members.
 
         Returns:
             An :class:`~sdm.EnsembleTable` with one group.
         """
+        if num_members < 1:
+            raise ValueError("'num_members' needs to be positive")
+
         return cls(
             groups=(cast(TableTensor, table.unsqueeze(0)),),
             locations=((0, 0),) * num_members,

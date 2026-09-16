@@ -120,11 +120,11 @@ def test_reduce_estimators_reduces_across_storage_groups(
 
 
 def test_reduce_estimators_rejects_empty_ensemble_table() -> None:
-    table = TableTensor.from_tensor(torch.ones(4, 2))
+    empty_group = TableTensor.from_tensor(torch.empty(0, 4, 2))
 
     with pytest.raises(ValueError, match="at least one ensemble member"):
         sp.ReduceEstimators().transform_ensemble(
-            EnsembleTable.from_table(table, num_members=0)
+            EnsembleTable(groups=(empty_group,), locations=())
         )
 
 
