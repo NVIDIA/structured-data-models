@@ -9,13 +9,13 @@ from torch import Tensor
 
 from sdm import EnsembleTable, Stype, StypeLike, TableTensor
 from sdm.processing import EnsembleProcessor
-from sdm.processing.categorical.ecoc import ECOCCategories
+from sdm.processing.categorical.encode_ecoc import EncodeECOC
 
 
 class DecodeECOC(EnsembleProcessor):
     """Map symbol scores back onto the original classes.
 
-    The processor reads the codebook that :class:`ECOCCategories` fitted. For
+    The processor reads the codebook that :class:`EncodeECOC` fitted. For
     every member and every original class it selects the score of the symbol
     that the member gave that class, and it drops the positions where the
     member merged the class into the rest symbol. The input holds the logits
@@ -34,14 +34,14 @@ class DecodeECOC(EnsembleProcessor):
     handles_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
-    def __init__(self, encoder: ECOCCategories) -> None:
+    def __init__(self, encoder: EncodeECOC) -> None:
         super().__init__()
         # Held outside the module tree: the encoder already belongs to
         # `Recipe.target`, and `Recipe.output` must not require fitting.
         self._encoder = (encoder,)
 
     @property
-    def encoder(self) -> ECOCCategories:
+    def encoder(self) -> EncodeECOC:
         """Return the target processor that holds the codebook."""
         return self._encoder[0]
 
@@ -104,8 +104,6 @@ class DecodeECOC(EnsembleProcessor):
 
         scores = table.numerical
         num_members = self._check_members(scores.size(0))
-        # The encoder belongs to another stage, so it can hold the codebook on
-        # another device than the scores.
         codebook = self.encoder.codebook.to(scores.device)
         num_classes = codebook.size(1)
         index = self._symbol_index(table, codebook)

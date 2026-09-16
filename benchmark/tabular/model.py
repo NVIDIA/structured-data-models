@@ -20,7 +20,7 @@ from tabarena.benchmark.experiment import OOFExperimentRunner
 
 import sdm
 import sdm.processing as sp
-from sdm.processing.categorical.ecoc import ecoc_code_count
+from sdm.models.kumo.tabular.model import scale_ecoc_estimators
 
 Task = Literal["classification", "regression"]
 
@@ -112,20 +112,15 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 if isinstance(processor, sp.SelectColumns):
                     processor.max_columns = params["max_columns"]
 
-        if subsamples and target_stype == "categorical":
-            num_classes = y_context.categorical.categories[0].numel()
-            for processor in recipe.target.modules():
-                if (
-                    isinstance(processor, sp.ECOCCategories)
-                    and num_classes > processor.alphabet_size
-                ):
-                    self._num_estimators *= ecoc_code_count(
-                        num_classes=num_classes,
-                        alphabet_size=processor.alphabet_size,
-                    )
-
         num_estimators: int | None = self._num_estimators
         if subsamples:
+            num_estimators = scale_ecoc_estimators(
+                y=y_context,
+                num_estimators=num_estimators,
+                recipe=recipe,
+            )
+            assert num_estimators is not None
+            self._num_estimators = num_estimators
             num_repeats = math.ceil(num_estimators * max_context_size / len(X))
             perm = torch.cat(
                 [

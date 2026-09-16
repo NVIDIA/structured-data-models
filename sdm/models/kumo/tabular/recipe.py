@@ -5,7 +5,7 @@ import sdm.processing as sp
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
-    ecoc = sp.ECOCCategories(alphabet_size=10)
+    ecoc = sp.EncodeECOC(alphabet_size=10)
     return sp.Recipe(
         features=[
             sp.StypeDispatch(

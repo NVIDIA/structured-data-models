@@ -153,7 +153,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.RandomProjection(2)),
     ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
     ProcessorCase(sp.ShuffleCategories()),
-    ProcessorCase(sp.ECOCCategories(alphabet_size=10), _make_ecoc_table),
+    ProcessorCase(sp.EncodeECOC(alphabet_size=10), _make_ecoc_table),
     ProcessorCase(sp.ImputeMode()),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
@@ -214,8 +214,6 @@ def test_all_public_processors_have_contract_cases() -> None:
         sp.TaskDispatch,
         sp.TableDispatch,
         sp.SentenceTransformer,
-        # Needs the codebook of a fitted 'ECOCCategories' and an ensemble
-        # dimension of model outputs, which this table cannot supply.
         sp.DecodeECOC,
     }
     assert public_processors == covered_processors | specialized_processors

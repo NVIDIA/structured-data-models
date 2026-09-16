@@ -26,7 +26,7 @@ from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
-from sdm.processing.categorical.ecoc import ECOCCategories, ecoc_code_count
+from sdm.processing.categorical.encode_ecoc import EncodeECOC, ecoc_code_count
 from sdm.tensor.table import TableSchema
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
@@ -59,7 +59,7 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
-def _scale_estimators(
+def scale_ecoc_estimators(
     y: Tensor | TableTensor | EnsembleTable,
     num_estimators: int | None,
     recipe: Recipe,
@@ -82,7 +82,7 @@ def _scale_estimators(
     num_classes = table.categorical.categories[0].numel()
     for processor in recipe.target.modules():
         if (
-            isinstance(processor, ECOCCategories)
+            isinstance(processor, EncodeECOC)
             and num_classes > processor.alphabet_size
         ):
             return num_estimators * ecoc_code_count(
@@ -177,7 +177,7 @@ class KumoTabular(ICLModel):
             x_context = TableTensor.from_tensor(x_context)
         kwargs["_schema"] = x_context.schema
         y_context = kwargs["y_context"] if "y_context" in kwargs else args[1]
-        kwargs["num_estimators"] = _scale_estimators(
+        kwargs["num_estimators"] = scale_ecoc_estimators(
             y_context,
             kwargs.get("num_estimators"),
             kwargs.get("recipe") or self.default_recipe(),
@@ -191,7 +191,7 @@ class KumoTabular(ICLModel):
             x = TableTensor.from_tensor(x)
         kwargs["_schema"] = x.schema
         y = kwargs["y"] if "y" in kwargs else args[1]
-        kwargs["num_estimators"] = _scale_estimators(
+        kwargs["num_estimators"] = scale_ecoc_estimators(
             y,
             kwargs.get("num_estimators"),
             kwargs.get("recipe") or self.default_recipe(),

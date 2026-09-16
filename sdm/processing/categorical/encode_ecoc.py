@@ -23,7 +23,7 @@ def ecoc_code_count(num_classes: int, alphabet_size: int) -> int:
     return max(cover, 4 * depth)
 
 
-class ECOCCategories(EnsembleProcessor):
+class EncodeECOC(EnsembleProcessor):
     """Merge a many-class target into a small alphabet, one code per member.
 
     A model with a fixed class capacity cannot fit a target that holds more
@@ -144,7 +144,7 @@ class ECOCCategories(EnsembleProcessor):
         table = ensemble_table.table(0)
         if len(table.categorical.categories) != 1:
             raise ValueError(
-                "'ECOCCategories' supports exactly one categorical target"
+                "'EncodeECOC' supports exactly one categorical target"
             )
         categories = table.categorical.categories[0]
         num_classes = categories.numel()
@@ -155,20 +155,18 @@ class ECOCCategories(EnsembleProcessor):
             self._categories = BufferList()
             return
 
-        # One codebook maps the classes of every member, so a member that
-        # orders its categories differently would get the wrong symbols.
         for member_id in range(1, num_members):
             member = ensemble_table.table(member_id)
             if not torch.equal(member.categorical.categories[0], categories):
                 raise ValueError(
-                    "'ECOCCategories' needs the same target categories in "
+                    "'EncodeECOC' needs the same target categories in "
                     f"every ensemble member (member {member_id} differs)"
                 )
 
         minimum = math.ceil(num_classes / self.rest)
         if num_members < minimum:
             raise ValueError(
-                f"'ECOCCategories' needs at least {minimum} estimators to "
+                f"'EncodeECOC' needs at least {minimum} estimators to "
                 f"cover {num_classes} classes with alphabet size "
                 f"{self.alphabet_size} (got {num_members})"
             )
@@ -181,8 +179,6 @@ class ECOCCategories(EnsembleProcessor):
             ),
             generator=generator,
         )
-        # Repeated up to the member count, so the decoder reads one code per
-        # member and several members can share a code.
         repeat = torch.arange(
             num_members, device=codebook.device
         ) % codebook.size(0)
@@ -197,7 +193,7 @@ class ECOCCategories(EnsembleProcessor):
             return ensemble_table
         if self.codebook.size(0) != ensemble_table.num_members:
             raise RuntimeError(
-                "'ECOCCategories' must be fitted with the same number of "
+                "'EncodeECOC' must be fitted with the same number of "
                 "ensemble members before transform"
             )
 

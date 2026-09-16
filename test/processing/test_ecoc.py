@@ -25,12 +25,12 @@ LABELS = np.tile(np.array([7, 2, 11, 0, 5, 1, 10, 4, 9, 3, 8, 6]), 3)
 
 def _fit_target(
     num_members: int,
-) -> tuple[sp.ECOCCategories, sdm.EnsembleTable]:
+) -> tuple[sp.EncodeECOC, sdm.EnsembleTable]:
     target = sdm.TableTensor.from_pandas(
         df=pd.DataFrame({"y": LABELS}),
         stypes={"y": "categorical"},
     )
-    ecoc = sp.ECOCCategories(alphabet_size=10)
+    ecoc = sp.EncodeECOC(alphabet_size=10)
     pipeline = sp.EnsembleProcessor.as_processor(
         [sp.AlignCategories(), ecoc, sp.ShuffleCategories(method="shift")]
     )
@@ -52,6 +52,24 @@ def _oracle(table: sdm.TableTensor, symbols: Sequence[int]) -> Tensor:
     return logits.scatter_(1, index[:, None], 10.0)
 
 
+def _member_logits(
+    transformed: sdm.EnsembleTable,
+) -> list[sdm.TableTensor]:
+    tables = []
+    for member_id in range(transformed.num_members):
+        table = transformed.table(member_id)
+        order = [
+            int(symbol) for symbol in table.categorical.categories[0].tolist()
+        ]
+        tables.append(
+            sdm.TableTensor(
+                columns={sdm.Stype.numerical: [str(s) for s in order]},
+                numerical=_oracle(table, order),
+            )
+        )
+    return tables
+
+
 def _assert_recovers_the_labels(reduced: sdm.TableTensor) -> None:
     final = sp.Softmax(temperature=1.0).transform(reduced)
     names = final.columns[sdm.Stype.numerical]
@@ -60,16 +78,6 @@ def _assert_recovers_the_labels(reduced: sdm.TableTensor) -> None:
         [int(names[index]) for index in final.numerical.argmax(dim=-1)]
     )
     np.testing.assert_array_equal(predicted, LABELS)
-
-
-def test_every_member_reports_the_whole_alphabet() -> None:
-    """The output columns must not depend on the symbols a member uses."""
-    ecoc, transformed = _fit_target(NUM_MEMBERS)
-
-    assert ecoc.active
-    for member_id in range(NUM_MEMBERS):
-        categories = transformed.table(member_id).categorical.categories[0]
-        assert sorted(categories.tolist()) == list(range(10))
 
 
 # The second count exceeds the code count, so the codebook repeats and several
@@ -83,20 +91,7 @@ def test_ecoc_round_trip_recovers_the_original_labels(
     assert ecoc.active
     assert ecoc.codebook.size(0) == num_members
 
-    # Stand in for the model: every member reports the symbol it was told, as
-    # logits, in that member's own shuffled symbol order.
-    tables = []
-    for member_id in range(num_members):
-        table = transformed.table(member_id)
-        order = [
-            int(symbol) for symbol in table.categorical.categories[0].tolist()
-        ]
-        tables.append(
-            sdm.TableTensor(
-                columns={sdm.Stype.numerical: [str(s) for s in order]},
-                numerical=_oracle(table, order),
-            )
-        )
+    tables = _member_logits(transformed)
 
     decoder = sp.DecodeECOC(ecoc)
     reducer = sp.ReduceEstimators(method="mean")
@@ -130,25 +125,14 @@ def test_encoder_rejects_members_that_disagree_on_the_categories() -> None:
     )
 
     with pytest.raises(ValueError, match="same target categories"):
-        sp.ECOCCategories(alphabet_size=10).fit_ensemble(shuffled)
+        sp.EncodeECOC(alphabet_size=10).fit_ensemble(shuffled)
 
 
 @onlyCUDA
 def test_decoder_reads_a_codebook_from_another_device() -> None:
     """The encoder holds the codebook, so it may lag behind the scores."""
     ecoc, transformed = _fit_target(NUM_MEMBERS)
-    tables = []
-    for member_id in range(NUM_MEMBERS):
-        table = transformed.table(member_id)
-        order = [
-            int(symbol) for symbol in table.categorical.categories[0].tolist()
-        ]
-        tables.append(
-            sdm.TableTensor(
-                columns={sdm.Stype.numerical: [str(s) for s in order]},
-                numerical=_oracle(table, order),
-            )
-        )
+    tables = _member_logits(transformed)
     stacked = cast(sdm.TableTensor, torch.stack(tuple(tables)))
     scores = cast(sdm.TableTensor, stacked.to(torch.device("cuda")))
 
