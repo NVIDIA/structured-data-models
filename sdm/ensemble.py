@@ -77,6 +77,22 @@ class EnsembleTable(DeviceMixin):
     ) -> None:
         self._groups = tuple(groups)
         self._locations = tuple(locations)
+        self._validate_locations(self._groups, self._locations)
+
+    @staticmethod
+    def _validate_locations(
+        groups: Sequence[TableTensor],
+        locations: Sequence[tuple[int, int]],
+    ) -> None:
+        expected_locations = {
+            (group_id, position)
+            for group_id, group in enumerate(groups)
+            for position in range(group.size(0))
+        }
+        if set(locations) != expected_locations:
+            raise ValueError(
+                "Expected 'locations' to reference every group position"
+            )
 
     @classmethod
     def from_table(
