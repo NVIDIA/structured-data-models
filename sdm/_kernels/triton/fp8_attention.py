@@ -188,10 +188,10 @@ def quantize_kernel(
         + (offset // D) * S2
         + (offset % D) * S3
     )
-    x = tl.load(X + source, offset < LENGTH, 0.0).to(tl.float32)
+    x = tl.load(X + source, mask=offset < LENGTH, other=0.0).to(tl.float32)
     scale = tl.load(S + head)
     y = tl.minimum(tl.maximum(x / scale, -448.0), 448.0)
-    tl.store(Y + head * LENGTH + offset, y, offset < LENGTH)
+    tl.store(Y + head * LENGTH + offset, y, mask=offset < LENGTH)
 
 
 def quantize(
