@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from textwrap import dedent
-from typing import cast
+from typing import Any, cast
 
 import pytest
 import torch
@@ -15,6 +15,8 @@ from sdm import (
     TableTensor,
     TaskLink,
 )
+from sdm.models import TabICLv2
+from sdm.processing.execution import RecipeExecution
 
 
 def test_sampler(relational_data: RelationalData) -> None:
@@ -126,39 +128,35 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
     task_table, related_tables = relational_data.sampler()(
         task_table=TableTensor(
             columns={"id": ("user_id",)},
-            id=ColumnarTensor((torch.tensor([[3, 2, 1, 0], [0, 1, 2, 3]]),)),
+            id=ColumnarTensor((torch.tensor([[3, 2], [0, 1]]),)),
         ),
         task_link={
             "task_column": "user_id",
             "table": "users",
             "table_columns": "user_id",
         },
-        num_neighbors=[10, 10],
+        num_neighbors=[2, 2],
     )
 
     assert task_table.columns[Stype.id] == ("user_id", "__example__")
-    assert task_table.id[..., 0].equal(
-        torch.tensor([[3, 2, 1, 0], [0, 1, 2, 3]])
-    )
-    assert task_table.id[..., 1].equal(
-        torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
-    )
+    assert task_table.id[..., 0].equal(torch.tensor([[3, 2], [0, 1]]))
+    assert task_table.id[..., 1].equal(torch.tensor([[0, 1], [0, 1]]))
 
     assert len(related_tables.tables) == 3
+    assert all(t.num_groups == 2 for t in related_tables.tables.values())
     assert all(t.num_members == 2 for t in related_tables.tables.values())
 
     users = related_tables.tables["users"]
-    for member_id, expected in enumerate(([3, 2, 1, 0], [0, 1, 2, 3])):
+    for member_id, expected in enumerate(([3, 2], [0, 1])):
         user = users.table(member_id)
         assert user.columns[Stype.id] == ("user_id", "__example__")
         assert user.id[..., 0].equal(torch.tensor(expected))
-        assert user.id[..., 1].equal(torch.tensor([0, 1, 2, 3]))
+        assert user.id[..., 1].equal(torch.tensor([0, 1]))
 
 
-def test_batch_sampler_accepts_expanded_task_rows(
-    relational_data: RelationalData,
-) -> None:
+def test_expanded_sampler(relational_data: RelationalData) -> None:
     pytest.importorskip("pyg_lib")
+
     task_table = TableTensor(
         columns={"id": ("user_id",)},
         id=ColumnarTensor((torch.tensor([3, 2]),)),
@@ -168,14 +166,73 @@ def test_batch_sampler_accepts_expanded_task_rows(
         task_table.unsqueeze(0).expand(2, -1, -1),
     )
 
-    sampled = relational_data.sampler()(
+    task_table, related_tables = relational_data.sampler()(
         task_table=task_table,
         task_link={
             "task_column": "user_id",
             "table": "users",
             "table_columns": "user_id",
         },
-        num_neighbors=[1],
+        num_neighbors=[2, 2],
     )
 
-    assert sampled.task_table.id[..., 0].equal(torch.tensor([[3, 2], [3, 2]]))
+    assert all(
+        all(column.stride(0) == 0 for column in block.unbind(-1))
+        if isinstance(block, ColumnarTensor)
+        else block.stride(0) == 0
+        for _, block in task_table.items()
+        if block.size(-1) > 0
+    )
+
+    assert task_table.columns[Stype.id] == ("user_id", "__example__")
+    assert task_table.id[..., 0].equal(torch.tensor([[3, 2], [3, 2]]))
+    assert task_table.id[..., 1].equal(torch.tensor([[0, 1], [0, 1]]))
+
+    assert len(related_tables.tables) == 3
+    assert all(t.num_groups == 2 for t in related_tables.tables.values())
+    assert all(t.num_members == 2 for t in related_tables.tables.values())
+
+    users = related_tables.tables["users"]
+    assert len({user.numerical.data_ptr() for user in users}) == 1
+    for user in users:
+        user = user.squeeze(0)
+        assert user.columns[Stype.id] == ("user_id", "__example__")
+        assert user.id[..., 0].equal(torch.tensor([3, 2]))
+        assert user.id[..., 1].equal(torch.tensor([0, 1]))
+
+
+def test_batched_recipe_execution(relational_data: RelationalData) -> None:
+    pytest.importorskip("pyg_lib")
+
+    context = TableTensor(
+        columns={"numerical": ("target",), "id": ("user_id",)},
+        numerical=torch.randn(2, 2, 1),
+        id=ColumnarTensor((torch.tensor([[3, 2], [0, 1]]),)),
+    )
+    query = cast(TableTensor, context[0].expand(2, *context.size()[1:]))
+
+    kwargs: dict[str, Any] = {
+        "task_link": {
+            "task_column": "user_id",
+            "table": "users",
+            "table_columns": "user_id",
+        },
+        "num_neighbors": [2, 2],
+    }
+
+    sampler = relational_data.sampler()
+    context, related_context_tables = sampler(context, **kwargs)
+    query, related_query_tables = sampler(query, **kwargs)
+
+    recipe_execution = RecipeExecution(TabICLv2.default_recipe())
+    contexts = recipe_execution.fit_transform(
+        x=context.drop_columns("target"),
+        y=context["target"],
+        related_tables=related_context_tables,
+    )
+    queries = recipe_execution.transform(
+        x=query.drop_columns("target"),
+        related_tables=related_query_tables,
+    )
+    assert len(contexts) == 2
+    assert len(queries) == 2
