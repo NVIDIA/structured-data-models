@@ -59,3 +59,7 @@ def test_default_recipe_numerical_missing() -> None:
     assert count(default_recipe("impute"), sp.Choice) == 1
     assert count(default_recipe("mix"), sp.ImputeMean) == 1
     assert count(default_recipe("mix"), sp.Choice) == 2
+    assert (
+        count(default_recipe(shuffle_categories_max=30), sp.ShuffleCategories)
+        == 1
+    )

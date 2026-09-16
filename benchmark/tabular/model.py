@@ -59,6 +59,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._set_default_param_value("max_columns", None)
         self._set_default_param_value("checkpoint", None)
         self._set_default_param_value("numerical_missing", "nan")
+        self._set_default_param_value("shuffle_categories_max", None)
 
     def _fit(
         self,
@@ -244,7 +245,10 @@ class SDMKumoTabularModel(SDMModel):
         )
 
     def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
-        return default_recipe(numerical_missing=params["numerical_missing"])
+        return default_recipe(
+            numerical_missing=params["numerical_missing"],
+            shuffle_categories_max=params["shuffle_categories_max"],
+        )
 
 
 class SDMTabFMModel(SDMModel):

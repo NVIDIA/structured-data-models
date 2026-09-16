@@ -56,6 +56,12 @@ parser.add_argument(
     help="KumoTabular NaN handling: keep, mean-impute, or alternate both.",
 )
 parser.add_argument(
+    "--shuffle_categories_max",
+    type=int,
+    help="Permute the codes of categorical columns with at most this many "
+    "levels per estimator.",
+)
+parser.add_argument(
     "--name",
     help="Result directory name (default: the model name).",
 )
@@ -78,6 +84,7 @@ config = {
     "max_columns": args.max_columns,
     "checkpoint": args.checkpoint,
     "numerical_missing": args.numerical_missing,
+    "shuffle_categories_max": args.shuffle_categories_max,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size

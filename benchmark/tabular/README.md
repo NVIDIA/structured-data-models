@@ -53,13 +53,16 @@ python -m benchmark.tabular.tabarena.main \
 ```
 
 Run a local kumo-scm checkpoint under a run name, mean-imputing numerical
-NaNs on every other estimator (`--numerical_missing {nan,impute,mix}`):
+NaNs on every other estimator (`--numerical_missing {nan,impute,mix}`) and
+permuting the codes of small categorical columns per estimator
+(`--shuffle_categories_max 30`):
 
 ```bash
 python -m benchmark.tabular.tabarena.main \
   --model kumo-tabular \
   --checkpoint /path/to/final.pt \
   --numerical_missing mix \
+  --shuffle_categories_max 30 \
   --name my-run \
   --output_root /path/to/tabarena_out
 ```

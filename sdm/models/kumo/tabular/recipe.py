@@ -5,12 +5,19 @@ import sdm.processing as sp
 NumericalMissing = Literal["nan", "impute", "mix"]
 
 
-def default_recipe(numerical_missing: NumericalMissing = "nan") -> sp.Recipe:
+def default_recipe(
+    numerical_missing: NumericalMissing = "nan",
+    shuffle_categories_max: int | None = None,
+) -> sp.Recipe:
     r"""Default recipe.
 
     ``numerical_missing`` keeps NaN, mean-imputes, or alternates both across
-    estimators (``mix``).
+    estimators (``mix``). ``shuffle_categories_max`` permutes the codes of
+    categorical columns with at most that many levels per estimator.
     """
+    shuffle: list[sp.Processor] = []
+    if shuffle_categories_max is not None:
+        shuffle = [sp.ShuffleCategories(max_categories=shuffle_categories_max)]
     missing: list[sp.Processor] = []
     if numerical_missing == "impute":
         missing = [sp.ImputeMean()]
@@ -23,6 +30,7 @@ def default_recipe(numerical_missing: NumericalMissing = "nan") -> sp.Recipe:
             sp.StypeDispatch(
                 categorical=[
                     sp.AlignCategories(sort_by="value", min_frequency=2),
+                    *shuffle,
                     sp.ToNumerical(),
                 ],
             ),
