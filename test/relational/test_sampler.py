@@ -9,13 +9,14 @@ import torch
 
 from sdm import (
     ColumnarTensor,
+    Recipe,
     RelationalData,
     Relationship,
     Stype,
     TableTensor,
     TaskLink,
 )
-from sdm.models import TabICLv2
+from sdm.processing import Processor, TableDispatch
 from sdm.processing.execution import RecipeExecution
 
 
@@ -204,6 +205,23 @@ def test_expanded_sampler(relational_data: RelationalData) -> None:
 def test_batched_recipe_execution(relational_data: RelationalData) -> None:
     pytest.importorskip("pyg_lib")
 
+    class ShapeLock(Processor):
+        handles_stypes = frozenset({Stype.numerical})
+        requires_fit = True
+
+        def _fit(
+            self,
+            table: TableTensor,
+            *,
+            generator: torch.Generator | None = None,
+        ) -> None:
+            self.batch_size = table.size(0)
+
+        def _transform(self, table: TableTensor) -> TableTensor:
+            if table.size(0) != self.batch_size:
+                raise RuntimeError("group layout changed")
+            return table
+
     context = TableTensor(
         columns={"numerical": ("target",), "id": ("user_id",)},
         numerical=torch.randn(2, 2, 1),
@@ -211,6 +229,7 @@ def test_batched_recipe_execution(relational_data: RelationalData) -> None:
     )
     query = cast(TableTensor, context[0].expand(2, *context.size()[1:]))
 
+    sampler = relational_data.sampler()
     kwargs: dict[str, Any] = {
         "task_link": {
             "task_column": "user_id",
@@ -219,12 +238,12 @@ def test_batched_recipe_execution(relational_data: RelationalData) -> None:
         },
         "num_neighbors": [2, 2],
     }
-
-    sampler = relational_data.sampler()
     context, related_context_tables = sampler(context, **kwargs)
     query, related_query_tables = sampler(query, **kwargs)
 
-    recipe_execution = RecipeExecution(TabICLv2.default_recipe())
+    recipe_execution = RecipeExecution(
+        recipe=Recipe(features=TableDispatch(related=ShapeLock())),
+    )
     contexts = recipe_execution.fit_transform(
         x=context.drop_columns("target"),
         y=context["target"],
