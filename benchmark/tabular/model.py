@@ -49,6 +49,9 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     ) -> sdm.models.ICLModel:
         pass
 
+    def _stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
+        return sdm.infer_stypes(X)
+
     def _set_default_params(self) -> None:
         self._set_default_param_value(
             "num_estimators",
@@ -84,7 +87,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             )
 
         X = self.preprocess(X, y=y)
-        self.stypes = sdm.infer_stypes(X)
+        self.stypes = self._stypes(X)
         x_context = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
@@ -240,6 +243,19 @@ class SDMKumoTabularModel(SDMModel):
             device=device,
             checkpoint=self._get_model_params()["checkpoint"],
         )
+
+    def _stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
+        # A numeric column of two or three distinct values (missing counted
+        # as one) holds category codes once the table is large enough for
+        # that to be evidence.
+        stypes = sdm.infer_stypes(X)
+        if len(X) > 150:
+            for column, stype in stypes.items():
+                if stype != sdm.Stype.numerical:
+                    continue
+                if 1 < X[column].nunique(dropna=False) < 4:
+                    stypes[column] = sdm.Stype.categorical
+        return stypes
 
 
 class SDMTabFMModel(SDMModel):
