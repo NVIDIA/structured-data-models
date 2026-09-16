@@ -110,6 +110,8 @@ class EncodeECOC(EnsembleProcessor):
                 coverage[chosen] += 1
             if not bool(coverage.all()):
                 continue
+            if num_classes > 200:
+                return codebook
 
             # Accumulated one code at a time, because holding every class
             # pair and every code at once grows with the cube of the classes.
