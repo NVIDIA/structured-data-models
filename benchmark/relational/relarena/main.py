@@ -86,16 +86,16 @@ def search_space(stats: TaskStats) -> SearchSpace:
         num_estimators = [1]
     else:
         print("Large Data Regime", stats.num_train_nodes)
-        num_neighbors = [[], [1, 1], [32, 32], [96, 96]]
+        num_neighbors = [[], [1, 1], [32, 32], [96, 96], [128, 128]]
         num_estimators = [8]
 
     context_size = [20_000]
-    num_lags = [0, 10]
+    num_lags = [0, 10, 20]
 
     if context_size[0] < stats.num_train_nodes:
-        ensemble_context = [True]
+        ensemble_context = [False]
     else:
-        ensemble_context = [False, True]
+        ensemble_context = [True]
 
     keys = (
         "context_size",
