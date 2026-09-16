@@ -53,8 +53,10 @@ def test_fp8_partial_tiles(batch: int, queries: int, context: int) -> None:
 
 
 @pytest.mark.parametrize("scale", [None, 1.0])
-@pytest.mark.parametrize("tile", [64, 128])
-def test_grouped_heads_and_model_scale(scale: float | None, tile: int) -> None:
+@pytest.mark.parametrize("context_tile", [64, 128])
+def test_grouped_query_attention_and_model_scale(
+    scale: float | None, context_tile: int
+) -> None:
     with torch.inference_mode():
         q = (
             torch.randn(2, 8, 129, 64, device="cuda", dtype=torch.float16)
@@ -78,7 +80,7 @@ def test_grouped_heads_and_model_scale(scale: float | None, tile: int) -> None:
             q.dtype,
             128,
             scale,
-            tile=tile,
+            context_tile=context_tile,
         )
         expected = torch.nn.functional.scaled_dot_product_attention(
             q, k, v, enable_gqa=True, scale=scale
@@ -92,10 +94,10 @@ def test_grouped_heads_and_model_scale(scale: float | None, tile: int) -> None:
 
 @pytest.mark.parametrize("accumulation_chunk", [0, 16])
 @pytest.mark.parametrize("optimized", [False, True])
-@pytest.mark.parametrize("tile", [64, 128])
+@pytest.mark.parametrize("context_tile", [64, 128])
 @pytest.mark.parametrize("context", [8193, 65536])
 def test_periodic_attention_matches_cached_query_slice(
-    context: int, tile: int, optimized: bool, accumulation_chunk: int
+    context: int, context_tile: int, optimized: bool, accumulation_chunk: int
 ) -> None:
     with torch.inference_mode():
         q = torch.randn(1, 1, context, 64, device="cuda", dtype=torch.float16)
@@ -106,7 +108,7 @@ def test_periodic_attention_matches_cached_query_slice(
         v8 = v8.transpose(-1, -2).contiguous()
         opts: dict[str, Any] = {
             "accumulation_chunk": accumulation_chunk,
-            "tile": tile,
+            "context_tile": context_tile,
             "scale_weights_in_exp": optimized,
             "fuse_score_scale": optimized,
         }
