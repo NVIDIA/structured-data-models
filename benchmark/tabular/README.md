@@ -71,10 +71,10 @@ Evaluate all available model results with:
 python -m benchmark.tabular.tabarena.evaluate
 ```
 
-Evaluate named runs of one model instead (repeat `--name` to combine runs):
+Evaluate named runs of one model instead. Repeat `--name` for one leaderboard row per run; join runs with `,` to score them as one method, for example a classification and a regression run:
 
 ```bash
-python -m benchmark.tabular.tabarena.evaluate --model kumo-tabular --name my-run --output_root /path/to/tabarena_out
+python -m benchmark.tabular.tabarena.evaluate --model kumo-tabular --name my-cls-run,my-reg-run --output_root /path/to/tabarena_out
 ```
 
 For `kumo-tabular`, numeric columns with two or three distinct values are passed to the model as categorical on tables of more than 150 rows, as the reference estimator does.

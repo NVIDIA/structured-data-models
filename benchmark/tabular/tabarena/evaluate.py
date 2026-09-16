@@ -23,7 +23,8 @@ parser.add_argument(
 parser.add_argument(
     "--name",
     action="append",
-    help="Named run of ``--model`` to evaluate; repeat to combine runs.",
+    help="Named run of ``--model`` to evaluate; repeat for one row per run, "
+    "or join runs with ',' to score them as one method.",
 )
 parser.add_argument(
     "--output_root",
@@ -47,9 +48,9 @@ if args.name:
     model_config = MODEL_CONFIGS[args.model]
     runs = [
         (
-            name,
+            name.replace(",", "+"),
             model_config.tabarena_method_name,
-            result_root / name / "outer_model",
+            [result_root / part / "outer_model" for part in name.split(",")],
         )
         for name in args.name
     ]
@@ -58,14 +59,14 @@ else:
         (
             model_config.name,
             model_config.tabarena_method_name,
-            result_root / model_config.name / "outer_model",
+            [result_root / model_config.name / "outer_model"],
         )
         for model_config in MODEL_CONFIGS.values()
     ]
 runs = [
-    (label, method, result_dir)
-    for label, method, result_dir in runs
-    if next(result_dir.rglob("results.pkl"), None) is not None
+    (label, method, result_dirs)
+    for label, method, result_dirs in runs
+    if all(next(d.rglob("results.pkl"), None) is not None for d in result_dirs)
 ]
 if not runs:
     raise FileNotFoundError(f"No TabArena results found under {result_root}")
@@ -78,7 +79,7 @@ base_context = TabArenaContext(
     ),
 )
 methods = []
-for label, method, result_dir in runs:
+for label, method, result_dirs in runs:
     output_dir = output_root / label
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -88,7 +89,7 @@ for label, method, result_dir in runs:
         artifact_dir=output_dir / "artifacts",
     )
     processed = EndToEnd.from_path_raw(
-        path_raw=result_dir,
+        path_raw=result_dirs,
         method_metadata=method_metadata,
         task_metadata=base_context.task_metadata_collection,
         backend="native",
