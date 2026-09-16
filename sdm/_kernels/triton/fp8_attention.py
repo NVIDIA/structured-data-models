@@ -58,21 +58,27 @@ def attention_kernel(
         FUSE_SCORE_SCALE: Move positive score scaling after the maximum
             reduction to permit fused scaling and maximum subtraction.
     """
-    block, head = tl.program_id(0), tl.program_id(1)
-    kv_head = (head // HQ) * HK + (head % HQ) // (HQ // HK)
-    rows = block * BM + tl.arange(0, BM)
+    query_block, batch_query_head = tl.program_id(0), tl.program_id(1)
+    batch = batch_query_head // HQ
+    query_head = batch_query_head % HQ
+    # Query heads share K/V heads only when HQ > HK (grouped-query attention).
+    batch_kv_head = batch * HK + query_head // (HQ // HK)
+    rows = query_block * BM + tl.arange(0, BM)
     cols = tl.arange(0, BN)
     dims = tl.arange(0, D)
     q = tl.load(
-        Q + head * M * D + rows[:, None] * D + dims[None, :],
+        Q + batch_query_head * M * D + rows[:, None] * D + dims[None, :],
         rows[:, None] < M,
         0.0,
     )
     # Restore Q/K magnitudes and convert natural-exponential scores to base 2.
     score_scale = (
-        tl.load(QS + head) * tl.load(KS + kv_head) * SCALE * 1.4426950408889634
+        tl.load(QS + batch_query_head)
+        * tl.load(KS + batch_kv_head)
+        * SCALE
+        * 1.4426950408889634
     )
-    value_scale = tl.load(VS + kv_head)
+    value_scale = tl.load(VS + batch_kv_head)
     row_max = tl.full((BM,), -float("inf"), tl.float32)
     weight_sum = tl.full((BM,), 0, tl.float32)
     acc = tl.full((BM, D), 0, tl.float32)
@@ -83,7 +89,7 @@ def attention_kernel(
         # 1. Tiled QK^T multiplication: [BM, D] @ [D, BN] -> [BM, BN].
         indices = start * BN + cols
         k = tl.load(
-            K + kv_head * N * D + indices[None, :] * D + dims[:, None],
+            K + batch_kv_head * N * D + indices[None, :] * D + dims[:, None],
             indices[None, :] < N,
             0.0,
         )
@@ -111,7 +117,7 @@ def attention_kernel(
         # 3. Tiled weights-V multiplication: [BM, BN] @ [BN, D] -> [BM, D].
         v_offsets = indices[:, None] + dims[None, :] * N
         v = tl.load(
-            V + kv_head * N * D + v_offsets,
+            V + batch_kv_head * N * D + v_offsets,
             indices[:, None] < N,
             0.0,
         )
@@ -139,7 +145,7 @@ def attention_kernel(
     if not SCALE_WEIGHTS_IN_EXP:
         out *= 1.0 / 256.0
     tl.store(
-        Out + head * M * D + rows[:, None] * D + dims[None, :],
+        Out + batch_query_head * M * D + rows[:, None] * D + dims[None, :],
         out,
         rows[:, None] < M,
     )
@@ -222,9 +228,9 @@ def quantized_attention(
     ks: torch.Tensor,
     vs: torch.Tensor,
     dtype: torch.dtype,
-    block: int,
+    query_tile: int,
     scale: float | None = None,
-    tile: int = 64,
+    context_tile: int = 64,
     warps: int = 4,
     stages: int = 2,
     accumulation_chunk: int = 0,
@@ -241,9 +247,9 @@ def quantized_attention(
         ks: Key scales shaped ``[batch, kv_heads, 1, 1]``.
         vs: Value scales shaped ``[batch, kv_heads, 1, 1]``.
         dtype: Output dtype.
-        block: Query rows handled by each program.
+        query_tile: Query rows handled by each program.
         scale: Attention score multiplier. Defaults to ``1 / sqrt(D)``.
-        tile: Context rows processed per loop iteration.
+        context_tile: Context rows processed per loop iteration.
         warps: Cooperating warps per program.
         stages: Software pipeline stages.
         accumulation_chunk: Tiles per FP32 accumulator flush; zero disables it.
@@ -258,7 +264,7 @@ def quantized_attention(
     n = k.size(-2)
     # Q/K are [batch, heads, sequence, channels]; V is transposed.
     output = torch.empty((b, h, m, d), device=q.device, dtype=dtype)
-    cast(Any, attention_kernel)[(((m + block - 1) // block), b * h)](
+    cast(Any, attention_kernel)[(((m + query_tile - 1) // query_tile), b * h)](
         q,
         k,
         v,
@@ -272,8 +278,8 @@ def quantized_attention(
         n,
         d,
         d**-0.5 if scale is None else scale,
-        block,
-        tile,
+        query_tile,
+        context_tile,
         accumulation_chunk,
         scale_weights_in_exp,
         fuse_score_scale,
