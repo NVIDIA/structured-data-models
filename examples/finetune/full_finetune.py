@@ -270,10 +270,7 @@ def main() -> None:
     val_frame = val_frame.reset_index(drop=True)
     test_frame = test_frame.reset_index(drop=True)
 
-    # Zero-shot/validation/test evaluation always uses raw label/target
-    # values: the model's own default recipe fits `AlignCategories`/
-    # `Standardize` on the context it is given, so no manual target
-    # encoding is needed here.
+
     context = sdm.TableTensor.from_pandas(
         df=train_frame,
         stypes=stypes,
