@@ -1,3 +1,4 @@
+from itertools import product
 import math
 import sys
 from functools import lru_cache
@@ -6,39 +7,55 @@ import numpy as np
 import torch
 from relarena.model import RelArenaModel
 from relarena.registry import register_model
-from relarena.search_space import SearchSpace
+from relarena.search_space import SearchSpace, TaskStats
 from relbench.base import Database, EntityTask, Table, TaskType
 
 import sdm
 
-KUMO_RELATIONAL_SPACE = SearchSpace(
-    default_overrides={
-        "context_size": 20_000,
-        "num_neighbors": [8, 8],
-        "num_estimators": 1,
-        "lag_target": False,
-        "ensemble_context": False,
-    },
-    fixed_grid=[
-        {
-            "context_size": context_size,
-            "num_neighbors": num_neighbors,
-            "num_estimators": num_estimators,
-            "lag_target": lag_target,
-            "ensemble_context": ensemble_context,
-        }
-        for context_size in [20_000]
-        for num_neighbors in [
-            [],
-            [1, 1],
-            [32, 32],
-            [96, 96],
-        ]
-        for num_estimators in [1, 8]
-        for lag_target in [False]
-        for ensemble_context in [True]
-    ],
-)
+DEFAULT_CONFIG = {}  # TODO
+
+def search_space(stats: TaskStats) -> SearchSpace:
+    if stats.num_train_nodes < 2_000:
+        print("Low Data Regime", stats.num_train_nodes)
+        # Prevent overfitting in low-data regimes:
+        num_neighbors = [[], [1, 1], [8, 8]]
+        num_estimators = [1]
+    else:
+        print("Large Data Regime", stats.num_train_nodes)
+        num_neighbors = [[], [1, 1], [32, 32], [96, 96]]
+        num_estimators = [8]
+
+    context_size = [20_000]
+    lag_target = [False, True]
+
+    if context_size[0] < stats.num_train_nodes:
+        ensemble_context = [True]
+    else:
+        ensemble_context = [False, True]
+
+    keys = (
+        "context_size",
+        "num_neighbors",
+        "num_estimators",
+        "lag_target",
+        "ensemble_context",
+    )
+
+    fixed_grid = [
+        dict(zip(keys, values, strict=True))
+        for values in product(
+            context_size,
+            num_neighbors,
+            num_estimators,
+            lag_target,
+            ensemble_context,
+        )
+    ]
+
+    return SearchSpace(
+        default_overrides=fixed_grid[0],  # Dummy
+        fixed_grid=fixed_grid
+    )
 
 
 @lru_cache(maxsize=1)
@@ -106,7 +123,7 @@ def get_sampler(
     )
 
 
-@register_model(search_space=KUMO_RELATIONAL_SPACE)
+@register_model(search_space=search_space)
 class KumoRelationalModel(RelArenaModel):
     name = "kumo-relational"
 
@@ -120,9 +137,6 @@ class KumoRelationalModel(RelArenaModel):
         seed: int,
         time_limit: float | None = None,
     ) -> None:
-
-        if task.task_type == TaskType.BINARY_CLASSIFICATION:
-            self.pos_cls = train_table.df[task.target_col].unique()[-1].item()
 
         context = sdm.TableTensor.from_pandas(
             df=train_table.df,
@@ -224,7 +238,10 @@ class KumoRelationalModel(RelArenaModel):
         out = torch.cat(outs, dim=-2)
 
         if task.task_type == TaskType.BINARY_CLASSIFICATION:
-            out = out[str(self.pos_cls)].numerical.squeeze(-1)
+            if "1" in out.column_names:
+                out = out["1"].numerical.squeeze(-1)
+            else:
+                out = out["True"].numerical.squeeze(-1)
 
         return out.cpu().numpy()
 
