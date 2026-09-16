@@ -31,14 +31,8 @@ KUMO_RELATIONAL_SPACE = SearchSpace(
         for num_neighbors in [
             [],
             [1, 1],
-            [2, 2],
-            [4, 4],
-            [8, 8],
-            [16, 16],
             [32, 32],
-            # [64, 64],
-            # [96, 96],
-            # [128, 128],
+            [96, 96],
         ]
         for num_estimators in [1, 8]
         for lag_target in [False]
@@ -54,7 +48,6 @@ def get_sampler(
     train_table: Table,
     lag_targets: bool,
 ) -> sdm.relational.RelationalSampler:
-    print("GET SAMPLER")
 
     tables = {
         name: sdm.TableTensor.from_pandas(
@@ -128,6 +121,9 @@ class KumoRelationalModel(RelArenaModel):
         time_limit: float | None = None,
     ) -> None:
 
+        if task.task_type == TaskType.BINARY_CLASSIFICATION:
+            self.pos_cls = train_table.df[task.target_col].unique()[-1].item()
+
         context = sdm.TableTensor.from_pandas(
             df=train_table.df,
             stypes={
@@ -153,7 +149,6 @@ class KumoRelationalModel(RelArenaModel):
             )
             context = context[perm[: context_size * num_estimators]]
             if num_estimators > 1:
-                print("EXPAND CONTEXT/QUERY")
                 context = context.unflatten(0, (num_estimators, context_size))
                 num_estimators = None
                 self.expand_query = True
@@ -229,8 +224,7 @@ class KumoRelationalModel(RelArenaModel):
         out = torch.cat(outs, dim=-2)
 
         if task.task_type == TaskType.BINARY_CLASSIFICATION:
-            out = out["1"].numerical.squeeze(-1)
-            # out = out["True"].numerical.squeeze(-1)
+            out = out[str(self.pos_cls)].numerical.squeeze(-1)
 
         return out.cpu().numpy()
 
