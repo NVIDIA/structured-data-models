@@ -38,6 +38,11 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - Do not mention Codex, AI, or tool attribution in PR titles, PR descriptions, commit messages, or review replies unless explicitly requested.
 - Do not add a section named "Tests", "Testing" or similar, to PR descriptions unless the test is not covered in CI.
 - PR metadata should describe the code change only.
+- Follow `.github/PULL_REQUEST_TEMPLATE.md` when writing a PR body: answer only the prompts it lists, delete its comment block, and add no headings or sections beyond it.
+- Leave the PR body empty when the title and the diff already answer those prompts.
+- Keep the PR body short enough that its length tracks the decision a reviewer has to make, not the size of the diff, and never enumerate the change file by file, symbol by symbol, or commit by commit.
+- Give measured numbers whenever the change claims a speed, memory, or accuracy effect, and never restate results CI already produces, such as test counts or lint, type-check, or formatting status.
+- Do not end a PR description with an attribution footer, badge, or emoji signature.
 
 # Markdown Style
 
