@@ -54,6 +54,17 @@ parser.add_argument(
     help="Local checkpoint loaded instead of the published weights.",
 )
 parser.add_argument(
+    "--recipe_ensemble",
+    help="Comma-separated KumoTabular recipes blended with weights fitted "
+    "by cross-validation on the training rows.",
+)
+parser.add_argument(
+    "--ensemble_method",
+    choices=("caruana", "nnls"),
+    default="caruana",
+    help="How --recipe_ensemble weights are fitted.",
+)
+parser.add_argument(
     "--name",
     help="Name of the result directory (default: the model name).",
 )
@@ -81,6 +92,10 @@ result_dir.mkdir(parents=True, exist_ok=True)
 config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
+    "recipe_ensemble": (
+        args.recipe_ensemble.split(",") if args.recipe_ensemble else None
+    ),
+    "ensemble_method": args.ensemble_method,
 }
 if args.checkpoint is not None:
     config["checkpoint"] = args.checkpoint

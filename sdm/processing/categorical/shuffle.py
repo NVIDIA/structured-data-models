@@ -27,6 +27,8 @@ class ShuffleCategories(EnsembleProcessor):
         method: Permutation strategy. ``"shift"`` cyclically shifts the
             codes by a drawn offset, and ``"random"`` remaps the codes with
             a drawn permutation.
+        max_categories: Leave columns with more categories than this
+            unchanged. ``None`` permutes every column.
     """
 
     handles_stypes = frozenset({Stype.categorical})
@@ -35,9 +37,11 @@ class ShuffleCategories(EnsembleProcessor):
     def __init__(
         self,
         method: Literal["shift", "random"] = "random",
+        max_categories: int | None = None,
     ) -> None:
         super().__init__()
         self.method = method
+        self.max_categories = max_categories
         self._permutations: BufferList[BufferList[Tensor]] = BufferList()
         self._permutation_ids: tuple[int, ...] = ()
 
@@ -59,7 +63,10 @@ class ShuffleCategories(EnsembleProcessor):
         permutations: list[Tensor] = []
         for category in table.categorical.categories:
             n_classes = category.numel()
-            if n_classes <= 1:
+            if n_classes <= 1 or (
+                self.max_categories is not None
+                and n_classes > self.max_categories
+            ):
                 permutation = torch.arange(n_classes, device=device)
             elif self.method == "shift":
                 offset = torch.randint(

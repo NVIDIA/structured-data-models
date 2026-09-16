@@ -6,6 +6,7 @@ import torch
 import sdm.processing as sp
 from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
+from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.testing import withCUDA
 
 
@@ -131,3 +132,18 @@ def test_default_recipe_reduces_outputs_per_task() -> None:
     )
     assert out.size() == (5, 3)
     torch.testing.assert_close(out.numerical.sum(dim=-1), torch.ones(5))
+
+
+def test_default_recipe_variants() -> None:
+    def count(recipe: sp.Recipe, cls: type) -> int:
+        return sum(isinstance(p, cls) for p in recipe.features.modules())
+
+    assert count(default_recipe(), sp.Choice) == 2
+    assert count(default_recipe(normalize="power"), sp.Choice) == 0
+    assert (
+        count(default_recipe(normalize="quantile"), sp.QuantileTransform) == 2
+    )
+    assert (
+        count(default_recipe(shuffle_categories_max=30), sp.ShuffleCategories)
+        == 1
+    )
