@@ -58,55 +58,16 @@ class EnsembleData(abc.ABC, Generic[T]):
 
 
 class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
-    """Store and group input tables for an ensemble.
+    """Store and group input :class:`~sdm.tensor.TableTensor` as an ensemble.
 
-    Each ensemble member is associated with one table. Shared tables are stored
-    only once. Compatible tables are stacked along a leading dimension and
-    form a group, so processors can process them together. Incompatible tables
-    remain in separate groups.
-
-    Use :meth:`member` to access a member's table. Iterate over the
-    :class:`EnsembleTable` to process its groups, and :meth:`replace_groups`
-    to build an ensemble table from the processed groups.
-
-    .. testcode::
-
-        import torch
-        from sdm import EnsembleTable, TableTensor
-
-        estimator_table1 = TableTensor.from_tensor(
-            tensor=torch.tensor([[1.0], [2.0]]),
-            columns=("value",),
-        )
-        estimator_table2 = TableTensor.from_tensor(
-            tensor=torch.tensor([[-1.0], [1.0]]),
-            columns=("value",),
-        )
-        estimator_table3 = TableTensor.from_tensor(
-            tensor=torch.tensor([[10.0], [20.0]]),
-            columns=("selected_value",),
-        )
-
-        ensemble = EnsembleTable.from_tables(
-            tables=(estimator_table1, estimator_table2, estimator_table3),
-            member_table_ids=(0, 1, 2, 0),
-        )
-
-        # Access tables in member order.
-        assert ensemble.num_members == 4
-        assert ensemble.member(0).equal(estimator_table1)
-        assert ensemble.member(3).equal(estimator_table1)
-
-        # Iterate over two groups of compatible tables.
-        groups = tuple(ensemble)
-        assert len(groups) == 2
-        assert groups[0].size() == (2, 2, 1)
-        assert groups[1].size() == (1, 2, 1)
+    Each ensemble member is associated with one
+    :class:`~sdm.tensor.TableTensor`.
+    Shared tables are stored only once. Compatible tables are stacked along a
+    leading dimension and form a group.
 
     Args:
-        groups: Sequence of
-            :class:`~sdm.tensor.TableTensor`, optionally stacked along their
-            leading dimension.
+        groups: Sequence of :class:`~sdm.tensor.TableTensor`, optionally
+            stacked along their leading dimension.
         locations: ``(group, batch)`` location of each ensemble member.
     """
 
