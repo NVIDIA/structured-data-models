@@ -31,7 +31,28 @@ def attention_kernel(
     SCALE_WEIGHTS_IN_EXP: tl.constexpr = False,
     FUSE_SCORE_SCALE: tl.constexpr = False,
 ):
-    # Each program owns BM query rows for one head and visits every K/V tile.
+    """Write attention outputs for one query tile and head per program.
+
+    Args:
+        Q: FP8 queries shaped ``[batch, HQ, M, D]``.
+        K: FP8 keys shaped ``[batch, HK, N, D]``.
+        V: FP8 values shaped ``[batch, HK, D, N]``.
+        QS: Per-query-head dequantization scales.
+        KS: Per-key-head dequantization scales.
+        VS: Per-value-head dequantization scales.
+        Out: Output buffer shaped ``[batch, HQ, M, D]``.
+        HQ: Query heads per batch item.
+        HK: K/V heads per batch item; must divide HQ.
+        M: Number of query rows.
+        N: Number of context rows.
+        D: Channels per head.
+        SCALE: Attention score multiplier.
+        BM: Query rows handled by each program.
+        BN: Context rows processed per iteration.
+        ACC_CHUNK: Tiles per FP32 accumulator flush; zero disables it.
+        SCALE_WEIGHTS_IN_EXP: Include the weight factor 256 inside exp2.
+        FUSE_SCORE_SCALE: Permit fused score scaling and max subtraction.
+    """
     block, head = tl.program_id(0), tl.program_id(1)
     kv_head = (head // HQ) * HK + (head % HQ) // (HQ // HK)
     rows = block * BM + tl.arange(0, BM)
@@ -133,6 +154,21 @@ def quantize_kernel(
     S2: tl.constexpr,
     S3: tl.constexpr,
 ):
+    """Write scaled, clamped input values into a contiguous FP8 buffer.
+
+    Args:
+        X: Input shaped ``[batch, heads, rows, channels]``.
+        S: Contiguous per-head dequantization scales.
+        Y: Contiguous FP8 output buffer with the input shape.
+        LENGTH: Number of elements per head.
+        BLOCK: Elements handled by each program.
+        H: Heads per batch item.
+        D: Channels per head.
+        S0: Input batch stride in elements.
+        S1: Input head stride in elements.
+        S2: Input row stride in elements.
+        S3: Input channel stride in elements.
+    """
     offset = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
     head = tl.program_id(1)
     source = (
