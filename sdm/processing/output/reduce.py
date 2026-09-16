@@ -30,7 +30,9 @@ class ReduceEstimators(EnsembleProcessor):
             every output coordinate, removes an equal proportion from both
             ends, and averages the remainder.
         proportion_to_cut: Proportion removed from each end for
-            ``"trimmed_mean"``. Must be in the interval ``[0, 0.5)``.
+            ``"trimmed_mean"``. Required for ``"trimmed_mean"`` and
+            inapplicable to ``"mean"``. Must be strictly between zero and
+            ``0.5``.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -40,13 +42,23 @@ class ReduceEstimators(EnsembleProcessor):
         self,
         *,
         method: Literal["mean", "trimmed_mean"] = "mean",
-        proportion_to_cut: float = 0.2,
+        proportion_to_cut: float | None = None,
     ) -> None:
         super().__init__()
         if method not in ("mean", "trimmed_mean"):
             raise ValueError("method must be 'mean' or 'trimmed_mean'")
-        if not 0 <= proportion_to_cut < 0.5:
-            raise ValueError("proportion_to_cut must be in [0, 0.5)")
+        if method == "mean" and proportion_to_cut is not None:
+            raise ValueError(
+                "proportion_to_cut must be None when method='mean'"
+            )
+        if method == "trimmed_mean" and proportion_to_cut is None:
+            raise ValueError(
+                "proportion_to_cut is required when method='trimmed_mean'"
+            )
+        if proportion_to_cut is not None and not 0 < proportion_to_cut < 0.5:
+            raise ValueError(
+                "proportion_to_cut must be strictly between 0 and 0.5"
+            )
         self.method = method
         self.proportion_to_cut = proportion_to_cut
 
@@ -55,6 +67,7 @@ class ReduceEstimators(EnsembleProcessor):
         if self.method == "mean":
             return numerical.mean(dim=0)
         if self.method == "trimmed_mean":
+            assert self.proportion_to_cut is not None
             cut = int(self.proportion_to_cut * numerical.size(0))
             if cut == 0:
                 return numerical.mean(dim=0)

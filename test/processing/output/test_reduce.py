@@ -68,7 +68,10 @@ def test_reduce_estimators_trimmed_mean_rejects_outliers(
         device=device,
     )
     table = TableTensor.from_tensor(values, columns=("a", "b"))
-    processor = sp.ReduceEstimators(method="trimmed_mean")
+    processor = sp.ReduceEstimators(
+        method="trimmed_mean",
+        proportion_to_cut=0.2,
+    )
 
     output = processor.transform(table)
 
@@ -92,8 +95,11 @@ def test_reduce_estimators_trimmed_mean_floors_cut(
     values = torch.arange(
         4 * 3 * 2, dtype=torch.float32, device=device
     ).reshape(4, 3, 2)
-    output = sp.ReduceEstimators(method="trimmed_mean").transform(
-        TableTensor.from_tensor(values)
+    output = sp.ReduceEstimators(
+        method="trimmed_mean",
+        proportion_to_cut=0.2,
+    ).transform(
+        TableTensor.from_tensor(values),
     )
 
     torch.testing.assert_close(output.numerical, values.mean(dim=0))
@@ -125,16 +131,27 @@ def test_reduce_estimators_trimmed_mean_non_default_proportion(
 
 @pytest.mark.parametrize(
     "proportion_to_cut",
-    [-0.1, 0.5, 1.0, float("nan")],
+    [-0.1, 0.0, 0.5, 1.0, float("nan")],
 )
 def test_reduce_estimators_rejects_invalid_proportion(
     proportion_to_cut: float,
 ) -> None:
-    with pytest.raises(ValueError, match=r"must be in \[0, 0\.5\)"):
+    with pytest.raises(ValueError, match=r"strictly between 0 and 0\.5"):
         sp.ReduceEstimators(
             method="trimmed_mean",
             proportion_to_cut=proportion_to_cut,
         )
+
+
+def test_reduce_estimators_requires_method_specific_proportion() -> None:
+    with pytest.raises(ValueError, match="must be None when method='mean'"):
+        sp.ReduceEstimators(method="mean", proportion_to_cut=0.2)
+
+    with pytest.raises(
+        ValueError,
+        match="is required when method='trimmed_mean'",
+    ):
+        sp.ReduceEstimators(method="trimmed_mean")
 
 
 def test_reduce_estimators_rejects_non_numerical_stypes() -> None:
@@ -227,7 +244,10 @@ def test_reduce_estimators_trimmed_mean_counts_logical_members(
         tables=(first, shared, last),
         member_table_ids=(0, 1, 1, 1, 2),
     )
-    processor = sp.ReduceEstimators(method="trimmed_mean")
+    processor = sp.ReduceEstimators(
+        method="trimmed_mean",
+        proportion_to_cut=0.2,
+    )
 
     output = processor.transform_ensemble(table)
 
