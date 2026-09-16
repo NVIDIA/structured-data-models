@@ -12,15 +12,12 @@ from sdm.processing.execution import RecipeExecution
 
 def test_relational_recipe_uses_fitted_task_states_for_shared_query() -> None:
     values = torch.arange(8 * 32).reshape(8, 32).float() / 20
-    x = TableTensor.from_tensor(
-        torch.stack((values, values.square(), torch.ones_like(values)), dim=-1)
+    features = torch.stack(
+        (values, values.square(), torch.ones_like(values)), dim=-1
     )
+    x = TableTensor.from_tensor(features)
     y = TableTensor.from_tensor(values.unsqueeze(-1))
-    query_values = torch.arange(6).float() / 3
-    query = torch.stack(
-        (query_values, query_values.square(), torch.ones_like(query_values)),
-        dim=-1,
-    )
+    query = features[0, :6]
     execution = RecipeExecution(KumoRelational.default_recipe())
     execution.fit_transform(x=x, y=y, related_tables=None)
     expected = execution.transform(
