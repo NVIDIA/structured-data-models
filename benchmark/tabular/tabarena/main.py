@@ -4,14 +4,15 @@
 r"""Run an SDM tabular model on TabArena."""
 
 import argparse
+import gc
 from pathlib import Path
 
+import torch
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
 from benchmark.tabular.model import MODEL_CONFIGS
-from benchmark.tabular.run import run_jobs
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -77,4 +78,11 @@ jobs = context.build_jobs(
     subset=args.subset,
     dataset_names=[args.dataset] if args.dataset is not None else None,
 )
-run_jobs(context=context, jobs=jobs, result_dir=result_dir)
+for job in jobs:
+    context.run_jobs(jobs=[job], expname=result_dir, register=False)
+    # Reclaim memory before the next job.
+    gc.collect()
+    if torch.cuda.is_initialized():
+        torch.cuda.synchronize()
+        torch._C._host_emptyCache()
+        torch.cuda.empty_cache()
