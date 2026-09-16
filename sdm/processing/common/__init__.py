@@ -10,6 +10,7 @@ from sdm.processing.common.drop import DropStypes
 from sdm.processing.common.stype import StypeDispatch
 from sdm.processing.common.task import TaskDispatch
 from sdm.processing.common.table import TableDispatch
+from sdm.processing.common.missing import MissingDispatch
 from sdm.processing.common.ensemble import EnsembleProcessorAdapter
 from sdm.processing.common.choice import Choice
 from sdm.processing.common.to_numerical import ToNumerical
@@ -24,6 +25,7 @@ __all__ = [
     "StypeDispatch",
     "TaskDispatch",
     "TableDispatch",
+    "MissingDispatch",
     "EnsembleProcessorAdapter",
     "Choice",
     "ToNumerical",
