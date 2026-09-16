@@ -74,20 +74,23 @@ KUMO_RELATIONAL_SPACE = SearchSpace(
             "context_size": context_size,
             "num_neighbors": num_neighbors,
             "num_estimators": num_estimators,
+            "lag_target": lag_target,
         }
         for context_size in [20_000]
         for num_neighbors in [
-            [],
-            [1, 1],
-            [2, 2],
-            [4, 4],
-            [8, 8],
-            [16, 16],
-            [32, 32],
-            [48, 48],
-            [64, 64],
+            # [],
+            # [1, 1],
+            # [2, 2],
+            # [4, 4],
+            # [8, 8],
+            # [16, 16],
+            # [32, 32],
+            # [64, 64],
+            # [96, 96],
+            [128, 128],
         ]
-        for num_estimators in [1]
+        for num_estimators in [1, 8]
+        for lag_target in [False]
     ],
 )
 
@@ -107,8 +110,8 @@ class KumoRelationalModel(RelArenaModel):
         time_limit: float | None = None,
     ) -> None:
 
-        print("FITTING", self.config)
-        print("LEN TRAIN TABLE", len(train_table))
+        history = train_table.df.copy()
+        history[task.time_col] -= task.timedelta
 
         for name, table in db.table_dict.items():
             columns = list(table.df.columns)
@@ -130,23 +133,37 @@ class KumoRelationalModel(RelArenaModel):
             )
             for name, table in db.table_dict.items()
         }
-        data = sdm.RelationalData(
-            tables={
-                name: sdm.TableTensor.from_pandas(table.df, stypes[name])
-                for name, table in db.table_dict.items()
-            },
-            relationships=[
-                {
-                    "left_table": name,
-                    "left_column": column,
-                    "right_table": other,
-                    "right_column": db.table_dict[other].pkey_col,
-                }
-                for name, table in db.table_dict.items()
-                for column, other in table.fkey_col_to_pkey_table.items()
-            ],
-        )
-        self.sampler = data.sampler(
+        tables = {
+            name: sdm.TableTensor.from_pandas(table.df, stypes[name])
+            for name, table in db.table_dict.items()
+        }
+        if self.config["lag_target"]:
+            tables["history"] = sdm.TableTensor.from_pandas(history, stypes={
+                task.entity_col: "id",
+                task.time_col: "datetime",
+                task.target_col: "numerical"
+                if task.task_type == TaskType.REGRESSION
+                else "categorical",
+            })
+        relationships = [
+            {
+                "left_table": name,
+                "left_column": column,
+                "right_table": other,
+                "right_column": db.table_dict[other].pkey_col,
+            }
+            for name, table in db.table_dict.items()
+            for column, other in table.fkey_col_to_pkey_table.items()
+        ]
+        if self.config["lag_target"]:
+            relationships.append({
+                "left_table": "history",
+                "left_column": task.entity_col,
+                "right_table": task.entity_table,
+                "right_column": db.table_dict[task.entity_table].pkey_col,
+            })
+
+        self.sampler = sdm.RelationalData(tables, relationships).sampler(
             time_columns={
                 name: table.time_col
                 for name, table in db.table_dict.items()
@@ -164,6 +181,7 @@ class KumoRelationalModel(RelArenaModel):
                 else "categorical",
             },
         )
+        print('context', len(context))
 
         generator = torch.Generator().manual_seed(seed)
         perm = torch.randperm(len(context), generator=generator)
@@ -203,9 +221,6 @@ class KumoRelationalModel(RelArenaModel):
         table: Table,
     ) -> np.ndarray:
 
-        print("Predicting", self.config)
-        print("LEN TABLE", len(table))
-
         query = sdm.TableTensor.from_pandas(
             df=table.df,
             stypes={
@@ -213,23 +228,29 @@ class KumoRelationalModel(RelArenaModel):
                 task.time_col: "datetime",
             },
         )
+        print('query', len(query))
 
-        query, related_tables = self.sampler(
-            query,
-            task_link={
-                "task_column": task.entity_col,
-                "table": task.entity_table,
-                "table_column": db.table_dict[task.entity_table].pkey_col,
-            },
-            num_neighbors=self.config["num_neighbors"],
-            task_time_column=task.time_col,
-        ).cuda()
 
-        with torch.amp.autocast("cuda", torch.float16, enabled=True):
-            out = self.model.predict(query, related_tables)
+        outs = []
+        for batch in query.split(10_000, dim=-2):
+            batch, related_tables = self.sampler(
+                batch,
+                task_link={
+                    "task_column": task.entity_col,
+                    "table": task.entity_table,
+                    "table_column": db.table_dict[task.entity_table].pkey_col,
+                },
+                num_neighbors=self.config["num_neighbors"],
+                task_time_column=task.time_col,
+            ).cuda()
+
+            with torch.amp.autocast("cuda", torch.float16, enabled=True):
+                outs.append(self.model.predict(batch, related_tables))
+        out = torch.cat(outs, dim=-2)
 
         if task.task_type == TaskType.BINARY_CLASSIFICATION:
-            out = out["1"].numerical.squeeze(-1)
+            # out = out["1"].numerical.squeeze(-1)
+            out = out["True"].numerical.squeeze(-1)
 
         return out.cpu().numpy()
 
