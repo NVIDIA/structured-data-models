@@ -1,12 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import torch
+
 import sdm.processing as sp
 
 
 def _normalize() -> list[sp.Processor]:
-    # Members cycle over three normalizations of the standardized columns.
+    # Members cycle over three normalizations of the standardized columns,
+    # fitted in double precision: in single precision the standardized
+    # values of a column with a few huge outliers collapse onto one value.
     return [
+        sp.Cast(torch.float64),
         sp.Standardize(eps=1e-6),
         sp.Clip(min_value=-100.0, max_value=100.0),
         sp.Choice(
@@ -40,6 +45,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.DropConstantColumns(),
                     *_normalize(),
                     sp.FlipSign(),
+                    sp.Cast(torch.float32),
                 ],
                 # Category codes are normalized like numbers but never
                 # sign-flipped.
@@ -47,6 +53,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.ToNumerical(),
                     sp.DropConstantColumns(),
                     *_normalize(),
+                    sp.Cast(torch.float32),
                 ],
             ),
             sp.StypeDispatch(

@@ -44,6 +44,7 @@ def test_default_recipe_imputes_small_tables(device: torch.device) -> None:
     for member_id in range(output.num_members):
         member = output.table(member_id)
         assert member.numerical.isfinite().all()
+        assert member.numerical.dtype == features.numerical.dtype
 
 
 @withCUDA
