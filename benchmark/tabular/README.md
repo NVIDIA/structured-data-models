@@ -123,6 +123,17 @@ python -m benchmark.tabular.beyondarena.main \
   --subset lite
 ```
 
+Run a local checkpoint under a run name, with every cache under one directory:
+
+```bash
+python -m benchmark.tabular.beyondarena.main \
+  --model kumo-tabular \
+  --checkpoint /path/to/final.pt \
+  --name my-run \
+  --output_root /path/to/beyondarena_out \
+  --cache_root /path/to/cache
+```
+
 Available subset filters include problem types (`classification`, `regression`), size buckets (`tiny`, `small`, `medium`, `large`), split regimes (`iid`, `temporal`, `grouped`), feature groups (`low-dim`, `high-dim`, `text`, `high-cardinality`), and split selections (`core`, `lite`, `all`). Prefix a filter with `!` to negate it.
 
 ### Evaluate
@@ -131,4 +142,10 @@ Evaluate all available model results with:
 
 ```bash
 python -m benchmark.tabular.beyondarena.evaluate
+```
+
+Evaluate named runs of one model instead. Repeat `--name` for one leaderboard row per run; join runs with `,` to score them as one method, for example a classification and a regression run:
+
+```bash
+python -m benchmark.tabular.beyondarena.evaluate --model kumo-tabular --name my-cls-run,my-reg-run --output_root /path/to/beyondarena_out
 ```

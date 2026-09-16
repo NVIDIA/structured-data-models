@@ -7,6 +7,7 @@ import argparse
 from pathlib import Path
 
 from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
+from tabarena.caching import CacheConfig
 from tabarena.contexts import BeyondArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
@@ -47,14 +48,33 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+parser.add_argument(
+    "--checkpoint",
+    type=Path,
+    help="Local checkpoint loaded instead of the published weights.",
+)
+parser.add_argument(
+    "--name",
+    help="Name of the result directory (default: the model name).",
+)
+parser.add_argument(
+    "--output_root",
+    type=Path,
+    default=Path(__file__).parent.parent / "beyondarena_out",
+    help="Directory holding one result directory per run.",
+)
+parser.add_argument(
+    "--cache_root",
+    type=Path,
+    help="Parent directory of every BeyondArena cache.",
+)
 args = parser.parse_args()
+if args.checkpoint is not None and args.model != "kumo-tabular":
+    parser.error("--checkpoint is only supported for --model kumo-tabular")
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
-    Path(__file__).parent.parent
-    / "beyondarena_out"
-    / model_config.name
-    / "outer_model"
+    args.output_root / (args.name or model_config.name) / "outer_model"
 )
 result_dir.mkdir(parents=True, exist_ok=True)
 
@@ -62,6 +82,8 @@ config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
 }
+if args.checkpoint is not None:
+    config["checkpoint"] = args.checkpoint
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
 
@@ -78,7 +100,13 @@ for experiment in experiments:
     experiment.method_cls = SDMModelWrapper
     experiment.experiment_cls = SDMExperimentRunner
 
-context = BeyondArenaContext()
+context = BeyondArenaContext(
+    cache_config=(
+        CacheConfig.from_root(args.cache_root)
+        if args.cache_root is not None
+        else None
+    ),
+)
 context.build_and_run_jobs(
     experiments,
     expname=result_dir,
