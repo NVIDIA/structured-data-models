@@ -5,7 +5,9 @@
 
 Fine-tunes every parameter of the selected model with gradient descent on
 resampled in-context batches per iteration. Evaluates in-context against a
-held-out split every epoch and checkpoints whenever that metric improves.
+fixed validation split every epoch, checkpoints whenever that metric
+improves, and reports the checkpointed model's performance on a held-out
+test split once fine-tuning is done.
 """
 
 import argparse
@@ -92,8 +94,8 @@ def finetune(
     model: sdm.models.ICLModel,
     recipe: sp.Recipe,
     pool: sdm.TableTensor,
-    eval_context: sdm.TableTensor,
-    eval_query: sdm.TableTensor,
+    val_context: sdm.TableTensor,
+    val_query: sdm.TableTensor,
     target_column: str,
     *,
     task: str,
@@ -111,20 +113,21 @@ def finetune(
     Each step resamples a disjoint context/query batch from ``pool``, runs
     the model's differentiable ``forward()`` path, and backpropagates a
     supervised loss on the query rows computed inside a training callback.
-    After every epoch, ``model`` is evaluated in-context against
-    ``eval_context``/``eval_query`` and checkpointed to ``checkpoint_path``
-    whenever that metric improves on the best seen so far.
+    After every epoch, ``model`` is evaluated in-context against the fixed
+    ``val_context``/``val_query`` split and checkpointed to
+    ``checkpoint_path`` whenever that metric improves on the best seen so
+    far. Before returning, ``model`` is restored to its best checkpoint.
     """
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     quantile_levels = torch.linspace(0.001, 0.999, 999, device=pool.device)
     higher_is_better = task == "classification"
-    metric_name = "accuracy" if task == "classification" else "RMSE"
+    metric_name = "val_accuracy" if task == "classification" else "val_RMSE"
 
     def current_metric() -> float:
         return evaluate(
             model,
-            eval_context,
-            eval_query,
+            val_context,
+            val_query,
             target_column,
             task=task,
             num_estimators=num_estimators,
@@ -186,6 +189,13 @@ def finetune(
             best_metric = metric_value
             torch.save(model.state_dict(), checkpoint_path)
 
+    best_state = torch.load(
+        checkpoint_path,
+        map_location=pool.device,
+        weights_only=True,
+    )
+    model.load_state_dict(best_state)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -228,26 +238,44 @@ def main() -> None:
         target_column = "MedHouseVal"
         stypes = sdm.infer_stypes(frame)
 
+    # 80% train (also the fine-tuning pool) / 10% val (checkpoint selection
+    # during training) / 10% test (reported only once, after fine-tuning).
     stratify = frame[target_column] if args.task == "classification" else None
-    train_frame, eval_frame = train_test_split(
+    train_frame, holdout_frame = train_test_split(
         frame,
         test_size=0.2,
         random_state=args.seed,
         stratify=stratify,
     )
+    holdout_stratify = (
+        holdout_frame[target_column] if args.task == "classification" else None
+    )
+    val_frame, test_frame = train_test_split(
+        holdout_frame,
+        test_size=0.5,
+        random_state=args.seed,
+        stratify=holdout_stratify,
+    )
     train_frame = train_frame.reset_index(drop=True)
-    eval_frame = eval_frame.reset_index(drop=True)
+    val_frame = val_frame.reset_index(drop=True)
+    test_frame = test_frame.reset_index(drop=True)
 
-    # Zero-shot evaluation always uses raw label/target values: the model's
-    # own default recipe fits `AlignCategories`/`Standardize` on the context
-    # it is given, so no manual target encoding is needed here.
-    eval_context = sdm.TableTensor.from_pandas(
+    # Zero-shot/validation/test evaluation always uses raw label/target
+    # values: the model's own default recipe fits `AlignCategories`/
+    # `Standardize` on the context it is given, so no manual target
+    # encoding is needed here.
+    context = sdm.TableTensor.from_pandas(
         df=train_frame.iloc[: args.context_size],
         stypes=stypes,
         device=device,
     )
-    eval_query = sdm.TableTensor.from_pandas(
-        df=eval_frame,
+    val_query = sdm.TableTensor.from_pandas(
+        df=val_frame,
+        stypes=stypes,
+        device=device,
+    )
+    test_query = sdm.TableTensor.from_pandas(
+        df=test_frame,
         stypes=stypes,
         device=device,
     )
@@ -287,8 +315,8 @@ def main() -> None:
         model,
         train_recipe,
         train_pool,
-        eval_context,
-        eval_query,
+        context,
+        val_query,
         target_column,
         task=args.task,
         max_epochs=args.max_epochs,
@@ -300,6 +328,18 @@ def main() -> None:
         checkpoint_path=checkpoint_path,
         generator=generator,
     )
+
+    test_metric = evaluate(
+        model,
+        context,
+        test_query,
+        target_column,
+        task=args.task,
+        num_estimators=args.num_estimators,
+        generator=generator,
+    )
+    metric_name = "accuracy" if args.task == "classification" else "RMSE"
+    print(f"test_{metric_name}={test_metric:.4f}")
 
 
 if __name__ == "__main__":
