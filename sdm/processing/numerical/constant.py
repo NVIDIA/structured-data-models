@@ -21,8 +21,6 @@ class DropConstantColumns(EnsembleProcessor):
     Fitting expects data with shape ``[N, C]``, where ``N`` is the number of
     rows and ``C`` is the number of numerical columns. The learned selection
     can transform later tables with shape ``[..., C]``.
-    Each ensemble member learns its own column selection; query members use
-    the selection fitted for the corresponding member.
 
     Args:
         threshold: Columns with at most this many unique values are removed.
