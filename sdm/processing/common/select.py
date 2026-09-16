@@ -98,7 +98,7 @@ class SelectColumns(EnsembleProcessor):
                     **blocks,
                 )
             )
-        return EnsembleTable.from_tables(
+        return ensemble_table.replace_tables(
             tables=tables,
             member_table_ids=range(len(tables)),
         )
