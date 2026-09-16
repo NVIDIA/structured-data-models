@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
-import math
 from typing import Any, cast
 
 import pandas as pd
