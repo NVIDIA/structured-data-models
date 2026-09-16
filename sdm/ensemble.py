@@ -117,9 +117,6 @@ class EnsembleTable(DeviceMixin):
         Returns:
             An :class:`~sdm.EnsembleTable` with one group.
         """
-        if num_members < 1:
-            raise ValueError("'num_members' needs to be positive")
-
         return cls(
             groups=(cast(TableTensor, table.unsqueeze(0)),),
             locations=((0, 0),) * num_members,
