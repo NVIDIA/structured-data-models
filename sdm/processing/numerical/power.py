@@ -11,7 +11,8 @@ from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _constant_feature_mask
 
 # Keep GPU execution batched; adaptive per-column stopping would resynchronize.
-# For float32 overflow-safe bounds, 44 golden steps reaches ~1.48e-8.
+# Over the double-precision bounds, 44 golden steps shrink the interval by
+# a factor of ~6e-10.
 _YEOJOHNSON_OPTIMIZATION_STEPS = 44
 
 
@@ -266,16 +267,14 @@ class PowerTransform(Processor, InvertibleMixin):
         mean.masked_fill_(mean.isnan(), 0.0)
         var = (finite_or_nan - mean).square().nanmean(-2, keepdim=True)
         var.masked_fill_(var.isnan(), 0.0)
+        count = finite.sum(dim=-2, keepdim=True)
         constant_features = _constant_feature_mask(
-            var,
-            mean,
-            num_samples=finite.sum(dim=-2, keepdim=True),
+            var, mean, num_samples=count
         )
         self.max = torch.where(finite, numerical, mean).amax(
             dim=-2,
             keepdim=True,
         )
-        count = finite.sum(dim=-2, keepdim=True)
         del finite
 
         self.lambdas = self._optimize_lambdas(finite_or_nan, constant_features)
@@ -288,14 +287,7 @@ class PowerTransform(Processor, InvertibleMixin):
             transformed = _yeojohnson_transform(finite_or_nan, self.lambdas)
             self.mean = transformed.nanmean(dim=-2, keepdim=True)
             self.mean.masked_fill_(self.mean.isnan(), 0.0)
-            var = (
-                (transformed - self.mean)
-                .square()
-                .nanmean(
-                    dim=-2,
-                    keepdim=True,
-                )
-            )
+            var = (transformed - self.mean).square().nanmean(-2, keepdim=True)
             var.masked_fill_(var.isnan(), 0.0)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, self.mean, count)] = 1.0
@@ -311,6 +303,10 @@ class PowerTransform(Processor, InvertibleMixin):
             self.lambdas,
         )
         numerical = (transformed - self.mean) / self.scale
+        # Lambdas fitted in double precision can send a query beyond the
+        # fitted range past the table dtype; keep it finite for the clip.
+        bound = torch.finfo(table.numerical.dtype).max
+        numerical = numerical.clamp(min=-bound, max=bound)
         return table.replace_blocks(
             numerical=numerical.to(table.numerical.dtype)
         )
@@ -320,7 +316,7 @@ class PowerTransform(Processor, InvertibleMixin):
         unscaled = numerical * self.scale + self.mean
         inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)
 
-        out_of_bounds = inverse.isinf()
+        out_of_bounds = inverse.isinf() | (inverse.isnan() & ~unscaled.isnan())
         eps = torch.finfo(numerical.dtype).eps
         bounded_unscaled = torch.minimum(unscaled, self.upper_bound - eps)
         bounded_inverse = _yeojohnson_inverse_transform(
