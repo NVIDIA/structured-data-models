@@ -6,14 +6,16 @@ from typing import Literal, cast
 import torch
 from torch.nn import ModuleDict
 
-from sdm import EnsembleTable, Stype
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor, Processor
 
 
 class TaskDispatch(EnsembleProcessor):
     """Apply separate processors based on the semantic type of the target.
 
-    :class:`TaskDispatch` is resolved only during model execution.
+    :class:`TaskDispatch` is resolved only during model execution. A plain
+    table is forwarded to the selected processor as is, so stacked model
+    outputs keep their estimator dimension for a reducer inside a route.
 
     Args:
         classification: Processor selected for a categorical target.
@@ -51,22 +53,52 @@ class TaskDispatch(EnsembleProcessor):
             for stype in processor.handles_stypes
         )
 
+    def _route(self) -> EnsembleProcessor | None:
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
+            )
+        if self._task not in self.processors:
+            return None
+        return self.processors[self._task]
+
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        processor = self._route()
+        if processor is not None:
+            processor.fit(table, generator=generator)
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        processor = self._route()
+        if processor is None:
+            return table
+        return processor.fit_transform(table, generator=generator)
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        processor = self._route()
+        if processor is None:
+            return table
+        return processor.transform(table)
+
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        if self._task is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; use it "
-                "in a 'Recipe' through model execution"
-            )
-        if self._task in self.processors:
-            self.processors[self._task].fit_ensemble(
-                ensemble_table,
-                generator=generator,
-            )
+        processor = self._route()
+        if processor is not None:
+            processor.fit_ensemble(ensemble_table, generator=generator)
 
     def _fit_transform_ensemble(
         self,
@@ -74,14 +106,10 @@ class TaskDispatch(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        if self._task is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; use it "
-                "in a 'Recipe' through model execution"
-            )
-        if self._task not in self.processors:
+        processor = self._route()
+        if processor is None:
             return ensemble_table
-        return self.processors[self._task].fit_transform_ensemble(
+        return processor.fit_transform_ensemble(
             ensemble_table,
             generator=generator,
         )
@@ -90,14 +118,10 @@ class TaskDispatch(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if self._task is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; use it "
-                "in a 'Recipe' through model execution"
-            )
-        if self._task not in self.processors:
+        processor = self._route()
+        if processor is None:
             return ensemble_table
-        return self.processors[self._task].transform_ensemble(ensemble_table)
+        return processor.transform_ensemble(ensemble_table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415
