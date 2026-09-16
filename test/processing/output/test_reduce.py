@@ -45,8 +45,96 @@ def test_reduce_estimators_rejects_empty_ensemble_dimension() -> None:
 
 
 def test_reduce_estimators_rejects_unknown_method() -> None:
-    with pytest.raises(ValueError, match="method must be 'mean'"):
+    with pytest.raises(
+        ValueError,
+        match="method must be 'mean' or 'trimmed_mean'",
+    ):
         sp.ReduceEstimators(method="median")  # type: ignore
+
+
+@withCUDA
+def test_reduce_estimators_trimmed_mean_rejects_outliers(
+    device: torch.device,
+) -> None:
+    values = torch.tensor(
+        [
+            [[-100.0, 100.0]],
+            [[1.0, 4.0]],
+            [[2.0, 3.0]],
+            [[3.0, 2.0]],
+            [[100.0, -100.0]],
+        ],
+        dtype=torch.float64,
+        device=device,
+    )
+    table = TableTensor.from_tensor(values, columns=("a", "b"))
+    processor = sp.ReduceEstimators(method="trimmed_mean")
+
+    output = processor.transform(table)
+
+    assert output.size() == (1, 2)
+    assert output.schema == table.schema
+    assert output.dtype == values.dtype
+    assert output.device == device
+    torch.testing.assert_close(
+        output.numerical,
+        torch.tensor([[2.0, 3.0]], dtype=values.dtype, device=device),
+    )
+    assert repr(processor) == (
+        "ReduceEstimators(method='trimmed_mean', proportion_to_cut=0.2)"
+    )
+
+
+@withCUDA
+def test_reduce_estimators_trimmed_mean_floors_cut(
+    device: torch.device,
+) -> None:
+    values = torch.arange(
+        4 * 3 * 2, dtype=torch.float32, device=device
+    ).reshape(4, 3, 2)
+    output = sp.ReduceEstimators(method="trimmed_mean").transform(
+        TableTensor.from_tensor(values)
+    )
+
+    torch.testing.assert_close(output.numerical, values.mean(dim=0))
+
+
+@withCUDA
+def test_reduce_estimators_trimmed_mean_non_default_proportion(
+    device: torch.device,
+) -> None:
+    values = torch.tensor(
+        [-100.0, -50.0, 1.0, 2.0, 3.0, 4.0, 50.0, 100.0],
+        device=device,
+    ).reshape(8, 1, 1)
+    processor = sp.ReduceEstimators(
+        method="trimmed_mean",
+        proportion_to_cut=0.25,
+    )
+
+    output = processor.transform(TableTensor.from_tensor(values))
+
+    torch.testing.assert_close(
+        output.numerical,
+        torch.tensor([[2.5]], device=device),
+    )
+    assert repr(processor) == (
+        "ReduceEstimators(method='trimmed_mean', proportion_to_cut=0.25)"
+    )
+
+
+@pytest.mark.parametrize(
+    "proportion_to_cut",
+    [-0.1, 0.5, 1.0, float("nan")],
+)
+def test_reduce_estimators_rejects_invalid_proportion(
+    proportion_to_cut: float,
+) -> None:
+    with pytest.raises(ValueError, match=r"must be in \[0, 0\.5\)"):
+        sp.ReduceEstimators(
+            method="trimmed_mean",
+            proportion_to_cut=proportion_to_cut,
+        )
 
 
 def test_reduce_estimators_rejects_non_numerical_stypes() -> None:
@@ -117,6 +205,48 @@ def test_reduce_estimators_reduces_across_storage_groups(
         output.table(0).numerical,
         torch.tensor([[4.0, 10.0 / 3.0]], device=device),
     )
+
+
+@withCUDA
+def test_reduce_estimators_trimmed_mean_counts_logical_members(
+    device: torch.device,
+) -> None:
+    first = TableTensor.from_tensor(
+        torch.tensor([[0.0, 100.0]], dtype=torch.float64, device=device),
+        columns=("a", "b"),
+    )
+    shared = TableTensor.from_tensor(
+        torch.tensor([[10.0, 1.0]], dtype=torch.float64, device=device),
+        columns=("b", "a"),
+    )
+    last = TableTensor.from_tensor(
+        torch.tensor([[100.0, -100.0]], dtype=torch.float64, device=device),
+        columns=("a", "b"),
+    )
+    table = EnsembleTable.from_tables(
+        tables=(first, shared, last),
+        member_table_ids=(0, 1, 1, 1, 2),
+    )
+    processor = sp.ReduceEstimators(method="trimmed_mean")
+
+    output = processor.transform_ensemble(table)
+
+    assert output.num_members == 1
+    result = output.table(0)
+    assert result.columns == first.columns
+    assert result.schema == first.schema
+    assert result.dtype == first.dtype
+    assert result.device == device
+    torch.testing.assert_close(
+        result.numerical,
+        torch.tensor([[1.0, 10.0]], dtype=first.dtype, device=device),
+    )
+
+    single = processor.transform_ensemble(
+        EnsembleTable.from_table(first, num_members=1)
+    )
+    assert single.num_members == 1
+    assert single.table(0).equal(first)
 
 
 def test_reduce_estimators_rejects_empty_ensemble_table() -> None:
