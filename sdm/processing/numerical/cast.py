@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+import torch
+
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
+
+
+class Cast(Processor):
+    r"""Cast numerical columns to a floating point dtype.
+
+    Statistics fitted by the processors that follow are then computed in
+    that precision; cast back before handing the table to a model.
+
+    Args:
+        dtype: The floating point dtype of the numerical columns.
+    """
+
+    handles_stypes = frozenset({Stype.numerical})
+    requires_fit = False
+
+    def __init__(self, dtype: torch.dtype) -> None:
+        super().__init__()
+        self.dtype = dtype
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical.to(self.dtype))
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return f"{' ' * indent}{self.__class__.__name__}({self.dtype})"
