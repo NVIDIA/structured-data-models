@@ -5,6 +5,7 @@ import sdm.processing as sp
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
+    ecoc = sp.ECOCCategories(alphabet_size=10)
     return sp.Recipe(
         features=[
             sp.StypeDispatch(
@@ -34,6 +35,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             sp.StypeDispatch(
                 categorical=[
                     sp.AlignCategories(),
+                    ecoc,
                     sp.ShuffleCategories(method="shift"),
                 ],
                 numerical=[
@@ -44,6 +46,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         ],
         output=[
             sp.TaskDispatch(regression=sp.SortQuantiles()),
+            sp.DecodeECOC(ecoc),
             sp.ReduceEstimators(method="mean"),
             sp.TaskDispatch(classification=sp.Softmax(temperature=1.0)),
         ],

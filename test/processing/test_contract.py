@@ -107,6 +107,29 @@ def _make_processor_pair(
     )
 
 
+def _make_ecoc_table() -> EnsembleTable:
+    # More categories than the alphabet, so the codebook activates. The
+    # categories are strings, because a class label need not be a number.
+    table = make_table()
+    categories = (
+        StringTensor.from_list([f"c{index}" for index in range(12)]),
+    )
+    tables = tuple(
+        table.table(member_id).replace_blocks(
+            categorical=CategoricalTensor(
+                code=torch.tensor(codes, dtype=torch.int32),
+                categories=categories,
+            ),
+        )
+        for member_id, codes in enumerate(
+            ([[0], [4], [9], [11]], [[1], [5], [8], [-1]])
+        )
+    )
+    return EnsembleTable.from_tables(
+        tables=tables, member_table_ids=(0, 1, 0, 1)
+    )
+
+
 PROCESSOR_CASES = (
     ProcessorCase(sp.Identity()),
     ProcessorCase(sp.Callable(lambda table: table)),
@@ -130,6 +153,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.RandomProjection(2)),
     ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
     ProcessorCase(sp.ShuffleCategories()),
+    ProcessorCase(sp.ECOCCategories(alphabet_size=10), _make_ecoc_table),
     ProcessorCase(sp.ImputeMode()),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
@@ -190,6 +214,9 @@ def test_all_public_processors_have_contract_cases() -> None:
         sp.TaskDispatch,
         sp.TableDispatch,
         sp.SentenceTransformer,
+        # Needs the codebook of a fitted 'ECOCCategories' and an ensemble
+        # dimension of model outputs, which this table cannot supply.
+        sp.DecodeECOC,
     }
     assert public_processors == covered_processors | specialized_processors
 

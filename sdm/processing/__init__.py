@@ -40,9 +40,15 @@ from sdm.processing.categorical import (
     AlignCategories,
     ShuffleCategories,
     ImputeMode,
+    ECOCCategories,
 )
 from sdm.processing.datetime import AddCalendarFields
-from sdm.processing.output import ReduceEstimators, Softmax, SortQuantiles
+from sdm.processing.output import (
+    DecodeECOC,
+    ReduceEstimators,
+    Softmax,
+    SortQuantiles,
+)
 from sdm.processing.recipe import Recipe
 
 __all__ = [
@@ -78,7 +84,9 @@ __all__ = [
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
+    "ECOCCategories",
     "AddCalendarFields",
+    "DecodeECOC",
     "ReduceEstimators",
     "Softmax",
     "SortQuantiles",

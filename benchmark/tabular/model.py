@@ -20,6 +20,7 @@ from tabarena.benchmark.experiment import OOFExperimentRunner
 
 import sdm
 import sdm.processing as sp
+from sdm.processing.categorical.ecoc import ecoc_code_count
 
 Task = Literal["classification", "regression"]
 
@@ -103,8 +104,28 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         params = self._get_model_params()
         self._num_estimators = params["num_estimators"]
         max_context_size = params["max_context_size"]
+        subsamples = max_context_size is not None and len(X) > max_context_size
+
+        recipe = self.model.default_recipe()
+        if params["max_columns"] is not None:
+            for processor in recipe.features.modules():
+                if isinstance(processor, sp.SelectColumns):
+                    processor.max_columns = params["max_columns"]
+
+        if subsamples and target_stype == "categorical":
+            num_classes = y_context.categorical.categories[0].numel()
+            for processor in recipe.target.modules():
+                if (
+                    isinstance(processor, sp.ECOCCategories)
+                    and num_classes > processor.alphabet_size
+                ):
+                    self._num_estimators *= ecoc_code_count(
+                        num_classes=num_classes,
+                        alphabet_size=processor.alphabet_size,
+                    )
+
         num_estimators: int | None = self._num_estimators
-        if max_context_size is not None and len(X) > max_context_size:
+        if subsamples:
             num_repeats = math.ceil(num_estimators * max_context_size / len(X))
             perm = torch.cat(
                 [
@@ -121,12 +142,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             y_context = y_context[perm].unflatten(0, shape)
             num_estimators = None
         self._expand_query = num_estimators is None
-
-        recipe = self.model.default_recipe()
-        if params["max_columns"] is not None:
-            for processor in recipe.features.modules():
-                if isinstance(processor, sp.SelectColumns):
-                    processor.max_columns = params["max_columns"]
 
         with torch.amp.autocast(
             self._device.type,
