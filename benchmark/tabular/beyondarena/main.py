@@ -80,7 +80,6 @@ jobs = context.build_jobs(
 )
 for job in jobs:
     context.run_jobs(jobs=[job], expname=result_dir, register=False)
-    # Reclaim memory before the next job.
     gc.collect()
     if torch.cuda.is_initialized():
         torch.cuda.synchronize()
