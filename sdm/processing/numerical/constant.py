@@ -1,22 +1,20 @@
-from typing import Literal, cast
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from typing import cast
 
 import torch
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
 
-DropConstantColumnsMethod = Literal["unique", "variance"]
-
 
 class DropConstantColumns(EnsembleProcessor):
     """Remove non-informative numerical columns learned during fit.
 
-    With ``method="unique"``, columns are retained when they have more than
-    ``threshold`` distinct values. When the number of samples is less than or
-    equal to ``threshold``, all columns are preserved.
-
-    With ``method="variance"``, columns are retained when their sample
-    standard deviation is greater than ``tolerance``.
+    Columns are retained when they have more than ``threshold`` distinct
+    values. When the number of samples is less than or equal to ``threshold``,
+    all columns are preserved. NaN is counted once as a distinct value.
 
     Only numerical columns are supported. Convert other feature stypes before
     this step, for example with :class:`~sdm.processing.ToNumerical`.
@@ -27,12 +25,8 @@ class DropConstantColumns(EnsembleProcessor):
     the selection fitted for the corresponding member.
 
     Args:
-        method: Filtering rule. ``"unique"`` uses distinct-value counts;
-            ``"variance"`` uses sample standard deviation.
-        threshold: With ``method="unique"``, columns with at most this many
-            unique values are removed. Must be positive.
-        tolerance: With ``method="variance"``, columns with sample standard
-            deviation at most this value are removed.
+        threshold: Columns with at most this many unique values are removed.
+            Must be positive.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -40,29 +34,14 @@ class DropConstantColumns(EnsembleProcessor):
 
     def __init__(
         self,
-        method: DropConstantColumnsMethod = "unique",
         *,
-        threshold: int | None = None,
-        tolerance: float | None = None,
+        threshold: int = 1,
     ) -> None:
         super().__init__()
-        if method == "unique" and tolerance is not None:
-            raise ValueError("tolerance must be None when method is 'unique'")
-
-        if method == "variance" and threshold is not None:
-            raise ValueError(
-                "threshold must be None when method is 'variance'"
-            )
-
-        if threshold is not None and threshold <= 0:
+        if threshold <= 0:
             raise ValueError("threshold must be positive")
 
-        if tolerance is not None and tolerance < 0:
-            raise ValueError("tolerance must be non-negative")
-
-        self.method = method
-        self.threshold = 1 if threshold is None else threshold
-        self.tolerance = 1e-6 if tolerance is None else tolerance
+        self.threshold = threshold
         # TODO: Consider recording the fitted column names if transforms should
         # verify that the numerical schema and order match fit.
         self._kept_indices: tuple[tuple[int, ...], ...] = ()
@@ -77,10 +56,6 @@ class DropConstantColumns(EnsembleProcessor):
 
     def _keep_mask(self, data: torch.Tensor) -> torch.Tensor:
         # [N, C] or [..., N, C] -> [C] or [..., C].
-        if self.method == "variance":
-            return data.std(dim=-2) > self.tolerance
-
-        assert self.method == "unique"
         # Preserve the schema when too few rows can exceed the threshold.
         if data.size(-2) <= self.threshold:
             return data.new_ones(
@@ -89,11 +64,13 @@ class DropConstantColumns(EnsembleProcessor):
             )
         if self.threshold == 1:
             # Any mismatch with the first row proves a second unique value.
-            return (data != data[..., :1, :]).any(dim=-2)
+            different = (data != data[..., :1, :]).any(dim=-2)
+            return different & ~data.isnan().all(dim=-2)
 
         # A sorted column with k unique values has k - 1 transitions.
         values = data.sort(dim=-2).values
-        changed = values[..., 1:, :] != values[..., :-1, :]
+        left, right = values[..., :-1, :], values[..., 1:, :]
+        changed = (right != left) & ~(right.isnan() & left.isnan())
         return changed.sum(dim=-2) >= self.threshold
 
     @staticmethod

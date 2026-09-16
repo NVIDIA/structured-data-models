@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -121,7 +124,7 @@ class KumoTabular(ICLModel):
                 is_classifier=task == Task.classification,
                 num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
             )
-            model.load_state_dict(ckpt, strict=True, assign=True)
+            model.load_state_dict(ckpt, assign=True)
 
         return model
 
