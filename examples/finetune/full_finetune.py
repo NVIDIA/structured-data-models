@@ -211,8 +211,18 @@ def main() -> None:
     )
     parser.add_argument("--max-epochs", type=int, default=10)
     parser.add_argument("--steps-per-epoch", type=int, default=30)
-    parser.add_argument("--context-size", type=int, default=256)
-    parser.add_argument("--query-size", type=int, default=128)
+    parser.add_argument(
+        "--context-size",
+        type=int,
+        default=256,
+        help="Context size sampled per fine-tuning iteration.",
+    )
+    parser.add_argument(
+        "--query-size",
+        type=int,
+        default=128,
+        help="Query size sampled per fine-tuning iteration.",
+    )
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--num-estimators", type=int, default=8)
     parser.add_argument("--checkpoint-path", type=Path, default=None)
@@ -265,7 +275,7 @@ def main() -> None:
     # `Standardize` on the context it is given, so no manual target
     # encoding is needed here.
     context = sdm.TableTensor.from_pandas(
-        df=train_frame.iloc[: args.context_size],
+        df=train_frame,
         stypes=stypes,
         device=device,
     )
