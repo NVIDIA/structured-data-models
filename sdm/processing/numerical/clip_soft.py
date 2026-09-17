@@ -20,6 +20,8 @@ class ClipSoft(Processor):
 
     which maps monotonically onto ``±max_absolute_value`` (``b``) without a
     hard edge. NaN is preserved. ``±Inf`` maps to ``±max_absolute_value``.
+    Unlike :class:`~sdm.processing.ClipSigma`, the bound is fixed rather
+    than fitted from per-column statistics.
 
     Args:
         max_absolute_value: Bound of the soft clip.
@@ -28,7 +30,7 @@ class ClipSoft(Processor):
     handles_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
-    def __init__(self, *, max_absolute_value: float = 3.0) -> None:
+    def __init__(self, max_absolute_value: float) -> None:
         super().__init__()
         if not math.isfinite(max_absolute_value) or max_absolute_value <= 0:
             raise ValueError("max_absolute_value must be finite and positive.")
@@ -50,6 +52,6 @@ class ClipSoft(Processor):
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
-            f"{' ' * indent}{self.__class__.__name__}("
-            f"max_absolute_value={self.max_absolute_value})"
+            f"{' ' * indent}{self.__class__.__name__}"
+            f"({self.max_absolute_value})"
         )

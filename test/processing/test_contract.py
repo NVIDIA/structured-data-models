@@ -118,7 +118,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.Clip(-2.0, 6.0)),
     ProcessorCase(sp.ClipQuantiles()),
     ProcessorCase(sp.ClipSigma()),
-    ProcessorCase(sp.ClipSoft()),
+    ProcessorCase(sp.ClipSoft(3.0)),
     ProcessorCase(sp.ImputeMean(), _make_impute_mean_table),
     ProcessorCase(sp.PowerTransform()),
     ProcessorCase(
