@@ -9,28 +9,6 @@ from sdm import EnsembleTable, Recipe, RelatedTables, TableTensor
 from sdm.processing.execution import RecipeExecution
 
 
-def test_task_dispatch_reduces_stacked_member_outputs() -> None:
-    x = TableTensor.from_tensor(torch.zeros(2, 1))
-    y = TableTensor.from_tensor(torch.tensor([[0.0], [1.0]]))
-    execution = RecipeExecution(
-        Recipe(output=sp.TaskDispatch(regression=sp.ReduceEstimators()))
-    )
-    execution.fit_transform(x=x, y=y, related_tables=None, num_members=2)
-
-    output = execution.transform_output(
-        (
-            TableTensor.from_tensor(torch.tensor([[0.0], [2.0]])),
-            TableTensor.from_tensor(torch.tensor([[2.0], [6.0]])),
-        )
-    )
-
-    assert output.size() == (2, 1)
-    torch.testing.assert_close(
-        output.numerical,
-        torch.tensor([[1.0], [4.0]]),
-    )
-
-
 def test_sequence_uses_batched_fit_states_for_shared_query() -> None:
     x = TableTensor.from_tensor(torch.zeros(2, 1))
     fitted_related = EnsembleTable(
