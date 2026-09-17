@@ -223,10 +223,7 @@ delimited words are space-padded before windowing, so a word shorter than
 <code class="docutils literal notranslate"><span class="pre">n</span></code> still yields one n-gram. Fit learns a vocabulary and smoothed idf
 weights per text column. Transform replaces text with concatenated
 numerical features (one per retained n-gram), applies those idf weights,
-L2-normalizes each row, and ignores n-grams unseen at fit time.
-When fitted on an <a class="reference internal" href="../internal/ensemble_table.html#sdm.EnsembleTable" title="sdm.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a>, distinct member
-tables learn independent vocabularies and can produce different numerical
-schemas; members assigned the same table share fitted state.</p>
+L2-normalizes each row, and ignores n-grams unseen at fit time.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -280,7 +277,7 @@ column. <code class="docutils literal notranslate"><span class="pre">None</span>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=3b0e807e"></script>
+      <script src="../../_static/documentation_options.js?v=5c72a87e"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

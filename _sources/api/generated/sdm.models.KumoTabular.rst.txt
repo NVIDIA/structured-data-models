@@ -50,7 +50,7 @@ Default Recipe
              method='round_robin',
            ),
            ClipSigma(threshold=4.0),
-           FlipSign(),
+           FlipSign(probability=0.5),
            ShuffleColumns(method='latin'),
            SelectColumns(),
          ),
@@ -60,7 +60,7 @@ Default Recipe
        StypeDispatch(
          numerical=Sequential(
            Standardize(eps=0.0),
-           FlipSign(),
+           FlipSign(probability=0.5),
          ),
          categorical=Sequential(
            AlignCategories(),

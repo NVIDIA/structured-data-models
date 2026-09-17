@@ -278,7 +278,7 @@ default device.</p></li>
 </span><span data-line="17">          <span class="n">method</span><span class="o">=</span><span class="s1">'round_robin'</span><span class="p">,</span>
 </span><span data-line="18">        <span class="p">),</span>
 </span><span data-line="19">        <span class="n">ClipSigma</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">4.0</span><span class="p">),</span>
-</span><span data-line="20">        <span class="n">FlipSign</span><span class="p">(),</span>
+</span><span data-line="20">        <span class="n">FlipSign</span><span class="p">(</span><span class="n">probability</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
 </span><span data-line="21">        <span class="n">ShuffleColumns</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'latin'</span><span class="p">),</span>
 </span><span data-line="22">        <span class="n">SelectColumns</span><span class="p">(),</span>
 </span><span data-line="23">      <span class="p">),</span>
@@ -288,7 +288,7 @@ default device.</p></li>
 </span><span data-line="27">    <span class="n">StypeDispatch</span><span class="p">(</span>
 </span><span data-line="28">      <span class="n">numerical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
 </span><span data-line="29">        <span class="n">Standardize</span><span class="p">(</span><span class="n">eps</span><span class="o">=</span><span class="mf">0.0</span><span class="p">),</span>
-</span><span data-line="30">        <span class="n">FlipSign</span><span class="p">(),</span>
+</span><span data-line="30">        <span class="n">FlipSign</span><span class="p">(</span><span class="n">probability</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
 </span><span data-line="31">      <span class="p">),</span>
 </span><span data-line="32">      <span class="n">categorical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
 </span><span data-line="33">        <span class="n">AlignCategories</span><span class="p">(),</span>
@@ -335,7 +335,7 @@ default device.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=3b0e807e"></script>
+      <script src="../../_static/documentation_options.js?v=5c72a87e"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

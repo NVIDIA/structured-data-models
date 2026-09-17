@@ -225,9 +225,7 @@ all columns are preserved. NaN is counted once as a distinct value.</p>
 this step, for example with <code class="xref py py-class docutils literal notranslate"><span class="pre">ToNumerical</span></code>.
 Fitting expects data with shape <code class="docutils literal notranslate"><span class="pre">[N,</span> <span class="pre">C]</span></code>, where <code class="docutils literal notranslate"><span class="pre">N</span></code> is the number of
 rows and <code class="docutils literal notranslate"><span class="pre">C</span></code> is the number of numerical columns. The learned selection
-can transform later tables with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C]</span></code>.
-Each ensemble member learns its own column selection; query members use
-the selection fitted for the corresponding member.</p>
+can transform later tables with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C]</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Columns with at most this many unique values are removed.
@@ -277,7 +275,7 @@ Must be positive.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=3b0e807e"></script>
+      <script src="../../_static/documentation_options.js?v=5c72a87e"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

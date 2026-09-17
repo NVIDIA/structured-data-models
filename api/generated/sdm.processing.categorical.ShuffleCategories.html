@@ -219,13 +219,11 @@ data-aria-dark="Switch to auto color mode">
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a></p>
 <p>Independently permute the integer codes of categorical columns.</p>
 <p>One permutation per categorical column is drawn when the processor is
-fitted; pass <code class="docutils literal notranslate"><span class="pre">generator</span></code> to <code class="docutils literal notranslate"><span class="pre">fit()</span></code> to make the draws reproducible.
-For an ensemble, each logical member receives independent permutations.
-Codes and their corresponding category vectors are permuted together so
-decoded values remain unchanged. Negative codes represent missing values
-and are preserved unchanged. Only categorical columns are supported; use
-<code class="xref py py-class docutils literal notranslate"><span class="pre">StypeDispatch</span></code> to apply this processor to the
-categorical block of a mixed feature table.</p>
+fitted. Codes and their corresponding category vectors are permuted
+together so decoded values remain unchanged. Negative codes represent
+missing values and are preserved unchanged. Only categorical columns
+are supported; use <code class="xref py py-class docutils literal notranslate"><span class="pre">StypeDispatch</span></code> to apply this
+processor to the categorical block of a mixed feature table.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>method</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'shift'</em><em>, </em><em>'random'</em><em>]</em>) – Permutation strategy. <code class="docutils literal notranslate"><span class="pre">&quot;shift&quot;</span></code> cyclically shifts the
@@ -276,7 +274,7 @@ a drawn permutation.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=3b0e807e"></script>
+      <script src="../../_static/documentation_options.js?v=5c72a87e"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
