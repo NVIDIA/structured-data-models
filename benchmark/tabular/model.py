@@ -41,13 +41,16 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     default_num_estimators: ClassVar[int]
     autocast_dtype: ClassVar[torch.dtype]
 
-    @staticmethod
     @abc.abstractmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.ICLModel:
         pass
+
+    def _infer_stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
+        return sdm.infer_stypes(X)
 
     def _set_default_params(self) -> None:
         self._set_default_param_value(
@@ -83,7 +86,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             )
 
         X = self.preprocess(X, y=y)
-        self.stypes = sdm.infer_stypes(X)
+        self.stypes = self._infer_stypes(X)
         x_context = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
@@ -215,8 +218,8 @@ class SDMTabICLv2Model(SDMModel):
     default_num_estimators = 8
     autocast_dtype = torch.float16
 
-    @staticmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.TabICLv2:
@@ -229,12 +232,33 @@ class SDMKumoTabularModel(SDMModel):
     default_num_estimators = 8
     autocast_dtype = torch.float16
 
-    @staticmethod
+    def _set_default_params(self) -> None:
+        super()._set_default_params()
+        self._set_default_param_value("checkpoint", None)
+
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
-        return sdm.models.KumoTabular(task=task, device=device)
+        return sdm.models.KumoTabular(
+            task=task,
+            device=device,
+            checkpoint=self._get_model_params()["checkpoint"],
+        )
+
+    def _infer_stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
+        # A numeric column of two or three distinct values (missing counted
+        # as one) holds category codes once the table is large enough for
+        # that to be evidence.
+        stypes = sdm.infer_stypes(X)
+        if len(X) > 150:
+            for column, stype in stypes.items():
+                if stype != sdm.Stype.numerical:
+                    continue
+                if 1 < X[column].nunique(dropna=False) < 4:
+                    stypes[column] = sdm.Stype.categorical
+        return stypes
 
 
 class SDMTabFMModel(SDMModel):
@@ -243,8 +267,8 @@ class SDMTabFMModel(SDMModel):
     default_num_estimators = 32
     autocast_dtype = torch.bfloat16
 
-    @staticmethod
     def _create_model(
+        self,
         task: Task,
         device: torch.device,
     ) -> sdm.models.TabFM:

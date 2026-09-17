@@ -7,7 +7,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import EnsembleTable, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 
 
 def _numerical_table(
@@ -88,3 +88,24 @@ def test_task_dispatch_routes_ensemble_members() -> None:
             result.numerical,
             source.numerical.softmax(dim=-1),
         )
+
+
+def test_task_dispatch_forwards_stacked_outputs_to_reducers() -> None:
+    dispatch = sp.TaskDispatch(
+        classification=sp.ReduceEstimators(method="mean"),
+        regression=[
+            sp.ReduceQuantiles(),
+            sp.ReduceEstimators(method="trimmed"),
+        ],
+    )
+    stacked = TableTensor.from_tensor(torch.randn(8, 5, 4))
+
+    dispatch._task = "regression"
+    out = dispatch.transform(stacked)
+    assert out.size() == (5, 1)
+    assert out.columns[Stype.numerical] == ("mean",)
+
+    dispatch._task = "classification"
+    out = dispatch.transform(stacked)
+    assert out.size() == (5, 4)
+    torch.testing.assert_close(out.numerical, stacked.numerical.mean(dim=0))

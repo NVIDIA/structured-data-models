@@ -115,6 +115,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ShuffleColumns()),
     ProcessorCase(sp.SelectColumns(2)),
     ProcessorCase(sp.TFIDF(ngram_range=(2, 2))),
+    ProcessorCase(sp.Cast(torch.float64)),
     ProcessorCase(sp.Clip(-2.0, 6.0)),
     ProcessorCase(sp.ClipQuantiles()),
     ProcessorCase(sp.ClipSigma()),
@@ -123,6 +124,7 @@ PROCESSOR_CASES = (
     ProcessorCase(
         sp.QuantileTransform(n_quantiles=4, subsample=None),
     ),
+    ProcessorCase(sp.SquashTransform()),
     ProcessorCase(sp.Standardize()),
     ProcessorCase(sp.FlipSign()),
     ProcessorCase(sp.DropConstantColumns()),
@@ -131,11 +133,21 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
+    ProcessorCase(sp.AddLevelCounts(min_cardinality=1)),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
     ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
+    ProcessorCase(sp.ReduceQuantiles(), _make_reduction_table),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
+    ProcessorCase(
+        sp.MissingDispatch(
+            sparse=sp.Identity(),
+            dense=sp.ImputeMean(),
+            min_cell_frac=0.5,
+        ),
+        _make_impute_mean_table,
+    ),
     ProcessorCase(
         sp.Sequential(
             sp.StypeDispatch(

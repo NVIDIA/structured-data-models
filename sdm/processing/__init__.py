@@ -16,6 +16,7 @@ from sdm.processing.common import (
     StypeDispatch,
     TaskDispatch,
     TableDispatch,
+    MissingDispatch,
     EnsembleProcessorAdapter,
     Choice,
     ToNumerical,
@@ -24,12 +25,14 @@ from sdm.processing.common import (
 )
 from sdm.processing.text import TFIDF, SentenceTransformer
 from sdm.processing.numerical import (
+    Cast,
     Clip,
     ClipQuantiles,
     ClipSigma,
     ImputeMean,
     PowerTransform,
     QuantileTransform,
+    SquashTransform,
     Standardize,
     FlipSign,
     DropConstantColumns,
@@ -40,9 +43,15 @@ from sdm.processing.categorical import (
     AlignCategories,
     ShuffleCategories,
     ImputeMode,
+    AddLevelCounts,
 )
 from sdm.processing.datetime import AddCalendarFields
-from sdm.processing.output import ReduceEstimators, Softmax, SortQuantiles
+from sdm.processing.output import (
+    ReduceEstimators,
+    Softmax,
+    SortQuantiles,
+    ReduceQuantiles,
+)
 from sdm.processing.recipe import Recipe
 
 __all__ = [
@@ -57,6 +66,7 @@ __all__ = [
     "StypeDispatch",
     "TaskDispatch",
     "TableDispatch",
+    "MissingDispatch",
     "EnsembleProcessor",
     "Choice",
     "ToNumerical",
@@ -64,12 +74,14 @@ __all__ = [
     "SelectColumns",
     "TFIDF",
     "SentenceTransformer",
+    "Cast",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
     "ImputeMean",
     "PowerTransform",
     "QuantileTransform",
+    "SquashTransform",
     "Standardize",
     "FlipSign",
     "DropConstantColumns",
@@ -78,9 +90,11 @@ __all__ = [
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
+    "AddLevelCounts",
     "AddCalendarFields",
     "ReduceEstimators",
     "Softmax",
     "SortQuantiles",
+    "ReduceQuantiles",
     "Recipe",
 ]

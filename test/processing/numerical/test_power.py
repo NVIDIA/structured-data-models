@@ -183,6 +183,7 @@ def test_power_transform_preserves_nan(
             [1.0, float("nan"), float("nan"), 4.0],
             [3.0, 10.0, float("nan"), float("nan")],
             [5.0, 14.0, float("nan"), float("nan")],
+            [7.0, 12.0, float("nan"), float("nan")],
         ],
         device=device,
     )
@@ -291,3 +292,76 @@ def test_power_transform_fits_leading_batches_independently(
         rtol=2e-5,
         atol=2e-5,
     )
+
+
+def test_power_transform_fits_on_finite_values_only() -> None:
+    values = torch.randn(200, 1).exp()
+    missing = torch.zeros(200, dtype=torch.bool)
+    missing[::3] = True
+    with_missing = values.masked_fill(missing.unsqueeze(-1), float("nan"))
+
+    fitted_with_missing = PowerTransform().fit(
+        TableTensor(numerical=with_missing)
+    )
+    fitted_on_finite = PowerTransform().fit(
+        TableTensor(numerical=values[~missing])
+    )
+    query = TableTensor(numerical=torch.randn(50, 1).exp())
+
+    torch.testing.assert_close(
+        fitted_with_missing.transform(query).numerical,
+        fitted_on_finite.transform(query).numerical,
+        rtol=1e-3,
+        atol=1e-4,
+    )
+
+
+def test_power_transform_fit_is_independent_of_input_precision() -> None:
+    # A spike of near-identical values with a few far outliers needs a
+    # lambda far outside the range single-precision bounds allow.
+    values = torch.cat(
+        (torch.randn(1900, 1) * 0.01, torch.full((100, 1), 4.3))
+    )
+    values = values[torch.randperm(2000)]
+
+    out32 = PowerTransform().fit_transform(TableTensor(numerical=values))
+    out64 = PowerTransform().fit_transform(
+        TableTensor(numerical=values.double())
+    )
+
+    assert out32.numerical.dtype == torch.float32
+    torch.testing.assert_close(
+        out32.numerical.double(),
+        out64.numerical,
+        rtol=1e-4,
+        atol=1e-4,
+    )
+
+
+def test_power_transform_round_trips_at_the_fitted_bound() -> None:
+    values = torch.cat(
+        (torch.randn(1900, 1) * 0.01, torch.full((100, 1), 4.3))
+    )
+    processor = PowerTransform()
+    out = processor.fit_transform(TableTensor(numerical=values))
+
+    # Values at the fitted bound sit on the asymptote of the inverse, so
+    # single-precision rounding leaves them approximate but finite.
+    restored = processor.inverse_transform(out).numerical
+    assert restored.isfinite().all()
+    spike = values == 4.3
+    torch.testing.assert_close(
+        restored[~spike], values[~spike], rtol=1e-3, atol=1e-3
+    )
+    assert (restored[spike] - 4.3).abs().max() < 0.5
+
+
+def test_power_transform_keeps_far_queries_finite() -> None:
+    values = -torch.randn(2000, 1).mul(3).exp()
+    processor = PowerTransform().fit(TableTensor(numerical=values))
+
+    out = processor.transform(
+        TableTensor(numerical=torch.tensor([[10.0], [100.0]]))
+    )
+    assert out.numerical.dtype == torch.float32
+    assert out.numerical.isfinite().all()
