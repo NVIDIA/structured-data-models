@@ -12,101 +12,114 @@ tl: Any = _tl
 
 @triton.jit
 def attention_kernel(
-    Q,
-    K,
-    V,
-    QS,
-    KS,
-    VS,
-    Out,
-    HQ: tl.constexpr,
-    HK: tl.constexpr,
-    M: tl.constexpr,
-    N: tl.constexpr,
-    D: tl.constexpr,
-    SCALE: tl.constexpr,
-    BM: tl.constexpr,
-    BN: tl.constexpr,
-    ACC_CHUNK: tl.constexpr = 0,
-    SCALE_WEIGHTS_IN_EXP: tl.constexpr = False,
-    FUSE_SCORE_SCALE: tl.constexpr = False,
+    q_ptr,
+    k_ptr,
+    v_ptr,
+    q_scale_ptr,
+    k_scale_ptr,
+    v_scale_ptr,
+    out_ptr,
+    n_q_heads: tl.constexpr,
+    n_kv_heads: tl.constexpr,
+    n_queries: tl.constexpr,
+    n_context: tl.constexpr,
+    head_dim: tl.constexpr,
+    attn_scale: tl.constexpr,
+    block_q: tl.constexpr,
+    block_kv: tl.constexpr,
+    acc_flush_tiles: tl.constexpr = 0,
+    scale_weights_in_exp: tl.constexpr = False,
+    fuse_score_scale: tl.constexpr = False,
 ):
     """Write attention outputs for one query tile and head per program.
 
-    Each program keeps a ``[BM, D]`` query tile and loops over context tiles
-    of ``BN`` rows. Both matrix multiplications use the full head width D.
+    Each program keeps a ``[block_q, head_dim]`` query tile and loops over
+    context tiles of ``block_kv`` rows. Both matrix multiplications use
+    the full head width.
 
     Args:
-        Q: FP8 queries shaped ``[batch, HQ, M, D]``.
-        K: FP8 keys shaped ``[batch, HK, N, D]``.
-        V: FP8 values shaped ``[batch, HK, D, N]``.
-        QS: Per-query-head dequantization scales.
-        KS: Per-key-head dequantization scales.
-        VS: Per-value-head dequantization scales.
-        Out: Output buffer shaped ``[batch, HQ, M, D]``.
-        HQ: Query heads per batch item.
-        HK: K/V heads per batch item; must divide HQ.
-        M: Number of query rows.
-        N: Number of context rows.
-        D: Channels per head.
-        SCALE: Attention score multiplier.
-        BM: Query rows handled by each program.
-        BN: Context rows processed per iteration.
-        ACC_CHUNK: Tiles per FP32 accumulator flush; zero disables it.
-        SCALE_WEIGHTS_IN_EXP: Scale weights via ``exp2(x + 8)`` instead of
+        q_ptr: FP8 queries shaped ``[batch, n_q_heads, n_queries, head_dim]``.
+        k_ptr: FP8 keys shaped ``[batch, n_kv_heads, n_context, head_dim]``.
+        v_ptr: FP8 values shaped ``[batch, n_kv_heads, head_dim, n_context]``.
+        q_scale_ptr: Per-query-head dequantization scales.
+        k_scale_ptr: Per-key-head dequantization scales.
+        v_scale_ptr: Per-value-head dequantization scales.
+        out_ptr: Output buffer with the query shape.
+        n_q_heads: Query heads per batch item.
+        n_kv_heads: K/V heads per batch item; must divide n_q_heads.
+        n_queries: Number of query rows.
+        n_context: Number of context rows.
+        head_dim: Channels per head.
+        attn_scale: Attention score multiplier.
+        block_q: Query rows handled by each program.
+        block_kv: Context rows processed per iteration.
+        acc_flush_tiles: Tiles per FP32 accumulator flush; zero disables it.
+        scale_weights_in_exp: Scale weights via ``exp2(x + 8)`` instead of
             multiplying ``exp2(x)`` by 256 afterward.
-        FUSE_SCORE_SCALE: Move positive score scaling after the maximum
+        fuse_score_scale: Move positive score scaling after the maximum
             reduction to permit fused scaling and maximum subtraction.
     """
     query_block, batch_query_head = tl.program_id(0), tl.program_id(1)
-    batch = batch_query_head // HQ
-    query_head = batch_query_head % HQ
-    # Query heads share K/V heads only when HQ > HK (grouped-query attention).
-    batch_kv_head = batch * HK + query_head // (HQ // HK)
-    rows = query_block * BM + tl.arange(0, BM)
-    cols = tl.arange(0, BN)
-    dims = tl.arange(0, D)
+    batch = batch_query_head // n_q_heads
+    query_head = batch_query_head % n_q_heads
+    # Grouped-query attention shares K/V heads when n_q_heads > n_kv_heads.
+    batch_kv_head = batch * n_kv_heads + query_head // (
+        n_q_heads // n_kv_heads
+    )
+    rows = query_block * block_q + tl.arange(0, block_q)
+    cols = tl.arange(0, block_kv)
+    dims = tl.arange(0, head_dim)
     q = tl.load(
-        Q + batch_query_head * M * D + rows[:, None] * D + dims[None, :],
-        rows[:, None] < M,
+        q_ptr
+        + batch_query_head * n_queries * head_dim
+        + rows[:, None] * head_dim
+        + dims[None, :],
+        rows[:, None] < n_queries,
         0.0,
     )
     # Restore Q/K magnitudes and convert natural-exponential scores to base 2.
     score_scale = (
-        tl.load(QS + batch_query_head)
-        * tl.load(KS + batch_kv_head)
-        * SCALE
+        tl.load(q_scale_ptr + batch_query_head)
+        * tl.load(k_scale_ptr + batch_kv_head)
+        * attn_scale
         * 1.4426950408889634
     )
-    value_scale = tl.load(VS + batch_kv_head)
-    row_max = tl.full((BM,), -float("inf"), tl.float32)
-    weight_sum = tl.full((BM,), 0, tl.float32)
-    acc = tl.full((BM, D), 0, tl.float32)
-    if ACC_CHUNK > 0:
-        outer_acc = tl.full((BM, D), 0, tl.float32)
-        outer_max = tl.full((BM,), -float("inf"), tl.float32)
-    for start in range(tl.cdiv(N, BN)):
-        # 1. Tiled QK^T multiplication: [BM, D] @ [D, BN] -> [BM, BN].
-        indices = start * BN + cols
+    value_scale = tl.load(v_scale_ptr + batch_kv_head)
+    row_max = tl.full((block_q,), -float("inf"), tl.float32)
+    weight_sum = tl.full((block_q,), 0, tl.float32)
+    acc = tl.full((block_q, head_dim), 0, tl.float32)
+    if acc_flush_tiles > 0:
+        outer_acc = tl.full((block_q, head_dim), 0, tl.float32)
+        outer_max = tl.full((block_q,), -float("inf"), tl.float32)
+    for start in range(tl.cdiv(n_context, block_kv)):
+        # 1. Tiled QK^T: reduce over channels to get [block_q, block_kv].
+        indices = start * block_kv + cols
         k = tl.load(
-            K + batch_kv_head * N * D + indices[None, :] * D + dims[:, None],
-            indices[None, :] < N,
+            k_ptr
+            + batch_kv_head * n_context * head_dim
+            + indices[None, :] * head_dim
+            + dims[:, None],
+            indices[None, :] < n_context,
             0.0,
         )
         score = tl.dot(q, k, max_num_imprecise_acc=32)
 
         # 2. Online softmax: update row maxima and weight sums across tiles.
-        if FUSE_SCORE_SCALE and SCALE > 0:
-            score = tl.where(indices[None, :] < N, score, -float("inf"))
+        if fuse_score_scale and attn_scale > 0:
+            score = tl.where(
+                indices[None, :] < n_context, score, -float("inf")
+            )
             new_max = tl.maximum(row_max, tl.max(score, 1) * score_scale)
-            shift = new_max - 8.0 if SCALE_WEIGHTS_IN_EXP else new_max
+            shift = new_max - 8.0 if scale_weights_in_exp else new_max
             weights = tl.exp2(score * score_scale - shift[:, None])
         else:
             score = tl.where(
-                indices[None, :] < N, score * score_scale, -float("inf")
+                indices[None, :] < n_context,
+                score * score_scale,
+                -float("inf"),
             )
             new_max = tl.maximum(row_max, tl.max(score, 1))
-            if SCALE_WEIGHTS_IN_EXP:
+            if scale_weights_in_exp:
                 weights = tl.exp2(score - (new_max[:, None] - 8.0))
             else:
                 weights = tl.exp2(score - new_max[:, None])
@@ -114,15 +127,15 @@ def attention_kernel(
         weight_sum = weight_sum * correction + tl.sum(weights, 1)
         acc *= correction[:, None]
 
-        # 3. Tiled weights-V multiplication: [BM, BN] @ [BN, D] -> [BM, D].
-        v_offsets = indices[:, None] + dims[None, :] * N
+        # 3. Tiled weights-V: reduce over context to get [block_q, head_dim].
+        v_offsets = indices[:, None] + dims[None, :] * n_context
         v = tl.load(
-            V + batch_kv_head * N * D + v_offsets,
-            indices[:, None] < N,
+            v_ptr + batch_kv_head * n_context * head_dim + v_offsets,
+            indices[:, None] < n_context,
             0.0,
         )
         acc = tl.dot(
-            (weights if SCALE_WEIGHTS_IN_EXP else weights * 256.0).to(
+            (weights if scale_weights_in_exp else weights * 256.0).to(
                 tl.float8e4nv
             ),
             v,
@@ -130,24 +143,29 @@ def attention_kernel(
             max_num_imprecise_acc=32,
         )
         # Periodically flush the dot accumulator to FP32 for long L4 contexts.
-        if ACC_CHUNK > 0:  # noqa: SIM102 - constexpr guard avoids modulo zero.
-            if ((start + 1) % ACC_CHUNK == 0) | (start + 1 == tl.cdiv(N, BN)):
+        if acc_flush_tiles > 0:  # noqa: SIM102 - constexpr guard avoids modulo zero.
+            if ((start + 1) % acc_flush_tiles == 0) | (
+                start + 1 == tl.cdiv(n_context, block_kv)
+            ):
                 outer_acc = (
                     outer_acc * tl.exp2(outer_max - new_max)[:, None] + acc
                 )
                 outer_max = new_max
-                acc = tl.full((BM, D), 0, tl.float32)
+                acc = tl.full((block_q, head_dim), 0, tl.float32)
         row_max = new_max
-    if ACC_CHUNK > 0:
+    if acc_flush_tiles > 0:
         acc = outer_acc
     # After all tiles, divide accumulated weighted values by the weight sum.
     out = acc * value_scale / weight_sum[:, None]
-    if not SCALE_WEIGHTS_IN_EXP:
+    if not scale_weights_in_exp:
         out *= 1.0 / 256.0
     tl.store(
-        Out + batch_query_head * M * D + rows[:, None] * D + dims[None, :],
+        out_ptr
+        + batch_query_head * n_queries * head_dim
+        + rows[:, None] * head_dim
+        + dims[None, :],
         out,
-        rows[:, None] < M,
+        rows[:, None] < n_queries,
     )
 
 
@@ -272,17 +290,17 @@ def quantized_attention(
         ks,
         vs,
         output,
-        h,
-        k.size(1),
-        m,
-        n,
-        d,
-        d**-0.5 if scale is None else scale,
-        query_tile,
-        context_tile,
-        accumulation_chunk,
-        scale_weights_in_exp,
-        fuse_score_scale,
+        n_q_heads=h,
+        n_kv_heads=k.size(1),
+        n_queries=m,
+        n_context=n,
+        head_dim=d,
+        attn_scale=d**-0.5 if scale is None else scale,
+        block_q=query_tile,
+        block_kv=context_tile,
+        acc_flush_tiles=accumulation_chunk,
+        scale_weights_in_exp=scale_weights_in_exp,
+        fuse_score_scale=fuse_score_scale,
         num_warps=warps,
         num_stages=stages,
     )
