@@ -88,3 +88,16 @@ def test_task_dispatch_routes_ensemble_members() -> None:
             result.numerical,
             source.numerical.softmax(dim=-1),
         )
+
+
+def test_task_dispatch_reduces_stacked_estimator_outputs() -> None:
+    stacked = TableTensor.from_tensor(
+        torch.arange(2 * 3 * 2, dtype=torch.float).reshape(2, 3, 2)
+    )
+    dispatch = sp.TaskDispatch(regression=sp.ReduceEstimators())
+    dispatch._task = "regression"
+
+    output = dispatch.transform(stacked)
+
+    assert output.size() == (3, 2)
+    torch.testing.assert_close(output.numerical, stacked.numerical.mean(dim=0))
