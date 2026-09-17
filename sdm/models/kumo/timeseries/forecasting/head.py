@@ -1,6 +1,3 @@
-# Copyright (c) 2024 Auton Lab, Carnegie Mellon University
-# Licensed under the MIT License; see LICENSE.
-
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
