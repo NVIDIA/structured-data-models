@@ -32,3 +32,15 @@ description: Create or modify reusable SDM processors and focused tests. Use whe
 ## Verification
 
 Run the focused processor tests and the repository-required checks for the changed files.
+
+## Review
+
+When reviewing an existing processor change, do not take the proposed implementation or its documentation as the design baseline.
+
+1. Reconstruct the intended behavior from the PR/task and existing public contracts.
+2. Determine how you would implement and document that behavior from scratch following this skill.
+3. Compare that minimal design with the proposed diff.
+4. Flag code that exists only because of the proposed implementation rather than because the behavior requires it, including unnecessary state, validation, compatibility layers, helpers, or public API.
+5. Write the docstring from scratch and compare it with the proposed text instead of editing the proposed text. Flag sentences that restate the summary, repeat contracts already documented on `Processor`/`EnsembleProcessor` such as batch or member independence, describe raised errors or missing validation, or state that untouched blocks stay unchanged.
+6. Check whether existing wording or tests caused implementation details to be preserved. Neither tests nor docstrings copied from sibling processors make internal behavior part of the public contract.
+7. Suggest removing unnecessary code and documentation, not only modifying it.
