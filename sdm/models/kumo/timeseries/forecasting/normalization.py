@@ -28,6 +28,9 @@ class RevIN(torch.nn.Module):
 
     .. _"RevIN": https://openreview.net/forum?id=cGDAkQo1C0p
 
+    Series without observed values use zero mean and unit standard deviation
+    for both normalization and its inverse. Missing input values remain NaN.
+
     Args:
         num_features: Number of affine feature parameters. Use ``1`` to share
             affine parameters across variates.
@@ -87,6 +90,9 @@ class RevIN(torch.nn.Module):
         mean = masked.nanmean(dim=-1, keepdim=True).detach()
         variance = (masked - mean).square().nanmean(dim=-1, keepdim=True)
         stdev = variance.sqrt().detach() + self.eps
+        unobserved = mean.isnan()
+        mean = mean.masked_fill(unobserved, 0.0)
+        stdev = stdev.masked_fill(unobserved, 1.0)
 
         out = (x - mean) / stdev
         if self.affine:

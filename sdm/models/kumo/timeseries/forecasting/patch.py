@@ -129,8 +129,8 @@ class PatchEmbedding(torch.nn.Module):
         self.patch_len = patch_len
         self.stride = stride
         self.value_embedding = Linear(
-            patch_len,
-            channels,
+            in_features=patch_len,
+            out_features=channels,
             bias=bias,
             **factory_kwargs,
         )

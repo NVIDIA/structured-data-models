@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 from sdm.models.kumo.timeseries.forecasting.attention import (
@@ -70,6 +71,31 @@ def test_revin_round_trip() -> None:
 
     assert restored.allclose(x)
     assert normalized[..., :3].mean(dim=-1).abs().max() < 1e-6
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("affine", [False, True])
+def test_revin_unobserved_series(dtype: torch.dtype, affine: bool) -> None:
+    """Use neutral statistics for missing variates and fully masked batches."""
+    normalizer = RevIN(num_features=1, affine=affine, dtype=dtype)
+    x = torch.tensor(
+        [
+            [[float("nan")] * 4, [1.0, float("nan"), 3.0, 5.0]],
+            [[2.0, 4.0, 6.0, 8.0], [1.0, 3.0, 5.0, 7.0]],
+        ],
+        dtype=dtype,
+    )
+    mask = torch.tensor([[True] * 4, [False] * 4])
+
+    _, state = normalizer(x, mask)
+    restored = normalizer.inverse(torch.zeros_like(x), state)
+
+    expected_mean = x.new_tensor([[[0.0], [3.0]], [[0.0], [0.0]]])
+    expected_stdev = torch.ones_like(expected_mean)
+    expected_stdev[0, 1] = (8.0 / 3.0) ** 0.5 + normalizer.eps
+    torch.testing.assert_close(state.mean, expected_mean)
+    torch.testing.assert_close(state.stdev, expected_stdev)
+    torch.testing.assert_close(restored, expected_mean.expand_as(x))
 
 
 def test_cross_channel_attention_is_permutation_equivariant() -> None:

@@ -107,6 +107,30 @@ def test_missing_observations(model: KumoForecasting) -> None:
     assert model(x, y, torch.empty(3, 2)).numerical.isfinite().all()
 
 
+def test_fully_missing_series(model: KumoForecasting) -> None:
+    """Keep forecasts finite with empty target and covariate histories."""
+    x, y = torch.randn(2, 32, 2), torch.randn(2, 32, 2)
+    x[0, :, 1] = float("nan")
+    y[0, :, 0] = float("nan")
+    y[1] = float("nan")
+    query = torch.full((2, 3, 2), float("nan"))
+
+    direct = model(x, y, query, num_estimators=1).numerical
+    model.fit(x, y, num_estimators=1)
+    cached = model.predict(query).numerical
+
+    assert direct.shape == (2, 3, 2)
+    assert direct.isfinite().all()
+    torch.testing.assert_close(cached, direct)
+    for i in range(2):
+        torch.testing.assert_close(
+            direct[i],
+            model(x[i], y[i], query[i]).numerical,
+            atol=1e-5,
+            rtol=1e-5,
+        )
+
+
 @pytest.mark.parametrize("horizon", [0, 7])
 def test_rejects_unsupported_horizon(
     model: KumoForecasting, horizon: int

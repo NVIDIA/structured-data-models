@@ -32,8 +32,8 @@ class ForecastingHead(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.linear = Linear(
-            input_channels,
-            prediction_length,
+            in_features=input_channels,
+            out_features=prediction_length,
             **factory_kwargs,
         )
         self.dropout = torch.nn.Dropout(dropout)

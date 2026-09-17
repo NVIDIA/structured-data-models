@@ -54,25 +54,46 @@ class _T5Block(torch.nn.Module):
         self.attention_norm = _RMSNorm(channels, eps, **factory_kwargs)
         self.ffn_norm = _RMSNorm(channels, eps, **factory_kwargs)
         self.q = Linear(
-            channels, num_heads * head_channels, bias=False, **factory_kwargs
+            in_features=channels,
+            out_features=num_heads * head_channels,
+            bias=False,
+            **factory_kwargs,
         )
         self.k = Linear(
-            channels, num_heads * head_channels, bias=False, **factory_kwargs
+            in_features=channels,
+            out_features=num_heads * head_channels,
+            bias=False,
+            **factory_kwargs,
         )
         self.v = Linear(
-            channels, num_heads * head_channels, bias=False, **factory_kwargs
+            in_features=channels,
+            out_features=num_heads * head_channels,
+            bias=False,
+            **factory_kwargs,
         )
         self.o = Linear(
-            num_heads * head_channels, channels, bias=False, **factory_kwargs
+            in_features=num_heads * head_channels,
+            out_features=channels,
+            bias=False,
+            **factory_kwargs,
         )
         self.wi_0 = Linear(
-            channels, hidden_channels, bias=False, **factory_kwargs
+            in_features=channels,
+            out_features=hidden_channels,
+            bias=False,
+            **factory_kwargs,
         )
         self.wi_1 = Linear(
-            channels, hidden_channels, bias=False, **factory_kwargs
+            in_features=channels,
+            out_features=hidden_channels,
+            bias=False,
+            **factory_kwargs,
         )
         self.wo = Linear(
-            hidden_channels, channels, bias=False, **factory_kwargs
+            in_features=hidden_channels,
+            out_features=channels,
+            bias=False,
+            **factory_kwargs,
         )
         self.dropout = Dropout(dropout)
 
@@ -138,7 +159,9 @@ class T5Encoder(torch.nn.Module):
         self.num_buckets = num_buckets
         self.max_distance = max_distance
         self.relative_attention_bias = Embedding(
-            num_buckets, num_heads, **factory_kwargs
+            num_embeddings=num_buckets,
+            embedding_dim=num_heads,
+            **factory_kwargs,
         )
         self.layers = ModuleList(
             [

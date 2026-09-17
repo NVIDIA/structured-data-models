@@ -31,8 +31,8 @@ class CrossChannelAttention(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.attn = torch.nn.MultiheadAttention(
-            channels,
-            num_heads,
+            embed_dim=channels,
+            num_heads=num_heads,
             dropout=dropout,
             batch_first=True,
             **factory_kwargs,
