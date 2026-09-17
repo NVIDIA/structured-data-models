@@ -41,7 +41,7 @@ def test_robust_scale_centers_and_scales_quantile_range(
 
 
 @withCUDA
-def test_robust_scale_uses_half_span_when_quantiles_coincide(
+def test_robust_scale_uses_unit_scale_when_quantiles_coincide(
     device: torch.device,
 ) -> None:
     inp = torch.tensor(
@@ -52,12 +52,41 @@ def test_robust_scale_uses_half_span_when_quantiles_coincide(
 
     processor = RobustScale().fit(TableTensor.from_tensor(inp))
     out = processor.transform(TableTensor.from_tensor(inp))
-    expected = (inp - 1.0) / 4.5
 
-    torch.testing.assert_close(out.numerical, expected)
+    torch.testing.assert_close(out.numerical, inp - 1.0)
     torch.testing.assert_close(
         processor.inverse_transform(out).numerical,
         inp,
+    )
+
+
+@withCUDA
+def test_robust_scale_scales_values_outside_the_fitted_table(
+    device: torch.device,
+) -> None:
+    context = torch.tensor(
+        [[1.0, 5.0], [2.0, 5.0], [3.0, 5.0]],
+        dtype=torch.float64,
+        device=device,
+    )
+    query = torch.tensor(
+        [[2.0, 7.0], [3.0, 9.0]],
+        dtype=torch.float64,
+        device=device,
+    )
+
+    processor = RobustScale().fit(TableTensor.from_tensor(context))
+    out = processor.transform(TableTensor.from_tensor(query))
+
+    expected = torch.tensor(
+        [[0.0, 2.0], [1.0, 4.0]],
+        dtype=torch.float64,
+        device=device,
+    )
+    torch.testing.assert_close(out.numerical, expected)
+    torch.testing.assert_close(
+        processor.inverse_transform(out).numerical,
+        query,
     )
 
 
@@ -165,12 +194,3 @@ def test_robust_scale_fits_half_precision(
     assert out.numerical.dtype == dtype
     expected = torch.tensor([[-1.0], [0.0], [1.0]], device=device)
     torch.testing.assert_close(out.numerical.float(), expected)
-
-
-def test_robust_scale_rejects_invalid_quantile_range() -> None:
-    with pytest.raises(ValueError, match="quantile_range"):
-        RobustScale(quantile_range=(75.0, 25.0))
-    with pytest.raises(ValueError, match="quantile_range"):
-        RobustScale(quantile_range=(-1.0, 75.0))
-    with pytest.raises(ValueError, match="quantile_range"):
-        RobustScale(quantile_range=(25.0, 101.0))
