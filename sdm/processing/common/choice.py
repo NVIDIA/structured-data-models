@@ -13,10 +13,8 @@ from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     """Route each table or ensemble member through one selected option.
 
-    Options are selected when the processor is fitted. Pass ``generator`` to
-    ``fit()`` to make random selection reproducible; it is also passed to the
-    selected options. Only selected options are fitted, and refitting selects
-    again.
+    Options are selected when the processor is fitted. Only selected options
+    are fitted, and refitting selects again.
 
     Args:
         args: Candidate processors or stateless callables.
