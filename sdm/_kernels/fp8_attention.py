@@ -39,6 +39,8 @@ def supports_fp8(query: Tensor) -> bool:
         and not torch.is_grad_enabled()
         and query.is_cuda
         and query.size(-1) in {32, 64, 128, 256}
+        # CUDA compute capability (major, minor): Ada, Hopper, RTX Blackwell.
+        # Restrict dispatch to architectures supported by this FP8 kernel.
         and torch.cuda.get_device_capability(query.device)
         in {(8, 9), (9, 0), (12, 0)}
     )
