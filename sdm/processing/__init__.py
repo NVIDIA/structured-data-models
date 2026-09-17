@@ -44,7 +44,12 @@ from sdm.processing.categorical import (
     ImputeMode,
 )
 from sdm.processing.datetime import AddCalendarFields
-from sdm.processing.output import ReduceEstimators, Softmax, SortQuantiles
+from sdm.processing.output import (
+    ReduceEstimators,
+    ReduceQuantiles,
+    Softmax,
+    SortQuantiles,
+)
 from sdm.processing.recipe import Recipe
 
 __all__ = [
@@ -84,6 +89,7 @@ __all__ = [
     "ImputeMode",
     "AddCalendarFields",
     "ReduceEstimators",
+    "ReduceQuantiles",
     "Softmax",
     "SortQuantiles",
     "Recipe",
