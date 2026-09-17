@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from collections import Counter
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 
 from sdm import EnsembleTable, Stype, TableTensor
-from sdm.processing import EnsembleProcessor
+from sdm.processing import EnsembleProcessor, Processor
 
 
 class ReduceEstimators(EnsembleProcessor):
@@ -139,4 +139,27 @@ class ReduceEstimators(EnsembleProcessor):
     def __repr__(self, *, indent: int = 0) -> str:
         return (
             f"{' ' * indent}{self.__class__.__name__}(method={self.method!r})"
+        )
+
+
+class ReduceQuantiles(Processor):
+    r"""Reduce quantile predictions to their mean point prediction.
+
+    The ``O`` numerical columns of an output table with shape
+    ``[..., R, O]`` hold the predicted quantiles of every row. They are
+    replaced by a single column ``"mean"`` with shape ``[..., R, 1]``, which
+    approximates the expected value for evenly spaced quantiles.
+    """
+
+    handles_stypes = frozenset({Stype.numerical})
+    requires_fit = False
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        mean = TableTensor(
+            columns={Stype.numerical: ("mean",)},
+            numerical=table.numerical.mean(dim=-1, keepdim=True),
+        )
+        return cast(
+            TableTensor,
+            torch.cat([table.drop_stypes(Stype.numerical), mean], dim=-1),
         )

@@ -135,7 +135,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
     ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
-    ProcessorCase(sp.ReduceQuantiles(), _make_reduction_table),
+    ProcessorCase(sp.ReduceQuantiles()),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(
         sp.Sequential(
