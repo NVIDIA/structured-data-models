@@ -118,12 +118,14 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.Clip(-2.0, 6.0)),
     ProcessorCase(sp.ClipQuantiles()),
     ProcessorCase(sp.ClipSigma()),
+    ProcessorCase(sp.ClipSoft(3.0)),
     ProcessorCase(sp.ImputeMean(), _make_impute_mean_table),
     ProcessorCase(sp.PowerTransform()),
     ProcessorCase(
         sp.QuantileTransform(n_quantiles=4, subsample=None),
     ),
     ProcessorCase(sp.Standardize()),
+    ProcessorCase(sp.RobustScale()),
     ProcessorCase(sp.FlipSign()),
     ProcessorCase(sp.DropConstantColumns()),
     ProcessorCase(sp.PCA(2)),
@@ -135,6 +137,10 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
     ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
+    ProcessorCase(
+        sp.ReduceEstimators(method="trimmed_mean", proportion=0.25),
+        _make_reduction_table,
+    ),
     ProcessorCase(sp.ReduceQuantiles()),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(

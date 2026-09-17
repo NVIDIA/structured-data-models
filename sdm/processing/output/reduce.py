@@ -5,6 +5,7 @@ from collections import Counter
 from typing import Literal, cast
 
 import torch
+from torch import Tensor
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor, Processor
@@ -24,8 +25,14 @@ class ReduceEstimators(EnsembleProcessor):
     Ensemble transformation returns one member containing the reduction.
 
     Args:
-        method: Reduction applied across ensemble members. Currently only
-            ``"mean"`` is supported.
+        method: Reduction applied across ensemble members. ``"mean"``
+            averages all members. ``"trimmed_mean"`` sorts the members at
+            every output coordinate, drops ``proportion`` of them from each
+            end, and averages the remainder.
+        proportion: Proportion dropped from each end in ``[0, 0.5)``. When it
+            does not resolve to a whole number of members, the number of
+            dropped members is rounded down, so small ensembles keep all
+            members.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -34,13 +41,14 @@ class ReduceEstimators(EnsembleProcessor):
     def __init__(
         self,
         *,
-        method: Literal["mean"] = "mean",
+        method: Literal["mean", "trimmed_mean"] = "mean",
+        proportion: float = 0.0,
     ) -> None:
         super().__init__()
-        # TODO: Support `method="median"` when required by a model recipe.
-        if method != "mean":
-            raise ValueError("method must be 'mean'")
+        if not 0.0 <= proportion < 0.5:
+            raise ValueError("proportion must satisfy 0 <= proportion < 0.5.")
         self.method = method
+        self.proportion = proportion
 
     def _transform_ensemble(
         self,
@@ -57,13 +65,19 @@ class ReduceEstimators(EnsembleProcessor):
                 f"Expected a numerical-only output table (also found {found})."
             )
         reference_columns = reference.columns[Stype.numerical]
-        counts_by_location = Counter(
-            ensemble_table._locations[member_id]
-            for member_id in range(ensemble_table.num_members)
-        )
 
-        total = None
-        for group_id, group in enumerate(ensemble_table):
+        if self.method == "trimmed_mean":
+            # Sorting depends on how often each table appears as a member, so
+            # shared tables are materialized once per member.
+            groups = [
+                ensemble_table.expanded_group(group_id)
+                for group_id in range(ensemble_table.num_groups)
+            ]
+        else:
+            groups = list(ensemble_table)
+
+        numerical_groups: list[Tensor] = []
+        for group in groups:
             if group.stypes != reference.stypes:
                 raise ValueError(
                     "Expected ensemble members to have the same column names "
@@ -92,24 +106,38 @@ class ReduceEstimators(EnsembleProcessor):
                 raise ValueError(
                     "Expected ensemble members to have the same shape."
                 )
+            numerical_groups.append(numerical)
 
-            counts = numerical.new_tensor(
-                [
-                    counts_by_location[(group_id, position)]
-                    for position in range(group.size(0))
-                ]
-            )
-            partial = torch.tensordot(
-                a=counts,
-                b=numerical,
-                dims=([0], [0]),
-            )
-            total = partial if total is None else total + partial
+        if self.method == "mean":
+            counts_by_location = Counter(ensemble_table._locations)
+            total = None
+            for group_id, numerical in enumerate(numerical_groups):
+                counts = numerical.new_tensor(
+                    [
+                        counts_by_location[(group_id, position)]
+                        for position in range(numerical.size(0))
+                    ]
+                )
+                partial = torch.tensordot(
+                    a=counts,
+                    b=numerical,
+                    dims=([0], [0]),
+                )
+                total = partial if total is None else total + partial
+            assert total is not None
+            reduced = total / ensemble_table.num_members
+        else:
+            assert self.method == "trimmed_mean"
+            members = torch.cat(numerical_groups, dim=0)  # [E, ..., R, O]
+            cut = int(self.proportion * members.size(0))
+            ordered = members.sort(dim=0).values
+            reduced = ordered.narrow(
+                dim=0,
+                start=cut,
+                length=members.size(0) - 2 * cut,
+            ).mean(dim=0)
 
-        assert total is not None
-        output = reference.replace_blocks(
-            numerical=total / ensemble_table.num_members
-        )
+        output = reference.replace_blocks(numerical=reduced)
         return EnsembleTable.from_table(output, num_members=1)
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -127,18 +155,28 @@ class ReduceEstimators(EnsembleProcessor):
                 f"Expected a numerical-only output table (also found {found})."
             )
 
+        numerical = table.numerical  # [E, ..., R, O]
         if self.method == "mean":
-            numerical = table.numerical.mean(dim=0)
+            reduced = numerical.mean(dim=0)
         else:
-            raise ValueError("method must be 'mean'")
+            assert self.method == "trimmed_mean"
+            cut = int(self.proportion * numerical.size(0))
+            ordered = numerical.sort(dim=0).values
+            reduced = ordered.narrow(
+                dim=0,
+                start=cut,
+                length=numerical.size(0) - 2 * cut,
+            ).mean(dim=0)
+
         return table.__class__(
             columns={Stype.numerical: table.columns[Stype.numerical]},
-            numerical=numerical,
+            numerical=reduced,
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
-            f"{' ' * indent}{self.__class__.__name__}(method={self.method!r})"
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"method={self.method!r}, proportion={self.proportion})"
         )
 
 
