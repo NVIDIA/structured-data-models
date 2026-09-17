@@ -197,7 +197,7 @@ def quantize(x: Tensor, scale: Tensor | None = None) -> tuple[Tensor, Tensor]:
             x.abs().amax(dim=(-2, -1), keepdim=True).float().clamp_min(1e-12)
             / 448.0
         )
-    output = torch.empty(x.shape, device=x.device, dtype=torch.float8_e4m3fn)
+    output = x.new_empty(x.shape, dtype=torch.float8_e4m3fn)
     length = x.size(-2) * x.size(-1)
     block_size = 1024
     grid = (
@@ -209,11 +209,14 @@ def quantize(x: Tensor, scale: Tensor | None = None) -> tuple[Tensor, Tensor]:
             x,
             scale,
             output,
-            length,
-            block_size,
-            x.size(1),
-            x.size(-1),
-            *x.stride(),
+            numel=length,
+            block_size=block_size,
+            num_heads=x.size(1),
+            num_channels=x.size(-1),
+            stride_b=x.stride(0),
+            stride_h=x.stride(1),
+            stride_r=x.stride(2),
+            stride_c=x.stride(3),
         )
     return output, scale
 
@@ -261,7 +264,7 @@ def quantized_attention(
     b, h, m, d = q.shape
     n = k.size(-2)
     # Q/K are [batch, heads, sequence, channels]; V is transposed.
-    output = torch.empty((b, h, m, d), device=q.device, dtype=dtype)
+    output = q.new_empty(q.shape, dtype=dtype)
     grid = (triton.cdiv(m, query_tile), b * h)  # ty: ignore[invalid-argument-type]
     with torch.cuda.device(q.device):
         cast(Any, _attention_kernel)[grid](
