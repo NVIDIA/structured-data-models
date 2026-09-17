@@ -1,6 +1,6 @@
 # In-Context Learning
 
-In-Context Learning (ICL) treats predictions on structured data (*e.g.*, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights through in-context adaptation. (Conventional gradient-based fine-tuning of the underlying model parameters, via {py:meth}`torch.nn.Module.train` and a training loop, is a separate, orthogonal concern — see below.)
+In-Context Learning (ICL) treats predictions on structured data (*e.g.*, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights through in-context adaptation.
 The `structured-data-models` package groups and unifies such foundation models behind a single interface:
 
 1. Convert dataframe-like data into a {py:class}`~sdm.tensor.TableTensor` (see [here](tensor) for the accompanying tutorial).
