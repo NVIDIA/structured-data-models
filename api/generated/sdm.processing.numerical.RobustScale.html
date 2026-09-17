@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Callable - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Sequential" href="sdm.processing.common.Sequential.html" /><link rel="prev" title="Identity" href="sdm.processing.common.Identity.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>RobustScale - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="FlipSign" href="sdm.processing.numerical.FlipSign.html" /><link rel="prev" title="Standardize" href="sdm.processing.numerical.Standardize.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -20,7 +20,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="Callable"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="RobustScale"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -103,7 +103,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html">EnsembleInvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Callable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Callable.html">Callable</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.DropStypes.html">DropStypes</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
@@ -122,7 +122,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Standardize.html">Standardize</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.RobustScale.html">RobustScale</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">RobustScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.FlipSign.html">FlipSign</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.PCA.html">PCA</a></li>
@@ -177,7 +177,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.common.Callable"><code class="docutils literal notranslate"><span class="pre">Callable</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.numerical.RobustScale"><code class="docutils literal notranslate"><span class="pre">RobustScale</span></code></a></li>
 <li><a class="reference internal" href="#capabilities">Capabilities</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
@@ -200,7 +200,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">Callable</strong>
+        <strong itemprop="name">RobustScale</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -213,16 +213,20 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="callable">
-<h1>Callable<a class="headerlink" href="#callable" title="Link to this heading">#</a></h1>
+          <section id="robustscale">
+<h1>RobustScale<a class="headerlink" href="#robustscale" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.common.Callable">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.common.</span></span><span class="sig-name descname"><span class="pre">Callable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">function</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Callable" title="(in Python v3.14)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.common.Callable" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
-<p>Adapt a stateless callable to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code> interface.</p>
+<dt class="sig sig-object py" id="sdm.processing.numerical.RobustScale">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.numerical.</span></span><span class="sig-name descname"><span class="pre">RobustScale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">quantile_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(25.0,</span> <span class="pre">75.0)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.numerical.RobustScale" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
+<p>Center and scale each feature column with median and quantile range.</p>
+<p>Columns whose lower and upper quantile coincide use a unit scale to keep
+the transform finite and invertible. NaN and infinite values are ignored
+when fitting statistics and preserved during the transform.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>function</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Callable" title="(in Python v3.14)"><em>Callable</em></a><em>[</em><em>[</em><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a><em>]</em><em>, </em><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a><em>]</em>)</p>
+<dd class="field-odd"><p><strong>quantile_range</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>]</em>) – Percentile pair <code class="docutils literal notranslate"><span class="pre">(low,</span> <span class="pre">high)</span></code> in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">100]</span></code>
+used as the scale.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -233,10 +237,10 @@ data-aria-dark="Switch to auto color mode">
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><strong>Handled Semantic Types</strong></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">categorical</span></code>, <code class="docutils literal notranslate"><span class="pre">datetime</span></code>, <code class="docutils literal notranslate"><span class="pre">id</span></code>, <code class="docutils literal notranslate"><span class="pre">numerical</span></code>, <code class="docutils literal notranslate"><span class="pre">text</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">numerical</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><strong>Requires Fitting</strong></p></td>
-<td><p>❌</p></td>
+<td><p>✅</p></td>
 </tr>
 </tbody>
 </table>
@@ -250,16 +254,16 @@ data-aria-dark="Switch to auto color mode">
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.common.Identity.html">
+    <a href="sdm.processing.numerical.Standardize.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">Identity</div></div>
+        <span>Previous</span><div class="title">Standardize</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.common.Sequential.html">
+    <a href="sdm.processing.numerical.FlipSign.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">Sequential</div>
+        <div class="title">FlipSign</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>

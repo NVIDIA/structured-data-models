@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Callable - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Sequential" href="sdm.processing.common.Sequential.html" /><link rel="prev" title="Identity" href="sdm.processing.common.Identity.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ClipSoft - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="ImputeMean" href="sdm.processing.numerical.ImputeMean.html" /><link rel="prev" title="ClipSigma" href="sdm.processing.numerical.ClipSigma.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -20,7 +20,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="Callable"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="ClipSoft"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -103,7 +103,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html">EnsembleInvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Callable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Callable.html">Callable</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.DropStypes.html">DropStypes</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
@@ -117,7 +117,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Clip.html">Clip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipSoft.html">ClipSoft</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">ClipSoft</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
@@ -177,7 +177,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.common.Callable"><code class="docutils literal notranslate"><span class="pre">Callable</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.numerical.ClipSoft"><code class="docutils literal notranslate"><span class="pre">ClipSoft</span></code></a></li>
 <li><a class="reference internal" href="#capabilities">Capabilities</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
@@ -200,7 +200,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">Callable</strong>
+        <strong itemprop="name">ClipSoft</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -213,16 +213,25 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="callable">
-<h1>Callable<a class="headerlink" href="#callable" title="Link to this heading">#</a></h1>
+          <section id="clipsoft">
+<h1>ClipSoft<a class="headerlink" href="#clipsoft" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.common.Callable">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.common.</span></span><span class="sig-name descname"><span class="pre">Callable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">function</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Callable" title="(in Python v3.14)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.common.Callable" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="sdm.processing.numerical.ClipSoft">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.numerical.</span></span><span class="sig-name descname"><span class="pre">ClipSoft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_absolute_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.numerical.ClipSoft" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
-<p>Adapt a stateless callable to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code> interface.</p>
+<p>Soft-clip numerical values toward <code class="docutils literal notranslate"><span class="pre">±max_absolute_value</span></code>.</p>
+<p>Values pass through</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[\frac{x}{\sqrt{1 + (x / b)^{2}}}\]</div>
+</div>
+<p>which maps monotonically onto <code class="docutils literal notranslate"><span class="pre">±max_absolute_value</span></code> (<code class="docutils literal notranslate"><span class="pre">b</span></code>) without a
+hard edge. NaN is preserved. <code class="docutils literal notranslate"><span class="pre">±Inf</span></code> maps to <code class="docutils literal notranslate"><span class="pre">±max_absolute_value</span></code>.
+Unlike <code class="xref py py-class docutils literal notranslate"><span class="pre">ClipSigma</span></code>, the bound is fixed rather
+than fitted from per-column statistics.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>function</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Callable" title="(in Python v3.14)"><em>Callable</em></a><em>[</em><em>[</em><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a><em>]</em><em>, </em><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a><em>]</em>)</p>
+<dd class="field-odd"><p><strong>max_absolute_value</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Bound of the soft clip.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -233,7 +242,7 @@ data-aria-dark="Switch to auto color mode">
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><strong>Handled Semantic Types</strong></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">categorical</span></code>, <code class="docutils literal notranslate"><span class="pre">datetime</span></code>, <code class="docutils literal notranslate"><span class="pre">id</span></code>, <code class="docutils literal notranslate"><span class="pre">numerical</span></code>, <code class="docutils literal notranslate"><span class="pre">text</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">numerical</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><strong>Requires Fitting</strong></p></td>
 <td><p>❌</p></td>
@@ -250,16 +259,16 @@ data-aria-dark="Switch to auto color mode">
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.common.Identity.html">
+    <a href="sdm.processing.numerical.ClipSigma.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">Identity</div></div>
+        <span>Previous</span><div class="title">ClipSigma</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.common.Sequential.html">
+    <a href="sdm.processing.numerical.ImputeMean.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">Sequential</div>
+        <div class="title">ImputeMean</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -273,5 +282,6 @@ data-aria-dark="Switch to auto color mode">
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../../_static/copybutton.js?v=ccdb6887"></script>
-      <script src="../../_static/shibuya.js?v=50760d75"></script></body>
+      <script src="../../_static/shibuya.js?v=50760d75"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script></body>
 </html>
