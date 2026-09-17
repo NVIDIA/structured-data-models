@@ -5,7 +5,6 @@ from collections import Counter
 from typing import Literal
 
 import torch
-from torch import Tensor
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
@@ -27,12 +26,9 @@ class ReduceEstimators(EnsembleProcessor):
     Args:
         method: Reduction applied across ensemble members. ``"mean"``
             averages all members. ``"trimmed_mean"`` sorts the members at
-            every output coordinate, removes an equal proportion from both
-            ends, and averages the remainder.
-        proportion_to_cut: Proportion removed from each end for
-            ``"trimmed_mean"``. Required for ``"trimmed_mean"`` and
-            inapplicable to ``"mean"``. Must be strictly between zero and
-            ``0.5``.
+            every output coordinate, removes ``proportion`` from both ends,
+            and averages the remainder.
+        proportion: Proportion removed from each end.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -42,42 +38,11 @@ class ReduceEstimators(EnsembleProcessor):
         self,
         *,
         method: Literal["mean", "trimmed_mean"] = "mean",
-        proportion_to_cut: float | None = None,
+        proportion: float | None = None,
     ) -> None:
         super().__init__()
-        if method not in ("mean", "trimmed_mean"):
-            raise ValueError("method must be 'mean' or 'trimmed_mean'")
-        if method == "mean" and proportion_to_cut is not None:
-            raise ValueError(
-                "proportion_to_cut must be None when method='mean'"
-            )
-        if method == "trimmed_mean" and proportion_to_cut is None:
-            raise ValueError(
-                "proportion_to_cut is required when method='trimmed_mean'"
-            )
-        if proportion_to_cut is not None and not 0 < proportion_to_cut < 0.5:
-            raise ValueError(
-                "proportion_to_cut must be strictly between 0 and 0.5"
-            )
         self.method = method
-        self.proportion_to_cut = proportion_to_cut
-
-    def _reduce(self, numerical: Tensor) -> Tensor:
-        # numerical: [E, ..., R, O]
-        if self.method == "mean":
-            return numerical.mean(dim=0)
-        if self.method == "trimmed_mean":
-            assert self.proportion_to_cut is not None
-            cut = int(self.proportion_to_cut * numerical.size(0))
-            if cut == 0:
-                return numerical.mean(dim=0)
-            ordered = numerical.sort(dim=0).values
-            return ordered.narrow(
-                dim=0,
-                start=cut,
-                length=numerical.size(0) - 2 * cut,
-            ).mean(dim=0)
-        raise AssertionError(f"Unknown method {self.method!r}")
+        self.proportion = proportion
 
     def _transform_ensemble(
         self,
@@ -95,7 +60,7 @@ class ReduceEstimators(EnsembleProcessor):
             )
         reference_columns = reference.columns[Stype.numerical]
 
-        groups: list[Tensor] = []
+        groups: list[torch.Tensor] = []
         for group in ensemble_table:
             if group.stypes != reference.stypes:
                 raise ValueError(
@@ -146,13 +111,20 @@ class ReduceEstimators(EnsembleProcessor):
             assert total is not None
             reduced = total / ensemble_table.num_members
         else:
+            assert self.method == "trimmed_mean"
             members = torch.stack(
                 [
                     groups[group_id][position]
                     for group_id, position in ensemble_table._locations
                 ]
             )  # [E, ..., R, O]
-            reduced = self._reduce(members)
+            output = self._transform(
+                reference.__class__(
+                    columns={Stype.numerical: reference_columns},
+                    numerical=members,
+                )
+            )
+            return EnsembleTable.from_table(output, num_members=1)
 
         output = reference.replace_blocks(numerical=reduced)
         return EnsembleTable.from_table(output, num_members=1)
@@ -172,9 +144,27 @@ class ReduceEstimators(EnsembleProcessor):
                 f"Expected a numerical-only output table (also found {found})."
             )
 
+        numerical = table.numerical  # [E, ..., R, O]
+        if self.method == "mean":
+            reduced = numerical.mean(dim=0)
+        else:
+            assert self.method == "trimmed_mean"
+            assert self.proportion is not None
+            assert 0 < self.proportion < 0.5
+            cut = int(self.proportion * numerical.size(0))
+            if cut == 0:
+                reduced = numerical.mean(dim=0)
+            else:
+                ordered = numerical.sort(dim=0).values
+                reduced = ordered.narrow(
+                    dim=0,
+                    start=cut,
+                    length=numerical.size(0) - 2 * cut,
+                ).mean(dim=0)
+
         return table.__class__(
             columns={Stype.numerical: table.columns[Stype.numerical]},
-            numerical=self._reduce(table.numerical),
+            numerical=reduced,
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
@@ -182,6 +172,5 @@ class ReduceEstimators(EnsembleProcessor):
         if self.method == "mean":
             return f"{prefix}(method={self.method!r})"
         return (
-            f"{prefix}(method={self.method!r}, "
-            f"proportion_to_cut={self.proportion_to_cut})"
+            f"{prefix}(method={self.method!r}, proportion={self.proportion})"
         )
