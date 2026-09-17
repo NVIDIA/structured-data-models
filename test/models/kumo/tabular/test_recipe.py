@@ -25,8 +25,12 @@ def _features(
     )
 
 
-def _transform(features: TableTensor, num_members: int = 2) -> EnsembleTable:
-    recipe = KumoTabular.default_recipe()
+def _transform(
+    features: TableTensor,
+    num_members: int = 2,
+    numerical_missing: str = "nan",
+) -> EnsembleTable:
+    recipe = default_recipe(numerical_missing)  # type: ignore[arg-type]
     return recipe.features.fit_transform_ensemble(
         EnsembleTable.from_table(features, num_members=num_members)
     )
@@ -138,7 +142,8 @@ def test_default_recipe_numerical_missing_options() -> None:
     def kinds(recipe: sp.Recipe) -> set[type]:
         return {type(m) for m in recipe.features.modules()}
 
-    assert sp.MissingDispatch in kinds(default_recipe())
+    assert sp.MissingDispatch in kinds(default_recipe("dispatch"))
+    assert sp.MissingDispatch not in kinds(default_recipe())
     assert sp.MissingDispatch not in kinds(default_recipe("nan"))
     assert sp.ImputeMean not in kinds(default_recipe("nan"))
     mix = [

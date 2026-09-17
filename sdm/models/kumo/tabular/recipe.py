@@ -29,10 +29,10 @@ def _normalize() -> list[sp.Processor]:
 
 
 def _missing(numerical_missing: NumericalMissing) -> sp.Processor:
-    # ``dispatch``: large, mostly incomplete tables keep their missing cells
-    # for the model, every other table is imputed. ``nan`` keeps them
-    # everywhere, ``impute`` fills them everywhere, ``mix`` alternates the
-    # two across the members.
+    # ``nan`` keeps missing cells for the model everywhere (best on
+    # BeyondArena; the model is trained with missing values). ``dispatch``
+    # imputes all but large, mostly incomplete tables, ``impute`` fills them
+    # everywhere, ``mix`` alternates the two across the members.
     if numerical_missing == "dispatch":
         return sp.MissingDispatch(
             dense=sp.ImputeMean(),
@@ -47,7 +47,7 @@ def _missing(numerical_missing: NumericalMissing) -> sp.Processor:
 
 
 def default_recipe(
-    numerical_missing: NumericalMissing = "dispatch",
+    numerical_missing: NumericalMissing = "nan",
 ) -> sp.Recipe:
     r"""Default recipe.
 

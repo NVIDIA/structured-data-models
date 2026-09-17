@@ -52,7 +52,7 @@ python -m benchmark.tabular.tabarena.main \
   --dataset blood-transfusion-service-center
 ```
 
-Run a local checkpoint under a run name, with every cache under one directory:
+Run a local checkpoint under a run name, with every cache under one directory (`--size small` for a 128-channel checkpoint, `--num_estimators`, `--numerical_missing {nan,dispatch,mix,impute}` and `--max_context_size` change the inference setup):
 
 ```bash
 python -m benchmark.tabular.tabarena.main \

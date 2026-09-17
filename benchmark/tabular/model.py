@@ -249,7 +249,8 @@ class SDMKumoTabularModel(SDMModel):
     def _set_default_params(self) -> None:
         super()._set_default_params()
         self._set_default_param_value("checkpoint", None)
-        self._set_default_param_value("numerical_missing", "dispatch")
+        self._set_default_param_value("size", "large")
+        self._set_default_param_value("numerical_missing", "nan")
 
     def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
         return default_recipe(numerical_missing=params["numerical_missing"])
@@ -259,10 +260,12 @@ class SDMKumoTabularModel(SDMModel):
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
+        params = self._get_model_params()
         return sdm.models.KumoTabular(
             task=task,
+            size=params["size"],
             device=device,
-            checkpoint=self._get_model_params()["checkpoint"],
+            checkpoint=params["checkpoint"],
         )
 
     def _infer_stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:

@@ -59,10 +59,15 @@ parser.add_argument(
     help="Local checkpoint loaded instead of the published weights.",
 )
 parser.add_argument(
+    "--size",
+    choices=("small", "large"),
+    help="kumo-tabular architecture matching --checkpoint (default: large).",
+)
+parser.add_argument(
     "--numerical_missing",
     choices=("dispatch", "nan", "mix", "impute"),
     help="How kumo-tabular passes missing numerical cells to the model "
-    "(default: dispatch).",
+    "(default: nan).",
 )
 parser.add_argument(
     "--name",
@@ -81,10 +86,12 @@ parser.add_argument(
 )
 args = parser.parse_args()
 if args.model != "kumo-tabular" and (
-    args.checkpoint is not None or args.numerical_missing is not None
+    args.checkpoint is not None
+    or args.size is not None
+    or args.numerical_missing is not None
 ):
     parser.error(
-        "--checkpoint and --numerical_missing need --model kumo-tabular"
+        "--checkpoint, --size, --numerical_missing need --model kumo-tabular"
     )
 
 model_config = MODEL_CONFIGS[args.model]
@@ -101,6 +108,8 @@ if args.num_estimators is not None:
     config["num_estimators"] = args.num_estimators
 if args.checkpoint is not None:
     config["checkpoint"] = args.checkpoint
+if args.size is not None:
+    config["size"] = args.size
 if args.numerical_missing is not None:
     config["numerical_missing"] = args.numerical_missing
 if args.batch_size is not None:
