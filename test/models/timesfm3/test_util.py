@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from sdm.models.timesfm3.util import (
+    DecodeCache,
     get_activation_fn,
     get_output_patch_via_roll,
     get_running_stats,
@@ -13,6 +14,78 @@ from sdm.models.timesfm3.util import (
     update_running_stats,
 )
 from sdm.testing import withCUDA
+
+
+@withCUDA
+def test_init_decode_cache(device: torch.device) -> None:
+    caches = DecodeCache.init_decode_cache(
+        num_layers=2,
+        batch_size=2,
+        num_variates=3,
+        num_total_input_patches=5,
+        num_heads=2,
+        head_dim=4,
+        device=device,
+        dtype=torch.float64,
+    )
+
+    assert len(caches) == 2
+    for cache in caches:
+        assert cache.next_index.shape == (6,)
+        assert cache.next_index.dtype == torch.int32
+        assert cache.num_front_masked.shape == (6,)
+        assert cache.num_front_masked.dtype == torch.int32
+        assert cache.key.shape == (6, 5, 2, 4)
+        assert cache.key.dtype == torch.float64
+        assert cache.value.shape == cache.key.shape
+        assert cache.value.dtype == cache.key.dtype
+        assert cache.key.device == device
+    assert caches[0].key.data_ptr() != caches[1].key.data_ptr()
+    assert caches[0].value.data_ptr() != caches[1].value.data_ptr()
+
+
+@withCUDA
+def test_decode_cache_appends_heterogeneous_batch(
+    device: torch.device,
+) -> None:
+    key_storage = torch.zeros(2, 6, 1, 2, device=device)
+    value_storage = torch.zeros_like(key_storage)
+    cache = DecodeCache(
+        next_index=torch.tensor([1, 3], dtype=torch.int32, device=device),
+        num_front_masked=torch.tensor(
+            [1, 2],
+            dtype=torch.int32,
+            device=device,
+        ),
+        key=key_storage,
+        value=value_storage,
+    )
+    key = torch.tensor(
+        [
+            [[[1.0, 2.0]], [[3.0, 4.0]]],
+            [[[5.0, 6.0]], [[7.0, 8.0]]],
+        ],
+        device=device,
+    )
+    value = -key
+
+    updated = cache.append(key, value)
+
+    torch.testing.assert_close(
+        updated.next_index,
+        updated.next_index.new_tensor([3, 5]),
+    )
+    torch.testing.assert_close(
+        updated.num_front_masked,
+        updated.num_front_masked.new_tensor([1, 2]),
+    )
+    torch.testing.assert_close(updated.key[0, 1:3], key[0])
+    torch.testing.assert_close(updated.key[1, 3:5], key[1])
+    torch.testing.assert_close(updated.value[0, 1:3], value[0])
+    torch.testing.assert_close(updated.value[1, 3:5], value[1])
+    torch.testing.assert_close(updated.key[:, 5], torch.zeros_like(key[:, 0]))
+    assert updated.key.data_ptr() == key_storage.data_ptr()
+    assert updated.value.data_ptr() == value_storage.data_ptr()
 
 
 @withCUDA
@@ -307,3 +380,28 @@ def test_stitch_single_patch(device: torch.device) -> None:
     output = stitch_patches(patch_preds, patch_len=2)
 
     assert torch.equal(output, patch_preds[:, :, 0])
+
+
+@withCUDA
+def test_decode_cache_appends_single_patch(device: torch.device) -> None:
+    cache = DecodeCache(
+        next_index=torch.tensor([1, 3], dtype=torch.int32, device=device),
+        num_front_masked=torch.zeros(2, dtype=torch.int32, device=device),
+        key=torch.zeros(2, 5, 1, 2, device=device),
+        value=torch.zeros(2, 5, 1, 2, device=device),
+    )
+    key = torch.tensor(
+        [[[[1.0, 2.0]]], [[[3.0, 4.0]]]],
+        device=device,
+    )
+
+    updated = cache.append(key, -key)
+
+    torch.testing.assert_close(
+        updated.next_index,
+        updated.next_index.new_tensor([2, 4]),
+    )
+    torch.testing.assert_close(updated.key[0, 1], key[0, 0])
+    torch.testing.assert_close(updated.key[1, 3], key[1, 0])
+    torch.testing.assert_close(updated.value[0, 1], -key[0, 0])
+    torch.testing.assert_close(updated.value[1, 3], -key[1, 0])

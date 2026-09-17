@@ -16,6 +16,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -26,6 +27,122 @@ _TOLERANCE = 1e-6
 
 def _make_safe_for_division(values: Tensor) -> Tensor:
     return torch.where(values < _TOLERANCE, 1.0, values)
+
+
+@dataclass
+class DecodeCache:
+    """Store TimesFM-3 state for incremental temporal attention.
+
+    Args:
+        next_index: Next insertion index for each flattened batch/variate
+            sequence with shape ``[L]``.
+        num_front_masked: Number of leading masked patches for each sequence
+            with shape ``[L]``.
+        key: Key projections with shape ``[L, C, H, D]``, where ``C`` is the
+            cache capacity, ``H`` is the number of heads, and ``D`` is the
+            head dimension.
+        value: Value projections with the same shape as ``key``.
+    """
+
+    next_index: Tensor
+    num_front_masked: Tensor
+    key: Tensor
+    value: Tensor
+
+    @classmethod
+    def init_decode_cache(
+        cls,
+        num_layers: int,
+        batch_size: int,
+        num_variates: int,
+        num_total_input_patches: int,
+        num_heads: int,
+        head_dim: int,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> list["DecodeCache"]:
+        """Initialize one decode cache per transformer layer.
+
+        Args:
+            num_layers: Number of transformer layers.
+            batch_size: Batch size ``B``.
+            num_variates: Number of variates ``V``.
+            num_total_input_patches: Cache capacity ``C``.
+            num_heads: Number of attention heads ``H``.
+            head_dim: Dimension ``D`` of each attention head.
+            device: Device on which to create the cache tensors.
+            dtype: Data type of the key and value tensors.
+
+        Returns:
+            Independent caches whose leading dimension is ``B * V``.
+        """
+        leading_size = batch_size * num_variates
+        return [
+            cls(
+                next_index=torch.zeros(
+                    leading_size,
+                    dtype=torch.int32,
+                    device=device,
+                ),
+                num_front_masked=torch.zeros(
+                    leading_size,
+                    dtype=torch.int32,
+                    device=device,
+                ),
+                key=torch.zeros(
+                    leading_size,
+                    num_total_input_patches,
+                    num_heads,
+                    head_dim,
+                    device=device,
+                    dtype=dtype,
+                ),
+                value=torch.zeros(
+                    leading_size,
+                    num_total_input_patches,
+                    num_heads,
+                    head_dim,
+                    device=device,
+                    dtype=dtype,
+                ),
+            )
+            for _ in range(num_layers)
+        ]
+
+    def append(self, key: Tensor, value: Tensor) -> "DecodeCache":
+        """Append key/value projections and advance each insertion index.
+
+        The method updates the preallocated key and value tensors in place and
+        returns new cursor metadata referencing the same storage.
+
+        Args:
+            key: New key projections with shape ``[L, Q, H, D]``.
+            value: New value projections with the same shape as ``key``.
+
+        Returns:
+            Cache with every insertion index advanced by ``Q``.
+        """
+        num_sequences, query_length = key.shape[:2]
+        sequence_indices = torch.arange(
+            num_sequences,
+            device=self.next_index.device,
+        )
+        if query_length == 1:
+            self.key[sequence_indices, self.next_index] = key[:, 0]
+            self.value[sequence_indices, self.next_index] = value[:, 0]
+        else:
+            positions = self.next_index[:, None] + torch.arange(
+                query_length,
+                device=self.next_index.device,
+            )
+            self.key[sequence_indices[:, None], positions] = key
+            self.value[sequence_indices[:, None], positions] = value
+        return DecodeCache(
+            next_index=self.next_index + query_length,
+            num_front_masked=self.num_front_masked,
+            key=self.key,
+            value=self.value,
+        )
 
 
 def update_running_stats(
