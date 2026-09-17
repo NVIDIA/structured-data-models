@@ -36,6 +36,12 @@ Overview
        | 30.94M (regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - BSD-3-Clause
+   * - :class:`~sdm.models.KumoForecasting`
+     -
+     - | 313.06M (base)
+       | 317.26M (cross-channel)
+     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
+     - `Apache-2.0 <https://huggingface.co/nvidia/nv-tesseract-forecasting>`__
 
 Model API
 ---------
