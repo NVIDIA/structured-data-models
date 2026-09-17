@@ -133,6 +133,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
+    ProcessorCase(sp.AddCategoryCounts()),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
