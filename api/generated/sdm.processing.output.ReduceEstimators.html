@@ -215,7 +215,7 @@ data-aria-dark="Switch to auto color mode">
 <h1>ReduceEstimators<a class="headerlink" href="#reduceestimators" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.processing.output.ReduceEstimators">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.output.</span></span><span class="sig-name descname"><span class="pre">ReduceEstimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'mean'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'mean'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.output.ReduceEstimators" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.output.</span></span><span class="sig-name descname"><span class="pre">ReduceEstimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'mean'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'trimmed_mean'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'mean'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">proportion</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.output.ReduceEstimators" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a></p>
 <p>Reduce the leading ensemble dimension of model outputs.</p>
 <p>Input must be a numerical output table with shape <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...,</span> <span class="pre">R,</span> <span class="pre">O]</span></code>.
@@ -228,8 +228,16 @@ Processors after it receive an already-reduced output table.
 Ensemble transformation returns one member containing the reduction.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>method</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'mean'</em><em>]</em>) – Reduction applied across ensemble members. Currently only
-<code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> is supported.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>method</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'mean'</em><em>, </em><em>'trimmed_mean'</em><em>]</em>) – Reduction applied across ensemble members. <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>
+averages all members. <code class="docutils literal notranslate"><span class="pre">&quot;trimmed_mean&quot;</span></code> sorts the members at
+every output coordinate, drops <code class="docutils literal notranslate"><span class="pre">proportion</span></code> of them from each
+end, and averages the remainder.</p></li>
+<li><p><strong>proportion</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Proportion dropped from each end in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">0.5)</span></code>. When it
+does not resolve to a whole number of members, the number of
+dropped members is rounded down, so small ensembles keep all
+members.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -275,7 +283,7 @@ Ensemble transformation returns one member containing the reduction.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=ad41cb5d"></script>
+      <script src="../../_static/documentation_options.js?v=9abf0520"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

@@ -82,7 +82,7 @@ Default Recipe
        TaskDispatch(
          regression=SortQuantiles(),
        ),
-       ReduceEstimators(method='mean'),
+       ReduceEstimators(method='mean', proportion=0.0),
        TaskDispatch(
          classification=Softmax(temperature=0.9),
        ),
