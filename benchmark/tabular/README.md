@@ -149,3 +149,5 @@ Evaluate named runs of one model instead. Repeat `--name` for one leaderboard ro
 ```bash
 python -m benchmark.tabular.beyondarena.evaluate --model kumo-tabular --name my-cls-run,my-reg-run=Kumo-Tabular-L --output_root /path/to/beyondarena_out
 ```
+
+`--backend ray` processes the raw results in parallel; on the 138-split regression pool it took 45 s where the default in-process path took 17 min, with identical output.

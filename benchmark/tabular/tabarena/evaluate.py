@@ -38,6 +38,12 @@ parser.add_argument(
     type=Path,
     help="Parent directory of every TabArena cache.",
 )
+parser.add_argument(
+    "--backend",
+    choices=("native", "ray"),
+    default="native",
+    help="Process the raw results in-process or in parallel with ray.",
+)
 args = parser.parse_args()
 
 result_root = args.output_root
@@ -98,7 +104,7 @@ for label, method, result_dirs in runs:
         path_raw=result_dirs,
         method_metadata=method_metadata,
         task_metadata=base_context.task_metadata_collection,
-        backend="native",
+        backend=args.backend,
         name=method if method == label else None,
     )
     prefix = None if method == label else f"[{label}] "
