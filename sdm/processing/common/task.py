@@ -116,12 +116,8 @@ class TaskDispatch(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        if self._task is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; use it "
-                "in a 'Recipe' through model execution"
-            )
-        if self._task not in self.processors:
+        processor = self._processor()
+        if processor is None:
             return ensemble_table
         return self.processors[self._task].fit_transform_ensemble(
             ensemble_table,
