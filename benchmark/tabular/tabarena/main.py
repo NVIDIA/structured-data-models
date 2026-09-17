@@ -34,6 +34,11 @@ parser.add_argument(
     help="Filter tasks; repeat to combine filters.",
 )
 parser.add_argument(
+    "--num_estimators",
+    type=int,
+    help="Ensemble members per fit (default: the model's).",
+)
+parser.add_argument(
     "--max_context_size",
     type=int,
     help="Subsample the context to at most this many rows.",
@@ -92,6 +97,8 @@ config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
 }
+if args.num_estimators is not None:
+    config["num_estimators"] = args.num_estimators
 if args.checkpoint is not None:
     config["checkpoint"] = args.checkpoint
 if args.numerical_missing is not None:
