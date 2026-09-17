@@ -14,7 +14,6 @@ from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     """Permute numerical feature columns and their names.
 
-    Pass ``generator`` to ``fit()`` to make the permutation reproducible.
     Convert non-numerical feature stypes before this step, for example with
     :class:`~sdm.processing.ToNumerical`.
 
