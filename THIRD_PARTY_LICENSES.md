@@ -31,6 +31,15 @@ The `sdm/models/tabfm/` implementation contains code derived from TabFM. The Tab
 
 The `sdm/models/timesfm3/` implementation contains code derived from TimesFM 3.0. The TimesFM 3.0 weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
+## MOMENT
+
+- Source: https://github.com/moment-timeseries-foundation-model/moment
+- Code license: MIT
+- License terms: [`sdm/models/kumo/timeseries/forecasting/LICENSE`](sdm/models/kumo/timeseries/forecasting/LICENSE)
+- Pretrained backbone: https://huggingface.co/AutonLab/MOMENT-1-large
+
+The `sdm/models/kumo/timeseries/forecasting/` implementation contains code derived from MOMENT through NVIDIA NV-Tesseract. The model weights are not bundled with this project.
+
 ## PyTorch contribution guide
 
 Portions of [`CONTRIBUTING.md`](CONTRIBUTING.md) are adapted from the [PyTorch contribution guide](https://github.com/pytorch/pytorch/blob/main/CONTRIBUTING.md), distributed under the BSD 3-Clause License. The complete copyright notices and license terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).
