@@ -43,6 +43,12 @@ parser.add_argument(
     help="Select at most this many columns per estimator.",
 )
 parser.add_argument(
+    "--pca_components",
+    type=int,
+    default=8,
+    help="Append this many PCA features to a share of the estimators.",
+)
+parser.add_argument(
     "--batch_size",
     type=int,
     help="Prediction batch size.",
@@ -61,6 +67,7 @@ result_dir.mkdir(parents=True, exist_ok=True)
 config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
+    "pca_components": args.pca_components,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size

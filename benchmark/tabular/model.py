@@ -5,6 +5,7 @@
 
 import abc
 import math
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
@@ -22,6 +23,47 @@ import sdm
 import sdm.processing as sp
 
 Task = Literal["classification", "regression"]
+
+
+def _append_pca(
+    recipe: sdm.Recipe,
+    num_components: int,
+    max_columns: int | None,
+    exclude_columns: Collection[str],
+    *,
+    estimator_share: int = 4,
+    center: bool = False,
+) -> None:
+    """Give principal components to a share of the estimators of ``recipe``.
+
+    Args:
+        recipe: Recipe to change in place.
+        num_components: Number of principal components to append.
+        max_columns: Column limit that the components stay inside, if any.
+        exclude_columns: Columns that do not take part in the projection.
+        estimator_share: One estimator of this many receives the components.
+        center: Subtract the column mean before the projection.
+    """
+    branch: sp.Processor = sp.PCA(
+        num_components,
+        append_original=True,
+        center=center,
+        exclude_columns=exclude_columns,
+    )
+    if max_columns is not None:
+        if num_components >= max_columns:
+            raise ValueError(
+                f"'pca_components' must stay below the column limit of "
+                f"{max_columns}"
+            )
+        branch = sp.Sequential(
+            sp.SelectColumns(max_columns - num_components, method="first"),
+            branch,
+        )
+
+    # The round robin gives the branch to one estimator of every share.
+    plain = [sp.Identity() for _ in range(estimator_share - 1)]
+    recipe.append_features(sp.Choice(*plain, branch, method="round_robin"))
 
 
 class SDMModel(AbstractTorchModel, abc.ABC):
@@ -56,6 +98,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
+        self._set_default_param_value("pca_components", 8)
 
     def _fit(
         self,
@@ -127,6 +170,19 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             for processor in recipe.features.modules():
                 if isinstance(processor, sp.SelectColumns):
                     processor.max_columns = params["max_columns"]
+
+        if params["pca_components"]:
+            column_limits = [
+                processor.max_columns
+                for processor in recipe.features.modules()
+                if isinstance(processor, sp.SelectColumns)
+            ]
+            _append_pca(
+                recipe,
+                params["pca_components"],
+                min(column_limits, default=None),
+                x_context.columns[sdm.Stype.categorical],
+            )
 
         with torch.amp.autocast(
             self._device.type,
