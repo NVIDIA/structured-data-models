@@ -94,6 +94,29 @@ def test_align_categories_keeps_string_vocabularies_column_local(
     )
 
 
+@withCUDA
+def test_shared_categories_preserves_int32_codes(
+    device: torch.device,
+) -> None:
+    table = _table(
+        [[0], [1], [0]],
+        categories=(("red", "blue"),),
+        device=device,
+    )
+    ensemble = EnsembleTable.from_table(table, num_members=2)
+
+    output = AlignCategories(shared_categories=True).fit_transform_ensemble(
+        ensemble
+    )
+
+    for member_id in range(2):
+        assert output.table(member_id).categorical.code.dtype == torch.int32
+        assert torch.equal(
+            output.table(member_id).categorical.code,
+            table.categorical.code,
+        )
+
+
 def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     table = TableTensor.from_pandas(
         pd.DataFrame({"kind": ["red", "blue", "green", "blue"]}),

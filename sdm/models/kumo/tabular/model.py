@@ -11,7 +11,15 @@ import torch
 from torch import Tensor
 from torch.nn import Identity, Linear, ModuleDict
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
+from sdm import (
+    EnsembleTable,
+    Recipe,
+    RelatedTables,
+    Stype,
+    TableTensor,
+    Task,
+    TaskLike,
+)
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -19,6 +27,7 @@ from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
+from sdm.processing.categorical.encode_ecoc import EncodeECOC, ecoc_code_count
 from sdm.tensor.table import TableSchema
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
@@ -49,6 +58,39 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
         "num_icl_key_value_heads_for_query": 2,
     },
 }
+
+
+def scale_ecoc_estimators(
+    y: Tensor | TableTensor | EnsembleTable,
+    num_estimators: int | None,
+    recipe: Recipe,
+) -> int | None:
+    """Raise the estimator count so every error-correcting code gets a group.
+
+    The classification head represents a fixed number of classes. The recipe
+    therefore gives each estimator one code of an error-correcting code, and a
+    target with more classes needs one group of estimators for every code.
+    """
+    if num_estimators is None:
+        if not isinstance(y, TableTensor) or y.dim() > 2:
+            return None
+        num_estimators = 1
+    table = y.table(0) if isinstance(y, EnsembleTable) else y
+    if not isinstance(table, TableTensor):
+        return num_estimators
+    if len(table.categorical.categories) != 1:
+        return num_estimators
+    num_classes = table.categorical.categories[0].numel()
+    for processor in recipe.target.modules():
+        if (
+            isinstance(processor, EncodeECOC)
+            and num_classes > processor.alphabet_size
+        ):
+            return num_estimators * ecoc_code_count(
+                num_classes=num_classes,
+                alphabet_size=processor.alphabet_size,
+            )
+    return num_estimators
 
 
 class KumoTabular(ICLModel):
@@ -147,6 +189,12 @@ class KumoTabular(ICLModel):
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         kwargs["_schema"] = x_context.schema
+        y_context = kwargs["y_context"] if "y_context" in kwargs else args[1]
+        kwargs["num_estimators"] = scale_ecoc_estimators(
+            y_context,
+            kwargs.get("num_estimators"),
+            kwargs.get("recipe") or self.default_recipe(),
+        )
         return super().forward(*args, **kwargs)
 
     def fit(self, *args: Any, **kwargs: Any) -> None:
@@ -155,6 +203,12 @@ class KumoTabular(ICLModel):
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
         kwargs["_schema"] = x.schema
+        y = kwargs["y"] if "y" in kwargs else args[1]
+        kwargs["num_estimators"] = scale_ecoc_estimators(
+            y,
+            kwargs.get("num_estimators"),
+            kwargs.get("recipe") or self.default_recipe(),
+        )
         return super().fit(*args, **kwargs)
 
     def _forward(

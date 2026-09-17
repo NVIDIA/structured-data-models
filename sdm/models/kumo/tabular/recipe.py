@@ -25,6 +25,7 @@ def _normalize() -> list[sp.Processor]:
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
+    ecoc = sp.EncodeECOC(alphabet_size=10)
     return sp.Recipe(
         features=[
             sp.StypeDispatch(
@@ -66,7 +67,8 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         target=[
             sp.StypeDispatch(
                 categorical=[
-                    sp.AlignCategories(),
+                    sp.AlignCategories(shared_categories=True),
+                    ecoc,
                     sp.ShuffleCategories(method="shift"),
                 ],
                 numerical=[
@@ -77,6 +79,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         ],
         output=sp.TaskDispatch(
             classification=[
+                sp.DecodeECOC(ecoc),
                 sp.ReduceEstimators(method="mean"),
                 sp.Softmax(temperature=1.0),
             ],

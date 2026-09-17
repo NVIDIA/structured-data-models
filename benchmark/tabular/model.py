@@ -20,6 +20,7 @@ from tabarena.benchmark.experiment import OOFExperimentRunner
 
 import sdm
 import sdm.processing as sp
+from sdm.models.kumo.tabular.model import scale_ecoc_estimators
 
 Task = Literal["classification", "regression"]
 
@@ -106,8 +107,23 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         params = self._get_model_params()
         self._num_estimators = params["num_estimators"]
         max_context_size = params["max_context_size"]
+        subsamples = max_context_size is not None and len(X) > max_context_size
+
+        recipe = self.model.default_recipe()
+        if params["max_columns"] is not None:
+            for processor in recipe.features.modules():
+                if isinstance(processor, sp.SelectColumns):
+                    processor.max_columns = params["max_columns"]
+
         num_estimators: int | None = self._num_estimators
-        if max_context_size is not None and len(X) > max_context_size:
+        if subsamples:
+            num_estimators = scale_ecoc_estimators(
+                y=y_context,
+                num_estimators=num_estimators,
+                recipe=recipe,
+            )
+            assert num_estimators is not None
+            self._num_estimators = num_estimators
             num_repeats = math.ceil(num_estimators * max_context_size / len(X))
             perm = torch.cat(
                 [
@@ -124,12 +140,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             y_context = y_context[perm].unflatten(0, shape)
             num_estimators = None
         self._expand_query = num_estimators is None
-
-        recipe = self.model.default_recipe()
-        if params["max_columns"] is not None:
-            for processor in recipe.features.modules():
-                if isinstance(processor, sp.SelectColumns):
-                    processor.max_columns = params["max_columns"]
 
         with torch.amp.autocast(
             self._device.type,

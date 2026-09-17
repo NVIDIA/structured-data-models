@@ -41,12 +41,14 @@ from sdm.processing.numerical import (
 )
 from sdm.processing.categorical import (
     AlignCategories,
-    ShuffleCategories,
+    EncodeECOC,
     ImputeMode,
+    ShuffleCategories,
     AddLevelCounts,
 )
 from sdm.processing.datetime import AddCalendarFields
 from sdm.processing.output import (
+    DecodeECOC,
     ReduceEstimators,
     Softmax,
     SortQuantiles,
@@ -88,10 +90,12 @@ __all__ = [
     "PCA",
     "RandomProjection",
     "AlignCategories",
-    "ShuffleCategories",
+    "EncodeECOC",
     "ImputeMode",
+    "ShuffleCategories",
     "AddLevelCounts",
     "AddCalendarFields",
+    "DecodeECOC",
     "ReduceEstimators",
     "Softmax",
     "SortQuantiles",
