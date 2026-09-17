@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Identity - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Callable" href="sdm.processing.common.Callable.html" /><link rel="prev" title="Recipe" href="sdm.processing.recipe.Recipe.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ReduceQuantiles - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Softmax" href="sdm.processing.output.Softmax.html" /><link rel="prev" title="ReduceEstimators" href="sdm.processing.output.ReduceEstimators.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -20,7 +20,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="Identity"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="ReduceQuantiles"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -102,7 +102,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html">EnsembleProcessor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html">EnsembleInvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Callable.html">Callable</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.DropStypes.html">DropStypes</a></li>
@@ -134,7 +134,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.text.SentenceTransformer.html">SentenceTransformer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.ReduceEstimators.html">ReduceEstimators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.ReduceQuantiles.html">ReduceQuantiles</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">ReduceQuantiles</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.Softmax.html">Softmax</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.SortQuantiles.html">SortQuantiles</a></li>
 </ul>
@@ -178,7 +178,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.common.Identity"><code class="docutils literal notranslate"><span class="pre">Identity</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.output.ReduceQuantiles"><code class="docutils literal notranslate"><span class="pre">ReduceQuantiles</span></code></a></li>
 <li><a class="reference internal" href="#capabilities">Capabilities</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
@@ -201,7 +201,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">Identity</strong>
+        <strong itemprop="name">ReduceQuantiles</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -214,13 +214,17 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="identity">
-<h1>Identity<a class="headerlink" href="#identity" title="Link to this heading">#</a></h1>
+          <section id="reducequantiles">
+<h1>ReduceQuantiles<a class="headerlink" href="#reducequantiles" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.common.Identity">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.common.</span></span><span class="sig-name descname"><span class="pre">Identity</span></span><a class="headerlink" href="#sdm.processing.common.Identity" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
-<p>Return inputs unchanged.</p>
+<dt class="sig sig-object py" id="sdm.processing.output.ReduceQuantiles">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.output.</span></span><span class="sig-name descname"><span class="pre">ReduceQuantiles</span></span><a class="headerlink" href="#sdm.processing.output.ReduceQuantiles" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
+<p>Reduce quantile predictions to their mean point prediction.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">O</span></code> numerical columns of an output table with shape
+<code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R,</span> <span class="pre">O]</span></code> hold the predicted quantiles of every row. They are
+replaced by a single column <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R,</span> <span class="pre">1]</span></code>, which
+approximates the expected value for evenly spaced quantiles.</p>
 <dl class="field-list simple">
 </dl>
 </dd></dl>
@@ -231,7 +235,7 @@ data-aria-dark="Switch to auto color mode">
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><strong>Handled Semantic Types</strong></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">categorical</span></code>, <code class="docutils literal notranslate"><span class="pre">datetime</span></code>, <code class="docutils literal notranslate"><span class="pre">id</span></code>, <code class="docutils literal notranslate"><span class="pre">numerical</span></code>, <code class="docutils literal notranslate"><span class="pre">text</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">numerical</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><strong>Requires Fitting</strong></p></td>
 <td><p>❌</p></td>
@@ -248,16 +252,16 @@ data-aria-dark="Switch to auto color mode">
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.recipe.Recipe.html">
+    <a href="sdm.processing.output.ReduceEstimators.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">Recipe</div></div>
+        <span>Previous</span><div class="title">ReduceEstimators</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.common.Callable.html">
+    <a href="sdm.processing.output.Softmax.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">Callable</div>
+        <div class="title">Softmax</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
