@@ -159,11 +159,11 @@ def quantize_kernel(
     LENGTH: tl.constexpr,
     BLOCK: tl.constexpr,
     H: tl.constexpr,
-    D: tl.constexpr,
-    S0: tl.constexpr,
-    S1: tl.constexpr,
-    S2: tl.constexpr,
-    S3: tl.constexpr,
+    CHANNELS: tl.constexpr,
+    BATCH_STRIDE: tl.constexpr,
+    HEAD_STRIDE: tl.constexpr,
+    ROW_STRIDE: tl.constexpr,
+    CHANNEL_STRIDE: tl.constexpr,
 ):
     """Write scaled, clamped input values into a contiguous FP8 buffer.
 
@@ -174,19 +174,19 @@ def quantize_kernel(
         LENGTH: Number of elements per head.
         BLOCK: Elements handled by each program.
         H: Heads per batch item.
-        D: Channels per head.
-        S0: Input batch stride in elements.
-        S1: Input head stride in elements.
-        S2: Input row stride in elements.
-        S3: Input channel stride in elements.
+        CHANNELS: Channels per head.
+        BATCH_STRIDE: Input batch stride in elements.
+        HEAD_STRIDE: Input head stride in elements.
+        ROW_STRIDE: Input row stride in elements.
+        CHANNEL_STRIDE: Input channel stride in elements.
     """
     offset = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
     head = tl.program_id(1)
     source = (
-        (head // H) * S0
-        + (head % H) * S1
-        + (offset // D) * S2
-        + (offset % D) * S3
+        (head // H) * BATCH_STRIDE
+        + (head % H) * HEAD_STRIDE
+        + (offset // CHANNELS) * ROW_STRIDE
+        + (offset % CHANNELS) * CHANNEL_STRIDE
     )
     x = tl.load(X + source, mask=offset < LENGTH, other=0.0).to(tl.float32)
     scale = tl.load(S + head)
