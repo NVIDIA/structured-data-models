@@ -124,9 +124,9 @@ def test_compact_promotes_cumulative_offsets(
         pass
 
     def check_allocation(
-        *, end: Tensor, dtype: torch.dtype, device: torch.device
+        *, end: int, dtype: torch.dtype, device: torch.device
     ) -> Tensor:
-        assert end.item() == 2**31
+        assert end == 2**31
         assert dtype == torch.int64
         raise AllocationBoundary
 
