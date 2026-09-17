@@ -54,6 +54,12 @@ parser.add_argument(
     help="Local checkpoint loaded instead of the published weights.",
 )
 parser.add_argument(
+    "--numerical_missing",
+    choices=("dispatch", "nan", "mix", "impute"),
+    help="How kumo-tabular passes missing numerical cells to the model "
+    "(default: dispatch).",
+)
+parser.add_argument(
     "--name",
     help="Name of the result directory (default: the model name).",
 )
@@ -69,8 +75,12 @@ parser.add_argument(
     help="Parent directory of every BeyondArena cache.",
 )
 args = parser.parse_args()
-if args.checkpoint is not None and args.model != "kumo-tabular":
-    parser.error("--checkpoint is only supported for --model kumo-tabular")
+if args.model != "kumo-tabular" and (
+    args.checkpoint is not None or args.numerical_missing is not None
+):
+    parser.error(
+        "--checkpoint and --numerical_missing need --model kumo-tabular"
+    )
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
@@ -84,6 +94,8 @@ config = {
 }
 if args.checkpoint is not None:
     config["checkpoint"] = args.checkpoint
+if args.numerical_missing is not None:
+    config["numerical_missing"] = args.numerical_missing
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
 

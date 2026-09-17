@@ -6,6 +6,7 @@ import torch
 import sdm.processing as sp
 from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
+from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.testing import withCUDA
 
 
@@ -131,3 +132,24 @@ def test_default_recipe_reduces_outputs_per_task() -> None:
     )
     assert out.size() == (5, 3)
     torch.testing.assert_close(out.numerical.sum(dim=-1), torch.ones(5))
+
+
+def test_default_recipe_numerical_missing_options() -> None:
+    def kinds(recipe: sp.Recipe) -> set[type]:
+        return {type(m) for m in recipe.features.modules()}
+
+    assert sp.MissingDispatch in kinds(default_recipe())
+    assert sp.MissingDispatch not in kinds(default_recipe("nan"))
+    assert sp.ImputeMean not in kinds(default_recipe("nan"))
+    mix = [
+        m
+        for m in default_recipe("mix").features.modules()
+        if isinstance(m, sp.Choice)
+    ]
+    assert any(
+        {type(getattr(o, "processor", o)) for o in choice.options}
+        == {sp.Identity, sp.ImputeMean}
+        for choice in mix
+    )
+    assert sp.MissingDispatch not in kinds(default_recipe("impute"))
+    assert sp.ImputeMean in kinds(default_recipe("impute"))

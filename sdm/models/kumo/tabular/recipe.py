@@ -1,9 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import Literal
+
 import torch
 
 import sdm.processing as sp
+
+NumericalMissing = Literal["dispatch", "nan", "mix", "impute"]
 
 
 def _normalize() -> list[sp.Processor]:
@@ -24,18 +28,38 @@ def _normalize() -> list[sp.Processor]:
     ]
 
 
-def default_recipe() -> sp.Recipe:  # noqa: D103
+def _missing(numerical_missing: NumericalMissing) -> sp.Processor:
+    # ``dispatch``: large, mostly incomplete tables keep their missing cells
+    # for the model, every other table is imputed. ``nan`` keeps them
+    # everywhere, ``impute`` fills them everywhere, ``mix`` alternates the
+    # two across the members.
+    if numerical_missing == "dispatch":
+        return sp.MissingDispatch(
+            dense=sp.ImputeMean(),
+            min_rows=20_000,
+            min_row_frac=0.5,
+        )
+    if numerical_missing == "nan":
+        return sp.Identity()
+    if numerical_missing == "mix":
+        return sp.Choice(sp.Identity(), sp.ImputeMean(), method="round_robin")
+    return sp.ImputeMean()
+
+
+def default_recipe(
+    numerical_missing: NumericalMissing = "dispatch",
+) -> sp.Recipe:
+    r"""Default recipe.
+
+    Args:
+        numerical_missing: How missing numerical cells reach the model, see
+            :func:`_missing`.
+    """
     ecoc = sp.EncodeECOC(alphabet_size=10)
     return sp.Recipe(
         features=[
             sp.StypeDispatch(
-                # Large, mostly incomplete tables keep their missing cells
-                # for the model; every other table is imputed.
-                numerical=sp.MissingDispatch(
-                    dense=sp.ImputeMean(),
-                    min_rows=20_000,
-                    min_row_frac=0.5,
-                ),
+                numerical=_missing(numerical_missing),
                 categorical=[
                     sp.AlignCategories(sort_by="value"),
                     sp.AddLevelCounts(min_cardinality=50),

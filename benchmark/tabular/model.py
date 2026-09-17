@@ -21,6 +21,7 @@ from tabarena.benchmark.experiment import OOFExperimentRunner
 import sdm
 import sdm.processing as sp
 from sdm.models.kumo.tabular.model import scale_ecoc_estimators
+from sdm.models.kumo.tabular.recipe import default_recipe
 
 Task = Literal["classification", "regression"]
 
@@ -60,6 +61,9 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
+
+    def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
+        return self.model.default_recipe()
 
     def _fit(
         self,
@@ -109,7 +113,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         max_context_size = params["max_context_size"]
         subsamples = max_context_size is not None and len(X) > max_context_size
 
-        recipe = self.model.default_recipe()
+        recipe = self._recipe(params)
         if params["max_columns"] is not None:
             for processor in recipe.features.modules():
                 if isinstance(processor, sp.SelectColumns):
@@ -245,6 +249,10 @@ class SDMKumoTabularModel(SDMModel):
     def _set_default_params(self) -> None:
         super()._set_default_params()
         self._set_default_param_value("checkpoint", None)
+        self._set_default_param_value("numerical_missing", "dispatch")
+
+    def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
+        return default_recipe(numerical_missing=params["numerical_missing"])
 
     def _create_model(
         self,
