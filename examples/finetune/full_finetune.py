@@ -4,12 +4,10 @@
 """Full fine-tuning of KumoTabular ("kumo-small") or TabICLv2.
 
 Fine-tunes every parameter of the selected model with gradient descent on
-resampled in-context batches per iteration, using the model's own default
-recipe throughout (``model.train()`` makes ``forward()`` differentiable
-end-to-end, including post-processing, so no custom recipe or callback is
-needed). Evaluates in-context against a fixed validation split every epoch,
-checkpoints whenever that metric improves, and reports the checkpointed
-model's performance on a held-out test split once fine-tuning is done.
+resampled in-context batches per iteration. Evaluates in-context against a
+fixed validation split every epoch, checkpoints whenever that metric
+improves, and reports the checkpointed model's performance on a held-out
+test split once fine-tuning is done.
 """
 
 import argparse
