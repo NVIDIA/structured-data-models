@@ -3,12 +3,13 @@
 
 """Output postprocessing transforms."""
 
-from sdm.processing.output.reduce import ReduceEstimators
+from sdm.processing.output.reduce import ReduceEstimators, ReduceQuantiles
 from sdm.processing.output.softmax import Softmax
 from sdm.processing.output.sort import SortQuantiles
 
 __all__ = [
     "ReduceEstimators",
+    "ReduceQuantiles",
     "Softmax",
     "SortQuantiles",
 ]
