@@ -39,6 +39,11 @@ parser.add_argument(
     help="Parent directory of every BeyondArena cache.",
 )
 parser.add_argument(
+    "--subset",
+    action="append",
+    help="Score only these tasks; repeat to combine filters.",
+)
+parser.add_argument(
     "--backend",
     choices=("native", "ray"),
     default="native",
@@ -120,6 +125,7 @@ for label, method, result_dirs in runs:
 context = BeyondArenaContext.from_new_methods(methods)
 leaderboard = context.compare(
     output_dir=output_root,
+    subset=args.subset,
     only_valid_tasks=[method.method for method in methods],
 )
 website = context.leaderboard_to_website_format(leaderboard)
