@@ -24,7 +24,8 @@ parser.add_argument(
     "--name",
     action="append",
     help="Named run of ``--model`` to evaluate; repeat for one row per run, "
-    "or join runs with ',' to score them as one method.",
+    "join runs with ',' to score them as one method, and append '=LABEL' to "
+    "name that method.",
 )
 parser.add_argument(
     "--output_root",
@@ -46,14 +47,19 @@ if args.name:
     if args.model is None:
         parser.error("--name requires --model")
     model_config = MODEL_CONFIGS[args.model]
-    runs = [
-        (
-            name.replace(",", "+"),
-            model_config.tabarena_method_name,
-            [result_root / part / "outer_model" for part in name.split(",")],
+    runs = []
+    for name in args.name:
+        name, _, label = name.partition("=")
+        runs.append(
+            (
+                label or name.replace(",", "+"),
+                label or model_config.tabarena_method_name,
+                [
+                    result_root / part / "outer_model"
+                    for part in name.split(",")
+                ],
+            )
         )
-        for name in args.name
-    ]
 else:
     runs = [
         (
@@ -93,8 +99,9 @@ for label, method, result_dirs in runs:
         method_metadata=method_metadata,
         task_metadata=base_context.task_metadata_collection,
         backend="native",
+        name=method if method == label else None,
     )
-    prefix = f"[{label}] "
+    prefix = None if method == label else f"[{label}] "
     results = processed.get_results(new_result_prefix=prefix)
     results.to_csv(
         output_dir / "method_results_per_split.csv",
