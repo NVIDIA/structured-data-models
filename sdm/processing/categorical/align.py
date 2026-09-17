@@ -31,6 +31,10 @@ class AlignCategories(EnsembleProcessor):
     and transforming remaps another table to use it. Missing values and
     categories not retained during fitting receive code ``-1``.
 
+    Ensemble vocabularies follow logical member positions, independently of
+    physical table grouping or sharing. Transforming an ensemble requires the
+    same number of members used during fitting.
+
     Args:
         sort_by: How to order fitted categories.
             ``"code"`` keeps observed categories in original order.
@@ -83,6 +87,13 @@ class AlignCategories(EnsembleProcessor):
         self.sort_by = sort_by
         self.min_frequency = min_frequency
         self._categories: BufferList[BufferList[Tensor]] = BufferList()
+        self._category_ids: tuple[int, ...] = ()
+
+    def get_extra_state(self) -> tuple[int, ...]:  # noqa: D102
+        return self._category_ids
+
+    def set_extra_state(self, state: object) -> None:  # noqa: D102
+        self._category_ids = cast(tuple[int, ...], state)
 
     def _fit_column(
         self,
@@ -229,6 +240,7 @@ class AlignCategories(EnsembleProcessor):
         self._categories = BufferList(
             BufferList(categories) for categories in fitted_categories
         )
+        self._category_ids = (0,)
 
     def _fit_transform(
         self,
@@ -240,6 +252,7 @@ class AlignCategories(EnsembleProcessor):
         self._categories = BufferList(
             BufferList(categories) for categories in fitted_categories
         )
+        self._category_ids = (0,)
         return aligned_tables[0]
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -281,6 +294,7 @@ class AlignCategories(EnsembleProcessor):
         self._categories = BufferList(
             BufferList(categories) for categories in fitted_categories
         )
+        self._category_ids = self._member_table_ids(ensemble_table)
 
     def _fit_transform_ensemble(
         self,
@@ -303,13 +317,52 @@ class AlignCategories(EnsembleProcessor):
         self._categories = BufferList(
             BufferList(categories) for categories in fitted_categories
         )
+        self._category_ids = member_table_ids
         return output
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        if len(self._category_ids) != ensemble_table.num_members:
+            raise RuntimeError(
+                "AlignCategories must be fitted with the same number of "
+                "ensemble members before transform."
+            )
         table_ids = self._member_table_ids(ensemble_table)
+        if table_ids != self._category_ids or sum(
+            group.size(0) for group in ensemble_table
+        ) != len(self._categories):
+            aligned_tables = []
+            member_table_ids = []
+            aligned_table_ids: dict[tuple[int, int], int] = {}
+            for member_id, (table_id, category_id) in enumerate(
+                zip(table_ids, self._category_ids, strict=True)
+            ):
+                # Shared input can stay shared only with the same fitted state.
+                key = (table_id, category_id)
+                aligned_id = aligned_table_ids.get(key)
+                if aligned_id is None:
+                    aligned_id = len(aligned_tables)
+                    aligned_table_ids[key] = aligned_id
+                    aligned_tables.append(
+                        self._align_to_categories(
+                            ensemble_table.table(member_id),
+                            (
+                                cast(
+                                    Sequence[Tensor],
+                                    self._categories[category_id],
+                                ),
+                            ),
+                        )[0]
+                    )
+                member_table_ids.append(aligned_id)
+            return ensemble_table.replace_tables(
+                tables=aligned_tables,
+                member_table_ids=member_table_ids,
+            )
+
+        # Preserve batched alignment when physical tables retain fitted state.
         aligned_tables = []
         offset = 0
         for group in ensemble_table:
