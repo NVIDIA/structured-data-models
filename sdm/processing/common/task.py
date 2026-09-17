@@ -13,9 +13,7 @@ from sdm.processing import EnsembleProcessor, Processor
 class TaskDispatch(EnsembleProcessor):
     """Apply separate processors based on the semantic type of the target.
 
-    :class:`TaskDispatch` is resolved only during model execution. The selected
-    processor receives the table as given, so a route in ``Recipe.output`` can
-    reduce stacked member outputs.
+    :class:`TaskDispatch` is resolved only during model execution.
 
     Args:
         classification: Processor selected for a categorical target.
@@ -53,25 +51,19 @@ class TaskDispatch(EnsembleProcessor):
             for stype in processor.handles_stypes
         )
 
-    def _processor(self) -> EnsembleProcessor | None:
-        if self._task is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; use it "
-                "in a 'Recipe' through model execution"
-            )
-        if self._task not in self.processors:
-            return None
-        return self.processors[self._task]
-
     def _fit(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        processor = self._processor()
-        if processor is not None:
-            processor.fit(table, generator=generator)
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
+            )
+        if self._task in self.processors:
+            self.processors[self._task].fit(table, generator=generator)
 
     def _fit_transform(
         self,
@@ -79,16 +71,27 @@ class TaskDispatch(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        processor = self._processor()
-        if processor is None:
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
+            )
+        if self._task not in self.processors:
             return table
-        return processor.fit_transform(table, generator=generator)
+        return self.processors[self._task].fit_transform(
+            table,
+            generator=generator,
+        )
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        processor = self._processor()
-        if processor is None:
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
+            )
+        if self._task not in self.processors:
             return table
-        return processor.transform(table)
+        return self.processors[self._task].transform(table)
 
     def _fit_ensemble(
         self,
@@ -96,9 +99,16 @@ class TaskDispatch(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        processor = self._processor()
-        if processor is not None:
-            processor.fit_ensemble(ensemble_table, generator=generator)
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
+            )
+        if self._task in self.processors:
+            self.processors[self._task].fit_ensemble(
+                ensemble_table,
+                generator=generator,
+            )
 
     def _fit_transform_ensemble(
         self,
@@ -106,10 +116,14 @@ class TaskDispatch(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        processor = self._processor()
-        if processor is None:
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
+            )
+        if self._task not in self.processors:
             return ensemble_table
-        return processor.fit_transform_ensemble(
+        return self.processors[self._task].fit_transform_ensemble(
             ensemble_table,
             generator=generator,
         )
@@ -118,10 +132,14 @@ class TaskDispatch(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        processor = self._processor()
-        if processor is None:
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; use it "
+                "in a 'Recipe' through model execution"
+            )
+        if self._task not in self.processors:
             return ensemble_table
-        return processor.transform_ensemble(ensemble_table)
+        return self.processors[self._task].transform_ensemble(ensemble_table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415
