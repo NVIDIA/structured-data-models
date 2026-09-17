@@ -12,7 +12,8 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
-from sdm.cache import KVCacheEntry
+from sdm._kernels.fp8_attention import fp8_attention, supports_fp8
+from sdm.cache import KVCacheEntry, QuantizedKVCacheEntry
 from sdm.nn import QueryScaling
 
 
@@ -219,6 +220,8 @@ class Attention(torch.nn.Module):
         self.q_dim = num_query_heads * self.head_dim  # == channels
         self.kv_dim = num_key_value_heads * self.head_dim
 
+        self.attention_quantization: Literal["fp8"] | None = None
+
         self.qkv_lin = Linear(
             channels, self.q_dim + 2 * self.kv_dim, bias=bias, **factory_kwargs
         )
@@ -310,7 +313,12 @@ class Attention(torch.nn.Module):
                 if self.qkv_lin.bias is not None
                 else None,
             )
-            if (
+            if isinstance(key_value, QuantizedKVCacheEntry):
+                if query.dtype != key_value.dtype:
+                    raise ValueError(
+                        "Query dtype differs from fitted FP8 cache"
+                    )
+            elif (
                 key_value.key.dtype != query.dtype
                 or key_value.value.dtype != query.dtype
             ):
@@ -350,17 +358,58 @@ class Attention(torch.nn.Module):
         ):
             key = self.key_transform(key)
 
-        out = self.sdpa(
-            query=query,  # [..., Q, Hq, C // Hq]
-            key=key,  # [..., KV, Hkv, C // Hq]
-            value=value,  # [..., KV, Hkv, C // Hq]
-            seqused_key_value=seqused_key_value,  # [...]
-            attn_mask=attn_mask,  # [..., Q, KV]
-        )  # [..., Q, Hq, C // Hq]
-
+        quantized_cache = (
+            key_value if isinstance(key_value, QuantizedKVCacheEntry) else None
+        )
+        use_fp8 = (
+            self.attention_quantization == "fp8"
+            and not isinstance(key_value, KVCacheEntry)
+            and query.numel() > 0
+            and key.size(-3) > 8192
+            and query.size(-3) >= key.size(-3)
+            and seqused_key_value is None
+            and attn_mask is None
+            and supports_fp8(query)
+        )
+        if quantized_cache is not None:
+            if (
+                not supports_fp8(query)
+                or attn_mask is not None
+                or seqused_key_value is not None
+            ):
+                raise ValueError(
+                    "Fitted FP8 attention requires supported CUDA inference "
+                    "without attention masks"
+                )
+            use_fp8 = True
+        if quantized_cache is not None and query.numel() == 0:
+            out = query
+        elif use_fp8:
+            scaled_query = query
+            if self.sdpa.query_scaling is not None:
+                scaled_query = self.sdpa.query_scaling(
+                    query, key_len=key.size(-3)
+                )
+            out, quantized_cache = fp8_attention(
+                query=scaled_query,
+                key=key,
+                value=value,
+                cache=quantized_cache,
+                scale=self.sdpa.scale,
+            )
+        else:
+            out = self.sdpa(
+                query=query,  # [..., Q, Hq, C // Hq]
+                key=key,  # [..., KV, Hkv, C // Hq]
+                value=value,  # [..., KV, Hkv, C // Hq]
+                seqused_key_value=seqused_key_value,  # [...]
+                attn_mask=attn_mask,  # [..., Q, KV]
+            )  # [..., Q, Hq, C // Hq]
         out = out.flatten(-2, -1)  # [..., Q, C]
         out = self.out_lin(out)  # [..., Q, C]
         if return_key_value:
+            if quantized_cache is not None:
+                return out, quantized_cache
             # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
             # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
             return out, KVCacheEntry(
@@ -593,8 +642,7 @@ class TransformerBlock(torch.nn.Module):
             )
 
         flat_out: Tensor | None = None
-        flat_key: Tensor | None = None
-        flat_value: Tensor | None = None
+        flat_cache: KVCacheEntry | None = None
 
         if out is not None and (out.dim() <= 3 or out.is_contiguous()):
             flat_out = out.view(batch_size, *query.size()[-2:])
@@ -626,18 +674,14 @@ class TransformerBlock(torch.nn.Module):
             if isinstance(result, tuple):
                 chunk, chunk_kv = result
 
-                if flat_key is None:
-                    flat_key = chunk_kv.key.new_empty(
-                        batch_size, *chunk_kv.key.size()[-3:]
+                if flat_cache is None:
+                    flat_cache = chunk_kv._apply_tensor(
+                        lambda t: t.new_empty(batch_size, *t.shape[-3:])
                     )
-                if flat_value is None:
-                    flat_value = chunk_kv.value.new_empty(
-                        batch_size, *chunk_kv.value.size()[-3:]
-                    )
-
-                flat_key[start:end] = chunk_kv.key
-                flat_value[start:end] = chunk_kv.value
-
+                for dest, source in zip(
+                    flat_cache._tensors(), chunk_kv._tensors()
+                ):
+                    dest[start:end] = source
                 del chunk_kv
 
             else:
@@ -663,12 +707,9 @@ class TransformerBlock(torch.nn.Module):
         if not return_key_value:
             return out
 
-        assert flat_key is not None
-        assert flat_value is not None
-
-        return out, KVCacheEntry(
-            key=flat_key.view(*batch_shape, *flat_key.size()[-3:]),
-            value=flat_value.view(*batch_shape, *flat_value.size()[-3:]),
+        assert flat_cache is not None
+        return out, flat_cache._apply_tensor(
+            lambda t: t.view(*batch_shape, *t.shape[-3:])
         )
 
     def _forward(
@@ -789,9 +830,8 @@ def _chunk(
         return None
 
     if isinstance(tensor, KVCacheEntry):
-        return KVCacheEntry(
-            key=_chunk(tensor.key, batch_shape, 3, start, end),
-            value=_chunk(tensor.value, batch_shape, 3, start, end),
+        return tensor._apply_tensor(
+            lambda value: _chunk(value, batch_shape, 3, start, end)
         )
 
     trailing_shape = tensor.size()[-trailing_dims:] if trailing_dims else ()

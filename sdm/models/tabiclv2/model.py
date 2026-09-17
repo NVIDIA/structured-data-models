@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -19,6 +19,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 from sdm.models.tabiclv2.ckpt import remap_ckpt
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
@@ -116,6 +117,14 @@ class TabICLv2(ICLModel):
             model are initialized.
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+        attention_quantization: Set to ``"fp8"`` to quantize eligible ICL
+            attention and its cache during CUDA inference on Ada, Hopper,
+            and RTX Blackwell GPUs. Requires Triton and more than 8192
+            context rows.
+            Weights and the final ICL layer remain unquantized. Other inputs
+            use standard attention. Fitted FP8 caches require the same
+            inference dtype and do not support ``torch.compile``.
+            Defaults to ``None``. Cached prediction is not always faster.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -132,10 +141,12 @@ class TabICLv2(ICLModel):
         task: TaskLike | Iterable[TaskLike] | None = None,
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        *,
+        attention_quantization: Literal["fp8"] | None = None,
     ) -> None:
         super().__init__(task=task)
 
-        self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
+        self.models: ModuleDict = ModuleDict()
         for task in self.tasks:
             self.models[task] = _TabICLv2(
                 num_classes=10 if task == Task.classification else 0,
@@ -147,6 +158,14 @@ class TabICLv2(ICLModel):
         if pretrained:
             self._load_from_pretrained(device=device)
 
+        if attention_quantization == "fp8":
+            for network in self.models.values():
+                for layer in cast(_TabICLv2, network).icl_block.layers[:-1]:
+                    cast(
+                        TabICLv2TransformerBlock, layer
+                    ).attn.attention_quantization = "fp8"
+        else:
+            assert attention_quantization is None
         self.eval()
 
     @classmethod

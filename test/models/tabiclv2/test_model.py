@@ -1,10 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import cast
+
 import pytest
 import torch
 
 from sdm import Recipe
+from sdm.cache import Cache, QuantizedKVCacheEntry
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -258,3 +261,40 @@ def test_compile(dtype: torch.dtype) -> None:
     predicted = model.predict(x_query)
     assert predicted.allclose(expected, atol=5e-4, rtol=5e-3)
     assert torch.is_inference(predicted)
+
+
+@onlyCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_fp8_fit_predict(dtype: torch.dtype) -> None:
+    if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
+        pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
+    model = TabICLv2(
+        task="regression",
+        pretrained=False,
+        device="cuda",
+        attention_quantization="fp8",
+    )
+    x = torch.randn(8193, 3, device="cuda")
+    y = torch.randn(8193, 1, device="cuda")
+    query = torch.randn(17, 3, device="cuda")
+    with (
+        torch.inference_mode(),
+        torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
+    ):
+        expected = model(x, y, query, recipe=Recipe(), num_estimators=1)
+        model.fit(x, y, recipe=Recipe(), num_estimators=1)
+        actual = model.predict(query)
+        assert actual.numerical.isfinite().all()
+        torch.testing.assert_close(
+            actual.numerical, expected.numerical, atol=0.01, rtol=0.01
+        )
+        assert model._cache is not None
+        # The public lifecycle must retain real quantized tensors, not merely
+        # accept an option while silently executing ordinary attention.
+        entries = cast(Cache, model._cache[0])
+        assert any(
+            isinstance(entry, QuantizedKVCacheEntry)
+            for entry in entries.values()
+        )
+        model.clear()
+        assert model._cache is None
