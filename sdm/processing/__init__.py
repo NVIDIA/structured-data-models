@@ -40,7 +40,7 @@ from sdm.processing.categorical import (
     AlignCategories,
     ShuffleCategories,
     ImputeMode,
-    AddLevelCounts,
+    AddCategoryCounts,
 )
 from sdm.processing.datetime import AddCalendarFields
 from sdm.processing.output import ReduceEstimators, Softmax, SortQuantiles
@@ -79,7 +79,7 @@ __all__ = [
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
-    "AddLevelCounts",
+    "AddCategoryCounts",
     "AddCalendarFields",
     "ReduceEstimators",
     "Softmax",
