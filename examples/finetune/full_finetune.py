@@ -243,10 +243,6 @@ def main() -> None:
     val_frame = val_frame.reset_index(drop=True)
     test_frame = test_frame.reset_index(drop=True)
 
-    # The model's own default recipe (AlignCategories/Standardize/etc.)
-    # handles both training and evaluation now that forward() is
-    # differentiable end-to-end in train mode, so context/pool share one
-    # table built straight from raw labels -- no manual pre-encoding.
     train_pool = sdm.TableTensor.from_pandas(
         df=train_frame,
         stypes=stypes,
