@@ -37,7 +37,9 @@ def _transform(
 
 
 @withCUDA
-def test_default_recipe_imputes_small_tables(device: torch.device) -> None:
+def test_default_recipe_keeps_missing_values_of_small_tables(
+    device: torch.device,
+) -> None:
     features = _features(100, 3, 2, device=device)
     numerical = features.numerical.clone()
     numerical[::7, 1] = float("nan")
@@ -48,12 +50,29 @@ def test_default_recipe_imputes_small_tables(device: torch.device) -> None:
 
     for member_id in range(output.num_members):
         member = output.table(member_id)
+        assert member.numerical.isnan().sum() == numerical.isnan().sum()
+        assert not member.numerical.isinf().any()
+        assert member.numerical.dtype == features.numerical.dtype
+
+
+@withCUDA
+def test_dispatch_recipe_imputes_small_tables(device: torch.device) -> None:
+    features = _features(100, 3, 2, device=device)
+    numerical = features.numerical.clone()
+    numerical[::7, 1] = float("nan")
+    numerical[3, 2] = float("inf")
+    features = features.replace_blocks(numerical=numerical)
+
+    output = _transform(features, numerical_missing="dispatch")
+
+    for member_id in range(output.num_members):
+        member = output.table(member_id)
         assert member.numerical.isfinite().all()
         assert member.numerical.dtype == features.numerical.dtype
 
 
 @withCUDA
-def test_default_recipe_keeps_missing_values_of_large_sparse_tables(
+def test_dispatch_recipe_keeps_missing_values_of_large_sparse_tables(
     device: torch.device,
 ) -> None:
     features = _features(20_000, 3, 2, device=device)
@@ -63,7 +82,7 @@ def test_default_recipe_keeps_missing_values_of_large_sparse_tables(
     numerical[2::5, 2] = float("nan")
     features = features.replace_blocks(numerical=numerical)
 
-    output = _transform(features)
+    output = _transform(features, numerical_missing="dispatch")
 
     for member_id in range(output.num_members):
         member = output.table(member_id)
