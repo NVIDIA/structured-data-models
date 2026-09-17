@@ -337,7 +337,6 @@ def _fp8_attention(
             for t in (cache.key_scale, cache.value_scale, cache.query_scale)
         )
     q, qs = quantize(q, qs)
-    blackwell = torch.cuda.get_device_capability(query.device) == (12, 0)
     wide = query.size(-1) == 256
     result = quantized_attention(
         q,
@@ -349,12 +348,12 @@ def _fp8_attention(
         dtype=query.dtype,
         query_tile=64 if wide else 128,
         scale=scale,
-        context_tile=64 if wide or blackwell or k.size(-2) < 32768 else 128,
+        context_tile=64 if wide or k.size(-2) < 32768 else 128,
         warps=8 if wide else 4,
-        stages=4 if blackwell and not wide else 2,
-        accumulation_chunk=0 if blackwell else 16,
-        scale_weights_in_exp=blackwell,
-        fuse_score_scale=blackwell,
+        stages=2,
+        accumulation_chunk=16,
+        scale_weights_in_exp=False,
+        fuse_score_scale=False,
     )
     if cache is None:
         cache = QuantizedKVCacheEntry(
