@@ -56,11 +56,17 @@ class RobustScale(Processor, InvertibleMixin):
             keepdim=True,
         )
         q_low, q_high = (value / 100.0 for value in self.quantile_range)
-        lower, self.median, upper = finite_or_nan.nanquantile(
-            numerical.new_tensor([q_low, 0.5, q_high]),
+        quantile_input = finite_or_nan.to(
+            dtype=torch.promote_types(numerical.dtype, torch.float32),
+        )
+        lower, median, upper = quantile_input.nanquantile(
+            quantile_input.new_tensor([q_low, 0.5, q_high]),
             dim=-2,
             keepdim=True,
         )
+        self.median = median.to(dtype=numerical.dtype)
+        lower = lower.to(dtype=numerical.dtype)
+        upper = upper.to(dtype=numerical.dtype)
         self.constant = column_max == column_min
         tiny = torch.finfo(numerical.dtype).tiny
         scale = torch.where(

@@ -148,6 +148,25 @@ def test_robust_scale_all_nonfinite_fit_yields_nan(
     assert out.numerical.isnan().all()
 
 
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_robust_scale_fits_half_precision(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    inp = torch.tensor(
+        [[1.0], [3.0], [5.0]],
+        dtype=dtype,
+        device=device,
+    )
+    table = TableTensor.from_tensor(inp)
+    out = RobustScale().fit_transform(table)
+
+    assert out.numerical.dtype == dtype
+    expected = torch.tensor([[-1.0], [0.0], [1.0]], device=device)
+    torch.testing.assert_close(out.numerical.float(), expected)
+
+
 def test_robust_scale_rejects_invalid_quantile_range() -> None:
     with pytest.raises(ValueError, match="quantile_range"):
         RobustScale(quantile_range=(75.0, 25.0))
