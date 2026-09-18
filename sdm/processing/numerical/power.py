@@ -11,8 +11,7 @@ from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _constant_feature_mask
 
 # Keep GPU execution batched; adaptive per-column stopping would resynchronize.
-# Over the double-precision bounds, 44 golden steps shrink the interval by
-# a factor of ~6e-10.
+# For float32 overflow-safe bounds, 44 golden steps reaches ~1.48e-8.
 _YEOJOHNSON_OPTIMIZATION_STEPS = 44
 
 
@@ -217,8 +216,7 @@ class PowerTransform(Processor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
     NaN and infinite values are left out of the fitted statistics. NaN values
-    are preserved during the transform. Statistics are fitted and applied in
-    double precision; outputs keep the input dtype.
+    are preserved during the transform.
 
     Args:
         standardize: If ``True``, zero-mean and unit-variance the transformed
@@ -235,13 +233,11 @@ class PowerTransform(Processor, InvertibleMixin):
     ) -> None:
         super().__init__()
         self.standardize = standardize
-        self.register_buffer("lambdas", torch.empty(0, dtype=torch.float64))
-        self.register_buffer("max", torch.empty(0, dtype=torch.float64))
-        self.register_buffer(
-            "upper_bound", torch.empty(0, dtype=torch.float64)
-        )
-        self.register_buffer("mean", torch.empty(0, dtype=torch.float64))
-        self.register_buffer("scale", torch.empty(0, dtype=torch.float64))
+        self.register_buffer("lambdas", torch.empty(0))
+        self.register_buffer("max", torch.empty(0))
+        self.register_buffer("upper_bound", torch.empty(0))
+        self.register_buffer("mean", torch.empty(0))
+        self.register_buffer("scale", torch.empty(0))
 
     def _optimize_lambdas(
         self,
@@ -257,11 +253,8 @@ class PowerTransform(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
 
-        # Lambdas beyond a few units overflow single precision, so every
-        # statistic is fitted and applied in double precision.
-        numerical = table.numerical.double()
-        finite = numerical.isfinite()
-        finite_or_nan = numerical.masked_fill(~finite, torch.nan)
+        finite = table.numerical.isfinite()
+        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
 
         mean = finite_or_nan.nanmean(-2, keepdim=True)
         mean.masked_fill_(mean.isnan(), 0.0)
@@ -271,7 +264,7 @@ class PowerTransform(Processor, InvertibleMixin):
         constant_features = _constant_feature_mask(
             var, mean, num_samples=count
         )
-        self.max = torch.where(finite, numerical, mean).amax(
+        self.max = torch.where(finite, table.numerical, mean).amax(
             dim=-2,
             keepdim=True,
         )
@@ -298,21 +291,17 @@ class PowerTransform(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
-        transformed = _yeojohnson_transform(
-            table.numerical.double(),
-            self.lambdas,
-        )
+        transformed = _yeojohnson_transform(table.numerical, self.lambdas)
         numerical = (transformed - self.mean) / self.scale
-        # Lambdas fitted in double precision can send a query beyond the
-        # fitted range past the table dtype; keep it finite for the clip.
-        bound = torch.finfo(table.numerical.dtype).max
-        numerical = numerical.clamp(min=-bound, max=bound)
+        # The fitted lambdas only keep the fitted range representable, so a
+        # query far outside it can still overflow.
+        bound = torch.finfo(numerical.dtype).max
         return table.replace_blocks(
-            numerical=numerical.to(table.numerical.dtype)
+            numerical=numerical.clamp(min=-bound, max=bound)
         )
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical.double()
+        numerical = table.numerical
         unscaled = numerical * self.scale + self.mean
         inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)
 
@@ -330,6 +319,4 @@ class PowerTransform(Processor, InvertibleMixin):
             inverse,
         )
 
-        return table.replace_blocks(
-            numerical=inverse.to(table.numerical.dtype)
-        )
+        return table.replace_blocks(numerical=inverse)

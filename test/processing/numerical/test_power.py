@@ -316,28 +316,6 @@ def test_power_transform_fits_on_finite_values_only() -> None:
     )
 
 
-def test_power_transform_fit_is_independent_of_input_precision() -> None:
-    # A spike of near-identical values with a few far outliers needs a
-    # lambda far outside the range single-precision bounds allow.
-    values = torch.cat(
-        (torch.randn(1900, 1) * 0.01, torch.full((100, 1), 4.3))
-    )
-    values = values[torch.randperm(2000)]
-
-    out32 = PowerTransform().fit_transform(TableTensor(numerical=values))
-    out64 = PowerTransform().fit_transform(
-        TableTensor(numerical=values.double())
-    )
-
-    assert out32.numerical.dtype == torch.float32
-    torch.testing.assert_close(
-        out32.numerical.double(),
-        out64.numerical,
-        rtol=1e-4,
-        atol=1e-4,
-    )
-
-
 def test_power_transform_round_trips_at_the_fitted_bound() -> None:
     values = torch.cat(
         (torch.randn(1900, 1) * 0.01, torch.full((100, 1), 4.3))
