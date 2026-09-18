@@ -68,6 +68,7 @@ if not datasets:
 
 model = MODEL_CONFIGS[args.model]
 method = f"[SDM] {model.name}"
+model_label = args.model + ("-ft" if args.finetune else "")
 config = {
     "model": {},
     "training": {"n_bins": 2},
@@ -87,7 +88,7 @@ config = {
 
 failed = False
 for dataset in datasets:
-    path = args.output_dir / args.model / dataset / "result.json"
+    path = args.output_dir / model_label / dataset / "result.json"
     cached = json.loads(path.read_text()) if path.is_file() else {}
     if (
         cached.get("status") in {"success", "unsupported"}

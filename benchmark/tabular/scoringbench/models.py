@@ -21,6 +21,7 @@ from scoringbench.univariate.wrappers import (
 
 import sdm
 from benchmark.tabular.finetune import full_finetune
+from benchmark.tabular.kumo import load_kumo_tabular
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,11 @@ def _create_tabiclv2(device: torch.device) -> sdm.models.TabICLv2:
 
 
 def _create_kumo_tabular(device: torch.device) -> sdm.models.KumoTabular:
-    return sdm.models.KumoTabular(task="regression", device=device)
+    return load_kumo_tabular(task="regression", size="large", device=device)
+
+
+def _create_kumo_tabular_small(device: torch.device) -> sdm.models.KumoTabular:
+    return load_kumo_tabular(task="regression", size="small", device=device)
 
 
 MODEL_CONFIGS = {
@@ -52,6 +57,13 @@ MODEL_CONFIGS = {
         name="KumoTabular",
         method="sdm_kumo_tabular",
         factory=_create_kumo_tabular,
+        autocast_dtype=torch.float16,
+        num_estimators=8,
+    ),
+    "kumo-small": ModelConfig(
+        name="KumoTabularSmall",
+        method="sdm_kumo_tabular_small",
+        factory=_create_kumo_tabular_small,
         autocast_dtype=torch.float16,
         num_estimators=8,
     ),
@@ -173,7 +185,12 @@ class SDMKumoTabularWrapper(SDMQuantileWrapper):
     config = MODEL_CONFIGS["kumo-tabular"]
 
 
+class SDMKumoTabularSmallWrapper(SDMQuantileWrapper):
+    config = MODEL_CONFIGS["kumo-small"]
+
+
 WRAPPERS: dict[str, type[SDMQuantileWrapper]] = {
     "tabiclv2": SDMTabICLv2Wrapper,
     "kumo-tabular": SDMKumoTabularWrapper,
+    "kumo-small": SDMKumoTabularSmallWrapper,
 }

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 BENCHMARK_DIR = Path(__file__).parent.parent
-MODEL_NAMES = ("tabiclv2", "kumo-tabular")
+MODEL_NAMES = ("tabiclv2", "kumo-tabular", "kumo-small")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -154,9 +154,10 @@ def main() -> None:
         finetune=args.finetune,
         **finetune_kwargs,
     )
+    method_name = model_config.method + ("_finetuned" if args.finetune else "")
     runner_module.run_benchmark(
         datasets_config=datasets,
-        model_factories={model_config.method: factory},
+        model_factories={method_name: factory},
         output_dir=args.output_dir,
         n_folds=n_folds,
         n_repeats_cv=n_repeats_cv,

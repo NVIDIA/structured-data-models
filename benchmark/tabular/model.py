@@ -20,6 +20,7 @@ from autogluon.tabular.models.abstract.abstract_torch_model import (
 import sdm
 import sdm.processing as sp
 from benchmark.tabular.finetune import full_finetune
+from benchmark.tabular.kumo import load_kumo_tabular
 
 Task = Literal["classification", "regression"]
 
@@ -261,7 +262,7 @@ class SDMKumoTabularModel(SDMModel):
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
-        return sdm.models.KumoTabular(task=task, device=device)
+        return load_kumo_tabular(task=task, size="large", device=device)
 
 
 class SDMTabICLv2FinetunedModel(SDMTabICLv2Model):
@@ -282,7 +283,7 @@ class SDMKumoTabularSmallModel(SDMKumoTabularModel):
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
-        return sdm.models.KumoTabular(task=task, size="small", device=device)
+        return load_kumo_tabular(task=task, size="small", device=device)
 
 
 class SDMKumoTabularSmallFinetunedModel(SDMKumoTabularSmallModel):
