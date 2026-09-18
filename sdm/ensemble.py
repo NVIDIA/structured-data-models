@@ -42,14 +42,17 @@ class EnsembleData(abc.ABC, Generic[T]):
         """Return the number of ensemble members."""
         return len(self._locations)
 
+    def __getitem__(self, member_id: int) -> T:
+        group_id, position = self._locations[member_id]
+        return self._select_member(self._groups[group_id], position)
+
     def member(self, member_id: int) -> T:
         """Return the value associated with one ensemble member.
 
         Args:
             member_id: Zero-based ensemble member index.
         """
-        group_id, position = self._locations[member_id]
-        return self._select_member(self._groups[group_id], position)
+        return self[member_id]
 
     @staticmethod
     @abc.abstractmethod

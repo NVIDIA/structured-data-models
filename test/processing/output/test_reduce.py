@@ -84,7 +84,7 @@ def test_reduce_estimators_trimmed_mean_reduces_members(
 
     assert output.num_members == 1
     torch.testing.assert_close(
-        output.table(0).numerical,
+        output.member(0).numerical,
         torch.tensor([[2.0]], device=device),
     )
 
@@ -104,7 +104,7 @@ def test_reduce_estimators_trimmed_mean_keeps_all_members_when_untrimmed(
     output = processor.transform_ensemble(table)
 
     torch.testing.assert_close(
-        output.table(0).numerical,
+        output.member(0).numerical,
         (first.numerical + 2 * second.numerical) / 3,
     )
 
