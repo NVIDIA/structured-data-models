@@ -254,7 +254,7 @@ class AlignCategories(EnsembleProcessor):
     ) -> tuple[int, ...]:
         group_offsets = []
         offset = 0
-        for group in ensemble_table:
+        for group in ensemble_table._iter_groups():
             group_offsets.append(offset)
             offset += group.size(0)
 
@@ -272,7 +272,7 @@ class AlignCategories(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> None:
         fitted_categories = []
-        for group in ensemble_table:
+        for group in ensemble_table._iter_groups():
             group_categories, _ = self._fit_columns(
                 group,
                 align_codes=False,
@@ -290,7 +290,7 @@ class AlignCategories(EnsembleProcessor):
     ) -> EnsembleTable:
         fitted_categories = []
         aligned_tables = []
-        for group in ensemble_table:
+        for group in ensemble_table._iter_groups():
             group_categories, group_tables = self._fit_and_align(group)
             fitted_categories.extend(group_categories)
             aligned_tables.extend(group_tables)
@@ -312,7 +312,7 @@ class AlignCategories(EnsembleProcessor):
         table_ids = self._member_table_ids(ensemble_table)
         aligned_tables = []
         offset = 0
-        for group in ensemble_table:
+        for group in ensemble_table._iter_groups():
             end = offset + group.size(0)
             aligned_tables.extend(
                 self._align_to_categories(

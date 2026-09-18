@@ -72,7 +72,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> None:
         self._fitted_locations = ensemble_table._locations
         self._processors = ModuleList()
-        for group_id, group in enumerate(ensemble_table):
+        for group_id, group in enumerate(ensemble_table._iter_groups()):
             if group_id == 0:
                 processor = self.processor
             else:
@@ -92,7 +92,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         self._fitted_locations = ensemble_table._locations
         outputs = []
         self._processors = ModuleList()
-        for group_id, group in enumerate(ensemble_table):
+        for group_id, group in enumerate(ensemble_table._iter_groups()):
             if group_id == 0:
                 processor = self.processor
             else:
@@ -112,7 +112,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         outputs = [
             processor.transform(group)
             for group, processor in zip(
-                ensemble_table, processors, strict=True
+                ensemble_table._iter_groups(), processors, strict=True
             )
         ]
         return ensemble_table.replace_groups(outputs)
@@ -127,7 +127,9 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
             processors = repeat(self.processor, ensemble_table.num_groups)
 
         outputs = []
-        for group, processor in zip(ensemble_table, processors, strict=True):
+        for group, processor in zip(
+            ensemble_table._iter_groups(), processors, strict=True
+        ):
             if not isinstance(processor, InvertibleMixin):
                 raise AttributeError(
                     f"{self.processor.__class__.__name__!r} object has no "

@@ -326,15 +326,13 @@ class TFIDF(EnsembleProcessor):
         # TODO: Replace direct `_locations` access with a public
         # `EnsembleTable` iterator over stored tables and their logical member
         # IDs, then use the same abstraction when transforming.
-        for member_id in range(ensemble_table.num_members):
+        for member_id in range(len(ensemble_table)):
             location = ensemble_table._locations[member_id]
             state_id = state_ids.get(location)
             if state_id is None:
                 state_id = len(states)
                 state_ids[location] = state_id
-                states.append(
-                    self._learn_state(ensemble_table.member(member_id))
-                )
+                states.append(self._learn_state(ensemble_table[member_id]))
             member_state_ids.append(state_id)
 
         self._states = states
@@ -344,7 +342,7 @@ class TFIDF(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._member_state_ids) != ensemble_table.num_members:
+        if len(self._member_state_ids) != len(ensemble_table):
             raise RuntimeError(
                 "TFIDF must be fitted with the same number of "
                 "ensemble members before transform."
@@ -365,7 +363,7 @@ class TFIDF(EnsembleProcessor):
                 transformed[key] = table_id
                 output_tables.append(
                     self._encode(
-                        ensemble_table.member(member_id),
+                        ensemble_table[member_id],
                         state,
                     )
                 )

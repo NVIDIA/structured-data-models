@@ -40,8 +40,8 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
         "cat_0__count": [False, False, False, False, False],
     }
 
-    for member_id in range(output.num_members):
-        member = output.member(member_id)
+    for member_id in range(len(output)):
+        member = output[member_id]
         expected_missing = torch.tensor(
             [
                 missing_by_column[column]
@@ -71,8 +71,8 @@ def test_default_recipe_flips_numbers_but_not_codes() -> None:
 
     code_correlations = []
     numerical_correlations = []
-    for member_id in range(output.num_members):
-        member = output.member(member_id)
+    for member_id in range(len(output)):
+        member = output[member_id]
         for index, column in enumerate(member.columns[Stype.numerical]):
             values = member.numerical[:, index]
             if column == "cat_0":
@@ -82,7 +82,7 @@ def test_default_recipe_flips_numbers_but_not_codes() -> None:
                 reference = features[column].numerical[:, 0]
                 numerical_correlations.append(_correlation(values, reference))
 
-    assert len(code_correlations) == output.num_members
+    assert len(code_correlations) == len(output)
     assert min(code_correlations) > 0
     assert min(numerical_correlations) < 0 < max(numerical_correlations)
 
@@ -100,7 +100,7 @@ def test_default_recipe_adds_category_counts() -> None:
         EnsembleTable.from_table(features, num_members=2)
     )
 
-    assert set(output.member(0).columns[Stype.numerical]) == {
+    assert set(output[0].columns[Stype.numerical]) == {
         "num_0",
         "num_1",
         "cat_0",

@@ -177,7 +177,7 @@ def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
     output = processor.transform_ensemble(table)
 
     for member_id, source in enumerate((second, first, second)):
-        result = output.member(member_id)
+        result = output[member_id]
         assert torch.equal(result.numerical, source.numerical.square())
         assert result.categorical.equal(source.categorical)
 
@@ -202,9 +202,9 @@ def test_stype_dispatch_ensemble_fits_routes_per_group() -> None:
     transformed = processor.transform_ensemble(table)
     expected = combined.fit_transform_ensemble(table)
 
-    for member_id in range(table.num_members):
-        result = transformed.member(member_id)
-        assert result.equal(expected.member(member_id))
+    for member_id in range(len(table)):
+        result = transformed[member_id]
+        assert result.equal(expected[member_id])
         assert torch.allclose(
             result.numerical.mean(dim=-2),
             torch.zeros(1),

@@ -166,8 +166,8 @@ def test_shuffle_categories_ensemble_matches_independent_processors(
             generator=generator,
         )
         expected_query = reference.transform(query_tables[table_id])
-        assert context_output.member(member_id).equal(expected_context)
-        assert query_output.member(member_id).equal(expected_query)
+        assert context_output[member_id].equal(expected_context)
+        assert query_output[member_id].equal(expected_query)
 
 
 def test_shuffle_categories_requires_fitted_member_count() -> None:

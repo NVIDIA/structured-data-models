@@ -145,11 +145,11 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
 
     assert len(related_tables.tables) == 3
     assert all(t.num_groups == 2 for t in related_tables.tables.values())
-    assert all(t.num_members == 2 for t in related_tables.tables.values())
+    assert all(len(t) == 2 for t in related_tables.tables.values())
 
     users = related_tables.tables["users"]
     for member_id, expected in enumerate(([3, 2], [0, 1])):
-        user = users.member(member_id)
+        user = users[member_id]
         assert user.columns[Stype.id] == ("user_id", "__example__")
         assert user.id[..., 0].equal(torch.tensor(expected))
         assert user.id[..., 1].equal(torch.tensor([0, 1]))
@@ -191,11 +191,14 @@ def test_expanded_sampler(relational_data: RelationalData) -> None:
 
     assert len(related_tables.tables) == 3
     assert all(t.num_groups == 2 for t in related_tables.tables.values())
-    assert all(t.num_members == 2 for t in related_tables.tables.values())
+    assert all(len(t) == 2 for t in related_tables.tables.values())
 
     users = related_tables.tables["users"]
-    assert len({user.numerical.data_ptr() for user in users}) == 1
-    for user in users:
+    assert (
+        len({group.numerical.data_ptr() for group in users._iter_groups()})
+        == 1
+    )
+    for user in users._iter_groups():
         user = user.squeeze(0)
         assert user.columns[Stype.id] == ("user_id", "__example__")
         assert user.id[..., 0].equal(torch.tensor([3, 2]))

@@ -202,7 +202,7 @@ def test_sequential_ensemble_matches_member_execution() -> None:
         expected = _add_one(
             source.replace_blocks(numerical=source.numerical.square())
         )
-        assert output.member(member_id).equal(expected)
+        assert output[member_id].equal(expected)
 
 
 def test_empty_ensemble_pipeline_passes_through_members() -> None:
@@ -219,5 +219,5 @@ def test_empty_ensemble_pipeline_passes_through_members() -> None:
         processor.fit_transform_ensemble(table),
         processor.inverse_transform_ensemble(table),
     ):
-        for member_id in range(table.num_members):
-            assert output.member(member_id).equal(table.member(member_id))
+        for member_id in range(len(table)):
+            assert output[member_id].equal(table[member_id])

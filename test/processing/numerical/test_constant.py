@@ -99,12 +99,12 @@ def test_drop_constant_columns_ensemble_matches_member_fits(
     context_tables = (first_context, second_context)
     for member_id, table_id in enumerate(member_table_ids):
         reference = references[table_id]
-        assert context_output.member(member_id).equal(
+        assert context_output[member_id].equal(
             reference.transform(context_tables[table_id])
         )
         expected_query = reference.transform(query)
-        assert query_output.member(member_id).equal(expected_query)
-        assert separate_query_output.member(member_id).equal(expected_query)
+        assert query_output[member_id].equal(expected_query)
+        assert separate_query_output[member_id].equal(expected_query)
 
 
 def test_drop_constant_columns_requires_fitted_member_count() -> None:

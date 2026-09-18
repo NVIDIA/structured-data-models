@@ -23,7 +23,7 @@ def test_random_projection() -> None:
     out = RandomProjection(8).fit_transform_ensemble(inp)
 
     assert out.num_groups == 1
-    assert out.num_members == 8
+    assert len(out) == 8
     group = out._groups[0]
     assert group.size() == (8, 6, 9)
     assert group.numerical.size() == (8, 6, 8)
