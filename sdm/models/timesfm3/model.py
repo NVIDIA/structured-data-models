@@ -23,7 +23,6 @@ import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
-from itertools import product
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -243,32 +242,120 @@ class TimesFM3(ICLModel):
         cache: Cache | None,
         generator: torch.Generator | None,
         **kwargs: Any,
-    ) -> TableTensor:  # [..., R_query, Y * 9]
-
+    ) -> TableTensor:  # [..., R_query, Y * Q]
         if y_context is not None:
-            columns = y_context.columns[Stype.numerical]
+            target_columns = y_context.columns[Stype.numerical]
         else:
             assert cache is not None
             y_schema = cast(TableSchema, cache["y_schema"])
-            columns = y_schema.columns[Stype.numerical]
+            target_columns = y_schema.columns[Stype.numerical]
 
-        if x_query is not None:
-            size = x_query.size()[:-1]
-        else:
+        output_columns = [
+            f"{column}__q{quantile * 100:g}"
+            for column in target_columns
+            for quantile in self.model.quantiles
+        ]
+
+        if cache is not None and cache.is_recording:
             assert x_context is not None
-            size = (*x_context.size()[:-2], 0)
+            assert y_context is not None
+            cache["x_context"] = x_context.numerical
+            cache["y_context"] = y_context.numerical
+            return TableTensor(
+                columns={Stype.numerical: output_columns},
+                numerical=y_context.numerical.new_empty(
+                    (*y_context.size()[:-2], 0, len(output_columns))
+                ),
+            )
+
+        assert x_query is not None
+        if cache is None:
+            assert x_context is not None
+            assert y_context is not None
+            context_values = x_context.numerical
+            target_values = y_context.numerical
+            context_schema = x_context.schema
+        else:
+            context_values = cast(Tensor, cache["x_context"])
+            target_values = cast(Tensor, cache["y_context"])
+            context_schema = cast(TableSchema, cache["x_schema"])
+
+        query_values = x_query.numerical
+        query_schema = cast(TableSchema, kwargs["_x_query_schema"])
+        future_columns = frozenset(query_schema.columns[Stype.numerical])
+        future_indices = [
+            index
+            for index, column in enumerate(
+                context_schema.columns[Stype.numerical]
+            )
+            if column in future_columns
+        ]
+        past_indices = [
+            index
+            for index, column in enumerate(
+                context_schema.columns[Stype.numerical]
+            )
+            if column not in future_columns
+        ]
+
+        context_length = target_values.size(-2)
+        horizon = query_values.size(-2)
+        num_targets = target_values.size(-1)
+        batch_shape = target_values.shape[:-2]
+        target = target_values.movedim(-1, -2).reshape(
+            -1, num_targets, context_length
+        )
+
+        past_only_covariates: Tensor | None = None
+        if past_indices:
+            past_only_covariates = context_values[..., past_indices]
+            past_only_covariates = past_only_covariates.movedim(
+                -1, -2
+            ).reshape(-1, len(past_indices), context_length)
+
+        past_future_covariates: Tensor | None = None
+        if future_indices:
+            past_future_covariates = torch.cat(
+                [
+                    context_values[..., future_indices],
+                    query_values[..., future_indices],
+                ],
+                dim=-2,
+            )
+            past_future_covariates = past_future_covariates.movedim(
+                -1, -2
+            ).reshape(-1, len(future_indices), context_length + horizon)
+
+        forecast = cast(
+            Tensor,
+            self.model.decode(
+                target,
+                horizon=horizon,
+                past_only_covariates=past_only_covariates,
+                past_future_covariates=past_future_covariates,
+                target_mask=~target.isfinite(),
+                past_only_mask=(
+                    None
+                    if past_only_covariates is None
+                    else ~past_only_covariates.isfinite()
+                ),
+                past_future_mask=(
+                    None
+                    if past_future_covariates is None
+                    else ~past_future_covariates.isfinite()
+                ),
+            ),
+        )
+        forecast = forecast[:, :num_targets].permute(0, 2, 1, 3)
+        forecast = forecast.reshape(
+            *batch_shape,
+            horizon,
+            num_targets * self.model.num_quantiles,
+        )
 
         return TableTensor(
-            columns={
-                Stype.numerical: [
-                    f"{name}__q{i}"
-                    for name, i in product(columns, range(10, 100, 10))
-                ]
-            },
-            numerical=torch.zeros(
-                (*size, len(columns) * 9),
-                device=next(self.parameters()).device,
-            ),
+            columns={Stype.numerical: output_columns},
+            numerical=forecast,
         )
 
 

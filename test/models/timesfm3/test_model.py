@@ -8,7 +8,7 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
-from sdm import TableTensor
+from sdm import Stype, TableTensor
 from sdm.models.timesfm3 import TimesFM3
 from sdm.models.timesfm3 import model as timesfm_module
 from sdm.models.timesfm3.configs import (
@@ -226,33 +226,206 @@ def test_pretrained_loading_is_strict(
         TimesFM3(pretrained=True, accept_license=True)
 
 
-def test_forward() -> None:
+def _public_model(device: torch.device) -> TimesFM3:
     model = TimesFM3(pretrained=False, device="meta")
+    model.model = _internal_model(device)
+    return model.eval()
 
-    # Past and past-and-future covariates:
+
+@withCUDA
+def test_forward_matches_internal_decode(device: torch.device) -> None:
+    model = _public_model(device)
+    context_values = torch.tensor(
+        [
+            [1.0, 10.0],
+            [2.0, 11.0],
+            [float("nan"), 12.0],
+            [4.0, 13.0],
+            [5.0, 14.0],
+        ],
+        device=device,
+    )
+    query_values = torch.tensor(
+        [[15.0], [float("nan")], [17.0]],
+        device=device,
+    )
+    target_values = torch.tensor(
+        [
+            [2.0, 20.0],
+            [3.0, 21.0],
+            [4.0, float("nan")],
+            [5.0, 23.0],
+            [6.0, 24.0],
+        ],
+        device=device,
+    )
     x_context = TableTensor.from_tensor(
-        torch.randn(5, 4),
-        columns=["x1", "x2", "x3", "x4"],
+        context_values,
+        columns=["past", "known"],
     )
-    x_query = TableTensor.from_tensor(
-        torch.randn(3, 2),
-        columns=["x2", "x4"],
-    )
-
-    # Target variates:
+    x_query = TableTensor.from_tensor(query_values, columns=["known"])
     y_context = TableTensor.from_tensor(
-        torch.randn(5, 3),
-        columns=["y1", "y2", "y3"],
+        target_values,
+        columns=["first", "second"],
     )
 
     out = model(x_context, y_context, x_query)
-    assert out.size() == (3, 3 * 9)
-    assert "y1__q10" in out.columns["numerical"]
-    assert "y2__q50" in out.columns["numerical"]
-    assert "y3__q90" in out.columns["numerical"]
+
+    target = target_values.T.unsqueeze(0)
+    past_only = context_values[:, :1].T.unsqueeze(0)
+    past_future = torch.cat(
+        [context_values[:, 1], query_values[:, 0]]
+    ).reshape(1, 1, -1)
+    expected = model.model.decode(
+        target,
+        horizon=len(query_values),
+        past_only_covariates=past_only,
+        past_future_covariates=past_future,
+        target_mask=~target.isfinite(),
+        past_only_mask=~past_only.isfinite(),
+        past_future_mask=~past_future.isfinite(),
+    )
+    assert isinstance(expected, torch.Tensor)
+    expected = expected[:, :2].permute(0, 2, 1, 3).reshape(3, 6)
+
+    assert out.columns[Stype.numerical] == (
+        "first__q10",
+        "first__q50",
+        "first__q90",
+        "second__q10",
+        "second__q50",
+        "second__q90",
+    )
+    torch.testing.assert_close(out.numerical, expected)
 
     model.fit(x_context, y_context)
-    assert model.predict(x_query).size() == (3, 3 * 9)
+    cached = model.predict(x_query)
+    torch.testing.assert_close(cached.numerical, out.numerical)
+    assert cached.columns == out.columns
+
+    past_only_query = TableTensor.from_tensor(
+        torch.empty(3, 0, device=device),
+        columns=[],
+    )
+    past_only_out = model(x_context, y_context, past_only_query)
+    cached_past_only = model.predict(past_only_query)
+    torch.testing.assert_close(
+        cached_past_only.numerical,
+        past_only_out.numerical,
+    )
+    cached_again = model.predict(x_query)
+    torch.testing.assert_close(cached_again.numerical, out.numerical)
+
+
+@withCUDA
+def test_forward_without_covariates(device: torch.device) -> None:
+    model = _public_model(device)
+    context = TableTensor.from_tensor(
+        torch.empty(5, 0, device=device),
+        columns=[],
+    )
+    query = TableTensor.from_tensor(
+        torch.empty(3, 0, device=device),
+        columns=[],
+    )
+    target_values = torch.arange(
+        5, dtype=torch.float32, device=device
+    ).unsqueeze(-1)
+    target = TableTensor.from_tensor(target_values, columns=["target"])
+
+    out = model(context, target, query)
+    expected = model.model.decode(
+        target_values.T.unsqueeze(0),
+        horizon=3,
+    )
+    assert isinstance(expected, torch.Tensor)
+    expected = expected[0, 0]
+
+    assert out.size() == (3, 3)
+    torch.testing.assert_close(out.numerical, expected)
+
+
+@withCUDA
+def test_forward_preserves_batch_dimensions(device: torch.device) -> None:
+    model = _public_model(device)
+    context_values = torch.arange(
+        24, dtype=torch.float32, device=device
+    ).reshape(2, 6, 2)
+    query_values = torch.arange(6, dtype=torch.float32, device=device).reshape(
+        2, 3, 1
+    )
+    target_values = torch.arange(
+        24, dtype=torch.float32, device=device
+    ).reshape(2, 6, 2)
+    x_context = TableTensor.from_tensor(
+        context_values,
+        columns=["past", "known"],
+    )
+    x_query = TableTensor.from_tensor(query_values, columns=["known"])
+    y_context = TableTensor.from_tensor(
+        target_values,
+        columns=["first", "second"],
+    )
+
+    out = model(
+        x_context,
+        y_context,
+        x_query,
+        num_estimators=1,
+    )
+
+    target = target_values.movedim(-1, -2)
+    past_only = context_values[..., :1].movedim(-1, -2)
+    past_future = torch.cat(
+        [context_values[..., 1:], query_values],
+        dim=-2,
+    ).movedim(-1, -2)
+    expected = model.model.decode(
+        target,
+        horizon=3,
+        past_only_covariates=past_only,
+        past_future_covariates=past_future,
+    )
+    assert isinstance(expected, torch.Tensor)
+    expected = expected[:, :2].permute(0, 2, 1, 3).reshape(2, 3, 6)
+
+    assert out.size() == (2, 3, 6)
+    torch.testing.assert_close(out.numerical, expected)
+
+
+@withCUDA
+def test_default_recipe_averages_estimators(device: torch.device) -> None:
+    model = _public_model(device)
+    context_values = torch.arange(
+        24, dtype=torch.float32, device=device
+    ).reshape(2, 6, 2)
+    query_values = torch.arange(6, dtype=torch.float32, device=device).reshape(
+        2, 3, 1
+    )
+    target_values = torch.arange(
+        6, dtype=torch.float32, device=device
+    ).reshape(1, 6, 1)
+    target_values = torch.cat([target_values, target_values + 2.0])
+    contexts = TableTensor.from_tensor(
+        context_values,
+        columns=["past", "known"],
+    )
+    queries = TableTensor.from_tensor(query_values, columns=["known"])
+    targets = TableTensor.from_tensor(target_values, columns=["target"])
+
+    out = model(contexts, targets, queries)
+    member_outputs = [
+        model(contexts[index], targets[index], queries[index]).numerical
+        for index in range(2)
+    ]
+    expected = torch.stack(member_outputs).mean(dim=0)
+
+    assert out.size() == (3, 3)
+    torch.testing.assert_close(out.numerical, expected)
+
+    model.fit(contexts, targets)
+    cached = model.predict(queries)
+    torch.testing.assert_close(cached.numerical, out.numerical)
 
 
 @pytest.mark.parametrize(
