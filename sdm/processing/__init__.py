@@ -27,10 +27,12 @@ from sdm.processing.numerical import (
     Clip,
     ClipQuantiles,
     ClipSigma,
+    ClipSoft,
     ImputeMean,
     PowerTransform,
     QuantileTransform,
     Standardize,
+    RobustScale,
     FlipSign,
     DropConstantColumns,
     PCA,
@@ -40,9 +42,15 @@ from sdm.processing.categorical import (
     AlignCategories,
     ShuffleCategories,
     ImputeMode,
+    AddCategoryCounts,
 )
 from sdm.processing.datetime import AddCalendarFields
-from sdm.processing.output import ReduceEstimators, Softmax, SortQuantiles
+from sdm.processing.output import (
+    ReduceEstimators,
+    ReduceQuantiles,
+    Softmax,
+    SortQuantiles,
+)
 from sdm.processing.recipe import Recipe
 
 __all__ = [
@@ -67,10 +75,12 @@ __all__ = [
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
+    "ClipSoft",
     "ImputeMean",
     "PowerTransform",
     "QuantileTransform",
     "Standardize",
+    "RobustScale",
     "FlipSign",
     "DropConstantColumns",
     "PCA",
@@ -78,8 +88,10 @@ __all__ = [
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
+    "AddCategoryCounts",
     "AddCalendarFields",
     "ReduceEstimators",
+    "ReduceQuantiles",
     "Softmax",
     "SortQuantiles",
     "Recipe",
