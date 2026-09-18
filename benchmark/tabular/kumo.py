@@ -3,6 +3,7 @@
 
 """Shared KumoTabular construction for the tabular benchmark harness."""
 
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -16,7 +17,10 @@ from sdm.models.kumo.tabular.model import MODEL_KWARGS
 Size = Literal["small", "large"]
 Task = Literal["classification", "regression"]
 
-_CHECKPOINT_ROOT = Path.home() / "KumoTFM-Checkpoints"
+_CHECKPOINT_ROOT = Path(
+    os.environ.get("SDM_KUMO_CHECKPOINT_DIR")
+    or (Path.home() / "KumoTFM-Checkpoints")
+)
 _LOCAL_CHECKPOINTS: dict[tuple[Size, Task], Path] = {
     ("small", "classification"): (
         _CHECKPOINT_ROOT / "kumo-tabular-cls-s3-27m-priorrefine-12k.pt"
