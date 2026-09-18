@@ -250,9 +250,9 @@ def quantized_attention(
         ks: Key scales shaped ``[batch, kv_heads, 1, 1]``.
         vs: Value scales shaped ``[batch, kv_heads, 1, 1]``.
         dtype: Output dtype.
-        query_tile: Query rows handled by each program.
+        query_tile: Query rows per program; a positive power of two.
         scale: Attention score multiplier. Defaults to ``1 / sqrt(D)``.
-        context_tile: Context rows processed per loop iteration.
+        context_tile: Context rows per loop iteration; a positive power of two.
         warps: Cooperating warps per program.
         stages: Software pipeline stages.
         accumulation_chunk: Tiles per FP32 accumulator flush; zero disables it.
@@ -264,6 +264,15 @@ def quantized_attention(
         Attention output with the query shape and requested dtype.
     """
     b, h, m, d = q.shape
+    for name, size in (
+        ("query_tile", query_tile),
+        ("context_tile", context_tile),
+        ("head dimension", d),
+    ):
+        if size <= 0 or size & (size - 1):
+            raise ValueError(f"{name} must be a positive power of two")
+    if k.size(1) == 0 or h % k.size(1):
+        raise ValueError("The number of K/V heads must divide the query heads")
     n = k.size(-2)
     # Q/K are [batch, heads, sequence, channels]; V is transposed.
     output = q.new_empty(q.shape, dtype=dtype)
