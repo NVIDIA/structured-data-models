@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import copy
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -29,9 +30,17 @@ from TALENT.model.method_registry import (
 from TALENT.model.methods.base import Method
 
 import sdm
+from benchmark.tabular.finetune import full_finetune
 
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
+
+# `MODEL_CONFIGS[...].factory` is `@lru_cache`d, so `SDMMethod.fit` sees the
+# same model instance across every seed/dataset in a process. Fine-tuning
+# must not leak from one seed/dataset into the next, so each model's
+# pretrained weights are snapshotted once here and restored before every
+# fine-tuning run.
+_PRISTINE_STATE: dict[int, dict[str, torch.Tensor]] = {}
 
 
 class UnsupportedDatasetError(RuntimeError):
@@ -126,6 +135,19 @@ class SDMMethod(Method):
             "num_estimators",
             self._config.num_estimators,
         )
+        self._finetune = general.get("finetune", False)
+        self._finetune_epochs = general.get("finetune_epochs", 150)
+        self._finetune_iters_per_epoch = general.get(
+            "finetune_iters_per_epoch",
+            10,
+        )
+        self._finetune_lr = general.get("finetune_lr", 1e-5)
+        self._finetune_train_size = general.get("finetune_train_size", 10_000)
+        self._finetune_context_frac = general.get(
+            "finetune_context_frac",
+            0.8,
+        )
+        self._finetune_val_frac = general.get("finetune_val_frac", 0.2)
 
     def data_format(
         self,
@@ -252,6 +274,27 @@ class SDMMethod(Method):
         generator = torch.Generator(device=self._device).manual_seed(
             self.args.seed
         )
+
+        if self._finetune:
+            pristine_state = _PRISTINE_STATE.setdefault(
+                id(self.model),
+                copy.deepcopy(self.model.state_dict()),
+            )
+            self.model.load_state_dict(pristine_state)
+            full_finetune(
+                self.model,
+                x_train,
+                y_train,
+                task=task,
+                max_epochs=self._finetune_epochs,
+                iters_per_epoch=self._finetune_iters_per_epoch,
+                train_size=self._finetune_train_size,
+                context_frac=self._finetune_context_frac,
+                val_frac=self._finetune_val_frac,
+                lr=self._finetune_lr,
+                num_estimators=self._num_estimators,
+                generator=generator,
+            )
 
         tic = time.perf_counter()
         with torch.amp.autocast(

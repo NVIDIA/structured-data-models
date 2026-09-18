@@ -18,6 +18,7 @@ from autogluon.tabular.models.abstract.abstract_torch_model import (
 
 import sdm
 import sdm.processing as sp
+from benchmark.tabular.finetune import full_finetune
 
 Task = Literal["classification", "regression"]
 
@@ -54,6 +55,13 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
+        self._set_default_param_value("finetune", False)
+        self._set_default_param_value("finetune_epochs", 150)
+        self._set_default_param_value("finetune_iters_per_epoch", 10)
+        self._set_default_param_value("finetune_lr", 1e-5)
+        self._set_default_param_value("finetune_train_size", 10_000)
+        self._set_default_param_value("finetune_context_frac", 0.8)
+        self._set_default_param_value("finetune_val_frac", 0.2)
 
     def _fit(
         self,
@@ -101,6 +109,24 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         params = self._get_model_params()
         self._num_estimators = params["num_estimators"]
         max_context_size = params["max_context_size"]
+
+        if params["finetune"]:
+            full_finetune(
+                self.model,
+                x_context,
+                y_context,
+                task=task,
+                max_epochs=params["finetune_epochs"],
+                iters_per_epoch=params["finetune_iters_per_epoch"],
+                train_size=params["finetune_train_size"],
+                context_frac=params["finetune_context_frac"],
+                val_frac=params["finetune_val_frac"],
+                lr=params["finetune_lr"],
+                num_estimators=self._num_estimators,
+                max_val_context_size=max_context_size,
+                generator=generator,
+            )
+
         num_estimators: int | None = self._num_estimators
         if max_context_size is not None and len(X) > max_context_size:
             num_repeats = math.ceil(num_estimators * max_context_size / len(X))
@@ -211,6 +237,36 @@ class SDMKumoTabularModel(SDMModel):
         return sdm.models.KumoTabular(task=task, device=device)
 
 
+class SDMTabICLv2FinetunedModel(SDMTabICLv2Model):
+    ag_key = "SDM-TABICLV2-FT"
+    ag_name = "SDMTabICLv2FT"
+
+    def _set_default_params(self) -> None:
+        super()._set_default_params()
+        self._set_default_param_value("finetune", True)
+
+
+class SDMKumoTabularSmallModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-SMALL"
+    ag_name = "SDMKumoTabularSmall"
+
+    @staticmethod
+    def _create_model(
+        task: Task,
+        device: torch.device,
+    ) -> sdm.models.KumoTabular:
+        return sdm.models.KumoTabular(task=task, size="small", device=device)
+
+
+class SDMKumoTabularSmallFinetunedModel(SDMKumoTabularSmallModel):
+    ag_key = "SDM-KUMO-TABULAR-SMALL-FT"
+    ag_name = "SDMKumoTabularSmallFT"
+
+    def _set_default_params(self) -> None:
+        super()._set_default_params()
+        self._set_default_param_value("finetune", True)
+
+
 class SDMTabFMModel(SDMModel):
     ag_key = "SDM-TABFM"
     ag_name = "SDMTabFM"
@@ -251,6 +307,18 @@ MODEL_CONFIGS = {
     "kumo-tabular": ModelConfig(
         name="KumoTabular",
         model_cls=SDMKumoTabularModel,
+    ),
+    "tabiclv2-ft": ModelConfig(
+        name="TabICLv2FT",
+        model_cls=SDMTabICLv2FinetunedModel,
+    ),
+    "kumo-small": ModelConfig(
+        name="KumoTabularSmall",
+        model_cls=SDMKumoTabularSmallModel,
+    ),
+    "kumo-small-ft": ModelConfig(
+        name="KumoTabularSmallFT",
+        model_cls=SDMKumoTabularSmallFinetunedModel,
     ),
     "tabfm": ModelConfig(
         name="TabFM",

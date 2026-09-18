@@ -45,6 +45,36 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+parser.add_argument(
+    "--finetune_epochs",
+    type=int,
+    help="Fine-tuning epochs (only used by '-ft' model variants).",
+)
+parser.add_argument(
+    "--finetune_iters_per_epoch",
+    type=int,
+    help="Fine-tuning iterations per epoch.",
+)
+parser.add_argument(
+    "--finetune_lr",
+    type=float,
+    help="Fine-tuning learning rate.",
+)
+parser.add_argument(
+    "--finetune_train_size",
+    type=int,
+    help="Rows resampled per fine-tuning iteration, capped to available data.",
+)
+parser.add_argument(
+    "--finetune_context_frac",
+    type=float,
+    help="Fraction of each fine-tuning sample used as context.",
+)
+parser.add_argument(
+    "--finetune_val_frac",
+    type=float,
+    help="Fraction of the fine-tuning pool held out for validation.",
+)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
@@ -62,6 +92,17 @@ config = {
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
+for key in (
+    "finetune_epochs",
+    "finetune_iters_per_epoch",
+    "finetune_lr",
+    "finetune_train_size",
+    "finetune_context_frac",
+    "finetune_val_frac",
+):
+    value = getattr(args, key)
+    if value is not None:
+        config[key] = value
 
 generator = ConfigGenerator(
     search_space={},

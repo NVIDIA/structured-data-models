@@ -39,6 +39,17 @@ parser.add_argument("--dataset")
 parser.add_argument(
     "--output-dir", type=Path, default=BENCHMARK_DIR / "talent_out"
 )
+parser.add_argument(
+    "--finetune",
+    action="store_true",
+    help="Full fine-tune the model on each dataset's training split.",
+)
+parser.add_argument("--finetune-epochs", type=int, default=150)
+parser.add_argument("--finetune-iters-per-epoch", type=int, default=10)
+parser.add_argument("--finetune-lr", type=float, default=1e-5)
+parser.add_argument("--finetune-train-size", type=int, default=10_000)
+parser.add_argument("--finetune-context-frac", type=float, default=0.8)
+parser.add_argument("--finetune-val-frac", type=float, default=0.2)
 args = parser.parse_args()
 
 register_sdm_method()
@@ -64,6 +75,13 @@ config = {
         "model": args.model,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "num_estimators": model.num_estimators,
+        "finetune": args.finetune,
+        "finetune_epochs": args.finetune_epochs,
+        "finetune_iters_per_epoch": args.finetune_iters_per_epoch,
+        "finetune_lr": args.finetune_lr,
+        "finetune_train_size": args.finetune_train_size,
+        "finetune_context_frac": args.finetune_context_frac,
+        "finetune_val_frac": args.finetune_val_frac,
     },
 }
 
