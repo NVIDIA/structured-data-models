@@ -74,9 +74,7 @@ def test_flip_sign_preserves_group_when_members_already_own_a_position() -> (
 
 def test_flip_sign_falls_back_when_positions_are_reordered() -> None:
     # Same group size as member count, but member 0 sits at position 1 and
-    # member 1 sits at position 0: a stacked signs tensor built in member
-    # order would silently pair each member with the wrong row, so this
-    # must be detected and routed through the per-member fallback instead.
+    # member 1 sits at position 0
     table = TableTensor.from_tensor(torch.randn(2, 4, 3))
     ensemble = EnsembleTable(groups=(table,), locations=((0, 1), (0, 0)))
     processor = FlipSign()
@@ -94,9 +92,7 @@ def test_flip_sign_falls_back_when_positions_are_reordered() -> None:
 
 def test_flip_sign_handles_mixed_shared_and_canonical_groups() -> None:
     # Group 0: members 0 and 1 share a single stored row (like duplicate
-    # `Choice` assignments). Group 1: member 2 owns a distinct row on its
-    # own. The shared group must diverge into its own storage, while the
-    # already-canonical solo group should be left as a single group.
+    # `Choice` assignments).
     shared = TableTensor.from_tensor(torch.randn(1, 4, 3))
     solo = TableTensor.from_tensor(torch.randn(1, 4, 3))
     ensemble = EnsembleTable(
@@ -128,9 +124,7 @@ def test_flip_sign_handles_mixed_shared_and_canonical_groups() -> None:
 
 def test_flip_sign_falls_back_when_group_has_an_unreferenced_row() -> None:
     # Group 0 stores 2 rows but only member 0 (at position 0) references
-    # it; row 1 is unreferenced. Member 0's own position sequence looks
-    # canonical in isolation, so only comparing storage size against the
-    # referenced member count catches this.
+    # it; row 1 is unreferenced.
     group0 = TableTensor.from_tensor(torch.randn(2, 4, 3))
     group1 = TableTensor.from_tensor(torch.randn(1, 4, 3))
     ensemble = EnsembleTable(
