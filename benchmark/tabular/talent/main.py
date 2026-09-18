@@ -42,6 +42,13 @@ parser.add_argument(
     "--seeds", type=int, default=SEED_NUM, help="TALENT seeds per dataset."
 )
 parser.add_argument(
+    "--tune-threshold",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="Tune the binary decision threshold on the validation split "
+    "(TALENT default); --no-tune-threshold scores argmax predictions.",
+)
+parser.add_argument(
     "--output-dir", type=Path, default=BENCHMARK_DIR / "talent_out"
 )
 parser.add_argument(
@@ -93,6 +100,8 @@ general: dict[str, object] = {
     "device": "cuda" if torch.cuda.is_available() else "cpu",
     "num_estimators": args.num_estimators or model.num_estimators,
 }
+if not args.tune_threshold:
+    general["tune_threshold"] = False  # part of the cache key; default runs keep their key
 checkpoints = {
     task: str(path.resolve())
     for task, path in (
@@ -134,7 +143,7 @@ for dataset in datasets:
             config=config,
             seed_num=args.seeds,
             tune=False,
-            tune_threshold=True,
+            tune_threshold=args.tune_threshold,
             threshold_metric="f1",
         )
         record = {
