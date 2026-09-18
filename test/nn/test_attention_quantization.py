@@ -12,6 +12,8 @@ from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 from sdm.nn import Attention
 from sdm.testing import onlyCUDA, withCUDA
 
+pytestmark = pytest.mark.usefixtures("fp8_rng")
+
 
 @withCUDA
 def test_fp8_small_context_fallback(device: torch.device) -> None:
@@ -26,6 +28,7 @@ def test_fp8_small_context_fallback(device: torch.device) -> None:
         expected = reference(query)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     assert isinstance(cache, KVCacheEntry)
+    assert not isinstance(cache, QuantizedKVCacheEntry)
     assert module.state_dict().keys() == reference.state_dict().keys()
 
 
