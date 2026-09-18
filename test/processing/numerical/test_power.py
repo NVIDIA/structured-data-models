@@ -318,6 +318,22 @@ def test_power_transform_fit_ignores_missing_cells(
 
 
 @withCUDA
+def test_power_transform_spreads_a_column_with_huge_outliers(
+    device: torch.device,
+) -> None:
+    # The variance of this column overflows in single precision, which must
+    # not make the column look constant.
+    bulk = torch.linspace(0.0, 1.0, 1990, device=device)
+    outliers = torch.full((10,), 1e20, device=device)
+    inp = torch.cat((bulk, outliers)).unsqueeze(-1)
+
+    out = PowerTransform().fit_transform(TableTensor.from_tensor(inp))
+
+    assert out.numerical.isfinite().all()
+    assert out.numerical.unique().numel() > bulk.numel()
+
+
+@withCUDA
 def test_power_transform_keeps_queries_beyond_the_fitted_range_finite(
     device: torch.device,
 ) -> None:

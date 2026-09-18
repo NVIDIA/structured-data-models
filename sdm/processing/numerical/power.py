@@ -255,21 +255,26 @@ class PowerTransform(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        dtype = table.numerical.dtype
         finite = table.numerical.isfinite()
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
         count = finite.sum(dim=-2, keepdim=True)
 
-        mean = finite_or_nan.nanmean(-2, keepdim=True)
+        # The raw variance is widened because in single precision a column
+        # with a few huge outliers overflows and then looks constant.
+        wide = finite_or_nan.double()
+        mean = wide.nanmean(-2, keepdim=True)
         mean.masked_fill_(mean.isnan(), 0.0)
-        var = (finite_or_nan - mean).square().nanmean(-2, keepdim=True)
+        var = (wide - mean).square().nanmean(-2, keepdim=True)
         var.masked_fill_(var.isnan(), 0.0)
         constant_features = _constant_feature_mask(
             var,
             mean,
             num_samples=count,
         )
-        del var
+        del wide, var
 
+        mean = mean.to(dtype)
         # ``mean`` never exceeds the column maximum, and is zero for an
         # entirely missing column.
         self.max = torch.where(finite, table.numerical, mean).amax(
@@ -285,6 +290,8 @@ class PowerTransform(Processor, InvertibleMixin):
         )
 
         if self.standardize:
+            # The fitted lambdas keep the transformed values well within the
+            # range of ``dtype``, so these statistics need no widening.
             transformed = _yeojohnson_transform(finite_or_nan, self.lambdas)
             mean = transformed.nanmean(dim=-2, keepdim=True)
             mean.masked_fill_(mean.isnan(), 0.0)
