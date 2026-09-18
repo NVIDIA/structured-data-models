@@ -2,16 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+from torch import Tensor
 
-from sdm import Stype, TableTensor
-from sdm.processing import InvertibleMixin, Processor
+from sdm import EnsembleTable, Stype, TableTensor
+from sdm.nn._buffer import BufferList
+from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 
 
-class FlipSign(Processor, InvertibleMixin):
+class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
     """Randomly negate numerical columns.
 
     Args:
-        probability: Probability of negating a numerical column.
+        probability: Probability of negating each numerical column.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -23,21 +25,57 @@ class FlipSign(Processor, InvertibleMixin):
     ) -> None:
         super().__init__()
         self.probability = probability
-        self.register_buffer("sign", torch.empty(0))
+        self._signs: BufferList[Tensor] = BufferList()
 
-    def _fit(
+    def _fit_ensemble(
         self,
-        table: TableTensor,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        shape = (*table.numerical.size()[:-2], 1, table.numerical.size(-1))
-        self.sign = table.numerical.new_empty(shape)
-        self.sign.bernoulli_(self.probability, generator=generator)
-        self.sign.mul_(-2).add_(1)
+        # TODO: Vectorize sign draws and application over ensemble members.
+        signs = []
+        for member_id in range(ensemble_table.num_members):
+            numerical = ensemble_table.member(member_id).numerical
+            sign = numerical.new_empty(
+                (*numerical.size()[:-2], 1, numerical.size(-1))
+            )
+            sign.bernoulli_(self.probability, generator=generator)
+            sign.mul_(-2).add_(1)
+            signs.append(sign)
+        self._signs = BufferList(signs)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical * self.sign)
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        if len(self._signs) != ensemble_table.num_members:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} was fitted with "
+                f"{len(self._signs)} ensemble members, but got "
+                f"{ensemble_table.num_members}."
+            )
+        tables: list[TableTensor] = []
+        for member_id in range(ensemble_table.num_members):
+            table = ensemble_table.member(member_id)
+            tables.append(
+                table.replace_blocks(
+                    numerical=table.numerical * self._signs[member_id]
+                )
+            )
+        return EnsembleTable.from_tables(
+            tables=tables,
+            member_table_ids=range(len(tables)),
+        )
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return self._transform(table)
+    def _inverse_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        return self._transform_ensemble(ensemble_table)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}"
+            f"(probability={self.probability})"
+        )

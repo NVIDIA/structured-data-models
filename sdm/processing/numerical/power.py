@@ -308,7 +308,7 @@ class PowerTransform(Processor, InvertibleMixin):
         transformed = _yeojohnson_transform(table.numerical, self.lambdas)
         numerical = (transformed - self.mean) / self.scale
         # The fitted lambdas only keep the fitted range representable, so a
-        # query far outside it can still overflow.
+        # query far outside it can overflow.
         bound = torch.finfo(numerical.dtype).max
         return table.replace_blocks(
             numerical=numerical.clamp(min=-bound, max=bound)

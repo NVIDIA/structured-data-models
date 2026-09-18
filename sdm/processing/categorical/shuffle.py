@@ -15,13 +15,11 @@ class ShuffleCategories(EnsembleProcessor):
     """Independently permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn when the processor is
-    fitted; pass ``generator`` to ``fit()`` to make the draws reproducible.
-    For an ensemble, each logical member receives independent permutations.
-    Codes and their corresponding category vectors are permuted together so
-    decoded values remain unchanged. Negative codes represent missing values
-    and are preserved unchanged. Only categorical columns are supported; use
-    :class:`~sdm.processing.StypeDispatch` to apply this processor to the
-    categorical block of a mixed feature table.
+    fitted. Codes and their corresponding category vectors are permuted
+    together so decoded values remain unchanged. Negative codes represent
+    missing values and are preserved unchanged. Only categorical columns
+    are supported; use :class:`~sdm.processing.StypeDispatch` to apply this
+    processor to the categorical block of a mixed feature table.
 
     Args:
         method: Permutation strategy. ``"shift"`` cyclically shifts the
@@ -96,11 +94,11 @@ class ShuffleCategories(EnsembleProcessor):
 
         for member_id in range(ensemble_table.num_members):
             permutations = self._draw_permutations(
-                ensemble_table.table(member_id),
+                ensemble_table.member(member_id),
                 generator=generator,
             )
             key = (
-                ensemble_table.table(member_id).categorical.device,
+                ensemble_table.member(member_id).categorical.device,
                 tuple(
                     tuple(permutation.tolist()) for permutation in permutations
                 ),
@@ -139,7 +137,7 @@ class ShuffleCategories(EnsembleProcessor):
                 permutations = self._permutations[permutation_id]
                 member_tables.append(
                     self._permute(
-                        ensemble_table.table(member_id),
+                        ensemble_table.member(member_id),
                         permutations,
                     )
                 )

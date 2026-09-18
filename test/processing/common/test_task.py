@@ -82,7 +82,7 @@ def test_task_dispatch_routes_ensemble_members() -> None:
     output = dispatch.transform_ensemble(ensemble_table)
 
     for member_id, source in enumerate((second, first, second)):
-        result = output.table(member_id)
+        result = output.member(member_id)
         assert result.columns == source.columns
         torch.testing.assert_close(
             result.numerical,
