@@ -156,10 +156,7 @@ def test_default_recipe_ensembling_forward_matches_fit_predict(
     num_estimators: int,
 ) -> None:
     # Exercises the model's actual `default_recipe()` (unlike the other
-    # tests in this module, which use a minimal deterministic recipe): it
-    # is the only place stochastic ensemble processors like `FlipSign` and
-    # `Choice` run, and their per-member group bookkeeping only diverges
-    # from a single-estimator run once `num_estimators > 1`.
+    # tests in this module, which use a minimal deterministic recipe)
     model = _build(task)
     R_context, C = 12, 6
 
