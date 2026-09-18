@@ -74,7 +74,7 @@ class EnsembleTensor(EnsembleData[TensorT], Generic[TensorT]):
         return cast(TensorT, group[position])
 
 
-class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
+class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
     """Store and group input :class:`~sdm.tensor.TableTensor` as an ensemble.
 
     Each ensemble member is associated with one
@@ -307,13 +307,6 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
             group_id: Zero-based group index.
         """
         return sum(i == group_id for i, _ in self._locations)
-
-    @staticmethod
-    def _select_member(
-        group: TableTensor,
-        position: int,
-    ) -> TableTensor:
-        return group[position]
 
     def expanded_group(self, group_id: int) -> TableTensor:
         """Return the logical members assigned to one group.
