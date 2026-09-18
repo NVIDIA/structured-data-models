@@ -158,11 +158,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
-        # "no_grad" (not "inference") is required here even though this
-        # block itself does no differentiable work: the buffers it fits
-        # (e.g. `Standardize`'s mean/scale) get combined with the
-        # differentiable model output in the target inverse-transform
-        # below, and inference tensors cannot be saved for backward.
+        # "no_grad" and not "inference" here since these buffers get combined
+        # with differentiable model output, and inference tensor cannot be
+        # used for backward
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
             inference_mode("no_grad" if requires_grad else "inference"),
