@@ -93,18 +93,17 @@ class ECOC(torch.nn.Module):
                 cache["ecoc_codebook"] = codebook
                 kwargs["cache"] = cache["ecoc_model"] = Cache()
 
+        T = codebook.size(0)
         # [T, ..., R, D] and [T, ..., R_context], with T encoded tasks.
         # Separate storage also supports models that modify their inputs.
         logits = model(
-            x=x.expand(codebook.size(0), *x.shape).clone(),
+            x=x.expand(T, *x.shape).clone(),
             y=codebook.index_select(dim=1, index=y.reshape(-1)).view(
-                codebook.size(0), *y.shape
+                T, *y.shape
             ),
             **kwargs,
         )
-        index = codebook.view(
-            codebook.size(0), *(1,) * (logits.dim() - 2), num_classes
-        )
+        index = codebook.view(T, *(1,) * (logits.dim() - 2), num_classes)
         scores = logits.log_softmax(dim=-1).gather(
             dim=-1,
             index=index.expand(*logits.shape[:-1], num_classes),
