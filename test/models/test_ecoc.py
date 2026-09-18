@@ -52,11 +52,11 @@ class _ProbabilityClassifier(torch.nn.Module):
 @pytest.mark.parametrize("num_classes", [1, 3, 10])
 def test_ecoc_within_capacity(device: torch.device, num_classes: int) -> None:
     model = _ProbabilityClassifier(10).to(device)
-    ecoc = ECOC(model, max_classes=10)
+    ecoc = ECOC(max_classes=10)
     x = torch.randn(2, num_classes + 3, num_classes, device=device)
     y = torch.arange(num_classes, device=device).expand(2, -1)
 
-    actual = ecoc(x, y, num_classes=num_classes, temperature=0.7)
+    actual = ecoc(model, x, y, num_classes=num_classes, temperature=0.7)
     expected = model(x, y, temperature=0.7)[..., :num_classes]
 
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
@@ -70,11 +70,12 @@ def test_ecoc_recovers_probabilities(
     num_classes: int,
     batch_shape: tuple[int, ...],
 ) -> None:
-    ecoc = ECOC(_ProbabilityClassifier(10), max_classes=10).to(device)
+    model = _ProbabilityClassifier(10).to(device)
+    ecoc = ECOC(max_classes=10)
     x = torch.randn(*batch_shape, num_classes + 3, num_classes, device=device)
     y = torch.rand(*batch_shape, num_classes, device=device).argsort(dim=-1)
 
-    scores = ecoc(x, y, num_classes=num_classes, temperature=0.7)
+    scores = ecoc(model, x, y, num_classes=num_classes, temperature=0.7)
     probabilities = (x[..., -3:, :] / 0.7).softmax(dim=-1)
     expected = torch.empty_like(probabilities).scatter(
         dim=-1,
@@ -90,11 +91,12 @@ def test_ecoc_recovers_probabilities(
 
 @pytest.mark.parametrize("max_classes", [2, 10])
 def test_ecoc_absent_classes(max_classes: int) -> None:
-    ecoc = ECOC(_ProbabilityClassifier(max_classes), max_classes=max_classes)
+    model = _ProbabilityClassifier(max_classes)
+    ecoc = ECOC(max_classes=max_classes)
     x = torch.randn(7, 4, dtype=torch.float64)
     y = torch.tensor([0, 3, 7, 11])
 
-    scores = ecoc(x, y, num_classes=12)
+    scores = ecoc(model, x, y, num_classes=12)
     expected = x.new_zeros(3, 12).scatter(
         dim=-1,
         index=y.expand(3, -1),
@@ -106,19 +108,26 @@ def test_ecoc_absent_classes(max_classes: int) -> None:
 
 @pytest.mark.parametrize("num_classes", [3, 17])
 def test_ecoc_cache(num_classes: int) -> None:
-    ecoc = ECOC(_ProbabilityClassifier(10), max_classes=10)
+    model = _ProbabilityClassifier(10)
+    ecoc = ECOC(max_classes=10)
     x = torch.randn(2, num_classes + 5, num_classes)
     y = torch.arange(num_classes).expand(2, -1)
-    expected = ecoc(x, y, num_classes=num_classes)
+    expected = ecoc(model, x, y, num_classes=num_classes)
     cache = Cache()
 
     recorded = ecoc(
-        x[..., :num_classes, :], y, num_classes=num_classes, cache=cache
+        model=model,
+        x=x[..., :num_classes, :],
+        y=y,
+        num_classes=num_classes,
+        cache=cache,
     )
     cache = cache.freeze().to("cpu")
     actual = torch.cat(
         [
-            ecoc(query, y[..., :0], num_classes=num_classes, cache=cache)
+            ecoc(
+                model, query, y[..., :0], num_classes=num_classes, cache=cache
+            )
             for query in x[..., num_classes:, :].split(2, dim=-2)
         ],
         dim=-2,
@@ -129,25 +138,26 @@ def test_ecoc_cache(num_classes: int) -> None:
 
 
 def test_ecoc_cache_class_count() -> None:
-    ecoc = ECOC(_ProbabilityClassifier(10), max_classes=10)
+    model = _ProbabilityClassifier(10)
+    ecoc = ECOC(max_classes=10)
     x = torch.randn(17, 17)
     y = torch.arange(17)
     cache = Cache()
-    ecoc(x, y, num_classes=17, cache=cache)
+    ecoc(model, x, y, num_classes=17, cache=cache)
 
     with pytest.raises(
         ValueError, match="must match the cached ECOC codebook"
     ):
-        ecoc(x[:1], y[:0], num_classes=18, cache=cache.freeze())
+        ecoc(model, x[:1], y[:0], num_classes=18, cache=cache.freeze())
 
 
 def test_ecoc_gradients() -> None:
     model = _ProbabilityClassifier(10)
-    ecoc = ECOC(model, max_classes=10)
+    ecoc = ECOC(max_classes=10)
     x = torch.randn(15, 12, requires_grad=True)
     y = torch.arange(12)
 
-    scores = ecoc(x, y, num_classes=12)
+    scores = ecoc(model, x, y, num_classes=12)
     loss = -scores[:, 0].mean()
     grad_x, grad_scale = torch.autograd.grad(loss, (x, model.scale))
     expected = -(x[-3:] * model.scale).log_softmax(dim=-1)[:, 0].mean()
@@ -166,19 +176,50 @@ def test_ecoc_generator() -> None:
         def forward(self, x: Tensor, y: Tensor) -> Tensor:
             return x[..., y.size(-1) :, :10]
 
-    ecoc = ECOC(Classifier(), max_classes=10)
+    model = Classifier()
+    ecoc = ECOC(max_classes=10)
     x = torch.randn(15, 12)
     y = torch.arange(12)
 
     first = ecoc(
-        x, y, num_classes=12, generator=torch.Generator().manual_seed(1)
+        model=model,
+        x=x,
+        y=y,
+        num_classes=12,
+        generator=torch.Generator().manual_seed(1),
     )
     repeated = ecoc(
-        x, y, num_classes=12, generator=torch.Generator().manual_seed(1)
+        model=model,
+        x=x,
+        y=y,
+        num_classes=12,
+        generator=torch.Generator().manual_seed(1),
     )
     other = ecoc(
-        x, y, num_classes=12, generator=torch.Generator().manual_seed(2)
+        model=model,
+        x=x,
+        y=y,
+        num_classes=12,
+        generator=torch.Generator().manual_seed(2),
     )
 
     torch.testing.assert_close(first, repeated, rtol=0, atol=0)
     assert not torch.allclose(first, other)
+
+
+@pytest.mark.parametrize("num_classes", [8, 20])
+def test_ecoc_runtime_model(num_classes: int) -> None:
+    ecoc = ECOC(max_classes=8)
+    models = (_ProbabilityClassifier(8), _ProbabilityClassifier(8))
+    with torch.no_grad():
+        models[1].scale.fill_(2)
+    x = torch.randn(num_classes + 3, num_classes)
+    y = torch.arange(num_classes)
+
+    for model in models:
+        scores = ecoc(model, x, y, num_classes=num_classes)
+        expected = (x[-3:] * model.scale).softmax(dim=-1)
+
+        torch.testing.assert_close(scores.softmax(dim=-1), expected)
+
+    assert not ecoc.state_dict()

@@ -23,21 +23,20 @@ class ECOC(torch.nn.Module):
     4 * ceil(log(C, max_classes)))`` encoded tasks, where ``C`` is the number
     of original classes. Tasks run along an additional leading batch dimension.
 
+    The model is supplied to :meth:`forward`. Manage its parameters, device,
+    and training mode directly on that model.
+
     Args:
-        model: In-context classifier accepting ``model(x, y, **kwargs)`` and
-            returning logits. It must support leading batch dimensions. To use
-            caching, it must also accept a :class:`~sdm.cache.Cache` through
-            the ``cache`` keyword argument.
-        max_classes: Number of classes supported by the wrapped model.
+        max_classes: Number of classes supported by the model.
     """
 
-    def __init__(self, model: torch.nn.Module, max_classes: int) -> None:
+    def __init__(self, max_classes: int) -> None:
         super().__init__()
-        self.model = model
         self.max_classes = max_classes
 
     def forward(
         self,
+        model: torch.nn.Module,
         x: Tensor,
         y: Tensor,
         *,
@@ -49,6 +48,11 @@ class ECOC(torch.nn.Module):
         """Predict scores over the original classes.
 
         Args:
+            model: In-context classifier accepting ``model(x, y, **kwargs)``
+                and returning logits with shape
+                ``[..., R_query, max_classes]``. It must support leading batch
+                dimensions. To use caching, it must also accept a
+                :class:`~sdm.cache.Cache` via the ``cache`` keyword argument.
             x: Context followed by query features, with shape ``[..., R, D]``
                 for ``R`` rows and ``D`` features. When replaying a cache,
                 provide only query features.
@@ -58,7 +62,8 @@ class ECOC(torch.nn.Module):
             num_classes: Number of original classes, including any absent
                 from the context. Must remain unchanged when replaying a cache.
             cache: Optional cache recording context state and the codebook,
-                or replaying them across query batches.
+                or replaying them for the same model and context across query
+                batches.
             generator: Generator controlling codebook sampling. Ignored when
                 replaying a cache.
             kwargs: Arguments forwarded to the model. Tensor arguments must
@@ -72,7 +77,7 @@ class ECOC(torch.nn.Module):
         if num_classes <= self.max_classes:
             if cache is not None:
                 kwargs["cache"] = cache
-            return self.model(x, y, **kwargs)[..., :num_classes]
+            return model(x, y, **kwargs)[..., :num_classes]
 
         if cache is not None and cache.is_replaying:
             codebook = cast(Tensor, cache["ecoc_codebook"])
@@ -90,7 +95,7 @@ class ECOC(torch.nn.Module):
 
         # [T, ..., R, D] and [T, ..., R_context], with T encoded tasks.
         # Separate storage also supports models that modify their inputs.
-        logits = self.model(
+        logits = model(
             x=x.expand(codebook.size(0), *x.shape).clone(),
             y=codebook.index_select(dim=1, index=y.reshape(-1)).view(
                 codebook.size(0), *y.shape
