@@ -11,6 +11,14 @@ from sdm import RelationalData, Stype, TableTensor, infer_stypes
 
 
 @pytest.fixture
+def fp8_rng() -> Iterator[None]:
+    """Reproduce FP8 comparisons while preserving the surrounding RNG state."""
+    with torch.random.fork_rng():
+        torch.manual_seed(0)
+        yield
+
+
+@pytest.fixture
 def device() -> torch.device:
     return torch.device("cpu")
 
