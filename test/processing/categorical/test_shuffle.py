@@ -105,6 +105,20 @@ def test_shuffle_categories_is_reproducible_with_generator(
     assert first.equal(second)
 
 
+def test_shuffle_categories_keeps_columns_above_max_categories() -> None:
+    table = _table(
+        [[0, 0], [1, 1], [2, 2], [3, 0]],
+        (("a", "b", "c", "d"), ("x", "y", "z")),
+    )
+
+    output = ShuffleCategories(max_categories=3).fit_transform(table)
+
+    assert torch.equal(
+        output.categorical.code[:, 0], table.categorical.code[:, 0]
+    )
+    assert output.categorical.tolist() == table.categorical.tolist()
+
+
 def test_shuffle_categories_preserves_missing() -> None:
     target = _table(
         [[0], [1], [-1]],

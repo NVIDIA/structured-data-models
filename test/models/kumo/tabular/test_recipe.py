@@ -177,3 +177,18 @@ def test_default_recipe_numerical_missing_options() -> None:
     )
     assert sp.MissingDispatch not in kinds(default_recipe("impute"))
     assert sp.ImputeMean in kinds(default_recipe("impute"))
+
+
+def test_default_recipe_variants() -> None:
+    def count(recipe: sp.Recipe, cls: type) -> int:
+        return sum(isinstance(p, cls) for p in recipe.features.modules())
+
+    assert count(default_recipe(), sp.Choice) == 2
+    assert count(default_recipe(normalize="power"), sp.Choice) == 0
+    assert (
+        count(default_recipe(normalize="quantile"), sp.QuantileTransform) == 2
+    )
+    assert (
+        count(default_recipe(shuffle_categories_max=30), sp.ShuffleCategories)
+        == 1
+    )

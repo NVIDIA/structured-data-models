@@ -8,22 +8,36 @@ import torch
 import sdm.processing as sp
 
 NumericalMissing = Literal["dispatch", "nan", "mix", "impute"]
+Normalize = Literal["round_robin", "identity", "power", "squash", "quantile"]
 
 
-def _normalize() -> list[sp.Processor]:
-    # Members cycle over three normalizations of the standardized columns,
-    # fitted in double precision: in single precision the standardized
-    # values of a column with a few huge outliers collapse onto one value.
+def _transform(normalize: Normalize) -> sp.Processor:
+    if normalize == "identity":
+        return sp.Identity()
+    if normalize == "power":
+        return sp.PowerTransform()
+    if normalize == "squash":
+        return sp.SquashTransform()
+    if normalize == "quantile":
+        return sp.QuantileTransform(n_quantiles=100)
+    assert normalize == "round_robin"
+    return sp.Choice(
+        sp.Identity(),
+        sp.PowerTransform(),
+        sp.SquashTransform(),
+        method="round_robin",
+    )
+
+
+def _normalize(normalize: Normalize) -> list[sp.Processor]:
+    # Standardized columns are normalized in double precision: in single
+    # precision the standardized values of a column with a few huge
+    # outliers collapse onto one value.
     return [
         sp.Cast(torch.float64),
         sp.Standardize(eps=1e-6),
         sp.Clip(min_value=-100.0, max_value=100.0),
-        sp.Choice(
-            sp.Identity(),
-            sp.PowerTransform(),
-            sp.SquashTransform(),
-            method="round_robin",
-        ),
+        _transform(normalize),
         sp.ClipSigma(threshold=4.0),
     ]
 
@@ -48,27 +62,38 @@ def _missing(numerical_missing: NumericalMissing) -> sp.Processor:
 
 def default_recipe(
     numerical_missing: NumericalMissing = "nan",
+    *,
+    normalize: Normalize = "round_robin",
+    shuffle_categories_max: int | None = None,
 ) -> sp.Recipe:
     r"""Default recipe.
 
     Args:
         numerical_missing: How missing numerical cells reach the model, see
             :func:`_missing`.
+        normalize: The numeric transform of the members, by default a cycle
+            over identity, power and squash.
+        shuffle_categories_max: Permute the codes of categorical columns
+            with at most this many levels per member; ``None`` keeps them.
     """
     ecoc = sp.EncodeECOC(alphabet_size=10)
+    shuffle: list[sp.Processor] = []
+    if shuffle_categories_max is not None:
+        shuffle = [sp.ShuffleCategories(max_categories=shuffle_categories_max)]
     return sp.Recipe(
         features=[
             sp.StypeDispatch(
                 numerical=_missing(numerical_missing),
                 categorical=[
                     sp.AlignCategories(sort_by="value"),
+                    *shuffle,
                     sp.AddLevelCounts(min_cardinality=50),
                 ],
             ),
             sp.StypeDispatch(
                 numerical=[
                     sp.DropConstantColumns(),
-                    *_normalize(),
+                    *_normalize(normalize),
                     sp.FlipSign(),
                     sp.Cast(torch.float32),
                 ],
@@ -77,7 +102,7 @@ def default_recipe(
                 categorical=[
                     sp.ToNumerical(),
                     sp.DropConstantColumns(),
-                    *_normalize(),
+                    *_normalize(normalize),
                     sp.Cast(torch.float32),
                 ],
             ),

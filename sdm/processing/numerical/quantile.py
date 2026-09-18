@@ -81,7 +81,8 @@ class QuantileTransform(Processor, InvertibleMixin):
 
     QuantileTransform grids are capped by the number of fitted rows and, when
     ``subsample`` is set, by ``20%`` of the subsample size to keep dense grids
-    tractable.
+    tractable. Non-finite cells are ignored when fitting; NaN cells stay NaN
+    and infinite cells map onto the bounds when transforming.
 
     The subsample rows are drawn from the ``generator`` passed to ``fit()``;
     without one, they are drawn from the data device's global generator.
@@ -169,9 +170,12 @@ class QuantileTransform(Processor, InvertibleMixin):
 
         sample_size = input_sample.size(-2)
         sample_columns = (
-            input_sample.movedim(-1, -2).reshape(-1, sample_size).contiguous()
+            input_sample.masked_fill(~input_sample.isfinite(), torch.nan)
+            .movedim(-1, -2)
+            .reshape(-1, sample_size)
+            .contiguous()
         )
-        quantiles = torch.quantile(
+        quantiles = torch.nanquantile(
             sample_columns,
             references,
             dim=-1,

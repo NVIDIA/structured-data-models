@@ -70,6 +70,11 @@ parser.add_argument(
     "(default: nan).",
 )
 parser.add_argument(
+    "--recipe_ensemble",
+    help="Comma-separated kumo-tabular recipes blended with weights fitted "
+    "on the training rows, see benchmark/tabular/README.md.",
+)
+parser.add_argument(
     "--name",
     help="Name of the result directory (default: the model name).",
 )
@@ -89,9 +94,11 @@ if args.model != "kumo-tabular" and (
     args.checkpoint is not None
     or args.size is not None
     or args.numerical_missing is not None
+    or args.recipe_ensemble is not None
 ):
     parser.error(
-        "--checkpoint, --size, --numerical_missing need --model kumo-tabular"
+        "--checkpoint, --size, --numerical_missing, --recipe_ensemble need "
+        "--model kumo-tabular"
     )
 
 model_config = MODEL_CONFIGS[args.model]
@@ -112,6 +119,8 @@ if args.size is not None:
     config["size"] = args.size
 if args.numerical_missing is not None:
     config["numerical_missing"] = args.numerical_missing
+if args.recipe_ensemble is not None:
+    config["recipe_ensemble"] = args.recipe_ensemble.split(",")
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
 

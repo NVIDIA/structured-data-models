@@ -61,6 +61,39 @@ def test_quantile_transform_uniform_fit_transform_and_inverse_round_trip(
 
 
 @withCUDA
+def test_quantile_transform_ignores_non_finite_cells_when_fitting(
+    device: torch.device,
+) -> None:
+    clean = torch.tensor(
+        [[0.0], [1.0], [2.0], [3.0]], dtype=torch.float64, device=device
+    )
+    dirty = torch.cat(
+        [
+            clean,
+            torch.tensor(
+                [[float("nan")], [float("inf")]],
+                dtype=torch.float64,
+                device=device,
+            ),
+        ]
+    )
+
+    processor = QuantileTransform(n_quantiles=4, subsample=None).fit(
+        TableTensor.from_tensor(dirty)
+    )
+    transformed = processor.transform(TableTensor.from_tensor(dirty)).numerical
+    expected = (
+        QuantileTransform(n_quantiles=4, subsample=None)
+        .fit_transform(TableTensor.from_tensor(clean))
+        .numerical
+    )
+
+    assert torch.allclose(transformed[:4], expected)
+    assert transformed[4].isnan().all()
+    assert transformed[5].item() == 1.0
+
+
+@withCUDA
 def test_quantile_transform_wide_inverse_round_trip(
     device: torch.device,
 ) -> None:
