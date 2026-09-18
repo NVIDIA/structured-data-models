@@ -1,11 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import json
+from pathlib import Path
+
 import pytest
 import torch
+from safetensors.torch import save_file
 
 from sdm import TableTensor
 from sdm.models.timesfm3 import TimesFM3
+from sdm.models.timesfm3 import model as timesfm_module
 from sdm.models.timesfm3.configs import (
     ResidualBlockConfig,
     StackedTransformersConfig,
@@ -62,6 +67,20 @@ def _internal_model(
     )
 
 
+def _write_pretrained_fixture(
+    tmp_path: Path,
+) -> tuple[_TimesFM3, dict[str, Path]]:
+    expected = _internal_model("cpu").eval()
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(expected.to_dict()))
+    checkpoint_path = tmp_path / "model.safetensors"
+    save_file(expected.state_dict(), checkpoint_path)
+    return expected, {
+        "config.json": config_path,
+        "model.safetensors": checkpoint_path,
+    }
+
+
 def _golden_model(
     device: torch.device,
     *,
@@ -113,6 +132,98 @@ def _golden_model(
             ) / 32
             parameter.copy_(values.to(device))
     return model
+
+
+@pytest.mark.parametrize("accept_license", [False, True])
+@withCUDA
+def test_pretrained_loading(
+    device: torch.device,
+    accept_license: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected, paths = _write_pretrained_fixture(tmp_path)
+    calls: list[tuple[str, str, str, str | None]] = []
+
+    def download(
+        repo_id: str,
+        filename: str,
+        **kwargs: object,
+    ) -> str:
+        revision = kwargs.get("revision")
+        assert isinstance(revision, str)
+        license_prompt = kwargs.get("license_prompt")
+        assert license_prompt is None or isinstance(license_prompt, str)
+        calls.append((repo_id, filename, revision, license_prompt))
+        return str(paths[filename])
+
+    monkeypatch.setattr(timesfm_module, "download_checkpoint", download)
+    model = TimesFM3(
+        pretrained=True,
+        accept_license=accept_license,
+        device=device,
+    )
+    expected = expected.to(device)
+    values = torch.arange(12, device=device, dtype=torch.float32).reshape(
+        1, 1, 6, 2
+    )
+    masks = torch.zeros_like(values, dtype=torch.bool)
+    patch_is_target = torch.ones(1, 1, 6, dtype=torch.bool, device=device)
+
+    with torch.inference_mode():
+        actual_logits = model.model(
+            values,
+            masks,
+            patch_is_target,
+        )["logits"]
+        expected_logits = expected(
+            values,
+            masks,
+            patch_is_target,
+        )["logits"]
+
+    assert model.model.to_dict() == expected.to_dict()
+    assert all(parameter.device == device for parameter in model.parameters())
+    assert all(buffer.device == device for buffer in model.buffers())
+    torch.testing.assert_close(actual_logits, expected_logits)
+    assert [call[:3] for call in calls] == [
+        (
+            "google/timesfm-3.0-pytorch",
+            "config.json",
+            "43046b85ec22d584a13f8098c2ed39c889e129c2",
+        ),
+        (
+            "google/timesfm-3.0-pytorch",
+            "model.safetensors",
+            "43046b85ec22d584a13f8098c2ed39c889e129c2",
+        ),
+    ]
+    assert calls[0][3] is None
+    if accept_license:
+        assert calls[1][3] is None
+    else:
+        assert calls[1][3] is not None
+
+
+def test_pretrained_loading_is_strict(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected, paths = _write_pretrained_fixture(tmp_path)
+    checkpoint = expected.state_dict()
+    checkpoint.pop("output_head.bias")
+    save_file(checkpoint, paths["model.safetensors"])
+
+    def download(
+        repo_id: str,
+        filename: str,
+        **kwargs: object,
+    ) -> str:
+        return str(paths[filename])
+
+    monkeypatch.setattr(timesfm_module, "download_checkpoint", download)
+    with pytest.raises(RuntimeError, match="Missing key"):
+        TimesFM3(pretrained=True, accept_license=True)
 
 
 def test_forward() -> None:

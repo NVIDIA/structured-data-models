@@ -19,13 +19,16 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from itertools import product
+from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import torch
+from safetensors.torch import load_file
 from torch import Tensor
 
 from sdm import Recipe, RelatedTables, Stype, StypeLike, TableTensor, Task
@@ -50,6 +53,16 @@ from sdm.models.timesfm3.util import (
     stitch_patches,
 )
 from sdm.tensor.table import TableSchema
+
+_TIMESFM_REPO_ID = "google/timesfm-3.0-pytorch"
+_TIMESFM_REVISION = "43046b85ec22d584a13f8098c2ed39c889e129c2"
+_TIMESFM_LICENSE_PROMPT = (
+    "TimesFM 3.0 pretrained weights are distributed under the TimesFM "
+    "Non-Commercial License v1.0 and may be used only for "
+    "non-commercial, non-production purposes. Review the license at "
+    "'https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/"
+    "LICENSE' before downloading."
+)
 
 
 class TimesFM3(ICLModel):
@@ -118,7 +131,20 @@ class TimesFM3(ICLModel):
     ) -> None:
         super().__init__(task=Task.regression)
 
+        config: dict[str, Any] = {}
+        if pretrained:
+            config_path = download_checkpoint(
+                repo_id=_TIMESFM_REPO_ID,
+                filename="config.json",
+                revision=_TIMESFM_REVISION,
+            )
+            config = cast(
+                dict[str, Any],
+                json.loads(Path(config_path).read_text()),
+            )
+
         self.model = _TimesFM3(
+            **config,
             device="meta" if pretrained else device,
         )
 
@@ -137,25 +163,21 @@ class TimesFM3(ICLModel):
         accept_license: bool,
         device: torch.device | str | None,
     ) -> TimesFM3:
-        from safetensors.torch import load_file  # noqa: PLC0415
-
-        TIMESFM_LICENSE_PROMPT = (
-            "TimesFM 3.0 pretrained weights are distributed under the TimesFM "
-            "Non-Commercial License v1.0 and may be used only for "
-            "non-commercial, non-production purposes. Review the license at "
-            "'https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/"
-            "LICENSE' before downloading."
-        )
-
         device = torch.get_default_device() if device is None else device
-
         path = download_checkpoint(
-            repo_id="google/timesfm-3.0-pytorch",
+            repo_id=_TIMESFM_REPO_ID,
             filename="model.safetensors",
-            license_prompt=None if accept_license else TIMESFM_LICENSE_PROMPT,
+            revision=_TIMESFM_REVISION,
+            license_prompt=(
+                None if accept_license else _TIMESFM_LICENSE_PROMPT
+            ),
         )
-        ckpt = load_file(path, device=str(device))  # noqa: F841
-
+        checkpoint = load_file(path, device=str(device))
+        self.model.load_state_dict(
+            checkpoint,
+            strict=True,
+            assign=True,
+        )
         return self
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
