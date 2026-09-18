@@ -149,7 +149,7 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
 
     users = related_tables.tables["users"]
     for member_id, expected in enumerate(([3, 2], [0, 1])):
-        user = users.table(member_id)
+        user = users.member(member_id)
         assert user.columns[Stype.id] == ("user_id", "__example__")
         assert user.id[..., 0].equal(torch.tensor(expected))
         assert user.id[..., 1].equal(torch.tensor([0, 1]))

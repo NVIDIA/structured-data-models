@@ -41,7 +41,7 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
     }
 
     for member_id in range(output.num_members):
-        member = output.table(member_id)
+        member = output.member(member_id)
         expected_missing = torch.tensor(
             [
                 missing_by_column[column]

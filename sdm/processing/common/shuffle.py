@@ -51,7 +51,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> None:
         device = next(iter(ensemble_table)).device
         widths = [
-            ensemble_table.table(member_id).numerical.size(-1)
+            ensemble_table.member(member_id).numerical.size(-1)
             for member_id in range(ensemble_table.num_members)
         ]
         permutations = []
@@ -120,7 +120,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             )
         tables: list[TableTensor] = []
         for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
+            table = ensemble_table.member(member_id)
             host_permutation = self._host_permutations[member_id]
             shuffled = table.__class__(
                 columns={
@@ -159,7 +159,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             )
         tables: list[TableTensor] = []
         for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
+            table = ensemble_table.member(member_id)
             host_permutation = self._host_permutations[member_id]
             inverse_host_permutation = [0] * len(host_permutation)
             for destination, source in enumerate(host_permutation):

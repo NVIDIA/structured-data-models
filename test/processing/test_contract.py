@@ -57,7 +57,7 @@ def make_table() -> EnsembleTable:
 
 def _make_impute_mean_table() -> EnsembleTable:
     table = make_table()
-    table_a, table_b = table.table(0), table.table(1)
+    table_a, table_b = table.member(0), table.member(1)
     numerical = table_b.numerical.clone()
     numerical[0, 0] = float("nan")
     return EnsembleTable.from_tables(
@@ -68,7 +68,7 @@ def _make_impute_mean_table() -> EnsembleTable:
 
 def _make_align_categories_table() -> EnsembleTable:
     table = make_table()
-    table_a, table_b = table.table(0), table.table(1)
+    table_a, table_b = table.member(0), table.member(1)
     categorical = CategoricalTensor(
         code=torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32),
         categories=(StringTensor.from_list(["b", "c"]),),
@@ -223,7 +223,7 @@ def test_fit_transform_matches_fit_then_transform(
     )
     assert actual.num_members == expected.num_members
     for member_id in range(actual.num_members):
-        assert actual.table(member_id).equal(expected.table(member_id))
+        assert actual.member(member_id).equal(expected.member(member_id))
 
 
 @pytest.mark.parametrize(
@@ -242,7 +242,7 @@ def test_save_and_load_preserves_fitted_processor_behavior(
     actual = processor_b.transform_ensemble(table)
     assert actual.num_members == expected.num_members
     for member_id in range(actual.num_members):
-        assert actual.table(member_id).equal(expected.table(member_id))
+        assert actual.member(member_id).equal(expected.member(member_id))
 
 
 @pytest.mark.parametrize(
@@ -260,8 +260,8 @@ def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
     assert restored.num_members == table.num_members
     for member_id in range(restored.num_members):
         torch.testing.assert_close(
-            restored.table(member_id).numerical,
-            table.table(member_id).numerical,
+            restored.member(member_id).numerical,
+            table.member(member_id).numerical,
             atol=1e-3,
             rtol=1e-5,
             equal_nan=True,
@@ -280,8 +280,8 @@ def test_preserves_rows_and_unhandled_stypes(
     processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
     output = processor.fit_transform_ensemble(table)
     for member_id in range(output.num_members):
-        before = table.table(member_id)
-        after = output.table(member_id)
+        before = table.member(member_id)
+        after = output.member(member_id)
         assert after.size()[:-1] == before.size()[:-1]
         for stype in before.active_stypes - processor.handles_stypes:
             columns = before.columns[stype]
@@ -312,13 +312,13 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
     processor.to(dtype=dtype)
     actual = processor.transform_ensemble(target)
     assert all(
-        actual.table(member_id).dtype == dtype
+        actual.member(member_id).dtype == dtype
         for member_id in range(actual.num_members)
     )
     assert actual.num_members == expected.num_members
     for member_id in range(actual.num_members):
-        actual_table = actual.table(member_id)
-        expected_table = expected.table(member_id)
+        actual_table = actual.member(member_id)
+        expected_table = expected.member(member_id)
         assert actual_table.columns == expected_table.columns
         torch.testing.assert_close(
             actual_table.numerical,
@@ -348,13 +348,13 @@ def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
     processor_b.to(device=device)
     actual = processor_b.transform_ensemble(target)
     assert all(
-        actual.table(member_id).device.type == device.type
+        actual.member(member_id).device.type == device.type
         for member_id in range(actual.num_members)
     )
     assert actual.num_members == expected.num_members
     for member_id in range(actual.num_members):
-        actual_table = actual.table(member_id)
-        expected_table = expected.table(member_id)
+        actual_table = actual.member(member_id)
+        expected_table = expected.member(member_id)
         assert actual_table.columns == expected_table.columns
         torch.testing.assert_close(
             actual_table.numerical.cpu(),
