@@ -60,7 +60,7 @@ def test_callback_requires_grad_supports_autograd(fitted: bool) -> None:
         torch.tensor([[0.0], [1.0]]),  # regression
     ],
 )
-def test_train_mode_supports_autograd(
+def test_train_mode_supports_autograd_without_callback(
     y_context: Tensor,
 ) -> None:
     model = TabICLv2(pretrained=False)
