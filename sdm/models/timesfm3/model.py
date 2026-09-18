@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from itertools import product
@@ -46,6 +47,7 @@ from sdm.models.timesfm3.util import (
     get_output_patch_via_roll,
     get_running_stats,
     revin,
+    stitch_patches,
 )
 from sdm.tensor.table import TableSchema
 
@@ -591,6 +593,367 @@ class _TimesFM3(torch.nn.Module):
             outputs["__call__:seq_attn_mask"] = attention_masks
             outputs["__call__:transformer_output"] = transformer_output
         return outputs
+
+    @torch.no_grad()
+    def decode(
+        self,
+        target: Tensor,
+        horizon: int = 0,
+        past_only_covariates: Tensor | None = None,
+        past_future_covariates: Tensor | None = None,
+        target_mask: Tensor | None = None,
+        past_only_mask: Tensor | None = None,
+        past_future_mask: Tensor | None = None,
+        mask: Tensor | None = None,
+        return_aux_outputs: bool = False,
+    ) -> Tensor | tuple[Tensor, dict[str, Any]]:
+        """Decode a forecast in one non-autoregressive pass.
+
+        Future-known covariates determine the forecast horizon when supplied,
+        overriding ``horizon``.
+
+        Args:
+            target: Target context with shape ``[B, U, C]``, where ``B`` is the
+                batch size and ``U`` is the number of target variates.
+                ``C`` is the context length.
+            horizon: Number of future time steps to predict.
+            past_only_covariates: Historical covariates with shape
+                ``[B, V, C]``.
+            past_future_covariates: Future-known covariates with shape
+                ``[B, W, C + H]``, where ``H`` is the forecast horizon.
+            target_mask: Invalid-value mask with shape ``[B, U, C]``.
+            past_only_mask: Invalid-value mask with shape ``[B, V, C]``.
+            past_future_mask: Invalid-value mask with shape
+                ``[B, W, C + H]``.
+            mask: Global context mask with shape ``[B, C]``.
+            return_aux_outputs: Whether to return full-sequence intermediate
+                outputs with the forecast.
+
+        Returns:
+            Forecasts for every target and covariate variate with shape
+            ``[B, U + V + W, H, Q]``, where ``Q`` is the number of quantiles,
+            optionally paired with the full-sequence outputs.
+        """
+        device = target.device
+        batch_size, num_target, context = target.shape
+
+        if past_future_covariates is not None:
+            horizon = past_future_covariates.shape[-1] - context
+        if horizon <= 0:
+            raise ValueError("Decode function requires horizon > 0.")
+
+        # 1. Pad context to multiple of input_patch_len
+        ctx_padding = (
+            self.input_patch_len - (context % self.input_patch_len)
+        ) % self.input_patch_len
+        if ctx_padding > 0:
+            target = torch.nn.functional.pad(target, (ctx_padding, 0))
+            if mask is not None:
+                mask = torch.nn.functional.pad(
+                    mask, (ctx_padding, 0), value=True
+                )
+            if past_only_covariates is not None:
+                past_only_covariates = torch.nn.functional.pad(
+                    past_only_covariates, (ctx_padding, 0)
+                )
+            if past_future_covariates is not None:
+                past_future_covariates = torch.nn.functional.pad(
+                    past_future_covariates, (ctx_padding, 0)
+                )
+            if target_mask is not None:
+                target_mask = torch.nn.functional.pad(
+                    target_mask, (ctx_padding, 0), value=True
+                )
+            if past_only_mask is not None:
+                past_only_mask = torch.nn.functional.pad(
+                    past_only_mask, (ctx_padding, 0), value=True
+                )
+            if past_future_mask is not None:
+                past_future_mask = torch.nn.functional.pad(
+                    past_future_mask, (ctx_padding, 0), value=True
+                )
+            context = context + ctx_padding
+
+        if mask is None:
+            mask = torch.zeros(
+                batch_size, context, dtype=torch.bool, device=device
+            )
+            if ctx_padding > 0:
+                mask[:, :ctx_padding] = True
+
+        # 2. Pad horizon
+        if self.use_stitching:
+            extract_len = self._stitching_extract_len
+            overlap = extract_len - self.input_patch_len
+            num_forecast_patches = max(
+                math.ceil((horizon - overlap) / self.input_patch_len), 1
+            )
+            num_horizon_patches = num_forecast_patches + self.rolls - 1
+            padded_horizon = num_horizon_patches * self.input_patch_len
+            hor_padding = padded_horizon - horizon
+        else:
+            hor_padding = (-horizon) % self.output_patch_len
+            padded_horizon = horizon + hor_padding
+            num_horizon_patches = padded_horizon // self.input_patch_len
+        num_context_patches = context // self.input_patch_len
+
+        # 3. Build context & horizon inputs
+        if target_mask is None:
+            target_mask = torch.zeros_like(target, dtype=torch.bool)
+        target_mask = target_mask | mask.unsqueeze(1)
+
+        all_ctx_vals = [target]
+        all_ctx_masks = [target_mask]
+        num_past_only = 0
+        if past_only_covariates is not None:
+            num_past_only = past_only_covariates.shape[1]
+            if past_only_mask is None:
+                past_only_mask = torch.zeros_like(
+                    past_only_covariates, dtype=torch.bool
+                )
+            all_ctx_vals.append(past_only_covariates)
+            all_ctx_masks.append(past_only_mask | mask.unsqueeze(1))
+        if past_future_covariates is not None:
+            if past_future_mask is None:
+                past_future_mask = torch.zeros_like(
+                    past_future_covariates, dtype=torch.bool
+                )
+            all_ctx_vals.append(past_future_covariates[..., :context])
+            all_ctx_masks.append(
+                past_future_mask[..., :context] | mask.unsqueeze(1)
+            )
+
+        ctx_vals = torch.cat(all_ctx_vals, dim=1)
+        ctx_masks = torch.cat(all_ctx_masks, dim=1)
+
+        if self.use_linear_detrending:
+            t_ctx = torch.arange(
+                -(context - 1), 1, dtype=torch.float32, device=device
+            )
+            t_ctx_bvc = t_ctx[None, None, :]
+            t_ctx_bvc_normalized = t_ctx_bvc / context
+
+            valid = ~ctx_masks
+            n_v = valid.float().sum(dim=-1, keepdim=True)
+            sum_t = torch.where(valid, t_ctx_bvc_normalized, 0.0).sum(
+                dim=-1, keepdim=True
+            )
+            sum_t2 = torch.where(valid, t_ctx_bvc_normalized**2, 0.0).sum(
+                dim=-1, keepdim=True
+            )
+            sum_y = torch.where(valid, ctx_vals, 0.0).sum(dim=-1, keepdim=True)
+            sum_ty = torch.where(
+                valid, t_ctx_bvc_normalized * ctx_vals, 0.0
+            ).sum(dim=-1, keepdim=True)
+
+            det = n_v * sum_t2 - sum_t**2
+            safe_det = torch.where(det == 0.0, 1.0, det)
+            m_trend = torch.where(
+                det == 0.0, 0.0, (n_v * sum_ty - sum_t * sum_y) / safe_det
+            )
+            c_trend = torch.where(
+                det == 0.0,
+                torch.where(n_v > 0, sum_y / torch.clamp_min(n_v, 1.0), 0.0),
+                (sum_y - m_trend * sum_t) / torch.clamp_min(n_v, 1.0),
+            )
+
+            ctx_vals_detrended = ctx_vals - (
+                m_trend * t_ctx_bvc_normalized + c_trend
+            )
+
+            mean_y = sum_y / torch.clamp_min(n_v, 1.0)
+            sum_y2 = torch.where(valid, ctx_vals**2, 0.0).sum(
+                dim=-1, keepdim=True
+            )
+            var_orig = torch.clamp_min(
+                sum_y2 / torch.clamp_min(n_v, 1.0) - mean_y**2, 0.0
+            )
+            std_orig = torch.sqrt(var_orig)
+
+            sum_yd = torch.where(valid, ctx_vals_detrended, 0.0).sum(
+                dim=-1, keepdim=True
+            )
+            mean_yd = sum_yd / torch.clamp_min(n_v, 1.0)
+            sum_yd2 = torch.where(valid, ctx_vals_detrended**2, 0.0).sum(
+                dim=-1, keepdim=True
+            )
+            var_det = torch.clamp_min(
+                sum_yd2 / torch.clamp_min(n_v, 1.0) - mean_yd**2, 0.0
+            )
+            std_det = torch.sqrt(var_det)
+
+            apply_detrend = (
+                std_det < self.linear_detrending_threshold * std_orig
+            )
+            ctx_vals = torch.where(apply_detrend, ctx_vals_detrended, ctx_vals)
+        else:
+            num_variates = ctx_vals.shape[1]
+            m_trend = torch.zeros(
+                (batch_size, num_variates, 1),
+                dtype=torch.float32,
+                device=device,
+            )
+            c_trend = torch.zeros(
+                (batch_size, num_variates, 1),
+                dtype=torch.float32,
+                device=device,
+            )
+            apply_detrend = torch.zeros(
+                (batch_size, num_variates, 1), dtype=torch.bool, device=device
+            )
+
+        ctx_vals = torch.where(ctx_masks, 0.0, ctx_vals)
+
+        all_hor_vals = [
+            torch.zeros(batch_size, num_target, padded_horizon, device=device),
+            torch.zeros(
+                batch_size, num_past_only, padded_horizon, device=device
+            ),
+        ]
+        all_hor_masks = [
+            torch.ones(
+                batch_size,
+                num_target,
+                padded_horizon,
+                dtype=torch.bool,
+                device=device,
+            ),
+            torch.ones(
+                batch_size,
+                num_past_only,
+                padded_horizon,
+                dtype=torch.bool,
+                device=device,
+            ),
+        ]
+
+        if past_future_covariates is not None:
+            if past_future_mask is None:
+                past_future_mask = torch.zeros_like(
+                    past_future_covariates, dtype=torch.bool
+                )
+            pf_future_vals = past_future_covariates[
+                ..., context : context + horizon
+            ]
+            pf_future_masks = past_future_mask[
+                ..., context : context + horizon
+            ]
+            if self.use_linear_detrending:
+                m_pf = m_trend[:, num_target + num_past_only :, :]
+                c_pf = c_trend[:, num_target + num_past_only :, :]
+                apply_detrend_pf = apply_detrend[
+                    :, num_target + num_past_only :, :
+                ]
+                t_hor_pf = torch.arange(
+                    1, horizon + 1, dtype=torch.float32, device=device
+                )[None, None, :]
+                t_hor_pf_normalized = t_hor_pf / context
+                pf_trend_hor = m_pf * t_hor_pf_normalized + c_pf
+                pf_future_vals = torch.where(
+                    apply_detrend_pf,
+                    pf_future_vals - pf_trend_hor,
+                    pf_future_vals,
+                )
+            pf_future_vals = torch.where(pf_future_masks, 0.0, pf_future_vals)
+            if hor_padding > 0:
+                pf_future_vals = torch.nn.functional.pad(
+                    pf_future_vals, (0, hor_padding)
+                )
+                pf_future_masks = torch.nn.functional.pad(
+                    pf_future_masks, (0, hor_padding), value=True
+                )
+            all_hor_vals.append(pf_future_vals)
+            all_hor_masks.append(pf_future_masks)
+
+        hor_vals = torch.cat(all_hor_vals, dim=1)
+        hor_masks = torch.cat(all_hor_masks, dim=1)
+
+        all_vals = torch.cat([ctx_vals, hor_vals], dim=-1)
+        all_masks = torch.cat([ctx_masks, hor_masks], dim=-1)
+
+        num_variates = all_vals.shape[1]
+        patch_is_target = torch.zeros(
+            (
+                batch_size,
+                num_variates,
+                num_context_patches + num_horizon_patches,
+            ),
+            dtype=torch.bool,
+            device=device,
+        )
+        patch_is_target[:, : num_target + num_past_only, :] = True
+
+        # Reshape values & masks to patched shape (b, v, n, p)
+        values_bvnp = all_vals.reshape(
+            batch_size, num_variates, -1, self.input_patch_len
+        )
+        masks_bvnp = all_masks.reshape(
+            batch_size, num_variates, -1, self.input_patch_len
+        )
+
+        # Build horizon CPM mask: context=False, horizon=True.
+        num_total_patches = num_context_patches + num_horizon_patches
+        horizon_cpm_mask = torch.zeros(
+            batch_size, num_total_patches, dtype=torch.bool, device=device
+        )
+        horizon_cpm_mask[:, num_context_patches:] = True
+
+        freeze_after = (
+            num_context_patches - 1 if self.use_frozen_running_stats else None
+        )
+        forward_out = self.forward(
+            values_bvnp,
+            masks_bvnp,
+            patch_is_target,
+            freeze_after=freeze_after,
+            patch_cpm_mask=horizon_cpm_mask,
+            return_aux_outputs=return_aux_outputs,
+        )
+        logits = forward_out[
+            "logits"
+        ]  # (b, v, n, output_patch_len, num_quantiles)
+
+        if self.use_stitching:
+            extract_len = self._stitching_extract_len
+            overlap = extract_len - self.input_patch_len
+            num_forecast_patches = max(
+                math.ceil((horizon - overlap) / self.input_patch_len), 1
+            )
+            forecast_indices = torch.arange(
+                num_forecast_patches, device=device
+            ) + (num_context_patches - 1)
+            patch_preds = logits[:, :, forecast_indices, :extract_len, :]
+            horizon_logits = stitch_patches(
+                patch_preds,
+                self.input_patch_len,
+            )[:, :, :horizon, :]
+        else:
+            num_forecast_chunks = padded_horizon // self.output_patch_len
+            forecast_indices = torch.arange(
+                num_forecast_chunks, device=device
+            ) * self.rolls + (num_context_patches - 1)
+            forecast_logits = logits[:, :, forecast_indices, :, :]
+            horizon_logits = forecast_logits.reshape(
+                batch_size, num_variates, -1, self.num_quantiles
+            )[:, :, :horizon, :]
+
+        if self.use_linear_detrending:
+            t_forecast = torch.arange(
+                1, horizon + 1, dtype=torch.float32, device=device
+            )
+            t_forecast_normalized = t_forecast / context
+            trend_forecast = (
+                m_trend[:, :, 0, None] * t_forecast_normalized[None, None, :]
+                + c_trend[:, :, 0, None]
+            )
+            trend_forecast = torch.where(
+                apply_detrend[:, :, 0, None], trend_forecast, 0.0
+            )
+            horizon_logits = horizon_logits + trend_forecast[:, :, :, None]
+
+        if return_aux_outputs:
+            return horizon_logits, forward_out
+        return horizon_logits
 
 
 def expand_query(x_context: TableSchema, x_query: TableTensor) -> TableTensor:
