@@ -39,7 +39,32 @@ parser.add_argument("--dataset")
 parser.add_argument(
     "--output-dir", type=Path, default=BENCHMARK_DIR / "talent_out"
 )
+parser.add_argument(
+    "--name", help="Result directory and method label (default: the model)."
+)
+parser.add_argument("--num-estimators", type=int)
+parser.add_argument(
+    "--checkpoint",
+    type=Path,
+    help="kumo-tabular classification checkpoint (or the only one).",
+)
+parser.add_argument(
+    "--checkpoint-reg", type=Path, help="kumo-tabular regression checkpoint."
+)
+parser.add_argument("--size", choices=("small", "large"))
+parser.add_argument(
+    "--numerical-missing", choices=("dispatch", "nan", "mix", "impute")
+)
 args = parser.parse_args()
+if args.model != "kumo-tabular" and (
+    args.checkpoint
+    or args.checkpoint_reg
+    or args.size
+    or args.numerical_missing
+):
+    parser.error(
+        "checkpoint, size and missing options need --model kumo-tabular"
+    )
 
 register_sdm_method()
 root = args.dataset_path.resolve()
@@ -56,20 +81,32 @@ if not datasets:
     raise FileNotFoundError(f"No TALENT datasets found under {root}")
 
 model = MODEL_CONFIGS[args.model]
-method = f"[SDM] {model.name}"
-config = {
-    "model": {},
-    "training": {"n_bins": 2},
-    "general": {
-        "model": args.model,
-        "device": "cuda" if torch.cuda.is_available() else "cpu",
-        "num_estimators": model.num_estimators,
-    },
+label = args.name or model.name
+method = f"[SDM] {label}"
+general: dict[str, object] = {
+    "model": args.model,
+    "device": "cuda" if torch.cuda.is_available() else "cpu",
+    "num_estimators": args.num_estimators or model.num_estimators,
 }
+checkpoints = {
+    task: str(path.resolve())
+    for task, path in (
+        ("classification", args.checkpoint),
+        ("regression", args.checkpoint_reg or args.checkpoint),
+    )
+    if path is not None
+}
+if checkpoints:
+    general["checkpoints"] = checkpoints
+if args.size:
+    general["size"] = args.size
+if args.numerical_missing:
+    general["numerical_missing"] = args.numerical_missing
+config = {"model": {}, "training": {"n_bins": 2}, "general": general}
 
 failed = False
 for dataset in datasets:
-    path = args.output_dir / args.model / dataset / "result.json"
+    path = args.output_dir / label / dataset / "result.json"
     cached = json.loads(path.read_text()) if path.is_file() else {}
     if (
         cached.get("status") in {"success", "unsupported"}

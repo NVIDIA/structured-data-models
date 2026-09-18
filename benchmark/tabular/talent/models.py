@@ -59,8 +59,15 @@ def _create_tabiclv2(
 def _create_kumo_tabular(
     task: Task,
     device: torch.device,
+    checkpoint: str | None = None,
+    size: Literal["small", "large"] = "large",
 ) -> sdm.models.KumoTabular:
-    return sdm.models.KumoTabular(task=task, device=device)
+    return sdm.models.KumoTabular(
+        task=task,
+        size=size,
+        device=device,
+        checkpoint=checkpoint,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -126,6 +133,11 @@ class SDMMethod(Method):
             "num_estimators",
             self._config.num_estimators,
         )
+        # kumo-tabular only: local checkpoints per task, architecture size
+        # and the recipe's missing-value mode.
+        self._checkpoints: dict[str, str] = general.get("checkpoints", {})
+        self._size: str | None = general.get("size")
+        self._numerical_missing: str | None = general.get("numerical_missing")
 
     def data_format(
         self,
@@ -248,7 +260,19 @@ class SDMMethod(Method):
         x_train = self._to_table(N_train, C_train)
         y_train = self._to_target(self.y["train"])
         task: Task = "regression" if self.is_regression else "classification"
-        self.model = self._config.factory(task, self._device)
+        kwargs: dict[str, Any] = {}
+        if self._checkpoints.get(task):
+            kwargs["checkpoint"] = self._checkpoints[task]
+        if self._size:
+            kwargs["size"] = self._size
+        self.model = self._config.factory(task, self._device, **kwargs)
+        recipe = None
+        if self._numerical_missing:
+            from sdm.models.kumo.tabular.recipe import (  # noqa: PLC0415
+                default_recipe,
+            )
+
+            recipe = default_recipe(self._numerical_missing)  # type: ignore[arg-type]
         generator = torch.Generator(device=self._device).manual_seed(
             self.args.seed
         )
@@ -262,6 +286,7 @@ class SDMMethod(Method):
             self.model.fit(
                 x=x_train,
                 y=y_train,
+                recipe=recipe,
                 num_estimators=self._num_estimators,
                 generator=generator,
             )
