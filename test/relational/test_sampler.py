@@ -194,8 +194,11 @@ def test_expanded_sampler(relational_data: RelationalData) -> None:
     assert all(len(t) == 2 for t in related_tables.tables.values())
 
     users = related_tables.tables["users"]
-    assert len({user.numerical.data_ptr() for user in users}) == 1
-    for user in users:
+    assert (
+        len({group.numerical.data_ptr() for group in users._iter_groups()})
+        == 1
+    )
+    for user in users._iter_groups():
         user = user.squeeze(0)
         assert user.columns[Stype.id] == ("user_id", "__example__")
         assert user.id[..., 0].equal(torch.tensor([3, 2]))

@@ -173,6 +173,14 @@ def test_getitem_preserves_groups_and_order() -> None:
     assert output[1].equal(tables[2])
     assert output[2].equal(tables[2])
 
+    output = ensemble_table[1:4:2]
+
+    assert len(output) == 2
+    assert output.num_groups == 1
+    assert next(output._iter_groups()).size(0) == 2
+    assert output[0].equal(tables[0])
+    assert output[1].equal(tables[2])
+
 
 def test_concatenate_columns_preserves_member_order() -> None:
     left = EnsembleTable.from_tables(
