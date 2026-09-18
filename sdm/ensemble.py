@@ -58,7 +58,7 @@ class EnsembleData(abc.ABC, Generic[T]):
         pass
 
 
-class EnsembleTensor(EnsembleData[TensorT], Generic[TensorT]):
+class EnsembleTensor(EnsembleData[TensorT]):
     """Store and group tensors as an ensemble.
 
     Args:
