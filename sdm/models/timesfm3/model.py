@@ -259,8 +259,8 @@ class TimesFM3(ICLModel):
         if cache is not None and cache.is_recording:
             assert x_context is not None
             assert y_context is not None
-            cache["x_context"] = x_context.numerical
-            cache["y_context"] = y_context.numerical
+            cache["x_context"] = x_context.numerical.clone()
+            cache["y_context"] = y_context.numerical.clone()
             return TableTensor(
                 columns={Stype.numerical: output_columns},
                 numerical=y_context.numerical.new_empty(

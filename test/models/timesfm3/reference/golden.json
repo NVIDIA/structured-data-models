@@ -1,0 +1,1003 @@
+{
+  "upstream": {
+    "repository": "https://github.com/google-research/timesfm",
+    "revision": "e31dadd84cb26bd5153fde6687502b8312e918fb"
+  },
+  "weight_recipe": {
+    "offset_step": 3,
+    "modulus": 19,
+    "center": 9,
+    "divisor": 32
+  },
+  "public": {
+    "config": {
+      "input_patch_len": 2,
+      "output_patch_len": 4,
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "residual_block_config": {
+        "hidden_dims": 8,
+        "output_dims": 8,
+        "use_bias": false,
+        "activation": "relu"
+      },
+      "transformer_config": {
+        "num_layers": 2,
+        "transformer": {
+          "model_dims": 8,
+          "hidden_dims": 12,
+          "num_heads": 2,
+          "attention_norm": "rms",
+          "feedforward_norm": "rms",
+          "qk_norm": "rms",
+          "use_rope_seq": true,
+          "use_rope_var": false,
+          "use_bias": false,
+          "ff_activation": "relu",
+          "deterministic": true
+        }
+      },
+      "use_variate_attention": true,
+      "use_stitching": true,
+      "use_linear_detrending": true,
+      "use_iterative_cpm_revin": true,
+      "use_frozen_running_stats": false
+    },
+    "state": [
+      {
+        "key": "output_head.bias",
+        "shape": [
+          12
+        ]
+      },
+      {
+        "key": "output_head.weight",
+        "shape": [
+          12,
+          8
+        ]
+      },
+      {
+        "key": "pre_transformer_resblock.hidden_layer.weight",
+        "shape": [
+          8,
+          12
+        ]
+      },
+      {
+        "key": "pre_transformer_resblock.output_layer.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "pre_transformer_resblock.residual_layer.weight",
+        "shape": [
+          8,
+          12
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.ff0.weight",
+        "shape": [
+          12,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.ff1.weight",
+        "shape": [
+          8,
+          12
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.post_ff_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.post_seq_attn_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.post_var_attn_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.pre_ff_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.pre_seq_attn_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.pre_var_attn_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.key_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.key_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.out_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.per_dim_scale.per_dim_scale",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.query_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.query_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.value_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.var_attn.key_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.var_attn.key_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.var_attn.out_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.var_attn.per_dim_scale.per_dim_scale",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.var_attn.query_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.var_attn.query_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.var_attn.value_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.ff0.weight",
+        "shape": [
+          12,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.ff1.weight",
+        "shape": [
+          8,
+          12
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.post_ff_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.post_seq_attn_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.post_var_attn_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.pre_ff_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.pre_seq_attn_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.pre_var_attn_ln.weight",
+        "shape": [
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.seq_attn.key_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.seq_attn.key_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.seq_attn.out_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.seq_attn.per_dim_scale.per_dim_scale",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.seq_attn.query_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.seq_attn.query_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.seq_attn.value_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.var_attn.key_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.var_attn.key_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.var_attn.out_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.var_attn.per_dim_scale.per_dim_scale",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.var_attn.query_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.var_attn.query_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.1.var_attn.value_proj.weight",
+        "shape": [
+          8,
+          8
+        ]
+      }
+    ],
+    "inputs": {
+      "targets": {
+        "columns": [
+          "target_a",
+          "target_b"
+        ],
+        "context": [
+          [
+            1.0,
+            10.0
+          ],
+          [
+            2.0,
+            8.0
+          ],
+          [
+            null,
+            7.0
+          ],
+          [
+            5.0,
+            null
+          ],
+          [
+            8.0,
+            3.0
+          ]
+        ]
+      },
+      "past_only": {
+        "columns": [
+          "past"
+        ],
+        "context": [
+          [
+            3.0
+          ],
+          [
+            null
+          ],
+          [
+            4.0
+          ],
+          [
+            1.0
+          ],
+          [
+            5.0
+          ]
+        ]
+      },
+      "future_known": {
+        "columns": [
+          "known_a",
+          "known_b"
+        ],
+        "context": [
+          [
+            5.0,
+            2.0
+          ],
+          [
+            6.0,
+            3.0
+          ],
+          [
+            4.0,
+            null
+          ],
+          [
+            9.0,
+            5.0
+          ],
+          [
+            7.0,
+            8.0
+          ]
+        ],
+        "query": [
+          [
+            8.0,
+            13.0
+          ],
+          [
+            null,
+            21.0
+          ],
+          [
+            10.0,
+            34.0
+          ]
+        ]
+      }
+    },
+    "expected": {
+      "columns": [
+        "target_a__q10",
+        "target_a__q50",
+        "target_a__q90",
+        "target_b__q10",
+        "target_b__q50",
+        "target_b__q90"
+      ],
+      "values": [
+        [
+          8.937819480895996,
+          9.024666786193848,
+          8.944172859191895,
+          1.3525722026824951,
+          1.3911969661712646,
+          1.3579237461090088
+        ],
+        [
+          10.731019973754883,
+          10.61153793334961,
+          10.737372398376465,
+          -0.3177372217178345,
+          -0.41048455238342285,
+          -0.3123857080936432
+        ],
+        [
+          12.389291763305664,
+          12.4437255859375,
+          12.530572891235352,
+          -2.1010594367980957,
+          -2.02131986618042,
+          -1.9826951026916504
+        ]
+      ]
+    }
+  },
+  "internal": {
+    "config": {
+      "input_patch_len": 2,
+      "output_patch_len": 4,
+      "quantiles": [
+        0.5
+      ],
+      "residual_block_config": {
+        "hidden_dims": 4,
+        "output_dims": 4,
+        "use_bias": false,
+        "activation": "relu"
+      },
+      "transformer_config": {
+        "num_layers": 1,
+        "transformer": {
+          "model_dims": 4,
+          "hidden_dims": 6,
+          "num_heads": 2,
+          "attention_norm": "rms",
+          "feedforward_norm": "rms",
+          "qk_norm": "rms",
+          "use_rope_seq": true,
+          "use_rope_var": false,
+          "use_bias": false,
+          "ff_activation": "relu",
+          "deterministic": true
+        }
+      },
+      "use_variate_attention": false,
+      "use_stitching": true,
+      "use_linear_detrending": true,
+      "use_frozen_running_stats": false
+    },
+    "state": [
+      {
+        "key": "output_head.bias",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "output_head.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "pre_transformer_resblock.hidden_layer.weight",
+        "shape": [
+          4,
+          12
+        ]
+      },
+      {
+        "key": "pre_transformer_resblock.output_layer.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "pre_transformer_resblock.residual_layer.weight",
+        "shape": [
+          4,
+          12
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.ff0.weight",
+        "shape": [
+          6,
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.ff1.weight",
+        "shape": [
+          4,
+          6
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.post_ff_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.post_seq_attn_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.pre_ff_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.pre_seq_attn_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.key_ln.weight",
+        "shape": [
+          2
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.key_proj.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.out_proj.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.per_dim_scale.per_dim_scale",
+        "shape": [
+          2
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.query_ln.weight",
+        "shape": [
+          2
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.query_proj.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.value_proj.weight",
+        "shape": [
+          4,
+          4
+        ]
+      }
+    ],
+    "forward": {
+      "inputs": {
+        "values": [
+          [
+            [
+              [
+                1.0,
+                3.0
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0
+              ]
+            ]
+          ]
+        ],
+        "masks": [
+          [
+            [
+              [
+                false,
+                false
+              ],
+              [
+                true,
+                true
+              ],
+              [
+                true,
+                true
+              ]
+            ]
+          ]
+        ],
+        "patch_is_target": [
+          [
+            [
+              true,
+              true,
+              true
+            ]
+          ]
+        ],
+        "patch_cpm_masks": [
+          null,
+          [
+            [
+              false,
+              true,
+              true
+            ]
+          ]
+        ]
+      },
+      "outputs": [
+        [
+          [
+            [
+              [
+                [
+                  1.7138645648956299
+                ],
+                [
+                  1.7143478393554688
+                ],
+                [
+                  1.7148311138153076
+                ],
+                [
+                  1.715314269065857
+                ]
+              ],
+              [
+                [
+                  1.692699670791626
+                ],
+                [
+                  1.7234890460968018
+                ],
+                [
+                  1.754278302192688
+                ],
+                [
+                  1.7850675582885742
+                ]
+              ],
+              [
+                [
+                  1.6920182704925537
+                ],
+                [
+                  1.7233555316925049
+                ],
+                [
+                  1.754692792892456
+                ],
+                [
+                  1.7860300540924072
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              [
+                [
+                  1.7138645648956299
+                ],
+                [
+                  1.7143478393554688
+                ],
+                [
+                  1.7148311138153076
+                ],
+                [
+                  1.715314269065857
+                ]
+              ],
+              [
+                [
+                  1.635363221168518
+                ],
+                [
+                  1.657575011253357
+                ],
+                [
+                  1.6797866821289062
+                ],
+                [
+                  1.7019984722137451
+                ]
+              ],
+              [
+                [
+                  1.6271485090255737
+                ],
+                [
+                  1.6457258462905884
+                ],
+                [
+                  1.6643033027648926
+                ],
+                [
+                  1.6828805208206177
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    "decode": {
+      "inputs": {
+        "target": [
+          [
+            [
+              1.0,
+              2.0,
+              5.0,
+              3.0,
+              8.0
+            ]
+          ]
+        ],
+        "past_only_covariates": [
+          [
+            [
+              3.0,
+              1.0,
+              4.0,
+              1.0,
+              5.0
+            ]
+          ]
+        ],
+        "past_future_covariates": [
+          [
+            [
+              5.0,
+              6.0,
+              4.0,
+              9.0,
+              7.0,
+              8.0,
+              6.0,
+              10.0
+            ]
+          ]
+        ],
+        "mask": [
+          [
+            false,
+            false,
+            false,
+            true,
+            false
+          ]
+        ],
+        "past_only_mask": [
+          [
+            [
+              false,
+              true,
+              false,
+              false,
+              false
+            ]
+          ]
+        ],
+        "past_future_mask": [
+          [
+            [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              true,
+              false
+            ]
+          ]
+        ],
+        "horizon": 99
+      },
+      "output": [
+        [
+          [
+            [
+              9.797889709472656
+            ],
+            [
+              11.640660285949707
+            ],
+            [
+              13.483430862426758
+            ]
+          ],
+          [
+            [
+              5.5
+            ],
+            [
+              6.0
+            ],
+            [
+              6.5
+            ]
+          ],
+          [
+            [
+              4.873227596282959
+            ],
+            [
+              5.074841499328613
+            ],
+            [
+              5.276455879211426
+            ]
+          ]
+        ]
+      ]
+    },
+    "decode_without_stitching": {
+      "config": {
+        "input_patch_len": 2,
+        "output_patch_len": 4,
+        "quantiles": [
+          0.5
+        ],
+        "residual_block_config": {
+          "hidden_dims": 4,
+          "output_dims": 4,
+          "use_bias": false,
+          "activation": "relu"
+        },
+        "transformer_config": {
+          "num_layers": 1,
+          "transformer": {
+            "model_dims": 4,
+            "hidden_dims": 6,
+            "num_heads": 2,
+            "attention_norm": "rms",
+            "feedforward_norm": "rms",
+            "qk_norm": "rms",
+            "use_rope_seq": true,
+            "use_rope_var": false,
+            "use_bias": false,
+            "ff_activation": "relu",
+            "deterministic": true
+          }
+        },
+        "use_variate_attention": false,
+        "use_stitching": false,
+        "use_linear_detrending": false,
+        "use_frozen_running_stats": true
+      },
+      "inputs": {
+        "target": [
+          [
+            [
+              1.0,
+              3.0,
+              2.0,
+              5.0
+            ]
+          ]
+        ],
+        "target_mask": [
+          [
+            [
+              false,
+              false,
+              true,
+              false
+            ]
+          ]
+        ],
+        "horizon": 5
+      },
+      "output": [
+        [
+          [
+            [
+              2.3474349975585938
+            ],
+            [
+              2.511141777038574
+            ],
+            [
+              2.6748485565185547
+            ],
+            [
+              2.838555335998535
+            ],
+            [
+              2.427795648574829
+            ]
+          ]
+        ]
+      ]
+    }
+  }
+}

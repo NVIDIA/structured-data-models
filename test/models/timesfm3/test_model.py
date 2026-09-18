@@ -3,6 +3,7 @@
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 import torch
@@ -81,56 +82,57 @@ def _write_pretrained_fixture(
     }
 
 
-def _golden_model(
+def _reference_fixture() -> dict[str, Any]:
+    path = Path(__file__).with_name("reference") / "golden.json"
+    return cast(dict[str, Any], json.loads(path.read_text()))
+
+
+def _fixture_tensor(
+    values: list[list[float | None]],
     device: torch.device,
-    *,
-    use_stitching: bool = True,
-    use_linear_detrending: bool = True,
-    use_frozen_running_stats: bool = False,
-) -> _TimesFM3:
-    model = _TimesFM3(
-        input_patch_len=2,
-        output_patch_len=4,
-        quantiles=[0.5],
-        residual_block_config=ResidualBlockConfig(
-            hidden_dims=4,
-            output_dims=4,
-            use_bias=False,
-            activation="relu",
-        ),
-        transformer_config=StackedTransformersConfig(
-            num_layers=1,
-            transformer=TransformerConfig(
-                model_dims=4,
-                hidden_dims=6,
-                num_heads=2,
-                attention_norm="rms",
-                feedforward_norm="rms",
-                qk_norm="rms",
-                use_rope_seq=True,
-                use_rope_var=False,
-                use_bias=False,
-                ff_activation="relu",
-                deterministic=True,
-            ),
-        ),
-        use_variate_attention=False,
-        use_stitching=use_stitching,
-        use_linear_detrending=use_linear_detrending,
-        use_frozen_running_stats=use_frozen_running_stats,
+) -> torch.Tensor:
+    return torch.tensor(
+        [
+            [float("nan") if value is None else value for value in row]
+            for row in values
+        ],
         device=device,
-    ).eval()
-    with torch.no_grad():
-        for index, parameter in enumerate(model.parameters()):
-            values = (
-                (
-                    torch.arange(parameter.numel()).reshape(parameter.shape)
-                    + 3 * index
+    )
+
+
+def _load_reference_weights(
+    model: _TimesFM3,
+    model_fixture: dict[str, Any],
+    recipe: dict[str, int],
+) -> None:
+    state = model.state_dict()
+    actual_state = [
+        {"key": key, "shape": list(tensor.shape)}
+        for key, tensor in sorted(state.items())
+    ]
+    assert actual_state == model_fixture["state"]
+
+    for index, key in enumerate(sorted(state)):
+        tensor = state[key]
+        values = (
+            (
+                torch.arange(tensor.numel(), device=tensor.device).reshape(
+                    tensor.shape
                 )
-                % 19
-                - 9
-            ) / 32
-            parameter.copy_(values.to(device))
+                + recipe["offset_step"] * index
+            )
+            % recipe["modulus"]
+            - recipe["center"]
+        ) / recipe["divisor"]
+        state[key] = values.to(dtype=tensor.dtype)
+    model.load_state_dict(state, strict=True)
+
+
+def _golden_model(device: torch.device) -> _TimesFM3:
+    fixture = _reference_fixture()
+    model_fixture = fixture["internal"]
+    model = _TimesFM3(**model_fixture["config"], device=device).eval()
+    _load_reference_weights(model, model_fixture, fixture["weight_recipe"])
     return model
 
 
@@ -428,61 +430,246 @@ def test_default_recipe_averages_estimators(device: torch.device) -> None:
     torch.testing.assert_close(cached.numerical, out.numerical)
 
 
+@withCUDA
+def test_public_model_matches_pinned_upstream(
+    device: torch.device,
+) -> None:
+    fixture = _reference_fixture()
+    model_fixture = fixture["public"]
+    model = TimesFM3(pretrained=False, device="meta")
+    model.model = _TimesFM3(**model_fixture["config"], device=device).eval()
+    _load_reference_weights(
+        model.model, model_fixture, fixture["weight_recipe"]
+    )
+
+    inputs = model_fixture["inputs"]
+    target_values = _fixture_tensor(inputs["targets"]["context"], device)
+    past_values = _fixture_tensor(inputs["past_only"]["context"], device)
+    known_context_values = _fixture_tensor(
+        inputs["future_known"]["context"], device
+    )
+    query_values = _fixture_tensor(inputs["future_known"]["query"], device)
+    x_context = TableTensor.from_tensor(
+        torch.cat([past_values, known_context_values], dim=-1),
+        columns=(
+            inputs["past_only"]["columns"] + inputs["future_known"]["columns"]
+        ),
+    )
+    x_query = TableTensor.from_tensor(
+        query_values,
+        columns=inputs["future_known"]["columns"],
+    )
+    y_context = TableTensor.from_tensor(
+        target_values,
+        columns=inputs["targets"]["columns"],
+    )
+
+    actual = model(x_context, y_context, x_query)
+
+    expected = actual.numerical.new_tensor(model_fixture["expected"]["values"])
+    assert actual.columns[Stype.numerical] == tuple(
+        model_fixture["expected"]["columns"]
+    )
+    torch.testing.assert_close(actual.numerical, expected)
+
+
 @pytest.mark.parametrize(
-    ("patch_cpm_mask", "expected_values"),
-    [
-        (
-            None,
-            [
-                2.1499414443969727,
-                2.198551654815674,
-                2.5312085151672363,
-                2.213311195373535,
-                2.203420400619507,
-                2.3626081943511963,
-                2.4190330505371094,
-                2.0732791423797607,
-                2.19990611076355,
-                2.355543375015259,
-                2.4288644790649414,
-                2.0759785175323486,
-            ],
-        ),
-        (
-            [[False, True, True]],
-            [
-                2.1499414443969727,
-                2.198551654815674,
-                2.5312085151672363,
-                2.213311195373535,
-                2.232093095779419,
-                2.3455402851104736,
-                2.385751962661743,
-                2.1393465995788574,
-                2.3029558658599854,
-                2.3969945907592773,
-                2.4412965774536133,
-                2.228076457977295,
-            ],
-        ),
-    ],
+    ("context_length", "horizon"),
+    [(1, 1), (2, 4), (3, 5)],
 )
+@withCUDA
+def test_public_forecast_geometry(
+    device: torch.device,
+    context_length: int,
+    horizon: int,
+) -> None:
+    model = _public_model(device)
+    x_context = TableTensor.from_tensor(
+        torch.empty(context_length, 0, device=device),
+        columns=[],
+    )
+    x_query = TableTensor.from_tensor(
+        torch.empty(horizon, 0, device=device),
+        columns=[],
+    )
+    y_context = TableTensor.from_tensor(
+        torch.arange(
+            1,
+            2 * context_length + 1,
+            dtype=torch.float32,
+            device=device,
+        ).reshape(context_length, 2),
+        columns=["first", "second"],
+    )
+
+    out = model(x_context, y_context, x_query)
+
+    assert out.size() == (horizon, 6)
+    assert out.numerical.isfinite().all()
+
+
+@withCUDA
+def test_fit_snapshots_and_replaces_context(device: torch.device) -> None:
+    model = _public_model(device)
+    context_values = torch.arange(
+        12, dtype=torch.float32, device=device
+    ).reshape(6, 2)
+    target_values = torch.arange(
+        12, dtype=torch.float32, device=device
+    ).reshape(6, 2)
+    query_values = torch.arange(
+        3, dtype=torch.float32, device=device
+    ).unsqueeze(-1)
+    x_context = TableTensor.from_tensor(
+        context_values,
+        columns=["past", "known"],
+    )
+    y_context = TableTensor.from_tensor(
+        target_values,
+        columns=["first", "second"],
+    )
+    x_query = TableTensor.from_tensor(query_values, columns=["known"])
+
+    model.fit(x_context, y_context)
+    expected = model.predict(x_query)
+    context_values.add_(1000.0)
+    target_values.neg_()
+
+    actual = model.predict(x_query)
+    repeated = model.predict(x_query)
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+    torch.testing.assert_close(repeated.numerical, expected.numerical)
+
+    next_context = TableTensor.from_tensor(
+        torch.arange(12, dtype=torch.float32, device=device).reshape(6, 2),
+        columns=["past", "known"],
+    )
+    next_target = TableTensor.from_tensor(
+        torch.arange(12, dtype=torch.float32, device=device).reshape(6, 2)
+        + 20.0,
+        columns=["first", "second"],
+    )
+    model.fit(next_context, next_target)
+    refitted = model.predict(x_query)
+    one_shot = model(next_context, next_target, x_query)
+    torch.testing.assert_close(refitted.numerical, one_shot.numerical)
+
+
+@withCUDA
+def test_future_covariate_order_is_semantic(device: torch.device) -> None:
+    model = _public_model(device)
+    x_context = TableTensor.from_tensor(
+        torch.arange(18, dtype=torch.float32, device=device).reshape(6, 3),
+        columns=["past", "known_a", "known_b"],
+    )
+    y_context = TableTensor.from_tensor(
+        torch.arange(6, dtype=torch.float32, device=device).unsqueeze(-1),
+        columns=["target"],
+    )
+    query_values = torch.arange(6, dtype=torch.float32, device=device).reshape(
+        3, 2
+    )
+    query_ab = TableTensor.from_tensor(
+        query_values,
+        columns=["known_a", "known_b"],
+    )
+    query_ba = TableTensor.from_tensor(
+        query_values.flip(-1),
+        columns=["known_b", "known_a"],
+    )
+
+    out_ab = model(x_context, y_context, query_ab)
+    out_ba = model(x_context, y_context, query_ba)
+
+    torch.testing.assert_close(out_ab.numerical, out_ba.numerical)
+    unknown = TableTensor.from_tensor(
+        torch.zeros(3, 1, device=device),
+        columns=["unknown"],
+    )
+    with pytest.raises(ValueError, match="subset"):
+        model(x_context, y_context, unknown)
+
+
+@withCUDA
+def test_public_model_masks_missing_series(device: torch.device) -> None:
+    model = _public_model(device)
+    x_context = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [float("nan"), 1.0],
+                [float("nan"), 2.0],
+                [float("nan"), float("inf")],
+                [float("nan"), 4.0],
+                [float("nan"), 5.0],
+            ],
+            device=device,
+        ),
+        columns=["missing_past", "known"],
+    )
+    x_query = TableTensor.from_tensor(
+        torch.tensor([[6.0], [float("nan")], [8.0]], device=device),
+        columns=["known"],
+    )
+    y_context = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [float("nan"), float("nan")],
+                [float("nan"), float("nan")],
+                [3.0, float("nan")],
+                [4.0, float("nan")],
+                [5.0, float("nan")],
+            ],
+            device=device,
+        ),
+        columns=["partial", "missing"],
+    )
+
+    out = model(x_context, y_context, x_query)
+
+    assert out.size() == (3, 6)
+    assert out.numerical.isfinite().all()
+
+
+@withCUDA
+def test_public_model_bfloat16(device: torch.device) -> None:
+    model = TimesFM3(pretrained=False, device="meta")
+    model.model = _internal_model(device, dtype=torch.bfloat16).eval()
+    x_context = TableTensor.from_tensor(
+        torch.arange(12, device=device, dtype=torch.bfloat16).reshape(6, 2),
+        columns=["past", "known"],
+    )
+    x_query = TableTensor.from_tensor(
+        torch.arange(3, device=device, dtype=torch.bfloat16).unsqueeze(-1),
+        columns=["known"],
+    )
+    y_context = TableTensor.from_tensor(
+        torch.arange(6, device=device, dtype=torch.bfloat16).unsqueeze(-1),
+        columns=["target"],
+    )
+
+    one_shot = model(x_context, y_context, x_query)
+    model.fit(x_context, y_context)
+    cached = model.predict(x_query)
+
+    assert one_shot.dtype == torch.bfloat16
+    assert one_shot.device == device
+    assert one_shot.numerical.isfinite().all()
+    torch.testing.assert_close(cached.numerical, one_shot.numerical)
+
+
+@pytest.mark.parametrize("case_index", [0, 1])
 @withCUDA
 def test_internal_model_matches_pinned_upstream(
     device: torch.device,
-    patch_cpm_mask: list[list[bool]] | None,
-    expected_values: list[float],
+    case_index: int,
 ) -> None:
+    fixture = _reference_fixture()["internal"]["forward"]
+    inputs = fixture["inputs"]
     model = _golden_model(device)
-    values = torch.tensor(
-        [[[[1.0, 3.0], [0.0, 0.0], [0.0, 0.0]]]],
-        device=device,
-    )
-    masks = torch.tensor(
-        [[[[False, False], [True, True], [True, True]]]],
-        device=device,
-    )
-    patch_is_target = torch.ones(1, 1, 3, dtype=torch.bool, device=device)
+    values = torch.tensor(inputs["values"], device=device)
+    masks = torch.tensor(inputs["masks"], device=device)
+    patch_is_target = torch.tensor(inputs["patch_is_target"], device=device)
+    patch_cpm_mask = inputs["patch_cpm_masks"][case_index]
     cpm_mask = (
         None
         if patch_cpm_mask is None
@@ -497,8 +684,7 @@ def test_internal_model_matches_pinned_upstream(
             patch_cpm_mask=cpm_mask,
         )["logits"]
 
-    # Generated by google-research/timesfm@e31dadd with identical weights.
-    expected = actual.new_tensor(expected_values).reshape(1, 1, 3, 4, 1)
+    expected = actual.new_tensor(fixture["outputs"][case_index])
     torch.testing.assert_close(actual, expected)
 
 
@@ -506,55 +692,30 @@ def test_internal_model_matches_pinned_upstream(
 def test_internal_model_decode_matches_pinned_upstream(
     device: torch.device,
 ) -> None:
+    fixture = _reference_fixture()["internal"]["decode"]
+    inputs = fixture["inputs"]
     model = _golden_model(device)
-    target = torch.tensor([[[1.0, 2.0, 5.0, 3.0, 8.0]]], device=device)
-    past_only_covariates = torch.tensor(
-        [[[3.0, 1.0, 4.0, 1.0, 5.0]]],
-        device=device,
-    )
-    past_future_covariates = torch.tensor(
-        [[[5.0, 6.0, 4.0, 9.0, 7.0, 8.0, 6.0, 10.0]]],
-        device=device,
-    )
-    mask = torch.tensor(
-        [[False, False, False, True, False]],
-        device=device,
-    )
-    past_only_mask = torch.tensor(
-        [[[False, True, False, False, False]]],
-        device=device,
-    )
-    past_future_mask = torch.tensor(
-        [[[False, False, False, False, False, False, True, False]]],
-        device=device,
-    )
 
     result = model.decode(
-        target,
-        horizon=99,
-        past_only_covariates=past_only_covariates,
-        past_future_covariates=past_future_covariates,
-        past_only_mask=past_only_mask,
-        past_future_mask=past_future_mask,
-        mask=mask,
+        torch.tensor(inputs["target"], device=device),
+        horizon=inputs["horizon"],
+        past_only_covariates=torch.tensor(
+            inputs["past_only_covariates"], device=device
+        ),
+        past_future_covariates=torch.tensor(
+            inputs["past_future_covariates"], device=device
+        ),
+        past_only_mask=torch.tensor(inputs["past_only_mask"], device=device),
+        past_future_mask=torch.tensor(
+            inputs["past_future_mask"], device=device
+        ),
+        mask=torch.tensor(inputs["mask"], device=device),
         return_aux_outputs=True,
     )
 
     assert isinstance(result, tuple)
     actual, auxiliary = result
-    expected = actual.new_tensor(
-        [
-            10.019998550415039,
-            11.902892112731934,
-            13.782285690307617,
-            5.5,
-            6.0,
-            6.5,
-            5.632140159606934,
-            5.58524227142334,
-            6.072176456451416,
-        ]
-    ).reshape(1, 3, 3, 1)
+    expected = actual.new_tensor(fixture["output"])
     torch.testing.assert_close(actual, expected)
     assert not actual.requires_grad
     assert auxiliary["logits"].shape == (1, 3, 5, 4, 1)
@@ -565,30 +726,21 @@ def test_internal_model_decode_matches_pinned_upstream(
 def test_internal_model_decode_without_stitching_matches_pinned_upstream(
     device: torch.device,
 ) -> None:
-    model = _golden_model(
-        device,
-        use_stitching=False,
-        use_linear_detrending=False,
-        use_frozen_running_stats=True,
+    reference = _reference_fixture()
+    fixture = reference["internal"]["decode_without_stitching"]
+    inputs = fixture["inputs"]
+    model = _TimesFM3(**fixture["config"], device=device).eval()
+    _load_reference_weights(
+        model, reference["internal"], reference["weight_recipe"]
     )
-    target = torch.tensor([[[1.0, 3.0, 2.0, 5.0]]], device=device)
-    target_mask = torch.tensor(
-        [[[False, False, True, False]]],
-        device=device,
+    actual = model.decode(
+        torch.tensor(inputs["target"], device=device),
+        horizon=inputs["horizon"],
+        target_mask=torch.tensor(inputs["target_mask"], device=device),
     )
-
-    actual = model.decode(target, horizon=5, target_mask=target_mask)
 
     assert isinstance(actual, torch.Tensor)
-    expected = actual.new_tensor(
-        [
-            3.2529115676879883,
-            3.369866371154785,
-            3.794128179550171,
-            3.2906386852264404,
-            3.4670321941375732,
-        ]
-    ).reshape(1, 1, 5, 1)
+    expected = actual.new_tensor(fixture["output"])
     torch.testing.assert_close(actual, expected)
     assert not actual.requires_grad
 
