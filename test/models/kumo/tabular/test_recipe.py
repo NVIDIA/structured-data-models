@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 import sdm.processing as sp
@@ -132,18 +133,23 @@ def test_default_recipe_reduces_outputs_per_task() -> None:
     torch.testing.assert_close(output.numerical.sum(dim=-1), torch.ones(5))
 
 
-def test_default_recipe_inverts_target_with_distinct_member_rows() -> None:
+@pytest.mark.parametrize("num_members", [1, 2, 5])
+def test_default_recipe_inverts_target_with_distinct_member_rows(
+    num_members: int,
+) -> None:
     # Mirrors `RecipeExecution`'s target layout: one physical group
     # stacking a distinct row per ensemble member (rather than every
     # member sharing a single stored row).
     target = TableTensor.from_tensor(torch.randn(5, 1), columns=("target",))
     group = TableTensor.from_tensor(
-        target.numerical.unsqueeze(0).expand(5, *target.numerical.size()),
+        target.numerical.unsqueeze(0).expand(
+            num_members, *target.numerical.size()
+        ),
         columns=target.columns[Stype.numerical],
     )
     ensemble = EnsembleTable(
         groups=(group,),
-        locations=tuple((0, i) for i in range(5)),
+        locations=tuple((0, i) for i in range(num_members)),
     )
     recipe = KumoTabular.default_recipe()
 

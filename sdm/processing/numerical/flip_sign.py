@@ -56,38 +56,21 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
                 f"{len(ensemble_table)}."
             )
 
-        # Every member already occupies its own storage position (no two
-        # members share one row), so signs can be applied in place without
-        # disturbing the group/position layout that position-dependent
-        # fitted processors (e.g. an adapted `Standardize`) rely on.
-        member_ids_by_group: list[list[int]] = [
-            [] for _ in range(ensemble_table.num_groups)
-        ]
-        preserves_storage = True
-        for member_id, (group_id, position) in enumerate(
-            ensemble_table._locations
-        ):
-            if position != len(member_ids_by_group[group_id]):
-                preserves_storage = False
-                break
-            member_ids_by_group[group_id].append(member_id)
-
-        groups = tuple(ensemble_table._iter_groups())
-        if preserves_storage and all(
-            len(member_ids) == group.size(0)
-            for member_ids, group in zip(member_ids_by_group, groups)
-        ):
-            new_groups = [
-                group.replace_blocks(
-                    numerical=group.numerical
-                    * torch.stack(
-                        [self._signs[member_id] for member_id in member_ids],
-                        dim=0,
-                    )
+        # When every member already owns a distinct row in the single
+        # physical group, signs can be applied in place without disturbing
+        # the group/position layout that position-dependent fitted
+        # processors (e.g. an adapted `Standardize`) rely on.
+        if ensemble_table.num_groups == 1:
+            group = next(ensemble_table._iter_groups())
+            positions = tuple(
+                position for _, position in ensemble_table._locations
+            )
+            if positions == tuple(range(group.size(0))):
+                signs = torch.stack(list(self._signs), dim=0)
+                new_group = group.replace_blocks(
+                    numerical=group.numerical * signs
                 )
-                for group, member_ids in zip(groups, member_ids_by_group)
-            ]
-            return ensemble_table.replace_groups(new_groups)
+                return ensemble_table.replace_groups([new_group])
 
         # Fallback: some members share a storage position but must diverge
         # after negation, so each member becomes its own group.
