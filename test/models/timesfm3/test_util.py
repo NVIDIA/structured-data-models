@@ -176,6 +176,42 @@ def test_update_running_stats(device: torch.device) -> None:
 
 
 @withCUDA
+def test_update_running_stats_preserves_upstream_operation_order(
+    device: torch.device,
+) -> None:
+    n = torch.tensor([[11.0]], device=device)
+    mu = torch.tensor([[-92.03504943847656]], device=device)
+    sigma = torch.tensor([[6.244617462158203]], device=device)
+    x = torch.tensor(
+        [[[-17.37119483947754, -76.65009307861328, 79.12385559082031]]],
+        device=device,
+    )
+    mask = torch.zeros_like(x, dtype=torch.bool)
+
+    _, actual_mu, actual_sigma = update_running_stats(n, mu, sigma, x, mask)
+
+    inc_n = (~mask).float().sum(dim=-1)
+    inc_mu = x.mean(dim=-1)
+    inc_sigma = ((x - inc_mu.unsqueeze(-1)).square().mean(dim=-1)).sqrt()
+    new_n = n + inc_n
+    expected_sigma = (
+        (
+            n * sigma * sigma
+            + inc_n * inc_sigma * inc_sigma
+            + n * (mu - actual_mu) * (mu - actual_mu)
+            + inc_n * (inc_mu - actual_mu) * (inc_mu - actual_mu)
+        )
+        / new_n
+    ).sqrt()
+    torch.testing.assert_close(
+        actual_sigma,
+        expected_sigma,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+@withCUDA
 def test_update_running_stats_fully_masked(device: torch.device) -> None:
     n = torch.tensor([[3.0]], device=device)
     mu = torch.tensor([[2.0]], device=device)

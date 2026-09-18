@@ -265,10 +265,10 @@ def update_running_stats(
         new_n == 0,
         0.0,
         (
-            n * sigma.square()
-            + inc_n * inc_sigma.square()
-            + n * (mu - new_mu).square()
-            + inc_n * (inc_mu - new_mu).square()
+            n * sigma * sigma
+            + inc_n * inc_sigma * inc_sigma
+            + n * (mu - new_mu) * (mu - new_mu)
+            + inc_n * (inc_mu - new_mu) * (inc_mu - new_mu)
         )
         / new_n,
     ).sqrt()
