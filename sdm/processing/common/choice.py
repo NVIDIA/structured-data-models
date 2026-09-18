@@ -58,19 +58,19 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         if self.method == "round_robin":
             return tuple(
                 member_id % len(self.options)
-                for member_id in range(ensemble_table.num_members)
+                for member_id in range(len(ensemble_table))
             )
 
         assert self.method == "random"
         device = (
-            next(iter(ensemble_table)).device
+            next(ensemble_table._iter_groups()).device
             if generator is None
             else generator.device
         )
         return tuple(
             torch.randint(
                 len(self.options),
-                (ensemble_table.num_members,),
+                (len(ensemble_table),),
                 generator=generator,
                 device=device,
             ).tolist()
@@ -84,7 +84,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         for member_id, option_id in enumerate(self._option_ids):
             member_ids_by_option.setdefault(option_id, []).append(member_id)
         return {
-            option_id: ensemble_table.select_members(member_ids)
+            option_id: ensemble_table[member_ids]
             for option_id, member_ids in sorted(member_ids_by_option.items())
         }
 
@@ -107,11 +107,11 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         )
 
     def _check_num_members(self, ensemble_table: EnsembleTable) -> None:
-        if len(self._option_ids) != ensemble_table.num_members:
+        if len(self._option_ids) != len(ensemble_table):
             raise RuntimeError(
                 f"{self.__class__.__name__!r} was fitted with "
                 f"{len(self._option_ids)} ensemble members, but got "
-                f"{ensemble_table.num_members}."
+                f"{len(ensemble_table)}."
             )
 
     def _fit_ensemble(

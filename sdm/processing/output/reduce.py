@@ -54,10 +54,10 @@ class ReduceEstimators(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if ensemble_table.num_members == 0:
+        if len(ensemble_table) == 0:
             raise ValueError("Expected at least one ensemble member.")
 
-        reference = ensemble_table.table(0)
+        reference = ensemble_table[0]
         extra = reference.active_stypes - self.handles_stypes
         if extra:
             found = ", ".join(sorted(extra))
@@ -74,7 +74,7 @@ class ReduceEstimators(EnsembleProcessor):
                 for group_id in range(ensemble_table.num_groups)
             ]
         else:
-            groups = list(ensemble_table)
+            groups = list(ensemble_table._iter_groups())
 
         numerical_groups: list[Tensor] = []
         for group in groups:
@@ -125,7 +125,7 @@ class ReduceEstimators(EnsembleProcessor):
                 )
                 total = partial if total is None else total + partial
             assert total is not None
-            reduced = total / ensemble_table.num_members
+            reduced = total / len(ensemble_table)
         else:
             assert self.method == "trimmed_mean"
             members = torch.cat(numerical_groups, dim=0)  # [E, ..., R, O]
