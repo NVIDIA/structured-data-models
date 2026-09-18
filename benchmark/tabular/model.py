@@ -25,7 +25,11 @@ from tabarena.benchmark.experiment import OOFExperimentRunner
 import sdm
 import sdm.processing as sp
 from sdm.models.kumo.tabular.model import scale_ecoc_estimators
-from sdm.models.kumo.tabular.recipe import Normalize, default_recipe
+from sdm.models.kumo.tabular.recipe import (
+    Normalize,
+    NumericalMissing,
+    default_recipe,
+)
 
 Task = Literal["classification", "regression"]
 
@@ -405,11 +409,9 @@ class SDMKumoTabularModel(SDMModel):
         names = params["recipe_ensemble"]
         if not names:
             return super()._recipes(params)
+        missing = {"numerical_missing": params["numerical_missing"]}
         return {
-            name: default_recipe(
-                numerical_missing=params["numerical_missing"],
-                **parse_recipe(name),
-            )
+            name: default_recipe(**(missing | parse_recipe(name)))
             for name in names
         }
 
@@ -462,12 +464,15 @@ def parse_recipe(name: str) -> dict[str, Any]:
     """default_recipe keyword arguments from a '+'-joined name.
 
     Tokens: a numeric transform (round_robin, identity, power, squash or
-    quantile) and catshuffle<N> for ``shuffle_categories_max``.
+    quantile), a missing-value mode (dispatch, nan, mix or impute) and
+    catshuffle<N> for ``shuffle_categories_max``.
     """
     kwargs: dict[str, Any] = {}
     for token in name.split("+"):
         if token in get_args(Normalize):
             kwargs["normalize"] = token
+        elif token in get_args(NumericalMissing):
+            kwargs["numerical_missing"] = token
         elif token.startswith("catshuffle"):
             kwargs["shuffle_categories_max"] = int(
                 token.removeprefix("catshuffle")

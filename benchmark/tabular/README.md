@@ -63,7 +63,7 @@ python -m benchmark.tabular.tabarena.main \
   --cache_root /path/to/cache
 ```
 
-`--recipe_ensemble` blends several kumo-tabular recipes. Each recipe is fitted on the folds of the training rows (3 by default, stratified for classification), AutoGluon's ensemble selection on the out-of-fold predictions sets the weights, and the weighted members are refit on the full table at prediction time. Recipes are `+`-joined tokens: `round_robin`, `identity`, `power`, `squash` or `quantile` for the numeric transform, and `catshuffle<N>` to permute the codes of categoricals with at most N levels per estimator:
+`--recipe_ensemble` blends several kumo-tabular recipes. Each recipe is fitted on the folds of the training rows (3 by default, stratified for classification), AutoGluon's ensemble selection on the out-of-fold predictions sets the weights, and the weighted members are refit on the full table at prediction time. Recipes are `+`-joined tokens: `round_robin`, `identity`, `power`, `squash` or `quantile` for the numeric transform, `dispatch`, `nan`, `mix` or `impute` to override `--numerical_missing` for that member, and `catshuffle<N>` to permute the codes of categoricals with at most N levels per estimator:
 
 ```bash
 python -m benchmark.tabular.tabarena.main \
