@@ -133,7 +133,7 @@ class RecipeExecution:
             if related_tables is not None:
                 related_tables_i = RelatedTables(
                     tables={
-                        name: table.table(member_id)
+                        name: table.member(member_id)
                         for name, table in related_ensembles.items()
                     },
                     relationships=related_tables.relationships,
@@ -141,8 +141,8 @@ class RecipeExecution:
                 )
             members.append(
                 MemberContext(
-                    x=x.table(member_id),
-                    y=y.table(member_id),
+                    x=x.member(member_id),
+                    y=y.member(member_id),
                     related_tables=related_tables_i,
                 )
             )
@@ -190,7 +190,7 @@ class RecipeExecution:
             if related_tables is not None:
                 related_tables_i = RelatedTables(
                     tables={
-                        name: table.table(member_id)
+                        name: table.member(member_id)
                         for name, table in related_ensembles.items()
                     },
                     relationships=related_tables.relationships,
@@ -198,7 +198,7 @@ class RecipeExecution:
                 )
             members.append(
                 MemberQuery(
-                    x=x.table(member_id),
+                    x=x.member(member_id),
                     related_tables=related_tables_i,
                 )
             )
@@ -239,7 +239,7 @@ class RecipeExecution:
         if not isinstance(self.recipe.target, EnsembleInvertibleMixin):
             raise RuntimeError("Target recipe is not invertible")
         table = self.recipe.target.inverse_transform_ensemble(table)
-        return tuple(table.table(i) for i in range(table.num_members))
+        return tuple(table.member(i) for i in range(table.num_members))
 
     def transform_output(
         self,

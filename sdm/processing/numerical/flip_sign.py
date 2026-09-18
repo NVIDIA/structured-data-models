@@ -36,7 +36,7 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         # TODO: Vectorize sign draws and application over ensemble members.
         signs = []
         for member_id in range(ensemble_table.num_members):
-            numerical = ensemble_table.table(member_id).numerical
+            numerical = ensemble_table.member(member_id).numerical
             sign = numerical.new_empty(
                 (*numerical.size()[:-2], 1, numerical.size(-1))
             )
@@ -57,7 +57,7 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
             )
         tables: list[TableTensor] = []
         for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
+            table = ensemble_table.member(member_id)
             tables.append(
                 table.replace_blocks(
                     numerical=table.numerical * self._signs[member_id]

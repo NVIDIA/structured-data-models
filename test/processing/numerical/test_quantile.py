@@ -259,8 +259,8 @@ def test_quantile_transform_adapter_matches_grouped_tables(
         expected_restored.append(reference.inverse_transform(expected_context))
 
     for member_id, table_id in enumerate(member_table_ids):
-        assert context_output.table(member_id).equal(
+        assert context_output.member(member_id).equal(
             expected_contexts[table_id]
         )
-        assert query_output.table(member_id).equal(expected_queries[table_id])
-        assert restored.table(member_id).equal(expected_restored[table_id])
+        assert query_output.member(member_id).equal(expected_queries[table_id])
+        assert restored.member(member_id).equal(expected_restored[table_id])

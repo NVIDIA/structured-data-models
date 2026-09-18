@@ -157,14 +157,14 @@ def test_choice_round_robin_routes_members() -> None:
     for member_id in range(8):
         offset = 10 * (member_id % 2)
         torch.testing.assert_close(
-            transformed.table(member_id).numerical,
+            transformed.member(member_id).numerical,
             context.numerical + offset,
         )
         torch.testing.assert_close(
-            query_transformed.table(member_id).numerical,
+            query_transformed.member(member_id).numerical,
             query.numerical + offset,
         )
-        assert restored.table(member_id).equal(context)
+        assert restored.member(member_id).equal(context)
 
 
 def test_choice_fit_ensemble_fits_selected_options() -> None:
@@ -178,8 +178,8 @@ def test_choice_fit_ensemble_fits_selected_options() -> None:
 
     for member_id in range(table.num_members):
         torch.testing.assert_close(
-            transformed.table(member_id).numerical,
-            expected.table(member_id).numerical,
+            transformed.member(member_id).numerical,
+            expected.member(member_id).numerical,
         )
 
 
@@ -202,7 +202,7 @@ def test_choice_fits_options_on_selected_members() -> None:
 
     for member_id, source in enumerate(tables):
         torch.testing.assert_close(
-            output.table(member_id).numerical,
+            output.member(member_id).numerical,
             source.numerical + 2,
         )
 
@@ -226,7 +226,7 @@ def test_nested_choice_routes_selected_members_locally() -> None:
     for member_id in range(8):
         offset = 10 * ((member_id // 2) % 3 + 1) if member_id % 2 == 0 else 100
         torch.testing.assert_close(
-            output.table(member_id).numerical,
+            output.member(member_id).numerical,
             _table().numerical + offset,
         )
 

@@ -61,7 +61,9 @@ class InvertibleIdentityEnsembleProcessor(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        return EnsembleTable.from_table(ensemble_table.table(0), num_members=1)
+        return EnsembleTable.from_table(
+            ensemble_table.member(0), num_members=1
+        )
 
 
 class _StatelessProcessor(Processor, InvertibleMixin):
@@ -94,9 +96,9 @@ def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
 
     assert output is ensemble_table
     assert output.num_members == 3
-    assert output.table(0).columns == second.columns
-    assert output.table(1).columns == first.columns
-    assert output.table(2).columns == second.columns
+    assert output.member(0).columns == second.columns
+    assert output.member(1).columns == first.columns
+    assert output.member(2).columns == second.columns
     assert processor.transform_ensemble(ensemble_table) is ensemble_table
 
 
@@ -124,7 +126,7 @@ def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
     output = processor.inverse_transform_ensemble(ensemble_table)
 
     assert output.num_members == 1
-    assert output.table(0).equal(table)
+    assert output.member(0).equal(table)
     assert processor.inverse_transform(table).equal(table)
 
 
@@ -203,9 +205,9 @@ def test_adapter_fits_each_group_separately() -> None:
     output = processor.transform_ensemble(ensemble_table)
 
     assert output.num_members == 3
-    assert output.table(0).numerical.tolist() == [[-1.0], [1.0]]
-    assert output.table(1).numerical.tolist() == [[-1.0], [1.0]]
-    assert output.table(2).equal(output.table(0))
+    assert output.member(0).numerical.tolist() == [[-1.0], [1.0]]
+    assert output.member(1).numerical.tolist() == [[-1.0], [1.0]]
+    assert output.member(2).equal(output.member(0))
 
 
 def test_adapter_inverse_restores_input() -> None:
@@ -216,7 +218,9 @@ def test_adapter_inverse_restores_input() -> None:
     restored = processor.inverse_transform_ensemble(output)
 
     for member_id in range(ensemble_table.num_members):
-        assert restored.table(member_id).equal(ensemble_table.table(member_id))
+        assert restored.member(member_id).equal(
+            ensemble_table.member(member_id)
+        )
 
 
 def test_stateless_adapter_supports_transform_and_inverse() -> None:
