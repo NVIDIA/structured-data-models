@@ -4,65 +4,68 @@
 import sdm.processing as sp
 
 
-def _normalize() -> list[sp.Processor]:
-    return [
+def _in_double(*processors: object) -> sp.Sequential:
+    """Run ``processors`` on a double-precision numerical block."""
+    return sp.Sequential(
         sp.Callable(
             lambda table: table.replace_blocks(
                 numerical=table.numerical.double()
             )
         ),
-        sp.Standardize(eps=1e-6),
-        sp.Clip(min_value=-100.0, max_value=100.0),
-        sp.Choice(
-            sp.Identity(),
-            sp.PowerTransform(),
-            [
-                sp.RobustScale(),
-                sp.ClipSoft(3.0),
-            ],
-            method="round_robin",
+        *processors,
+        sp.Callable(
+            lambda table: table.replace_blocks(
+                numerical=table.numerical.float()
+            )
         ),
-        sp.ClipSigma(threshold=4.0),
-    ]
+    )
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
         features=[
             sp.StypeDispatch(
+                numerical=[
+                    sp.DropConstantColumns(),
+                    _in_double(
+                        sp.Standardize(eps=1e-6),
+                        sp.Clip(min_value=-100.0, max_value=100.0),
+                        sp.Choice(
+                            sp.Identity(),
+                            sp.PowerTransform(),
+                            [
+                                sp.RobustScale(),
+                                sp.ClipSoft(3.0),
+                            ],
+                            method="round_robin",
+                        ),
+                        sp.ClipSigma(threshold=4.0),
+                        sp.FlipSign(),
+                    ),
+                ],
                 categorical=[
                     sp.AlignCategories(sort_by="value"),
                     sp.AddCategoryCounts(),
-                ],
-            ),
-            sp.StypeDispatch(
-                numerical=[
-                    sp.DropConstantColumns(),
-                    *_normalize(),
-                    sp.FlipSign(),
-                    sp.Callable(
-                        lambda table: table.replace_blocks(
-                            numerical=table.numerical.float()
-                        )
-                    ),
-                ],
-                categorical=[
                     sp.ToNumerical(),
                     sp.DropConstantColumns(),
-                    *_normalize(),
-                    sp.Callable(
-                        lambda table: table.replace_blocks(
-                            numerical=table.numerical.float()
-                        )
+                    _in_double(
+                        sp.Standardize(eps=1e-6),
+                        sp.Clip(min_value=-100.0, max_value=100.0),
+                        sp.Choice(
+                            sp.Identity(),
+                            sp.PowerTransform(),
+                            [
+                                sp.RobustScale(),
+                                sp.ClipSoft(3.0),
+                            ],
+                            method="round_robin",
+                        ),
+                        sp.ClipSigma(threshold=4.0),
                     ),
                 ],
             ),
-            sp.StypeDispatch(
-                numerical=[
-                    sp.ShuffleColumns(method="latin"),
-                    sp.SelectColumns(500, method="first"),
-                ],
-            ),
+            sp.ShuffleColumns(method="latin"),
+            sp.SelectColumns(500, method="first"),
         ],
         target=[
             sp.StypeDispatch(
