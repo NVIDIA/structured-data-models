@@ -35,7 +35,12 @@ parser.add_argument(
     "--model", choices=tuple(MODEL_CONFIGS), default="tabiclv2"
 )
 parser.add_argument("--dataset-path", type=Path, required=True)
-parser.add_argument("--dataset")
+parser.add_argument(
+    "--dataset", action="append", help="Run only these datasets; repeatable."
+)
+parser.add_argument(
+    "--seeds", type=int, default=SEED_NUM, help="TALENT seeds per dataset."
+)
 parser.add_argument(
     "--output-dir", type=Path, default=BENCHMARK_DIR / "talent_out"
 )
@@ -69,7 +74,7 @@ if args.model != "kumo-tabular" and (
 register_sdm_method()
 root = args.dataset_path.resolve()
 datasets = (
-    [args.dataset]
+    args.dataset
     if args.dataset
     else sorted(
         path.name
@@ -111,7 +116,7 @@ for dataset in datasets:
     if (
         cached.get("status") in {"success", "unsupported"}
         and cached.get("config") == config
-        and cached.get("seed_num") == SEED_NUM
+        and cached.get("seed_num") == args.seeds
     ):
         if cached.get("method") != method:
             cached["method"] = method
@@ -127,7 +132,7 @@ for dataset in datasets:
             dataset,
             str(root),
             config=config,
-            seed_num=SEED_NUM,
+            seed_num=args.seeds,
             tune=False,
             tune_threshold=True,
             threshold_metric="f1",
@@ -138,7 +143,7 @@ for dataset in datasets:
             "model": args.model,
             "method": method,
             "config": config,
-            "seed_num": SEED_NUM,
+            "seed_num": args.seeds,
             "result": result.to_dict(),
         }
     except UnsupportedDatasetError as error:
@@ -148,7 +153,7 @@ for dataset in datasets:
             "model": args.model,
             "method": method,
             "config": config,
-            "seed_num": SEED_NUM,
+            "seed_num": args.seeds,
             "error": str(error),
         }
     except Exception:  # noqa: BLE001
