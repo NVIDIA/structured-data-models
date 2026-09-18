@@ -19,6 +19,15 @@ class ClipSigma(Processor):
     Args:
         threshold: Positive z-score multiplier setting how many standard
             deviations from the mean mark the soft clipping bounds.
+
+    .. plot:: plots/clipping.py clip_sigma
+        :filename-prefix: clip_sigma
+        :alt: Identity near the center, with logarithmically growing tails.
+
+        Thresholds fitted on 401 evenly spaced context values from -2 to 2.
+        Dotted lines mark fitted bounds, not output limits: logarithmic
+        tails continue beyond them. The dashed line shows the unchanged
+        input; query values are transformed without refitting.
     """
 
     handles_stypes = frozenset({Stype.numerical})

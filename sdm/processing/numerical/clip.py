@@ -16,6 +16,13 @@ class Clip(Processor):
     Args:
         min_value: Inclusive lower bound for every numerical value.
         max_value: Inclusive upper bound for every numerical value.
+
+    .. plot:: plots/clipping.py clip
+        :filename-prefix: clip
+        :alt: Identity between fixed bounds, with flat tails outside them.
+
+        Symmetric intervals with bounds at ±0.5, ±1, and ±2. Dotted lines
+        mark the hard limits; the dashed line shows the unchanged input.
     """
 
     handles_stypes = frozenset({Stype.numerical})

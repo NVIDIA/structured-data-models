@@ -24,6 +24,7 @@ except PackageNotFoundError:
 version = release
 
 extensions = [
+    "matplotlib.sphinxext.plot_directive",
     "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
@@ -42,6 +43,9 @@ html_theme_options = {
 }
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+plot_formats = ["svg", "pdf"]
+plot_html_show_source_link = False
+plot_html_show_formats = False
 autosummary_generate = True
 autosummary_context = {"import_module": importlib.import_module}
 autodoc_member_order = "bysource"

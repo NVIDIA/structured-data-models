@@ -18,6 +18,15 @@ class ClipQuantiles(Processor):
         q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.
         q_high: Upper quantile in ``[0, 1]`` used as the per-column upper
             bound. Must satisfy ``0 <= q_low <= q_high <= 1``.
+
+    .. plot:: plots/clipping.py clip_quantiles
+        :filename-prefix: clip_quantiles
+        :alt: Identity between fitted quantiles, with flat tails outside them.
+
+        Quantiles fitted on 401 evenly spaced context values from -2 to 2,
+        giving bounds at ±0.5, ±1, and ±2. Dotted lines mark the hard limits;
+        the dashed line shows the unchanged input. Query values are
+        transformed without refitting.
     """
 
     handles_stypes = frozenset({Stype.numerical})
