@@ -149,6 +149,42 @@ def test_fit_predict(
     )
 
 
+@pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("num_estimators", [1, 2, 3, 4, 5])
+def test_default_recipe_ensembling_forward_matches_fit_predict(
+    task: Literal["classification", "regression"],
+    num_estimators: int,
+) -> None:
+    # Exercises the model's actual `default_recipe()` (unlike the other
+    # tests in this module, which use a minimal deterministic recipe): it
+    # is the only place stochastic ensemble processors like `FlipSign` and
+    # `Choice` run, and their per-member group bookkeeping only diverges
+    # from a single-estimator run once `num_estimators > 1`.
+    model = _build(task)
+    R_context, C = 12, 6
+
+    torch.manual_seed(0)
+    x_context = torch.randn(R_context, C)
+    x_query = torch.randn(5, C)
+    if task == "regression":
+        y_context = torch.randn(R_context, 1)
+    else:
+        y_context = torch.arange(R_context).remainder(3).view(-1, 1)
+
+    torch.manual_seed(1)
+    expected = model(
+        x_context, y_context, x_query, num_estimators=num_estimators
+    )
+    assert expected.numerical.isfinite().all()
+
+    torch.manual_seed(1)
+    model.fit(x_context, y_context, num_estimators=num_estimators)
+    actual = model.predict(x_query)
+
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+    assert actual.columns == expected.columns
+
+
 def test_missing_values_pass_through_fit_predict() -> None:
     model = _build("regression")
     x_context = TableTensor.from_tensor(
