@@ -49,10 +49,10 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        device = next(iter(ensemble_table)).device
+        device = next(ensemble_table._iter_groups()).device
         widths = [
-            ensemble_table.table(member_id).numerical.size(-1)
-            for member_id in range(ensemble_table.num_members)
+            ensemble_table[member_id].numerical.size(-1)
+            for member_id in range(len(ensemble_table))
         ]
         permutations = []
         if self.method == "latin":
@@ -112,15 +112,15 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._permutations) != ensemble_table.num_members:
+        if len(self._permutations) != len(ensemble_table):
             raise RuntimeError(
                 f"{self.__class__.__name__!r} was fitted with "
                 f"{len(self._permutations)} ensemble members, but got "
-                f"{ensemble_table.num_members}."
+                f"{len(ensemble_table)}."
             )
         tables: list[TableTensor] = []
-        for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
+        for member_id in range(len(ensemble_table)):
+            table = ensemble_table[member_id]
             host_permutation = self._host_permutations[member_id]
             shuffled = table.__class__(
                 columns={
@@ -151,15 +151,15 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._permutations) != ensemble_table.num_members:
+        if len(self._permutations) != len(ensemble_table):
             raise RuntimeError(
                 f"{self.__class__.__name__!r} was fitted with "
                 f"{len(self._permutations)} ensemble members, but got "
-                f"{ensemble_table.num_members}."
+                f"{len(ensemble_table)}."
             )
         tables: list[TableTensor] = []
-        for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
+        for member_id in range(len(ensemble_table)):
+            table = ensemble_table[member_id]
             host_permutation = self._host_permutations[member_id]
             inverse_host_permutation = [0] * len(host_permutation)
             for destination, source in enumerate(host_permutation):

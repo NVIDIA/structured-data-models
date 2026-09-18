@@ -288,23 +288,23 @@ def test_tfidf_keeps_vocabulary_per_member_table() -> None:
 
     output = processor.fit_transform_ensemble(context)
 
-    assert output.table(0).numerical.shape == (1, 2)
-    assert output.table(1).numerical.shape == (1, 4)
+    assert output[0].numerical.shape == (1, 2)
+    assert output[1].numerical.shape == (1, 4)
     assert torch.equal(
-        output.table(0).numerical,
-        output.table(2).numerical,
+        output[0].numerical,
+        output[2].numerical,
     )
     assert torch.equal(
-        output.table(1).numerical,
-        output.table(3).numerical,
+        output[1].numerical,
+        output[3].numerical,
     )
 
     query = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
     query_output = processor.transform_ensemble(
         EnsembleTable.from_table(query, num_members=4)
     )
-    assert query_output.table(0).numerical.shape == (1, 2)
-    assert query_output.table(1).numerical.shape == (1, 4)
+    assert query_output[0].numerical.shape == (1, 2)
+    assert query_output[1].numerical.shape == (1, 4)
 
     with pytest.raises(RuntimeError, match="same number"):
         processor.transform_ensemble(
@@ -342,5 +342,5 @@ def test_tfidf_failed_refit_preserves_ensemble_state(
         processor.fit(table)
 
     output = processor.transform_ensemble(ensemble_table)
-    for member_id in range(ensemble_table.num_members):
-        assert output.table(member_id).equal(expected.table(member_id))
+    for member_id in range(len(ensemble_table)):
+        assert output[member_id].equal(expected[member_id])

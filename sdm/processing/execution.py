@@ -74,15 +74,19 @@ class RecipeExecution:
             if isinstance(module, sp.TaskDispatch)
         )
         if len(task_dispatchers) > 0:
-            if any(group.size(-1) != 1 for group in y):
+            if any(group.size(-1) != 1 for group in y._iter_groups()):
                 raise ValueError(
                     "Expected the transformed target to contain exactly one "
                     "column"
                 )
 
-            if all(group.numerical.size(-1) == 1 for group in y):
+            if all(
+                group.numerical.size(-1) == 1 for group in y._iter_groups()
+            ):
                 task = "regression"
-            elif all(group.categorical.size(-1) == 1 for group in y):
+            elif all(
+                group.categorical.size(-1) == 1 for group in y._iter_groups()
+            ):
                 task = "classification"
             else:
                 raise ValueError(
@@ -110,7 +114,7 @@ class RecipeExecution:
                     ensemble_table,
                     generator=generator,
                 )
-                if related_ensembles[name].num_members != self.num_members:
+                if len(related_ensembles[name]) != self.num_members:
                     raise ValueError(
                         "Expected inputs to map to the same number of "
                         "ensemble members"
@@ -122,7 +126,7 @@ class RecipeExecution:
 
         x = _to_ensemble_table(x, num_members)
         x = self.recipe.features.fit_transform_ensemble(x, generator=generator)
-        if x.num_members != self.num_members:
+        if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
             )
@@ -133,7 +137,7 @@ class RecipeExecution:
             if related_tables is not None:
                 related_tables_i = RelatedTables(
                     tables={
-                        name: table.table(member_id)
+                        name: table[member_id]
                         for name, table in related_ensembles.items()
                     },
                     relationships=related_tables.relationships,
@@ -141,8 +145,8 @@ class RecipeExecution:
                 )
             members.append(
                 MemberContext(
-                    x=x.table(member_id),
-                    y=y.table(member_id),
+                    x=x[member_id],
+                    y=y[member_id],
                     related_tables=related_tables_i,
                 )
             )
@@ -157,7 +161,7 @@ class RecipeExecution:
         """Transform query data."""
         x = _to_ensemble_table(x, self._num_estimators)
         x = self.recipe.features.transform_ensemble(x)
-        if x.num_members != self.num_members:
+        if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
             )
@@ -178,7 +182,7 @@ class RecipeExecution:
                 related_ensembles[name] = processor.transform_ensemble(
                     ensemble_table
                 )
-                if related_ensembles[name].num_members != self.num_members:
+                if len(related_ensembles[name]) != self.num_members:
                     raise ValueError(
                         "Expected inputs to map to the same number of "
                         "ensemble members"
@@ -190,7 +194,7 @@ class RecipeExecution:
             if related_tables is not None:
                 related_tables_i = RelatedTables(
                     tables={
-                        name: table.table(member_id)
+                        name: table[member_id]
                         for name, table in related_ensembles.items()
                     },
                     relationships=related_tables.relationships,
@@ -198,7 +202,7 @@ class RecipeExecution:
                 )
             members.append(
                 MemberQuery(
-                    x=x.table(member_id),
+                    x=x[member_id],
                     related_tables=related_tables_i,
                 )
             )
@@ -239,7 +243,7 @@ class RecipeExecution:
         if not isinstance(self.recipe.target, EnsembleInvertibleMixin):
             raise RuntimeError("Target recipe is not invertible")
         table = self.recipe.target.inverse_transform_ensemble(table)
-        return tuple(table.table(i) for i in range(table.num_members))
+        return tuple(table[i] for i in range(len(table)))
 
     def transform_output(
         self,
@@ -360,10 +364,10 @@ def _to_ensemble_table(
             positions.
     """
     if isinstance(x, EnsembleTable):
-        if num_estimators is not None and num_estimators != x.num_members:
+        if num_estimators is not None and num_estimators != len(x):
             raise ValueError(
                 f"Expected {num_estimators} members in 'EnsembleTable' "
-                f"(got {x.num_members})"
+                f"(got {len(x)})"
             )
         if expand:
             groups = [x.expanded_group(i) for i in range(x.num_groups)]
@@ -376,7 +380,7 @@ def _to_ensemble_table(
                 groups=tuple(groups),
                 locations=tuple(locations),
             )
-        if x.num_members < 1:
+        if len(x) < 1:
             raise ValueError("'num_estimators' needs to be positive")
         return x
 
@@ -387,7 +391,7 @@ def _to_ensemble_table(
     if x.dim() > 2 and num_estimators is None:
         locations = tuple((0, i) for i in range(x.size(0)))
         x = EnsembleTable(groups=(x,), locations=locations)
-        if x.num_members < 1:
+        if len(x) < 1:
             raise ValueError("'num_estimators' needs to be positive")
         return x
 
