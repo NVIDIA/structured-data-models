@@ -115,7 +115,9 @@ class T5Encoder(torch.nn.Module):
         num_heads: Number of attention heads.
         head_channels: Width of each attention head.
         num_buckets: Number of bidirectional relative-position buckets.
+            Must be at least ``4``.
         max_distance: Distance at which relative-position buckets saturate.
+            Must exceed ``num_buckets // 4``.
         dropout: Attention, residual, and feed-forward dropout probability.
         eps: RMS normalization epsilon.
         device: The device.
@@ -137,6 +139,10 @@ class T5Encoder(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        if num_buckets < 4 or max_distance <= num_buckets // 4:
+            raise ValueError(
+                "Expected num_buckets >= 4 and max_distance > num_buckets // 4"
+            )
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.num_buckets = num_buckets
         self.max_distance = max_distance
@@ -199,7 +205,7 @@ class T5Encoder(torch.nn.Module):
             padding = x.new_zeros((*mask.shape[:-1], 1, 1, mask.size(-1)))
             padding = padding.masked_fill(
                 ~mask.bool().unsqueeze(-2).unsqueeze(-2),
-                torch.finfo(x.dtype).min,
+                -torch.inf,
             )
             bias = bias + padding
         x = self.dropout(x)

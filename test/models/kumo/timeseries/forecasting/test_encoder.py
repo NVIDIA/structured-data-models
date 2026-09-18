@@ -11,7 +11,13 @@ from sdm.models.kumo.timeseries.forecasting.encoder import T5Encoder
 
 @pytest.mark.parametrize("length", [9, 140])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
-def test_encoder_matches_t5(length: int, dtype: torch.dtype) -> None:
+@pytest.mark.parametrize(("num_buckets", "max_distance"), [(4, 2), (32, 128)])
+def test_encoder_matches_t5(
+    length: int,
+    dtype: torch.dtype,
+    num_buckets: int,
+    max_distance: int,
+) -> None:
     reference = T5EncoderModel(
         T5Config(
             vocab_size=16,
@@ -22,6 +28,8 @@ def test_encoder_matches_t5(length: int, dtype: torch.dtype) -> None:
             d_kv=8,
             dropout_rate=0.0,
             feed_forward_proj="gated-gelu",
+            relative_attention_num_buckets=num_buckets,
+            relative_attention_max_distance=max_distance,
         )
     ).eval()
     torch.nn.Module.to(reference, dtype=dtype)
@@ -33,6 +41,8 @@ def test_encoder_matches_t5(length: int, dtype: torch.dtype) -> None:
         head_channels=8,
         dropout=0.0,
         dtype=dtype,
+        num_buckets=num_buckets,
+        max_distance=max_distance,
     ).eval()
     ckpt = remap_ckpt(
         {
@@ -98,3 +108,51 @@ def test_encoder_backward() -> None:
     assert x.grad is not None
     assert x.grad.isfinite().all()
     assert x.grad.abs().sum() > 0
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_all_masked_keys_cannot_change_other_outputs(
+    dtype: torch.dtype,
+) -> None:
+    model = T5Encoder(
+        channels=16,
+        hidden_channels=24,
+        num_layers=2,
+        num_heads=2,
+        head_channels=8,
+        dropout=0.0,
+        dtype=dtype,
+    )
+    x = torch.randn(2, 12, 16, dtype=dtype, requires_grad=True)
+    mask = torch.zeros(2, 12, dtype=torch.bool)
+    changed = x.detach().clone()
+    changed[:, -1] += torch.arange(16, dtype=dtype)
+
+    actual = model(x, mask)
+    with torch.no_grad():
+        other = model(changed, mask)
+    assert actual.isfinite().all()
+    # Residual/FFN paths may change the final patch, but attention must not
+    # carry it to any other patch when every key is masked.
+    torch.testing.assert_close(actual[:, :-1], other[:, :-1], atol=0, rtol=0)
+    actual.float().square().sum().backward()
+    assert x.grad is not None
+    assert x.grad.isfinite().all()
+
+
+@pytest.mark.parametrize(
+    ("num_buckets", "max_distance"), [(2, 128), (32, 8), (32, 7)]
+)
+def test_invalid_relative_position_configuration(
+    num_buckets: int, max_distance: int
+) -> None:
+    with pytest.raises(ValueError, match=r"num_buckets.*max_distance"):
+        T5Encoder(
+            channels=16,
+            hidden_channels=24,
+            num_layers=1,
+            num_heads=2,
+            head_channels=8,
+            num_buckets=num_buckets,
+            max_distance=max_distance,
+        )
