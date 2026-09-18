@@ -24,6 +24,11 @@ Overview
        | 1.65B (regression)
      - `Apache-2.0 <https://github.com/google-research/tabfm/blob/b8a8b090c66d1b9e7af278003461582219996b6a/LICENSE>`__
      - `tabfm-non-commercial-v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__
+   * - :class:`~sdm.models.TimesFM3` (`Blog <https://research.google/blog/timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting>`__)
+     - 2026-08-31
+     - 330M
+     - `Apache-2.0 <https://github.com/google-research/timesfm/blob/e31dadd84cb26bd5153fde6687502b8312e918fb/LICENSE>`__
+     - `TimesFM Non-Commercial License v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/43046b85ec22d584a13f8098c2ed39c889e129c2/LICENSE>`__
    * - :class:`~sdm.models.KumoTabular`
      -
      - | 27.44M-61.43M (classification)

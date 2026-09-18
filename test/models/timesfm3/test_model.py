@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
+import runpy
 from pathlib import Path
 from typing import Any, cast
 
@@ -9,8 +10,9 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
+import sdm
 from sdm import Stype, TableTensor
-from sdm.models.timesfm3 import TimesFM3
+from sdm.models import TimesFM3
 from sdm.models.timesfm3 import model as timesfm_module
 from sdm.models.timesfm3.configs import (
     ResidualBlockConfig,
@@ -428,6 +430,28 @@ def test_default_recipe_averages_estimators(device: torch.device) -> None:
     model.fit(contexts, targets)
     cached = model.predict(queries)
     torch.testing.assert_close(cached.numerical, out.numerical)
+
+
+def test_forecasting_example(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def model_factory(*, device: torch.device) -> TimesFM3:
+        return _public_model(device)
+
+    monkeypatch.setattr(sdm.models, "TimesFM3", model_factory)
+    path = Path(__file__).parents[3] / "examples/timesfm3/forecast.py"
+
+    namespace = runpy.run_path(str(path))
+
+    output = capsys.readouterr().out
+    forecast = namespace["forecast"]
+    assert isinstance(forecast, TableTensor)
+    assert forecast.size(0) == 3
+    assert "ice_cream__q50" in forecast.columns[Stype.numerical]
+    assert "cold_drinks__q50" in forecast.columns[Stype.numerical]
+    assert "ice_cream__q50" in output
+    assert forecast.numerical.isfinite().all()
 
 
 @withCUDA
