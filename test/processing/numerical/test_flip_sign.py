@@ -18,14 +18,14 @@ def test_flip_sign() -> None:
     )
     signs = torch.stack(
         [
-            output.table(member_id).numerical[..., :1, :]
+            output.member(member_id).numerical[..., :1, :]
             / table.numerical[..., :1, :]
             for member_id in range(output.num_members)
         ]
     )
     assert signs.size() == (8, 2, 1, 64)
     for member_id in range(output.num_members):
-        assert output.table(member_id).numerical.equal(
+        assert output.member(member_id).numerical.equal(
             table.numerical * signs[member_id]
         )
     assert not (signs == signs[0]).all()
