@@ -12,7 +12,7 @@ from torch.nn import Identity, Linear, ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
-from sdm.models import ICLModel
+from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
@@ -53,6 +53,9 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 class KumoTabular(ICLModel):
     """Kumo Tabular, a foundation model for classification and regression.
 
+    Classification targets with more than ten classes use
+    :class:`~sdm.models.ECOC` to combine predictions from encoded tasks.
+
     Args:
         task: The tasks to initialize. If ``None``, both classification and
             regression are initialized.
@@ -91,6 +94,12 @@ class KumoTabular(ICLModel):
 
         if pretrained:
             self.models[task] = self._load_from_pretrained(size, device=device)
+
+        if Task.classification in self.models:
+            self.models[Task.classification] = ECOC(
+                model=self.models[Task.classification],
+                max_classes=10,
+            )
 
         self.eval()
 
@@ -179,12 +188,6 @@ class KumoTabular(ICLModel):
                 dtype=torch.int64 if classes is not None else x.dtype,
             )
 
-        if classes is not None and len(classes) > 10:
-            raise ValueError(
-                f"{self.__class__.__name__!r} only supports up to 10 classes "
-                f"(got {len(classes)})"
-            )
-
         if cache is None or cache.is_recording:
             assert x_context is not None
             schema: TableSchema = kwargs["_schema"]
@@ -204,7 +207,16 @@ class KumoTabular(ICLModel):
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
         task = Task.classification if classes is not None else Task.regression
-        out = self.models[task](x, y, categorical_mask, cache=cache)
+        model_kwargs: dict[str, Any] = {}
+        if classes is not None:
+            model_kwargs.update(num_classes=len(classes), generator=generator)
+        out = self.models[task](
+            x=x,
+            y=y,
+            categorical_mask=categorical_mask,
+            cache=cache,
+            **model_kwargs,
+        )
 
         if classes is None:
             return TableTensor(
