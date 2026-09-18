@@ -221,6 +221,7 @@ class Attention(torch.nn.Module):
         self.q_dim = num_query_heads * self.head_dim  # == channels
         self.kv_dim = num_key_value_heads * self.head_dim
 
+        # ICL blocks enable this where queries include context for calibration.
         self._supports_quantized_attention = False
 
         self.qkv_lin = Linear(

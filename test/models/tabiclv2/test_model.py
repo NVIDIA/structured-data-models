@@ -296,5 +296,12 @@ def test_fp8_fit_predict(dtype: torch.dtype) -> None:
             isinstance(entry, QuantizedKVCacheEntry)
             for entry in entries.values()
         )
-        model.clear()
-        assert model._cache is None
+    with torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32):
+        with pytest.raises(RuntimeError, match=r"sdm\.optimize"):
+            model.predict(query)
+        with optimize(attention="fp8"):
+            torch.testing.assert_close(
+                model.predict(query).numerical, actual.numerical
+            )
+    model.clear()
+    assert model._cache is None
