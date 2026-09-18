@@ -10,8 +10,7 @@ class Clip(Processor):
 
     Values below ``min_value`` are set to ``min_value``, and values above
     ``max_value`` are set to ``max_value``. Values within the interval are
-    unchanged. This processor is stateless, so it can transform a table
-    without being fitted first.
+    unchanged.
 
     Args:
         min_value: Inclusive lower bound for every numerical value.
