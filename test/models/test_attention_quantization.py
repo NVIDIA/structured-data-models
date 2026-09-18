@@ -16,6 +16,8 @@ from sdm.models.tabfm import model as tabfm_module
 from sdm.models.tabfm.icl import ICLBlock as TabFMICLBlock
 from sdm.testing import onlyCUDA
 
+pytestmark = pytest.mark.usefixtures("fp8_rng")
+
 
 @onlyCUDA
 @pytest.mark.parametrize(
