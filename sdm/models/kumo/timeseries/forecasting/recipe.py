@@ -13,6 +13,12 @@ _SCALE = 8.693312644958496
 
 
 class _Standardize(Processor, InvertibleMixin):
+    """Apply the released checkpoint's frozen training-set statistics.
+
+    These are checkpoint metadata, not statistics of the inference context.
+    Fitting a new standardizer would change the SDK's preprocessing contract.
+    """
+
     handles_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
@@ -29,8 +35,15 @@ def default_recipe() -> sp.Recipe:
     """Preserve chronology and apply the released fixed normalization.
 
     The SDK's ``1e-8`` scale epsilon rounds away in its float32 standardizer.
-    No statistics are fitted on future rows. Reversible instance normalization
-    remains inside the model, as it is part of the checkpoint architecture.
+    The fixed statistics come from the training artifact ``standardizer.pkl``
+    distributed with the released weights. They are deliberately not refitted
+    on each inference context. Data-dependent, per-channel normalization is
+    already performed by RevIN inside the model, using observed context only.
+
+    Although both operations are invertible, removing the fixed transform is
+    not equivalent: RevIN's additive epsilon is applied in standardized units,
+    which affects low-variance inputs. Keeping both preserves SDK inference.
+    Checkpoints fine-tuned with different preprocessing need a matching recipe.
     """
     return sp.Recipe(
         features=_Standardize(),

@@ -9,30 +9,9 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Dropout, Embedding, Linear, ModuleList, Parameter
+from torch.nn import Dropout, Embedding, Linear, ModuleList, RMSNorm
 
-
-class _RMSNorm(torch.nn.Module):
-    def __init__(
-        self,
-        channels: int,
-        eps: float,
-        device: torch.device | str | None,
-        dtype: torch.dtype | None,
-    ) -> None:
-        super().__init__()
-        self.weight = Parameter(
-            torch.ones(channels, device=device, dtype=dtype)
-        )
-        self.eps = eps
-
-    def forward(self, x: Tensor) -> Tensor:
-        # T5 accumulates variance in fp32, including for reduced precision.
-        variance = x.float().square().mean(dim=-1, keepdim=True)
-        x = x * (variance + self.eps).rsqrt()
-        if self.weight.dtype in (torch.float16, torch.bfloat16):
-            x = x.to(self.weight.dtype)
-        return x * self.weight
+from sdm.nn import SDPA
 
 
 class _T5Block(torch.nn.Module):
@@ -51,8 +30,13 @@ class _T5Block(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.num_heads = num_heads
         self.head_channels = head_channels
-        self.attention_norm = _RMSNorm(channels, eps, **factory_kwargs)
-        self.ffn_norm = _RMSNorm(channels, eps, **factory_kwargs)
+        self.attention_norm = RMSNorm(channels, eps=eps, **factory_kwargs)
+        self.ffn_norm = RMSNorm(channels, eps=eps, **factory_kwargs)
+        self.sdpa = SDPA(
+            num_query_heads=num_heads,
+            scale=1.0,
+            dropout=dropout,
+        )
         self.q = Linear(
             in_features=channels,
             out_features=num_heads * head_channels,
@@ -100,19 +84,17 @@ class _T5Block(torch.nn.Module):
     def forward(self, x: Tensor, bias: Tensor) -> Tensor:
         normalized = self.attention_norm(x)
         shape = (*x.shape[:-1], self.num_heads, self.head_channels)
-        query = self.q(normalized).view(shape).transpose(-3, -2)
-        key = self.k(normalized).view(shape).transpose(-3, -2)
-        value = self.v(normalized).view(shape).transpose(-3, -2)
+        query = self.q(normalized).view(shape)
+        key = self.k(normalized).view(shape)
+        value = self.v(normalized).view(shape)
         # T5 uses unscaled dot products and shares position bias across layers.
-        attended = F.scaled_dot_product_attention(
+        attended = self.sdpa(
             query=query,
             key=key,
             value=value,
-            attn_mask=bias.to(query.dtype),
-            dropout_p=self.dropout.p if self.training else 0.0,
-            scale=1.0,
+            attn_bias=bias.to(query.dtype),
         )
-        attended = attended.transpose(-3, -2).flatten(-2)
+        attended = attended.flatten(-2)
         x = x + self.dropout(self.o(attended))
         normalized = self.ffn_norm(x)
         hidden = F.gelu(self.wi_0(normalized), approximate="tanh")
@@ -177,7 +159,7 @@ class T5Encoder(torch.nn.Module):
                 for _ in range(num_layers)
             ]
         )
-        self.norm = _RMSNorm(channels, eps, **factory_kwargs)
+        self.norm = RMSNorm(channels, eps=eps, **factory_kwargs)
         self.dropout = Dropout(dropout)
 
     def _position_bias(self, length: int, device: torch.device) -> Tensor:
