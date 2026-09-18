@@ -12,11 +12,14 @@ from sdm._kernels.triton.fp8_attention import (
     quantized_attention,
 )
 
-pytestmark = pytest.mark.skipif(
-    not torch.cuda.is_available()
-    or torch.cuda.get_device_capability() < (8, 9),
-    reason="FP8 attention requires an Ada or newer CUDA GPU",
-)
+pytestmark = [
+    pytest.mark.usefixtures("fp8_rng"),
+    pytest.mark.skipif(
+        not torch.cuda.is_available()
+        or torch.cuda.get_device_capability() < (8, 9),
+        reason="FP8 attention requires an Ada or newer CUDA GPU",
+    ),
+]
 
 
 @pytest.mark.parametrize(
@@ -151,3 +154,50 @@ def test_quantization_reads_strided_heads_without_fp16_copy() -> None:
         actual.float(), expected.float(), rtol=0, atol=0
     )
     torch.testing.assert_close(actual_scale, expected_scale, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(
+    (
+        "query_heads",
+        "kv_heads",
+        "channels",
+        "query_tile",
+        "context_tile",
+        "message",
+    ),
+    [
+        (3, 2, 64, 64, 64, "K/V heads"),
+        (1, 2, 64, 64, 64, "K/V heads"),
+        (2, 0, 64, 64, 64, "K/V heads"),
+        (2, 2, 96, 64, 64, "head dimension"),
+        (2, 2, 64, 96, 64, "query_tile"),
+        (2, 2, 64, 64, 96, "context_tile"),
+        (2, 2, 64, 0, 64, "query_tile"),
+    ],
+)
+def test_invalid_attention_launch(
+    query_heads: int,
+    kv_heads: int,
+    channels: int,
+    query_tile: int,
+    context_tile: int,
+    message: str,
+) -> None:
+    q = torch.empty(
+        1, query_heads, 1, channels, device="cuda", dtype=torch.float8_e4m3fn
+    )
+    k = q.new_empty(1, kv_heads, 1, channels)
+    qs = torch.ones(1, query_heads, 1, 1, device="cuda")
+    ks = qs.new_ones(1, kv_heads, 1, 1)
+    with pytest.raises(ValueError, match=message):
+        quantized_attention(
+            q,
+            k,
+            k.transpose(-1, -2).contiguous(),
+            qs,
+            ks,
+            ks,
+            dtype=torch.float16,
+            query_tile=query_tile,
+            context_tile=context_tile,
+        )
