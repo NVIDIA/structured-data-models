@@ -161,8 +161,7 @@ def full_finetune(
             else:
                 # Pinball loss over the model's 999 fixed quantile levels,
                 # already back in the target's original scale.
-                target = y_query.numerical.squeeze(-1).unsqueeze(-1)
-                diff = target - out.numerical
+                diff = y_query.numerical - out.numerical
                 loss = torch.maximum(
                     quantile_levels * diff,
                     (quantile_levels - 1) * diff,

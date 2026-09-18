@@ -4,6 +4,7 @@
 """SDM model adapters for TabArena and BeyondArena."""
 
 import abc
+import argparse
 import math
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
@@ -21,6 +22,30 @@ import sdm.processing as sp
 from benchmark.tabular.finetune import full_finetune
 
 Task = Literal["classification", "regression"]
+
+_FINETUNE_ARGS: dict[str, tuple[type, str]] = {
+    "finetune_epochs": (int, "Fine-tuning epochs (only for '-ft' variants)."),
+    "finetune_iters_per_epoch": (int, "Fine-tuning iterations per epoch."),
+    "finetune_lr": (float, "Fine-tuning learning rate."),
+    "finetune_train_size": (int, "Rows resampled per fine-tuning iteration."),
+    "finetune_context_frac": (float, "Context fraction of each sample."),
+    "finetune_val_frac": (float, "Held-out validation fraction of the pool."),
+}
+
+
+def add_finetune_args(parser: argparse.ArgumentParser) -> None:
+    """Add the fine-tuning flags shared by TabArena/BeyondArena."""
+    for name, (arg_type, help_text) in _FINETUNE_ARGS.items():
+        parser.add_argument(f"--{name}", type=arg_type, help=help_text)
+
+
+def finetune_config_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    """Explicitly-set fine-tuning flags, ready to merge into a model config."""
+    return {
+        name: value
+        for name in _FINETUNE_ARGS
+        if (value := getattr(args, name)) is not None
+    }
 
 
 class SDMModel(AbstractTorchModel, abc.ABC):
@@ -123,6 +148,8 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 val_frac=params["finetune_val_frac"],
                 lr=params["finetune_lr"],
                 num_estimators=self._num_estimators,
+                # Reuse max_context_size to cap fine-tuning's own validation
+                # context the same way it caps the final fit()/predict() call.
                 max_val_context_size=max_context_size,
                 generator=generator,
             )

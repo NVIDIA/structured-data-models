@@ -38,9 +38,11 @@ ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
 # `MODEL_CONFIGS[...].factory` is `@lru_cache`d, so `SDMMethod.fit` sees the
 # same model instance across every seed/dataset in a process. Fine-tuning
 # must not leak from one seed/dataset into the next, so each model's
-# pretrained weights are snapshotted once here and restored before every
-# fine-tuning run.
-_PRISTINE_STATE: dict[int, dict[str, torch.Tensor]] = {}
+# pretrained weights are snapshotted onto the model instance itself (an
+# `id(model)`-keyed dict would collide once `lru_cache` evicts and frees an
+# entry, since CPython can reuse the freed address for an unrelated model)
+# the first time it's fine-tuned, and restored before every fine-tuning run.
+_PRISTINE_STATE_ATTR = "_sdm_pristine_state"
 
 
 class UnsupportedDatasetError(RuntimeError):
@@ -276,10 +278,10 @@ class SDMMethod(Method):
         )
 
         if self._finetune:
-            pristine_state = _PRISTINE_STATE.setdefault(
-                id(self.model),
-                copy.deepcopy(self.model.state_dict()),
-            )
+            pristine_state = getattr(self.model, _PRISTINE_STATE_ATTR, None)
+            if pristine_state is None:
+                pristine_state = copy.deepcopy(self.model.state_dict())
+                setattr(self.model, _PRISTINE_STATE_ATTR, pristine_state)
             self.model.load_state_dict(pristine_state)
             full_finetune(
                 self.model,
