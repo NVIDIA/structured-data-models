@@ -43,7 +43,7 @@ from sdm.models.timesfm3.cpm_revin_refine import (
     cpm_iterative_revin_refine,
 )
 from sdm.models.timesfm3.dense import ResidualBlock
-from sdm.models.timesfm3.recipe import default_recipe
+from sdm.models.timesfm3.recipe import _validate_recipe, default_recipe
 from sdm.models.timesfm3.transformer import StackedMixingTransformer
 from sdm.models.timesfm3.util import (
     get_output_patch_via_roll,
@@ -96,6 +96,10 @@ class TimesFM3(ICLModel):
     ``x_context`` contains historical covariates, ``y_context`` contains one or
     more past target series, and ``x_query`` contains future-known covariates
     (which must also be present in ``x_context``).
+
+    .. note::
+        Custom recipes must leave :attr:`~sdm.processing.Recipe.target`
+        unchanged. Feature and output pipelines remain configurable.
 
     .. note::
         :class:`TimesFM` model weights are distributed under the
@@ -181,6 +185,7 @@ class TimesFM3(ICLModel):
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415
+        _validate_recipe(cast(Recipe | None, kwargs.get("recipe")))
         x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
@@ -202,6 +207,7 @@ class TimesFM3(ICLModel):
 
     def fit(self, *args: Any, **kwargs: Any) -> None:
         r""":meta private:"""  # noqa: D415
+        _validate_recipe(cast(Recipe | None, kwargs.get("recipe")))
         x = kwargs["x"] if "x" in kwargs else args[0]
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)

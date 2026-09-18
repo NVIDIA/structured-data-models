@@ -11,6 +11,7 @@ import torch
 from safetensors.torch import save_file
 
 import sdm
+import sdm.processing as sp
 from sdm import Stype, TableTensor
 from sdm.models import TimesFM3
 from sdm.models.timesfm3 import model as timesfm_module
@@ -430,6 +431,55 @@ def test_default_recipe_averages_estimators(device: torch.device) -> None:
     model.fit(contexts, targets)
     cached = model.predict(queries)
     torch.testing.assert_close(cached.numerical, out.numerical)
+
+
+@withCUDA
+def test_custom_recipe_allows_identity_target(device: torch.device) -> None:
+    model = _public_model(device)
+    x_context = TableTensor.from_tensor(
+        torch.arange(12, dtype=torch.float32, device=device).reshape(6, 2),
+        columns=["past", "known"],
+    )
+    y_context = TableTensor.from_tensor(
+        torch.arange(6, dtype=torch.float32, device=device).unsqueeze(-1),
+        columns=["target"],
+    )
+    x_query = TableTensor.from_tensor(
+        torch.arange(3, dtype=torch.float32, device=device).unsqueeze(-1),
+        columns=["known"],
+    )
+    recipe = sp.Recipe(
+        target=sp.Identity(),
+        output=sp.ReduceEstimators(method="mean"),
+    )
+
+    actual = model(x_context, y_context, x_query, recipe=recipe)
+    expected = model(x_context, y_context, x_query)
+
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+
+
+def test_custom_recipe_rejects_target_transformations() -> None:
+    model = _public_model(torch.device("cpu"))
+    x_context = TableTensor.from_tensor(
+        torch.arange(12, dtype=torch.float32).reshape(6, 2),
+        columns=["past", "known"],
+    )
+    y_context = TableTensor.from_tensor(
+        torch.arange(6, dtype=torch.float32).unsqueeze(-1),
+        columns=["target"],
+    )
+    x_query = TableTensor.from_tensor(
+        torch.arange(3, dtype=torch.float32).unsqueeze(-1),
+        columns=["known"],
+    )
+    recipe = sp.Recipe(target=sp.Standardize())
+    message = "does not support transformations in 'Recipe.target'"
+
+    with pytest.raises(ValueError, match=message):
+        model(x_context, y_context, x_query, recipe=recipe)
+    with pytest.raises(ValueError, match=message):
+        model.fit(x_context, y_context, recipe=recipe)
 
 
 def test_forecasting_example(
