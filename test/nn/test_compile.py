@@ -241,6 +241,7 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
 @pytest.mark.parametrize(
     "dtype", [torch.float16, torch.bfloat16, torch.float32]
 )
+@pytest.mark.usefixtures("fp8_rng")
 def test_attention_compile_fp8_cache(dtype: torch.dtype) -> None:
     if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
         pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
