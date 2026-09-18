@@ -34,27 +34,47 @@ Default Recipe
    Recipe(
      features=Sequential(
        StypeDispatch(
-         categorical=Sequential(
-           AlignCategories(sort_by='value', min_frequency=2),
-           ToNumerical(),
-         ),
-       ),
-       StypeDispatch(
          numerical=Sequential(
            DropConstantColumns(),
+           Callable(<lambda>),
            Standardize(eps=1e-06),
            Clip(-100.0, 100.0),
            Choice(
              Identity(),
              PowerTransform(),
+             Sequential(
+               RobustScale(quantile_range=(25.0, 75.0)),
+               ClipSoft(3.0),
+             ),
              method='round_robin',
            ),
            ClipSigma(threshold=4.0),
            FlipSign(probability=0.5),
-           ShuffleColumns(method='latin'),
-           SelectColumns(),
+           Callable(<lambda>),
+         ),
+         categorical=Sequential(
+           AlignCategories(sort_by='value'),
+           AddCategoryCounts(),
+           ToNumerical(),
+           DropConstantColumns(),
+           Callable(<lambda>),
+           Standardize(eps=1e-06),
+           Clip(-100.0, 100.0),
+           Choice(
+             Identity(),
+             PowerTransform(),
+             Sequential(
+               RobustScale(quantile_range=(25.0, 75.0)),
+               ClipSoft(3.0),
+             ),
+             method='round_robin',
+           ),
+           ClipSigma(threshold=4.0),
+           Callable(<lambda>),
          ),
        ),
+       ShuffleColumns(method='latin'),
+       SelectColumns(),
      ),
      target=Sequential(
        StypeDispatch(
@@ -68,13 +88,14 @@ Default Recipe
          ),
        ),
      ),
-     output=Sequential(
-       TaskDispatch(
-         regression=SortQuantiles(),
+     output=TaskDispatch(
+       classification=Sequential(
+         ReduceEstimators(method='mean', proportion=0.0),
+         Softmax(),
        ),
-       ReduceEstimators(method='mean', proportion=0.0),
-       TaskDispatch(
-         classification=Softmax(),
+       regression=Sequential(
+         ReduceQuantiles(),
+         ReduceEstimators(method='trimmed_mean', proportion=0.2),
        ),
      ),
    )
