@@ -8,6 +8,8 @@ import pytest
 import torch
 from torch import Tensor
 
+from sdm import optimize
+from sdm.cache import QuantizedKVCacheEntry
 from sdm.nn import (
     SDPA,
     Attention,
@@ -16,7 +18,7 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 # Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
 pytestmark = pytest.mark.skipif(
@@ -233,6 +235,47 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
     expected = module(query=query, key_value=expected_kv)
     out = fullgraph(module)(query=query, key_value=kv)
     torch.testing.assert_close(out, expected)
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32]
+)
+@pytest.mark.usefixtures("fp8_rng")
+def test_attention_compile_fp8_cache(dtype: torch.dtype) -> None:
+    if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
+        pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
+    module = Attention(
+        channels=128,
+        num_query_heads=2,
+        num_key_value_heads=1,
+        device="cuda",
+        dtype=dtype,
+    ).eval()
+    module._supports_quantized_attention = True
+    torch.nn.init.normal_(module.out_lin.weight, std=0.05)
+    context = torch.randn(1, 8193, 128, device="cuda", dtype=dtype)
+    compiled = torch.compile(module, fullgraph=True, dynamic=False)
+    with torch.inference_mode(), optimize(attention="fp8"):
+        expected, eager_cache = module(context, return_key_value=True)
+        actual, cache = compiled(context, return_key_value=True)
+        assert isinstance(cache, QuantizedKVCacheEntry)
+        torch.testing.assert_close(actual, expected)
+        for rows in (17, 33, 1, 17):
+            query = torch.randn(1, rows, 128, device="cuda", dtype=dtype)
+            expected = module(query, eager_cache)
+            torch.testing.assert_close(compiled(query, cache), expected)
+            torch.testing.assert_close(compiled(query, eager_cache), expected)
+
+    with torch.inference_mode():
+        expected, _ = module(context, return_key_value=True)
+        actual, ordinary_cache = compiled(context, return_key_value=True)
+        assert not isinstance(ordinary_cache, QuantizedKVCacheEntry)
+        torch.testing.assert_close(actual, expected)
+        with optimize(attention="fp8"):
+            torch.testing.assert_close(
+                compiled(query, cache), module(query, cache)
+            )
 
 
 @withCUDA
