@@ -6,7 +6,7 @@ from typing import cast
 import pytest
 import torch
 
-from sdm import Recipe
+from sdm import Recipe, optimize
 from sdm.cache import Cache, QuantizedKVCacheEntry
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
@@ -272,13 +272,13 @@ def test_fp8_fit_predict(dtype: torch.dtype) -> None:
         task="regression",
         pretrained=False,
         device="cuda",
-        attention_quantization="fp8",
     )
     x = torch.randn(8193, 3, device="cuda")
     y = torch.randn(8193, 1, device="cuda")
     query = torch.randn(17, 3, device="cuda")
     with (
         torch.inference_mode(),
+        optimize(attention="fp8"),
         torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
     ):
         expected = model(x, y, query, recipe=Recipe(), num_estimators=1)
