@@ -217,7 +217,7 @@ data-aria-dark="Switch to auto color mode">
   <article class="yue" role="main">
           <section id="in-context-learning">
 <h1>In-Context Learning<a class="headerlink" href="#in-context-learning" title="Link to this heading">#</a></h1>
-<p>In-Context Learning (ICL) treats predictions on structured data (<em>e.g.</em>, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights.
+<p>In-Context Learning (ICL) treats predictions on structured data (<em>e.g.</em>, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights through in-context adaptation.
 The <code class="docutils literal notranslate"><span class="pre">structured-data-models</span></code> package groups and unifies such foundation models behind a single interface:</p>
 <ol class="arabic simple">
 <li><p>Convert dataframe-like data into a <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> (see <a class="reference internal" href="tensor.html"><span class="doc std std-doc">here</span></a> for the accompanying tutorial).</p></li>
@@ -244,7 +244,8 @@ As a result, single-table and multi-table models can share the same prediction w
 <li><p><code class="docutils literal notranslate"><span class="pre">x_query</span></code> (<a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> | <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>): feature rows whose targets should be predicted.</p></li>
 </ul>
 <p>The context rows are not used to update model weights.
-They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context:</p>
+They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context.</p>
+<p>This is distinct from calling <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> while the model is in train mode (<code class="docutils literal notranslate"><span class="pre">model.train()</span></code>), which enables gradient tracking through the full call — including post-processing — so the returned predictions can be used in an ordinary training loop (<code class="docutils literal notranslate"><span class="pre">loss.backward()</span></code>, an optimizer step) to fine-tune the model’s parameters. Context rows still don’t update weights <em>through in-context adaptation itself</em>; this is a conventional, separate training step around the model.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_breast_cancer</span>
 </span><span data-line="2">
 </span><span data-line="3"><span class="kn">import</span><span class="w"> </span><span class="nn">sdm</span>
@@ -482,7 +483,7 @@ The full relational sampling and prediction flow is shown in <a class="reference
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=3abcea71"></script>
+      <script src="_static/documentation_options.js?v=5dc92570"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
