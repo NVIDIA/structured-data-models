@@ -41,12 +41,15 @@ class SelectColumns(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if all(group.size(-1) <= self.max_columns for group in ensemble_table):
+        if all(
+            group.size(-1) <= self.max_columns
+            for group in ensemble_table._iter_groups()
+        ):
             return ensemble_table
 
         if self.method == "first":
             groups = []
-            for group in ensemble_table:
+            for group in ensemble_table._iter_groups():
                 columns: Mapping[StypeLike, Sequence[str]] = {
                     stype: column_names[: self.max_columns]
                     for stype, column_names in group.columns.items()
@@ -60,8 +63,8 @@ class SelectColumns(EnsembleProcessor):
 
         assert self.method == "round_robin"
         tables: list[TableTensor] = []
-        for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.member(member_id)
+        for member_id in range(len(ensemble_table)):
+            table = ensemble_table[member_id]
             columns: dict[StypeLike, tuple[str, ...]] = {}
             blocks = {}
             for stype, block in table.items():

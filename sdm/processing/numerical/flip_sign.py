@@ -35,8 +35,8 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> None:
         # TODO: Vectorize sign draws and application over ensemble members.
         signs = []
-        for member_id in range(ensemble_table.num_members):
-            numerical = ensemble_table.member(member_id).numerical
+        for member_id in range(len(ensemble_table)):
+            numerical = ensemble_table[member_id].numerical
             sign = numerical.new_empty(
                 (*numerical.size()[:-2], 1, numerical.size(-1))
             )
@@ -49,15 +49,15 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._signs) != ensemble_table.num_members:
+        if len(self._signs) != len(ensemble_table):
             raise RuntimeError(
                 f"{self.__class__.__name__!r} was fitted with "
                 f"{len(self._signs)} ensemble members, but got "
-                f"{ensemble_table.num_members}."
+                f"{len(ensemble_table)}."
             )
         tables: list[TableTensor] = []
-        for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.member(member_id)
+        for member_id in range(len(ensemble_table)):
+            table = ensemble_table[member_id]
             tables.append(
                 table.replace_blocks(
                     numerical=table.numerical * self._signs[member_id]

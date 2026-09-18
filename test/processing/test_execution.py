@@ -52,7 +52,7 @@ def test_sequence_uses_batched_fit_states_for_shared_query() -> None:
         assert query.related_tables is not None
         expected = (
             sp.Standardize()
-            .fit(fitted_related.member(member_id))
+            .fit(fitted_related[member_id])
             .transform(query_table)
         )
         assert query.related_tables.tables["x"].equal(expected)
@@ -147,9 +147,7 @@ def test_sequence_uses_shared_fit_state_for_batched_query() -> None:
     for member_id, query in enumerate(queries):
         assert query.related_tables is not None
         expected = (
-            sp.Standardize()
-            .fit(fit_table)
-            .transform(query_related.member(member_id))
+            sp.Standardize().fit(fit_table).transform(query_related[member_id])
         )
         assert query.related_tables.tables["x"].equal(expected)
 
@@ -198,7 +196,7 @@ def test_sequence_batches_separate_compatible_queries_for_fit_states() -> None:
         assert query.related_tables is not None
         expected = (
             sp.Standardize()
-            .fit(fitted_related.member(member_id))
+            .fit(fitted_related[member_id])
             .transform(query_tables[member_id])
         )
         assert query.related_tables.tables["x"].equal(expected)
@@ -254,7 +252,7 @@ def test_sequence_splits_batched_query_for_separate_fit_states() -> None:
         expected = (
             sp.Standardize()
             .fit(fit_tables[member_id])
-            .transform(query_related.member(member_id))
+            .transform(query_related[member_id])
         )
         assert query.related_tables.tables["x"].equal(expected)
 

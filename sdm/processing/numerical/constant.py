@@ -122,14 +122,14 @@ class DropConstantColumns(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        groups = tuple(ensemble_table)
+        groups = tuple(ensemble_table._iter_groups())
         if sum(group.size(0) for group in groups) == 1:
             group = groups[0]
             keep = self._keep_mask(group.numerical)[0].tolist()
             kept_indices = tuple(
                 index for index, kept in enumerate(keep) if kept
             )
-            self._kept_indices = (kept_indices,) * ensemble_table.num_members
+            self._kept_indices = (kept_indices,) * len(ensemble_table)
             return
 
         masks = ensemble_table.replace_groups(
@@ -147,15 +147,15 @@ class DropConstantColumns(EnsembleProcessor):
             tuple[int, torch.device],
             list[tuple[int, torch.Tensor]],
         ] = {}
-        for member_id in range(masks.num_members):
-            table = masks.member(member_id)
+        for member_id in range(len(masks)):
+            table = masks[member_id]
             key = (table.numerical.size(-1), table.device)
             masks_by_size_and_device.setdefault(key, []).append(
                 (member_id, table.numerical[0].bool())
             )
 
         kept_indices_by_member: list[tuple[int, ...]]
-        kept_indices_by_member = [()] * masks.num_members
+        kept_indices_by_member = [()] * len(masks)
         for member_masks in masks_by_size_and_device.values():
             keep_by_member = torch.stack(
                 [keep for _, keep in member_masks]
@@ -174,26 +174,25 @@ class DropConstantColumns(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._kept_indices) != ensemble_table.num_members:
+        if len(self._kept_indices) != len(ensemble_table):
             raise RuntimeError(
                 "DropConstantColumns must be fitted with the same number of "
                 "ensemble members before transform."
             )
 
-        if (
-            sum(group.size(0) for group in ensemble_table)
-            == ensemble_table.num_members
-        ):
+        if sum(
+            group.size(0) for group in ensemble_table._iter_groups()
+        ) == len(ensemble_table):
             tables = [
                 self._select_columns(
-                    ensemble_table.member(member_id),
+                    ensemble_table[member_id],
                     kept_indices,
                 )
                 for member_id, kept_indices in enumerate(self._kept_indices)
             ]
             return ensemble_table.replace_tables(
                 tables=tables,
-                member_table_ids=range(ensemble_table.num_members),
+                member_table_ids=range(len(ensemble_table)),
             )
 
         member_ids_by_kept_indices: dict[tuple[int, ...], list[int]] = {}
@@ -207,17 +206,17 @@ class DropConstantColumns(EnsembleProcessor):
             return ensemble_table.replace_groups(
                 [
                     self._select_columns(group, kept_indices)
-                    for group in ensemble_table
+                    for group in ensemble_table._iter_groups()
                 ]
             )
 
         outputs: dict[tuple[int, ...], EnsembleTable] = {}
         for kept_indices, member_ids in member_ids_by_kept_indices.items():
-            selected = ensemble_table.select_members(member_ids)
+            selected = ensemble_table[member_ids]
             outputs[kept_indices] = selected.replace_groups(
                 [
                     self._select_columns(group, kept_indices)
-                    for group in selected
+                    for group in selected._iter_groups()
                 ]
             )
 

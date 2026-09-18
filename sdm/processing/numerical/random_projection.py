@@ -41,7 +41,7 @@ class RandomProjection(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> None:
         weights = []
-        for i, group in enumerate(ensemble_table):
+        for i, group in enumerate(ensemble_table._iter_groups()):
             num_members = ensemble_table.num_members_in_group(i)
             weight = group.numerical.new_empty(
                 (

@@ -44,7 +44,7 @@ class AddFittedMemberCount(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self.value = ensemble_table.num_members
+        self.value = len(ensemble_table)
 
     def _transform_ensemble(
         self,
@@ -53,7 +53,7 @@ class AddFittedMemberCount(EnsembleProcessor):
         return ensemble_table.replace_groups(
             [
                 group.replace_blocks(numerical=group.numerical + self.value)
-                for group in ensemble_table
+                for group in ensemble_table._iter_groups()
             ]
         )
 
@@ -157,14 +157,14 @@ def test_choice_round_robin_routes_members() -> None:
     for member_id in range(8):
         offset = 10 * (member_id % 2)
         torch.testing.assert_close(
-            transformed.member(member_id).numerical,
+            transformed[member_id].numerical,
             context.numerical + offset,
         )
         torch.testing.assert_close(
-            query_transformed.member(member_id).numerical,
+            query_transformed[member_id].numerical,
             query.numerical + offset,
         )
-        assert restored.member(member_id).equal(context)
+        assert restored[member_id].equal(context)
 
 
 def test_choice_fit_ensemble_fits_selected_options() -> None:
@@ -176,10 +176,10 @@ def test_choice_fit_ensemble_fits_selected_options() -> None:
     transformed = fitted.transform_ensemble(table)
     expected = combined.fit_transform_ensemble(table)
 
-    for member_id in range(table.num_members):
+    for member_id in range(len(table)):
         torch.testing.assert_close(
-            transformed.member(member_id).numerical,
-            expected.member(member_id).numerical,
+            transformed[member_id].numerical,
+            expected[member_id].numerical,
         )
 
 
@@ -202,7 +202,7 @@ def test_choice_fits_options_on_selected_members() -> None:
 
     for member_id, source in enumerate(tables):
         torch.testing.assert_close(
-            output.member(member_id).numerical,
+            output[member_id].numerical,
             source.numerical + 2,
         )
 
@@ -226,7 +226,7 @@ def test_nested_choice_routes_selected_members_locally() -> None:
     for member_id in range(8):
         offset = 10 * ((member_id // 2) % 3 + 1) if member_id % 2 == 0 else 100
         torch.testing.assert_close(
-            output.member(member_id).numerical,
+            output[member_id].numerical,
             _table().numerical + offset,
         )
 

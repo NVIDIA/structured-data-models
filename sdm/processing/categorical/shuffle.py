@@ -92,13 +92,13 @@ class ShuffleCategories(EnsembleProcessor):
             tuple[torch.device, tuple[tuple[int, ...], ...]], int
         ] = {}
 
-        for member_id in range(ensemble_table.num_members):
+        for member_id in range(len(ensemble_table)):
             permutations = self._draw_permutations(
-                ensemble_table.member(member_id),
+                ensemble_table[member_id],
                 generator=generator,
             )
             key = (
-                ensemble_table.member(member_id).categorical.device,
+                ensemble_table[member_id].categorical.device,
                 tuple(
                     tuple(permutation.tolist()) for permutation in permutations
                 ),
@@ -119,7 +119,7 @@ class ShuffleCategories(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._permutation_ids) != ensemble_table.num_members:
+        if len(self._permutation_ids) != len(ensemble_table):
             raise RuntimeError(
                 "ShuffleCategories must be fitted with the same number of "
                 "ensemble members before transform."
@@ -131,27 +131,30 @@ class ShuffleCategories(EnsembleProcessor):
                 member_id
             )
 
-        if len(member_ids_by_permutation) == ensemble_table.num_members:
+        if len(member_ids_by_permutation) == len(ensemble_table):
             member_tables: list[TableTensor] = []
             for member_id, permutation_id in enumerate(self._permutation_ids):
                 permutations = self._permutations[permutation_id]
                 member_tables.append(
                     self._permute(
-                        ensemble_table.member(member_id),
+                        ensemble_table[member_id],
                         permutations,
                     )
                 )
             return EnsembleTable.from_tables(
                 tables=member_tables,
-                member_table_ids=range(ensemble_table.num_members),
+                member_table_ids=range(len(ensemble_table)),
             )
 
         outputs: dict[int, EnsembleTable] = {}
         for permutation_id, member_ids in member_ids_by_permutation.items():
-            selected = ensemble_table.select_members(member_ids)
+            selected = ensemble_table[member_ids]
             permutations = self._permutations[permutation_id]
             outputs[permutation_id] = selected.replace_groups(
-                [self._permute(group, permutations) for group in selected]
+                [
+                    self._permute(group, permutations)
+                    for group in selected._iter_groups()
+                ]
             )
 
         output_tables = []
