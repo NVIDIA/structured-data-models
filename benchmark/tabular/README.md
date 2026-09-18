@@ -69,7 +69,7 @@ python -m benchmark.tabular.tabarena.main \
 python -m benchmark.tabular.tabarena.main \
   --model kumo-tabular \
   --checkpoint /path/to/final.pt \
-  --recipe_ensemble round_robin,identity,power,squash,quantile,round_robin+catshuffle30 \
+  --recipe_ensemble round_robin,identity,power,squash,quantile,round_robin+catshuffle30,round_robin+impute \
   --name my-blend \
   --output_root /path/to/tabarena_out \
   --cache_root /path/to/cache
