@@ -42,12 +42,20 @@ class DecodeCache:
             cache capacity, ``H`` is the number of heads, and ``D`` is the
             head dimension.
         value: Value projections with the same shape as ``key``.
+        patch_mask: Cached invalid-patch mask with shape ``[L, C]``.
+        segment_ids: Optional cached segment identifiers with shape
+            ``[L, C]``.
+        filled: Length of the populated cache prefix. ``None`` uses the full
+            cache capacity.
     """
 
     next_index: Tensor
     num_front_masked: Tensor
     key: Tensor
     value: Tensor
+    patch_mask: Tensor | None = None
+    segment_ids: Tensor | None = None
+    filled: int | None = None
 
     @classmethod
     def init_decode_cache(
@@ -105,11 +113,24 @@ class DecodeCache:
                     device=device,
                     dtype=dtype,
                 ),
+                patch_mask=torch.ones(
+                    leading_size,
+                    num_total_input_patches,
+                    dtype=torch.bool,
+                    device=device,
+                ),
+                filled=0,
             )
             for _ in range(num_layers)
         ]
 
-    def append(self, key: Tensor, value: Tensor) -> "DecodeCache":
+    def append(
+        self,
+        key: Tensor,
+        value: Tensor,
+        patch_mask: Tensor | None = None,
+        segment_ids: Tensor | None = None,
+    ) -> "DecodeCache":
         """Append key/value projections and advance each insertion index.
 
         The method updates the preallocated key and value tensors in place and
@@ -118,6 +139,8 @@ class DecodeCache:
         Args:
             key: New key projections with shape ``[L, Q, H, D]``.
             value: New value projections with the same shape as ``key``.
+            patch_mask: Invalid-patch mask with shape ``[L, Q]``.
+            segment_ids: Optional segment identifiers with shape ``[L, Q]``.
 
         Returns:
             Cache with every insertion index advanced by ``Q``.
@@ -127,21 +150,69 @@ class DecodeCache:
             num_sequences,
             device=self.next_index.device,
         )
+        if patch_mask is None:
+            patch_mask = torch.zeros(
+                num_sequences,
+                query_length,
+                dtype=torch.bool,
+                device=self.next_index.device,
+            )
+
+        cache_patch_mask = self.patch_mask
+        if cache_patch_mask is None:
+            cache_patch_mask = torch.ones(
+                self.key.shape[:2],
+                dtype=torch.bool,
+                device=self.key.device,
+            )
+
+        cache_segment_ids = self.segment_ids
+        if segment_ids is not None and cache_segment_ids is None:
+            cache_segment_ids = torch.zeros(
+                self.key.shape[:2],
+                dtype=segment_ids.dtype,
+                device=segment_ids.device,
+            )
+
         if query_length == 1:
             self.key[sequence_indices, self.next_index] = key[:, 0]
             self.value[sequence_indices, self.next_index] = value[:, 0]
+            cache_patch_mask[sequence_indices, self.next_index] = patch_mask[
+                :, 0
+            ]
+            if segment_ids is not None:
+                assert cache_segment_ids is not None
+                cache_segment_ids[sequence_indices, self.next_index] = (
+                    segment_ids[:, 0]
+                )
         else:
             positions = self.next_index[:, None] + torch.arange(
                 query_length,
                 device=self.next_index.device,
             )
-            self.key[sequence_indices[:, None], positions] = key
-            self.value[sequence_indices[:, None], positions] = value
+            cache_indices = (sequence_indices[:, None], positions)
+            self.key[cache_indices] = key
+            self.value[cache_indices] = value
+            cache_patch_mask[cache_indices] = patch_mask
+            if segment_ids is not None:
+                assert cache_segment_ids is not None
+                cache_segment_ids[cache_indices] = segment_ids
+
+        leading_masked = patch_mask.int().cumprod(dim=-1).sum(dim=-1)
+        leading_masked = leading_masked.to(self.num_front_masked.dtype)
+        num_front_masked = torch.where(
+            self.next_index == self.num_front_masked,
+            self.num_front_masked + leading_masked,
+            self.num_front_masked,
+        )
         return DecodeCache(
             next_index=self.next_index + query_length,
-            num_front_masked=self.num_front_masked,
+            num_front_masked=num_front_masked,
             key=self.key,
             value=self.value,
+            patch_mask=cache_patch_mask,
+            segment_ids=cache_segment_ids,
+            filled=None if self.filled is None else self.filled + query_length,
         )
 
 

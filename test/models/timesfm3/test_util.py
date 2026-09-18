@@ -40,6 +40,11 @@ def test_init_decode_cache(device: torch.device) -> None:
         assert cache.value.shape == cache.key.shape
         assert cache.value.dtype == cache.key.dtype
         assert cache.key.device == device
+        assert cache.patch_mask is not None
+        assert cache.patch_mask.shape == (6, 5)
+        assert cache.patch_mask.all()
+        assert cache.segment_ids is None
+        assert cache.filled == 0
     assert caches[0].key.data_ptr() != caches[1].key.data_ptr()
     assert caches[0].value.data_ptr() != caches[1].value.data_ptr()
 
@@ -86,6 +91,57 @@ def test_decode_cache_appends_heterogeneous_batch(
     torch.testing.assert_close(updated.key[:, 5], torch.zeros_like(key[:, 0]))
     assert updated.key.data_ptr() == key_storage.data_ptr()
     assert updated.value.data_ptr() == value_storage.data_ptr()
+
+
+@withCUDA
+def test_decode_cache_appends_masks_and_segments(
+    device: torch.device,
+) -> None:
+    cache = DecodeCache.init_decode_cache(
+        num_layers=1,
+        batch_size=2,
+        num_variates=1,
+        num_total_input_patches=4,
+        num_heads=1,
+        head_dim=2,
+        device=device,
+    )[0]
+    key = torch.ones(2, 2, 1, 2, device=device)
+    patch_mask = torch.tensor(
+        [[True, False], [True, True]],
+        device=device,
+    )
+    segment_ids = torch.tensor([[0, 0], [1, 1]], device=device)
+
+    cache = cache.append(
+        key,
+        -key,
+        patch_mask=patch_mask,
+        segment_ids=segment_ids,
+    )
+
+    assert cache.patch_mask is not None
+    assert cache.segment_ids is not None
+    assert cache.filled == 2
+    torch.testing.assert_close(
+        cache.num_front_masked,
+        cache.num_front_masked.new_tensor([1, 2]),
+    )
+    torch.testing.assert_close(cache.patch_mask[:, :2], patch_mask)
+    torch.testing.assert_close(cache.segment_ids[:, :2], segment_ids)
+
+    cache = cache.append(
+        key[:, :1],
+        -key[:, :1],
+        patch_mask=torch.tensor([[False], [True]], device=device),
+        segment_ids=torch.tensor([[0], [1]], device=device),
+    )
+
+    assert cache.filled == 3
+    torch.testing.assert_close(
+        cache.num_front_masked,
+        cache.num_front_masked.new_tensor([1, 3]),
+    )
 
 
 @withCUDA
