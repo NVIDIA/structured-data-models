@@ -4,9 +4,7 @@
 """Shared full fine-tuning core for the tabular benchmark harness.
 
 Fine-tunes every parameter of an :class:`~sdm.models.ICLModel` with gradient
-descent, using ``model.train()`` to make ``forward()`` differentiable
-end-to-end against the model's own default recipe (no training ``Callback``
-or ``Recipe`` override needed). Generic over ``x``/``y`` :class:`TableTensor`
+descent. Generic over ``x``/``y`` :class:`TableTensor`
 pools built however each benchmark adapter already builds them, so the same
 :func:`full_finetune` call can be dropped in right before each adapter's
 existing ``model.fit(...)`` call.
