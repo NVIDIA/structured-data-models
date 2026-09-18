@@ -51,3 +51,25 @@ def test_callback_requires_grad_supports_autograd(fitted: bool) -> None:
         model(x_context, y_context, x_query, callbacks=callbacks)
 
     assert callback.completed
+
+
+@pytest.mark.parametrize(
+    "y_context",
+    [
+        torch.arange(2)[:, None],  # classification
+        torch.tensor([[0.0], [1.0]]),  # regression
+    ],
+)
+def test_train_mode_supports_autograd_without_callback(
+    y_context: Tensor,
+) -> None:
+    model = TabICLv2(pretrained=False)
+    model.train()
+    x_context = torch.eye(2)
+    x_query = torch.ones(1, 2)
+
+    out = model(x_context, y_context, x_query)
+    assert not torch.is_inference(out)
+
+    out.numerical.sum().backward()
+    assert any(p.grad is not None for p in model.parameters())
