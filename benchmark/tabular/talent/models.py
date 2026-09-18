@@ -363,7 +363,7 @@ class SDMMethod(Method):
         else:
             columns = [str(value) for value in self.y_info["classes"]]
             prediction = out.to_pandas()[columns].to_numpy()
-            probabilities = torch.as_tensor(prediction)
+            probabilities = torch.as_tensor(prediction.copy())
             loss = self.criterion(
                 probabilities.clamp_min(
                     torch.finfo(probabilities.dtype).tiny
