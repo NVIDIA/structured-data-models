@@ -47,8 +47,6 @@ def _yeojohnson_inverse_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
     positive = inp >= 0
     eps = torch.finfo(inp.dtype).eps
 
-    # Mirror the ``log1p``/``expm1`` pair of the forward transform: a small
-    # ``inp * lambdas`` loses its precision in ``(1 + x).log()``.
     positive_power = ((inp * lambdas).log1p() / lambdas).expm1()
     positive_log = inp.expm1()
     positive_out = torch.where(
@@ -276,7 +274,7 @@ class PowerTransform(Processor, InvertibleMixin):
 
         mean = mean.to(dtype)
         # ``mean`` never exceeds the column maximum, and is zero for an
-        # entirely missing column.
+        # entirely missing column, whose max must be zero.
         self.max = torch.where(finite, table.numerical, mean).amax(
             dim=-2,
             keepdim=True,
@@ -321,8 +319,7 @@ class PowerTransform(Processor, InvertibleMixin):
         inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)
 
         # Above the fitted upper bound the inverse diverges, either to
-        # infinity or, past the asymptote, to NaN. Fall back to the largest
-        # fitted value and keep missing values missing.
+        # infinity or, past the asymptote, to NaN.
         diverged = ~inverse.isfinite() & ~unscaled.isnan()
         return table.replace_blocks(
             numerical=torch.where(
