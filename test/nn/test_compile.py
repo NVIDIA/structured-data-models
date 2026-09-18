@@ -8,6 +8,7 @@ import pytest
 import torch
 from torch import Tensor
 
+from sdm import optimize
 from sdm.cache import QuantizedKVCacheEntry
 from sdm.nn import (
     SDPA,
@@ -250,11 +251,11 @@ def test_attention_compile_fp8_cache(dtype: torch.dtype) -> None:
         device="cuda",
         dtype=dtype,
     ).eval()
-    module.attention_quantization = "fp8"
+    module._supports_quantized_attention = True
     torch.nn.init.normal_(module.out_lin.weight, std=0.05)
     context = torch.randn(1, 8193, 128, device="cuda", dtype=dtype)
     compiled = torch.compile(module, fullgraph=True, dynamic=False)
-    with torch.inference_mode():
+    with torch.inference_mode(), optimize(attention="fp8"):
         expected, eager_cache = module(context, return_key_value=True)
         actual, cache = compiled(context, return_key_value=True)
         assert isinstance(cache, QuantizedKVCacheEntry)
@@ -264,6 +265,16 @@ def test_attention_compile_fp8_cache(dtype: torch.dtype) -> None:
             expected = module(query, eager_cache)
             torch.testing.assert_close(compiled(query, cache), expected)
             torch.testing.assert_close(compiled(query, eager_cache), expected)
+
+    with torch.inference_mode():
+        expected, _ = module(context, return_key_value=True)
+        actual, ordinary_cache = compiled(context, return_key_value=True)
+        assert not isinstance(ordinary_cache, QuantizedKVCacheEntry)
+        torch.testing.assert_close(actual, expected)
+        with optimize(attention="fp8"):
+            torch.testing.assert_close(
+                compiled(query, cache), module(query, cache)
+            )
 
 
 @withCUDA

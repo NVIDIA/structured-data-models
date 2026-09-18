@@ -6,6 +6,7 @@ import copy
 import pytest
 import torch
 
+from sdm import optimize
 from sdm.cache import Cache, KVCacheEntry, QuantizedKVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 from sdm.nn import Attention
@@ -17,10 +18,11 @@ def test_fp8_small_context_fallback(device: torch.device) -> None:
     module = Attention(128, 2, device=device)
     torch.nn.init.normal_(module.out_lin.weight, std=0.05)
     reference = copy.deepcopy(module)
-    module.attention_quantization = "fp8"
+    module._supports_quantized_attention = True
     query = torch.randn(2, 19, 128, device=device)
     with torch.inference_mode():
-        actual, cache = module(query, return_key_value=True)
+        with optimize(attention="fp8"):
+            actual, cache = module(query, return_key_value=True)
         expected = reference(query)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     assert isinstance(cache, KVCacheEntry)
@@ -43,7 +45,7 @@ def test_fp8_context_cache_and_chunking(dtype: torch.dtype) -> None:
     )
     torch.nn.init.normal_(module.attn.out_lin.weight, std=0.05)
     reference = copy.deepcopy(module)
-    module.attn.attention_quantization = "fp8"
+    module.attn._supports_quantized_attention = True
     context = torch.randn(2, 1, 8193, 128, device="cuda")
     query = torch.randn(2, 1, 129, 128, device="cuda")
     joined = torch.cat([context, query], dim=-2)
@@ -52,23 +54,24 @@ def test_fp8_context_cache_and_chunking(dtype: torch.dtype) -> None:
         torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
     ):
         expected = reference(joined, context)
-        full = module(joined, context)
-        _, cache = module(
-            context, context, return_key_value=True, batch_size_limit=1
-        )
-        assert isinstance(cache, QuantizedKVCacheEntry)
-        actual = module(query, cache, batch_size_limit=1)
-        unchunked = module(query, cache)
-        split = torch.cat(
-            [
-                module(query[..., :64, :], cache),
-                module(query[..., 64:, :], cache),
-            ],
-            dim=-2,
-        )
-        empty = module(query[..., :0, :], cache)
-        migrated = Cache(kv=cache).cpu().cuda()["kv"]
-        replay = module(query, migrated)
+        with optimize(attention="fp8"):
+            full = module(joined, context)
+            _, cache = module(
+                context, context, return_key_value=True, batch_size_limit=1
+            )
+            assert isinstance(cache, QuantizedKVCacheEntry)
+            actual = module(query, cache, batch_size_limit=1)
+            unchunked = module(query, cache)
+            split = torch.cat(
+                [
+                    module(query[..., :64, :], cache),
+                    module(query[..., 64:, :], cache),
+                ],
+                dim=-2,
+            )
+            empty = module(query[..., :0, :], cache)
+            migrated = Cache(kv=cache).cpu().cuda()["kv"]
+            replay = module(query, migrated)
     assert empty.size(-2) == 0
     assert actual.isfinite().all()
     torch.testing.assert_close(actual, unchunked, atol=2e-3, rtol=2e-3)
@@ -90,11 +93,22 @@ def test_fp8_context_cache_and_chunking(dtype: torch.dtype) -> None:
         torch.autocast(
             "cuda", dtype=torch.float16, enabled=dtype == torch.float32
         ),
+        optimize(attention="fp8"),
         pytest.raises(ValueError, match="dtype"),
     ):
         module(query, cache)
     with (
         torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
+        optimize(attention="fp8"),
         pytest.raises(ValueError, match="inference"),
     ):
         module(query, cache)
+
+    with (
+        torch.inference_mode(),
+        torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
+    ):
+        with pytest.raises(RuntimeError, match=r"sdm\.optimize"):
+            module(query, cache)
+        with optimize(attention="fp8"):
+            torch.testing.assert_close(module(query, cache), actual)
