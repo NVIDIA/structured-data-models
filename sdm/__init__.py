@@ -16,7 +16,7 @@ from sdm.tensor import (
     ColumnarTensor,
     TableTensor,
 )
-from sdm.ensemble import EnsembleData, EnsembleTable
+from sdm.ensemble import EnsembleData, EnsembleTensor, EnsembleTable
 from sdm.relational import (
     Relationship,
     RelationalData,
@@ -45,6 +45,7 @@ __all__ = [
     "ColumnarTensor",
     "TableTensor",
     "EnsembleData",
+    "EnsembleTensor",
     "EnsembleTable",
     "Relationship",
     "RelationalData",
