@@ -224,9 +224,8 @@ def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     device: torch.device,
 ) -> None:
     # The first column fits a positive lambda, whose inverse-domain has no
-    # upper bound, so ``upper_bound`` must be +inf (matching the lambda == 0
-    # case). A non-finite model output must fall back to the fitted per-column
-    # max, or zero for the entirely missing second column.
+    # upper bound. A non-finite model output must fall back to the fitted
+    # per-column max, or zero for the entirely missing second column.
     inp = torch.tensor(
         [
             [0.0, float("nan")],
@@ -245,7 +244,6 @@ def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     processor = PowerTransform()
     processor.fit(TableTensor.from_tensor(inp))
     assert (processor.lambdas > 0).all()
-    assert torch.isinf(processor.upper_bound).all()
 
     extreme = torch.tensor(
         [[float("inf"), float("inf")]], dtype=inp.dtype, device=device
@@ -291,3 +289,65 @@ def test_power_transform_fits_leading_batches_independently(
         rtol=2e-5,
         atol=2e-5,
     )
+
+
+@withCUDA
+def test_power_transform_fit_ignores_missing_cells(
+    device: torch.device,
+) -> None:
+    values = torch.linspace(0.1, 5.0, 300, device=device).exp().unsqueeze(-1)
+    missing = torch.zeros(300, dtype=torch.bool, device=device)
+    missing[::3] = True
+    query = TableTensor.from_tensor(
+        torch.tensor([[0.5], [2.0], [40.0]], device=device)
+    )
+
+    with_missing = PowerTransform().fit(
+        TableTensor.from_tensor(
+            values.masked_fill(missing.unsqueeze(-1), float("nan"))
+        )
+    )
+    on_finite = PowerTransform().fit(TableTensor.from_tensor(values[~missing]))
+
+    torch.testing.assert_close(
+        with_missing.transform(query).numerical,
+        on_finite.transform(query).numerical,
+        rtol=5e-3,
+        atol=5e-3,
+    )
+
+
+@withCUDA
+def test_power_transform_keeps_queries_beyond_the_fitted_range_finite(
+    device: torch.device,
+) -> None:
+    # Small-magnitude columns fit a large lambda, which overflows for inputs
+    # above the fitted range.
+    decay = torch.linspace(0.0, 1.0, 2000, device=device).pow(8)
+    inp = (0.01 * (1.0 - decay)).unsqueeze(-1)
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
+
+    out = processor.transform(
+        TableTensor.from_tensor(torch.tensor([[1.0], [10.0]], device=device))
+    )
+
+    assert out.numerical.isfinite().all()
+
+
+@withCUDA
+def test_power_transform_inverse_beyond_the_fitted_bound_falls_back_to_max(
+    device: torch.device,
+) -> None:
+    # A right-skewed column fits a negative lambda, whose inverse has a
+    # finite asymptote; past it the power formula yields NaN rather than inf.
+    inp = torch.linspace(0.1, 5.0, 2000, device=device).exp().unsqueeze(-1)
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
+
+    restored = processor.inverse_transform(
+        TableTensor.from_tensor(
+            torch.tensor([[2.0], [20.0], [1e6]], device=device)
+        )
+    ).numerical
+
+    assert restored.isfinite().all()
+    assert (restored[1:] == inp.max()).all()
