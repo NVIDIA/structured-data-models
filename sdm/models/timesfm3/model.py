@@ -99,7 +99,10 @@ class TimesFM3(ICLModel):
 
     .. note::
         Custom recipes must leave :attr:`~sdm.processing.Recipe.target`
-        unchanged. Feature and output pipelines remain configurable.
+        unchanged. Feature pipelines may transform, reorder, or drop existing
+        numerical columns, but cannot introduce new column names because names
+        identify past-only and future-known covariates. Output pipelines remain
+        configurable.
 
     .. note::
         :class:`TimesFM` model weights are distributed under the
@@ -262,6 +265,22 @@ class TimesFM3(ICLModel):
             for quantile in self.model.quantiles
         ]
 
+        if x_context is not None:
+            context_schema = x_context.schema
+        else:
+            assert cache is not None
+            context_schema = cast(TableSchema, cache["x_schema"])
+
+        source_schema = cast(TableSchema, kwargs["_x_context_schema"])
+        source_columns = set(source_schema.columns[Stype.numerical])
+        processed_columns = set(context_schema.columns[Stype.numerical])
+        if not processed_columns.issubset(source_columns):
+            raise ValueError(
+                "TimesFM3 feature recipes must not introduce new numerical "
+                "column names because names identify past-only and "
+                "future-known covariates."
+            )
+
         if cache is not None and cache.is_recording:
             assert x_context is not None
             assert y_context is not None
@@ -280,11 +299,9 @@ class TimesFM3(ICLModel):
             assert y_context is not None
             context_values = x_context.numerical
             target_values = y_context.numerical
-            context_schema = x_context.schema
         else:
             context_values = cast(Tensor, cache["x_context"])
             target_values = cast(Tensor, cache["y_context"])
-            context_schema = cast(TableSchema, cache["x_schema"])
 
         query_values = x_query.numerical
         query_schema = cast(TableSchema, kwargs["_x_query_schema"])
@@ -709,7 +726,6 @@ class _TimesFM3(torch.nn.Module):
             outputs["__call__:transformer_output"] = transformer_output
         return outputs
 
-    @torch.no_grad()
     def decode(
         self,
         target: Tensor,
@@ -726,6 +742,8 @@ class _TimesFM3(torch.nn.Module):
 
         Future-known covariates determine the forecast horizon when supplied,
         overriding ``horizon``.
+
+        Gradient tracking follows the ambient PyTorch gradient mode.
 
         Args:
             target: Target context with shape ``[B, U, C]``, where ``B`` is the
@@ -1072,7 +1090,16 @@ class _TimesFM3(torch.nn.Module):
 
 
 def expand_query(x_context: TableSchema, x_query: TableTensor) -> TableTensor:
-    """Expand the query by dummy past covariates."""
+    """Expand a query with placeholders for past-only covariates.
+
+    Args:
+        x_context: Context feature schema.
+        x_query: Future-known covariates with shape ``[..., R, D]``.
+
+    Returns:
+        Query with the context schema and shape ``[..., R, C]``, where ``C``
+        is the number of context features.
+    """
     if x_context == x_query.schema:
         return x_query
 

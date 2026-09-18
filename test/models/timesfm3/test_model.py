@@ -434,7 +434,9 @@ def test_default_recipe_averages_estimators(device: torch.device) -> None:
 
 
 @withCUDA
-def test_custom_recipe_allows_identity_target(device: torch.device) -> None:
+def test_custom_recipe_allows_supported_pipelines(
+    device: torch.device,
+) -> None:
     model = _public_model(device)
     x_context = TableTensor.from_tensor(
         torch.arange(12, dtype=torch.float32, device=device).reshape(6, 2),
@@ -449,14 +451,47 @@ def test_custom_recipe_allows_identity_target(device: torch.device) -> None:
         columns=["known"],
     )
     recipe = sp.Recipe(
+        features=sp.Standardize(),
         target=sp.Identity(),
         output=sp.ReduceEstimators(method="mean"),
     )
 
     actual = model(x_context, y_context, x_query, recipe=recipe)
-    expected = model(x_context, y_context, x_query)
 
-    torch.testing.assert_close(actual.numerical, expected.numerical)
+    assert actual.size() == (3, 3)
+    assert actual.numerical.isfinite().all()
+
+
+def test_custom_recipe_rejects_renamed_feature_columns() -> None:
+    model = _public_model(torch.device("cpu"))
+    x_context = TableTensor.from_tensor(
+        torch.arange(12, dtype=torch.float32).reshape(6, 2),
+        columns=["past", "known"],
+    )
+    y_context = TableTensor.from_tensor(
+        torch.arange(6, dtype=torch.float32).unsqueeze(-1),
+        columns=["target"],
+    )
+    x_query = TableTensor.from_tensor(
+        torch.arange(3, dtype=torch.float32).unsqueeze(-1),
+        columns=["known"],
+    )
+    recipe = sp.Recipe(features=sp.RandomProjection(channels=1))
+    message = "must not introduce new numerical column names"
+
+    with pytest.raises(ValueError, match=message):
+        model(
+            x_context,
+            y_context,
+            x_query,
+            recipe=recipe,
+        )
+    with pytest.raises(ValueError, match=message):
+        model.fit(
+            x_context,
+            y_context,
+            recipe=recipe,
+        )
 
 
 def test_custom_recipe_rejects_target_transformations() -> None:
@@ -731,6 +766,29 @@ def test_public_model_bfloat16(device: torch.device) -> None:
     torch.testing.assert_close(cached.numerical, one_shot.numerical)
 
 
+@withCUDA
+def test_train_mode_supports_autograd(device: torch.device) -> None:
+    model = _public_model(device).train()
+    x_context = TableTensor.from_tensor(
+        torch.arange(12, dtype=torch.float32, device=device).reshape(6, 2),
+        columns=["past", "known"],
+    )
+    y_context = TableTensor.from_tensor(
+        torch.arange(6, dtype=torch.float32, device=device).unsqueeze(-1),
+        columns=["target"],
+    )
+    x_query = TableTensor.from_tensor(
+        torch.arange(3, dtype=torch.float32, device=device).unsqueeze(-1),
+        columns=["known"],
+    )
+
+    output = model(x_context, y_context, x_query)
+
+    assert output.numerical.requires_grad
+    output.numerical.sum().backward()
+    assert any(parameter.grad is not None for parameter in model.parameters())
+
+
 @pytest.mark.parametrize("case_index", [0, 1])
 @withCUDA
 def test_internal_model_matches_pinned_upstream(
@@ -791,7 +849,6 @@ def test_internal_model_decode_matches_pinned_upstream(
     actual, auxiliary = result
     expected = actual.new_tensor(fixture["output"])
     torch.testing.assert_close(actual, expected)
-    assert not actual.requires_grad
     assert auxiliary["logits"].shape == (1, 3, 5, 4, 1)
     assert auxiliary["__call__:resblock_input"].shape == (1, 3, 5, 12)
 
@@ -816,7 +873,6 @@ def test_internal_model_decode_without_stitching_matches_pinned_upstream(
     assert isinstance(actual, torch.Tensor)
     expected = actual.new_tensor(fixture["output"])
     torch.testing.assert_close(actual, expected)
-    assert not actual.requires_grad
 
 
 def test_internal_model_decode_rejects_nonpositive_horizon() -> None:

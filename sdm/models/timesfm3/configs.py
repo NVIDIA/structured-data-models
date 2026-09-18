@@ -15,15 +15,23 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Configuration for TimesFM-3 layers."""
-
 from dataclasses import dataclass
 from typing import Literal
 
 
 @dataclass(frozen=True)
 class ResidualBlockConfig:
-    """Configuration for a residual block."""
+    """Configure a TimesFM-3 residual block.
+
+    Args:
+        hidden_dims: Hidden-layer width.
+        output_dims: Output width.
+        use_bias: Whether linear layers use bias parameters.
+        activation: Hidden-layer activation.
+        dropout: Upstream dropout setting, unused by this block.
+        identity_skip: Whether to use an identity residual connection.
+        prenorm: Normalization applied before the hidden layer.
+    """
 
     hidden_dims: int
     output_dims: int
@@ -36,7 +44,30 @@ class ResidualBlockConfig:
 
 @dataclass(frozen=True)
 class TransformerConfig:
-    """Configuration for a mixing transformer."""
+    """Configure a TimesFM-3 mixing transformer.
+
+    Args:
+        model_dims: Input and output width.
+        hidden_dims: Feed-forward hidden width.
+        num_heads: Number of attention heads.
+        attention_norm: Attention normalization.
+        feedforward_norm: Feed-forward normalization.
+        qk_norm: Query and key normalization.
+        use_bias: Whether linear layers use bias parameters.
+        use_rope_seq: Whether temporal attention uses rotary embeddings.
+        use_rope_var: Whether variate attention uses rotary embeddings.
+        ff_activation: Feed-forward activation.
+        deterministic: Upstream deterministic-execution setting.
+        v_norm: Value normalization.
+        causal_attention: Whether temporal attention is causal.
+        debug_no_masking: Upstream masking-debug setting.
+        training: Upstream training-mode setting.
+        use_memory_efficient_attention: Whether attention uses the upstream
+            memory-efficient scaling convention.
+        paired_token_skip_second: Upstream paired-token setting.
+        max_variates: Upstream maximum-variate setting.
+        use_sdpa: Whether to use scaled dot-product attention.
+    """
 
     model_dims: int
     hidden_dims: int
@@ -61,7 +92,13 @@ class TransformerConfig:
 
 @dataclass(frozen=True)
 class StackedTransformersConfig:
-    """Configuration for a stack of mixing transformers."""
+    """Configure a stack of TimesFM-3 mixing transformers.
+
+    Args:
+        num_layers: Number of transformer layers.
+        transformer: Configuration shared by every layer.
+        use_remat: Upstream rematerialization setting.
+    """
 
     num_layers: int
     transformer: TransformerConfig

@@ -4,7 +4,8 @@
 import sdm.processing as sp
 
 
-def default_recipe() -> sp.Recipe:  # noqa: D103
+def default_recipe() -> sp.Recipe:
+    """Return the default TimesFM-3 processing recipe."""
     return sp.Recipe(
         output=sp.ReduceEstimators(method="mean"),
     )

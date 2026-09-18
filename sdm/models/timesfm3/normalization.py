@@ -15,8 +15,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Normalization layers for TimesFM-3."""
-
 import math
 from typing import Any
 
@@ -51,7 +49,14 @@ class PerDimScale(torch.nn.Module):
         )
 
     def forward(self, tensor: Tensor) -> Tensor:
-        r"""Apply per-dimension scaling to the input."""
+        """Apply per-dimension scaling.
+
+        Args:
+            tensor: Input with shape ``[..., D]``.
+
+        Returns:
+            Scaled tensor with shape ``[..., D]``.
+        """
         return (
             tensor
             * _RECIPROCAL_OF_SOFTPLUS_0
