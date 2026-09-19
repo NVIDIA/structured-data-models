@@ -151,7 +151,7 @@ def test_fit_predict(
 
 @pytest.mark.parametrize("task", ["classification", "regression"])
 @pytest.mark.parametrize("num_estimators", [1, 2, 3, 4, 5])
-def test_default_recipe_ensembling_forward_matches_fit_predict(
+def test_default_recipe_ensembling(
     task: Literal["classification", "regression"],
     num_estimators: int,
 ) -> None:
