@@ -57,16 +57,28 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
             )
 
         # When every member already owns a distinct row in the single
-        # physical group, signs can be applied in place without disturbing
-        # the group/position layout that position-dependent fitted
-        # processors (e.g. an adapted `Standardize`) rely on.
+        # physical group (positions are a permutation of its rows, not
+        # necessarily in member order), signs can be applied in place,
+        # stacked by physical position, without disturbing the
+        # group/position layout that position-dependent fitted processors
+        # (e.g. an adapted `Standardize`) rely on.
         if ensemble_table.num_groups == 1:
             group = next(ensemble_table._iter_groups())
             positions = tuple(
                 position for _, position in ensemble_table._locations
             )
-            if positions == tuple(range(group.size(0))):
-                signs = torch.stack(list(self._signs), dim=0)
+            if sorted(positions) == list(range(group.size(0))):
+                member_by_position = {
+                    position: member_id
+                    for member_id, position in enumerate(positions)
+                }
+                signs = torch.stack(
+                    [
+                        self._signs[member_by_position[position]]
+                        for position in range(group.size(0))
+                    ],
+                    dim=0,
+                )
                 new_group = group.replace_blocks(
                     numerical=group.numerical * signs
                 )

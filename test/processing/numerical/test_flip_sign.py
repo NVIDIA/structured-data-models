@@ -38,18 +38,20 @@ def test_flip_sign() -> None:
         pytest.param(
             tuple((0, i) for i in range(4)), 1, id="canonical_positions"
         ),
-        pytest.param(((0, 1), (0, 0)), 2, id="reordered_positions"),
+        pytest.param(((0, 1), (0, 0)), 1, id="reordered_positions"),
     ],
 )
 def test_flip_sign_group_preservation(
     locations: tuple[tuple[int, int], ...],
     expected_num_groups: int,
 ) -> None:
-    # Canonical positions must stay one physical group (position-dependent
-    # fitted processors like an adapted `Standardize` rely on a stable
-    # group/position layout across transform/inverse). Reordered positions
-    # must fall back to a group per member instead of silently pairing
-    # each member with the wrong row.
+    # Positions that are a permutation of the group's rows -- not
+    # necessarily in member order -- must stay one physical group:
+    # position-dependent fitted processors like an adapted `Standardize`
+    # rely on a stable group/position layout across transform/inverse.
+    # Shared positions (see `test_flip_sign`) must still fall back to a
+    # group per member instead of silently pairing members with the wrong
+    # row.
     num_rows = max(position for _, position in locations) + 1
     table = TableTensor.from_tensor(torch.randn(num_rows, 4, 3))
     ensemble = EnsembleTable(groups=(table,), locations=locations)
