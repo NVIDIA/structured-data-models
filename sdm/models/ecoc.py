@@ -88,19 +88,20 @@ class ECOC(torch.nn.Module):
                 )
             kwargs["cache"] = cast(Cache, cache["ecoc_model"])
         else:
+            # [T, C]
             codebook = self._draw_codebook(num_classes, x.device, generator)
             if cache is not None:
                 cache["ecoc_codebook"] = codebook
                 kwargs["cache"] = cache["ecoc_model"] = Cache()
 
         T = codebook.size(0)
-        # [T, ..., R, D] and [T, ..., R_context], with T encoded tasks.
-        # Separate storage also supports models that modify their inputs.
+        # [T, ..., R, D] and [T, ..., R_context]
         logits = model(
-            x=x.expand(T, *x.shape).clone(),
-            y=codebook.index_select(dim=1, index=y.reshape(-1)).view(
-                T, *y.shape
-            ),
+            x=x.expand(T, *x.shape),  # [T, ..., R, D]
+            y=codebook.index_select(
+                dim=1,
+                index=y.reshape(-1),
+            ).view(T, *y.shape),  # [T, ..., R_context]
             **kwargs,
         )
         index = codebook.view(T, *(1,) * (logits.dim() - 2), num_classes)
@@ -119,6 +120,7 @@ class ECOC(torch.nn.Module):
     ) -> Tensor:
         rest = self.max_classes - 1
         num_codes = max(
+            # Give every class its own output in at least one task.
             math.ceil(num_classes / rest),
             4 * math.ceil(math.log(num_classes, self.max_classes)),
         )
