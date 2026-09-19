@@ -64,8 +64,8 @@ class ECOC(torch.nn.Module):
             cache: Optional cache recording context state and the codebook,
                 or replaying them for the same model and context across query
                 batches.
-            generator: Generator controlling codebook sampling. Ignored when
-                replaying a cache.
+            generator: Generator controlling codebook sampling on ``x.device``.
+                Ignored when replaying a cache.
             kwargs: Arguments forwarded to the model. Tensor arguments must
                 broadcast over the additional leading task dimension.
 
@@ -118,29 +118,28 @@ class ECOC(torch.nn.Module):
         device: torch.device,
         generator: torch.Generator | None,
     ) -> Tensor:
-        rest = self.max_classes - 1
+        rest_idx = self.max_classes - 1
         num_codes = max(
             # Give every class its own output in at least one task.
-            math.ceil(num_classes / rest),
+            math.ceil(num_classes / rest_idx),
             4 * math.ceil(math.log(num_classes, self.max_classes)),
         )
-        draw_device = device if generator is None else generator.device
         # Bound the quadratic distance search for large targets.
         num_draws = 50 if num_classes <= 200 else 1
         codebook = torch.full(
             size=(num_draws, num_codes, num_classes),
-            fill_value=rest,
+            fill_value=rest_idx,
             dtype=torch.long,
-            device=draw_device,
+            device=device,
         )
-        coverage = torch.zeros(num_draws, num_classes, device=draw_device)
+        coverage = torch.zeros(num_draws, num_classes, device=device)
         for code in codebook.unbind(dim=1):
             priority = coverage + 0.1 * torch.rand(
-                num_draws, num_classes, device=draw_device, generator=generator
+                num_draws, num_classes, device=device, generator=generator
             )
-            chosen = priority.argsort(dim=-1)[:, :rest]
+            chosen = priority.argsort(dim=-1)[:, :rest_idx]
             symbols = torch.rand(
-                num_draws, rest, device=draw_device, generator=generator
+                num_draws, rest_idx, device=device, generator=generator
             ).argsort(dim=-1)
             code.scatter_(dim=-1, index=chosen, src=symbols)
             coverage.scatter_add_(
@@ -150,27 +149,23 @@ class ECOC(torch.nn.Module):
             )
 
         if num_draws == 1:
-            return codebook[0].to(device)
+            return codebook[0]
 
         distance = torch.zeros(
             num_draws,
             num_classes,
             num_classes,
             dtype=torch.long,
-            device=draw_device,
+            device=device,
         )
         for code in codebook.unbind(dim=1):
             distance += code.unsqueeze(-1) != code.unsqueeze(-2)
         rows, cols = torch.triu_indices(
-            num_classes, num_classes, offset=1, device=draw_device
+            num_classes, num_classes, offset=1, device=device
         )
         pairwise = distance[:, rows, cols]
         # Prefer minimum distance, breaking ties by total pairwise distance.
         score = pairwise.amin(dim=-1) * (
             pairwise.size(-1) * num_codes + 1
         ) + pairwise.sum(dim=-1)
-        return (
-            codebook.index_select(0, score.argmax().view(1))
-            .squeeze(0)
-            .to(device)
-        )
+        return codebook.index_select(0, score.argmax().view(1)).squeeze(0)
