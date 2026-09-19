@@ -34,14 +34,12 @@ class _ProbabilityClassifier(torch.nn.Module):
                 cache["labels"] = y
             else:
                 y = cast(Tensor, cache["labels"])
-        probabilities = (query * self.scale / temperature).softmax(dim=-1)
-        out = probabilities.new_zeros(
-            (*probabilities.shape[:-1], self.num_classes)
-        )
+        probs = (query * self.scale / temperature).softmax(dim=-1)
+        out = probs.new_zeros((*probs.shape[:-1], self.num_classes))
         return out.scatter_add(
             dim=-1,
-            index=y.unsqueeze(-2).expand_as(probabilities),
-            src=probabilities,
+            index=y.unsqueeze(-2).expand_as(probs),
+            src=probs,
         ).log()
 
 
@@ -85,11 +83,11 @@ def test_ecoc_recovers_probabilities(
     ]
 
     scores = ecoc(model, x, y, num_classes=num_classes, temperature=0.7)
-    probabilities = (x[..., -3:, :] / 0.7).softmax(dim=-1)
+    probs = (x[..., -3:, :] / 0.7).softmax(dim=-1)
     expected = x.new_zeros((*batch_shape, 3, num_classes)).scatter(
         dim=-1,
-        index=y.unsqueeze(-2).expand_as(probabilities),
-        src=probabilities,
+        index=y.unsqueeze(-2).expand_as(probs),
+        src=probs,
     )
 
     torch.testing.assert_close(scores.exp(), expected)
