@@ -56,12 +56,9 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
                 f"{len(ensemble_table)}."
             )
 
-        # When every member already owns a distinct row in the single
-        # physical group (positions are a permutation of its rows, not
-        # necessarily in member order), signs can be applied in place,
-        # stacked by physical position, without disturbing the
-        # group/position layout that position-dependent fitted processors
-        # (e.g. an adapted `Standardize`) rely on.
+        # Reuse the single group when positions biject onto its rows: keeps
+        # a stable layout for position-dependent fitted processors (e.g.
+        # `Standardize`) placed around this one in a `Sequential`.
         if ensemble_table.num_groups == 1:
             group = next(ensemble_table._iter_groups())
             positions = tuple(
@@ -84,8 +81,8 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
                 )
                 return ensemble_table.replace_groups([new_group])
 
-        # Fallback: some members share a storage position but must diverge
-        # after negation, so each member becomes its own group.
+        # Fallback: members sharing a position diverge after negation, so
+        # each member becomes its own group.
         tables: list[TableTensor] = []
         for member_id in range(len(ensemble_table)):
             table = ensemble_table[member_id]

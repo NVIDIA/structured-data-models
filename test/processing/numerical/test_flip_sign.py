@@ -45,13 +45,8 @@ def test_flip_sign_group_preservation(
     locations: tuple[tuple[int, int], ...],
     expected_num_groups: int,
 ) -> None:
-    # Positions that are a permutation of the group's rows -- not
-    # necessarily in member order -- must stay one physical group:
-    # position-dependent fitted processors like an adapted `Standardize`
-    # rely on a stable group/position layout across transform/inverse.
-    # Shared positions (see `test_flip_sign`) must still fall back to a
-    # group per member instead of silently pairing members with the wrong
-    # row.
+    # Any position permutation stays one group; only sharing (test_flip_sign)
+    # falls back to a group per member.
     num_rows = max(position for _, position in locations) + 1
     table = TableTensor.from_tensor(torch.randn(num_rows, 4, 3))
     ensemble = EnsembleTable(groups=(table,), locations=locations)

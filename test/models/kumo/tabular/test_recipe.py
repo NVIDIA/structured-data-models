@@ -137,9 +137,8 @@ def test_default_recipe_reduces_outputs_per_task() -> None:
 def test_default_recipe_inverts_target_with_distinct_member_rows(
     num_members: int,
 ) -> None:
-    # Mirrors `RecipeExecution`'s target layout: one physical group
-    # stacking a distinct row per ensemble member (rather than every
-    # member sharing a single stored row).
+    # Mirrors `RecipeExecution`'s target layout: one group, one row per
+    # member.
     target = TableTensor.from_tensor(torch.randn(5, 1), columns=("target",))
     group = TableTensor.from_tensor(
         target.numerical.unsqueeze(0).expand(
