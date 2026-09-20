@@ -36,7 +36,6 @@ Default Recipe
        StypeDispatch(
          numerical=Sequential(
            DropConstantColumns(),
-           Callable(<lambda>),
            Standardize(eps=1e-06),
            Clip(-100.0, 100.0),
            Choice(
@@ -50,14 +49,12 @@ Default Recipe
            ),
            ClipSigma(threshold=4.0),
            FlipSign(probability=0.5),
-           Callable(<lambda>),
          ),
          categorical=Sequential(
            AlignCategories(sort_by='value'),
            AddCategoryCounts(),
            ToNumerical(),
            DropConstantColumns(),
-           Callable(<lambda>),
            Standardize(eps=1e-06),
            Clip(-100.0, 100.0),
            Choice(
@@ -70,7 +67,6 @@ Default Recipe
              method='round_robin',
            ),
            ClipSigma(threshold=4.0),
-           Callable(<lambda>),
          ),
        ),
        ShuffleColumns(method='latin'),

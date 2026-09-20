@@ -268,69 +268,65 @@ default device.</p></li>
 </span><span data-line="3">    <span class="n">StypeDispatch</span><span class="p">(</span>
 </span><span data-line="4">      <span class="n">numerical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
 </span><span data-line="5">        <span class="n">DropConstantColumns</span><span class="p">(),</span>
-</span><span data-line="6">        <span class="n">Callable</span><span class="p">(</span><span class="o">&lt;</span><span class="k">lambda</span><span class="o">&gt;</span><span class="p">),</span>
-</span><span data-line="7">        <span class="n">Standardize</span><span class="p">(</span><span class="n">eps</span><span class="o">=</span><span class="mf">1e-06</span><span class="p">),</span>
-</span><span data-line="8">        <span class="n">Clip</span><span class="p">(</span><span class="o">-</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>
-</span><span data-line="9">        <span class="n">Choice</span><span class="p">(</span>
-</span><span data-line="10">          <span class="n">Identity</span><span class="p">(),</span>
-</span><span data-line="11">          <span class="n">PowerTransform</span><span class="p">(),</span>
-</span><span data-line="12">          <span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="13">            <span class="n">RobustScale</span><span class="p">(</span><span class="n">quantile_range</span><span class="o">=</span><span class="p">(</span><span class="mf">25.0</span><span class="p">,</span> <span class="mf">75.0</span><span class="p">)),</span>
-</span><span data-line="14">            <span class="n">ClipSoft</span><span class="p">(</span><span class="mf">3.0</span><span class="p">),</span>
-</span><span data-line="15">          <span class="p">),</span>
-</span><span data-line="16">          <span class="n">method</span><span class="o">=</span><span class="s1">'round_robin'</span><span class="p">,</span>
-</span><span data-line="17">        <span class="p">),</span>
-</span><span data-line="18">        <span class="n">ClipSigma</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">4.0</span><span class="p">),</span>
-</span><span data-line="19">        <span class="n">FlipSign</span><span class="p">(</span><span class="n">probability</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
-</span><span data-line="20">        <span class="n">Callable</span><span class="p">(</span><span class="o">&lt;</span><span class="k">lambda</span><span class="o">&gt;</span><span class="p">),</span>
-</span><span data-line="21">      <span class="p">),</span>
-</span><span data-line="22">      <span class="n">categorical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="23">        <span class="n">AlignCategories</span><span class="p">(</span><span class="n">sort_by</span><span class="o">=</span><span class="s1">'value'</span><span class="p">),</span>
-</span><span data-line="24">        <span class="n">AddCategoryCounts</span><span class="p">(),</span>
-</span><span data-line="25">        <span class="n">ToNumerical</span><span class="p">(),</span>
-</span><span data-line="26">        <span class="n">DropConstantColumns</span><span class="p">(),</span>
-</span><span data-line="27">        <span class="n">Callable</span><span class="p">(</span><span class="o">&lt;</span><span class="k">lambda</span><span class="o">&gt;</span><span class="p">),</span>
-</span><span data-line="28">        <span class="n">Standardize</span><span class="p">(</span><span class="n">eps</span><span class="o">=</span><span class="mf">1e-06</span><span class="p">),</span>
-</span><span data-line="29">        <span class="n">Clip</span><span class="p">(</span><span class="o">-</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>
-</span><span data-line="30">        <span class="n">Choice</span><span class="p">(</span>
-</span><span data-line="31">          <span class="n">Identity</span><span class="p">(),</span>
-</span><span data-line="32">          <span class="n">PowerTransform</span><span class="p">(),</span>
-</span><span data-line="33">          <span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="34">            <span class="n">RobustScale</span><span class="p">(</span><span class="n">quantile_range</span><span class="o">=</span><span class="p">(</span><span class="mf">25.0</span><span class="p">,</span> <span class="mf">75.0</span><span class="p">)),</span>
-</span><span data-line="35">            <span class="n">ClipSoft</span><span class="p">(</span><span class="mf">3.0</span><span class="p">),</span>
-</span><span data-line="36">          <span class="p">),</span>
-</span><span data-line="37">          <span class="n">method</span><span class="o">=</span><span class="s1">'round_robin'</span><span class="p">,</span>
-</span><span data-line="38">        <span class="p">),</span>
-</span><span data-line="39">        <span class="n">ClipSigma</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">4.0</span><span class="p">),</span>
-</span><span data-line="40">        <span class="n">Callable</span><span class="p">(</span><span class="o">&lt;</span><span class="k">lambda</span><span class="o">&gt;</span><span class="p">),</span>
-</span><span data-line="41">      <span class="p">),</span>
-</span><span data-line="42">    <span class="p">),</span>
-</span><span data-line="43">    <span class="n">ShuffleColumns</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'latin'</span><span class="p">),</span>
-</span><span data-line="44">    <span class="n">SelectColumns</span><span class="p">(),</span>
-</span><span data-line="45">  <span class="p">),</span>
-</span><span data-line="46">  <span class="n">target</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="47">    <span class="n">StypeDispatch</span><span class="p">(</span>
-</span><span data-line="48">      <span class="n">numerical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="49">        <span class="n">Standardize</span><span class="p">(</span><span class="n">eps</span><span class="o">=</span><span class="mf">0.0</span><span class="p">),</span>
-</span><span data-line="50">        <span class="n">FlipSign</span><span class="p">(</span><span class="n">probability</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
+</span><span data-line="6">        <span class="n">Standardize</span><span class="p">(</span><span class="n">eps</span><span class="o">=</span><span class="mf">1e-06</span><span class="p">),</span>
+</span><span data-line="7">        <span class="n">Clip</span><span class="p">(</span><span class="o">-</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>
+</span><span data-line="8">        <span class="n">Choice</span><span class="p">(</span>
+</span><span data-line="9">          <span class="n">Identity</span><span class="p">(),</span>
+</span><span data-line="10">          <span class="n">PowerTransform</span><span class="p">(),</span>
+</span><span data-line="11">          <span class="n">Sequential</span><span class="p">(</span>
+</span><span data-line="12">            <span class="n">RobustScale</span><span class="p">(</span><span class="n">quantile_range</span><span class="o">=</span><span class="p">(</span><span class="mf">25.0</span><span class="p">,</span> <span class="mf">75.0</span><span class="p">)),</span>
+</span><span data-line="13">            <span class="n">ClipSoft</span><span class="p">(</span><span class="mf">3.0</span><span class="p">),</span>
+</span><span data-line="14">          <span class="p">),</span>
+</span><span data-line="15">          <span class="n">method</span><span class="o">=</span><span class="s1">'round_robin'</span><span class="p">,</span>
+</span><span data-line="16">        <span class="p">),</span>
+</span><span data-line="17">        <span class="n">ClipSigma</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">4.0</span><span class="p">),</span>
+</span><span data-line="18">        <span class="n">FlipSign</span><span class="p">(</span><span class="n">probability</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
+</span><span data-line="19">      <span class="p">),</span>
+</span><span data-line="20">      <span class="n">categorical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
+</span><span data-line="21">        <span class="n">AlignCategories</span><span class="p">(</span><span class="n">sort_by</span><span class="o">=</span><span class="s1">'value'</span><span class="p">),</span>
+</span><span data-line="22">        <span class="n">AddCategoryCounts</span><span class="p">(),</span>
+</span><span data-line="23">        <span class="n">ToNumerical</span><span class="p">(),</span>
+</span><span data-line="24">        <span class="n">DropConstantColumns</span><span class="p">(),</span>
+</span><span data-line="25">        <span class="n">Standardize</span><span class="p">(</span><span class="n">eps</span><span class="o">=</span><span class="mf">1e-06</span><span class="p">),</span>
+</span><span data-line="26">        <span class="n">Clip</span><span class="p">(</span><span class="o">-</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>
+</span><span data-line="27">        <span class="n">Choice</span><span class="p">(</span>
+</span><span data-line="28">          <span class="n">Identity</span><span class="p">(),</span>
+</span><span data-line="29">          <span class="n">PowerTransform</span><span class="p">(),</span>
+</span><span data-line="30">          <span class="n">Sequential</span><span class="p">(</span>
+</span><span data-line="31">            <span class="n">RobustScale</span><span class="p">(</span><span class="n">quantile_range</span><span class="o">=</span><span class="p">(</span><span class="mf">25.0</span><span class="p">,</span> <span class="mf">75.0</span><span class="p">)),</span>
+</span><span data-line="32">            <span class="n">ClipSoft</span><span class="p">(</span><span class="mf">3.0</span><span class="p">),</span>
+</span><span data-line="33">          <span class="p">),</span>
+</span><span data-line="34">          <span class="n">method</span><span class="o">=</span><span class="s1">'round_robin'</span><span class="p">,</span>
+</span><span data-line="35">        <span class="p">),</span>
+</span><span data-line="36">        <span class="n">ClipSigma</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">4.0</span><span class="p">),</span>
+</span><span data-line="37">      <span class="p">),</span>
+</span><span data-line="38">    <span class="p">),</span>
+</span><span data-line="39">    <span class="n">ShuffleColumns</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'latin'</span><span class="p">),</span>
+</span><span data-line="40">    <span class="n">SelectColumns</span><span class="p">(),</span>
+</span><span data-line="41">  <span class="p">),</span>
+</span><span data-line="42">  <span class="n">target</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
+</span><span data-line="43">    <span class="n">StypeDispatch</span><span class="p">(</span>
+</span><span data-line="44">      <span class="n">numerical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
+</span><span data-line="45">        <span class="n">Standardize</span><span class="p">(</span><span class="n">eps</span><span class="o">=</span><span class="mf">0.0</span><span class="p">),</span>
+</span><span data-line="46">        <span class="n">FlipSign</span><span class="p">(</span><span class="n">probability</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
+</span><span data-line="47">      <span class="p">),</span>
+</span><span data-line="48">      <span class="n">categorical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
+</span><span data-line="49">        <span class="n">AlignCategories</span><span class="p">(),</span>
+</span><span data-line="50">        <span class="n">ShuffleCategories</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'shift'</span><span class="p">),</span>
 </span><span data-line="51">      <span class="p">),</span>
-</span><span data-line="52">      <span class="n">categorical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="53">        <span class="n">AlignCategories</span><span class="p">(),</span>
-</span><span data-line="54">        <span class="n">ShuffleCategories</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'shift'</span><span class="p">),</span>
-</span><span data-line="55">      <span class="p">),</span>
-</span><span data-line="56">    <span class="p">),</span>
-</span><span data-line="57">  <span class="p">),</span>
-</span><span data-line="58">  <span class="n">output</span><span class="o">=</span><span class="n">TaskDispatch</span><span class="p">(</span>
-</span><span data-line="59">    <span class="n">classification</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="60">      <span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'mean'</span><span class="p">,</span> <span class="n">proportion</span><span class="o">=</span><span class="mf">0.0</span><span class="p">),</span>
-</span><span data-line="61">      <span class="n">Softmax</span><span class="p">(),</span>
+</span><span data-line="52">    <span class="p">),</span>
+</span><span data-line="53">  <span class="p">),</span>
+</span><span data-line="54">  <span class="n">output</span><span class="o">=</span><span class="n">TaskDispatch</span><span class="p">(</span>
+</span><span data-line="55">    <span class="n">classification</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
+</span><span data-line="56">      <span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'mean'</span><span class="p">,</span> <span class="n">proportion</span><span class="o">=</span><span class="mf">0.0</span><span class="p">),</span>
+</span><span data-line="57">      <span class="n">Softmax</span><span class="p">(),</span>
+</span><span data-line="58">    <span class="p">),</span>
+</span><span data-line="59">    <span class="n">regression</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
+</span><span data-line="60">      <span class="n">ReduceQuantiles</span><span class="p">(),</span>
+</span><span data-line="61">      <span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'trimmed_mean'</span><span class="p">,</span> <span class="n">proportion</span><span class="o">=</span><span class="mf">0.2</span><span class="p">),</span>
 </span><span data-line="62">    <span class="p">),</span>
-</span><span data-line="63">    <span class="n">regression</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="64">      <span class="n">ReduceQuantiles</span><span class="p">(),</span>
-</span><span data-line="65">      <span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'trimmed_mean'</span><span class="p">,</span> <span class="n">proportion</span><span class="o">=</span><span class="mf">0.2</span><span class="p">),</span>
-</span><span data-line="66">    <span class="p">),</span>
-</span><span data-line="67">  <span class="p">),</span>
-</span><span data-line="68"><span class="p">)</span>
+</span><span data-line="63">  <span class="p">),</span>
+</span><span data-line="64"><span class="p">)</span>
 </span></pre></div>
 </div>
 </section>
@@ -360,7 +356,7 @@ default device.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=a09169bf"></script>
+      <script src="../../_static/documentation_options.js?v=5786fcff"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
