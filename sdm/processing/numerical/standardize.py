@@ -14,29 +14,23 @@ class Standardize(Processor, InvertibleMixin):
     Constant columns use a unit scale to keep the transform finite and
     invertible. NaN and infinite values are ignored when fitting statistics
     and preserved during the transform.
+    Computation uses double precision, and transformed values are cast back to
+    the input dtype.
 
     Args:
         eps: Value added to each fitted standard deviation.
-        dtype: Floating-point dtype to cast numerical values to before each
-            operation. If ``None``, values are not cast.
     """
 
     handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
-    def __init__(
-        self,
-        *,
-        eps: float = 0.0,
-        dtype: torch.dtype | None = None,
-    ) -> None:
+    def __init__(self, *, eps: float = 0.0) -> None:
         super().__init__()
         if eps < 0:
             raise ValueError("epsilon must be non-negative.")
         self.eps = eps
-        self.dtype = dtype
-        self.register_buffer("mean", torch.empty(0))
-        self.register_buffer("scale", torch.empty(0))
+        self.register_buffer("mean", torch.empty(0, dtype=torch.float64))
+        self.register_buffer("scale", torch.empty(0, dtype=torch.float64))
 
     def _fit(
         self,
@@ -45,7 +39,7 @@ class Standardize(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
 
-        numerical = table.numerical.to(dtype=self.dtype)
+        numerical = table.numerical.double()
         finite = numerical.isfinite()
         finite_or_nan = numerical.masked_fill(~finite, torch.nan)
 
@@ -67,19 +61,16 @@ class Standardize(Processor, InvertibleMixin):
             self.scale += self.eps
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical.to(dtype=self.dtype)
+        dtype = table.numerical.dtype
+        numerical = table.numerical.double()
         numerical = (numerical - self.mean) / self.scale
-        return table.replace_blocks(numerical=numerical)
+        return table.replace_blocks(numerical=numerical.to(dtype=dtype))
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical.to(dtype=self.dtype)
+        dtype = table.numerical.dtype
+        numerical = table.numerical.double()
         numerical = numerical * self.scale + self.mean
-        return table.replace_blocks(numerical=numerical)
+        return table.replace_blocks(numerical=numerical.to(dtype=dtype))
 
     def __repr__(self, *, indent: int = 0) -> str:
-        arguments = [f"eps={self.eps}"]
-        if self.dtype is not None:
-            arguments.append(f"dtype={self.dtype}")
-        return (
-            f"{' ' * indent}{self.__class__.__name__}({', '.join(arguments)})"
-        )
+        return f"{' ' * indent}{self.__class__.__name__}(eps={self.eps})"

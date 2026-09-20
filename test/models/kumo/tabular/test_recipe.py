@@ -42,7 +42,6 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
 
     for member_id in range(len(output)):
         member = output[member_id]
-        assert member.numerical.dtype == torch.float32
         expected_missing = torch.tensor(
             [
                 missing_by_column[column]
