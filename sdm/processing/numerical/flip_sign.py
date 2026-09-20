@@ -55,6 +55,26 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
                 f"{len(self._signs)} ensemble members, but got "
                 f"{len(ensemble_table)}."
             )
+
+        if len(set(ensemble_table._locations)) == len(ensemble_table):
+            member_by_location = {
+                location: member_id
+                for member_id, location in enumerate(ensemble_table._locations)
+            }
+            groups = []
+            for group_id, group in enumerate(ensemble_table._iter_groups()):
+                signs = group.numerical.new_ones(
+                    (*group.numerical.size()[:-2], 1, group.numerical.size(-1))
+                )
+                for position in range(group.size(0)):
+                    member_id = member_by_location.get((group_id, position))
+                    if member_id is not None:
+                        signs[position] = self._signs[member_id]
+                groups.append(
+                    group.replace_blocks(numerical=group.numerical * signs)
+                )
+            return ensemble_table.replace_groups(groups)
+
         tables: list[TableTensor] = []
         for member_id in range(len(ensemble_table)):
             table = ensemble_table[member_id]
@@ -63,7 +83,7 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
                     numerical=table.numerical * self._signs[member_id]
                 )
             )
-        return EnsembleTable.from_tables(
+        return ensemble_table.replace_tables(
             tables=tables,
             member_table_ids=range(len(tables)),
         )
