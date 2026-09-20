@@ -135,3 +135,19 @@ def test_standardize_fits_leading_batches_independently(
         processor.inverse_transform(out).numerical,
         query,
     )
+
+
+@withCUDA
+def test_standardize_can_compute_in_float64(device: torch.device) -> None:
+    inp = torch.tensor(
+        [[0.0], [1.0], [2.0], [3.0], [1e10]],
+        dtype=torch.float32,
+        device=device,
+    )
+
+    output = Standardize(dtype=torch.float64).fit_transform(
+        TableTensor.from_tensor(inp)
+    )
+
+    assert output.numerical.dtype == torch.float64
+    assert output.numerical[:4].unique().numel() == 4
