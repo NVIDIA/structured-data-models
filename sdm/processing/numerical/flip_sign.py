@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import EnsembleTable, Stype
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 
@@ -56,37 +56,45 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
                 f"{len(ensemble_table)}."
             )
 
-        if len(set(ensemble_table._locations)) == len(ensemble_table):
-            member_by_location = {
-                location: member_id
-                for member_id, location in enumerate(ensemble_table._locations)
-            }
-            groups = []
-            for group_id, group in enumerate(ensemble_table._iter_groups()):
+        member_ids_by_group: list[list[int]] = [
+            [] for _ in range(ensemble_table.num_groups)
+        ]
+        for member_id, (group_id, _) in enumerate(ensemble_table._locations):
+            member_ids_by_group[group_id].append(member_id)
+
+        groups = []
+        locations = list(ensemble_table._locations)
+        for group_id, (group, member_ids) in enumerate(
+            zip(
+                ensemble_table._iter_groups(),
+                member_ids_by_group,
+                strict=True,
+            )
+        ):
+            positions = [
+                ensemble_table._locations[member_id][1]
+                for member_id in member_ids
+            ]
+            if len(set(positions)) == len(positions):
                 signs = group.numerical.new_ones(
                     (*group.numerical.size()[:-2], 1, group.numerical.size(-1))
                 )
-                for position in range(group.size(0)):
-                    member_id = member_by_location.get((group_id, position))
-                    if member_id is not None:
-                        signs[position] = self._signs[member_id]
-                groups.append(
-                    group.replace_blocks(numerical=group.numerical * signs)
+                for member_id, position in zip(
+                    member_ids, positions, strict=True
+                ):
+                    signs[position] = self._signs[member_id]
+            else:
+                group = ensemble_table.expanded_group(group_id)
+                signs = torch.stack(
+                    [self._signs[member_id] for member_id in member_ids]
                 )
-            return ensemble_table.replace_groups(groups)
+                for position, member_id in enumerate(member_ids):
+                    locations[member_id] = (group_id, position)
 
-        tables: list[TableTensor] = []
-        for member_id in range(len(ensemble_table)):
-            table = ensemble_table[member_id]
-            tables.append(
-                table.replace_blocks(
-                    numerical=table.numerical * self._signs[member_id]
-                )
+            groups.append(
+                group.replace_blocks(numerical=group.numerical * signs)
             )
-        return ensemble_table.replace_tables(
-            tables=tables,
-            member_table_ids=range(len(tables)),
-        )
+        return EnsembleTable(groups=groups, locations=locations)
 
     def _inverse_transform_ensemble(
         self,

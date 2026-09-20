@@ -58,6 +58,11 @@ def test_flip_sign() -> None:
             ((0, 2), (1, 0), (0, 0), (1, 1)),
             id="multiple_groups",
         ),
+        pytest.param(
+            (1, 2),
+            ((0, 0), (0, 0), (1, 1), (1, 0)),
+            id="shared_and_reordered_groups",
+        ),
     ],
 )
 def test_flip_sign_group_preservation(
