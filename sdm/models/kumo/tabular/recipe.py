@@ -30,8 +30,8 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.ToNumerical(),
                     sp.DropConstantColumns(),
                     sp.Standardize(eps=1e-6),
-                        sp.Clip(min_value=-100.0, max_value=100.0),
-                        sp.Choice(
+                    sp.Clip(min_value=-100.0, max_value=100.0),
+                    sp.Choice(
                         sp.Identity(),
                         sp.PowerTransform(),
                         [
