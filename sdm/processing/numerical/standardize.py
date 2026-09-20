@@ -14,8 +14,6 @@ class Standardize(Processor, InvertibleMixin):
     Constant columns use a unit scale to keep the transform finite and
     invertible. NaN and infinite values are ignored when fitting statistics
     and preserved during the transform.
-    Computation uses double precision, and transformed values are cast back to
-    the input dtype.
 
     Args:
         eps: Value added to each fitted standard deviation.
