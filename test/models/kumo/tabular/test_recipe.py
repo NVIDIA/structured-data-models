@@ -167,7 +167,9 @@ def test_default_recipe_regression_reduction_options() -> None:
         return [
             type(m)
             for m in dispatcher.processors["regression"].modules()
-            if isinstance(m, (sp.ReduceQuantiles, sp.ReduceEstimators))
+            if isinstance(
+                m, (sp.SortQuantiles, sp.ReduceQuantiles, sp.ReduceEstimators)
+            )
         ]
 
     assert regression_steps(default_recipe()) == [
@@ -177,6 +179,7 @@ def test_default_recipe_regression_reduction_options() -> None:
     assert regression_steps(
         default_recipe(regression_reduction="quantile_trim")
     ) == [
+        sp.SortQuantiles,
         sp.ReduceEstimators,
         sp.ReduceQuantiles,
     ]
@@ -191,7 +194,11 @@ def test_default_recipe_regression_reduction_options() -> None:
     out = recipe.output.transform(TableTensor.from_tensor(x))
     assert out.size() == (5, 1)
     expected = (
-        x.sort(dim=0).values[1:-1].mean(dim=0).mean(dim=-1, keepdim=True)
+        x.sort(dim=-1)
+        .values.sort(dim=0)
+        .values[1:-1]
+        .mean(dim=0)
+        .mean(dim=-1, keepdim=True)
     )
     torch.testing.assert_close(out.numerical, expected)
 

@@ -52,11 +52,11 @@ def _regression_output(
 ) -> list[sp.Processor]:
     # ``scalar_trim`` averages the quantiles of every member to a point
     # prediction, then takes the trimmed mean over the members.
-    # ``quantile_trim`` takes the trimmed mean of every quantile over the
-    # members first, then averages the trimmed quantiles.
+    # ``quantile_trim`` sorts every member's quantiles, takes the trimmed
+    # mean of every quantile over the members, then averages the quantiles.
     trim = sp.ReduceEstimators(method="trimmed")
     if regression_reduction == "quantile_trim":
-        return [trim, sp.ReduceQuantiles()]
+        return [sp.SortQuantiles(), trim, sp.ReduceQuantiles()]
     return [sp.ReduceQuantiles(), trim]
 
 
