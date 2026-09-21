@@ -1,7 +1,7 @@
 # Third-Party Software
 
 This project contains code or documentation derived from the following third-party projects.
-Runtime, test, and documentation dependencies are declared in [`pyproject.toml`](pyproject.toml)/[`uv.lock`](uv.lock), and example/benchmark dependencies are resolved separately and are not bundled in this source repository.
+Runtime, test, and documentation dependencies are declared in [`pyproject.toml`](pyproject.toml)/[`uv.lock`](uv.lock), and example/benchmark dependencies are resolved separately and are not bundled with this repository.
 
 ## TabICLv2
 
