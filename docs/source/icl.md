@@ -1,6 +1,6 @@
 # In-Context Learning
 
-In-Context Learning (ICL) treats predictions on structured data (*e.g.*, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights through in-context adaptation.
+In-Context Learning (ICL) treats predictions on structured data (*e.g.*, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights.
 The `structured-data-models` package groups and unifies such foundation models behind a single interface:
 
 1. Convert dataframe-like data into a {py:class}`~sdm.tensor.TableTensor` (see [here](tensor) for the accompanying tutorial).
@@ -30,9 +30,7 @@ Specifically, an in-context learning task has three core inputs, as defined in t
 - `x_query` ({py:class}`~sdm.tensor.TableTensor` | {py:class}`torch.Tensor`): feature rows whose targets should be predicted.
 
 The context rows are not used to update model weights.
-They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context.
-
-This is distinct from calling {py:meth}`~sdm.models.ICLModel.forward` while the model is in train mode (`model.train()`), which enables gradient tracking through the full call — including post-processing — so the returned predictions can be used in an ordinary training loop (`loss.backward()`, an optimizer step) to fine-tune the model's parameters. Context rows still don't update weights *through in-context adaptation itself*; this is a conventional, separate training step around the model.
+They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context:
 
 ```python
 from sklearn.datasets import load_breast_cancer
