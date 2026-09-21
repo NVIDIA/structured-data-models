@@ -184,12 +184,12 @@ jobs:
         run: |
           python examples/tabular/quickstart.py
 
-      - name: Run TabICLv2 Strable example
+      - name: Run TabICLv2 text example
         timeout-minutes: 2
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/tabular/strable.py --text-processor tfidf
+          python examples/tabular/text.py --text-processor tfidf
 
       - name: Run Kumo RelBench example
         timeout-minutes: 2
