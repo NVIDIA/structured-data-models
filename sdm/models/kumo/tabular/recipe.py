@@ -8,6 +8,7 @@ import torch
 import sdm.processing as sp
 
 NumericalMissing = Literal["dispatch", "nan", "mix", "impute"]
+RegressionReduction = Literal["scalar_trim", "quantile_trim"]
 
 
 def _normalize() -> list[sp.Processor]:
@@ -46,14 +47,30 @@ def _missing(numerical_missing: NumericalMissing) -> sp.Processor:
     return sp.ImputeMean()
 
 
+def _regression_output(
+    regression_reduction: RegressionReduction,
+) -> list[sp.Processor]:
+    # ``scalar_trim`` averages the quantiles of every member to a point
+    # prediction, then takes the trimmed mean over the members.
+    # ``quantile_trim`` takes the trimmed mean of every quantile over the
+    # members first, then averages the trimmed quantiles.
+    trim = sp.ReduceEstimators(method="trimmed")
+    if regression_reduction == "quantile_trim":
+        return [trim, sp.ReduceQuantiles()]
+    return [sp.ReduceQuantiles(), trim]
+
+
 def default_recipe(
     numerical_missing: NumericalMissing = "nan",
+    regression_reduction: RegressionReduction = "scalar_trim",
 ) -> sp.Recipe:
     r"""Default recipe.
 
     Args:
         numerical_missing: How missing numerical cells reach the model, see
             :func:`_missing`.
+        regression_reduction: Order of the quantile and ensemble reductions
+            of regression outputs, see :func:`_regression_output`.
     """
     ecoc = sp.EncodeECOC(alphabet_size=10)
     return sp.Recipe(
@@ -107,9 +124,6 @@ def default_recipe(
                 sp.ReduceEstimators(method="mean"),
                 sp.Softmax(temperature=1.0),
             ],
-            regression=[
-                sp.ReduceQuantiles(),
-                sp.ReduceEstimators(method="trimmed"),
-            ],
+            regression=_regression_output(regression_reduction),
         ),
     )

@@ -67,15 +67,20 @@ parser.add_argument("--size", choices=("small", "large"))
 parser.add_argument(
     "--numerical-missing", choices=("dispatch", "nan", "mix", "impute")
 )
+parser.add_argument(
+    "--regression-reduction", choices=("scalar_trim", "quantile_trim")
+)
 args = parser.parse_args()
 if args.model != "kumo-tabular" and (
     args.checkpoint
     or args.checkpoint_reg
     or args.size
     or args.numerical_missing
+    or args.regression_reduction
 ):
     parser.error(
-        "checkpoint, size and missing options need --model kumo-tabular"
+        "checkpoint, size, missing and reduction options need "
+        "--model kumo-tabular"
     )
 
 register_sdm_method()
@@ -101,7 +106,9 @@ general: dict[str, object] = {
     "num_estimators": args.num_estimators or model.num_estimators,
 }
 if not args.tune_threshold:
-    general["tune_threshold"] = False  # part of the cache key; default runs keep their key
+    general["tune_threshold"] = (
+        False  # part of the cache key; default runs keep their key
+    )
 checkpoints = {
     task: str(path.resolve())
     for task, path in (
@@ -116,6 +123,8 @@ if args.size:
     general["size"] = args.size
 if args.numerical_missing:
     general["numerical_missing"] = args.numerical_missing
+if args.regression_reduction:
+    general["regression_reduction"] = args.regression_reduction
 config = {"model": {}, "training": {"n_bins": 2}, "general": general}
 
 failed = False

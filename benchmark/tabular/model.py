@@ -251,9 +251,13 @@ class SDMKumoTabularModel(SDMModel):
         self._set_default_param_value("checkpoint", None)
         self._set_default_param_value("size", "large")
         self._set_default_param_value("numerical_missing", "nan")
+        self._set_default_param_value("regression_reduction", "scalar_trim")
 
     def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
-        return default_recipe(numerical_missing=params["numerical_missing"])
+        return default_recipe(
+            numerical_missing=params["numerical_missing"],
+            regression_reduction=params["regression_reduction"],
+        )
 
     def _create_model(
         self,

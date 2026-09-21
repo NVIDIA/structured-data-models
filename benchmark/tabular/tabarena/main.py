@@ -70,6 +70,12 @@ parser.add_argument(
     "(default: nan).",
 )
 parser.add_argument(
+    "--regression_reduction",
+    choices=("scalar_trim", "quantile_trim"),
+    help="Whether kumo-tabular trims the members' point predictions or "
+    "every quantile before averaging (default: scalar_trim).",
+)
+parser.add_argument(
     "--name",
     help="Name of the result directory (default: the model name).",
 )
@@ -89,9 +95,11 @@ if args.model != "kumo-tabular" and (
     args.checkpoint is not None
     or args.size is not None
     or args.numerical_missing is not None
+    or args.regression_reduction is not None
 ):
     parser.error(
-        "--checkpoint, --size, --numerical_missing need --model kumo-tabular"
+        "--checkpoint, --size, --numerical_missing, --regression_reduction "
+        "need --model kumo-tabular"
     )
 
 model_config = MODEL_CONFIGS[args.model]
@@ -112,6 +120,8 @@ if args.size is not None:
     config["size"] = args.size
 if args.numerical_missing is not None:
     config["numerical_missing"] = args.numerical_missing
+if args.regression_reduction is not None:
+    config["regression_reduction"] = args.regression_reduction
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
 

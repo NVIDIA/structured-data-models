@@ -134,10 +134,14 @@ class SDMMethod(Method):
             self._config.num_estimators,
         )
         # kumo-tabular only: local checkpoints per task, architecture size
-        # and the recipe's missing-value mode.
+        # and the recipe's missing-value and regression-reduction modes.
         self._checkpoints: dict[str, str] = general.get("checkpoints", {})
         self._size: str | None = general.get("size")
-        self._numerical_missing: str | None = general.get("numerical_missing")
+        self._recipe_kwargs = {
+            key: general[key]
+            for key in ("numerical_missing", "regression_reduction")
+            if general.get(key)
+        }
 
     def data_format(
         self,
@@ -267,12 +271,12 @@ class SDMMethod(Method):
             kwargs["size"] = self._size
         self.model = self._config.factory(task, self._device, **kwargs)
         recipe = None
-        if self._numerical_missing:
+        if self._recipe_kwargs:
             from sdm.models.kumo.tabular.recipe import (  # noqa: PLC0415
                 default_recipe,
             )
 
-            recipe = default_recipe(self._numerical_missing)  # type: ignore[arg-type]
+            recipe = default_recipe(**self._recipe_kwargs)  # type: ignore[arg-type]
         generator = torch.Generator(device=self._device).manual_seed(
             self.args.seed
         )

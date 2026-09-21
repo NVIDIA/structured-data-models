@@ -157,6 +157,45 @@ def test_default_recipe_reduces_outputs_per_task() -> None:
     torch.testing.assert_close(out.numerical.sum(dim=-1), torch.ones(5))
 
 
+def test_default_recipe_regression_reduction_options() -> None:
+    def regression_steps(recipe: sp.Recipe) -> list[type]:
+        dispatcher = next(
+            m
+            for m in recipe.output.modules()
+            if isinstance(m, sp.TaskDispatch)
+        )
+        return [
+            type(m)
+            for m in dispatcher.processors["regression"].modules()
+            if isinstance(m, (sp.ReduceQuantiles, sp.ReduceEstimators))
+        ]
+
+    assert regression_steps(default_recipe()) == [
+        sp.ReduceQuantiles,
+        sp.ReduceEstimators,
+    ]
+    assert regression_steps(
+        default_recipe(regression_reduction="quantile_trim")
+    ) == [
+        sp.ReduceEstimators,
+        sp.ReduceQuantiles,
+    ]
+
+    # Eight members, five rows, nine quantiles: the trimmed mean over the
+    # members of every quantile, then the mean over the quantiles.
+    recipe = default_recipe(regression_reduction="quantile_trim")
+    for dispatcher in recipe.output.modules():
+        if isinstance(dispatcher, sp.TaskDispatch):
+            dispatcher._task = "regression"
+    x = torch.randn(8, 5, 9)
+    out = recipe.output.transform(TableTensor.from_tensor(x))
+    assert out.size() == (5, 1)
+    expected = (
+        x.sort(dim=0).values[1:-1].mean(dim=0).mean(dim=-1, keepdim=True)
+    )
+    torch.testing.assert_close(out.numerical, expected)
+
+
 def test_default_recipe_numerical_missing_options() -> None:
     def kinds(recipe: sp.Recipe) -> set[type]:
         return {type(m) for m in recipe.features.modules()}
