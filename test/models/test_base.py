@@ -324,6 +324,11 @@ def test_train_mode_enables_grad_through_fit_predict() -> None:
     y_context = torch.tensor([[0.0], [1.0]])
     x_query = torch.tensor([[3.0]])
 
+    model.eval()
+    model.fit(x_context, y_context)
+    out = model.predict(x_query)
+    assert torch.is_inference(out)
+
     model.train()
     model.fit(x_context, y_context)
     out = model.predict(x_query)
