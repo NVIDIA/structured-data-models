@@ -104,7 +104,6 @@ def evaluate(context: sdm.TableTensor, query: sdm.TableTensor) -> float:
 
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-quantile_levels = torch.linspace(0.001, 0.999, 999, device=device)
 higher_is_better = args.task == "classification"
 metric_name = "acc" if args.task == "classification" else "rmse"
 ckpt_path = Path(f"ckpt-{args.model}-{args.task}.pt")
@@ -136,10 +135,8 @@ for epoch in range(1, args.max_epochs + 1):
             loss = F.cross_entropy(logits, y)
         else:  # Pinball loss over the model's 999 fixed quantile levels:
             diff = query[target].numerical - out.numerical
-            loss = torch.maximum(
-                quantile_levels * diff,
-                (quantile_levels - 1) * diff,
-            ).mean()
+            level = torch.linspace(0.001, 0.999, 999, device=device)
+            loss = torch.maximum(level * diff, (level - 1) * diff).mean()
         loss.backward()
         optimizer.step()
         total_loss += float(loss.detach())
