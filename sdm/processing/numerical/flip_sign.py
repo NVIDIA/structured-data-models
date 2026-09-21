@@ -59,7 +59,7 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
             group = ensemble_table.expanded_group(group_id)
             sign = torch.stack([self._signs[i] for i in member_ids], dim=0)
             group = group.replace_blocks(numerical=group.numerical * sign)
-            groups.append(groups)
+            groups.append(group)
             locations.extend((group_id, i) for i in range(len(member_ids)))
 
         return EnsembleTable(groups, locations)
