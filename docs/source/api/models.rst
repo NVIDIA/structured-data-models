@@ -25,17 +25,17 @@ Overview
      - `Apache-2.0 <https://github.com/google-research/tabfm/blob/b8a8b090c66d1b9e7af278003461582219996b6a/LICENSE>`__
      - `tabfm-non-commercial-v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__
    * - :class:`~sdm.models.KumoTabular`
-     -
+     - 2026-09-28
      - | 27.44M-61.43M (classification)
        | 28.45M-62.44M (regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - OpenMDW
+     - `OpenMDW-1.1 <https://raw.githubusercontent.com/OpenMDW/OpenMDW/refs/heads/main/1.1/LICENSE.OpenMDW-1.1>`__
    * - :class:`~sdm.models.KumoRelational` (`Paper <https://arxiv.org/abs/2604.12596>`__)
      - 2026-04-14
      - | 29.93M (classification)
        | 30.94M (regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - BSD-3-Clause
+     - `OpenMDW-1.1 <https://raw.githubusercontent.com/OpenMDW/OpenMDW/refs/heads/main/1.1/LICENSE.OpenMDW-1.1>`__
 
 Model API
 ---------

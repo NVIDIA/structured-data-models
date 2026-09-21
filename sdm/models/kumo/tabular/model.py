@@ -51,15 +51,49 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 
 
 class KumoTabular(ICLModel):
-    """Kumo Tabular, a foundation model for classification and regression.
+    r"""The Kumo tabular foundation model.
+
+    Architecturally, :class:`KumoTabular` combines the compression-then-ICL
+    structure of :class:`TabICLv2` with interleaved row/column attention from
+    `TabPFN <https://github.com/PriorLabs/tabpfn>`__ and Fourier cell
+    embeddings as introduced by :class:`TabFM`. Numerical and categorical
+    values use separate learned Fourier frequencies and projections. Each cell
+    embedding represents a repeated group of features, with missing values
+    handled via learned missingness projections.
+
+    The cell representations are processed by fully interleaved attention
+    stages, scaled up to six stages with 256 hidden cell dimension:
+
+    * **Column-wise:** Each feature group is processed across rows using
+      induced set attention. Both context and query cells attend only to
+      context-row keys and values.
+    * **Row-wise:** Each row's feature groups and learnable readout tokens
+      attend to one another, combining feature interactions into a fixed-size
+      row representation.
+
+    A final dataset-wise transformer processes the compressed
+    row representations and predicts each query target from the labeled
+    context rows.
+
+    The transformer blocks leverage :class:`torch.nn.RMSNorm`, with
+    normalization on the query and key/value inputs, non-affine per-head
+    normalization on projected queries and keys, and normalization before the
+    :class:`~torch.nn.GELU` feed-forward networks.
+
+    Additionally, :class:`KumoTabular` applies learned logarithmic
+    context-length scaling via :class:`sdm.nn.LogScale` during column-wise and
+    dataset-wise attention, and query-gated logarithmic scaling via
+    :class:`sdm.nn.GatedLogScale` during row-wise attention.
+
+    For regression tasks, :class:`KumoTabular` predicts 999 quantiles named
+    ``"q001"`` through ``"q999"``, similar to :class:`TabICLv2`.
 
     Args:
-        task: The tasks to initialize. If ``None``, both classification and
-            regression are initialized.
-        size: The model size, either ``"small"`` or ``"large"`` (default).
+        task: The tasks to initialize. If ``None``, all tasks supported by this
+            model are initialized.
+        size: The size of the model.
         pretrained: Whether to load pretrained checkpoints.
-        device: The device for model parameters. If ``None``, uses PyTorch's
-            default device.
+        device: The device.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
