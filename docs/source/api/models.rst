@@ -35,7 +35,7 @@ Overview
      - | 29.93M (classification)
        | 30.94M (regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - `OpenMDW 1.1, with BSD-3-Clause third-party notice <https://huggingface.co/nvidia/Kumo-Relational>`__
+     - `OpenMDW-1.1, with BSD-3-Clause third-party notice <https://huggingface.co/nvidia/Kumo-Relational>`__
 
 Model API
 ---------
