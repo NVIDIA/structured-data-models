@@ -37,12 +37,9 @@ class Recipe:
     processors that do not explicitly document non-finite support.
 
     Args:
-        features: Steps applied to model inputs before the model.
-        target: Steps applied to labels. Invertible numerical target steps map
-            regression output back to the original space.
-        output: Steps applied to stacked member outputs after member-local
-            mappings. Estimator reduction, when desired, is an explicit step
-            in this pipeline.
+        features: Steps applied to model inputs before model execution.
+        target: Steps applied to labels before model execution.
+        output: Steps applied to stacked model outputs.
     """
 
     _features: EnsembleProcessor
@@ -55,13 +52,9 @@ class Recipe:
         target: Processor | Iterable[Processor] | None = None,
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
-
         self.features = features
         self.target = target
         self.output = output
-
-        self._validate_target()
-        self._validate_output()
 
     @property
     def features(self) -> EnsembleProcessor:
@@ -90,6 +83,7 @@ class Recipe:
         if processor is None:
             processor = sp.Identity()
         self._target = EnsembleProcessor.as_processor(processor)
+
         if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
             raise ValueError(
                 "'TaskDispatch' is not supported in 'Recipe.target'"
@@ -112,6 +106,7 @@ class Recipe:
         if processor is None:
             processor = sp.Identity()
         self._output = EnsembleProcessor.as_processor(processor)
+
         if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.output'"
