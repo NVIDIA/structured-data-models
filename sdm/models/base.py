@@ -362,7 +362,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
         callbacks = () if callbacks is None else callbacks
-        requires_grad = any(callback.requires_grad for callback in callbacks)
+        requires_grad = self.training or any(
+            callback.requires_grad for callback in callbacks
+        )
 
         if self._cache is None:
             raise RuntimeError(
@@ -479,13 +481,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
         if cast(Cache, self._cache[0])["classes"] is None:
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode(),
+                inference_mode("grad" if requires_grad else "inference"),
             ):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
         with (
             torch.amp.autocast(x.device.type, enabled=False),
-            inference_mode(),
+            inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
 

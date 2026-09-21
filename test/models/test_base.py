@@ -318,6 +318,18 @@ def test_train_mode_enables_grad() -> None:
     assert not torch.is_inference(out)
 
 
+def test_train_mode_enables_grad_through_fit_predict() -> None:
+    model = _RecordingModel()
+    x_context = torch.tensor([[0.0], [2.0]])
+    y_context = torch.tensor([[0.0], [1.0]])
+    x_query = torch.tensor([[3.0]])
+
+    model.train()
+    model.fit(x_context, y_context)
+    out = model.predict(x_query)
+    assert not torch.is_inference(out)
+
+
 def test_related_table_preprocessing_forward_and_cache() -> None:
     model = _RecordingModel()
     x_context = _table([0.0, 2.0], [1, 2], value_column="feature")
