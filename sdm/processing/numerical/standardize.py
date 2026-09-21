@@ -37,9 +37,9 @@ class Standardize(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
 
-        numerical = table.numerical.double()
-        finite = numerical.isfinite()
-        finite_or_nan = numerical.masked_fill(~finite, torch.nan)
+        finite = table.numerical.isfinite()
+        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
+        finite_or_nan = finite_or_nan.double()  # Ensure high precision.
 
         self.mean = finite_or_nan.nanmean(-2, keepdim=True)
         self.mean.masked_fill_(self.mean.isnan(), 0.0)
@@ -60,14 +60,12 @@ class Standardize(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         dtype = table.numerical.dtype
-        numerical = table.numerical.double()
-        numerical = (numerical - self.mean) / self.scale
+        numerical = (table.numerical - self.mean) / self.scale
         return table.replace_blocks(numerical=numerical.to(dtype=dtype))
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         dtype = table.numerical.dtype
-        numerical = table.numerical.double()
-        numerical = numerical * self.scale + self.mean
+        numerical = table.numerical * self.scale + self.mean
         return table.replace_blocks(numerical=numerical.to(dtype=dtype))
 
     def __repr__(self, *, indent: int = 0) -> str:

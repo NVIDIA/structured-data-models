@@ -33,12 +33,11 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        # TODO: Vectorize sign draws and application over ensemble members.
         signs = []
-        for member_id in range(len(ensemble_table)):
-            numerical = ensemble_table[member_id].numerical
-            sign = numerical.new_empty(
-                (*numerical.size()[:-2], 1, numerical.size(-1))
+        for group_id in range(ensemble_table.num_groups):
+            group = ensemble_table.expanded_group(group_id)
+            sign = group.numerical.new_empty(
+                (*group.size()[:-2], 1, group.numerical.size(-1))
             )
             sign.bernoulli_(self.probability, generator=generator)
             sign.mul_(-2).add_(1)
@@ -49,52 +48,22 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._signs) != len(ensemble_table):
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} was fitted with "
-                f"{len(self._signs)} ensemble members, but got "
-                f"{len(ensemble_table)}."
-            )
-
-        member_ids_by_group: list[list[int]] = [
-            [] for _ in range(ensemble_table.num_groups)
-        ]
-        for member_id, (group_id, _) in enumerate(ensemble_table._locations):
-            member_ids_by_group[group_id].append(member_id)
 
         groups = []
-        locations = list(ensemble_table._locations)
-        for group_id, (group, member_ids) in enumerate(
-            zip(
-                ensemble_table._iter_groups(),
-                member_ids_by_group,
-                strict=True,
-            )
-        ):
-            positions = [
-                ensemble_table._locations[member_id][1]
-                for member_id in member_ids
-            ]
-            if len(set(positions)) == len(positions):
-                signs = group.numerical.new_ones(
-                    (*group.numerical.size()[:-2], 1, group.numerical.size(-1))
-                )
-                for member_id, position in zip(
-                    member_ids, positions, strict=True
-                ):
-                    signs[position] = self._signs[member_id]
-            else:
-                group = ensemble_table.expanded_group(group_id)
-                signs = torch.stack(
-                    [self._signs[member_id] for member_id in member_ids]
-                )
-                for position, member_id in enumerate(member_ids):
-                    locations[member_id] = (group_id, position)
-
+        for group_id in range(ensemble_table.num_groups):
+            group = ensemble_table.expanded_group(group_id)
+            sign = self._signs[group_id]
             groups.append(
-                group.replace_blocks(numerical=group.numerical * signs)
+                group.replace_blocks(numerical=group.numerical * sign)
             )
-        return EnsembleTable(groups=groups, locations=locations)
+
+        locations = []
+        next_position = [0] * ensemble_table.num_groups
+        for group_id, _ in ensemble_table._locations:
+            locations.append((group_id, next_position[group_id]))
+            next_position[group_id] += 1
+
+        return EnsembleTable(groups, locations)
 
     def _inverse_transform_ensemble(
         self,
