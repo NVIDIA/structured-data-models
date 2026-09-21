@@ -137,12 +137,20 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         max_context_size = params["max_context_size"]
 
         if params["finetune"]:
+            finetune_epochs = params["finetune_epochs"]
+            if (
+                self.ag_key == "SDM-KUMO-TABULAR-SMALL-FT"
+                and self.problem_type == BINARY
+            ):
+                # Empirically found to need fewer epochs than the shared
+                # default to avoid overfitting on binary classification.
+                finetune_epochs = 50
             full_finetune(
                 self.model,
                 x_context,
                 y_context,
                 task=task,
-                max_epochs=params["finetune_epochs"],
+                max_epochs=finetune_epochs,
                 iters_per_epoch=params["finetune_iters_per_epoch"],
                 train_size=params["finetune_train_size"],
                 context_frac=params["finetune_context_frac"],

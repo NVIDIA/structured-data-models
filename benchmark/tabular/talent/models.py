@@ -146,6 +146,7 @@ class SDMMethod(Method):
         assert args.tune is not True
 
         general = args.config.get("general", {}) or {}
+        self._model_key = general["model"]
         self._config = MODEL_CONFIGS[general["model"]]
         self._device = torch.device(general.get("device", args.device))
         self.args.device = self._device
@@ -299,12 +300,17 @@ class SDMMethod(Method):
                 pristine_state = copy.deepcopy(self.model.state_dict())
                 setattr(self.model, _PRISTINE_STATE_ATTR, pristine_state)
             self.model.load_state_dict(pristine_state)
+            finetune_epochs = self._finetune_epochs
+            if self._model_key == "kumo-small" and self.is_binclass:
+                # Empirically found to need fewer epochs than the shared
+                # default to avoid overfitting on binary classification.
+                finetune_epochs = 50
             full_finetune(
                 self.model,
                 x_train,
                 y_train,
                 task=task,
-                max_epochs=self._finetune_epochs,
+                max_epochs=finetune_epochs,
                 iters_per_epoch=self._finetune_iters_per_epoch,
                 train_size=self._finetune_train_size,
                 context_frac=self._finetune_context_frac,
