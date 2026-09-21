@@ -45,9 +45,9 @@ class Recipe:
             in this pipeline.
     """
 
-    features: EnsembleProcessor
-    target: EnsembleProcessor
-    output: EnsembleProcessor
+    _features: EnsembleProcessor
+    _target: EnsembleProcessor
+    _output: EnsembleProcessor
 
     def __init__(
         self,
@@ -56,18 +56,68 @@ class Recipe:
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
 
-        self.features = EnsembleProcessor.as_processor(
-            sp.Identity() if features is None else features
-        )
-        self.target = EnsembleProcessor.as_processor(
-            sp.Identity() if target is None else target
-        )
-        self.output = EnsembleProcessor.as_processor(
-            sp.Identity() if output is None else output
-        )
+        self.features = features
+        self.target = target
+        self.output = output
 
         self._validate_target()
         self._validate_output()
+
+    @property
+    def features(self) -> EnsembleProcessor:
+        r"""The steps applied to model inputs."""
+        return self._features
+
+    @features.setter
+    def features(
+        self,
+        processor: Processor | Iterable[Processor] | None,
+    ) -> None:
+        if processor is None:
+            processor = sp.Identity()
+        self._features = EnsembleProcessor.as_processor(processor)
+
+    @property
+    def target(self) -> EnsembleProcessor:
+        r"""The steps applied to labels."""
+        return self._target
+
+    @target.setter
+    def target(
+        self,
+        processor: Processor | Iterable[Processor] | None,
+    ) -> None:
+        if processor is None:
+            processor = sp.Identity()
+        self._target = EnsembleProcessor.as_processor(processor)
+        if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
+            raise ValueError(
+                "'TaskDispatch' is not supported in 'Recipe.target'"
+            )
+        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+            raise ValueError(
+                "'TableDispatch' is not supported in 'Recipe.target'"
+            )
+
+    @property
+    def output(self) -> EnsembleProcessor:
+        r"""The steps applied to model outputs."""
+        return self._output
+
+    @output.setter
+    def output(
+        self,
+        processor: Processor | Iterable[Processor] | None,
+    ) -> None:
+        if processor is None:
+            processor = sp.Identity()
+        self._output = EnsembleProcessor.as_processor(processor)
+        if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
+            raise ValueError(
+                "'TableDispatch' is not supported in 'Recipe.output'"
+            )
+        if self.output.requires_fit:
+            raise ValueError("'Recipe.output' should not require fitting")
 
     def prepend_features(self, processor: object) -> Self:
         """Prepend a processor to the feature pipeline."""
@@ -82,44 +132,22 @@ class Recipe:
     def prepend_target(self, processor: object) -> Self:
         """Prepend a processor to the target pipeline."""
         self.target = processor + self.target
-        self._validate_target()
         return self
 
     def append_target(self, processor: object) -> Self:
         """Append a processor to the target pipeline."""
         self.target = self.target + processor
-        self._validate_target()
         return self
 
     def prepend_output(self, processor: object) -> Self:
         """Prepend a processor to the output pipeline."""
         self.output = processor + self.output
-        self._validate_output()
         return self
 
     def append_output(self, processor: object) -> Self:
         """Append a processor to the output pipeline."""
         self.output = self.output + processor
-        self._validate_output()
         return self
-
-    def _validate_target(self) -> None:
-        if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
-            raise ValueError(
-                "'TaskDispatch' is not supported in 'Recipe.target'"
-            )
-        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
-            raise ValueError(
-                "'TableDispatch' is not supported in 'Recipe.target'"
-            )
-
-    def _validate_output(self) -> None:
-        if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
-            raise ValueError(
-                "'TableDispatch' is not supported in 'Recipe.output'"
-            )
-        if self.output.requires_fit:
-            raise ValueError("'Recipe.output' should not require fitting")
 
     def __repr__(self) -> str:
         return (
