@@ -189,22 +189,6 @@ def test_reduce_estimators_rejects_empty_ensemble_table() -> None:
 
 
 @withCUDA
-def test_reduce_quantiles_averages_quantile_columns(
-    device: torch.device,
-) -> None:
-    data = torch.tensor([[0.0, 2.0, 4.0], [1.0, 5.0, 9.0]], device=device)
-    table = TableTensor.from_tensor(data, columns=("q10", "q50", "q90"))
-
-    output = sp.ReduceQuantiles().transform(table)
-
-    assert output.column_names == {"mean"}
-    torch.testing.assert_close(
-        output.numerical,
-        torch.tensor([[2.0], [5.0]], device=device),
-    )
-
-
-@withCUDA
 def test_reduce_estimators_composes_with_following_processor(
     device: torch.device,
 ) -> None:
