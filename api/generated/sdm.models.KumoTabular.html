@@ -322,7 +322,7 @@ default device.</p></li>
 </span><span data-line="57">      <span class="n">Softmax</span><span class="p">(),</span>
 </span><span data-line="58">    <span class="p">),</span>
 </span><span data-line="59">    <span class="n">regression</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="60">      <span class="n">ReduceQuantiles</span><span class="p">(),</span>
+</span><span data-line="60">      <span class="n">SortQuantiles</span><span class="p">(),</span>
 </span><span data-line="61">      <span class="n">ReduceEstimators</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'trimmed_mean'</span><span class="p">,</span> <span class="n">proportion</span><span class="o">=</span><span class="mf">0.2</span><span class="p">),</span>
 </span><span data-line="62">    <span class="p">),</span>
 </span><span data-line="63">  <span class="p">),</span>
@@ -356,7 +356,7 @@ default device.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=cce676a4"></script>
+      <script src="../../_static/documentation_options.js?v=07d54a2f"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

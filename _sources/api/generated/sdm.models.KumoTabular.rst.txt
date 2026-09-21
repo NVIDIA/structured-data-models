@@ -90,7 +90,7 @@ Default Recipe
          Softmax(),
        ),
        regression=Sequential(
-         ReduceQuantiles(),
+         SortQuantiles(),
          ReduceEstimators(method='trimmed_mean', proportion=0.2),
        ),
      ),

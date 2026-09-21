@@ -180,6 +180,9 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.processing.recipe.Recipe"><code class="docutils literal notranslate"><span class="pre">Recipe</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.processing.recipe.Recipe.features"><code class="docutils literal notranslate"><span class="pre">Recipe.features</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.recipe.Recipe.target"><code class="docutils literal notranslate"><span class="pre">Recipe.target</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.recipe.Recipe.output"><code class="docutils literal notranslate"><span class="pre">Recipe.output</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.recipe.Recipe.prepend_features"><code class="docutils literal notranslate"><span class="pre">Recipe.prepend_features()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.recipe.Recipe.append_features"><code class="docutils literal notranslate"><span class="pre">Recipe.append_features()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.recipe.Recipe.prepend_target"><code class="docutils literal notranslate"><span class="pre">Recipe.prepend_target()</span></code></a></li>
@@ -252,15 +255,30 @@ processors that do not explicitly document non-finite support.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>features</strong> (<a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><em>EnsembleProcessor</em></a>) – Steps applied to model inputs before the model.</p></li>
-<li><p><strong>target</strong> (<a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><em>EnsembleProcessor</em></a>) – Steps applied to labels. Invertible numerical target steps map
-regression output back to the original space.</p></li>
-<li><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><em>EnsembleProcessor</em></a>) – Steps applied to stacked member outputs after member-local
-mappings. Estimator reduction, when desired, is an explicit step
-in this pipeline.</p></li>
+<li><p><strong>features</strong> (<a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a><em> | </em><em>Iterable</em><em>[</em><a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a><em>] </em><em>| </em><em>None</em>) – Steps applied to model inputs before model execution.</p></li>
+<li><p><strong>target</strong> (<a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a><em> | </em><em>Iterable</em><em>[</em><a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a><em>] </em><em>| </em><em>None</em>) – Steps applied to labels before model execution.</p></li>
+<li><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a><em> | </em><em>Iterable</em><em>[</em><a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a><em>] </em><em>| </em><em>None</em>) – Steps applied to stacked model outputs.</p></li>
 </ul>
 </dd>
 </dl>
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.processing.recipe.Recipe.features">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">features</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><span class="pre">EnsembleProcessor</span></a></span><a class="headerlink" href="#sdm.processing.recipe.Recipe.features" title="Link to this definition">#</a></dt>
+<dd><p>The steps applied to model inputs.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.processing.recipe.Recipe.target">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">target</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><span class="pre">EnsembleProcessor</span></a></span><a class="headerlink" href="#sdm.processing.recipe.Recipe.target" title="Link to this definition">#</a></dt>
+<dd><p>The steps applied to labels.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.processing.recipe.Recipe.output">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">output</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><span class="pre">EnsembleProcessor</span></a></span><a class="headerlink" href="#sdm.processing.recipe.Recipe.output" title="Link to this definition">#</a></dt>
+<dd><p>The steps applied to model outputs.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.recipe.Recipe.prepend_features">
 <span class="sig-name descname"><span class="pre">prepend_features</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">processor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><span class="pre">object</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.processing.recipe.Recipe.prepend_features" title="Link to this definition">#</a></dt>
@@ -373,7 +391,7 @@ in this pipeline.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=cce676a4"></script>
+      <script src="../../_static/documentation_options.js?v=07d54a2f"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

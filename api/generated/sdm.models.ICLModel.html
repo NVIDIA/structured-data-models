@@ -303,12 +303,7 @@ pre-processing and model execution.</p></li>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The processed prediction after applying <code class="docutils literal notranslate"><span class="pre">recipe.output</span></code> to the
-stacked estimator outputs with shape <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...,</span> <span class="pre">R_query,</span> <span class="pre">*]</span></code>.
-Calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">train()</span></code> beforehand makes this return value
-differentiable end-to-end with respect to model parameters, for
-gradient-based fine-tuning. A callback with
-<code class="docutils literal notranslate"><span class="pre">requires_grad</span> <span class="pre">=</span> <span class="pre">True</span></code> enables the same thing without
-requiring train mode, <em>e.g.</em> for input-gradient explainability.</p>
+stacked estimator outputs with shape <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...,</span> <span class="pre">R_query,</span> <span class="pre">*]</span></code>.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a></p>
@@ -425,7 +420,7 @@ stacked estimator outputs with shape <code class="docutils literal notranslate">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=cce676a4"></script>
+      <script src="../../_static/documentation_options.js?v=07d54a2f"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
