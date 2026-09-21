@@ -48,15 +48,15 @@ else:
 
 table = sdm.TableTensor.from_pandas(df, stypes=stypes, device=device)
 
-# Split dataset into training/validation/test (80/10/10):
+# Split dataset into training/validation/test (60/20/20):
 train_index, rest_index = train_test_split(
     torch.arange(len(df)).numpy(),
-    test_size=0.2,
+    test_size=0.4,
     random_state=args.seed,
     stratify=df[target] if args.task == "classification" else None,
 )
 val_index, test_index = train_test_split(
-    rest_index.numpy(),
+    rest_index,
     test_size=0.5,
     random_state=args.seed,
     stratify=df[target].iloc[rest_index]
@@ -82,7 +82,9 @@ def evaluate(context: sdm.TableTensor, query: sdm.TableTensor) -> float:
         num_estimators=args.num_estimators,
     )
     if args.task == "classification":
-        prob, y = sdm.evaluation.to_class_indices(out, query[target])
+        prob, y = sdm.evaluation.to_class_indices(
+            out, query[target], missing_score=0.0
+        )
         return float((prob.argmax(dim=-1) == y).float().mean())
 
     pred = out.numerical.mean(dim=-1)
@@ -94,11 +96,10 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 quantile_levels = torch.linspace(0.001, 0.999, 999, device=device)
 higher_is_better = args.task == "classification"
 metric_name = "acc" if args.task == "classification" else "rmse"
-ckpt_path = Path(f"checkpoint-{args.model}-{args.task}.pt")
-
+ckpt_path = Path(f"ckpt-{args.model}-{args.task}.pt")
 
 val_metric = evaluate(context=train_table, query=val_table)
-print(f"epoch=0 val_{metric_name}={val_metric:.4f}")
+print(f"epoch=0/{args.max_epochs} val_{metric_name}={val_metric:.4f}")
 torch.save(model.state_dict(), ckpt_path)
 
 for epoch in range(1, args.max_epochs + 1):
@@ -120,29 +121,28 @@ for epoch in range(1, args.max_epochs + 1):
             prob, y = sdm.evaluation.to_class_indices(
                 out, query[target], missing_score=0.0
             )
-            loss = F.nll_loss(prob.clamp_min(1e-12).log(), y)
+            loss = F.nll_loss(prob.clamp(min=1e-12).log(), y)
         else:  # Pinball loss over the model's 999 fixed quantile levels:
-            y = query[target].numerical
-            diff = target - out.numerical
+            diff = query[target].numerical - out.numerical
             loss = torch.maximum(
                 quantile_levels * diff,
                 (quantile_levels - 1) * diff,
             ).mean()
         loss.backward()
         optimizer.step()
-        total_loss += float(loss)
+        total_loss += float(loss.detach())
 
     metric = evaluate(context=train_table, query=val_table)
     print(
-        f"epoch={epoch:3d}/{args.max_epochs} "
-        f"val_{metric_name}={metric:.4f}"
-        f"loss={total_loss / args.steps_per_epoch:.4f} "
+        f"epoch={epoch}/{args.max_epochs} "
+        f"val_{metric_name}={metric:.4f} "
+        f"train_loss={total_loss / args.steps_per_epoch:.4f}"
     )
     if metric > val_metric if higher_is_better else metric < val_metric:
         val_metric = metric
         torch.save(model.state_dict(), ckpt_path)
 
-best_state = torch.load(ckpt, map_location=device, weights_only=True)
+best_state = torch.load(ckpt_path, map_location=device, weights_only=True)
 model.load_state_dict(best_state)
 test_metric = evaluate(context=train_table, query=test_table)
 print(f"test_{metric_name}={test_metric:.4f}")
