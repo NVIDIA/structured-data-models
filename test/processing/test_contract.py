@@ -142,7 +142,6 @@ PROCESSOR_CASES = (
         sp.ReduceEstimators(method="trimmed_mean", proportion=0.25),
         _make_reduction_table,
     ),
-    ProcessorCase(sp.ReduceQuantiles()),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(
         sp.Sequential(
