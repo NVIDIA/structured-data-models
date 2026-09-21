@@ -36,6 +36,29 @@ class EnsembleData(abc.ABC, Generic[T]):
     ) -> None:
         self._groups = tuple(groups)
         self._locations = tuple(locations)
+        self._validate(self._groups, self._locations)
+
+    @staticmethod
+    def _validate(
+        groups: Sequence[TableTensor],
+        locations: Sequence[tuple[int, int]],
+    ) -> None:
+        expected_locations = {
+            (group_id, position)
+            for group_id, group in enumerate(groups)
+            for position in range(group.size(0))
+        }
+        actual_locations = set(locations)
+        missing_locations = expected_locations - actual_locations
+        if missing_locations:
+            raise ValueError(
+                f"Missing locations for group positions: "
+                f"{sorted(missing_locations)}"
+            )
+
+        invalid_locations = actual_locations - expected_locations
+        if invalid_locations:
+            raise ValueError(f"Invalid locations: {sorted(invalid_locations)}")
 
     def __len__(self) -> int:
         return len(self._locations)
@@ -92,7 +115,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
 
         Args:
             table: Table used across members.
-            num_members: Number of ensemble members.
+            num_members: Positive number of ensemble members.
 
         Returns:
             An :class:`~sdm.EnsembleTable` with one group.
