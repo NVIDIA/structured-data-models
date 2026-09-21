@@ -29,13 +29,13 @@ Overview
      - | 27.44M-61.43M (classification)
        | 28.45M-62.44M (regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - OpenMDW
+     - `OpenMDW-1.1 <https://huggingface.co/nvidia/Kumo-Tabular/>`__
    * - :class:`~sdm.models.KumoRelational` (`Paper <https://arxiv.org/abs/2604.12596>`__)
      - 2026-04-14
      - | 29.93M (classification)
        | 30.94M (regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - BSD-3-Clause
+     - `OpenMDW-1.1 <https://huggingface.co/nvidia/Kumo-Relational>`__
 
 Model API
 ---------
