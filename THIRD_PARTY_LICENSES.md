@@ -20,7 +20,7 @@ The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) implementation contains code 
 - Weights license: [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE)
 
 The [`sdm/models/tabfm/`](sdm/models/tabfm/) implementation contains code derived from [`TabFM`](https://github.com/google-research/tabfm).
-The `TabFM` weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
+Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
 ## TimesFM 3.0
 
@@ -31,7 +31,7 @@ The `TabFM` weights are not bundled with this project and may be downloaded only
 - Weights license: [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE)
 
 The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
-The `TimesFM` weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
+Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
 ## PyTorch Contribution Guide
 
