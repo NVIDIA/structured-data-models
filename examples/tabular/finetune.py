@@ -12,6 +12,7 @@ from sklearn.datasets import fetch_california_housing, load_digits
 from sklearn.model_selection import train_test_split
 
 import sdm
+import sdm.processing as sp
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -72,6 +73,9 @@ if args.model == "kumo-small":
 else:
     model = sdm.models.TabICLv2(task=args.task, device=device)
 
+train_recipe = model.default_recipe()
+train_recipe.output = sp.TaskDispatch(regression=sp.SortQuantiles())
+
 
 def evaluate(context: sdm.TableTensor, query: sdm.TableTensor) -> float:
     model.eval()
@@ -116,12 +120,13 @@ for epoch in range(1, args.max_epochs + 1):
             x_context=context.drop_columns(target),
             y_context=context[target],
             x_query=query.drop_columns(target),
-        )
+            recipe=train_recipe,
+        )[0]
         if args.task == "classification":
-            prob, y = sdm.evaluation.to_class_indices(
-                out, query[target], missing_score=0.0
+            logits, y = sdm.evaluation.to_class_indices(
+                out, query[target], missing_score=-torch.inf
             )
-            loss = F.nll_loss(prob.clamp(min=1e-12).log(), y)
+            loss = F.cross_entropy(logits, y)
         else:  # Pinball loss over the model's 999 fixed quantile levels:
             diff = query[target].numerical - out.numerical
             loss = torch.maximum(
