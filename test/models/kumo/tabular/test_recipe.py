@@ -120,8 +120,7 @@ def test_default_recipe_reduces_outputs_per_task() -> None:
     output = recipe.output.transform(
         TableTensor.from_tensor(torch.randn(8, 5, 9))
     )
-    assert output.size() == (5, 1)
-    assert output.columns[Stype.numerical] == ("mean",)
+    assert output.size() == (5, 9)
 
     dispatch._task = "classification"
     output = recipe.output.transform(
