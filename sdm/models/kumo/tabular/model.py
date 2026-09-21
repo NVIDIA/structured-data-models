@@ -76,9 +76,9 @@ class KumoTabular(ICLModel):
     context rows.
 
     The transformer blocks leverage :class:`torch.nn.RMSNorm`, with
-    normalization on the query and key/value inputs, non-affine per-head
-    normalization on projected queries and keys, and normalization before the
-    :class:`~torch.nn.GELU` feed-forward networks.
+    normalization applied on query/key/value inputs and before
+    :class:`~torch.nn.GELU` feed-forward networks, and non-affine per-head
+    normalization applied on projected queries and keys.
 
     Additionally, :class:`KumoTabular` applies learned logarithmic
     context-length scaling via :class:`sdm.nn.LogScale` during column-wise and
