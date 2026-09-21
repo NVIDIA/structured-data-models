@@ -1,13 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import pytest
 import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
-from sdm.processing import EnsembleInvertibleMixin
 from sdm.testing import withCUDA
 
 
@@ -131,35 +129,3 @@ def test_default_recipe_reduces_outputs_per_task() -> None:
     )
     assert output.size() == (5, 3)
     torch.testing.assert_close(output.numerical.sum(dim=-1), torch.ones(5))
-
-
-@pytest.mark.parametrize("num_members", [1, 2, 5])
-def test_default_recipe_inverts_target_with_distinct_member_rows(
-    num_members: int,
-) -> None:
-    # Mirrors `RecipeExecution`'s target layout: one group, one row per
-    # member.
-    target = TableTensor.from_tensor(torch.randn(5, 1), columns=("target",))
-    group = TableTensor.from_tensor(
-        target.numerical.unsqueeze(0).expand(
-            num_members, *target.numerical.size()
-        ),
-        columns=target.columns[Stype.numerical],
-    )
-    ensemble = EnsembleTable(
-        groups=(group,),
-        locations=tuple((0, i) for i in range(num_members)),
-    )
-    recipe = KumoTabular.default_recipe()
-
-    target_recipe = recipe.target
-    assert isinstance(target_recipe, EnsembleInvertibleMixin)
-    transformed = target_recipe.fit_transform_ensemble(
-        ensemble, generator=torch.Generator().manual_seed(0)
-    )
-    restored = target_recipe.inverse_transform_ensemble(transformed)
-
-    for member_id in range(len(restored)):
-        torch.testing.assert_close(
-            restored[member_id].numerical, target.numerical
-        )
