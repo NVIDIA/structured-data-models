@@ -9,7 +9,7 @@ This project contains code or documentation derived from the following third-par
 - License terms: [`sdm/models/tabiclv2/LICENSE`](sdm/models/tabiclv2/LICENSE)
 - Optional pretrained weights: https://huggingface.co/jingang/TabICL
 
-The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) implementation contains code derived from `TabICLv2`.
+The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) implementation contains code derived from [`TabICLv2`](https://github.com/soda-inria/tabicl).
 
 ## TabFM
 
@@ -19,7 +19,7 @@ The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) implementation contains code 
 - Optional pretrained weights: https://huggingface.co/google/tabfm-1.0.0-pytorch
 - Weights license: [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE)
 
-The [`sdm/models/tabfm/`](sdm/models/tabfm/) implementation contains code derived from `TabFM`.
+The [`sdm/models/tabfm/`](sdm/models/tabfm/) implementation contains code derived from [`TabFM`](https://github.com/google-research/tabfm).
 The `TabFM` weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
 ## TimesFM 3.0
@@ -30,8 +30,8 @@ The `TabFM` weights are not bundled with this project and may be downloaded only
 - Optional pretrained weights: https://huggingface.co/google/timesfm-3.0-pytorch
 - Weights license: [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE)
 
-The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from `TimesFM` 3.0.
-The `TimesFM` 3.0 weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
+The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
+The `TimesFM` weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
 ## PyTorch Contribution Guide
 
