@@ -74,7 +74,14 @@ else:
     model = sdm.models.TabICLv2(task=args.task, device=device)
 
 train_recipe = model.default_recipe()
-train_recipe.output = sp.TaskDispatch(regression=sp.SortQuantiles())
+train_recipe.target = sp.StypeDispatch(  # No target flipping.
+    categorical=[
+        sp.AlignCategories(),
+        sp.ShuffleCategories(method="shift"),
+    ],
+    numerical=sp.Standardize(),
+)
+train_recipe.output = sp.Identity()  # No post-processing.
 
 
 def evaluate(context: sdm.TableTensor, query: sdm.TableTensor) -> float:
