@@ -34,10 +34,10 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         signs = []
-        for group_id in range(ensemble_table.num_groups):
-            group = ensemble_table.expanded_group(group_id)
-            sign = group.numerical.new_empty(
-                (*group.size()[:-2], 1, group.numerical.size(-1))
+        for member_id in range(len(ensemble_table)):
+            table = ensemble_table[member_id]
+            sign = table.numerical.new_empty(
+                (*table.numerical.size()[:-2], 1, table.numerical.size(-1))
             )
             sign.bernoulli_(self.probability, generator=generator)
             sign.mul_(-2).add_(1)
@@ -49,19 +49,18 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
 
-        groups = []
-        for group_id in range(ensemble_table.num_groups):
-            group = ensemble_table.expanded_group(group_id)
-            sign = self._signs[group_id]
-            groups.append(
-                group.replace_blocks(numerical=group.numerical * sign)
-            )
+        member_ids_by_group = [[] for _ in range(ensemble_table.num_groups)]
+        for member_id, (group_id, _) in enumerate(ensemble_table._locations):
+            member_ids_by_group[group_id].append(member_id)
 
+        groups = []
         locations = []
-        next_position = [0] * ensemble_table.num_groups
-        for group_id, _ in ensemble_table._locations:
-            locations.append((group_id, next_position[group_id]))
-            next_position[group_id] += 1
+        for group_id, member_ids in enumerate(member_ids_by_group):
+            group = ensemble_table.expanded_group(group_id)
+            sign = torch.stack([self._signs[i] for i in member_ids], dim=0)
+            group = group.replace_blocks(numerical=group.numerical * sign)
+            groups.append(groups)
+            locations.extend((group_id, i) for i in range(len(member_ids)))
 
         return EnsembleTable(groups, locations)
 
