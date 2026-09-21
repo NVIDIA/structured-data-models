@@ -182,21 +182,21 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/tabiclv2/quickstart.py
+          python examples/tabular/quickstart.py
 
       - name: Run TabICLv2 Strable example
         timeout-minutes: 2
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/tabiclv2/strable.py --text-processor tfidf
+          python examples/tabular/strable.py --text-processor tfidf
 
       - name: Run Kumo RelBench example
         timeout-minutes: 2
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/kumo/relational/rel_bench.py --dataset rel-f1 --task driver-position
+          python examples/relational/rel_bench.py --dataset rel-f1 --task driver-position
 
       - name: Test TabArena benchmark
         timeout-minutes: 5
