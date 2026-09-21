@@ -10,7 +10,7 @@ Runtime, test, and documentation dependencies are declared in [`pyproject.toml`]
 - License terms: [`sdm/models/tabiclv2/LICENSE`](sdm/models/tabiclv2/LICENSE)
 - Optional pretrained weights: https://huggingface.co/jingang/TabICL
 
-The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) implementation contains code derived from [`TabICLv2`](https://github.com/soda-inria/tabicl).
+The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) and [`sdm/models/kumo/relational`](sdm/models/kumo/relational) implementations contain code derived from [`TabICLv2`](https://github.com/soda-inria/tabicl).
 
 ## TabFM
 
