@@ -7,9 +7,9 @@ This project contains code or documentation derived from the following third-par
 - Source: https://github.com/soda-inria/tabicl
 - License: BSD 3-Clause
 - License terms: [`sdm/models/tabiclv2/LICENSE`](sdm/models/tabiclv2/LICENSE)
-- Pretrained weights: https://huggingface.co/jingang/TabICL
+- Optional pretrained weights: https://huggingface.co/jingang/TabICL
 
-The `sdm/models/tabiclv2/` implementation contains code derived from TabICLv2.
+The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) implementation contains code derived from `TabICLv2`.
 
 ## TabFM
 
@@ -19,7 +19,8 @@ The `sdm/models/tabiclv2/` implementation contains code derived from TabICLv2.
 - Optional pretrained weights: https://huggingface.co/google/tabfm-1.0.0-pytorch
 - Weights license: [TabFM Non-Commercial License v1.0](https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE)
 
-The `sdm/models/tabfm/` implementation contains code derived from TabFM. The TabFM weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
+The [`sdm/models/tabfm/`](sdm/models/tabfm/) implementation contains code derived from `TabFM`.
+The `TabFM` weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
 ## TimesFM 3.0
 
@@ -29,9 +30,10 @@ The `sdm/models/tabfm/` implementation contains code derived from TabFM. The Tab
 - Optional pretrained weights: https://huggingface.co/google/timesfm-3.0-pytorch
 - Weights license: [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE)
 
-The `sdm/models/timesfm3/` implementation contains code derived from TimesFM 3.0. The TimesFM 3.0 weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
+The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from `TimesFM` 3.0.
+The `TimesFM` 3.0 weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
-## PyTorch contribution guide
+## PyTorch Contribution Guide
 
 Portions of [`CONTRIBUTING.md`](CONTRIBUTING.md) are adapted from the [PyTorch contribution guide](https://github.com/pytorch/pytorch/blob/main/CONTRIBUTING.md), distributed under the BSD 3-Clause License. The complete copyright notices and license terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).
 
