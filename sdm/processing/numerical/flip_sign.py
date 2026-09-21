@@ -35,9 +35,9 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> None:
         signs = []
         for member_id in range(len(ensemble_table)):
-            table = ensemble_table[member_id]
-            sign = table.numerical.new_empty(
-                (*table.numerical.size()[:-2], 1, table.numerical.size(-1))
+            numerical = ensemble_table[member_id].numerical
+            sign = numerical.new_empty(
+                (*numerical.size()[:-2], 1, numerical.size(-1))
             )
             sign.bernoulli_(self.probability, generator=generator)
             sign.mul_(-2).add_(1)
