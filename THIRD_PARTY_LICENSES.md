@@ -3,14 +3,6 @@
 This project contains code or documentation derived from the following third-party projects.
 Runtime, test, and documentation dependencies are declared in [`pyproject.toml`](pyproject.toml)/[`uv.lock`](uv.lock), and example/benchmark dependencies are resolved separately and are not bundled with this repository.
 
-## TabPFN Extensions
-
-- Source: https://github.com/PriorLabs/tabpfn-extensions
-- License: Apache License 2.0
-- License terms: [`third_party/tabpfn-extensions/LICENSE`](third_party/tabpfn-extensions/LICENSE)
-
-The [`sdm/models/ecoc.py`](sdm/models/ecoc.py) implementation contains code derived from [`TabPFN Extensions`](https://github.com/PriorLabs/tabpfn-extensions).
-
 ## TabICLv2
 
 - Source: https://github.com/soda-inria/tabicl
@@ -41,6 +33,14 @@ Its weights are not bundled with this project and may be downloaded only after t
 
 The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
 Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
+
+## TabPFN Extensions
+
+- Source: https://github.com/PriorLabs/tabpfn-extensions
+- License: Apache License 2.0
+- License terms: [`third_party/tabpfn-extensions/LICENSE`](third_party/tabpfn-extensions/LICENSE)
+
+The [`sdm/models/ecoc.py`](sdm/models/ecoc.py) implementation contains code derived from [`TabPFN Extensions`](https://github.com/PriorLabs/tabpfn-extensions).
 
 ## PyTorch Contribution Guide
 

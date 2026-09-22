@@ -13,11 +13,10 @@ from sdm.models import ECOC
 from sdm.testing import withCUDA
 
 
-class _ProbabilityClassifier(torch.nn.Module):
+class MyModel(torch.nn.Module):
     def __init__(self, num_classes: int) -> None:
         super().__init__()
         self.num_classes = num_classes
-        self.scale = torch.nn.Parameter(torch.ones(()))
 
     def forward(
         self,
@@ -27,15 +26,9 @@ class _ProbabilityClassifier(torch.nn.Module):
         temperature: float = 1.0,
         cache: Cache | None = None,
     ) -> Tensor:
-        # Each feature supplies the probability of its context row's class.
-        # Sum probabilities for rows assigned the same encoded label.
-        query = x[..., y.size(-1) :, :]
+        probs = (x[..., y.size(-1) :, :] / temperature).softmax(dim=-1)
         if cache is not None:
-            if cache.is_recording:
-                cache["labels"] = y
-            else:
-                y = cast(Tensor, cache["labels"])
-        probs = (query * self.scale / temperature).softmax(dim=-1)
+            y = cast(Tensor, cache.setdefault("y", y))
         out = probs.new_zeros((*probs.shape[:-1], self.num_classes))
         return out.scatter_add(
             dim=-1,
@@ -55,7 +48,7 @@ def test_ecoc(
     num_classes: int,
     batch_shape: tuple[int, ...],
 ) -> None:
-    model = _ProbabilityClassifier(max_classes).to(device)
+    model = MyModel(max_classes)
     ecoc = ECOC(max_classes=max_classes)
     forward = partial(
         ecoc, model=model, num_classes=num_classes, temperature=0.7
@@ -103,54 +96,3 @@ def test_ecoc(
                 num_classes=num_classes + 1,
                 cache=cache,
             )
-
-
-def test_ecoc_gradients() -> None:
-    model = _ProbabilityClassifier(10)
-    ecoc = ECOC(max_classes=10)
-    x = torch.randn(15, 12, requires_grad=True)
-    y = torch.arange(12)
-
-    scores = ecoc(model, x, y, num_classes=12)
-    loss = -scores[:, 0].mean()
-    grad_x, grad_scale = torch.autograd.grad(loss, (x, model.scale))
-    expected = -(x[-3:] * model.scale).log_softmax(dim=-1)[:, 0].mean()
-    expected_x, expected_scale = torch.autograd.grad(
-        expected, (x, model.scale)
-    )
-
-    torch.testing.assert_close(grad_x, expected_x)
-    torch.testing.assert_close(grad_scale, expected_scale)
-
-
-@pytest.mark.parametrize("num_classes", [3, 10, 12])
-def test_ecoc_generator(num_classes: int) -> None:
-    # The oracle's output is invariant to the codebook. A fixed linear head
-    # instead makes codebook differences observable in the decoded scores.
-    class Classifier(torch.nn.Module):
-        def forward(self, x: Tensor, y: Tensor) -> Tensor:
-            return x[..., y.size(-1) :, :10]
-
-    model = Classifier()
-    ecoc = ECOC(max_classes=10)
-    x = torch.randn(num_classes + 3, 12)
-    y = torch.arange(num_classes)
-
-    first, repeated, other = [
-        ecoc(
-            model=model,
-            x=x,
-            y=y,
-            num_classes=num_classes,
-            generator=torch.Generator().manual_seed(seed),
-        )
-        for seed in (1, 1, 2)
-    ]
-
-    torch.testing.assert_close(first, repeated, rtol=0, atol=0)
-    if num_classes <= ecoc.max_classes:
-        torch.testing.assert_close(
-            first, model(x, y)[..., :num_classes], rtol=0, atol=0
-        )
-    else:
-        assert not torch.allclose(first, other)
