@@ -5,15 +5,17 @@
 
 import math
 import os
-from typing import Any, Literal, overload
+from typing import Any, Literal, TypeAlias, overload
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
-from sdm.cache import KVCacheEntry
+from sdm.cache import Int8KVCacheEntry, KVCacheEntry
 from sdm.nn import QueryScaling
+
+_KeyValueCacheEntry: TypeAlias = KVCacheEntry | Int8KVCacheEntry
 
 
 class SDPA(torch.nn.Module):
@@ -240,7 +242,7 @@ class Attention(torch.nn.Module):
     def forward(
         self,
         query: Tensor,
-        key_value: Tensor | KVCacheEntry | None = None,
+        key_value: Tensor | _KeyValueCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
@@ -251,7 +253,7 @@ class Attention(torch.nn.Module):
     def forward(
         self,
         query: Tensor,
-        key_value: Tensor | KVCacheEntry | None = None,
+        key_value: Tensor | _KeyValueCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
@@ -262,7 +264,7 @@ class Attention(torch.nn.Module):
     def forward(
         self,
         query: Tensor,
-        key_value: Tensor | KVCacheEntry | None = None,
+        key_value: Tensor | _KeyValueCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
@@ -272,7 +274,7 @@ class Attention(torch.nn.Module):
     def forward(
         self,
         query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
+        key_value: Tensor | _KeyValueCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         *,
@@ -286,7 +288,8 @@ class Attention(torch.nn.Module):
                 channels.
             key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
-                :class:`~sdm.cache.KVCacheEntry`.
+                :class:`~sdm.cache.KVCacheEntry` or
+                :class:`~sdm.cache.Int8KVCacheEntry`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -302,7 +305,7 @@ class Attention(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        if isinstance(key_value, KVCacheEntry):
+        if isinstance(key_value, _KeyValueCacheEntry):
             query = F.linear(
                 query,
                 weight=self.qkv_lin.weight[: self.q_dim],
@@ -310,15 +313,24 @@ class Attention(torch.nn.Module):
                 if self.qkv_lin.bias is not None
                 else None,
             )
-            if (
-                key_value.key.dtype != query.dtype
-                or key_value.value.dtype != query.dtype
-            ):
+            key_dtype = (
+                key_value.key_dtype
+                if isinstance(key_value, Int8KVCacheEntry)
+                else key_value.key.dtype
+            )
+            value_dtype = (
+                key_value.value_dtype
+                if isinstance(key_value, Int8KVCacheEntry)
+                else key_value.value.dtype
+            )
+            if key_dtype != query.dtype or value_dtype != query.dtype:
                 raise ValueError(
                     f"Key/value projections were cached under dtypes "
-                    f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
-                    f"the query has dtype '{query.dtype}'"
+                    f"'{key_dtype}'/'{value_dtype}' but the query has dtype "
+                    f"'{query.dtype}'"
                 )
+            if isinstance(key_value, Int8KVCacheEntry):
+                key_value = key_value.dequantize()
             key = key_value.key
             value = key_value.value
         elif key_value is None:
@@ -336,7 +348,7 @@ class Attention(torch.nn.Module):
 
         # [..., S, C] -> [..., S, H, C // H], with separate query/kv heads.
         query = query.unflatten(-1, [self.num_query_heads, self.head_dim])
-        if not isinstance(key_value, KVCacheEntry):
+        if not isinstance(key_value, _KeyValueCacheEntry):
             key = key.unflatten(-1, [self.num_key_value_heads, self.head_dim])
             value = value.unflatten(
                 -1, [self.num_key_value_heads, self.head_dim]
@@ -345,7 +357,7 @@ class Attention(torch.nn.Module):
         if self.query_transform is not None:
             query = self.query_transform(query)
         if (
-            not isinstance(key_value, KVCacheEntry)
+            not isinstance(key_value, _KeyValueCacheEntry)
             and self.key_transform is not None
         ):
             key = self.key_transform(key)
@@ -439,7 +451,7 @@ class TransformerBlock(torch.nn.Module):
     def forward(
         self,
         query: Tensor,
-        key_value: Tensor | KVCacheEntry | None = None,
+        key_value: Tensor | _KeyValueCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
@@ -452,7 +464,7 @@ class TransformerBlock(torch.nn.Module):
     def forward(
         self,
         query: Tensor,
-        key_value: Tensor | KVCacheEntry | None = None,
+        key_value: Tensor | _KeyValueCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
@@ -465,7 +477,7 @@ class TransformerBlock(torch.nn.Module):
     def forward(
         self,
         query: Tensor,
-        key_value: Tensor | KVCacheEntry | None = None,
+        key_value: Tensor | _KeyValueCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
@@ -477,7 +489,7 @@ class TransformerBlock(torch.nn.Module):
     def forward(
         self,
         query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
+        key_value: Tensor | _KeyValueCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         *,
@@ -493,7 +505,8 @@ class TransformerBlock(torch.nn.Module):
                 channels.
             key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
-                :class:`~sdm.cache.KVCacheEntry`.
+                :class:`~sdm.cache.KVCacheEntry` or
+                :class:`~sdm.cache.Int8KVCacheEntry`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -516,7 +529,7 @@ class TransformerBlock(torch.nn.Module):
             raise RuntimeError(
                 "'out' is only supported when gradients are disabled"
             )
-        if return_key_value and isinstance(key_value, KVCacheEntry):
+        if return_key_value and isinstance(key_value, _KeyValueCacheEntry):
             raise ValueError(
                 "'return_key_value=True' is not supported when 'key_value' is "
                 "already cached"
@@ -538,7 +551,7 @@ class TransformerBlock(torch.nn.Module):
                 key_value_length: int | None = None
                 if isinstance(key_value, Tensor):
                     key_value_length = key_value.size(-2)
-                elif isinstance(key_value, KVCacheEntry):
+                elif isinstance(key_value, _KeyValueCacheEntry):
                     key_value_length = key_value.key.size(-3)
 
                 bytes_per_example = self.peak_bytes_per_example(
@@ -574,7 +587,7 @@ class TransformerBlock(torch.nn.Module):
         if batch_size <= batch_size_limit or query.size(-2) == 0:
             disable_chunking = True
         if return_key_value:
-            assert not isinstance(key_value, KVCacheEntry)
+            assert not isinstance(key_value, _KeyValueCacheEntry)
             if batch_shape != (
                 query.size()[:-2]
                 if key_value is None
@@ -674,7 +687,7 @@ class TransformerBlock(torch.nn.Module):
     def _forward(
         self,
         query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
+        key_value: Tensor | _KeyValueCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         *,
@@ -731,14 +744,14 @@ class TransformerBlock(torch.nn.Module):
 
 def _batch_shape(
     query: Tensor,
-    key_value: Tensor | KVCacheEntry | None,
+    key_value: Tensor | _KeyValueCacheEntry | None,
     seqused_key_value: Tensor | None,
     attn_mask: Tensor | None,
 ) -> torch.Size:
     shapes = [query.size()[:-2]]
     if isinstance(key_value, Tensor):
         shapes.append(key_value.size()[:-2])
-    elif isinstance(key_value, KVCacheEntry):
+    elif isinstance(key_value, _KeyValueCacheEntry):
         shapes += [key_value.key.size()[:-3], key_value.value.size()[:-3]]
     if seqused_key_value is not None:
         shapes.append(seqused_key_value.size())
@@ -769,6 +782,16 @@ def _chunk(
 
 @overload
 def _chunk(
+    tensor: Int8KVCacheEntry,
+    batch_shape: torch.Size,
+    trailing_dims: int,
+    start: int,
+    end: int,
+) -> Int8KVCacheEntry: ...
+
+
+@overload
+def _chunk(
     tensor: None,
     batch_shape: torch.Size,
     trailing_dims: int,
@@ -778,12 +801,12 @@ def _chunk(
 
 
 def _chunk(
-    tensor: Tensor | KVCacheEntry | None,
+    tensor: Tensor | _KeyValueCacheEntry | None,
     batch_shape: torch.Size,
     trailing_dims: int,
     start: int,
     end: int,
-) -> Tensor | KVCacheEntry | None:
+) -> Tensor | _KeyValueCacheEntry | None:
 
     if tensor is None:
         return None
@@ -792,6 +815,16 @@ def _chunk(
         return KVCacheEntry(
             key=_chunk(tensor.key, batch_shape, 3, start, end),
             value=_chunk(tensor.value, batch_shape, 3, start, end),
+        )
+
+    if isinstance(tensor, Int8KVCacheEntry):
+        return Int8KVCacheEntry(
+            key=_chunk(tensor.key, batch_shape, 3, start, end),
+            value=_chunk(tensor.value, batch_shape, 3, start, end),
+            key_scale=_chunk(tensor.key_scale, batch_shape, 3, start, end),
+            value_scale=_chunk(tensor.value_scale, batch_shape, 3, start, end),
+            key_dtype=tensor.key_dtype,
+            value_dtype=tensor.value_dtype,
         )
 
     trailing_shape = tensor.size()[-trailing_dims:] if trailing_dims else ()

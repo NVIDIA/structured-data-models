@@ -13,7 +13,7 @@ import torch
 from torch import Tensor
 from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache, Int8KVCacheEntry, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
@@ -116,7 +116,7 @@ class ICLBlock(torch.nn.Module):
             result = layer(
                 query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
                 key_value=(
-                    cast(KVCacheEntry, cache[key])
+                    cast(KVCacheEntry | Int8KVCacheEntry, cache[key])
                     if cache is not None and cache.is_replaying
                     else x[..., :R_train, :]
                 ),

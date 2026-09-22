@@ -258,3 +258,52 @@ def test_compile(dtype: torch.dtype) -> None:
     predicted = model.predict(x_query)
     assert predicted.allclose(expected, atol=5e-4, rtol=5e-3)
     assert torch.is_inference(predicted)
+
+
+@withCUDA
+def test_int8_kv_cache(device: torch.device) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    x_context = torch.randn(64, 6, device=device)
+    y_context = torch.randint(0, 3, (64, 1), device=device)
+    x_query = torch.randn(16, 6, device=device)
+
+    model.fit(x_context, y_context)
+    assert model._cache is not None
+    default_size = model._cache.size()
+    expected = model.predict(x_query)
+
+    model.fit(x_context, y_context, kv_cache_dtype=torch.int8)
+    assert model._cache is not None
+    assert model._cache.size() < default_size
+
+    out = model.predict(x_query)
+    assert out.size() == expected.size()
+    assert out.numerical.isfinite().all()
+    model.clear()
+
+
+@withCUDA
+def test_int8_kv_cache_under_autocast(device: torch.device) -> None:
+    # Key projections are normalized to the value dtype before caching, so
+    # INT8 replay must still agree with the query dtype under autocast.
+    model = TabICLv2(pretrained=False, device=device)
+    x_context = torch.randn(64, 6, device=device)
+    y_context = torch.randint(0, 3, (64, 1), device=device)
+    x_query = torch.randn(16, 6, device=device)
+    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
+
+    with torch.autocast(device_type=device.type, dtype=dtype):
+        model.fit(x_context, y_context)
+        assert model._cache is not None
+        native_size = model._cache.size()
+        expected = model.predict(x_query)
+
+        model.fit(x_context, y_context, kv_cache_dtype=torch.int8)
+        assert model._cache is not None
+        assert model._cache.size() < native_size
+        out = model.predict(x_query)
+
+    assert out.size() == expected.size()
+    assert out.dtype == expected.dtype
+    assert out.numerical.isfinite().all()
+    model.clear()

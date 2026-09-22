@@ -5,14 +5,16 @@ r"""Set-transformer modules for structured tensor models."""
 
 from __future__ import annotations
 
-from typing import Any, Literal, overload
+from typing import Any, Literal, TypeAlias, overload
 
 import torch
 from torch import Tensor
 from torch.nn import Parameter
 
-from sdm.cache import KVCacheEntry
+from sdm.cache import Int8KVCacheEntry, KVCacheEntry
 from sdm.nn import TransformerBlock
+
+_KeyValueCacheEntry: TypeAlias = KVCacheEntry | Int8KVCacheEntry
 
 
 class InducedTransformerBlock(torch.nn.Module):
@@ -69,7 +71,7 @@ class InducedTransformerBlock(torch.nn.Module):
     def forward(
         self,
         query: Tensor,
-        key_value: Tensor | KVCacheEntry | None = None,
+        key_value: Tensor | _KeyValueCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
@@ -82,7 +84,7 @@ class InducedTransformerBlock(torch.nn.Module):
     def forward(
         self,
         query: Tensor,
-        key_value: Tensor | KVCacheEntry | None = None,
+        key_value: Tensor | _KeyValueCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
@@ -95,7 +97,7 @@ class InducedTransformerBlock(torch.nn.Module):
     def forward(
         self,
         query: Tensor,
-        key_value: Tensor | KVCacheEntry | None = None,
+        key_value: Tensor | _KeyValueCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
@@ -107,7 +109,7 @@ class InducedTransformerBlock(torch.nn.Module):
     def forward(
         self,
         query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
+        key_value: Tensor | _KeyValueCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., KV]
         *,
@@ -123,7 +125,8 @@ class InducedTransformerBlock(torch.nn.Module):
                 channels.
             key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
-                :class:`~sdm.cache.KVCacheEntry`.
+                :class:`~sdm.cache.KVCacheEntry` or
+                :class:`~sdm.cache.Int8KVCacheEntry`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for induced self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -141,7 +144,7 @@ class InducedTransformerBlock(torch.nn.Module):
             ``False``. Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        if not isinstance(key_value, KVCacheEntry):
+        if not isinstance(key_value, _KeyValueCacheEntry):
             if key_value is None:
                 key_value = query
             if attn_mask is not None:

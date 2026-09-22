@@ -8,6 +8,7 @@ import pytest
 import torch
 from torch import Tensor
 
+from sdm.cache import Int8KVCacheEntry
 from sdm.nn import (
     SDPA,
     Attention,
@@ -232,6 +233,13 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
     # Replaying the cached projections also compiles without graph breaks.
     expected = module(query=query, key_value=expected_kv)
     out = fullgraph(module)(query=query, key_value=kv)
+    torch.testing.assert_close(out, expected)
+
+    # The same holds for INT8 projections, which dequantize inside the graph.
+    quantized = Int8KVCacheEntry.from_entry(expected_kv)
+    assert quantized.key_scale.size() == (2, 5, 2, 1)
+    expected = module(query=query, key_value=quantized)
+    out = fullgraph(module)(query=query, key_value=quantized)
     torch.testing.assert_close(out, expected)
 
 

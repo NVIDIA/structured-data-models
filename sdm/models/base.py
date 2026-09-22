@@ -239,6 +239,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_estimators: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
+        kv_cache_dtype: torch.dtype | None = None,
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -261,6 +262,12 @@ class ICLModel(torch.nn.Module, abc.ABC):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            kv_cache_dtype: Storage dtype for cached key/value projections.
+                Pass :external+torch:ref:`torch.int8 <dtype-doc>` to store
+                approximate one-byte payloads with FP32 scales, or ``None`` to
+                preserve the projected dtype. INT8 projections are dequantized
+                before attention, so prediction accuracy and runtime may
+                differ.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
@@ -297,6 +304,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables=context.related_tables,
             )
             estimator_cache = Cache(
+                kv_cache_dtype=kv_cache_dtype,
                 x_schema=context.x.schema,
                 y_schema=context.y.schema,
                 related_tables_schema=context.related_tables.schema

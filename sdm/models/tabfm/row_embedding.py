@@ -31,7 +31,7 @@ from torch.nn import (
     Sequential,
 )
 
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache, Int8KVCacheEntry, KVCacheEntry
 from sdm.models.tabfm.block import TabFMTransformerBlock
 from sdm.models.tabfm.cell_embedding import CellEmbedding
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding
@@ -190,7 +190,7 @@ class RowEmbedding(torch.nn.Module):
                 key = f"row_embedding.col_layer{i}.{j}"
                 result = col_layer(
                     query=x,  # [..., C, R, D]
-                    key_value=cast(KVCacheEntry, cache[key])
+                    key_value=cast(KVCacheEntry | Int8KVCacheEntry, cache[key])
                     if cache is not None and cache.is_replaying
                     else x[..., :R_train, :],
                     return_key_value=cache is not None and cache.is_recording,

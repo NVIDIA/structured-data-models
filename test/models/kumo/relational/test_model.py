@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator
+
 import pandas as pd
 import pytest
 import torch
@@ -13,7 +15,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.cache import Cache
+from sdm.cache import Cache, Int8KVCacheEntry, KVCacheEntry
 from sdm.models import KumoRelational
 from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
@@ -339,3 +341,58 @@ def test_many_classes_forward_and_cache(
         cache=cache.freeze(),
     )
     torch.testing.assert_close(predicted, expected)
+
+
+def test_int8_kv_cache(relational_data: RelationalData) -> None:
+    model = KumoRelational(pretrained=False)
+
+    related_tables = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    x = TableTensor.from_pandas(
+        df=pd.DataFrame(
+            {
+                "user_id": [0, 1, 2, 3],
+                "timestamp": pd.to_datetime(
+                    ["2024-01-03", "2024-01-04", None, "2024-01-06"]
+                ),
+            }
+        ),
+        stypes={"user_id": "id", "timestamp": "datetime"},
+    )
+    y = TableTensor(numerical=torch.randn(4, 1))
+
+    model.fit(x, y, related_tables)
+    assert model._cache is not None
+    default_size = model._cache.size()
+    expected = model.predict(x, related_tables)
+
+    # Key/value entries recorded in caches the model creates internally must
+    # honor the configured storage dtype too.
+    model.fit(x, y, related_tables, kv_cache_dtype=torch.int8)
+    assert model._cache is not None
+    assert model._cache.size() < default_size
+
+    def key_value_entries(cache: Cache) -> Iterator[object]:
+        for value in cache.values():
+            if isinstance(value, KVCacheEntry | Int8KVCacheEntry):
+                yield value
+            elif isinstance(value, Cache):
+                yield from key_value_entries(value)
+
+    entries = list(key_value_entries(model._cache))
+    assert len(entries) > 0
+    assert all(isinstance(entry, Int8KVCacheEntry) for entry in entries)
+
+    out = model.predict(x, related_tables)
+    assert out.size() == expected.size()
+    assert out.numerical.isfinite().all()
+    model.clear()
