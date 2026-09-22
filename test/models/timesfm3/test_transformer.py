@@ -7,6 +7,7 @@ import pytest
 import torch
 
 from sdm.models.timesfm3.transformer import (
+    MultiHeadAttention,
     RotaryPositionalEmbedding,
     make_attn_mask,
 )
@@ -102,3 +103,158 @@ def test_rotary_positional_embedding_rotation(
         dtype=dtype,
     )
     torch.testing.assert_close(output[0, 1], expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("use_sdpa", [False, True])
+def test_multi_head_attention_bfloat16(
+    device: torch.device,
+    use_sdpa: bool,
+) -> None:
+    attention = MultiHeadAttention(
+        num_heads=2,
+        in_features=8,
+        use_sdpa=use_sdpa,
+        device=device,
+        dtype=torch.bfloat16,
+    )
+    inputs = torch.ones(2, 3, 8, device=device, dtype=torch.bfloat16)
+
+    output = attention(inputs)[0]
+
+    assert output.dtype == torch.bfloat16
+    assert output.isfinite().all()
+
+
+@withCUDA
+def test_multi_head_attention_sdpa_fully_masked(
+    device: torch.device,
+) -> None:
+    attention = MultiHeadAttention(
+        num_heads=2,
+        in_features=8,
+        device=device,
+        dtype=torch.float16,
+        use_sdpa=True,
+    )
+    inputs = torch.ones(2, 3, 8, device=device, dtype=torch.float16)
+    patch_mask = torch.ones(2, 3, device=device, dtype=torch.bool)
+
+    output = attention(inputs, patch_mask=patch_mask)[0]
+
+    torch.testing.assert_close(output, torch.zeros_like(output))
+
+
+@withCUDA
+def test_multi_head_attention_manual_fully_masked_uses_finite_bias(
+    device: torch.device,
+) -> None:
+    attention = MultiHeadAttention(
+        num_heads=2,
+        in_features=8,
+        use_rotary_position_embeddings=False,
+        qk_norm="none",
+        use_sdpa=False,
+        device=device,
+    )
+    with torch.no_grad():
+        for projection in (
+            attention.query_proj,
+            attention.key_proj,
+            attention.value_proj,
+            attention.out_proj,
+        ):
+            projection.weight.copy_(torch.eye(8, device=device))
+    inputs = torch.ones(1, 3, 8, device=device)
+    patch_mask = torch.ones(1, 3, device=device, dtype=torch.bool)
+
+    output = attention(inputs, patch_mask=patch_mask)[0]
+
+    torch.testing.assert_close(output, inputs)
+
+
+@withCUDA
+@pytest.mark.parametrize("use_sdpa", [False, True])
+@pytest.mark.parametrize("rescale_logits", [False, True])
+def test_multi_head_attention_matches_google_reference(
+    device: torch.device,
+    use_sdpa: bool,
+    rescale_logits: bool,
+) -> None:
+    attention = MultiHeadAttention(
+        num_heads=2,
+        in_features=4,
+        use_sdpa=use_sdpa,
+        rescale_logits=rescale_logits,
+        device=device,
+    )
+    with torch.no_grad():
+        for projection in (
+            attention.query_proj,
+            attention.key_proj,
+            attention.value_proj,
+            attention.out_proj,
+        ):
+            projection.weight.copy_(torch.eye(4, device=device))
+    inputs = (
+        torch.arange(1, 13, device=device, dtype=torch.float32).reshape(
+            1, 3, 4
+        )
+        / 10
+    )
+    patch_mask = torch.tensor([[False, True, False]], device=device)
+
+    output = attention(inputs, patch_mask=patch_mask)[0]
+
+    # Generated with google-research/timesfm at e31dadd84cb26bd5.
+    expected_last = {
+        False: [0.828331590, 0.928331673, 1.047185063, 1.147185087],
+        True: [0.769981503, 0.869981468, 0.993489444, 1.093489409],
+    }[rescale_logits]
+    expected = inputs.clone()
+    expected[:, 1] = inputs[:, 0]
+    expected[:, 2] = output.new_tensor(expected_last)
+    torch.testing.assert_close(output, expected)
+
+
+@withCUDA
+def test_multi_head_attention_loads_from_meta(device: torch.device) -> None:
+    expected = MultiHeadAttention(num_heads=2, in_features=8, device=device)
+    attention = MultiHeadAttention(
+        num_heads=2,
+        in_features=8,
+        device="meta",
+    )
+
+    attention.load_state_dict(expected.state_dict(), assign=True)
+    inputs = torch.arange(
+        24,
+        device=device,
+        dtype=torch.float32,
+    ).reshape(1, 3, 8)
+    output = attention(inputs)[0]
+
+    assert all(buffer.device == device for buffer in attention.buffers())
+    torch.testing.assert_close(output, expected(inputs)[0])
+
+
+@withCUDA
+def test_multi_head_attention_uses_output_projection(
+    device: torch.device,
+) -> None:
+    attention = MultiHeadAttention(
+        num_heads=2,
+        in_features=8,
+        device=device,
+    )
+    with torch.no_grad():
+        attention.out_proj.weight.zero_()
+    inputs = torch.arange(
+        24,
+        device=device,
+        dtype=torch.float32,
+    ).reshape(1, 3, 8)
+
+    output = attention(inputs)[0]
+
+    torch.testing.assert_close(output, torch.zeros_like(output))
