@@ -19,8 +19,8 @@ class ECOC(torch.nn.Module):
     The resulting scores can be normalized with softmax.
 
     Targets within the model's class capacity use a single ordinary forward
-    pass. Larger targets use ``max(ceil(C / (max_classes - 1)),
-    4 * ceil(log(C, max_classes)))`` encoded tasks, where ``C`` is the number
+    pass. Larger targets use ``max(ceil(K / (max_classes - 1)),
+    4 * ceil(log(K, max_classes)))`` encoded tasks, where ``K`` is the number
     of original classes. Tasks run along an additional leading batch dimension.
 
     The model is supplied to :meth:`forward`. Manage its parameters, device,
@@ -53,8 +53,8 @@ class ECOC(torch.nn.Module):
                 ``[..., R_query, max_classes]``. It must support leading batch
                 dimensions. To use caching, it must also accept a
                 :class:`~sdm.cache.Cache` via the ``cache`` keyword argument.
-            x: Context followed by query features, with shape ``[..., R, D]``
-                for ``R`` rows and ``D`` features. When replaying a cache,
+            x: Context followed by query features, with shape ``[..., R, C]``
+                for ``R`` rows and ``C`` columns. When replaying a cache,
                 provide only query features.
             y: Integer context labels in ``[0, num_classes)``, with shape
                 ``[..., R_context]``. Use an empty context axis when replaying
@@ -88,16 +88,15 @@ class ECOC(torch.nn.Module):
                 )
             kwargs["cache"] = cast(Cache, cache["ecoc_model"])
         else:
-            # [T, C]
+            # [T, K]
             codebook = self._draw_codebook(num_classes, x.device, generator)
             if cache is not None:
                 cache["ecoc_codebook"] = codebook
                 kwargs["cache"] = cache["ecoc_model"] = Cache()
 
         T = codebook.size(0)
-        # [T, ..., R, D] and [T, ..., R_context]
         logits = model(
-            x=x.expand(T, *x.shape),  # [T, ..., R, D]
+            x=x.expand(T, *x.shape),  # [T, ..., R, C]
             y=codebook.index_select(
                 dim=1,
                 index=y.reshape(-1),
@@ -108,7 +107,7 @@ class ECOC(torch.nn.Module):
         scores = logits.log_softmax(dim=-1).gather(
             dim=-1,
             index=index.expand(*logits.shape[:-1], num_classes),
-        )  # [T, ..., R_query, C]
+        )  # [T, ..., R_query, K]
         active = index != self.max_classes - 1
         return scores.masked_fill(~active, 0).sum(dim=0) / active.sum(dim=0)
 
