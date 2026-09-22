@@ -25,7 +25,7 @@ class Recipe:
     - ``output``: transforms member outputs after they have been mapped to a
       common class or target space and stacked as ``[E, ..., R, O]``. An
       explicit dimension-changing step such as
-      :class:`~sdm.processing.ReduceEstimators` removes ``E``; without one,
+      :class:`~sdm.processing.AverageEstimators` removes ``E``; without one,
       the output remains stacked. Steps before the reducer must support
       stacked outputs, while steps after it receive already-reduced outputs.
 
