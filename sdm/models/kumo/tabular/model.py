@@ -14,8 +14,8 @@ from torch.nn import Identity, Linear, ModuleDict
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
-from sdm.models._batch import _categorical_mask
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.base import _categorical_mask
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding

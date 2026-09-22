@@ -28,9 +28,8 @@ from torch.nn import ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
-from sdm.models._batch import _categorical_mask
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.base import ICLModel
+from sdm.models.base import ICLModel, _categorical_mask
 from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.recipe import default_recipe
