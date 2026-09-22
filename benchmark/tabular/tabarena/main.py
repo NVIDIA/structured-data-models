@@ -21,6 +21,11 @@ parser.add_argument(
     help="SDM model to benchmark.",
 )
 parser.add_argument(
+    "--registry_model",
+    help="Benchmark this tabarena registry model (e.g. TabPFN-3.5) with its "
+    "upstream wrapper instead of an SDM model, under the same settings.",
+)
+parser.add_argument(
     "--dataset",
     help="Run only the selected TabArena dataset.",
 )
@@ -95,6 +100,8 @@ parser.add_argument(
     help="Parent directory of every TabArena cache.",
 )
 args = parser.parse_args()
+if args.registry_model is not None and args.num_estimators is not None:
+    parser.error("--num_estimators applies to SDM models only")
 if args.model != "kumo-tabular" and (
     args.checkpoint is not None
     or args.size is not None
@@ -109,7 +116,7 @@ if args.model != "kumo-tabular" and (
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
     args.output_root
-    / (args.name or model_config.name)
+    / (args.name or args.registry_model or model_config.name)
     / f"{args.validation}_model"
 )
 result_dir.mkdir(parents=True, exist_ok=True)
@@ -131,18 +138,27 @@ if args.regression_reduction is not None:
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
 
-generator = ConfigGenerator(
-    search_space={},
-    model_cls=model_config.model_cls,
-    manual_configs=[config],
-)
+if args.registry_model is not None:
+    models = [(args.registry_model, 0)]
+else:
+    models = [
+        (
+            ConfigGenerator(
+                search_space={},
+                model_cls=model_config.model_cls,
+                manual_configs=[config],
+            ),
+            0,
+        )
+    ]
+# One GPU per fit, as the hosted methods were run.
 experiments = TabArenaV0pt1ExperimentBundle(
-    models=[(generator, 0)],
+    models=models,
     outer_experiments=args.validation == "outer",
-).build_experiments()
+).build_experiments(num_gpus=1)
 for experiment in experiments:
     experiment.experiment_kwargs["cleanup_on_failure"] = True
-    if args.validation == "outer":
+    if args.validation == "outer" and args.registry_model is None:
         experiment.method_cls = SDMModelWrapper
 
 context = TabArenaContext(
