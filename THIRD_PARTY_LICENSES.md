@@ -3,6 +3,14 @@
 This project contains code or documentation derived from the following third-party projects.
 Runtime, test, and documentation dependencies are declared in [`pyproject.toml`](pyproject.toml)/[`uv.lock`](uv.lock), and example/benchmark dependencies are resolved separately and are not bundled with this repository.
 
+## TabPFN Extensions
+
+- Source: https://github.com/PriorLabs/tabpfn-extensions
+- License: Apache License 2.0
+- License terms: [`third_party/tabpfn-extensions/LICENSE`](third_party/tabpfn-extensions/LICENSE)
+
+The [`sdm/models/ecoc.py`](sdm/models/ecoc.py) implementation contains code derived from [`TabPFN Extensions`](https://github.com/PriorLabs/tabpfn-extensions).
+
 ## TabICLv2
 
 - Source: https://github.com/soda-inria/tabicl
