@@ -262,7 +262,7 @@ class ModelConfig:
 
     @property
     def tabarena_method_name(self) -> str:
-        return f"{self.model_cls.ag_name}_c1_default"
+        return f"{self.model_cls.ag_name}_c1_default_BAG_L1"
 
     @property
     def beyondarena_method_name(self) -> str:

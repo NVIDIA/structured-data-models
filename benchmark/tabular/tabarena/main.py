@@ -13,7 +13,6 @@ from tabarena.utils.config_utils import ConfigGenerator
 from benchmark.tabular.model import (
     MODEL_CONFIGS,
     SDMExperimentRunner,
-    SDMModelWrapper,
 )
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -54,11 +53,12 @@ result_dir = (
     Path(__file__).parent.parent
     / "tabarena_out"
     / model_config.name
-    / "outer_model"
+    / "bagged_model"
 )
 result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
+    "ag_args_ensemble": {"refit_folds": True},
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
 }
@@ -72,10 +72,9 @@ generator = ConfigGenerator(
 )
 experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
-    outer_experiments=True,
+    sequential_local_fold_fitting=True,
 ).build_experiments()
 for experiment in experiments:
-    experiment.method_cls = SDMModelWrapper
     experiment.experiment_cls = SDMExperimentRunner
 
 context = TabArenaContext()
