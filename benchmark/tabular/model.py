@@ -20,6 +20,11 @@ from tabarena.benchmark.experiment import OOFExperimentRunner
 
 import sdm
 import sdm.processing as sp
+from benchmark.tabular.grouping import (
+    GROUP_ID_COLUMN,
+    KumoGroupPreprocessing,
+    pool_by_group,
+)
 
 Task = Literal["classification", "regression"]
 
@@ -83,6 +88,8 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             )
 
         X = self.preprocess(X, y=y)
+        # The context needs no id, because the pool joins query rows.
+        X, _group_id = self._take_group_id(X)
         self.stypes = sdm.infer_stypes(X)
         x_context = sdm.TableTensor.from_pandas(
             df=X,
@@ -147,6 +154,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         **kwargs: Any,
     ) -> np.ndarray:
         X = self.preprocess(X, **kwargs)
+        X, group_id = self._take_group_id(X)
         x_query = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
@@ -166,13 +174,31 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             out = self.model.predict(x_query)
 
         if self.problem_type == REGRESSION:
+            # The pool covers the class tasks only. The mean of a
+            # number needs the model error to say how far to pool.
             return out.numerical.float().mean(dim=-1).cpu().numpy()
 
         assert self.num_classes is not None
         columns = out.columns[sdm.Stype.numerical]
         indices = [columns.index(str(i)) for i in range(self.num_classes)]
         probabilities = out.numerical[..., indices].float().cpu().numpy()
+        if group_id is not None:
+            probabilities = pool_by_group(probabilities, group_id)
         return self._convert_proba_to_unified_form(probabilities)
+
+    @staticmethod
+    def _take_group_id(
+        x: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, pd.Series | None]:
+        """Remove the id of the group, which is no feature.
+
+        Only :mod:`benchmark.tabular.grouping` writes the column,
+        and only for a label-per-group task, so its presence is the
+        switch of the pool.
+        """
+        if GROUP_ID_COLUMN not in x.columns:
+            return x, None
+        return x.drop(columns=[GROUP_ID_COLUMN]), x[GROUP_ID_COLUMN]
 
     def get_device(self) -> str:
         return str(next(self.model.parameters()).device)
@@ -193,6 +219,15 @@ class SDMModel(AbstractTorchModel, abc.ABC):
 
 
 class SDMModelWrapper(AGModelWrapper):
+    #: Pool the query predictions of one group, set by the command line.
+    group_pooling: ClassVar[bool] = False
+
+    def _make_feature_generator(self) -> Any:
+        """Build the generator, which carries the group id when asked."""
+        if self.group_pooling:
+            self._feature_generator_cls = KumoGroupPreprocessing
+        return super()._make_feature_generator()
+
     def cleanup(self) -> None:
         model = getattr(self, "model", None)
         cleanup = getattr(model, "cleanup", None)
