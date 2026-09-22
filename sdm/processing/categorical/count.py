@@ -18,26 +18,41 @@ from sdm.processing.categorical._categorical import (
 class AddCategoryCounts(Processor):
     """Add the log row count of each categorical value.
 
-    Each categorical column receives one numerical column ``<column>__count``
+    Each eligible column receives one numerical column ``<column>__count``
     holding ``log1p`` of the number of fitted rows sharing the row's code.
     Negative codes (missing or unknown values) share one count.
 
     Transform inputs must use the fitted per-column category vocabularies.
     Use :class:`~sdm.processing.AlignCategories` before this processor when
     training and transform inputs were tensorized independently.
+
+    Args:
+        min_cardinality: Minimum fitted vocabulary size for adding a count
+            column. Missing values do not contribute to vocabulary size.
+            Defaults to 0, adding counts for all categorical columns.
     """
 
     handles_stypes = frozenset({Stype.categorical})
     requires_fit = True
 
-    def __init__(self) -> None:
+    def __init__(self, min_cardinality: int = 0) -> None:
         super().__init__()
+        self.min_cardinality = min_cardinality
+        self._columns: tuple[str, ...] = ()
         self._categories: BufferList[Tensor] = BufferList()
         self.register_buffer("_log_counts", torch.empty(0))
         self.register_buffer(
             "_num_categories",
             torch.empty(0, dtype=torch.long),
         )
+
+    def get_extra_state(self) -> tuple[str, ...]:
+        r""":meta private:"""  # noqa: D415
+        return self._columns
+
+    def set_extra_state(self, state: object) -> None:
+        r""":meta private:"""  # noqa: D415
+        self._columns = cast(tuple[str, ...], state)
 
     def _fit(
         self,
@@ -46,17 +61,23 @@ class AddCategoryCounts(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         _check_categorical_codes(table)
-        codes = table.categorical.code  # [*batch, num_rows, num_columns]
-        sizes = [
-            categories.numel() for categories in table.categorical.categories
-        ]
+        self._columns = tuple(
+            column
+            for column, categories in zip(
+                table.columns[Stype.categorical], table.categorical.categories
+            )
+            if categories.numel() >= self.min_cardinality
+        )
+        categorical = table.select_columns(self._columns).categorical
+        codes = categorical.code  # [*batch, num_rows, num_columns]
+        sizes = [categories.numel() for categories in categorical.categories]
         num_categories = codes.new_tensor(sizes, dtype=torch.long)
         # Negative codes accumulate in the slot behind their column's
         # vocabulary: [*batch, num_columns, max(sizes) + 1].
         slots = torch.where(codes >= 0, codes.long(), num_categories)
         slots = slots.transpose(-2, -1)
         counts = torch.zeros(
-            (*codes.shape[:-2], len(sizes), max(sizes) + 1),
+            (*codes.shape[:-2], len(sizes), max(sizes, default=0) + 1),
             dtype=torch.long,
             device=codes.device,
         )
@@ -75,15 +96,16 @@ class AddCategoryCounts(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         _check_categories(table, self._categories)
         _check_categorical_codes(table)
-        codes = table.categorical.code
+        if not self._columns:
+            return table
+        codes = table.select_columns(self._columns).categorical.code
         slots = torch.where(codes >= 0, codes.long(), self._num_categories)
         counts = self._log_counts.gather(-1, slots.transpose(-2, -1))
 
         out_table = TableTensor(
             columns={
                 Stype.numerical: tuple(
-                    f"{column}__count"
-                    for column in table.columns[Stype.categorical]
+                    f"{column}__count" for column in self._columns
                 ),
             },
             numerical=counts.transpose(-2, -1).to(table.numerical.dtype),

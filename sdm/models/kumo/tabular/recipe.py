@@ -31,7 +31,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 ],
                 categorical=[
                     sp.AlignCategories(sort_by="value"),
-                    sp.AddCategoryCounts(),
+                    sp.AddCategoryCounts(min_cardinality=50),
                     sp.ToNumerical(),
                     numerical_processor(),
                 ],
