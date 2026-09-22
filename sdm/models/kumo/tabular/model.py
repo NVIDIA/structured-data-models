@@ -57,6 +57,19 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
         "num_icl_heads": 8,
         "num_icl_key_value_heads_for_query": 2,
     },
+    "xlarge": {
+        "cell_channels": 256,
+        "num_embedding_layers": 6,
+        "num_embedding_heads": 4,
+        "num_inducing_points": 256,
+        "group_size": 3,
+        "num_frequencies": 32,
+        "num_readout_tokens": 4,
+        "icl_channels": 1024,
+        "num_icl_layers": 24,
+        "num_icl_heads": 16,
+        "num_icl_key_value_heads_for_query": 2,
+    },
 }
 
 
@@ -96,7 +109,7 @@ def scale_ecoc_estimators(
 def load_network(
     *,
     task: TaskLike,
-    size: Literal["small", "large"],
+    size: Literal["small", "large", "xlarge"],
     checkpoint: str | Path | None,
     device: torch.device | str | None,
 ) -> _KumoTabular:
@@ -108,7 +121,7 @@ def load_network(
 
     Args:
         task: The task the network predicts.
-        size: The model size, either ``"small"`` or ``"large"``.
+        size: The model size, ``"small"``, ``"large"`` or ``"xlarge"``.
         checkpoint: A local checkpoint in the training format, loaded instead
             of the published weights.
         device: The device for model parameters. If ``None``, uses PyTorch's
@@ -149,7 +162,8 @@ class KumoTabular(ICLModel):
     Args:
         task: The tasks to initialize. If ``None``, both classification and
             regression are initialized.
-        size: The model size, either ``"small"`` or ``"large"`` (default).
+        size: The model size, ``"small"``, ``"large"`` (default) or
+            ``"xlarge"``.
         pretrained: Whether to load pretrained checkpoints.
         device: The device for model parameters. If ``None``, uses PyTorch's
             default device.
@@ -169,7 +183,7 @@ class KumoTabular(ICLModel):
     def __init__(
         self,
         task: TaskLike | Iterable[TaskLike] | None = None,
-        size: Literal["small", "large"] = "large",
+        size: Literal["small", "large", "xlarge"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
         checkpoint: str | Path | None = None,

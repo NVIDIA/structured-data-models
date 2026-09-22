@@ -63,7 +63,7 @@ parser.add_argument(
 parser.add_argument(
     "--checkpoint-reg", type=Path, help="kumo-tabular regression checkpoint."
 )
-parser.add_argument("--size", choices=("small", "large"))
+parser.add_argument("--size", choices=("small", "large", "xlarge"))
 parser.add_argument(
     "--numerical-missing", choices=("dispatch", "nan", "mix", "impute")
 )

@@ -75,7 +75,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--size",
-    choices=("small", "large"),
+    choices=("small", "large", "xlarge"),
     help="kumo-tabular architecture matching --checkpoint (default: large).",
 )
 parser.add_argument(
