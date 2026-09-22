@@ -1,5 +1,6 @@
 import math
 import sys
+import tqdm
 from functools import lru_cache
 from itertools import product
 
@@ -16,7 +17,7 @@ import sdm
 DEFAULT_CONFIG = {}  # TODO
 
 
-def add_lag_target_features(
+def add_lag_target_features(  # TODO Make more efficient.
     df: pd.DataFrame,
     history: pd.DataFrame,
     task: EntityTask,
@@ -87,6 +88,8 @@ def search_space(stats: TaskStats) -> SearchSpace:
     else:
         print("Large Data Regime", stats.num_train_nodes)
         num_neighbors = [[], [1, 1], [32, 32], [96, 96], [128, 128]]
+        num_neighbors = [[8, 8], [16, 16], [32, 32], [64, 64]]
+        num_neighbors = [[32], [64], [128]]
         num_estimators = [8]
 
     context_size = [20_000]
@@ -173,6 +176,8 @@ class KumoRelationalModel(RelArenaModel):
         seed: int,
         time_limit: float | None = None,
     ) -> None:
+
+        print(self.config)
 
         if task.task_type == TaskType.REGRESSION:
             self.target_stype = "numerical"
@@ -282,7 +287,7 @@ class KumoRelationalModel(RelArenaModel):
             query = query.expand(self.config["num_estimators"], *query.size())
 
         outs = []
-        for batch in query.split(10_000, dim=-2):
+        for batch in tqdm.tqdm(query.split(10_000, dim=-2)):
             batch, related_tables = self.sampler(
                 batch,
                 task_link={
