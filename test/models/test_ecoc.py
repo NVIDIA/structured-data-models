@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from functools import partial
 from typing import cast
 
 import pytest
@@ -43,25 +44,12 @@ class _ProbabilityClassifier(torch.nn.Module):
         ).log()
 
 
-@pytest.mark.parametrize("num_classes", [3, 10])
-def test_ecoc_within_capacity(num_classes: int) -> None:
-    model = _ProbabilityClassifier(10)
-    ecoc = ECOC(max_classes=10)
-    x = torch.randn(2, num_classes + 3, num_classes)
-    y = torch.arange(num_classes).expand(2, -1)
-
-    actual = ecoc(model, x, y, num_classes=num_classes, temperature=0.7)
-    expected = model(x, y, temperature=0.7)[..., :num_classes]
-
-    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-
-
 @withCUDA
 @pytest.mark.parametrize(
     ("max_classes", "num_classes", "batch_shape"),
-    [(10, 11, ()), (10, 201, (2, 3)), (2, 12, ())],
+    [(10, 3, ()), (10, 11, ()), (10, 201, (2, 3)), (2, 12, ())],
 )
-def test_ecoc_recovers_probabilities(
+def test_ecoc(
     device: torch.device,
     max_classes: int,
     num_classes: int,
@@ -69,6 +57,9 @@ def test_ecoc_recovers_probabilities(
 ) -> None:
     model = _ProbabilityClassifier(max_classes).to(device)
     ecoc = ECOC(max_classes=max_classes)
+    forward = partial(
+        ecoc, model=model, num_classes=num_classes, temperature=0.7
+    )
     # Scramble the labels and leave one class absent from each context.
     num_context = num_classes - 1
     x = torch.randn(
@@ -82,7 +73,7 @@ def test_ecoc_recovers_probabilities(
         ..., :num_context
     ]
 
-    scores = ecoc(model, x, y, num_classes=num_classes, temperature=0.7)
+    scores = forward(x=x, y=y)
     probs = (x[..., -3:, :] / 0.7).softmax(dim=-1)
     expected = x.new_zeros((*batch_shape, 3, num_classes)).scatter(
         dim=-1,
@@ -92,41 +83,21 @@ def test_ecoc_recovers_probabilities(
 
     torch.testing.assert_close(scores.exp(), expected)
 
-
-@pytest.mark.parametrize("num_classes", [3, 17])
-def test_ecoc_cache(num_classes: int) -> None:
-    model = _ProbabilityClassifier(10)
-    ecoc = ECOC(max_classes=10)
-    x = torch.randn(2, num_classes + 5, num_classes)
-    y = torch.arange(num_classes).expand(2, -1)
-    expected = ecoc(model, x, y, num_classes=num_classes)
     cache = Cache()
-
-    recorded = ecoc(
-        model=model,
-        x=x[..., :num_classes, :],
-        y=y,
-        num_classes=num_classes,
-        cache=cache,
-    )
+    recorded = forward(x=x[..., :num_context, :], y=y, cache=cache)
+    assert recorded.shape == (*batch_shape, 0, num_classes)
     cache.freeze()
-    actual = torch.cat(
-        [
-            ecoc(
-                model, query, y[..., :0], num_classes=num_classes, cache=cache
-            )
-            for query in x[..., num_classes:, :].split(2, dim=-2)
-        ],
-        dim=-2,
-    )
-
-    assert recorded.shape == (2, 0, num_classes)
-    torch.testing.assert_close(actual, expected)
+    for query, expected in zip(
+        x[..., num_context:, :].split(2, dim=-2),
+        scores.split(2, dim=-2),
+        strict=True,
+    ):
+        actual = forward(x=query, y=y[..., :0], cache=cache)
+        torch.testing.assert_close(actual, expected)
 
     if num_classes > ecoc.max_classes:
         with pytest.raises(ValueError, match=r"num_classes.*cached"):
-            ecoc(
-                model=model,
+            forward(
                 x=x[..., -1:, :],
                 y=y[..., :0],
                 num_classes=num_classes + 1,
@@ -152,7 +123,8 @@ def test_ecoc_gradients() -> None:
     torch.testing.assert_close(grad_scale, expected_scale)
 
 
-def test_ecoc_generator() -> None:
+@pytest.mark.parametrize("num_classes", [3, 10, 12])
+def test_ecoc_generator(num_classes: int) -> None:
     # The oracle's output is invariant to the codebook. A fixed linear head
     # instead makes codebook differences observable in the decoded scores.
     class Classifier(torch.nn.Module):
@@ -161,19 +133,24 @@ def test_ecoc_generator() -> None:
 
     model = Classifier()
     ecoc = ECOC(max_classes=10)
-    x = torch.randn(15, 12)
-    y = torch.arange(12)
+    x = torch.randn(num_classes + 3, 12)
+    y = torch.arange(num_classes)
 
     first, repeated, other = [
         ecoc(
             model=model,
             x=x,
             y=y,
-            num_classes=12,
+            num_classes=num_classes,
             generator=torch.Generator().manual_seed(seed),
         )
         for seed in (1, 1, 2)
     ]
 
     torch.testing.assert_close(first, repeated, rtol=0, atol=0)
-    assert not torch.allclose(first, other)
+    if num_classes <= ecoc.max_classes:
+        torch.testing.assert_close(
+            first, model(x, y)[..., :num_classes], rtol=0, atol=0
+        )
+    else:
+        assert not torch.allclose(first, other)
