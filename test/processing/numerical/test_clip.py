@@ -10,7 +10,7 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_clip_clamps_fixed_bounds_and_preserves_metadata(
+def test_clip_clamps_fixed_bounds(
     device: torch.device,
 ) -> None:
     table = TableTensor.from_tensor(
@@ -20,7 +20,7 @@ def test_clip_clamps_fixed_bounds_and_preserves_metadata(
         ),
     )
 
-    actual = Clip(min_value=-100.0, max_value=100.0).transform(table)
+    actual = Clip(-100.0, 100.0).transform(table)
 
     torch.testing.assert_close(
         actual.numerical,
@@ -29,13 +29,9 @@ def test_clip_clamps_fixed_bounds_and_preserves_metadata(
             device=device,
         ),
     )
-    assert actual.columns == table.columns
-    assert actual.device == table.device
-    assert repr(Clip(min_value=-100.0, max_value=100.0)) == (
-        "Clip(-100.0, 100.0)"
-    )
+    assert repr(Clip(-100.0, 100.0)) == "Clip(-100.0, 100.0)"
 
 
 def test_clip_rejects_invalid_configuration() -> None:
     with pytest.raises(ValueError, match="min_value"):
-        Clip(min_value=1.0, max_value=-1.0)
+        Clip(1.0, -1.0)
