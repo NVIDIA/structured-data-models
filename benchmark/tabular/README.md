@@ -21,6 +21,8 @@ Every run starts with an untimed warm-up (imports, CUDA context, a one-member du
 
 `--registry_model NAME` (e.g. `TabPFN-3.5`, `LimiX-2`, `TabICLv2`) benchmarks an upstream tabarena model with its own wrapper under the same runner, so its times are measured exactly like the SDM models'. Every fit gets one GPU, as the hosted runs did.
 
+`--no_kv_cache` (kumo-tabular) runs the context inside predict instead of caching its key/value projections at fit; the other in-context wrappers run their context at predict (their caches are off by default), so this is the setting for a like-for-like inference time. `--registry_hp KEY=JSON` pins a hyperparameter of `--registry_model`, for example `n_estimators=1`.
+
 `--validation outer` (default) fits once on all training rows. `--validation official` runs the arena's bagged protocol, eight fold fits and one refit on all rows, which is how every hosted method is measured: its train time is that of nine fits, and its result directory is `official_model/`. Score such runs with `evaluate.py --validation official`: they enter the pool as a config method named after the model's registry key (`SDM-KUMO-TABULAR (default)` in the CSV, the `=LABEL` on the website table), so score two bagged runs of one model in separate pools.
 
 ______________________________________________________________________

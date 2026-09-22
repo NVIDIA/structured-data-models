@@ -74,6 +74,9 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
+        # Without the cache the context runs inside predict together with
+        # the queries, as most in-context wrappers do.
+        self._set_default_param_value("kv_cache", True)
 
     def _recipe(self, params: dict[str, Any]) -> sp.Recipe:
         return self.model.default_recipe()
@@ -169,6 +172,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 recipe=recipe,
                 num_estimators=num_estimators,
                 generator=generator,
+                kv_cache=params["kv_cache"],
             )
 
     def _predict_proba(

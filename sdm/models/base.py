@@ -90,6 +90,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
 
         self._cache: Cache | None = None
+        self._context: dict[str, Any] | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     def forward(
@@ -238,12 +239,19 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_estimators: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
+        kv_cache: bool = True,
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
 
         Repeated calls to :meth:`predict` can then reuse the same in-context
         examples while only providing new query examples.
+
+        With ``kv_cache`` the in-context examples run through the model here
+        and their key/value projections are cached, so :meth:`predict` only
+        runs the query examples. Without it, :meth:`fit` stores the examples
+        and every :meth:`predict` runs them together with the queries in one
+        pass, as most in-context models do.
 
         Args:
             x: The feature tensor of in-context examples with shape
@@ -260,11 +268,32 @@ class ICLModel(torch.nn.Module, abc.ABC):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            kv_cache: Whether to run the in-context examples now and cache
+                their key/value projections for :meth:`predict`.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
 
         self.clear()
+
+        self._cache = None
+        self._context = None
+        if not kv_cache:
+            self._context = dict(
+                x_context=x,
+                y_context=y,
+                related_context_tables=related_tables,
+                recipe=recipe,
+                num_estimators=num_estimators,
+                generator_state=(
+                    None if generator is None else generator.get_state()
+                ),
+                generator_device=(
+                    None if generator is None else generator.device
+                ),
+                kwargs=kwargs,
+            )
+            return
 
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
@@ -362,6 +391,27 @@ class ICLModel(torch.nn.Module, abc.ABC):
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
+
+        if self._context is not None:
+            # Fitted without a cache: one pass over the stored examples and
+            # the queries, with the same draws every time.
+            context = self._context
+            generator = None
+            if context["generator_state"] is not None:
+                generator = torch.Generator(context["generator_device"])
+                generator.set_state(context["generator_state"])
+            return self.forward(
+                x_context=context["x_context"],
+                y_context=context["y_context"],
+                x_query=x,
+                related_context_tables=context["related_context_tables"],
+                related_query_tables=related_tables,
+                recipe=context["recipe"],
+                num_estimators=context["num_estimators"],
+                callbacks=callbacks,
+                generator=generator,
+                **context["kwargs"],
+            )
 
         if self._cache is None:
             raise RuntimeError(
@@ -489,8 +539,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
             return recipe_execution.transform_output(outs)
 
     def clear(self) -> None:
-        r"""Clear cached context state created by :meth:`fit`."""
+        r"""Clear the context state created by :meth:`fit`."""
         self._cache = None
+        self._context = None
 
     def __getstate__(self) -> dict[str, object]:
         for stream in self._transfer_streams.values():

@@ -4,11 +4,13 @@
 r"""Run an SDM tabular model on TabArena."""
 
 import argparse
+import json
 from pathlib import Path
 
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.caching import CacheConfig
 from tabarena.contexts import TabArenaContext
+from tabarena.models.utils import get_model_info_from_name
 from tabarena.utils.config_utils import ConfigGenerator
 
 from benchmark.tabular.model import MODEL_CONFIGS, SDMModelWrapper
@@ -19,6 +21,18 @@ parser.add_argument(
     choices=tuple(MODEL_CONFIGS),
     default="tabiclv2",
     help="SDM model to benchmark.",
+)
+parser.add_argument(
+    "--no_kv_cache",
+    action="store_true",
+    help="kumo-tabular: run the context inside predict instead of caching "
+    "it at fit, like the other in-context wrappers.",
+)
+parser.add_argument(
+    "--registry_hp",
+    action="append",
+    metavar="KEY=JSON",
+    help="Hyperparameter of --registry_model (repeat); e.g. n_estimators=1.",
 )
 parser.add_argument(
     "--registry_model",
@@ -102,15 +116,18 @@ parser.add_argument(
 args = parser.parse_args()
 if args.registry_model is not None and args.num_estimators is not None:
     parser.error("--num_estimators applies to SDM models only")
+if args.registry_hp and args.registry_model is None:
+    parser.error("--registry_hp needs --registry_model")
 if args.model != "kumo-tabular" and (
     args.checkpoint is not None
     or args.size is not None
     or args.numerical_missing is not None
     or args.regression_reduction is not None
+    or args.no_kv_cache
 ):
     parser.error(
-        "--checkpoint, --size, --numerical_missing, --regression_reduction "
-        "need --model kumo-tabular"
+        "--checkpoint, --size, --numerical_missing, --regression_reduction, "
+        "--no_kv_cache need --model kumo-tabular"
     )
 
 model_config = MODEL_CONFIGS[args.model]
@@ -137,8 +154,27 @@ if args.regression_reduction is not None:
     config["regression_reduction"] = args.regression_reduction
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
+if args.no_kv_cache:
+    config["kv_cache"] = False
 
-if args.registry_model is not None:
+if args.registry_hp:
+    # The registry model with pinned hyperparameters, as one manual config.
+    info = get_model_info_from_name(args.registry_model)
+    hyperparameters = {
+        key: json.loads(value)
+        for key, _, value in (hp.partition("=") for hp in args.registry_hp)
+    }
+    models = [
+        (
+            ConfigGenerator(
+                search_space={},
+                model_cls=info.model_cls,
+                manual_configs=[hyperparameters],
+            ),
+            0,
+        )
+    ]
+elif args.registry_model is not None:
     models = [(args.registry_model, 0)]
 else:
     models = [
