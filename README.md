@@ -24,13 +24,7 @@
 ## Installation
 
 The `structured-data-models` package is available from Python 3.11 and PyTorch 2.7 onwards.
-Install via:
-
-```bash
-pip install structured-data-models
-```
-
-To install from the `main` branch:
+Install from the `main` branch:
 
 ```bash
 pip install git+https://github.com/NVIDIA/structured-data-models.git
