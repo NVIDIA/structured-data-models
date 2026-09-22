@@ -18,7 +18,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.ImputeMean(),
                     sp.DropConstantColumns(),
                     sp.Standardize(eps=1e-6),
-                    sp.Clip(min_value=-100.0, max_value=100.0),
+                    sp.Clip(-100.0, 100.0),
                     sp.Choice(
                         sp.Identity(),
                         sp.PowerTransform(),
@@ -40,7 +40,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         ],
         output=[
             sp.TaskDispatch(regression=sp.SortQuantiles()),
-            sp.ReduceEstimators(method="mean"),
+            sp.AverageEstimators(),
             sp.TaskDispatch(classification=sp.Softmax(temperature=0.9)),
         ],
     )

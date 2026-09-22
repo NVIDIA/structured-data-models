@@ -303,6 +303,21 @@ def test_callback() -> None:
     ]
 
 
+def test_train_mode_enables_grad() -> None:
+    model = _RecordingModel()
+    x_context = torch.tensor([[0.0], [2.0]])
+    y_context = torch.tensor([[0.0], [1.0]])
+    x_query = torch.tensor([[3.0]])
+
+    model.eval()
+    out = model(x_context, y_context, x_query)
+    assert torch.is_inference(out)
+
+    model.train()
+    out = model(x_context, y_context, x_query)
+    assert not torch.is_inference(out)
+
+
 def test_related_table_preprocessing_forward_and_cache() -> None:
     model = _RecordingModel()
     x_context = _table([0.0, 2.0], [1, 2], value_column="feature")
@@ -486,7 +501,7 @@ def test_ensemble_output_preserves_estimator_dimension() -> None:
     assert out.size() == (1, 2, 3)
 
 
-def test_ensemble_output_reduces_with_reduce_estimators() -> None:
+def test_ensemble_output_reduce() -> None:
     x_context = torch.randn(4, 3)
     y_context = torch.randn(4, 1)
     x_query = torch.randn(2, 3)
@@ -496,7 +511,7 @@ def test_ensemble_output_reduces_with_reduce_estimators() -> None:
         x_context,
         y_context,
         x_query,
-        recipe=sp.Recipe(output=sp.ReduceEstimators()),
+        recipe=sp.Recipe(output=sp.AverageEstimators()),
         num_estimators=2,
     )
 

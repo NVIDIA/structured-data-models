@@ -57,7 +57,7 @@ def make_table() -> EnsembleTable:
 
 def _make_impute_mean_table() -> EnsembleTable:
     table = make_table()
-    table_a, table_b = table.table(0), table.table(1)
+    table_a, table_b = table[0], table[1]
     numerical = table_b.numerical.clone()
     numerical[0, 0] = float("nan")
     return EnsembleTable.from_tables(
@@ -68,7 +68,7 @@ def _make_impute_mean_table() -> EnsembleTable:
 
 def _make_align_categories_table() -> EnsembleTable:
     table = make_table()
-    table_a, table_b = table.table(0), table.table(1)
+    table_a, table_b = table[0], table[1]
     categorical = CategoricalTensor(
         code=torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32),
         categories=(StringTensor.from_list(["b", "c"]),),
@@ -118,12 +118,14 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.Clip(-2.0, 6.0)),
     ProcessorCase(sp.ClipQuantiles()),
     ProcessorCase(sp.ClipSigma()),
+    ProcessorCase(sp.ClipSoft(3.0)),
     ProcessorCase(sp.ImputeMean(), _make_impute_mean_table),
     ProcessorCase(sp.PowerTransform()),
     ProcessorCase(
         sp.QuantileTransform(n_quantiles=4, subsample=None),
     ),
     ProcessorCase(sp.Standardize()),
+    ProcessorCase(sp.RobustScale()),
     ProcessorCase(sp.FlipSign()),
     ProcessorCase(sp.DropConstantColumns()),
     ProcessorCase(sp.PCA(2)),
@@ -131,10 +133,15 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
+    ProcessorCase(sp.AddCategoryCounts()),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
-    ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
+    ProcessorCase(sp.AverageEstimators(), _make_reduction_table),
+    ProcessorCase(
+        sp.AverageEstimators(trim_fraction=0.25),
+        _make_reduction_table,
+    ),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(
         sp.Sequential(
@@ -213,9 +220,9 @@ def test_fit_transform_matches_fit_then_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
-    assert actual.num_members == expected.num_members
-    for member_id in range(actual.num_members):
-        assert actual.table(member_id).equal(expected.table(member_id))
+    assert len(actual) == len(expected)
+    for member_id in range(len(actual)):
+        assert actual[member_id].equal(expected[member_id])
 
 
 @pytest.mark.parametrize(
@@ -232,9 +239,9 @@ def test_save_and_load_preserves_fitted_processor_behavior(
     expected = processor_a.transform_ensemble(table)
     processor_b.load_state_dict(processor_a.state_dict())
     actual = processor_b.transform_ensemble(table)
-    assert actual.num_members == expected.num_members
-    for member_id in range(actual.num_members):
-        assert actual.table(member_id).equal(expected.table(member_id))
+    assert len(actual) == len(expected)
+    for member_id in range(len(actual)):
+        assert actual[member_id].equal(expected[member_id])
 
 
 @pytest.mark.parametrize(
@@ -249,11 +256,11 @@ def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
     restored = cast(
         sp.EnsembleInvertibleMixin, processor
     ).inverse_transform_ensemble(transformed)
-    assert restored.num_members == table.num_members
-    for member_id in range(restored.num_members):
+    assert len(restored) == len(table)
+    for member_id in range(len(restored)):
         torch.testing.assert_close(
-            restored.table(member_id).numerical,
-            table.table(member_id).numerical,
+            restored[member_id].numerical,
+            table[member_id].numerical,
             atol=1e-3,
             rtol=1e-5,
             equal_nan=True,
@@ -271,9 +278,9 @@ def test_preserves_rows_and_unhandled_stypes(
     table = case.make_table()
     processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
     output = processor.fit_transform_ensemble(table)
-    for member_id in range(output.num_members):
-        before = table.table(member_id)
-        after = output.table(member_id)
+    for member_id in range(len(output)):
+        before = table[member_id]
+        after = output[member_id]
         assert after.size()[:-1] == before.size()[:-1]
         for stype in before.active_stypes - processor.handles_stypes:
             columns = before.columns[stype]
@@ -295,7 +302,7 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
     target = source.replace_groups(
         [
             group.replace_blocks(numerical=group.numerical.to(dtype))
-            for group in source
+            for group in source._iter_groups()
         ]
     )
     processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
@@ -304,13 +311,12 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
     processor.to(dtype=dtype)
     actual = processor.transform_ensemble(target)
     assert all(
-        actual.table(member_id).dtype == dtype
-        for member_id in range(actual.num_members)
+        actual[member_id].dtype == dtype for member_id in range(len(actual))
     )
-    assert actual.num_members == expected.num_members
-    for member_id in range(actual.num_members):
-        actual_table = actual.table(member_id)
-        expected_table = expected.table(member_id)
+    assert len(actual) == len(expected)
+    for member_id in range(len(actual)):
+        actual_table = actual[member_id]
+        expected_table = expected[member_id]
         assert actual_table.columns == expected_table.columns
         torch.testing.assert_close(
             actual_table.numerical,
@@ -331,7 +337,10 @@ def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
     device = torch.device("cuda")
     source = case.make_table()
     target = source.replace_groups(
-        [cast(TableTensor, group.to(device)) for group in source]
+        [
+            cast(TableTensor, group.to(device))
+            for group in source._iter_groups()
+        ]
     )
     processor_a, processor_b = _make_processor_pair(case.processor)
     processor_a.fit_ensemble(source)
@@ -340,13 +349,13 @@ def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
     processor_b.to(device=device)
     actual = processor_b.transform_ensemble(target)
     assert all(
-        actual.table(member_id).device.type == device.type
-        for member_id in range(actual.num_members)
+        actual[member_id].device.type == device.type
+        for member_id in range(len(actual))
     )
-    assert actual.num_members == expected.num_members
-    for member_id in range(actual.num_members):
-        actual_table = actual.table(member_id)
-        expected_table = expected.table(member_id)
+    assert len(actual) == len(expected)
+    for member_id in range(len(actual)):
+        actual_table = actual[member_id]
+        expected_table = expected[member_id]
         assert actual_table.columns == expected_table.columns
         torch.testing.assert_close(
             actual_table.numerical.cpu(),

@@ -267,7 +267,7 @@ class RelatedTables(DeviceMixin, Generic[T]):
         table_schemas = {}
         for name, table in self.tables.items():
             if isinstance(table, EnsembleTable):
-                schemas = {group.schema for group in table}
+                schemas = {group.schema for group in table._iter_groups()}
                 if len(schemas) != 1:
                     raise ValueError(
                         "'schema' requires each 'EnsembleTable' to have a "
@@ -349,12 +349,12 @@ class RelatedTables(DeviceMixin, Generic[T]):
         tables = {}
         for name, table in self.tables.items():
             if isinstance(table, EnsembleTable):
-                if len({group.schema for group in table}) != 1:
+                if len({group.schema for group in table._iter_groups()}) != 1:
                     raise ValueError(
                         "'to_graphviz' requires each 'EnsembleTable' to have "
                         "a unique table schema"
                     )
-                tables[name] = table.table(0)
+                tables[name] = table[0]
                 continue
             tables[name] = table
 
@@ -414,19 +414,23 @@ class RelatedTables(DeviceMixin, Generic[T]):
         for name, table in self.tables.items():
             row: list[Any] = [name]
             if isinstance(table, EnsembleTable):
-                num_rows = {group.size(-2) for group in table}
+                num_rows = {group.size(-2) for group in table._iter_groups()}
                 row.append(
                     next(iter(num_rows))
                     if len(num_rows) == 1
                     else f"{min(num_rows)} - {max(num_rows)}"
                 )
-                num_cols = {group.size(-1) for group in table}
+                num_cols = {group.size(-1) for group in table._iter_groups()}
                 row.append(
                     next(iter(num_cols))
                     if len(num_cols) == 1
                     else f"{min(num_cols)} - {max(num_cols)}"
                 )
-                stypes = {stype for g in table for stype in g.active_stypes}
+                stypes = {
+                    stype
+                    for g in table._iter_groups()
+                    for stype in g.active_stypes
+                }
                 row.append(", ".join(stypes))
             else:
                 row += [

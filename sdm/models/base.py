@@ -134,7 +134,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
-        requires_grad = any(callback.requires_grad for callback in callbacks)
+        requires_grad = self.training
+        requires_grad |= any(callback.requires_grad for callback in callbacks)
 
         if (related_context_tables is None) != (related_query_tables is None):
             raise ValueError(
@@ -218,13 +219,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
         if contexts[0].y.numerical.size(-1) > 0:
             with (
                 torch.amp.autocast(x_query.device.type, enabled=False),
-                inference_mode(),
+                inference_mode("grad" if requires_grad else "inference"),
             ):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
-            inference_mode(),
+            inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
 

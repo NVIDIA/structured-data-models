@@ -15,13 +15,11 @@ class ShuffleCategories(EnsembleProcessor):
     """Independently permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn when the processor is
-    fitted; pass ``generator`` to ``fit()`` to make the draws reproducible.
-    For an ensemble, each logical member receives independent permutations.
-    Codes and their corresponding category vectors are permuted together so
-    decoded values remain unchanged. Negative codes represent missing values
-    and are preserved unchanged. Only categorical columns are supported; use
-    :class:`~sdm.processing.StypeDispatch` to apply this processor to the
-    categorical block of a mixed feature table.
+    fitted. Codes and their corresponding category vectors are permuted
+    together so decoded values remain unchanged. Negative codes represent
+    missing values and are preserved unchanged. Only categorical columns
+    are supported; use :class:`~sdm.processing.StypeDispatch` to apply this
+    processor to the categorical block of a mixed feature table.
 
     Args:
         method: Permutation strategy. ``"shift"`` cyclically shifts the
@@ -94,13 +92,13 @@ class ShuffleCategories(EnsembleProcessor):
             tuple[torch.device, tuple[tuple[int, ...], ...]], int
         ] = {}
 
-        for member_id in range(ensemble_table.num_members):
+        for member_id in range(len(ensemble_table)):
             permutations = self._draw_permutations(
-                ensemble_table.table(member_id),
+                ensemble_table[member_id],
                 generator=generator,
             )
             key = (
-                ensemble_table.table(member_id).categorical.device,
+                ensemble_table[member_id].categorical.device,
                 tuple(
                     tuple(permutation.tolist()) for permutation in permutations
                 ),
@@ -121,7 +119,7 @@ class ShuffleCategories(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._permutation_ids) != ensemble_table.num_members:
+        if len(self._permutation_ids) != len(ensemble_table):
             raise RuntimeError(
                 "ShuffleCategories must be fitted with the same number of "
                 "ensemble members before transform."
@@ -133,27 +131,30 @@ class ShuffleCategories(EnsembleProcessor):
                 member_id
             )
 
-        if len(member_ids_by_permutation) == ensemble_table.num_members:
+        if len(member_ids_by_permutation) == len(ensemble_table):
             member_tables: list[TableTensor] = []
             for member_id, permutation_id in enumerate(self._permutation_ids):
                 permutations = self._permutations[permutation_id]
                 member_tables.append(
                     self._permute(
-                        ensemble_table.table(member_id),
+                        ensemble_table[member_id],
                         permutations,
                     )
                 )
             return EnsembleTable.from_tables(
                 tables=member_tables,
-                member_table_ids=range(ensemble_table.num_members),
+                member_table_ids=range(len(ensemble_table)),
             )
 
         outputs: dict[int, EnsembleTable] = {}
         for permutation_id, member_ids in member_ids_by_permutation.items():
-            selected = ensemble_table.select_members(member_ids)
+            selected = ensemble_table[member_ids]
             permutations = self._permutations[permutation_id]
             outputs[permutation_id] = selected.replace_groups(
-                [self._permute(group, permutations) for group in selected]
+                [
+                    self._permute(group, permutations)
+                    for group in selected._iter_groups()
+                ]
             )
 
         output_tables = []
