@@ -5,6 +5,7 @@ r"""Run an SDM tabular model on TabArena."""
 
 import argparse
 import gc
+from contextlib import nullcontext
 from pathlib import Path
 
 import torch
@@ -45,7 +46,15 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+parser.add_argument(
+    "--flash_attention_impl",
+    choices=("FA3", "FA4"),
+    help="Use this flash attention implementation (requires its package).",
+)
 args = parser.parse_args()
+
+if args.flash_attention_impl is not None:
+    torch.nn.attention.activate_flash_attention_impl(args.flash_attention_impl)
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
@@ -78,12 +87,19 @@ jobs = context.build_jobs(
     subset=args.subset,
     dataset_names=[args.dataset] if args.dataset is not None else None,
 )
-for job in jobs:
-    try:
-        context.run_jobs(jobs=[job], expname=result_dir, register=False)
-    finally:
-        gc.collect()
-        if torch.cuda.is_initialized():
-            torch.cuda.synchronize()
-            torch._C._host_emptyCache()
-            torch.cuda.empty_cache()
+with (
+    torch.nn.attention.sdpa_kernel(
+        torch.nn.attention.SDPBackend.FLASH_ATTENTION
+    )
+    if args.flash_attention_impl is not None
+    else nullcontext()
+):
+    for job in jobs:
+        try:
+            context.run_jobs(jobs=[job], expname=result_dir, register=False)
+        finally:
+            gc.collect()
+            if torch.cuda.is_initialized():
+                torch.cuda.synchronize()
+                torch._C._host_emptyCache()
+                torch.cuda.empty_cache()
