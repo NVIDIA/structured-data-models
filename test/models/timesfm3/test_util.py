@@ -8,6 +8,7 @@ import torch
 
 from sdm.models.timesfm3.util import (
     get_running_stats,
+    revin,
     update_running_stats,
 )
 from sdm.testing import withCUDA
@@ -159,3 +160,61 @@ def test_get_running_stats_has_finite_zero_variance_gradients(
         values.grad,
         values.grad.new_tensor([[[[0.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]]),
     )
+
+
+@withCUDA
+def test_revin_round_trip(device: torch.device) -> None:
+    x = torch.tensor(
+        [[[[1.0, 2.0], [3.0, 4.0]]]],
+        device=device,
+        dtype=torch.float64,
+    )
+    mu = torch.tensor([[2.0]], device=device, dtype=x.dtype)
+    sigma = torch.tensor([[0.5]], device=device, dtype=x.dtype)
+
+    normalized = revin(x, mu, sigma)
+    restored = revin(normalized, mu, sigma, reverse=True)
+
+    assert normalized.dtype == x.dtype
+    assert normalized.device == device
+    torch.testing.assert_close(restored, x)
+
+
+@withCUDA
+def test_revin_near_zero_sigma(device: torch.device) -> None:
+    x = torch.tensor([[[2.0, 3.0]]], device=device)
+    mu = torch.tensor([[2.0]], device=device)
+    sigma = torch.tensor([[1e-7]], device=device)
+
+    normalized = revin(x, mu, sigma)
+
+    torch.testing.assert_close(
+        normalized, normalized.new_tensor([[[0.0, 1.0]]])
+    )
+
+
+def test_revin_rejects_unsupported_shapes() -> None:
+    x = torch.ones(2, 3, 4, 5)
+    stats = torch.ones(2)
+
+    with pytest.raises(ValueError, match="Unsupported shapes"):
+        revin(x, stats, stats)
+
+
+def test_revin_rejects_mismatched_stats() -> None:
+    x = torch.ones(2, 3, 4)
+    mu = torch.ones(2, 3)
+    sigma = torch.ones(1, 3)
+
+    with pytest.raises(
+        ValueError, match="mu and sigma must have the same shape"
+    ):
+        revin(x, mu, sigma)
+
+
+def test_revin_rejects_broadcastable_stats() -> None:
+    x = torch.ones(2, 2, 3, 4)
+    stats = torch.ones(1, 2, 3)
+
+    with pytest.raises(ValueError, match="leading dimensions"):
+        revin(x, stats, stats)
