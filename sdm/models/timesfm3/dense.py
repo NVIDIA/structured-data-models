@@ -42,6 +42,11 @@ class ResidualBlock(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        if config.identity_skip and config.output_dims != input_dims:
+            raise ValueError(
+                "identity_skip requires output_dims to match input_dims, got "
+                f"{config.output_dims} and {input_dims}"
+            )
         self.config = config
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 

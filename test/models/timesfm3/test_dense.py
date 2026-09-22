@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 from sdm.models.timesfm3.configs import ResidualBlockConfig
@@ -97,6 +98,19 @@ def test_residual_block_identity_skip(device: torch.device) -> None:
     output = block(x)
 
     torch.testing.assert_close(output, x)
+
+
+def test_residual_block_identity_skip_requires_matching_dimensions() -> None:
+    config = ResidualBlockConfig(
+        hidden_dims=3,
+        output_dims=1,
+        use_bias=False,
+        activation="none",
+        identity_skip=True,
+    )
+
+    with pytest.raises(ValueError, match="identity_skip requires"):
+        ResidualBlock(config, input_dims=4)
 
 
 @withCUDA
