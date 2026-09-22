@@ -30,6 +30,8 @@ Overview
        | 28.47M (small, regression)
        | 61.49M (medium, classification)
        | 62.49M (medium, regression)
+       | 213.67M (large, classification)
+       | 215.68M (large, regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `OpenMDW-1.1 <https://huggingface.co/nvidia/Kumo-Tabular/>`__
    * - :class:`~sdm.models.KumoRelational` (`Paper <https://arxiv.org/abs/2604.12596>`__)

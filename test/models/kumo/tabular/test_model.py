@@ -13,7 +13,7 @@ from sdm.models import KumoTabular
 
 def _build(
     task: Literal["classification", "regression"],
-    size: Literal["small", "medium"],
+    size: Literal["small", "medium", "large"],
 ) -> KumoTabular:
     model = KumoTabular(task=task, size=size, pretrained=False)
     # Residual branches are zero-initialized, so an untrained model maps every
@@ -26,17 +26,19 @@ def _build(
 
 
 @pytest.fixture
-def cls_model(size: Literal["small", "medium"]) -> KumoTabular:
+def cls_model(size: Literal["small", "medium", "large"]) -> KumoTabular:
     return _build("classification", size)
 
 
 @pytest.fixture
-def reg_model(size: Literal["small", "medium"]) -> KumoTabular:
+def reg_model(size: Literal["small", "medium", "large"]) -> KumoTabular:
     return _build("regression", size)
 
 
-@pytest.fixture(params=["small", "medium"])
-def size(request: pytest.FixtureRequest) -> Literal["small", "medium"]:
+@pytest.fixture(params=["small", "medium", "large"])
+def size(
+    request: pytest.FixtureRequest,
+) -> Literal["small", "medium", "large"]:
     return request.param
 
 
@@ -170,7 +172,7 @@ def test_fit_predict(
 
 
 def test_missing_values_pass_through_fit_predict(
-    size: Literal["small", "medium"],
+    size: Literal["small", "medium", "large"],
 ) -> None:
     model = _build("regression", size)
     x_context = TableTensor.from_tensor(
