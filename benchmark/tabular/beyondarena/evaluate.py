@@ -53,6 +53,12 @@ parser.add_argument(
     help="Score only these tasks; repeat to combine filters.",
 )
 parser.add_argument(
+    "--evals_root",
+    type=Path,
+    help="Directory for the leaderboard and figures (default: "
+    "benchmark/tabular/beyondarena_evals).",
+)
+parser.add_argument(
     "--backend",
     choices=("native", "ray"),
     default="native",
@@ -61,7 +67,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 result_root = args.output_root
-output_root = benchmark_dir / "beyondarena_evals"
+output_root = args.evals_root or benchmark_dir / "beyondarena_evals"
 
 
 def framework(result_dir: Path) -> str | None:
