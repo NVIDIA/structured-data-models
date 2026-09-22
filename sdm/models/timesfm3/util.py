@@ -15,7 +15,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Callable
+from typing import Literal
+
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 
 _TOLERANCE = 1e-6
@@ -223,6 +227,26 @@ def get_output_patch_via_roll(
     )
 
     return result, wrap_mask.unsqueeze(0).unsqueeze(0)
+
+
+def get_activation_fn(
+    activation_name: Literal["relu", "swish", "none"],
+) -> Callable[[Tensor], Tensor]:
+    """Return an activation function by name.
+
+    Args:
+        activation_name: Activation name.
+
+    Returns:
+        The corresponding tensor operation.
+    """
+    if activation_name == "relu":
+        return F.relu
+    if activation_name == "swish":
+        return F.silu
+    if activation_name == "none":
+        return lambda x: x
+    raise AssertionError(f"Unhandled activation: {activation_name}")
 
 
 def stitch_patches(
