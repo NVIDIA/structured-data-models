@@ -221,11 +221,18 @@ class SDMModel(AbstractTorchModel, abc.ABC):
 class SDMModelWrapper(AGModelWrapper):
     #: Pool the query predictions of one group, set by the command line.
     group_pooling: ClassVar[bool] = False
+    #: Give the model the group id of a row, set by the command line.
+    group_id: ClassVar[bool] = False
 
     def _make_feature_generator(self) -> Any:
-        """Build the generator, which carries the group id when asked."""
-        if self.group_pooling:
+        """Build the generator, which keeps the group id when asked."""
+        if self.group_pooling or self.group_id:
             self._feature_generator_cls = KumoGroupPreprocessing
+            self._feature_generator_kwargs = {
+                **(self._feature_generator_kwargs or {}),
+                "group_pooling": self.group_pooling,
+                "group_id": self.group_id,
+            }
         return super()._make_feature_generator()
 
     def cleanup(self) -> None:
