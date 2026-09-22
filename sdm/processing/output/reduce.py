@@ -18,8 +18,8 @@ class AverageEstimators(EnsembleProcessor):
 
     Args:
         trim_fraction: Fraction of estimators discarded from each tail after
-            sorting each output coordinate. This can make the aggregation less
-            sensitive to outlying estimator predictions.
+            sorting each output coordinate, in ``[0, 0.5)``. This can make the
+            aggregation less sensitive to outlying estimator predictions.
     """
 
     handles_stypes = frozenset({Stype.numerical})
