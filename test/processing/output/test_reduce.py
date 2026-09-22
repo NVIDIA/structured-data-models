@@ -39,7 +39,7 @@ def test_average_estimators_rejects_missing_ensemble_dimension() -> None:
 
 
 @withCUDA
-def test_acerage_estimators_trimmed(device: torch.device) -> None:
+def test_average_estimators_trimmed(device: torch.device) -> None:
     values = torch.tensor(
         [
             [[-100.0, 100.0]],
