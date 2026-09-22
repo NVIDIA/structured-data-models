@@ -518,7 +518,7 @@ def test_ensemble_output_preserves_estimator_dimension() -> None:
     assert out.size() == (1, 2, 3)
 
 
-def test_ensemble_output_reduces_with_reduce_estimators() -> None:
+def test_ensemble_output_reduce() -> None:
     x_context = torch.randn(4, 3)
     y_context = torch.randn(4, 1)
     x_query = torch.randn(2, 3)
@@ -528,7 +528,7 @@ def test_ensemble_output_reduces_with_reduce_estimators() -> None:
         x_context,
         y_context,
         x_query,
-        recipe=sp.Recipe(output=sp.ReduceEstimators()),
+        recipe=sp.Recipe(output=sp.AverageEstimators()),
         num_estimators=2,
     )
 

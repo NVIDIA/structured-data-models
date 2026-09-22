@@ -17,7 +17,7 @@
 
 **A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
 
-- **Models:** Reference implementations of structured data foundation models, including tabular models such as [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and [`KumoTabular`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoTabular), and the relational [`KumoRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRelational) model, built on a unified interface with room for future model families.
+- **Models:** Reference implementations of structured data foundation models, including tabular models ([`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2), [`KumoTabular`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoTabular), *etc*), and relational models ([`KumoRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRelational)), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
@@ -44,7 +44,7 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 **Tabular Foundation Models:**
 
 - **[`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2)** from Qu *et al.*: [TabICLv2: A Better, Faster, Scalable, and Open Tabular Foundation Model](https://arxiv.org/abs/2602.11139) (ICML '26)
-- **[`KumoTabular`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoTabular)** ('26)
+- **[`KumoTabular`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoTabular)** from Qu *et al.* ('26)
 - **[`TabFM`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabFM)** from Kong *et al.*: [Introducing TabFM: A Zero-shot Foundation Model for Tabular Data](https://research.google/blog/introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data) ('26)
 
 **Relational Foundation Models:**
