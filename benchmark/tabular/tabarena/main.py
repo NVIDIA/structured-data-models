@@ -49,6 +49,11 @@ parser.add_argument(
     help="Filter tasks; repeat to combine filters.",
 )
 parser.add_argument(
+    "--split_indices",
+    action="append",
+    help="Run only these splits (r<repeat>f<fold>, e.g. r2f1); repeat the flag for several.",
+)
+parser.add_argument(
     "--num_estimators",
     type=int,
     help="Ensemble members per fit (default: the model's).",
@@ -209,7 +214,9 @@ context.build_and_run_jobs(
     expname=result_dir,
     subset=args.subset,
     register=False,
-    build_kwargs=(
-        {"dataset_names": [args.dataset]} if args.dataset is not None else None
-    ),
+    build_kwargs={
+        **({"dataset_names": [args.dataset]} if args.dataset is not None else {}),
+        **({"split_indices": args.split_indices} if args.split_indices else {}),
+    }
+    or None,
 )
