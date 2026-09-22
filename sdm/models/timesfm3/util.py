@@ -138,3 +138,55 @@ def get_running_stats(
         torch.stack(all_mu, dim=2),
         torch.stack(all_sigma, dim=2),
     )
+
+
+def revin(
+    x: Tensor,
+    mu: Tensor,
+    sigma: Tensor,
+    reverse: bool = False,
+) -> Tensor:
+    r"""Apply the statistical transform described by the `RevIN paper`_.
+
+    This helper uses supplied statistics and omits RevIN's learnable affine
+    transformation.
+
+    Args:
+        x: Input values with shape ``[..., D]`` or ``[..., D, Q]``, where
+            ``D`` is the number of values and ``Q`` is the optional number of
+            prediction channels.
+        mu: Means with one or two fewer dimensions than ``x``.
+        sigma: Standard deviations with the same shape as ``mu``.
+        reverse: Whether to denormalize instead of normalize.
+
+    Returns:
+        Transformed values with the same shape as ``x``.
+
+    .. _RevIN paper: https://openreview.net/forum?id=cGDAkQo1C0p
+    """
+    if mu.shape != sigma.shape:
+        raise ValueError(
+            "mu and sigma must have the same shape, got "
+            f"{mu.shape} and {sigma.shape}."
+        )
+
+    if mu.dim() not in (x.dim() - 1, x.dim() - 2):
+        raise ValueError(
+            f"Unsupported shapes for x and mu: {x.shape}, {mu.shape}."
+        )
+    if mu.shape != x.shape[: mu.dim()]:
+        raise ValueError(
+            "mu and sigma must match the leading dimensions of x, got "
+            f"x.shape={x.shape} and stats shape={mu.shape}."
+        )
+
+    if mu.dim() == x.dim() - 1:
+        mu = mu.unsqueeze(-1)
+        sigma = sigma.unsqueeze(-1)
+    else:
+        mu = mu.unsqueeze(-1).unsqueeze(-1)
+        sigma = sigma.unsqueeze(-1).unsqueeze(-1)
+
+    if reverse:
+        return x * sigma + mu
+    return (x - mu) / _make_safe_for_division(sigma)
