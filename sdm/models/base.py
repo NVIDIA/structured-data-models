@@ -364,9 +364,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         if self.training:
             raise RuntimeError(
                 f"{self.__class__.__name__!r}.predict() does not support "
-                "gradient-based training through a fitted context cache, "
-                "since the cache is built once in 'fit()' and does not "
-                "track parameters used only to encode the context."
+                "gradient-based training through a fitted context cache. "
+                "To fix call `model.eval()`."
             )
 
         callbacks = () if callbacks is None else callbacks
