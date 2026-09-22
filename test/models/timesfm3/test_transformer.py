@@ -2,11 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from dataclasses import replace
 
 import pytest
 import torch
 
+from sdm.models.timesfm3.configs import TransformerConfig
 from sdm.models.timesfm3.transformer import (
+    MixingTransformer,
     MultiHeadAttention,
     RotaryPositionalEmbedding,
     make_attn_mask,
@@ -143,6 +146,139 @@ def test_multi_head_attention_sdpa_fully_masked(
     output = attention(inputs, patch_mask=patch_mask)[0]
 
     torch.testing.assert_close(output, torch.zeros_like(output))
+
+
+def test_transformer_config_attention_defaults() -> None:
+    transformer = TransformerConfig(
+        model_dims=1280,
+        hidden_dims=1280,
+        num_heads=16,
+        qk_norm="rms",
+        use_bias=False,
+        use_rope_seq=True,
+        use_rope_var=False,
+        ff_activation="relu",
+    )
+
+    assert transformer.use_memory_efficient_attention is True
+    assert transformer.use_sdpa is True
+
+
+def _transformer_config(
+    *,
+    use_memory_efficient_attention: bool = True,
+    use_sdpa: bool = True,
+) -> TransformerConfig:
+    return TransformerConfig(
+        model_dims=8,
+        hidden_dims=12,
+        num_heads=2,
+        qk_norm="rms",
+        use_bias=False,
+        use_rope_seq=True,
+        use_rope_var=False,
+        ff_activation="relu",
+        use_memory_efficient_attention=use_memory_efficient_attention,
+        use_sdpa=use_sdpa,
+    )
+
+
+@withCUDA
+@pytest.mark.parametrize("use_sdpa", [False, True])
+def test_mixing_transformer_uses_attention_scaling_config(
+    device: torch.device,
+    use_sdpa: bool,
+) -> None:
+    scaled = MixingTransformer(
+        _transformer_config(
+            use_memory_efficient_attention=True,
+            use_sdpa=use_sdpa,
+        ),
+        use_variate_attention=False,
+        device=device,
+    )
+    unscaled = MixingTransformer(
+        _transformer_config(
+            use_memory_efficient_attention=False,
+            use_sdpa=use_sdpa,
+        ),
+        use_variate_attention=False,
+        device=device,
+    )
+    unscaled.load_state_dict(scaled.state_dict())
+    inputs = torch.arange(
+        4 * 8,
+        device=device,
+        dtype=torch.float32,
+    ).reshape(1, 1, 4, 8)
+    patch_mask = torch.zeros(1, 1, 4, dtype=torch.bool, device=device)
+
+    scaled_output = scaled(inputs, patch_mask)[0]
+    unscaled_output = unscaled(inputs, patch_mask)[0]
+
+    assert not torch.allclose(scaled_output, unscaled_output)
+
+
+@withCUDA
+def test_mixing_transformer_residuals(device: torch.device) -> None:
+    transformer = MixingTransformer(
+        _transformer_config(),
+        use_variate_attention=False,
+        device=device,
+    )
+    with torch.no_grad():
+        transformer.seq_attn.out_proj.weight.zero_()
+        transformer.ff1.weight.zero_()
+    inputs = torch.arange(
+        2 * 3 * 4 * 8,
+        device=device,
+        dtype=torch.float32,
+    ).reshape(2, 3, 4, 8)
+    patch_mask = torch.zeros(2, 3, 4, device=device, dtype=torch.bool)
+
+    output = transformer(inputs, patch_mask)[0]
+
+    torch.testing.assert_close(output, inputs)
+
+
+@withCUDA
+def test_mixing_transformer_uses_variate_attention_and_rope(
+    device: torch.device,
+) -> None:
+    rope_config = replace(_transformer_config(), use_rope_var=True)
+    with_rope = MixingTransformer(rope_config, device=device)
+    without_rope = MixingTransformer(_transformer_config(), device=device)
+    without_rope.load_state_dict(with_rope.state_dict())
+
+    with torch.no_grad():
+        for transformer in (with_rope, without_rope):
+            transformer.seq_attn.out_proj.weight.zero_()
+            transformer.ff1.weight.zero_()
+            transformer.var_attn.query_proj.weight.copy_(
+                torch.eye(8, device=device)
+            )
+            transformer.var_attn.key_proj.weight.copy_(
+                torch.eye(8, device=device)
+            )
+            transformer.var_attn.value_proj.weight.copy_(
+                torch.eye(8, device=device)
+            )
+            transformer.var_attn.out_proj.weight.copy_(
+                torch.eye(8, device=device)
+            )
+
+    inputs = torch.arange(
+        3 * 2 * 8,
+        device=device,
+        dtype=torch.float32,
+    ).reshape(1, 3, 2, 8)
+    patch_mask = torch.zeros(1, 3, 2, device=device, dtype=torch.bool)
+
+    rope_output = with_rope(inputs, patch_mask)[0]
+    no_rope_output = without_rope(inputs, patch_mask)[0]
+
+    assert not torch.allclose(rope_output, inputs)
+    assert not torch.allclose(rope_output, no_rope_output)
 
 
 @withCUDA
