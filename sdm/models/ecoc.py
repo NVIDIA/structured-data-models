@@ -13,18 +13,9 @@ from sdm.cache import Cache
 class ECOC(torch.nn.Module):
     """Extend a classifier with `error-correcting output codes <https://arxiv.org/abs/cs/9501101>`_.
 
-    Each encoded task separates ``max_classes - 1`` original classes and
-    merges the others into a rest class. Predictions average log probabilities
-    over the tasks that separate each class, ignoring its rest assignments.
-    The resulting scores can be normalized with softmax.
-
-    Targets within the model's class capacity use a single ordinary forward
-    pass. Larger targets use ``max(ceil(K / (max_classes - 1)),
-    4 * ceil(log(K, max_classes)))`` encoded tasks, where ``K`` is the number
-    of original classes. Tasks run along an additional leading batch dimension.
-
-    The model is supplied to :meth:`forward`. Manage its parameters, device,
-    and training mode directly on that model.
+    Above ``max_classes``, batched tasks each separate ``max_classes - 1``
+    classes and merge the rest. Scores average log probabilities over tasks
+    where each class is separate. Apply softmax to normalize them.
 
     Args:
         max_classes: Number of classes supported by the model.
@@ -48,31 +39,26 @@ class ECOC(torch.nn.Module):
         """Predict scores over the original classes.
 
         Args:
-            model: In-context classifier accepting ``model(x, y, **kwargs)``
-                and returning logits with shape
-                ``[..., R_query, max_classes]``. It must support leading batch
-                dimensions. To use caching, it must also accept a
-                :class:`~sdm.cache.Cache` via the ``cache`` keyword argument.
-            x: Context followed by query features, with shape ``[..., R, C]``
-                for ``R`` rows and ``C`` columns. When replaying a cache,
-                provide only query features.
-            y: Integer context labels in ``[0, num_classes)``, with shape
-                ``[..., R_context]``. Use an empty context axis when replaying
-                a cache.
-            num_classes: Number of original classes, including any absent
-                from the context. Must remain unchanged when replaying a cache.
-            cache: Optional cache recording context state and the codebook,
-                or replaying them for the same model and context across query
-                batches.
-            generator: Generator controlling codebook sampling on ``x.device``.
-                Ignored when replaying a cache.
-            kwargs: Arguments forwarded to the model. Tensor arguments must
-                broadcast over the additional leading task dimension.
+            model: Classifier accepting ``model(x, y, **kwargs)`` with leading
+                batch dimensions and returning ``[..., R_query, max_classes]``
+                logits. Must accept ``cache`` when caching is used.
+            x: Context then query features of shape ``[..., R, C]``, for
+                ``R`` rows and ``C`` columns.
+            y: Integer context labels in ``[0, num_classes)``, of shape
+                ``[..., R_context]``.
+            num_classes: Total number of target classes ``K``, including those
+                absent from the context.
+            cache: Cache for model state and the codebook. On replay, pass
+                query-only ``x``, an empty context axis in ``y``, and the same
+                ``num_classes``.
+            generator: Codebook sampling generator on ``x.device``. Ignored
+                on cache replay.
+            kwargs: Model arguments. Tensors must broadcast over the leading
+                task dimension.
 
         Returns:
-            Scores with shape ``[..., R_query, num_classes]`` for the query
-            rows. Within the class capacity these are the model's logits;
-            otherwise they are averaged log probabilities.
+            Scores of shape ``[..., R_query, K]`` for the query rows: model
+            logits within class capacity, otherwise averaged log probabilities.
         """
         if num_classes <= self.max_classes:
             if cache is not None:
