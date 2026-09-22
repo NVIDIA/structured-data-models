@@ -39,7 +39,7 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
-def preserve_ambient_autograd_state(fn: Callable) -> Callable:
+def preserve_autograd_state(fn: Callable) -> Callable:
     r"""Re-apply the caller's autograd/inference-mode state for a tensor copy.
 
     ``__torch_dispatch__`` redispatch does not automatically retain the
@@ -1033,7 +1033,7 @@ def _record_stream(inp: TableTensor, stream: torch.Stream) -> None:
 
 
 @TableTensor.implements(aten.to.dtype_layout)
-@preserve_ambient_autograd_state
+@preserve_autograd_state
 def _to_dtype_layout(
     inp: TableTensor,
     *,
