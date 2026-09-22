@@ -47,6 +47,12 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+parser.add_argument(
+    "--group_pooling",
+    action="store_true",
+    help="Average the query predictions of one group, on the tasks that "
+    "carry one label per group.",
+)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
@@ -70,6 +76,8 @@ generator = ConfigGenerator(
     model_cls=model_config.model_cls,
     manual_configs=[config],
 )
+SDMModelWrapper.group_pooling = args.group_pooling
+
 experiments = BeyondArenaExperimentBundle(
     models=[(generator, 0)],
     outer_experiments=True,
