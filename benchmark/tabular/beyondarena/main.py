@@ -79,9 +79,11 @@ jobs = context.build_jobs(
     dataset_names=[args.dataset] if args.dataset is not None else None,
 )
 for job in jobs:
-    context.run_jobs(jobs=[job], expname=result_dir, register=False)
-    gc.collect()
-    if torch.cuda.is_initialized():
-        torch.cuda.synchronize()
-        torch._C._host_emptyCache()
-        torch.cuda.empty_cache()
+    try:
+        context.run_jobs(jobs=[job], expname=result_dir, register=False)
+    finally:
+        gc.collect()
+        if torch.cuda.is_initialized():
+            torch.cuda.synchronize()
+            torch._C._host_emptyCache()
+            torch.cuda.empty_cache()
