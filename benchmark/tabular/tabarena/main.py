@@ -11,11 +11,7 @@ from tabarena.caching import CacheConfig
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import (
-    MODEL_CONFIGS,
-    SDMExperimentRunner,
-    SDMModelWrapper,
-)
+from benchmark.tabular.model import MODEL_CONFIGS, SDMModelWrapper
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -76,6 +72,14 @@ parser.add_argument(
     "every quantile before averaging (default: scalar_trim).",
 )
 parser.add_argument(
+    "--validation",
+    choices=("outer", "official"),
+    default="outer",
+    help="'outer' fits once on all training rows; 'official' runs the "
+    "arena's bagged protocol (eight fold fits and a refit), as the hosted "
+    "methods do.",
+)
+parser.add_argument(
     "--name",
     help="Name of the result directory (default: the model name).",
 )
@@ -104,7 +108,9 @@ if args.model != "kumo-tabular" and (
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
-    args.output_root / (args.name or model_config.name) / "outer_model"
+    args.output_root
+    / (args.name or model_config.name)
+    / f"{args.validation}_model"
 )
 result_dir.mkdir(parents=True, exist_ok=True)
 
@@ -132,11 +138,12 @@ generator = ConfigGenerator(
 )
 experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
-    outer_experiments=True,
+    outer_experiments=args.validation == "outer",
 ).build_experiments()
 for experiment in experiments:
-    experiment.method_cls = SDMModelWrapper
-    experiment.experiment_cls = SDMExperimentRunner
+    experiment.experiment_kwargs["cleanup_on_failure"] = True
+    if args.validation == "outer":
+        experiment.method_cls = SDMModelWrapper
 
 context = TabArenaContext(
     cache_config=(

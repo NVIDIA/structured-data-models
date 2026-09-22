@@ -8,13 +8,18 @@ Run the commands below from the repository root:
 
 ```bash
 pip install structured-data-models \
-  "autogluon.common @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=common" \
-  "autogluon.core @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=core" \
-  "autogluon.features @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=features" \
-  "autogluon.tabular @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=tabular" \
-  "bencheval @ git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/bencheval" \
-  "tabarena[data-foundry,plot] @ git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena"
+  --pre "autogluon.tabular>=1.6.3b20260917,!=1.6.3,<1.7" \
+  "bencheval @ git+https://github.com/autogluon/tabarena.git@90c07f317eec9991409398194ddee070a96b8bf1#subdirectory=packages/bencheval" \
+  "tabarena[data-foundry,plot] @ git+https://github.com/autogluon/tabarena.git@90c07f317eec9991409398194ddee070a96b8bf1#subdirectory=packages/tabarena"
 ```
+
+`tabarena` at this commit (2026-09-21) needs an AutoGluon pre-release for its shared-weights API. Weights of the hosted foundation models are resolved locally when `HF_HOME` (Hugging Face hub cache) and `TABPFN_MODEL_CACHE_DIR` (TabPFN checkpoints) point at populated caches; the TabArena data cache is `TABARENA_CACHE` or `--cache_root`.
+
+### Measurement protocol
+
+Every run starts with an untimed warm-up (imports, CUDA context, a one-member dummy fit); `time_train_s` and `time_infer_s` bracket only the fit and the prediction. `KumoTabular` declares its network loader as AutoGluon shared weights, so the checkpoint is read once per process and never inside the timed fit, like the hosted foundation models.
+
+`--validation outer` (default) fits once on all training rows. `--validation official` runs the arena's bagged protocol, eight fold fits and one refit on all rows, which is how every hosted method is measured: its train time is that of nine fits, and its result directory is `official_model/`. Score such runs with `evaluate.py --validation official`: they enter the pool as a config method named after the model's registry key (`SDM-KUMO-TABULAR (default)` in the CSV, the `=LABEL` on the website table), so score two bagged runs of one model in separate pools.
 
 ______________________________________________________________________
 
@@ -52,7 +57,7 @@ python -m benchmark.tabular.tabarena.main \
   --dataset blood-transfusion-service-center
 ```
 
-Run a local checkpoint under a run name, with every cache under one directory (`--size small` for a 128-channel checkpoint, `--num_estimators`, `--numerical_missing {nan,dispatch,mix,impute}` and `--max_context_size` change the inference setup):
+Run a local checkpoint under a run name, with every cache under one directory (`--size small` for a 128-channel checkpoint, `--num_estimators`, `--numerical_missing {nan,dispatch,mix,impute}`, `--regression_reduction {scalar_trim,quantile_trim}` and `--max_context_size` change the inference setup; `--validation official` runs the bagged protocol):
 
 ```bash
 python -m benchmark.tabular.tabarena.main \

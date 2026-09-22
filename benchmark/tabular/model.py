@@ -12,11 +12,11 @@ import numpy as np
 import pandas as pd
 import torch
 from autogluon.core.constants import BINARY, MULTICLASS, REGRESSION
+from autogluon.core.models.abstract.shared_weights import SharedWeights
 from autogluon.tabular.models.abstract.abstract_torch_model import (
     AbstractTorchModel,
 )
 from tabarena.benchmark.exec_models import AGModelWrapper
-from tabarena.benchmark.experiment import OOFExperimentRunner
 
 import sdm
 import sdm.processing as sp
@@ -39,6 +39,17 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     minimum_num_gpus = 1
     default_resources_physical_cores_only = True
     gpu_strongly_recommended = True
+    # The harness's untimed warm-up imports these and runs a one-member dummy
+    # fit, so imports, the CUDA context and the weights never land in the
+    # timed fit.
+    warmup_modules: ClassVar[tuple[str, ...]] = ("sdm",)
+    cheap_hyperparameters: ClassVar[dict[str, Any]] = {"num_estimators": 1}
+    # Bagged fits (the arenas' official protocol) fit one child at a time and
+    # refit once on all rows, as the hosted in-context models do.
+    _default_ag_args_ensemble_extra: ClassVar[dict[str, Any]] = {
+        "fold_fitting_strategy": "sequential_local",
+        "refit_folds": True,
+    }
 
     default_num_estimators: ClassVar[int]
     autocast_dtype: ClassVar[torch.dtype]
@@ -217,15 +228,6 @@ class SDMModelWrapper(AGModelWrapper):
             cleanup()
 
 
-class SDMExperimentRunner(OOFExperimentRunner):
-    def run(self) -> dict:
-        try:
-            return self._run()
-        finally:
-            if self.cleanup and getattr(self, "model", None) is not None:
-                self._cleanup()
-
-
 class SDMTabICLv2Model(SDMModel):
     ag_key = "SDM-TABICLV2"
     ag_name = "SDMTabICLv2"
@@ -245,6 +247,11 @@ class SDMKumoTabularModel(SDMModel):
     ag_name = "SDMKumoTabular"
     default_num_estimators = 8
     autocast_dtype = torch.float16
+    # The network is built once per process and shared by every fit.
+    shared_weights: ClassVar[SharedWeights] = SharedWeights(
+        loader="sdm.models.kumo.tabular.model:load_network",
+        key=("task", "size", "checkpoint"),
+    )
 
     def _set_default_params(self) -> None:
         super()._set_default_params()
@@ -265,11 +272,12 @@ class SDMKumoTabularModel(SDMModel):
         device: torch.device,
     ) -> sdm.models.KumoTabular:
         params = self._get_model_params()
+        checkpoint = params["checkpoint"]
         return sdm.models.KumoTabular(
             task=task,
             size=params["size"],
             device=device,
-            checkpoint=params["checkpoint"],
+            checkpoint=None if checkpoint is None else str(checkpoint),
         )
 
     def _infer_stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
@@ -308,14 +316,6 @@ class SDMTabFMModel(SDMModel):
 class ModelConfig:
     name: str
     model_cls: type[SDMModel]
-
-    @property
-    def tabarena_method_name(self) -> str:
-        return f"{self.model_cls.ag_name}_c1_default"
-
-    @property
-    def beyondarena_method_name(self) -> str:
-        return f"{self.model_cls.ag_name}_c1"
 
 
 MODEL_CONFIGS = {

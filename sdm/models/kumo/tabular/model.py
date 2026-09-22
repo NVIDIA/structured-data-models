@@ -93,6 +93,56 @@ def scale_ecoc_estimators(
     return num_estimators
 
 
+def load_network(
+    *,
+    task: TaskLike,
+    size: Literal["small", "large"],
+    checkpoint: str | Path | None,
+    device: torch.device | str | None,
+) -> _KumoTabular:
+    r"""Build one task's network on ``device`` with its pretrained weights.
+
+    A module-level function so a benchmark harness can memoize it per process
+    (AutoGluon's ``SharedWeights``), keyed on ``task``, ``size`` and
+    ``checkpoint``: the weights are then read once and shared by every fit.
+
+    Args:
+        task: The task the network predicts.
+        size: The model size, either ``"small"`` or ``"large"``.
+        checkpoint: A local checkpoint in the training format, loaded instead
+            of the published weights.
+        device: The device for model parameters. If ``None``, uses PyTorch's
+            default device.
+    """
+    task = Task(task)
+    device = torch.get_default_device() if device is None else device
+    model = _KumoTabular(
+        num_classes=10 if task == Task.classification else 0,
+        num_quantiles=999 if task == Task.regression else 0,
+        device="meta",
+        **MODEL_KWARGS[size],
+    )
+    if checkpoint is None:
+        filename = (
+            f"{size}/classifier.pt"
+            if task == Task.classification
+            else f"{size}/regressor.pt"
+        )
+        checkpoint = download_checkpoint(
+            repo_id="nvidia/Kumo-Tabular",
+            filename=filename,
+            revision="v1.0.3",
+        )
+    ckpt = torch.load(checkpoint, map_location=device, weights_only=True)
+    ckpt = remap_ckpt(
+        ckpt=ckpt["model"],
+        is_classifier=task == Task.classification,
+        num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
+    )
+    model.load_state_dict(ckpt, assign=True)
+    return model
+
+
 class KumoTabular(ICLModel):
     """Kumo Tabular, a foundation model for classification and regression.
 
@@ -130,19 +180,21 @@ class KumoTabular(ICLModel):
 
         self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
         for task in self.tasks:
-            self.models[task] = _KumoTabular(
-                num_classes=10 if task == Task.classification else 0,
-                num_quantiles=999 if task == Task.regression else 0,
-                device="meta" if pretrained else device,
-                **MODEL_KWARGS[size],
-            )
-
-        if pretrained:
-            self._load_from_pretrained(
-                size,
-                device=device,
-                checkpoint=checkpoint,
-            )
+            if pretrained:
+                # A module-level lookup at call time, so a harness can wrap it.
+                self.models[task] = load_network(
+                    task=task,
+                    size=size,
+                    checkpoint=checkpoint,
+                    device=device,
+                )
+            else:
+                self.models[task] = _KumoTabular(
+                    num_classes=10 if task == Task.classification else 0,
+                    num_quantiles=999 if task == Task.regression else 0,
+                    device=device,
+                    **MODEL_KWARGS[size],
+                )
 
         self.eval()
 
@@ -150,38 +202,6 @@ class KumoTabular(ICLModel):
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
-
-    def _load_from_pretrained(
-        self,
-        size: Literal["small", "large"],
-        device: torch.device | str | None,
-        checkpoint: str | Path | None = None,
-    ) -> None:
-        device = torch.get_default_device() if device is None else device
-
-        for task, model in self.models.items():
-            if task == Task.classification:
-                filename = f"{size}/classifier.pt"
-            else:
-                assert task == Task.regression
-                filename = f"{size}/regressor.pt"
-
-            path = (
-                checkpoint
-                if checkpoint is not None
-                else download_checkpoint(
-                    repo_id="nvidia/Kumo-Tabular",
-                    filename=filename,
-                    revision="v1.0.3",
-                )
-            )
-            ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(
-                ckpt=ckpt["model"],
-                is_classifier=task == Task.classification,
-                num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
-            )
-            model.load_state_dict(ckpt, assign=True)
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415
