@@ -578,6 +578,7 @@ def test_to_dtype_preserves_grad() -> None:
 
     out = tensor.to(torch.float32)
 
+    assert isinstance(out, TableTensor)
     assert out.numerical.dtype == torch.float32
     assert out.numerical.requires_grad
     assert out.numerical.grad_fn is not None
