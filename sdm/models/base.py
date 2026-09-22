@@ -132,16 +132,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
         Returns:
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
-            Calling :meth:`train` beforehand makes this return value
-            differentiable end-to-end with respect to model parameters, for
-            gradient-based fine-tuning. A callback with
-            ``requires_grad = True`` enables the same thing without
-            requiring train mode, *e.g.* for input-gradient explainability.
         """
         callbacks = () if callbacks is None else callbacks
-        requires_grad = self.training or any(
-            callback.requires_grad for callback in callbacks
-        )
+        requires_grad = self.training
+        requires_grad |= any(callback.requires_grad for callback in callbacks)
 
         if (related_context_tables is None) != (related_query_tables is None):
             raise ValueError(
@@ -158,9 +152,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
-        # "no_grad" and not "inference" here since these buffers get combined
-        # with differentiable model output, and inference tensor cannot be
-        # used for backward
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
             inference_mode("no_grad" if requires_grad else "inference"),

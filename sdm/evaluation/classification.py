@@ -81,7 +81,7 @@ def to_class_indices(
     pred: Tensor = pred.numerical
 
     category = target.categories[0]
-    code = target.code.squeeze(-1)
+    code = target.code.squeeze(-1).to(torch.int64)
 
     if isinstance(category, StringTensor):
         classes = StringTensor.from_list(

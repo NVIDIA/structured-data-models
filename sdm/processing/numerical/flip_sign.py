@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import EnsembleTable, Stype
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 
@@ -33,7 +33,6 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        # TODO: Vectorize sign draws and application over ensemble members.
         signs = []
         for member_id in range(len(ensemble_table)):
             numerical = ensemble_table[member_id].numerical
@@ -49,24 +48,22 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._signs) != len(ensemble_table):
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} was fitted with "
-                f"{len(self._signs)} ensemble members, but got "
-                f"{len(ensemble_table)}."
-            )
-        tables: list[TableTensor] = []
-        for member_id in range(len(ensemble_table)):
-            table = ensemble_table[member_id]
-            tables.append(
-                table.replace_blocks(
-                    numerical=table.numerical * self._signs[member_id]
-                )
-            )
-        return EnsembleTable.from_tables(
-            tables=tables,
-            member_table_ids=range(len(tables)),
-        )
+
+        member_ids_by_group = [[] for _ in range(ensemble_table.num_groups)]
+        for member_id, (group_id, _) in enumerate(ensemble_table._locations):
+            member_ids_by_group[group_id].append(member_id)
+
+        groups = []
+        locations = [(-1, -1)] * len(ensemble_table)
+        for group_id, member_ids in enumerate(member_ids_by_group):
+            group = ensemble_table.expanded_group(group_id)
+            sign = torch.stack([self._signs[i] for i in member_ids], dim=0)
+            group = group.replace_blocks(numerical=group.numerical * sign)
+            groups.append(group)
+            for position, member_id in enumerate(member_ids):
+                locations[member_id] = (group_id, position)
+
+        return EnsembleTable(groups, locations)
 
     def _inverse_transform_ensemble(
         self,

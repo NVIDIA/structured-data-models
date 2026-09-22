@@ -137,12 +137,11 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
-    ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
+    ProcessorCase(sp.AverageEstimators(), _make_reduction_table),
     ProcessorCase(
-        sp.ReduceEstimators(method="trimmed_mean", proportion=0.25),
+        sp.AverageEstimators(trim_fraction=0.25),
         _make_reduction_table,
     ),
-    ProcessorCase(sp.ReduceQuantiles()),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(
         sp.Sequential(
