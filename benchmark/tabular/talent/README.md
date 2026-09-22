@@ -7,7 +7,7 @@ This benchmark evaluates `structured-data-models` on the corrected 300-dataset [
 Run the commands below from the repository root:
 
 ```bash
-pip install structured-data-models \
+pip install . \
   "TALENT @ git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6"
 ```
 
