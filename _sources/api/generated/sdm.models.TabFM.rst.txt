@@ -64,7 +64,7 @@ Default Recipe
        ),
      ),
      output=Sequential(
-       ReduceEstimators(method='mean', proportion=0.0),
+       AverageEstimators(),
        TaskDispatch(
          classification=Softmax(temperature=0.9),
        ),

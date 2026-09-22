@@ -86,12 +86,12 @@ Default Recipe
      ),
      output=TaskDispatch(
        classification=Sequential(
-         ReduceEstimators(method='mean', proportion=0.0),
+         AverageEstimators(),
          Softmax(),
        ),
        regression=Sequential(
          SortQuantiles(),
-         ReduceEstimators(method='trimmed_mean', proportion=0.2),
+         AverageEstimators(trim_fraction=0.2),
        ),
      ),
    )

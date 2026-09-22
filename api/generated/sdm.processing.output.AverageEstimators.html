@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ReduceEstimators - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Softmax" href="sdm.processing.output.Softmax.html" /><link rel="prev" title="AddCalendarFields" href="sdm.processing.datetime.AddCalendarFields.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>AverageEstimators - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Softmax" href="sdm.processing.output.Softmax.html" /><link rel="prev" title="AddCalendarFields" href="sdm.processing.datetime.AddCalendarFields.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -20,7 +20,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="ReduceEstimators"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="AverageEstimators"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -134,7 +134,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.text.TFIDF.html">TFIDF</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.text.SentenceTransformer.html">SentenceTransformer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">ReduceEstimators</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">AverageEstimators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.Softmax.html">Softmax</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.SortQuantiles.html">SortQuantiles</a></li>
 </ul>
@@ -178,7 +178,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.output.ReduceEstimators"><code class="docutils literal notranslate"><span class="pre">ReduceEstimators</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.output.AverageEstimators"><code class="docutils literal notranslate"><span class="pre">AverageEstimators</span></code></a></li>
 <li><a class="reference internal" href="#capabilities">Capabilities</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
@@ -201,7 +201,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">ReduceEstimators</strong>
+        <strong itemprop="name">AverageEstimators</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -214,33 +214,20 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="reduceestimators">
-<h1>ReduceEstimators<a class="headerlink" href="#reduceestimators" title="Link to this heading">#</a></h1>
+          <section id="averageestimators">
+<h1>AverageEstimators<a class="headerlink" href="#averageestimators" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.output.ReduceEstimators">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.output.</span></span><span class="sig-name descname"><span class="pre">ReduceEstimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'mean'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'trimmed_mean'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'mean'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">proportion</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.output.ReduceEstimators" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="sdm.processing.output.AverageEstimators">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.output.</span></span><span class="sig-name descname"><span class="pre">AverageEstimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">trim_fraction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.output.AverageEstimators" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a></p>
 <p>Reduce the leading ensemble dimension of model outputs.</p>
-<p>Input must be a numerical output table with shape <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...,</span> <span class="pre">R,</span> <span class="pre">O]</span></code>.
-<code class="docutils literal notranslate"><span class="pre">E</span></code> is the non-empty leading ensemble dimension, <code class="docutils literal notranslate"><span class="pre">R</span></code> is the row
-dimension, and <code class="docutils literal notranslate"><span class="pre">O</span></code> is the output-column dimension. The result has shape
-<code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R,</span> <span class="pre">O]</span></code> and retains the input column schema, device, and floating
-dtype.</p>
-<p>Place processors that support stacked outputs before this processor.
-Processors after it receive an already-reduced output table.
-Ensemble transformation returns one member containing the reduction.</p>
+<p>Inputs must be a numerical output table with shape <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...]</span></code>, where
+<code class="docutils literal notranslate"><span class="pre">E</span></code> is the non-empty leading ensemble dimension.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>method</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'mean'</em><em>, </em><em>'trimmed_mean'</em><em>]</em>) – Reduction applied across ensemble members. <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>
-averages all members. <code class="docutils literal notranslate"><span class="pre">&quot;trimmed_mean&quot;</span></code> sorts the members at
-every output coordinate, drops <code class="docutils literal notranslate"><span class="pre">proportion</span></code> of them from each
-end, and averages the remainder.</p></li>
-<li><p><strong>proportion</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Proportion dropped from each end in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">0.5)</span></code>. When it
-does not resolve to a whole number of members, the number of
-dropped members is rounded down, so small ensembles keep all
-members.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>trim_fraction</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Fraction of estimators discarded from each tail after
+sorting each output coordinate, in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">0.5)</span></code>. This can make the
+aggregation less sensitive to outlying estimator predictions.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -286,7 +273,7 @@ members.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=9019d324"></script>
+      <script src="../../_static/documentation_options.js?v=6c259b06"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

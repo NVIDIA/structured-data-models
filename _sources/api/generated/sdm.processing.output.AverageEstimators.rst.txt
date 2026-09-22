@@ -1,9 +1,9 @@
-﻿ReduceEstimators
-================
+﻿AverageEstimators
+=================
 
 .. currentmodule:: sdm.processing.output
 
-.. autoclass:: ReduceEstimators
+.. autoclass:: AverageEstimators
    :members:
    :show-inheritance:
    :exclude-members: handles_stypes, requires_fit

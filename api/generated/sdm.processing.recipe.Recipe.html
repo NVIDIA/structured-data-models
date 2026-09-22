@@ -134,7 +134,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.text.TFIDF.html">TFIDF</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.text.SentenceTransformer.html">SentenceTransformer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.ReduceEstimators.html">ReduceEstimators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.AverageEstimators.html">AverageEstimators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.Softmax.html">Softmax</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.SortQuantiles.html">SortQuantiles</a></li>
 </ul>
@@ -241,7 +241,7 @@ are reconstructed from the fitted target categories instead.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">output</span></code>: transforms member outputs after they have been mapped to a
 common class or target space and stacked as <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...,</span> <span class="pre">R,</span> <span class="pre">O]</span></code>. An
 explicit dimension-changing step such as
-<code class="xref py py-class docutils literal notranslate"><span class="pre">ReduceEstimators</span></code> removes <code class="docutils literal notranslate"><span class="pre">E</span></code>; without one,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">AverageEstimators</span></code> removes <code class="docutils literal notranslate"><span class="pre">E</span></code>; without one,
 the output remains stacked. Steps before the reducer must support
 stacked outputs, while steps after it receive already-reduced outputs.</p></li>
 </ul>
@@ -390,7 +390,7 @@ processors that do not explicitly document non-finite support.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=9019d324"></script>
+      <script src="../../_static/documentation_options.js?v=6c259b06"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
