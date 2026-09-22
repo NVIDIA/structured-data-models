@@ -261,8 +261,8 @@ embedding.</p></li>
 for in-context prediction.
 Training-row embeddings are combined with target embeddings, and test
 rows attend to the labeled training rows. The resulting test-row states
-are mapped to task outputs, such as class logits for classification or
-quantile predictions for regression.</p></li>
+are mapped to task outputs, such as class probabilities for
+classification or quantile predictions for regression.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">TableTensor</span>
 </span><span data-line="2"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">TabICLv2</span>
@@ -409,7 +409,7 @@ model are initialized.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=25854867"></script>
+      <script src="../../_static/documentation_options.js?v=9019d324"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
