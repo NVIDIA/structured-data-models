@@ -39,6 +39,27 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
+def preserve_ambient_autograd_state(fn: Callable) -> Callable:
+    r"""Re-apply the caller's autograd/inference-mode state for a tensor copy.
+
+    ``__torch_dispatch__`` redispatch does not automatically retain the
+    caller's inference-mode and grad-enabled state for nested per-block ops,
+    so a real (non-view) copy performed here would otherwise silently lose
+    ``requires_grad``/``grad_fn`` even though gradients are enabled in the
+    caller's scope.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with (
+            torch.inference_mode(torch.is_inference_mode_enabled()),
+            torch.set_grad_enabled(torch.is_grad_enabled()),
+        ):
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
 @dataclass(frozen=True)
 class TableSchema:
     r"""The schema of a :class:`TableTensor`.
@@ -1012,6 +1033,7 @@ def _record_stream(inp: TableTensor, stream: torch.Stream) -> None:
 
 
 @TableTensor.implements(aten.to.dtype_layout)
+@preserve_ambient_autograd_state
 def _to_dtype_layout(
     inp: TableTensor,
     *,

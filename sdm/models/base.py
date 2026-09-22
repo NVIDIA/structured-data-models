@@ -361,10 +361,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        if self.training:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r}.predict() does not support "
+                "gradient-based training through a fitted context cache, "
+                "since the cache is built once in 'fit()' and does not "
+                "track parameters used only to encode the context. Call "
+                "'eval()' before 'fit()'/'predict()', or use 'forward()' "
+                "for gradient-based fine-tuning."
+            )
+
         callbacks = () if callbacks is None else callbacks
-        requires_grad = self.training or any(
-            callback.requires_grad for callback in callbacks
-        )
+        requires_grad = any(callback.requires_grad for callback in callbacks)
 
         if self._cache is None:
             raise RuntimeError(

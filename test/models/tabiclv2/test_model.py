@@ -82,6 +82,33 @@ def test_autocast_output_is_float32(
     assert out.numerical.dtype == torch.float32
 
 
+@withCUDA
+@pytest.mark.parametrize(
+    "y_context",
+    [
+        torch.arange(2)[:, None],  # classification
+        torch.tensor([[0.0], [1.0]]),  # regression
+    ],
+)
+def test_autocast_preserves_gradients_in_forward(
+    device: torch.device,
+    y_context: torch.Tensor,
+) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    model.train()
+    x_context = torch.eye(2, device=device)
+    y_context = y_context.to(device)
+    x_query = torch.ones(1, 2, device=device)
+    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
+
+    with torch.autocast(device_type=device.type, dtype=dtype):
+        out = model(x_context, y_context, x_query)
+
+    assert not torch.is_inference(out.numerical)
+    out.numerical.sum().backward()
+    assert any(p.grad is not None for p in model.parameters())
+
+
 @pytest.mark.parametrize("batch_shape", [(), (2,)])
 def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     model = TabICLv2(pretrained=False)

@@ -572,6 +572,20 @@ def test_to_dtype_preserves_empty_block_device(
     assert out.id.device == device
 
 
+def test_to_dtype_preserves_grad() -> None:
+    x = torch.randn(2, 1, dtype=torch.float16, requires_grad=True)
+    tensor = TableTensor.from_tensor(x * 2)
+
+    out = tensor.to(torch.float32)
+
+    assert out.numerical.dtype == torch.float32
+    assert out.numerical.requires_grad
+    assert out.numerical.grad_fn is not None
+
+    out.numerical.sum().backward()
+    assert x.grad is not None
+
+
 def test_clone_contiguous() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
