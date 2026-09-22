@@ -53,6 +53,12 @@ parser.add_argument(
     help="Average the query predictions of one group, on the tasks that "
     "carry one label per group.",
 )
+parser.add_argument(
+    "--group_id",
+    action="store_true",
+    help="Keep the group id as a hashed feature, on the tasks that carry "
+    "one label per row.",
+)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
@@ -77,6 +83,7 @@ generator = ConfigGenerator(
     manual_configs=[config],
 )
 SDMModelWrapper.group_pooling = args.group_pooling
+SDMModelWrapper.group_id = args.group_id
 
 experiments = BeyondArenaExperimentBundle(
     models=[(generator, 0)],
