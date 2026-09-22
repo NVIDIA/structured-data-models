@@ -48,8 +48,13 @@ class _LinearModel(ICLModel):
         return Recipe()
 
 
-@pytest.mark.parametrize("fitted", [False, True])
-def test_returns_query_input_gradients(fitted: bool) -> None:
+@pytest.mark.parametrize(
+    ("fitted", "num_estimators"),
+    [(False, 1), (False, 3), (True, 1), (True, 3)],
+)
+def test_returns_query_input_gradients(
+    fitted: bool, num_estimators: int
+) -> None:
     model = _LinearModel()
     x_context = torch.zeros(1, 2)
     y_context = torch.zeros(1, 1)
@@ -76,7 +81,12 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
     )
 
     if fitted:
-        model.fit(x_context, y_context, related_tables)
+        model.fit(
+            x=x_context,
+            y=y_context,
+            related_tables=related_tables,
+            num_estimators=num_estimators,
+        )
         result = explainer.explain(model, x_query, related_tables)
     else:
         result = explainer.explain(
@@ -86,8 +96,11 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
             x_context=x_context,
             y_context=y_context,
             related_context_tables=related_tables,
+            num_estimators=num_estimators,
         )
 
+    if num_estimators > 1:
+        x_query = x_query.expand(num_estimators, *x_query.size())
     torch.testing.assert_close(
         result.x.numerical, torch.full_like(x_query, 2.0)
     )

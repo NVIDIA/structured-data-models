@@ -138,8 +138,6 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
 
     model.fit(x_context, y_context, num_estimators=3)
     assert model._cache is not None
-    assert 0 in model._cache
-    assert 1 in model._cache
     assert model._cache.size() > 0
     assert model._cache.is_cpu
 

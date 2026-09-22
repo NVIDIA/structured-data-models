@@ -21,6 +21,12 @@ from sdm import (
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
+from sdm.models._batch import (
+    _output_columns,
+    _stack_contexts,
+    _stack_queries,
+    _unstack_output,
+)
 from sdm.models.callback import Callback
 from sdm.processing.execution import (
     MemberContext,
@@ -102,6 +108,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
+        estimator_batch_size: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -124,6 +131,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 used as the estimator dimension, allowing input data to be
                 customized per estimator (*e.g.*, different in-context examples
                 per estimator).
+            estimator_batch_size: Maximum number of estimators per model
+                execution. ``None`` runs all estimators together; ``1`` runs
+                them sequentially. Batched estimators must have compatible
+                shapes, target columns, and feature categories. Larger batches
+                use more device memory.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -172,8 +184,28 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables=related_query_tables,
             )
 
+        batch_size = (
+            len(contexts)
+            if estimator_batch_size is None
+            else estimator_batch_size
+        )
         outs: list[TableTensor] = []
-        for context, query in zip(contexts, queries):
+        for start in range(0, len(contexts), batch_size):
+            context_members = contexts[start : start + batch_size]
+            query_members = queries[start : start + batch_size]
+            if len(context_members) > 1:
+                for context, query in zip(context_members, query_members):
+                    self._validate_query(
+                        x_context=context.x.schema,
+                        x_query=query.x,
+                        related_context_tables=context.related_tables.schema
+                        if context.related_tables is not None
+                        else None,
+                        related_query_tables=query.related_tables,
+                    )
+            with inference_mode("no_grad" if requires_grad else "inference"):
+                context = _stack_contexts(context_members)
+                query = _stack_queries(query_members)
             for callback in callbacks:
                 context = MemberContext(
                     *callback.on_context_preprocessing_end(self, *context)
@@ -206,6 +238,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     related_query_tables=query.related_tables,
                     cache=None,
                     generator=generator,
+                    _x_schemas=(
+                        tuple(member.x.schema for member in context_members)
+                        if len(context_members) > 1
+                        else (context.x.schema,)
+                    ),
                     **kwargs,
                 )
 
@@ -213,7 +250,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     out = callback.on_model_forward_end(self, out)
 
             out = cast(TableTensor, out.to(query.x.dtype))
-            outs.append(out)
+            with inference_mode("grad" if requires_grad else "inference"):
+                outs.extend(
+                    _unstack_output(
+                        out=out,
+                        num_members=len(context_members),
+                        columns=_output_columns(context_members),
+                    )
+                )
 
         # Regression: invert target before stacking estimator outputs.
         if contexts[0].y.numerical.size(-1) > 0:
@@ -237,6 +281,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
+        estimator_batch_size: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -258,6 +303,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 used as the estimator dimension, allowing input data to be
                 customized per estimator (*e.g.*, different in-context examples
                 per estimator).
+            estimator_batch_size: Maximum number of estimators per model
+                execution. ``None`` runs all estimators together; ``1`` runs
+                them sequentially. Batched estimators must have compatible
+                shapes, target columns, and feature categories. Prediction
+                reuses the same batches. Larger batches use more device memory.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -282,11 +332,21 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 generator=generator,
             )
 
+        batch_size = (
+            len(contexts)
+            if estimator_batch_size is None
+            else estimator_batch_size
+        )
+        starts = range(0, len(contexts), batch_size)
         cache = Cache(
             recipe_execution=recipe_execution,
             kwargs=kwargs,
+            estimator_batch_size=batch_size,
         )
-        for i, context in enumerate(contexts):
+        for i, start in enumerate(starts):
+            members = contexts[start : start + batch_size]
+            with inference_mode("no_grad"):
+                context = _stack_contexts(members)
             for callback in callbacks:
                 context = MemberContext(
                     *callback.on_context_preprocessing_end(self, *context)
@@ -298,6 +358,12 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
             estimator_cache = Cache(
                 x_schema=context.x.schema,
+                x_schemas=(
+                    tuple(member.x.schema for member in members)
+                    if len(members) > 1
+                    else (context.x.schema,)
+                ),
+                output_columns=_output_columns(members),
                 y_schema=context.y.schema,
                 related_tables_schema=context.related_tables.schema
                 if context.related_tables is not None
@@ -321,7 +387,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     **kwargs,
                 )
 
-            if x.is_cuda and len(contexts) > 1:
+            if x.is_cuda and len(starts) > 1:
                 try:  # Copy to pinned CPU memory:
                     estimator_cache = estimator_cache._apply_tensor(
                         lambda tensor: torch.ops.aten._to_copy.default(
@@ -393,10 +459,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
             RecipeExecution,
             self._cache["recipe_execution"],
         )
-        caches = [
-            cast(Cache, self._cache[i])
-            for i in range(recipe_execution.num_members)
-        ]
+        batch_size = cast(int, self._cache["estimator_batch_size"])
+        starts = range(0, recipe_execution.num_members, batch_size)
+        caches = [cast(Cache, self._cache[i]) for i in range(len(starts))]
         next_cache = caches[0]
 
         compute_stream: torch.cuda.Stream | None = None
@@ -424,9 +489,29 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 compute_stream.wait_stream(transfer_stream)
 
             outs: list[TableTensor] = []
-            for i, query in enumerate(queries):
+            for i, start in enumerate(starts):
                 cache, next_cache = next_cache, None
                 assert cache is not None
+                members = queries[start : start + batch_size]
+                if len(members) > 1:
+                    for schema, member in zip(
+                        cast(tuple[TableSchema, ...], cache["x_schemas"]),
+                        members,
+                        strict=True,
+                    ):
+                        self._validate_query(
+                            x_context=schema,
+                            x_query=member.x,
+                            related_context_tables=cast(
+                                RelatedTablesSchema | None,
+                                cache["related_tables_schema"],
+                            ),
+                            related_query_tables=member.related_tables,
+                        )
+                with inference_mode(
+                    "no_grad" if requires_grad else "inference"
+                ):
+                    query = _stack_queries(members)
 
                 for callback in callbacks:
                     query = MemberQuery(
@@ -470,7 +555,17 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         tensor.record_stream(compute_stream)
 
                 out = cast(TableTensor, out.to(query.x.dtype))
-                outs.append(out)
+                with inference_mode("grad" if requires_grad else "inference"):
+                    outs.extend(
+                        _unstack_output(
+                            out=out,
+                            num_members=len(members),
+                            columns=cast(
+                                tuple[tuple[str, ...], ...] | None,
+                                cache["output_columns"],
+                            ),
+                        )
+                    )
 
                 if x.is_cuda and next_cache is not None:
                     assert compute_stream is not None

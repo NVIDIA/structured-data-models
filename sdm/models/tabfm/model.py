@@ -28,6 +28,7 @@ from torch.nn import ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
+from sdm.models._batch import _categorical_mask
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
 from sdm.models.tabfm.ckpt import remap_ckpt
@@ -207,14 +208,12 @@ class TabFM(ICLModel):
         if cache is None or cache.is_recording:
             assert x_context is not None
             schema: TableSchema = kwargs["_schema"]
-            categorical_columns = set(schema.columns[Stype.categorical])
-            categorical_mask = torch.tensor(
-                [
-                    column in categorical_columns
-                    for column in x_context.columns[Stype.numerical]
-                ],
-                device=x.device,
-                dtype=torch.bool,
+            categorical_mask = _categorical_mask(
+                x=x_context,
+                schema=schema,
+                schemas=kwargs.get("_x_schemas", (x_context.schema,))
+                if cache is None
+                else cast(tuple[TableSchema, ...], cache["x_schemas"]),
             )
             if cache is not None:
                 cache["categorical_mask"] = categorical_mask

@@ -8,7 +8,14 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    EnsembleTable,
+    RelatedTables,
+    Stype,
+    TableTensor,
+)
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models.callback import Callback
@@ -304,18 +311,19 @@ def test_callback() -> None:
     ]
 
 
-def test_train_mode_enables_grad() -> None:
+@pytest.mark.parametrize("num_estimators", [1, 3])
+def test_train_mode_enables_grad(num_estimators: int) -> None:
     model = _RecordingModel()
     x_context = torch.tensor([[0.0], [2.0]])
     y_context = torch.tensor([[0.0], [1.0]])
     x_query = torch.tensor([[3.0]])
 
     model.eval()
-    out = model(x_context, y_context, x_query)
+    out = model(x_context, y_context, x_query, num_estimators=num_estimators)
     assert torch.is_inference(out)
 
     model.train()
-    out = model(x_context, y_context, x_query)
+    out = model(x_context, y_context, x_query, num_estimators=num_estimators)
     assert not torch.is_inference(out)
 
 
@@ -361,6 +369,7 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
             related_query,
             recipe=_recipe(),
             num_estimators=2,
+            estimator_batch_size=1,
         ),
     )
 
@@ -409,6 +418,7 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         related_context,
         recipe=_recipe(),
         num_estimators=2,
+        estimator_batch_size=1,
     )
     assert model._cache is not None
 
@@ -533,3 +543,67 @@ def test_ensemble_output_reduce() -> None:
     )
 
     assert out.size() == (2, 3)
+
+
+@pytest.mark.parametrize("batch_size", [1, 2, None])
+def test_estimator_callbacks(batch_size: int | None) -> None:
+    model = _RecordingModel()
+    x = torch.arange(30.0).view(5, 3, 2)
+    y = torch.zeros(5, 3, 1)
+    model.fit(x, y, estimator_batch_size=batch_size)
+    out = model.predict(
+        x,
+        callbacks=(MyCallback("affine", 2.0, 3.0, []),),
+    )
+    torch.testing.assert_close(out.numerical, 2.0 * x + 3.0)
+    out = model(
+        x_context=x,
+        y_context=y,
+        x_query=x,
+        estimator_batch_size=batch_size,
+        callbacks=(MyCallback("affine", 2.0, 3.0, []),),
+    )
+    torch.testing.assert_close(out.numerical, 2.0 * x + 3.0)
+
+
+def test_estimator_batching_incompatible_shapes() -> None:
+    model = _RecordingModel()
+    x = EnsembleTable.from_tables(
+        tables=[
+            TableTensor(numerical=torch.ones(3, 2)),
+            TableTensor(numerical=torch.ones(4, 2)),
+        ],
+        member_table_ids=(0, 1),
+    )
+    y = EnsembleTable.from_tables(
+        tables=[
+            TableTensor(numerical=torch.ones(3, 1)),
+            TableTensor(numerical=torch.ones(4, 1)),
+        ],
+        member_table_ids=(0, 1),
+    )
+    with pytest.raises(RuntimeError, match="stack expects"):
+        model.fit(x, y)
+    model.fit(x, y, estimator_batch_size=1)
+    query = torch.randn(2, 2, 2)
+    torch.testing.assert_close(
+        model.predict(TableTensor(numerical=query)).numerical, query
+    )
+
+
+def test_estimator_batching_incompatible_categories() -> None:
+    model = _RecordingModel()
+    y = EnsembleTable.from_tables(
+        tables=[
+            TableTensor(
+                categorical=CategoricalTensor(
+                    code=torch.zeros(3, 1, dtype=torch.long),
+                    categories=(torch.arange(count),),
+                ),
+            )
+            for count in (2, 3)
+        ],
+        member_table_ids=(0, 1),
+    )
+    with pytest.raises(ValueError, match="matching class counts"):
+        model.fit(torch.ones(3, 2), y, num_estimators=2)
