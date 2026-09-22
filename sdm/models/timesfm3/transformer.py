@@ -22,7 +22,10 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.models.timesfm3.configs import TransformerConfig
+from sdm.models.timesfm3.configs import (
+    StackedTransformersConfig,
+    TransformerConfig,
+)
 from sdm.models.timesfm3.normalization import PerDimScale
 from sdm.models.timesfm3.util import get_activation_fn
 
@@ -461,3 +464,57 @@ class MixingTransformer(torch.nn.Module):
 
         ff_output = self.ff1(self.activation(self.ff0(self.pre_ff_ln(hidden))))
         return self.post_ff_ln(ff_output) + hidden, seq_attn_mask
+
+
+class StackedMixingTransformer(torch.nn.Module):
+    """Apply a stack of TimesFM-3 mixing transformer layers.
+
+    Args:
+        config: Stacked transformer configuration.
+        use_variate_attention: Whether to attend across variates.
+        device: Device on which to create parameters and buffers.
+        dtype: Data type of parameters.
+    """
+
+    def __init__(
+        self,
+        config: StackedTransformersConfig,
+        use_variate_attention: bool = True,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.config = config
+        self.layers = torch.nn.ModuleList(
+            [
+                MixingTransformer(
+                    config=config.transformer,
+                    use_variate_attention=use_variate_attention,
+                    device=device,
+                    dtype=dtype,
+                )
+                for _ in range(config.num_layers)
+            ]
+        )
+
+    def forward(
+        self,
+        input_embeddings: Tensor,
+        patch_mask: Tensor,
+    ) -> tuple[Tensor, list[Tensor]]:
+        """Apply the mixing transformer stack.
+
+        Args:
+            input_embeddings: Inputs with shape ``[B, V, N, D]``.
+            patch_mask: Masked patches with shape ``[B, V, N]``.
+
+        Returns:
+            Output with shape ``[B, V, N, D]`` and the temporal attention
+            mask from every layer.
+        """
+        output = input_embeddings
+        attn_masks = []
+        for layer in self.layers:
+            output, layer_mask = layer(output, patch_mask)
+            attn_masks.append(layer_mask)
+        return output, attn_masks

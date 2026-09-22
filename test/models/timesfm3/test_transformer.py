@@ -7,11 +7,15 @@ from dataclasses import replace
 import pytest
 import torch
 
-from sdm.models.timesfm3.configs import TransformerConfig
+from sdm.models.timesfm3.configs import (
+    StackedTransformersConfig,
+    TransformerConfig,
+)
 from sdm.models.timesfm3.transformer import (
     MixingTransformer,
     MultiHeadAttention,
     RotaryPositionalEmbedding,
+    StackedMixingTransformer,
     make_attn_mask,
 )
 from sdm.testing import withCUDA
@@ -364,6 +368,53 @@ def test_mixing_transformer_variate_attention_isolates_patches_and_masks(
     masked[0, 2, 0, 4] = 1
     masked_output = transformer(masked, patch_mask)[0]
     torch.testing.assert_close(masked_output[0, 1, 0], output[0, 1, 0])
+
+
+@withCUDA
+def test_stacked_transformer_shape(device: torch.device) -> None:
+    transformer = StackedMixingTransformer(
+        StackedTransformersConfig(
+            num_layers=2,
+            transformer=_transformer_config(),
+        ),
+        device=device,
+    )
+    inputs = torch.zeros(2, 3, 4, 8, device=device)
+    patch_mask = torch.zeros(2, 3, 4, dtype=torch.bool, device=device)
+
+    output, masks = transformer(inputs, patch_mask)
+
+    assert output.shape == inputs.shape
+    assert len(masks) == 2
+    assert all(mask.shape == (2 * 3, 1, 4, 4) for mask in masks)
+
+
+@withCUDA
+def test_stacked_transformer_loads_from_meta(
+    device: torch.device,
+) -> None:
+    config = StackedTransformersConfig(
+        num_layers=2,
+        transformer=_transformer_config(),
+    )
+    expected = StackedMixingTransformer(config, device=device)
+    transformer = StackedMixingTransformer(config, device="meta")
+    assert all(
+        buffer.device.type == "meta" for buffer in transformer.buffers()
+    )
+
+    transformer.load_state_dict(expected.state_dict(), assign=True)
+    inputs = torch.arange(
+        64,
+        device=device,
+        dtype=torch.float32,
+    ).reshape(1, 1, 8, 8)
+    patch_mask = torch.zeros(1, 1, 8, dtype=torch.bool, device=device)
+
+    output = transformer(inputs, patch_mask)[0]
+
+    assert all(buffer.device == device for buffer in transformer.buffers())
+    torch.testing.assert_close(output, expected(inputs, patch_mask)[0])
 
 
 @withCUDA
