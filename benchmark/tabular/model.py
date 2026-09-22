@@ -4,6 +4,7 @@
 """SDM model adapters for TabArena and BeyondArena."""
 
 import abc
+import copy
 import math
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
@@ -19,6 +20,7 @@ from autogluon.tabular.models.abstract.abstract_torch_model import (
 from tabarena.benchmark.exec_models import AGModelWrapper
 
 import sdm
+import sdm.models.kumo.tabular.model as kumo_tabular
 import sdm.processing as sp
 from sdm.models.kumo.tabular.model import scale_ecoc_estimators
 from sdm.models.kumo.tabular.recipe import default_recipe
@@ -219,6 +221,36 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     def _more_tags(self) -> dict[str, bool]:
         return {"can_refit_full": True}
 
+    # AutoGluon pickles a model whose network is shared without the weights,
+    # but its object walker stops at any torch module, and the served SDM
+    # model is one. So the pickle carries a copy of the served model whose
+    # networks are placeholders, and the load takes them back from the
+    # shared-weights registry.
+    def _shared_network(self, task: str) -> torch.nn.Module:
+        raise NotImplementedError
+
+    def __getstate__(self) -> dict[str, Any]:
+        served = self.__dict__.get("model")
+        if served is None or self._shared_state is None:
+            return super().__getstate__()
+        state = self.__dict__.copy()
+        clone = copy.copy(served)
+        clone._modules = dict(served._modules)
+        clone._modules["models"] = torch.nn.ModuleDict(
+            {task: torch.nn.Identity() for task in served.models}
+        )
+        state["model"] = clone
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        super().__setstate__(state)
+        served = self.__dict__.get("model")
+        if served is None or self._shared_state is None:
+            return
+        for task, module in list(served.models.items()):
+            if isinstance(module, torch.nn.Identity):
+                served.models[task] = self._shared_network(task)
+
 
 class SDMModelWrapper(AGModelWrapper):
     def cleanup(self) -> None:
@@ -278,6 +310,17 @@ class SDMKumoTabularModel(SDMModel):
             size=params["size"],
             device=device,
             checkpoint=None if checkpoint is None else str(checkpoint),
+        )
+
+    def _shared_network(self, task: str) -> torch.nn.Module:
+        params = self._get_model_params()
+        checkpoint = params["checkpoint"]
+        # Looked up on the module at call time: the registry wraps it there.
+        return kumo_tabular.load_network(
+            task=task,
+            size=params["size"],
+            checkpoint=None if checkpoint is None else str(checkpoint),
+            device=self._device,
         )
 
     def _infer_stypes(self, X: pd.DataFrame) -> dict[str, sdm.StypeLike]:
