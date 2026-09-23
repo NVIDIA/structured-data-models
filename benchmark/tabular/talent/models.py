@@ -155,12 +155,12 @@ class SDMMethod(Method):
             self._config.num_estimators,
         )
         self._finetune = general.get("finetune", False)
-        self._finetune_epochs = general.get("finetune_epochs", 150)
+        self._finetune_epochs = general.get("finetune_epochs", 75)
         self._finetune_iters_per_epoch = general.get(
             "finetune_iters_per_epoch",
             10,
         )
-        self._finetune_lr = general.get("finetune_lr", 1e-5)
+        self._finetune_lr = general.get("finetune_lr", 1e-6)
         self._finetune_train_size = general.get("finetune_train_size", 10_000)
         self._finetune_context_frac = general.get(
             "finetune_context_frac",
@@ -294,12 +294,18 @@ class SDMMethod(Method):
             self.args.seed
         )
 
+        # `self._config.factory` is `@lru_cache`d, so `self.model` is shared
+        # across every seed/dataset fit() call for this (task, device) — a
+        # zero-shot run must not silently inherit a previous call's
+        # fine-tuned weights, so always reset to the pristine snapshot.
+        pristine_state = getattr(self.model, _PRISTINE_STATE_ATTR, None)
+        if pristine_state is None:
+            pristine_state = copy.deepcopy(self.model.state_dict())
+            setattr(self.model, _PRISTINE_STATE_ATTR, pristine_state)
+        self.model.load_state_dict(pristine_state)
+
+        tic = time.perf_counter()
         if self._finetune:
-            pristine_state = getattr(self.model, _PRISTINE_STATE_ATTR, None)
-            if pristine_state is None:
-                pristine_state = copy.deepcopy(self.model.state_dict())
-                setattr(self.model, _PRISTINE_STATE_ATTR, pristine_state)
-            self.model.load_state_dict(pristine_state)
             finetune_epochs = self._finetune_epochs
             if self._model_key == "kumo-small" and self.is_binclass:
                 # Empirically found to need fewer epochs than the shared
@@ -320,7 +326,6 @@ class SDMMethod(Method):
                 generator=generator,
             )
 
-        tic = time.perf_counter()
         with torch.amp.autocast(
             self._device.type,
             self._config.autocast_dtype,

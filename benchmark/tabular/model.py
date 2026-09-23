@@ -82,9 +82,9 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
         self._set_default_param_value("finetune", False)
-        self._set_default_param_value("finetune_epochs", 150)
+        self._set_default_param_value("finetune_epochs", 75)
         self._set_default_param_value("finetune_iters_per_epoch", 10)
-        self._set_default_param_value("finetune_lr", 1e-5)
+        self._set_default_param_value("finetune_lr", 1e-6)
         self._set_default_param_value("finetune_train_size", 10_000)
         self._set_default_param_value("finetune_context_frac", 0.8)
         self._set_default_param_value("finetune_val_frac", 0.2)
@@ -279,7 +279,7 @@ class SDMTabICLv2FinetunedModel(SDMTabICLv2Model):
 
     def _set_default_params(self) -> None:
         super()._set_default_params()
-        self._set_default_param_value("finetune", True)
+        self.params["finetune"] = True
 
 
 class SDMKumoTabularSmallModel(SDMKumoTabularModel):
@@ -300,7 +300,7 @@ class SDMKumoTabularSmallFinetunedModel(SDMKumoTabularSmallModel):
 
     def _set_default_params(self) -> None:
         super()._set_default_params()
-        self._set_default_param_value("finetune", True)
+        self.params["finetune"] = True
 
 
 class SDMTabFMModel(SDMModel):

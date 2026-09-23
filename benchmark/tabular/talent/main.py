@@ -44,9 +44,9 @@ parser.add_argument(
     action="store_true",
     help="Full fine-tune the model on each dataset's training split.",
 )
-parser.add_argument("--finetune-epochs", type=int, default=150)
+parser.add_argument("--finetune-epochs", type=int, default=75)
 parser.add_argument("--finetune-iters-per-epoch", type=int, default=10)
-parser.add_argument("--finetune-lr", type=float, default=1e-5)
+parser.add_argument("--finetune-lr", type=float, default=1e-6)
 parser.add_argument("--finetune-train-size", type=int, default=10_000)
 parser.add_argument("--finetune-context-frac", type=float, default=0.8)
 parser.add_argument("--finetune-val-frac", type=float, default=0.2)

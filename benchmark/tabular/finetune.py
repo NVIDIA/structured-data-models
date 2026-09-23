@@ -61,12 +61,12 @@ def full_finetune(
     y_pool: sdm.TableTensor,
     *,
     task: Literal["classification", "regression"],
-    max_epochs: int = 150,
+    max_epochs: int = 75,
     iters_per_epoch: int = 10,
     train_size: int = 10_000,
     context_frac: float = 0.8,
     val_frac: float = 0.2,
-    lr: float = 1e-5,
+    lr: float = 1e-6,
     num_estimators: int,
     max_val_context_size: int | None = None,
     generator: torch.Generator | None,
@@ -107,6 +107,24 @@ def full_finetune(
     n_train = x_train.size(0)
     epoch_size = min(train_size, n_train)
     n_context = int(context_frac * epoch_size)
+
+    if n_val < 1:
+        raise ValueError(
+            f"val_frac={val_frac} leaves no validation rows out of "
+            f"{n} pool rows; pass a larger val_frac or pool."
+        )
+    if n_train < 2:
+        raise ValueError(
+            f"Only {n_train} training rows remain after the validation "
+            "split; need at least 2 to form a non-empty context and query."
+        )
+    if n_context < 1 or epoch_size - n_context < 1:
+        raise ValueError(
+            f"context_frac={context_frac} splits {epoch_size} sampled rows "
+            f"into an empty context or query ({n_context} / "
+            f"{epoch_size - n_context}); pick a context_frac strictly "
+            "between 0 and 1 relative to the sample size."
+        )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     quantile_levels = torch.linspace(0.001, 0.999, 999, device=device)
