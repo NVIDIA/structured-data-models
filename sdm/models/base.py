@@ -31,6 +31,15 @@ from sdm.processing.execution import (
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
+_CACHE_METADATA_KEYS = {
+    "x_schema",
+    "x_schemas",
+    "y_schema",
+    "related_tables_schema",
+    "classes",
+    "output_columns",
+}
+
 
 class ICLModel(torch.nn.Module, abc.ABC):
     r"""Base model for in-context foundation models on structured data.
@@ -855,6 +864,16 @@ def _output_columns(
     return _remap_columns(columns=columns, before=columns[0], after=names)
 
 
+def _can_batch_cache(cache: Cache) -> bool:
+    return all(
+        isinstance(value, Tensor | KVCacheEntry)
+        for estimator_cache in cache.values()
+        if isinstance(estimator_cache, Cache)
+        for key, value in estimator_cache.items()
+        if key not in _CACHE_METADATA_KEYS
+    )
+
+
 def _prediction_caches(cache: Cache, estimator_batch_size: int) -> list[Cache]:
     num_members = cast(RecipeExecution, cache["recipe_execution"]).num_members
     fitted_estimator_batch_size = cast(int, cache["estimator_batch_size"])
@@ -867,14 +886,6 @@ def _prediction_caches(cache: Cache, estimator_batch_size: int) -> list[Cache]:
     ):
         return caches
 
-    metadata_keys = {
-        "x_schema",
-        "x_schemas",
-        "y_schema",
-        "related_tables_schema",
-        "classes",
-        "output_columns",
-    }
     members: list[Cache] = []
     for fitted in caches:
         schemas = cast(tuple[TableSchema, ...], fitted["x_schemas"])
@@ -890,7 +901,7 @@ def _prediction_caches(cache: Cache, estimator_batch_size: int) -> list[Cache]:
             )
             if len(schemas) > 1:
                 for key, value in fitted.items():
-                    if key not in metadata_keys:
+                    if key not in _CACHE_METADATA_KEYS:
                         if isinstance(value, Tensor):
                             member[key] = value[index]
                         elif isinstance(value, KVCacheEntry):
@@ -940,7 +951,7 @@ def _prediction_caches(cache: Cache, estimator_batch_size: int) -> list[Cache]:
             )
         )
         for key, value in first.items():
-            if key not in metadata_keys:
+            if key not in _CACHE_METADATA_KEYS:
                 values = [member[key] for member in group]
                 if isinstance(value, Tensor):
                     batched[key] = torch.stack(cast(list[Tensor], values))
