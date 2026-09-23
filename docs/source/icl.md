@@ -73,8 +73,7 @@ model.clear()
 The cached interface has the same prediction contract as the one-shot call.
 Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls when tasks change frequently, and use the {py:meth}`~sdm.models.ICLModel.fit`+{py:meth}`~sdm.models.ICLModel.predict` flow for large batch predictions over a single fixed task.
 
-Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.predict` does not support gradient-based fine-tuning and raises if the model is in train mode: the context is encoded once in {py:meth}`~sdm.models.ICLModel.fit` under `torch.no_grad()` and cached, so gradients through {py:meth}`~sdm.models.ICLModel.predict` would never cover parameters used only to encode the context, and reusing the same cache across further optimizer steps would compute gradients against stale, pre-update weights.
-Call `model.eval()` before {py:meth}`~sdm.models.ICLModel.fit`/{py:meth}`~sdm.models.ICLModel.predict`, or use {py:meth}`~sdm.models.ICLModel.forward` for gradient-based fine-tuning.
+Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.predict` does not support gradient-based fine-tuning and raises if the model is in train mode.
 
 ## Model Concepts
 
