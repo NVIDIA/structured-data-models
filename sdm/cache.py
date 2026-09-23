@@ -187,7 +187,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         self._kv_cache_dtype = kv_cache_dtype
         self._items: dict[Hashable, object] = {}
         for key, value in dict(*args, **kwargs).items():
-            self[key] = value  # Quantizes key/value entries, if requested.
+            self[key] = value
 
     @property
     def is_recording(self) -> bool:
@@ -290,5 +290,5 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         return out
 
     def new_empty(self) -> Self:
-        r"""Return an empty recording cache with the same configuration."""
+        r"""Return an empty recording cache with the same KV cache dtype."""
         return self.__class__(kv_cache_dtype=self._kv_cache_dtype)
