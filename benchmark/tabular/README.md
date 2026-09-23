@@ -60,7 +60,7 @@ python -m benchmark.tabular.tabarena.main \
 
 ### Fine-tuning
 
-`tabiclv2-ft`, `kumo-small`, and `kumo-small-ft` full fine-tune every parameter of the model on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`). `--model kumo-small-ft`/`--model tabiclv2-ft` alone is enough to get benchmark-quality fine-tuning; tune it further with `--finetune_epochs`, `--finetune_iters_per_epoch`, `--finetune_lr`, `--finetune_train_size`, `--finetune_context_frac`, and `--finetune_val_frac`:
+`--model tabiclv2-ft` and `--model kumo-small-ft` full fine-tune every parameter of the model on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`), as opposed to the zero-shot `tabiclv2`/`kumo-small` baselines above. There is no fine-tuned variant of `kumo-tabular` (large). `--model tabiclv2-ft`/`--model kumo-small-ft` alone is enough to get benchmark-quality fine-tuning; tune it further with `--finetune_epochs`, `--finetune_iters_per_epoch`, `--finetune_lr`, `--finetune_train_size`, `--finetune_context_frac`, and `--finetune_val_frac`:
 
 ```bash
 python -m benchmark.tabular.tabarena.main \

@@ -54,7 +54,7 @@ python -m benchmark.tabular.talent.main \
 
 ## Fine-tuning
 
-Add `--finetune` to full fine-tune every parameter of the model on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`). `--finetune` alone is enough to get benchmark-quality fine-tuning; tune it further with `--finetune-epochs`, `--finetune-iters-per-epoch`, `--finetune-lr`, `--finetune-train-size`, `--finetune-context-frac`, and `--finetune-val-frac`:
+Add `--finetune` to full fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`) — unlike TabArena/BeyondArena's dedicated `-ft` model choices, `--finetune` here applies to whichever model you picked, including `kumo-tabular` (large) and `tabfm`. `--finetune` alone is enough to get benchmark-quality fine-tuning; tune it further with `--finetune-epochs`, `--finetune-iters-per-epoch`, `--finetune-lr`, `--finetune-train-size`, `--finetune-context-frac`, and `--finetune-val-frac`:
 
 ```bash
 python -m benchmark.tabular.talent.main \
