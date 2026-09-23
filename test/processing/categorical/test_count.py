@@ -155,4 +155,5 @@ def test_add_category_counts_selects_by_fitted_vocabulary_size(
 
     restored = AddCategoryCounts(min_cardinality=min_cardinality)
     restored.load_state_dict(processor.state_dict())
+    restored.to(device=device)
     assert restored.transform(query).equal(output)
