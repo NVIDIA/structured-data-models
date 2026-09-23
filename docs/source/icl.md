@@ -34,7 +34,6 @@ They are examples supplied at inference time, and the model predicts query rows 
 
 ```python
 from sklearn.datasets import load_breast_cancer
-import torch
 
 import sdm
 
@@ -70,24 +69,6 @@ model.clear()
 
 The cached interface has the same prediction contract as the one-shot call.
 Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls when tasks change frequently, and use the {py:meth}`~sdm.models.ICLModel.fit`+{py:meth}`~sdm.models.ICLModel.predict` flow for large batch predictions over a single fixed task.
-
-For large reusable contexts, {py:meth}`~sdm.models.ICLModel.fit` can store key/value projections as INT8 tensors:
-
-```python
-model.fit(
-    x=table[:300].drop_columns("target"),
-    y=table[:300, "target"],
-    kv_cache_dtype=torch.int8,
-)
-out = model.predict(table[300:].drop_columns("target"))
-```
-
-INT8 storage is opt-in because quantization is approximate; the default `kv_cache_dtype=None` preserves the projected dtype.
-Keys and values are quantized symmetrically with an independent FP32 scale for every token and attention head, and are restored immediately before attention.
-Each token and head stores an FP32 scale alongside the one-byte payloads, which costs `4 / channels_per_head` bytes per element, so realized savings depend on the channels per head and on the other state a model caches.
-Against a 16-bit cache the break-even point is four channels per head; narrower heads make the cache larger.
-Because replay dequantizes before ordinary scaled dot-product attention, reduced cache size does not by itself reduce prediction latency.
-Use the same autocast policy for fitting and prediction so replayed projections and query projections share a dtype.
 
 ## Model Concepts
 

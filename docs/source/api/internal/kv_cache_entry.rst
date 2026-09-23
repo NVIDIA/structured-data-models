@@ -1,10 +1,7 @@
 :orphan:
 
-Key/value cache entries
-=======================
+KVCacheEntry
+============
 
 .. autoclass:: sdm.cache.KVCacheEntry
-    :members:
-
-.. autoclass:: sdm.cache.Int8KVCacheEntry
     :members:
