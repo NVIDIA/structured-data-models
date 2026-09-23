@@ -44,8 +44,8 @@ def preserve_autograd_state(fn: Callable) -> Callable:
     on a tensor.
 
     ``__torch_dispatch__`` redispatch does not automatically retain the
-    caller's inference-mode and grad-enabled state for nested per-block ops,
-    so a real (non-view) copy performed here would otherwise silently lose
+    caller's inference-mode and grad-enabled state for non-view ops like
+    copy performed here would otherwise silently lose
     ``requires_grad``/``grad_fn`` even though gradients are enabled in the
     caller's scope.
     """
