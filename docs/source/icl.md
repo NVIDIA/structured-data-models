@@ -68,6 +68,7 @@ model.clear()
 ```
 
 The cached interface has the same prediction contract as the one-shot call.
+With `kv_cache=False`, {py:meth}`~sdm.models.ICLModel.fit` caches only the pre-processed context, and every {py:meth}`~sdm.models.ICLModel.predict` call runs it through the model together with the query batch.
 Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls when tasks change frequently, and use the {py:meth}`~sdm.models.ICLModel.fit`+{py:meth}`~sdm.models.ICLModel.predict` flow for large batch predictions over a single fixed task.
 
 ## Model Concepts

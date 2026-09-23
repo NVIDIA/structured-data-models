@@ -409,6 +409,33 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
     )
 
 
+def test_fit_without_kv_cache_runs_context_with_queries() -> None:
+    model = _RecordingModel()
+    model.fit(
+        _table([0.0, 2.0], [1, 2], value_column="feature"),
+        TableTensor.from_tensor(torch.tensor([[0.0], [1.0]])),
+        _related_tables(query=False),
+        recipe=_recipe(),
+        num_estimators=2,
+        kv_cache=False,
+    )
+    assert model.calls == []
+
+    model.predict(
+        _table([3.0], [3], value_column="feature"),
+        _related_tables(query=True),
+    )
+
+    assert len(model.calls) == 2
+    for call in model.calls:
+        assert call.x_context is not None
+        assert call.related_context_tables is not None
+        torch.testing.assert_close(
+            call.x_context.numerical,
+            torch.tensor([[-1.0], [1.0]]),
+        )
+
+
 def test_task_dispatch() -> None:
     model = _RecordingModel()
     recipe = sp.Recipe(

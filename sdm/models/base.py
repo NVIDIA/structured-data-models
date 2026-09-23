@@ -239,6 +239,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_estimators: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
+        kv_cache: bool = True,
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -261,6 +262,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            kv_cache: Whether to run the model over the in-context examples
+                and cache their key/value projections. If ``False``, only the
+                pre-processed in-context examples are cached, and
+                :meth:`predict` runs them through the model together with the
+                query examples.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
@@ -309,16 +315,23 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ),
             )
 
-            with inference_mode("no_grad"):
-                self._forward(
+            if kv_cache:
+                with inference_mode("no_grad"):
+                    self._forward(
+                        x_context=context.x,
+                        y_context=context.y,
+                        x_query=None,
+                        related_context_tables=context.related_tables,
+                        related_query_tables=None,
+                        cache=estimator_cache,
+                        generator=generator,
+                        **kwargs,
+                    )
+            else:
+                estimator_cache.update(
                     x_context=context.x,
                     y_context=context.y,
-                    x_query=None,
                     related_context_tables=context.related_tables,
-                    related_query_tables=None,
-                    cache=estimator_cache,
-                    generator=generator,
-                    **kwargs,
                 )
 
             if x.is_cuda and len(contexts) > 1:
@@ -442,14 +455,21 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
+                # Without key/value caching, the cache holds the context.
+                x_context = cast(TableTensor | None, cache.get("x_context"))
+                y_context = cast(TableTensor | None, cache.get("y_context"))
+                related_context_tables = cast(
+                    RelatedTables[TableTensor] | None,
+                    cache.get("related_context_tables"),
+                )
                 with inference_mode("grad" if requires_grad else "inference"):
                     out = self._forward(
-                        x_context=None,
-                        y_context=None,
+                        x_context=x_context,
+                        y_context=y_context,
                         x_query=query.x,
-                        related_context_tables=None,
+                        related_context_tables=related_context_tables,
                         related_query_tables=query.related_tables,
-                        cache=cache,
+                        cache=cache if x_context is None else None,
                         generator=None,
                         **cast(dict[str, Any], self._cache["kwargs"]),
                     )

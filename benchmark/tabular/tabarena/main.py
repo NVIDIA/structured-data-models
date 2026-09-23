@@ -45,6 +45,12 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+parser.add_argument(
+    "--no_kv_cache",
+    action="store_true",
+    help="Run the context through the model at prediction instead of "
+    "caching its key/value projections at fit.",
+)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
@@ -59,6 +65,7 @@ result_dir.mkdir(parents=True, exist_ok=True)
 config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
+    "kv_cache": not args.no_kv_cache,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size

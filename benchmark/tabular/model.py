@@ -54,6 +54,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
+        self._set_default_param_value("kv_cache", True)
 
     def _fit(
         self,
@@ -137,6 +138,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 recipe=recipe,
                 num_estimators=num_estimators,
                 generator=generator,
+                kv_cache=params["kv_cache"],
             )
 
     def _predict_proba(
