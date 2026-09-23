@@ -220,7 +220,7 @@ def test_checkpoint_loading(
         )
 
     def download_checkpoint(**kwargs: object) -> str:
-        assert kwargs["repo_id"] == "nvidia/nv-tesseract-forecasting"
+        assert kwargs["repo_id"] == "nvidia/Kumo-Forecast"
         assert kwargs["revision"] == "abff20a58834638b28227ff4ab934f26206e4b09"
         assert kwargs["filename"] == (
             "run8_best_model_cr.pt"

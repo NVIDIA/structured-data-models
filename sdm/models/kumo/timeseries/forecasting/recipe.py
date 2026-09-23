@@ -6,7 +6,7 @@ from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 
 # Scalar float32 statistics from standardizer.pkl at the checkpoint revision
-# abff20a58834638b28227ff4ab934f26206e4b09 in nvidia/nv-tesseract-forecasting.
+# abff20a58834638b28227ff4ab934f26206e4b09 in nvidia/Kumo-Forecast.
 # Keeping the values here avoids executing a pickle or requiring joblib.
 _MEAN = -5.671202659606934
 _SCALE = 8.693312644958496

@@ -42,7 +42,7 @@ MODEL_KWARGS: dict[str, Any] = {
 
 
 class KumoForecasting(ICLModel):
-    """Kumo time-series forecasting with the NV-Tesseract checkpoints.
+    """Kumo time-series forecasting with the Kumo-Forecast checkpoints.
 
     Rows are chronological, regularly spaced time steps. ``y_context`` holds
     one or more target histories; numerical ``x_context`` columns are optional
@@ -64,7 +64,7 @@ class KumoForecasting(ICLModel):
             is not supplied.
         use_cross_channel: Whether to mix variates after the T5 encoder.
             Selects the cross-channel or base published checkpoint.
-        checkpoint: Optional local NV-Tesseract state-dict file. Architecture
+        checkpoint: Optional local Kumo-Forecast state-dict file. Architecture
             must match the selected model. Loaded with ``weights_only=True``.
         device: The device for model parameters.
     """
@@ -109,7 +109,7 @@ class KumoForecasting(ICLModel):
     ) -> None:
         if checkpoint is None:
             checkpoint = download_checkpoint(
-                repo_id="nvidia/nv-tesseract-forecasting",
+                repo_id="nvidia/Kumo-Forecast",
                 filename="run8_best_model_cr.pt"
                 if use_cross_channel
                 else "moment_head_512_6hr.pt",

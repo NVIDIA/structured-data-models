@@ -19,7 +19,7 @@ _LAYER_KEYS = {
 
 
 def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:
-    """Map an NV-Tesseract forecasting state dict to SDM parameter names.
+    """Map a Kumo-Forecast state dict to SDM parameter names.
 
     Only the unused T5 vocabulary embedding is discarded. Unknown parameters
     remain in the result so strict loading reports incompatible checkpoints.
