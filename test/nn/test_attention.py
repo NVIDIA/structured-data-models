@@ -236,21 +236,44 @@ def test_sdpa_scale(device: torch.device) -> None:
 @pytest.mark.parametrize("mask_kind", [None, "mask", "lengths"])
 @pytest.mark.parametrize("bias_heads", [1, 2])
 @pytest.mark.parametrize("bias_query_len", [1, 4])
+@pytest.mark.parametrize(
+    "dtype", [torch.float32, torch.float16, torch.bfloat16]
+)
 def test_sdpa_additive_bias(
     device: torch.device,
     num_key_value_heads: int,
     mask_kind: str | None,
     bias_heads: int,
     bias_query_len: int,
+    dtype: torch.dtype,
 ) -> None:
+    if (
+        device.type == "cuda"
+        and dtype == torch.bfloat16
+        and not torch.cuda.is_bf16_supported()
+    ):
+        pytest.skip("CUDA bfloat16 not supported")
     module = SDPA(
         num_query_heads=2, num_key_value_heads=num_key_value_heads, scale=1.0
     )
-    query = torch.randn(2, 4, 2, 8, device=device)
-    key = torch.randn(5, num_key_value_heads, 8, device=device)
-    value = torch.randn_like(key)
+    # Deterministic, non-constant fixtures without changing global RNG state.
+    query = (
+        torch.arange(128, device=device, dtype=dtype).view(2, 4, 2, 8).sin()
+    )
+    key = (
+        torch.arange(40 * num_key_value_heads, device=device, dtype=dtype)
+        .view(5, num_key_value_heads, 8)
+        .cos()
+    )
+    value = key.sin()
     # The bias contributes a batch dimension, independent of query/KV batches.
-    bias = torch.randn(3, 1, bias_heads, bias_query_len, 5, device=device)
+    bias = (
+        torch.arange(
+            15 * bias_heads * bias_query_len, device=device, dtype=dtype
+        )
+        .view(3, 1, bias_heads, bias_query_len, 5)
+        .sin()
+    )
     bias.requires_grad_()
     lengths = torch.tensor([0, 3], dtype=torch.int32, device=device)
     mask = torch.arange(5, device=device) < lengths[:, None, None]
@@ -280,7 +303,7 @@ def test_sdpa_additive_bias(
         scale=1.0,
     ).transpose(-3, -2)
     torch.testing.assert_close(out, expected)
-    out.square().sum().backward()
+    out.float().square().sum().backward()
     assert bias.grad is not None
     assert bias.grad.isfinite().all()
     assert bias.grad.abs().sum() > 0
