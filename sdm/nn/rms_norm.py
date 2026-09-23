@@ -8,21 +8,7 @@ from sdm._kernels import rmsnorm_cast
 
 
 class RMSNorm(torch.nn.RMSNorm):
-    """Root mean square normalization with fused CUDA autocast inference.
-
-    Inherits the parameters and checkpoint format of :class:`torch.nn.RMSNorm`.
-    During CUDA autocast inference, one-dimensional normalization returns the
-    configured autocast dtype. Other calls retain PyTorch's behavior.
-
-    Args:
-        normalized_shape: Input dimensions to normalize, starting at the last
-            dimension.
-        eps: Constant added to the mean square before normalization. If
-            ``None``, uses PyTorch's default for the computation dtype.
-        elementwise_affine: Whether to learn a scale for each normalized value.
-        device: The parameter device.
-        dtype: The parameter dtype.
-    """
+    """A :class:`torch.nn.RMSNorm` that dispatches to an efficient kernel."""
 
     def forward(self, x: Tensor) -> Tensor:  # noqa: D102
         if (
