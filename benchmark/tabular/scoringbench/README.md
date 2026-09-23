@@ -9,7 +9,7 @@ ScoringBench owns the evaluation protocol, including five-fold cross-validation 
 Run the commands below from the repository root:
 
 ```bash
-pip install structured-data-models
+pip install .
 
 git clone https://github.com/jonaslandsgesell/ScoringBench.git
 git -C ScoringBench checkout cc0f4bbcafb1df80797324c00956950bf1ac1d66

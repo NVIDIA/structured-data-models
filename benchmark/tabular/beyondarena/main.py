@@ -4,17 +4,15 @@
 r"""Run an SDM tabular model on BeyondArena."""
 
 import argparse
+import gc
 from pathlib import Path
 
+import torch
 from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
 from tabarena.contexts import BeyondArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import (
-    MODEL_CONFIGS,
-    SDMExperimentRunner,
-    SDMModelWrapper,
-)
+from benchmark.tabular.model import MODEL_CONFIGS
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -74,17 +72,18 @@ experiments = BeyondArenaExperimentBundle(
     models=[(generator, 0)],
     outer_experiments=True,
 ).build_experiments()
-for experiment in experiments:
-    experiment.method_cls = SDMModelWrapper
-    experiment.experiment_cls = SDMExperimentRunner
-
 context = BeyondArenaContext()
-context.build_and_run_jobs(
-    experiments,
-    expname=result_dir,
+jobs = context.build_jobs(
+    experiments=experiments,
     subset=args.subset or ["core"],
-    register=False,
-    build_kwargs=(
-        {"dataset_names": [args.dataset]} if args.dataset is not None else None
-    ),
+    dataset_names=[args.dataset] if args.dataset is not None else None,
 )
+for job in jobs:
+    try:
+        context.run_jobs(jobs=[job], expname=result_dir, register=False)
+    finally:
+        gc.collect()
+        if torch.cuda.is_initialized():
+            torch.cuda.synchronize()
+            torch._C._host_emptyCache()
+            torch.cuda.empty_cache()
