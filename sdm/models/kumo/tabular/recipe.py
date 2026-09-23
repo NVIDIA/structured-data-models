@@ -1,12 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import torch
+
 import sdm.processing as sp
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
     def numerical_processor() -> sp.Sequential:
         return sp.Sequential(
+            # In single precision, a few huge outliers collapse the
+            # standardized values of all other rows onto one value.
+            sp.Cast(torch.float64),
             sp.DropConstantColumns(),
             sp.Standardize(eps=1e-6),
             sp.Clip(-100.0, 100.0),
@@ -38,6 +43,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
             sp.ShuffleColumns(method="latin"),
             sp.SelectColumns(500, method="first"),
+            sp.Cast(torch.float32),
         ],
         target=[
             sp.StypeDispatch(
