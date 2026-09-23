@@ -7,7 +7,7 @@ import abc
 import copy
 import math
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 import numpy as np
 import pandas as pd
@@ -20,7 +20,6 @@ from autogluon.tabular.models.abstract.abstract_torch_model import (
 from tabarena.models.warmup import warmup_torch
 
 import sdm
-import sdm.models.kumo.tabular.model as kumo_tabular
 import sdm.processing as sp
 
 Task = Literal["classification", "regression"]
@@ -39,12 +38,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     minimum_num_gpus = 1
     default_resources_physical_cores_only = True
     gpu_strongly_recommended = True
-    # Bagged fits (the arenas' official protocol) fit one child at a time in
-    # this process, as the hosted in-context models do, so the children share
-    # one network through the shared-weights registry.
-    _default_ag_args_ensemble_extra: ClassVar[dict[str, Any]] = {
-        "fold_fitting_strategy": "sequential_local",
-    }
 
     default_num_estimators: ClassVar[int]
     autocast_dtype: ClassVar[torch.dtype]
@@ -195,36 +188,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     def _more_tags(self) -> dict[str, bool]:
         return {"can_refit_full": True}
 
-    # AutoGluon pickles a model whose network is shared without the weights,
-    # but its object walker stops at any torch module, and the served SDM
-    # model is one. So the pickle carries a copy of the served model whose
-    # networks are placeholders, and the load takes them back from the
-    # shared-weights registry.
-    def _shared_network(self, task: str) -> torch.nn.Module:
-        raise NotImplementedError
-
-    def __getstate__(self) -> dict[str, Any]:
-        served = self.__dict__.get("model")
-        if served is None or self._shared_state is None:
-            return super().__getstate__()
-        state = self.__dict__.copy()
-        clone = copy.copy(served)
-        clone._modules = dict(served._modules)
-        clone._modules["models"] = torch.nn.ModuleDict(
-            {task: torch.nn.Identity() for task in served.models}
-        )
-        state["model"] = clone
-        return state
-
-    def __setstate__(self, state: dict[str, Any]) -> None:
-        super().__setstate__(state)
-        served = self.__dict__.get("model")
-        if served is None or self._shared_state is None:
-            return
-        for task, module in list(served.models.items()):
-            if isinstance(module, torch.nn.Identity):
-                served.models[task] = self._shared_network(task)
-
 
 class SDMTabICLv2Model(SDMModel):
     ag_key = "SDM-TABICLV2"
@@ -240,17 +203,23 @@ class SDMTabICLv2Model(SDMModel):
         return sdm.models.TabICLv2(task=task, device=device)
 
 
+def _load_kumo_network(*, task: str, device: torch.device) -> torch.nn.Module:
+    return sdm.models.KumoTabular(task=task, device=device).models[task]
+
+
 class SDMKumoTabularModel(SDMModel):
     ag_key = "SDM-KUMO-TABULAR"
     ag_name = "SDMKumoTabular"
     default_num_estimators = 8
     autocast_dtype = torch.float16
-    size: ClassVar[Literal["small", "large"]] = "large"
-    # The network is built once per process and shared by every fit, as the
-    # hosted TabArena wrappers do; the checkpoint read leaves the timed fit.
+    # Bagged children are fit one at a time in this process, so they share the
+    # pretrained network of their task through AutoGluon's registry.
+    _default_ag_args_ensemble_extra: ClassVar[dict[str, Any]] = {
+        "fold_fitting_strategy": "sequential_local",
+    }
     shared_weights: ClassVar[SharedWeights] = SharedWeights(
-        loader="sdm.models.kumo.tabular.model:load_network",
-        key=("task", "size"),
+        loader="benchmark.tabular.model:_load_kumo_network",
+        key=("task",),
     )
 
     @classmethod
@@ -265,19 +234,43 @@ class SDMKumoTabularModel(SDMModel):
     ) -> None:
         warmup_torch(cuda=None if num_gpus is None else num_gpus > 0)
 
-    @classmethod
+    @staticmethod
     def _create_model(
-        cls,
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
-        return sdm.models.KumoTabular(task=task, size=cls.size, device=device)
-
-    def _shared_network(self, task: str) -> torch.nn.Module:
-        # Looked up on the module at call time: the registry wraps it there.
-        return kumo_tabular.load_network(
-            task=task, size=self.size, device=self._device
+        model = sdm.models.KumoTabular(
+            task=task,
+            pretrained=False,
+            device="meta",
         )
+        model.models[task] = _load_kumo_network(task=task, device=device)
+        return model
+
+    # AutoGluon does not look inside the served model for the shared network,
+    # so the pickle holds a placeholder and the load restores the network on
+    # the fit device.
+    def __getstate__(self) -> dict[str, Any]:
+        if self.model is None or self._shared_state is None:
+            return super().__getstate__()
+        served = cast(sdm.models.KumoTabular, self.model)
+        model = copy.copy(served)
+        model._modules = dict(served._modules)
+        model._modules["models"] = torch.nn.ModuleDict(
+            modules={task: torch.nn.Identity() for task in served.models},
+        )
+        return {**self.__dict__, "model": model}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        super().__setstate__(state)
+        if self.model is None or self._shared_state is None:
+            return
+        served = cast(sdm.models.KumoTabular, self.model)
+        for task in served.models:
+            served.models[task] = _load_kumo_network(
+                task=task,
+                device=self._device,
+            )
 
     def _create_recipe(self) -> sdm.Recipe:
         recipe = super()._create_recipe()
