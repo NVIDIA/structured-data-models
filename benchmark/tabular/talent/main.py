@@ -39,6 +39,17 @@ parser.add_argument("--dataset")
 parser.add_argument(
     "--output-dir", type=Path, default=BENCHMARK_DIR / "talent_out"
 )
+parser.add_argument(
+    "--finetune",
+    action="store_true",
+    help="Full fine-tune the model on each dataset's training split.",
+)
+parser.add_argument("--finetune-epochs", type=int, default=75)
+parser.add_argument("--finetune-iters-per-epoch", type=int, default=10)
+parser.add_argument("--finetune-lr", type=float, default=1e-6)
+parser.add_argument("--finetune-train-size", type=int, default=10_000)
+parser.add_argument("--finetune-context-frac", type=float, default=0.8)
+parser.add_argument("--finetune-val-frac", type=float, default=0.2)
 args = parser.parse_args()
 
 register_sdm_method()
@@ -57,6 +68,7 @@ if not datasets:
 
 model = MODEL_CONFIGS[args.model]
 method = f"[SDM] {model.name}"
+model_label = args.model + ("-ft" if args.finetune else "")
 config = {
     "model": {},
     "training": {"n_bins": 2},
@@ -64,12 +76,19 @@ config = {
         "model": args.model,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "num_estimators": model.num_estimators,
+        "finetune": args.finetune,
+        "finetune_epochs": args.finetune_epochs,
+        "finetune_iters_per_epoch": args.finetune_iters_per_epoch,
+        "finetune_lr": args.finetune_lr,
+        "finetune_train_size": args.finetune_train_size,
+        "finetune_context_frac": args.finetune_context_frac,
+        "finetune_val_frac": args.finetune_val_frac,
     },
 }
 
 failed = False
 for dataset in datasets:
-    path = args.output_dir / args.model / dataset / "result.json"
+    path = args.output_dir / model_label / dataset / "result.json"
     cached = json.loads(path.read_text()) if path.is_file() else {}
     if (
         cached.get("status") in {"success", "unsupported"}

@@ -12,7 +12,11 @@ from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
 from tabarena.contexts import BeyondArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import MODEL_CONFIGS
+from benchmark.tabular.model import (
+    MODEL_CONFIGS,
+    add_finetune_args,
+    finetune_config_overrides,
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -45,6 +49,7 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+add_finetune_args(parser)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
@@ -62,6 +67,7 @@ config = {
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
+config.update(finetune_config_overrides(args))
 
 generator = ConfigGenerator(
     search_space={},

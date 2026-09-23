@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 BENCHMARK_DIR = Path(__file__).parent.parent
-MODEL_NAMES = ("tabiclv2", "kumo-tabular")
+MODEL_NAMES = ("tabiclv2", "kumo-tabular", "kumo-small")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -35,6 +35,33 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--sample-size", "--sample_size", type=int)
     parser.add_argument("--n-repeats-cv", "--n_repeats_cv", type=int)
     parser.add_argument("--batch-size", "--batch_size", type=int)
+    parser.add_argument(
+        "--finetune",
+        action="store_true",
+        help="Full fine-tune the model on each dataset's training split.",
+    )
+    parser.add_argument("--finetune-epochs", "--finetune_epochs", type=int)
+    parser.add_argument(
+        "--finetune-iters-per-epoch",
+        "--finetune_iters_per_epoch",
+        type=int,
+    )
+    parser.add_argument("--finetune-lr", "--finetune_lr", type=float)
+    parser.add_argument(
+        "--finetune-train-size",
+        "--finetune_train_size",
+        type=int,
+    )
+    parser.add_argument(
+        "--finetune-context-frac",
+        "--finetune_context_frac",
+        type=float,
+    )
+    parser.add_argument(
+        "--finetune-val-frac",
+        "--finetune_val_frac",
+        type=float,
+    )
     parser.add_argument(
         "--output-dir",
         "--output_dir",
@@ -108,14 +135,29 @@ def main() -> None:
         else args.n_repeats_cv
     )
     n_folds = 2 if args.lite else config_module.N_FOLDS
+    finetune_kwargs = {
+        key: value
+        for key, value in (
+            ("finetune_epochs", args.finetune_epochs),
+            ("finetune_iters_per_epoch", args.finetune_iters_per_epoch),
+            ("finetune_lr", args.finetune_lr),
+            ("finetune_train_size", args.finetune_train_size),
+            ("finetune_context_frac", args.finetune_context_frac),
+            ("finetune_val_frac", args.finetune_val_frac),
+        )
+        if value is not None
+    }
     factory = partial(
         wrapper,
         seed=seed,
         batch_size=args.batch_size,
+        finetune=args.finetune,
+        **finetune_kwargs,
     )
+    method_name = model_config.method + ("_finetuned" if args.finetune else "")
     runner_module.run_benchmark(
         datasets_config=datasets,
-        model_factories={model_config.method: factory},
+        model_factories={method_name: factory},
         output_dir=args.output_dir,
         n_folds=n_folds,
         n_repeats_cv=n_repeats_cv,

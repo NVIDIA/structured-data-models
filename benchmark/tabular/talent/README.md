@@ -27,6 +27,12 @@ Download and extract the datasets from the [official TALENT dataset page](https:
   python -m benchmark.tabular.talent.main --model kumo-tabular --dataset-path /path/to/talent/data
   ```
 
+- **`KumoTabular` (small):**
+
+  ```bash
+  python -m benchmark.tabular.talent.main --model kumo-small --dataset-path /path/to/talent/data
+  ```
+
 - **`TabFM`:**
 
   ```bash
@@ -45,6 +51,21 @@ python -m benchmark.tabular.talent.main \
   --dataset-path /path/to/talent/data \
   --dataset Bank_Customer_Churn_Dataset
 ```
+
+## Fine-tuning
+
+Add `--finetune` to full fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`) — unlike TabArena/BeyondArena's dedicated `-ft` model choices, `--finetune` here applies to whichever model you picked, including `kumo-tabular` (large) and `tabfm`. `--finetune` alone is enough to get benchmark-quality fine-tuning; tune it further with `--finetune-epochs`, `--finetune-iters-per-epoch`, `--finetune-lr`, `--finetune-train-size`, `--finetune-context-frac`, and `--finetune-val-frac`:
+
+```bash
+python -m benchmark.tabular.talent.main \
+  --model kumo-small \
+  --dataset-path /path/to/talent/data \
+  --finetune \
+  --finetune-epochs 75 \
+  --finetune-lr 1e-6
+```
+
+## Evaluate
 
 Evaluate all available model results with:
 

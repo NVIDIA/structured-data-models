@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import copy
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -29,9 +30,19 @@ from TALENT.model.method_registry import (
 from TALENT.model.methods.base import Method
 
 import sdm
+from benchmark.tabular.finetune import full_finetune
 
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
+
+# `MODEL_CONFIGS[...].factory` is `@lru_cache`d, so `SDMMethod.fit` sees the
+# same model instance across every seed/dataset in a process. Fine-tuning
+# must not leak from one seed/dataset into the next, so each model's
+# pretrained weights are snapshotted onto the model instance itself (an
+# `id(model)`-keyed dict would collide once `lru_cache` evicts and frees an
+# entry, since CPython can reuse the freed address for an unrelated model)
+# the first time it's fine-tuned, and restored before every fine-tuning run.
+_PRISTINE_STATE_ATTR = "_sdm_pristine_state"
 
 
 class UnsupportedDatasetError(RuntimeError):
@@ -60,7 +71,15 @@ def _create_kumo_tabular(
     task: Task,
     device: torch.device,
 ) -> sdm.models.KumoTabular:
-    return sdm.models.KumoTabular(task=task, device=device)
+    return sdm.models.KumoTabular(task=task, size="large", device=device)
+
+
+@lru_cache(maxsize=2)
+def _create_kumo_tabular_small(
+    task: Task,
+    device: torch.device,
+) -> sdm.models.KumoTabular:
+    return sdm.models.KumoTabular(task=task, size="small", device=device)
 
 
 @lru_cache(maxsize=1)
@@ -85,6 +104,13 @@ MODEL_CONFIGS = {
     "kumo-tabular": ModelConfig(
         name="KumoTabular",
         factory=_create_kumo_tabular,
+        num_estimators=8,
+        autocast_dtype=torch.float16,
+        max_classes=10,
+    ),
+    "kumo-small": ModelConfig(
+        name="KumoTabularSmall",
+        factory=_create_kumo_tabular_small,
         num_estimators=8,
         autocast_dtype=torch.float16,
         max_classes=10,
@@ -119,6 +145,7 @@ class SDMMethod(Method):
         assert args.tune is not True
 
         general = args.config.get("general", {}) or {}
+        self._model_key = general["model"]
         self._config = MODEL_CONFIGS[general["model"]]
         self._device = torch.device(general.get("device", args.device))
         self.args.device = self._device
@@ -126,6 +153,19 @@ class SDMMethod(Method):
             "num_estimators",
             self._config.num_estimators,
         )
+        self._finetune = general.get("finetune", False)
+        self._finetune_epochs = general.get("finetune_epochs", 75)
+        self._finetune_iters_per_epoch = general.get(
+            "finetune_iters_per_epoch",
+            10,
+        )
+        self._finetune_lr = general.get("finetune_lr", 1e-6)
+        self._finetune_train_size = general.get("finetune_train_size", 10_000)
+        self._finetune_context_frac = general.get(
+            "finetune_context_frac",
+            0.8,
+        )
+        self._finetune_val_frac = general.get("finetune_val_frac", 0.2)
 
     def data_format(
         self,
@@ -253,7 +293,38 @@ class SDMMethod(Method):
             self.args.seed
         )
 
+        # `self._config.factory` is `@lru_cache`d, so `self.model` is shared
+        # across every seed/dataset fit() call for this (task, device) — a
+        # zero-shot run must not silently inherit a previous call's
+        # fine-tuned weights, so always reset to the pristine snapshot.
+        pristine_state = getattr(self.model, _PRISTINE_STATE_ATTR, None)
+        if pristine_state is None:
+            pristine_state = copy.deepcopy(self.model.state_dict())
+            setattr(self.model, _PRISTINE_STATE_ATTR, pristine_state)
+        self.model.load_state_dict(pristine_state)
+
         tic = time.perf_counter()
+        if self._finetune:
+            finetune_epochs = self._finetune_epochs
+            if self._model_key == "kumo-small" and self.is_binclass:
+                # Empirically found to need fewer epochs than the shared
+                # default to avoid overfitting on binary classification.
+                finetune_epochs = 50
+            full_finetune(
+                self.model,
+                x_train,
+                y_train,
+                task=task,
+                max_epochs=finetune_epochs,
+                iters_per_epoch=self._finetune_iters_per_epoch,
+                train_size=self._finetune_train_size,
+                context_frac=self._finetune_context_frac,
+                val_frac=self._finetune_val_frac,
+                lr=self._finetune_lr,
+                num_estimators=self._num_estimators,
+                generator=generator,
+            )
+
         with torch.amp.autocast(
             self._device.type,
             self._config.autocast_dtype,
@@ -302,7 +373,7 @@ class SDMMethod(Method):
         else:
             columns = [str(value) for value in self.y_info["classes"]]
             prediction = out.to_pandas()[columns].to_numpy()
-            probabilities = torch.as_tensor(prediction)
+            probabilities = torch.as_tensor(prediction.copy())
             loss = self.criterion(
                 probabilities.clamp_min(
                     torch.finfo(probabilities.dtype).tiny

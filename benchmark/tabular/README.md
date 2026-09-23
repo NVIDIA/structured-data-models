@@ -38,6 +38,12 @@ ______________________________________________________________________
   python -m benchmark.tabular.tabarena.main --model kumo-tabular
   ```
 
+- **`KumoTabular` (small):**
+
+  ```bash
+  python -m benchmark.tabular.tabarena.main --model kumo-small
+  ```
+
 - **`TabFM`:**
 
   ```bash
@@ -50,6 +56,17 @@ Pass a dataset name to run only that TabArena dataset:
 python -m benchmark.tabular.tabarena.main \
   --model kumo-tabular \
   --dataset blood-transfusion-service-center
+```
+
+### Fine-tuning
+
+`--model tabiclv2-ft`, `--model kumo-tabular-ft`, `--model kumo-small-ft`, and `--model tabfm-ft` full fine-tune every parameter of the model on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`), as opposed to the zero-shot `tabiclv2`/`kumo-tabular`/`kumo-small`/`tabfm` baselines above. `--model <name>-ft` alone is enough to get benchmark-quality fine-tuning; tune it further with `--finetune_epochs`, `--finetune_iters_per_epoch`, `--finetune_lr`, `--finetune_train_size`, `--finetune_context_frac`, and `--finetune_val_frac`:
+
+```bash
+python -m benchmark.tabular.tabarena.main \
+  --model tabiclv2-ft \
+  --finetune_epochs 75 \
+  --finetune_lr 1e-6
 ```
 
 ### Evaluate
@@ -76,6 +93,12 @@ ______________________________________________________________________
 
   ```bash
   python -m benchmark.tabular.beyondarena.main --model kumo-tabular
+  ```
+
+- **`KumoTabular` (small):**
+
+  ```bash
+  python -m benchmark.tabular.beyondarena.main --model kumo-small
   ```
 
 - **`TabFM`:**
@@ -105,6 +128,14 @@ python -m benchmark.tabular.beyondarena.main \
 ```
 
 Available subset filters include problem types (`classification`, `regression`), size buckets (`tiny`, `small`, `medium`, `large`), split regimes (`iid`, `temporal`, `grouped`), feature groups (`low-dim`, `high-dim`, `text`, `high-cardinality`), and split selections (`core`, `lite`, `all`). Prefix a filter with `!` to negate it.
+
+### Fine-tuning
+
+Same `-ft` model variants and `--finetune_*` flags as TabArena above:
+
+```bash
+python -m benchmark.tabular.beyondarena.main --model kumo-small-ft --subset lite
+```
 
 ### Evaluate
 

@@ -35,8 +35,29 @@ pip install -r ScoringBench/requirements.txt
     --model kumo-tabular
   ```
 
+- **KumoTabular (small):**
+
+  ```bash
+  python -m benchmark.tabular.scoringbench.main \
+    --scoringbench-path /path/to/ScoringBench \
+    --model kumo-small
+  ```
+
 Pass `--dataset cpu_act` to run one dataset, `--dataset-index 0` to select by validated index, or `--lite` to use two folds.
 Results are written under `benchmark/tabular/scoringbench_out/univariate/raw/` and completed folds are reused automatically.
+
+## Fine-tuning
+
+Add `--finetune` to full fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`) — unlike TabArena/BeyondArena's dedicated `-ft` model choices, `--finetune` here applies to whichever model you picked, including `kumo-tabular` (large). `--finetune` alone is enough to get benchmark-quality fine-tuning; tune it further with `--finetune-epochs`, `--finetune-iters-per-epoch`, `--finetune-lr`, `--finetune-train-size`, `--finetune-context-frac`, and `--finetune-val-frac`:
+
+```bash
+python -m benchmark.tabular.scoringbench.main \
+  --scoringbench-path /path/to/ScoringBench \
+  --model kumo-small \
+  --finetune \
+  --finetune-epochs 75 \
+  --finetune-lr 1e-6
+```
 
 ## Evaluate
 
