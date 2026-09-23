@@ -10,9 +10,6 @@ from sdm.processing import Processor
 class Cast(Processor):
     """Cast numerical columns to a floating-point dtype.
 
-    The processors that follow fit and transform in ``dtype``. Cast back
-    before handing the table to a model.
-
     Args:
         dtype: The floating-point dtype of the numerical columns.
     """
