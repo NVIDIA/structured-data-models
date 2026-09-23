@@ -314,7 +314,7 @@ model are initialized.</p></li>
 </span><span data-line="20">      <span class="p">),</span>
 </span><span data-line="21">      <span class="n">categorical</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
 </span><span data-line="22">        <span class="n">AlignCategories</span><span class="p">(</span><span class="n">sort_by</span><span class="o">=</span><span class="s1">'value'</span><span class="p">),</span>
-</span><span data-line="23">        <span class="n">AddCategoryCounts</span><span class="p">(),</span>
+</span><span data-line="23">        <span class="n">AddCategoryCounts</span><span class="p">(</span><span class="n">min_cardinality</span><span class="o">=</span><span class="mi">50</span><span class="p">),</span>
 </span><span data-line="24">        <span class="n">ToNumerical</span><span class="p">(),</span>
 </span><span data-line="25">        <span class="n">Cast</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
 </span><span data-line="26">        <span class="n">DropConstantColumns</span><span class="p">(),</span>
@@ -388,7 +388,7 @@ model are initialized.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=ddd65838"></script>
+      <script src="../../_static/documentation_options.js?v=36508f29"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

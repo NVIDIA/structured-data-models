@@ -53,7 +53,7 @@ Default Recipe
          ),
          categorical=Sequential(
            AlignCategories(sort_by='value'),
-           AddCategoryCounts(),
+           AddCategoryCounts(min_cardinality=50),
            ToNumerical(),
            Cast(torch.float64),
            DropConstantColumns(),
