@@ -264,8 +264,8 @@ They are examples supplied at inference time, and the model predicts query rows 
 </span><span data-line="18"><span class="p">)</span>
 </span></pre></div>
 </div>
-<p>This one-shot <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> call is the most direct form of the interface.
-When the same context is reused for many query batches, call <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a> once and then call <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.predict" title="sdm.models.ICLModel.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> for each query batch.
+<p>This one-shot <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> call is the most direct form of the interface. Calling <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> while the model is in train mode (<code class="docutils literal notranslate"><span class="pre">model.train()</span></code>) enables gradient tracking so the returned predictions can be used in an ordinary training loop (<code class="docutils literal notranslate"><span class="pre">loss.backward()</span></code>) to fine-tune the model’s parameters.</p>
+<p>When the same context is reused for many query batches, call <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a> once and then call <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.predict" title="sdm.models.ICLModel.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> for each query batch.
 This records reusable model state, including key/value projections, and avoids recomputing the context side of the model for every prediction:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
 </span><span data-line="2">    <span class="n">x</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">"target"</span><span class="p">),</span>
@@ -278,6 +278,7 @@ This records reusable model state, including key/value projections, and avoids r
 </div>
 <p>The cached interface has the same prediction contract as the one-shot call.
 Use one-shot <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> calls for one-time calls when tasks change frequently, and use the <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>+<a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.predict" title="sdm.models.ICLModel.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> flow for large batch predictions over a single fixed task.</p>
+<p>Unlike <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a>, <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.predict" title="sdm.models.ICLModel.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> does not support gradient-based fine-tuning and raises if the model is in train mode.</p>
 </section>
 <section id="model-concepts">
 <h2>Model Concepts<a class="headerlink" href="#model-concepts" title="Link to this heading">#</a></h2>
@@ -481,7 +482,7 @@ The full relational sampling and prediction flow is shown in <a class="reference
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=7aceb7f1"></script>
+      <script src="_static/documentation_options.js?v=d01c4ba4"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
