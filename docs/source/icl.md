@@ -32,7 +32,6 @@ Specifically, an in-context learning task has three core inputs, as defined in t
 The context rows are not used to update model weights.
 They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context:
 
-
 ```python
 from sklearn.datasets import load_breast_cancer
 
