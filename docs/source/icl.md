@@ -32,7 +32,6 @@ Specifically, an in-context learning task has three core inputs, as defined in t
 The context rows are not used to update model weights.
 They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context.
 
-Calling {py:meth}`~sdm.models.ICLModel.forward` while the model is in train mode (`model.train()`) enables gradient tracking so the returned predictions can be used in an ordinary training loop (`loss.backward()`) to fine-tune the model's parameters.
 
 ```python
 from sklearn.datasets import load_breast_cancer
@@ -55,7 +54,8 @@ out = model(
 )
 ```
 
-This one-shot {py:meth}`~sdm.models.ICLModel.forward` call is the most direct form of the interface.
+This one-shot {py:meth}`~sdm.models.ICLModel.forward` call is the most direct form of the interface. Calling {py:meth}`~sdm.models.ICLModel.forward` while the model is in train mode (`model.train()`) enables gradient tracking so the returned predictions can be used in an ordinary training loop (`loss.backward()`) to fine-tune the model's parameters.
+
 When the same context is reused for many query batches, call {py:meth}`~sdm.models.ICLModel.fit` once and then call {py:meth}`~sdm.models.ICLModel.predict` for each query batch.
 This records reusable model state, including key/value projections, and avoids recomputing the context side of the model for every prediction:
 
