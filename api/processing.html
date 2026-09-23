@@ -114,6 +114,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.SelectColumns.html">SelectColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Cast.html">Cast</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Clip.html">Clip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
@@ -291,43 +292,46 @@ data-aria-dark="Switch to auto color mode">
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Clip.html#sdm.processing.numerical.Clip" title="sdm.processing.numerical.Clip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Clip</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Cast.html#sdm.processing.numerical.Cast" title="sdm.processing.numerical.Cast"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Cast</span></code></a></p></td>
+<td><p>Cast numerical columns to a floating-point dtype.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Clip.html#sdm.processing.numerical.Clip" title="sdm.processing.numerical.Clip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Clip</span></code></a></p></td>
 <td><p>Clamp numerical values to a fixed interval.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.ClipQuantiles.html#sdm.processing.numerical.ClipQuantiles" title="sdm.processing.numerical.ClipQuantiles"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClipQuantiles</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.ClipQuantiles.html#sdm.processing.numerical.ClipQuantiles" title="sdm.processing.numerical.ClipQuantiles"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClipQuantiles</span></code></a></p></td>
 <td><p>Clamp feature columns to fitted quantile bounds.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.ClipSigma.html#sdm.processing.numerical.ClipSigma" title="sdm.processing.numerical.ClipSigma"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClipSigma</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.ClipSigma.html#sdm.processing.numerical.ClipSigma" title="sdm.processing.numerical.ClipSigma"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClipSigma</span></code></a></p></td>
 <td><p>Two-stage z-score outlier clipping with soft logarithmic bounds.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.ClipSoft.html#sdm.processing.numerical.ClipSoft" title="sdm.processing.numerical.ClipSoft"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClipSoft</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.ClipSoft.html#sdm.processing.numerical.ClipSoft" title="sdm.processing.numerical.ClipSoft"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClipSoft</span></code></a></p></td>
 <td><p>Soft-clip numerical values toward <code class="docutils literal notranslate"><span class="pre">±max_absolute_value</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.ImputeMean.html#sdm.processing.numerical.ImputeMean" title="sdm.processing.numerical.ImputeMean"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImputeMean</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.ImputeMean.html#sdm.processing.numerical.ImputeMean" title="sdm.processing.numerical.ImputeMean"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImputeMean</span></code></a></p></td>
 <td><p>Replace NaN feature values with fitted per-column means.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PowerTransform.html#sdm.processing.numerical.PowerTransform" title="sdm.processing.numerical.PowerTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PowerTransform</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PowerTransform.html#sdm.processing.numerical.PowerTransform" title="sdm.processing.numerical.PowerTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PowerTransform</span></code></a></p></td>
 <td><p>Apply a feature-wise Yeo-Johnson power transform.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.QuantileTransform.html#sdm.processing.numerical.QuantileTransform" title="sdm.processing.numerical.QuantileTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QuantileTransform</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.QuantileTransform.html#sdm.processing.numerical.QuantileTransform" title="sdm.processing.numerical.QuantileTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QuantileTransform</span></code></a></p></td>
 <td><p>Map numerical columns through their empirical quantiles.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Standardize.html#sdm.processing.numerical.Standardize" title="sdm.processing.numerical.Standardize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Standardize</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Standardize.html#sdm.processing.numerical.Standardize" title="sdm.processing.numerical.Standardize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Standardize</span></code></a></p></td>
 <td><p>Center and scale each feature column.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RobustScale.html#sdm.processing.numerical.RobustScale" title="sdm.processing.numerical.RobustScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RobustScale</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RobustScale.html#sdm.processing.numerical.RobustScale" title="sdm.processing.numerical.RobustScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RobustScale</span></code></a></p></td>
 <td><p>Center and scale each feature column with median and quantile range.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.FlipSign.html#sdm.processing.numerical.FlipSign" title="sdm.processing.numerical.FlipSign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlipSign</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.FlipSign.html#sdm.processing.numerical.FlipSign" title="sdm.processing.numerical.FlipSign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlipSign</span></code></a></p></td>
 <td><p>Randomly negate numerical columns.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html#sdm.processing.numerical.DropConstantColumns" title="sdm.processing.numerical.DropConstantColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DropConstantColumns</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html#sdm.processing.numerical.DropConstantColumns" title="sdm.processing.numerical.DropConstantColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DropConstantColumns</span></code></a></p></td>
 <td><p>Remove non-informative numerical columns learned during fit.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html#sdm.processing.numerical.PCA" title="sdm.processing.numerical.PCA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCA</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html#sdm.processing.numerical.PCA" title="sdm.processing.numerical.PCA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCA</span></code></a></p></td>
 <td><p>Project numerical columns onto their principal components.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html#sdm.processing.numerical.RandomProjection" title="sdm.processing.numerical.RandomProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomProjection</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html#sdm.processing.numerical.RandomProjection" title="sdm.processing.numerical.RandomProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomProjection</span></code></a></p></td>
 <td><p>Randomly project numerical columns.</p></td>
 </tr>
 </tbody>
@@ -426,7 +430,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=d01c4ba4"></script>
+      <script src="../_static/documentation_options.js?v=b16b879a"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
