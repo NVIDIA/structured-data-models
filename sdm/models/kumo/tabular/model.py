@@ -12,7 +12,7 @@ from torch.nn import Identity, Linear, ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
-from sdm.models import ICLModel
+from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
@@ -113,6 +113,8 @@ class KumoTabular(ICLModel):
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=task)
+        if Task.classification in self.tasks:
+            self.ecoc = ECOC(max_classes=10)
 
         self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
         for task in self.tasks:
@@ -213,12 +215,6 @@ class KumoTabular(ICLModel):
                 dtype=torch.int64 if classes is not None else x.dtype,
             )
 
-        if classes is not None and len(classes) > 10:
-            raise ValueError(
-                f"{self.__class__.__name__!r} only supports up to 10 classes "
-                f"(got {len(classes)})"
-            )
-
         if cache is None or cache.is_recording:
             assert x_context is not None
             schema: TableSchema = kwargs["_schema"]
@@ -237,19 +233,32 @@ class KumoTabular(ICLModel):
             categorical_mask = cast(Tensor, cache["categorical_mask"])
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
-        task = Task.classification if classes is not None else Task.regression
-        out = self.models[task](x, y, categorical_mask, cache=cache)
-
         if classes is None:
+            out = self.models[Task.regression](
+                x=x,
+                y=y,
+                categorical_mask=categorical_mask,
+                cache=cache,
+            )
             return TableTensor(
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
                 numerical=out,
             )
+
+        out = self.ecoc(
+            model=self.models[Task.classification],
+            x=x,
+            y=y,
+            num_classes=len(classes),
+            cache=cache,
+            generator=generator,
+            categorical_mask=categorical_mask,
+        )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=out[..., : len(classes)],
+            numerical=out,
         )
 
 

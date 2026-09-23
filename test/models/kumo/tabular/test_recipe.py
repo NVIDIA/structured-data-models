@@ -87,6 +87,23 @@ def test_default_recipe_flips_numbers_but_not_codes() -> None:
     assert min(numerical_correlations) < 0 < max(numerical_correlations)
 
 
+def test_default_recipe_keeps_values_distinct_beside_outliers() -> None:
+    numerical = torch.arange(100.0).unsqueeze(-1)
+    numerical[0] = 1e12
+
+    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+        EnsembleTable.from_table(
+            TableTensor.from_tensor(numerical),
+            num_members=8,
+        )
+    )
+
+    members = [output[member_id] for member_id in range(len(output))]
+    assert all(member.numerical.dtype == torch.float32 for member in members)
+    num_unique = [member.numerical[1:].unique().numel() for member in members]
+    assert max(num_unique) == 99
+
+
 @pytest.mark.parametrize("cardinality", [50, 51])
 def test_default_recipe_adds_category_counts(cardinality: int) -> None:
     codes = torch.cat(

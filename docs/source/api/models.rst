@@ -45,6 +45,6 @@ Model API
    :template: model_class
    :nosignatures:
 
-{% for name in api_names("sdm.models") %}
+{% for name in api_names("sdm.models") if name != "ECOC" %}
    ~sdm.models.{{ name }}
 {% endfor %}

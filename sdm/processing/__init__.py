@@ -24,6 +24,7 @@ from sdm.processing.common import (
 )
 from sdm.processing.text import TFIDF, SentenceTransformer
 from sdm.processing.numerical import (
+    Cast,
     Clip,
     ClipQuantiles,
     ClipSigma,
@@ -67,6 +68,7 @@ __all__ = [
     "SelectColumns",
     "TFIDF",
     "SentenceTransformer",
+    "Cast",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
