@@ -272,6 +272,15 @@ class SDMKumoTabularModel(SDMModel):
         return sdm.models.KumoTabular(task=task, size="large", device=device)
 
 
+class SDMKumoTabularFinetunedModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-FT"
+    ag_name = "SDMKumoTabularFT"
+
+    def _set_default_params(self) -> None:
+        super()._set_default_params()
+        self.params["finetune"] = True
+
+
 class SDMTabICLv2FinetunedModel(SDMTabICLv2Model):
     ag_key = "SDM-TABICLV2-FT"
     ag_name = "SDMTabICLv2FT"
@@ -320,6 +329,15 @@ class SDMTabFMModel(SDMModel):
         )
 
 
+class SDMTabFMFinetunedModel(SDMTabFMModel):
+    ag_key = "SDM-TABFM-FT"
+    ag_name = "SDMTabFMFT"
+
+    def _set_default_params(self) -> None:
+        super()._set_default_params()
+        self.params["finetune"] = True
+
+
 @dataclass(frozen=True)
 class ModelConfig:
     name: str
@@ -343,6 +361,10 @@ MODEL_CONFIGS = {
         name="KumoTabular",
         model_cls=SDMKumoTabularModel,
     ),
+    "kumo-tabular-ft": ModelConfig(
+        name="KumoTabularFT",
+        model_cls=SDMKumoTabularFinetunedModel,
+    ),
     "tabiclv2-ft": ModelConfig(
         name="TabICLv2FT",
         model_cls=SDMTabICLv2FinetunedModel,
@@ -358,5 +380,9 @@ MODEL_CONFIGS = {
     "tabfm": ModelConfig(
         name="TabFM",
         model_cls=SDMTabFMModel,
+    ),
+    "tabfm-ft": ModelConfig(
+        name="TabFMFT",
+        model_cls=SDMTabFMFinetunedModel,
     ),
 }
