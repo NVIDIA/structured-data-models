@@ -15,8 +15,6 @@ from autogluon.core.constants import BINARY, MULTICLASS, REGRESSION
 from autogluon.tabular.models.abstract.abstract_torch_model import (
     AbstractTorchModel,
 )
-from tabarena.benchmark.exec_models import AGModelWrapper
-from tabarena.benchmark.experiment import OOFExperimentRunner
 
 import sdm
 import sdm.processing as sp
@@ -181,32 +179,8 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self.model.to(device)
         self._device = torch.device(device)
 
-    def cleanup(self) -> None:
-        self.model.clear()
-        if self._device.type == "cuda":
-            torch.cuda.synchronize(self._device)
-            torch._C._host_emptyCache()
-            torch.cuda.empty_cache()
-
     def _more_tags(self) -> dict[str, bool]:
         return {"can_refit_full": True}
-
-
-class SDMModelWrapper(AGModelWrapper):
-    def cleanup(self) -> None:
-        model = getattr(self, "model", None)
-        cleanup = getattr(model, "cleanup", None)
-        if callable(cleanup):
-            cleanup()
-
-
-class SDMExperimentRunner(OOFExperimentRunner):
-    def run(self) -> dict:
-        try:
-            return self._run()
-        finally:
-            if self.cleanup and getattr(self, "model", None) is not None:
-                self._cleanup()
 
 
 class SDMTabICLv2Model(SDMModel):

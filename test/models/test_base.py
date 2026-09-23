@@ -32,6 +32,7 @@ class _RecordingModel(ICLModel):
     def __init__(self) -> None:
         super().__init__(task=None)
         self.calls: list[_Call] = []
+        self.eval()
 
     def _forward(
         self,
@@ -318,6 +319,22 @@ def test_train_mode_enables_grad() -> None:
     assert not torch.is_inference(out)
 
 
+def test_train_mode_disallowed_for_predict() -> None:
+    model = _RecordingModel()
+    x_context = torch.tensor([[0.0], [2.0]])
+    y_context = torch.tensor([[0.0], [1.0]])
+    x_query = torch.tensor([[3.0]])
+
+    model.eval()
+    model.fit(x_context, y_context)
+    out = model.predict(x_query)
+    assert torch.is_inference(out)
+
+    model.train()
+    with pytest.raises(RuntimeError, match="does not support"):
+        model.predict(x_query)
+
+
 def test_related_table_preprocessing_forward_and_cache() -> None:
     model = _RecordingModel()
     x_context = _table([0.0, 2.0], [1, 2], value_column="feature")
@@ -501,7 +518,7 @@ def test_ensemble_output_preserves_estimator_dimension() -> None:
     assert out.size() == (1, 2, 3)
 
 
-def test_ensemble_output_reduces_with_reduce_estimators() -> None:
+def test_ensemble_output_reduce() -> None:
     x_context = torch.randn(4, 3)
     y_context = torch.randn(4, 1)
     x_query = torch.randn(2, 3)
@@ -511,7 +528,7 @@ def test_ensemble_output_reduces_with_reduce_estimators() -> None:
         x_context,
         y_context,
         x_query,
-        recipe=sp.Recipe(output=sp.ReduceEstimators()),
+        recipe=sp.Recipe(output=sp.AverageEstimators()),
         num_estimators=2,
     )
 

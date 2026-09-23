@@ -76,7 +76,7 @@ def _recipe() -> sp.Recipe:
     return sp.Recipe(
         features=[sp.ToNumerical()],
         target=sp.StypeDispatch(numerical=sp.Standardize()),
-        output=[sp.ReduceEstimators(method="mean")],
+        output=[sp.AverageEstimators()],
     )
 
 
