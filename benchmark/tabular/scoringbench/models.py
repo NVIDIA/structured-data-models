@@ -21,7 +21,6 @@ from scoringbench.univariate.wrappers import (
 
 import sdm
 from benchmark.tabular.finetune import full_finetune
-from benchmark.tabular.kumo import load_kumo_tabular
 
 
 @dataclass(frozen=True)
@@ -38,11 +37,15 @@ def _create_tabiclv2(device: torch.device) -> sdm.models.TabICLv2:
 
 
 def _create_kumo_tabular(device: torch.device) -> sdm.models.KumoTabular:
-    return load_kumo_tabular(task="regression", size="large", device=device)
+    return sdm.models.KumoTabular(
+        task="regression", size="large", device=device
+    )
 
 
 def _create_kumo_tabular_small(device: torch.device) -> sdm.models.KumoTabular:
-    return load_kumo_tabular(task="regression", size="small", device=device)
+    return sdm.models.KumoTabular(
+        task="regression", size="small", device=device
+    )
 
 
 MODEL_CONFIGS = {

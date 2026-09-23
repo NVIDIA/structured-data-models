@@ -31,7 +31,6 @@ from TALENT.model.methods.base import Method
 
 import sdm
 from benchmark.tabular.finetune import full_finetune
-from benchmark.tabular.kumo import load_kumo_tabular
 
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
@@ -72,7 +71,7 @@ def _create_kumo_tabular(
     task: Task,
     device: torch.device,
 ) -> sdm.models.KumoTabular:
-    return load_kumo_tabular(task=task, size="large", device=device)
+    return sdm.models.KumoTabular(task=task, size="large", device=device)
 
 
 @lru_cache(maxsize=2)
@@ -80,7 +79,7 @@ def _create_kumo_tabular_small(
     task: Task,
     device: torch.device,
 ) -> sdm.models.KumoTabular:
-    return load_kumo_tabular(task=task, size="small", device=device)
+    return sdm.models.KumoTabular(task=task, size="small", device=device)
 
 
 @lru_cache(maxsize=1)
