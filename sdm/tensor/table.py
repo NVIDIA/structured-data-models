@@ -39,6 +39,29 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
+def preserve_autograd_state(fn: Callable) -> Callable:
+    r"""Re-apply the caller's autograd/inference-mode state for non-view ops.
+
+    ``__torch_dispatch__`` redispatch does not automatically retain the
+    caller's inference-mode and grad-enabled state for non-view ops, so a
+    real (non-view) copy performed here would otherwise silently lose
+    ``requires_grad``/``grad_fn`` even though gradients are enabled in the
+    caller's scope.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        inference_mode_enabled = torch.is_inference_mode_enabled()
+        grad_enabled = torch.is_grad_enabled()
+        with (
+            torch.inference_mode(inference_mode_enabled),
+            torch.set_grad_enabled(grad_enabled),
+        ):
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
 @dataclass(frozen=True)
 class TableSchema:
     r"""The schema of a :class:`TableTensor`.
@@ -1012,6 +1035,7 @@ def _record_stream(inp: TableTensor, stream: torch.Stream) -> None:
 
 
 @TableTensor.implements(aten.to.dtype_layout)
+@preserve_autograd_state
 def _to_dtype_layout(
     inp: TableTensor,
     *,
@@ -1663,6 +1687,7 @@ def _index(
 
 
 @TableTensor.implements(aten.cat.default)
+@preserve_autograd_state
 def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     if len(tensors) == 0:
         raise ValueError("torch.cat(): expected a non-empty list of Tensors")
@@ -1711,6 +1736,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
 
 
 @TableTensor.implements(aten.stack.default)
+@preserve_autograd_state
 def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     if len(tensors) == 0:
         raise RuntimeError("stack expects a non-empty TensorList")

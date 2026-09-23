@@ -572,6 +572,59 @@ def test_to_dtype_preserves_empty_block_device(
     assert out.id.device == device
 
 
+def test_to_dtype_preserves_grad() -> None:
+    x = torch.randn(2, 1, dtype=torch.float16, requires_grad=True)
+    tensor = TableTensor.from_tensor(x * 2)
+
+    out = tensor.to(torch.float32)
+
+    assert isinstance(out, TableTensor)
+    assert out.numerical.dtype == torch.float32
+    assert out.numerical.requires_grad
+    assert out.numerical.grad_fn is not None
+
+    out.numerical.sum().backward()
+    assert x.grad is not None
+
+
+def test_to_dtype_respects_ambient_no_grad() -> None:
+    x = torch.randn(2, 1, dtype=torch.float16, requires_grad=True)
+    tensor = TableTensor.from_tensor(x * 2)
+
+    with torch.no_grad():
+        out = tensor.to(torch.float32)
+
+    assert isinstance(out, TableTensor)
+    assert not out.numerical.requires_grad
+    assert not torch.is_inference(out.numerical)
+
+
+def test_stack_preserves_grad() -> None:
+    x = torch.randn(2, 1, requires_grad=True)
+    a = TableTensor.from_tensor(x * 2)
+    b = TableTensor.from_tensor(x * 3)
+
+    stacked = torch.stack([a, b], dim=0)
+
+    assert isinstance(stacked, TableTensor)
+    assert stacked.numerical.requires_grad
+    stacked.numerical.sum().backward()
+    assert x.grad is not None
+
+
+def test_cat_preserves_grad() -> None:
+    x = torch.randn(2, 1, requires_grad=True)
+    a = TableTensor.from_tensor(x * 2)
+    b = TableTensor.from_tensor(x * 3)
+
+    concatenated = torch.cat([a, b], dim=0)
+
+    assert isinstance(concatenated, TableTensor)
+    assert concatenated.numerical.requires_grad
+    concatenated.numerical.sum().backward()
+    assert x.grad is not None
+
+
 def test_clone_contiguous() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
