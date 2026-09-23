@@ -222,15 +222,15 @@ class KumoTabular(ICLModel):
             categorical_mask = _categorical_mask(
                 x=x_context,
                 schema=schema,
-                schemas=kwargs.get("_x_schemas", (x_context.schema,))
+                schemas=(x_context.schema,)
                 if cache is None
                 else cast(tuple[TableSchema, ...], cache["x_schemas"]),
             )
+            categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
             if cache is not None:
                 cache["categorical_mask"] = categorical_mask
         else:
             categorical_mask = cast(Tensor, cache["categorical_mask"])
-        categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
         if classes is None:
             out = self.models[Task.regression](

@@ -369,7 +369,6 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
             related_query,
             recipe=_recipe(),
             num_estimators=2,
-            estimator_batch_size=1,
         ),
     )
 
@@ -418,7 +417,6 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         related_context,
         recipe=_recipe(),
         num_estimators=2,
-        estimator_batch_size=1,
     )
     assert model._cache is not None
 
@@ -545,12 +543,12 @@ def test_ensemble_output_reduce() -> None:
     assert out.size() == (2, 3)
 
 
-@pytest.mark.parametrize("batch_size", [1, 2, None])
-def test_estimator_callbacks(batch_size: int | None) -> None:
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_estimator_callbacks(estimator_batch_size: int | None) -> None:
     model = _RecordingModel()
     x = torch.arange(30.0).view(5, 3, 2)
     y = torch.zeros(5, 3, 1)
-    model.fit(x, y, estimator_batch_size=batch_size)
+    model.fit(x, y, estimator_batch_size=estimator_batch_size)
     out = model.predict(
         x,
         callbacks=(MyCallback("affine", 2.0, 3.0, []),),
@@ -560,7 +558,6 @@ def test_estimator_callbacks(batch_size: int | None) -> None:
         x_context=x,
         y_context=y,
         x_query=x,
-        estimator_batch_size=batch_size,
         callbacks=(MyCallback("affine", 2.0, 3.0, []),),
     )
     torch.testing.assert_close(out.numerical, 2.0 * x + 3.0)
@@ -583,11 +580,12 @@ def test_estimator_batching_incompatible_shapes() -> None:
         member_table_ids=(0, 1),
     )
     with pytest.raises(RuntimeError, match="stack expects"):
-        model.fit(x, y)
-    model.fit(x, y, estimator_batch_size=1)
+        model.fit(x, y, estimator_batch_size=None)
+    model.fit(x, y)
     query = torch.randn(2, 2, 2)
     torch.testing.assert_close(
-        model.predict(TableTensor(numerical=query)).numerical, query
+        model.predict(TableTensor(numerical=query)).numerical,
+        query,
     )
 
 
@@ -606,4 +604,9 @@ def test_estimator_batching_incompatible_categories() -> None:
         member_table_ids=(0, 1),
     )
     with pytest.raises(ValueError, match="matching class counts"):
-        model.fit(torch.ones(3, 2), y, num_estimators=2)
+        model.fit(
+            torch.ones(3, 2), y, num_estimators=2, estimator_batch_size=None
+        )
+    model.fit(torch.ones(3, 2), y, num_estimators=2)
+    with pytest.raises(ValueError, match="compatible caches"):
+        model.predict(torch.ones(1, 2), estimator_batch_size=None)

@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 import torch
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import CategoricalTensor, Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.explain import GradientExplainer
 from sdm.models import ICLModel
@@ -14,7 +14,7 @@ from sdm.models import ICLModel
 
 class _LinearModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
-    supported_target_stypes = frozenset({Stype.numerical})
+    supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_multi_target = False
     supports_related_tables = True
 
@@ -52,12 +52,20 @@ class _LinearModel(ICLModel):
     ("fitted", "num_estimators"),
     [(False, 1), (False, 3), (True, 1), (True, 3)],
 )
+@pytest.mark.parametrize("classification", [False, True])
 def test_returns_query_input_gradients(
-    fitted: bool, num_estimators: int
+    fitted: bool, num_estimators: int, classification: bool
 ) -> None:
     model = _LinearModel()
     x_context = torch.zeros(1, 2)
-    y_context = torch.zeros(1, 1)
+    y_context = TableTensor(numerical=torch.zeros(1, 1))
+    if classification:
+        y_context = TableTensor(
+            categorical=CategoricalTensor(
+                code=torch.zeros(1, 1, dtype=torch.long),
+                categories=(torch.arange(2),),
+            ),
+        )
     x_query = torch.ones(1, 2)
     related_tables = RelatedTables(
         tables={
@@ -99,8 +107,6 @@ def test_returns_query_input_gradients(
             num_estimators=num_estimators,
         )
 
-    if num_estimators > 1:
-        x_query = x_query.expand(num_estimators, *x_query.size())
     torch.testing.assert_close(
         result.x.numerical, torch.full_like(x_query, 2.0)
     )
