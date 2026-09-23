@@ -51,9 +51,14 @@ def preserve_autograd_state(fn: Callable) -> Callable:
 
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
+        # Capture both flags before entering either context: entering
+        # 'inference_mode(False)' first would otherwise force grad-enabled,
+        # corrupting a later 'is_grad_enabled()' read taken from inside it.
+        inference_mode_enabled = torch.is_inference_mode_enabled()
+        grad_enabled = torch.is_grad_enabled()
         with (
-            torch.inference_mode(torch.is_inference_mode_enabled()),
-            torch.set_grad_enabled(torch.is_grad_enabled()),
+            torch.inference_mode(inference_mode_enabled),
+            torch.set_grad_enabled(grad_enabled),
         ):
             return fn(*args, **kwargs)
 
