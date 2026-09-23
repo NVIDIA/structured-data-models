@@ -38,6 +38,8 @@ ______________________________________________________________________
   python -m benchmark.tabular.tabarena.main --model kumo-tabular
   ```
 
+  On CUDA, KumoTabular uses fp16 linear projection weights and fp16 autocast. Fourier frequencies, normalization weights, biases, and other parameters retain their original fp32 precision.
+
 - **`TabFM`:**
 
   ```bash
