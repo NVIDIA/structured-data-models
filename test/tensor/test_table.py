@@ -587,6 +587,32 @@ def test_to_dtype_preserves_grad() -> None:
     assert x.grad is not None
 
 
+def test_stack_preserves_grad() -> None:
+    x = torch.randn(2, 1, requires_grad=True)
+    a = TableTensor.from_tensor(x * 2)
+    b = TableTensor.from_tensor(x * 3)
+
+    stacked = torch.stack([a, b], dim=0)
+
+    assert isinstance(stacked, TableTensor)
+    assert stacked.numerical.requires_grad
+    stacked.numerical.sum().backward()
+    assert x.grad is not None
+
+
+def test_cat_preserves_grad() -> None:
+    x = torch.randn(2, 1, requires_grad=True)
+    a = TableTensor.from_tensor(x * 2)
+    b = TableTensor.from_tensor(x * 3)
+
+    concatenated = torch.cat([a, b], dim=0)
+
+    assert isinstance(concatenated, TableTensor)
+    assert concatenated.numerical.requires_grad
+    concatenated.numerical.sum().backward()
+    assert x.grad is not None
+
+
 def test_clone_contiguous() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},

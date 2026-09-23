@@ -109,6 +109,20 @@ def test_autocast_preserves_gradients_in_forward(
     assert any(p.grad is not None for p in model.parameters())
 
 
+def test_train_mode_preserves_gradients_with_ensembling() -> None:
+    model = TabICLv2(pretrained=False)
+    model.train()
+    x_context = torch.eye(2)
+    y_context = torch.tensor([[0.0], [1.0]])
+    x_query = torch.ones(1, 2)
+
+    out = model(x_context, y_context, x_query, num_estimators=2)
+
+    assert not torch.is_inference(out.numerical)
+    out.numerical.sum().backward()
+    assert any(p.grad is not None for p in model.parameters())
+
+
 @pytest.mark.parametrize("batch_shape", [(), (2,)])
 def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     model = TabICLv2(pretrained=False)

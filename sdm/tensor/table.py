@@ -1685,6 +1685,7 @@ def _index(
 
 
 @TableTensor.implements(aten.cat.default)
+@preserve_autograd_state
 def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     if len(tensors) == 0:
         raise ValueError("torch.cat(): expected a non-empty list of Tensors")
@@ -1733,6 +1734,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
 
 
 @TableTensor.implements(aten.stack.default)
+@preserve_autograd_state
 def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     if len(tensors) == 0:
         raise RuntimeError("stack expects a non-empty TensorList")
