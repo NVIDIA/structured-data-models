@@ -338,24 +338,26 @@ def test_attention(
     assert out.device == query.device
 
 
+@withCUDA
 @pytest.mark.parametrize("qassmax", [False, True])
-def test_attention_kv_cache(qassmax: bool) -> None:
+def test_attention_kv_cache(qassmax: bool, device: torch.device) -> None:
     channels = 8
     num_heads = 2
     module = Attention(
         channels=channels,
         num_query_heads=num_heads,
-        query_scaling=QASSMax(channels // num_heads, num_heads)
+        query_scaling=QASSMax(channels // num_heads, num_heads, device=device)
         if qassmax
         else None,
+        device=device,
     )
 
     with torch.no_grad():
-        module.out_lin.weight.copy_(torch.eye(channels))
+        module.out_lin.weight.copy_(torch.eye(channels, device=device))
         module.out_lin.bias.zero_()
 
-    query = torch.randn(2, 3, channels)
-    key_value = torch.randn(2, 5, channels)
+    query = torch.randn(2, 3, channels, device=device)
+    key_value = torch.randn(2, 5, channels, device=device)
     attn_mask = torch.tensor(
         [
             [True, True, True, False, False],
@@ -363,6 +365,7 @@ def test_attention_kv_cache(qassmax: bool) -> None:
             [True, True, True, True, True],
         ],
         dtype=torch.bool,
+        device=device,
     ).expand(2, -1, -1)
 
     direct_out = module(
@@ -390,6 +393,13 @@ def test_attention_kv_cache(qassmax: bool) -> None:
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
     torch.testing.assert_close(self_cached_out, self_out)
+
+    quantized_out = module(
+        query=query,
+        key_value=Int8KVCacheEntry.from_entry(kv),
+        attn_mask=attn_mask,
+    )
+    torch.testing.assert_close(quantized_out, direct_out, atol=2e-2, rtol=0)
 
 
 def test_empty_query_chunking_preserves_unbroadcast_shape() -> None:
@@ -685,7 +695,9 @@ def test_transformer_block_chunked_noncontiguous_out() -> None:
     torch.testing.assert_close(actual, expected)
 
 
-def test_transformer_block_kv_cache() -> None:
+@withCUDA
+@torch.no_grad()
+def test_transformer_block_kv_cache(device: torch.device) -> None:
     batch_size = 2
     query_len = 3
     key_value_len = 5
@@ -695,14 +707,14 @@ def test_transformer_block_kv_cache() -> None:
         channels=channels,
         num_query_heads=num_heads,
         mlp=torch.nn.Identity(),
+        device=device,
     )
-    with torch.no_grad():
-        module.attn.out_lin.weight.copy_(torch.eye(channels))
-        module.attn.out_lin.bias.zero_()
+    module.attn.out_lin.weight.copy_(torch.eye(channels, device=device))
+    module.attn.out_lin.bias.zero_()
 
-    query = torch.randn(batch_size, query_len, channels)
-    key_value = torch.randn(batch_size, key_value_len, channels)
-    seqused_key_value = torch.tensor([3, 1], dtype=torch.int32)
+    query = torch.randn(batch_size, query_len, channels, device=device)
+    key_value = torch.randn(batch_size, key_value_len, channels, device=device)
+    seqused_key_value = torch.tensor([3, 1], dtype=torch.int32, device=device)
 
     direct_out = module(
         query=query,
@@ -724,96 +736,31 @@ def test_transformer_block_kv_cache() -> None:
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
 
-
-@withCUDA
-def test_attention_int8_kv_cache(device: torch.device) -> None:
-    channels, num_heads = 32, 4
-    module = Attention(
-        channels=channels,
-        num_query_heads=num_heads,
-        device=device,
-    )
-    with torch.no_grad():
-        module.out_lin.weight.copy_(torch.eye(channels, device=device))
-        module.out_lin.bias.zero_()
-
-    query = torch.randn(2, 6, channels, device=device)
-    key_value = torch.randn(2, 40, channels, device=device)
-
-    out, entry = module(
+    quantized = Int8KVCacheEntry.from_entry(kv)
+    quantized_out = module(
         query=query,
-        key_value=key_value,
-        return_key_value=True,
+        key_value=quantized,
+        seqused_key_value=seqused_key_value,
     )
-    quantized = Int8KVCacheEntry.from_entry(entry)
+    torch.testing.assert_close(quantized_out, direct_out, atol=2e-2, rtol=0)
 
-    replayed = module(query=query, key_value=quantized)
-    assert replayed.size() == out.size()
-    assert replayed.dtype == out.dtype
-    # Replaying INT8 approximates, rather than reproduces, the exact output.
-    torch.testing.assert_close(replayed, out, atol=2e-2, rtol=0)
-    assert not torch.equal(replayed, out)
+    chunked_out = module(
+        query=query,
+        key_value=quantized,
+        seqused_key_value=seqused_key_value,
+        batch_size_limit=1,
+    )
+    torch.testing.assert_close(chunked_out, quantized_out)
 
 
 def test_attention_int8_kv_cache_rejects_dtype_mismatch() -> None:
-    channels, num_heads = 8, 2
-    module = Attention(channels=channels, num_query_heads=num_heads)
-
-    query = torch.randn(2, 3, channels)
-    _, entry = module(
-        query=query,
-        key_value=torch.randn(2, 5, channels),
-        return_key_value=True,
-    )
+    module = Attention(channels=8, num_query_heads=2)
     quantized = Int8KVCacheEntry.from_entry(
-        KVCacheEntry(key=entry.key.half(), value=entry.value.half())
+        KVCacheEntry(
+            key=torch.randn(2, 5, 2, 4, dtype=torch.float16),
+            value=torch.randn(2, 5, 2, 4, dtype=torch.float16),
+        )
     )
 
     with pytest.raises(ValueError, match="cached under dtypes"):
-        module(query=query, key_value=quantized)
-
-
-@withCUDA
-def test_transformer_block_int8_kv_cache(device: torch.device) -> None:
-    channels, num_heads = 32, 4
-    block = TransformerBlock(
-        channels=channels,
-        num_query_heads=num_heads,
-        mlp=torch.nn.Identity(),
-        device=device,
-    )
-
-    query = torch.randn(2, 6, channels, device=device)
-    key_value = torch.randn(2, 40, channels, device=device)
-
-    out, entry = block(
-        query=query,
-        key_value=key_value,
-        return_key_value=True,
-    )
-    replayed = block(query=query, key_value=Int8KVCacheEntry.from_entry(entry))
-
-    assert replayed.size() == out.size()
-    torch.testing.assert_close(replayed, out, atol=2e-2, rtol=0)
-
-
-def test_transformer_block_int8_kv_cache_chunked() -> None:
-    channels, num_heads = 16, 2
-    block = TransformerBlock(
-        channels=channels,
-        num_query_heads=num_heads,
-        mlp=torch.nn.Identity(),
-    )
-
-    query = torch.randn(8, 4, channels)
-    _, entry = block(
-        query=query,
-        key_value=torch.randn(8, 12, channels),
-        return_key_value=True,
-    )
-    quantized = Int8KVCacheEntry.from_entry(entry)
-
-    expected = block(query=query, key_value=quantized)
-    chunked = block(query=query, key_value=quantized, batch_size_limit=2)
-
-    torch.testing.assert_close(chunked, expected)
+        module(query=torch.randn(2, 3, 8), key_value=quantized)

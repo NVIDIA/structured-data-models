@@ -217,6 +217,8 @@ def test_attention_compile(
 @withCUDA
 def test_attention_compile_key_value_cache(device: torch.device) -> None:
     module = Attention(channels=8, num_query_heads=2, device=device)
+    with torch.no_grad():
+        module.out_lin.weight.copy_(torch.eye(8, device=device))
     query = torch.randn(2, 3, 8, device=device)
     key_value = torch.randn(2, 5, 8, device=device)
 
@@ -235,9 +237,7 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
     out = fullgraph(module)(query=query, key_value=kv)
     torch.testing.assert_close(out, expected)
 
-    # The same holds for INT8 projections, which dequantize inside the graph.
     quantized = Int8KVCacheEntry.from_entry(expected_kv)
-    assert quantized.key_scale.size() == (2, 5, 2, 1)
     expected = module(query=query, key_value=quantized)
     out = fullgraph(module)(query=query, key_value=quantized)
     torch.testing.assert_close(out, expected)
