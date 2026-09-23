@@ -40,12 +40,11 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
 
 
 def preserve_autograd_state(fn: Callable) -> Callable:
-    r"""Re-apply the caller's autograd/inference-mode state for non-view ops
-    on a tensor.
+    r"""Re-apply the caller's autograd/inference-mode state for non-view ops.
 
     ``__torch_dispatch__`` redispatch does not automatically retain the
-    caller's inference-mode and grad-enabled state for non-view ops like
-    copy performed here would otherwise silently lose
+    caller's inference-mode and grad-enabled state for non-view ops, so a
+    real (non-view) copy performed here would otherwise silently lose
     ``requires_grad``/``grad_fn`` even though gradients are enabled in the
     caller's scope.
     """
