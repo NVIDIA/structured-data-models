@@ -548,17 +548,30 @@ def test_estimator_callbacks(estimator_batch_size: int | None) -> None:
     model = _RecordingModel()
     x = torch.arange(30.0).view(5, 3, 2)
     y = torch.zeros(5, 3, 1)
+    callbacks = (MyCallback("affine", 2.0, 3.0, []),)
+    if estimator_batch_size != 1:
+        with pytest.raises(ValueError, match="Callbacks require"):
+            model.fit(
+                x=x,
+                y=y,
+                estimator_batch_size=estimator_batch_size,
+                callbacks=callbacks,
+            )
     model.fit(x, y, estimator_batch_size=estimator_batch_size)
-    out = model.predict(
-        x,
-        callbacks=(MyCallback("affine", 2.0, 3.0, []),),
-    )
+    if estimator_batch_size != 1:
+        with pytest.raises(ValueError, match="Callbacks require"):
+            model.predict(
+                x=x,
+                estimator_batch_size=estimator_batch_size,
+                callbacks=callbacks,
+            )
+    out = model.predict(x, callbacks=callbacks)
     torch.testing.assert_close(out.numerical, 2.0 * x + 3.0)
     out = model(
         x_context=x,
         y_context=y,
         x_query=x,
-        callbacks=(MyCallback("affine", 2.0, 3.0, []),),
+        callbacks=callbacks,
     )
     torch.testing.assert_close(out.numerical, 2.0 * x + 3.0)
 

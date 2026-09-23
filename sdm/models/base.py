@@ -273,13 +273,15 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 execution. ``None`` runs all estimators together; ``1`` runs
                 them sequentially. Batched estimators must have compatible
                 shapes, target columns, and feature categories. Larger batches
-                use more device memory.
+                use more device memory. Callbacks require ``1``.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
+        if callbacks and estimator_batch_size != 1:
+            raise ValueError("Callbacks require 'estimator_batch_size=1'")
 
         self.clear()
 
@@ -314,6 +316,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 context = MemberContext(
                     *callback.on_context_preprocessing_end(self, *context)
                 )
+            if len(members) == 1:
+                members = (context,)
             self._validate_context(
                 x=context.x,
                 y=context.y,
@@ -321,8 +325,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
             estimator_cache = Cache(
                 x_schema=context.x.schema,
-                x_schemas=_batch_schemas(members, context.x.schema),
-                output_columns=_output_columns(members, context.y),
+                x_schemas=tuple(member.x.schema for member in members),
+                output_columns=_output_columns(members),
                 y_schema=context.y.schema,
                 related_tables_schema=context.related_tables.schema
                 if context.related_tables is not None
@@ -385,6 +389,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 execution. ``None`` runs all estimators together; ``1`` runs
                 them sequentially. This can differ from the batch size used
                 for :meth:`fit` when the model uses compatible tensor caches.
+                Callbacks require ``1``.
             callbacks: Callbacks applied in sequence to this model call.
 
         Returns:
@@ -399,6 +404,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
 
         callbacks = () if callbacks is None else callbacks
+        if callbacks and estimator_batch_size != 1:
+            raise ValueError("Callbacks require 'estimator_batch_size=1'")
         requires_grad = any(callback.requires_grad for callback in callbacks)
 
         if self._cache is None:
@@ -477,8 +484,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     ),
                     related_query_tables=query.related_tables,
                 )
-                if len(members) > 1 and cache["x_schemas"] != _batch_schemas(
-                    members, query.x.schema
+                if len(members) > 1 and cache["x_schemas"] != tuple(
+                    member.x.schema for member in members
                 ):
                     raise ValueError(
                         "Expected context and query features to share "
@@ -504,49 +511,28 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         **cast(dict[str, Any], self._cache["kwargs"]),
                     )
 
-                    output_columns = cast(
-                        tuple[tuple[str, ...], ...] | None,
-                        cache["output_columns"],
+                    outputs = _unstack_output(
+                        out=out,
+                        num_members=len(members),
+                        columns=cast(
+                            tuple[tuple[str, ...], ...] | None,
+                            cache["output_columns"],
+                        ),
                     )
-                    if callbacks and output_columns is not None:
-                        outputs = _unstack_output(
-                            out=out,
-                            num_members=len(members),
-                            columns=output_columns,
-                        )
-                        out = outputs[0]
-                        if len(outputs) > 1:
-                            names = out.columns[Stype.numerical]
-                            # Align raw tensors to preserve gradients.
-                            values: list[Tensor] = []
-                            for output in outputs:
-                                columns = output.columns[Stype.numerical]
-                                indices = [
-                                    columns.index(name) for name in names
-                                ]
-                                values.append(output.numerical[..., indices])
-                            out = TableTensor(
-                                columns={Stype.numerical: names},
-                                numerical=torch.stack(values),
-                            )
-                        output_columns = None
                     for callback in callbacks:
-                        out = callback.on_model_forward_end(self, out)
+                        outputs = [
+                            callback.on_model_forward_end(self, out)
+                            for out in outputs
+                        ]
+                    outs.extend(
+                        cast(TableTensor, out.to(query.x.dtype))
+                        for out in outputs
+                    )
 
                 if x.is_cuda:
                     assert compute_stream is not None
                     for tensor in cache._tensors():
                         tensor.record_stream(compute_stream)
-
-                out = cast(TableTensor, out.to(query.x.dtype))
-                with inference_mode("grad" if requires_grad else "inference"):
-                    outs.extend(
-                        _unstack_output(
-                            out=out,
-                            num_members=len(members),
-                            columns=output_columns,
-                        )
-                    )
 
                 if x.is_cuda and next_cache is not None:
                     assert compute_stream is not None
@@ -804,64 +790,18 @@ def _stack_queries(queries: Sequence[MemberQuery]) -> MemberQuery:
     )
 
 
-def _remap_columns(
-    columns: Sequence[tuple[str, ...]],
-    before: tuple[str, ...],
-    after: tuple[str, ...],
-) -> tuple[tuple[str, ...], ...]:
-    if before == after:
-        return tuple(columns)
-    positions = {column: i for i, column in enumerate(before)}
-    return tuple(
-        tuple(
-            names[positions[column]] if column in positions else column
-            for column in after
-        )
-        for names in columns
-    )
-
-
-def _batch_schemas(
-    members: Sequence[MemberContext] | Sequence[MemberQuery],
-    schema: TableSchema,
-) -> tuple[TableSchema, ...]:
-    schemas = tuple(member.x.schema for member in members)
-    if schemas[0] == schema:
-        return schemas
-    # Apply callback column selections/reordering to each estimator's layout.
-    columns = _remap_columns(
-        columns=[s.columns[Stype.numerical] for s in schemas],
-        before=schemas[0].columns[Stype.numerical],
-        after=schema.columns[Stype.numerical],
-    )
-    return tuple(
-        TableSchema(columns={**schema.columns, Stype.numerical: names})
-        for names in columns
-    )
-
-
 def _output_columns(
     contexts: Sequence[MemberContext],
-    y: TableTensor,
 ) -> tuple[tuple[str, ...], ...] | None:
-    if y.categorical.size(-1) == 0:
-        return None
-    names = tuple(str(value) for value in y.categorical.categories[0].tolist())
     if contexts[0].y.categorical.size(-1) == 0:
-        return (names,) * len(contexts)
-    columns = tuple(
+        return None
+    return tuple(
         tuple(
             str(value)
             for value in context.y.categorical.categories[0].tolist()
         )
         for context in contexts
     )
-    if len(names) == len(columns[0]) and set(names) != set(columns[0]):
-        renamed = dict(zip(columns[0], names, strict=True))
-        return tuple(
-            tuple(renamed[name] for name in group) for group in columns
-        )
-    return _remap_columns(columns=columns, before=columns[0], after=names)
 
 
 def _can_batch_cache(cache: Cache) -> bool:
