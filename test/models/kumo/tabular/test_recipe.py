@@ -87,7 +87,7 @@ def test_default_recipe_flips_numbers_but_not_codes() -> None:
     assert min(numerical_correlations) < 0 < max(numerical_correlations)
 
 
-@pytest.mark.parametrize("cardinality", [49, 50])
+@pytest.mark.parametrize("cardinality", [50, 51])
 def test_default_recipe_adds_category_counts(cardinality: int) -> None:
     codes = torch.cat(
         [torch.arange(cardinality), torch.zeros(300 - cardinality)]
@@ -105,7 +105,7 @@ def test_default_recipe_adds_category_counts(cardinality: int) -> None:
     )
 
     expected_columns = {"num_0", "num_1", "cat_0"}
-    if cardinality >= 50:
+    if cardinality > 50:
         expected_columns.add("cat_0__count")
     for member_id in range(len(output)):
         assert (

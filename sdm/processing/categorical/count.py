@@ -27,9 +27,9 @@ class AddCategoryCounts(Processor):
     training and transform inputs were tensorized independently.
 
     Args:
-        min_cardinality: Minimum fitted vocabulary size for adding a count
-            column. Missing values do not contribute to vocabulary size.
-            Defaults to 0, adding counts for all categorical columns.
+        min_cardinality: A count column is added when its fitted vocabulary
+            size exceeds this value. Missing values do not contribute to
+            vocabulary size. Defaults to 0.
     """
 
     handles_stypes = frozenset({Stype.categorical})
@@ -66,7 +66,7 @@ class AddCategoryCounts(Processor):
             for column, categories in zip(
                 table.columns[Stype.categorical], table.categorical.categories
             )
-            if categories.numel() >= self.min_cardinality
+            if categories.numel() > self.min_cardinality
         )
         categorical = table.select_columns(self._columns).categorical
         codes = categorical.code  # [*batch, num_rows, num_columns]
@@ -111,3 +111,11 @@ class AddCategoryCounts(Processor):
             numerical=counts.transpose(-2, -1).to(table.numerical.dtype),
         )
         return cast(TableTensor, torch.cat([table, out_table], dim=-1))
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.min_cardinality == 0:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}"
+            f"(min_cardinality={self.min_cardinality!r})"
+        )

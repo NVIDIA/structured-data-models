@@ -130,9 +130,9 @@ def test_add_category_counts_avoids_float16_count_overflow() -> None:
     ("min_cardinality", "columns"),
     [
         (0, ("city__count", "kind__count")),
-        (2, ("city__count", "kind__count")),
+        (2, ("city__count",)),
         (3, ("city__count",)),
-        (4, ("city__count",)),
+        (4, ()),
         (5, ()),
     ],
 )
