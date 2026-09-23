@@ -252,7 +252,7 @@ They are examples supplied at inference time, and the model predicts query rows 
 </span><span data-line="6">
 </span><span data-line="7"><span class="n">table</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">TableTensor</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span>
 </span><span data-line="8">    <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
-</span><span data-line="9">    <span class="n">stypes</span><span class="o">=</span><span class="n">sdm</span><span class="o">.</span><span class="n">infer_stypes</span><span class="p">(</span><span class="n">df</span><span class="p">),</span>
+</span><span data-line="9">    <span class="n">stypes</span><span class="o">=</span><span class="n">sdm</span><span class="o">.</span><span class="n">infer_stypes</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">overrides</span><span class="o">=</span><span class="p">{</span><span class="s2">"target"</span><span class="p">:</span> <span class="s2">"categorical"</span><span class="p">}),</span>
 </span><span data-line="10">    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">,</span>
 </span><span data-line="11"><span class="p">)</span>
 </span><span data-line="12">
@@ -481,7 +481,7 @@ The full relational sampling and prediction flow is shown in <a class="reference
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=be22d933"></script>
+      <script src="_static/documentation_options.js?v=7aceb7f1"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
