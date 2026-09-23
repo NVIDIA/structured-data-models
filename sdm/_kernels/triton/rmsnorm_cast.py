@@ -27,13 +27,15 @@ def _rmsnorm_cast_kernel(
         total = tl.fma(v, v, total)
     variance = tl.sum(total, 0)  # ty: ignore[invalid-argument-type]
     value *= tl.rsqrt(variance / channels + eps)
-    value *= tl.load(weight_ptr + c).to(tl.float32)
+    if weight_ptr is not None:
+        value *= tl.load(weight_ptr + c).to(tl.float32)
     tl.store(out_ptr + row * channels + c, value)
 
 
-def rmsnorm_cast(x: Tensor, weight: Tensor, eps: float) -> Tensor:
+def rmsnorm_cast(x: Tensor, weight: Tensor | None, eps: float) -> Tensor:
     x = x.contiguous()
-    weight = weight.contiguous()
+    if weight is not None:
+        weight = weight.contiguous()
     channels = x.size(-1)
     out = torch.empty_like(x, dtype=torch.get_autocast_dtype("cuda"))
     with torch.cuda.device(x.device):
