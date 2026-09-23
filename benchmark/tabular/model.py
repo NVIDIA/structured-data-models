@@ -62,6 +62,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
         self._set_default_param_value("kv_cache", False)
+        self._set_default_param_value("estimator_batch_size", "auto")
 
     def _fit(
         self,
@@ -127,6 +128,10 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             y_context = y_context[perm].unflatten(0, shape)
             num_estimators = None
         self._expand_query = num_estimators is None
+        self._context_shape = (
+            x_context.size(-2),
+            x_context.numerical.size(-1) + 2 * x_context.categorical.size(-1),
+        )
 
         recipe = self._create_recipe()
         if params["max_columns"] is not None:
@@ -146,6 +151,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                     y=y_context,
                     recipe=recipe,
                     num_estimators=num_estimators,
+                    estimator_batch_size=1,
                     generator=generator,
                 )
             return
@@ -202,7 +208,10 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 self.autocast_dtype,
                 enabled=x_query.is_cuda,
             ):
-                out = self.model.predict(x_query)
+                out = self.model.predict(
+                    x_query,
+                    estimator_batch_size=self._prediction_batch_size(x_query),
+                )
         else:
             with (
                 torch.inference_mode(),
@@ -250,6 +259,35 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         indices = [columns.index(str(i)) for i in range(self.num_classes)]
         probabilities = out.numerical[..., indices].float().cpu().numpy()
         return self._convert_proba_to_unified_form(probabilities)
+
+    def _prediction_batch_size(self, x: torch.Tensor) -> int | None:
+        params = self._get_model_params()
+        estimator_batch_size = params["estimator_batch_size"]
+        if estimator_batch_size != "auto":
+            return estimator_batch_size
+        # Subsampled contexts can produce different cache shapes per estimator.
+        if (
+            not x.is_cuda
+            or self._expand_query
+            or not isinstance(self.model, sdm.models.KumoTabular)
+        ):
+            return 1
+
+        free, total = torch.cuda.mem_get_info(x.device)
+        allocated = torch.cuda.memory_allocated(x.device)
+        available = min(
+            free + torch.cuda.memory_reserved(x.device) - allocated,
+            total * torch.cuda.get_per_process_memory_fraction(x.device)
+            - allocated,
+        )
+        rows, columns = self._context_shape
+        return _kumo_prediction_batch_size(
+            context_rows=rows,
+            query_rows=x.size(-2),
+            columns=columns,
+            num_estimators=self._num_estimators,
+            available_memory=available,
+        )
 
     def get_device(self) -> str:
         return str(next(self.model.parameters()).device)
@@ -415,3 +453,27 @@ MODEL_CONFIGS = {
         model_cls=SDMTabFMModel,
     ),
 }
+
+
+def _kumo_prediction_batch_size(
+    context_rows: int,
+    query_rows: int,
+    columns: int,
+    num_estimators: int,
+    available_memory: float,
+) -> int:
+    rows = max(context_rows, query_rows)
+    if rows > 2_000 or rows * columns > 50_000:
+        return 1
+    # Kumo large: 24 ICL layers, 6 column layers, 16-bit keys and values.
+    cache_bytes = (
+        num_estimators
+        * 2
+        * 2
+        * (24 * context_rows * 128 + 6 * columns * 256 * 256)
+    )
+    # Conservative working-memory allowance, including four readout tokens.
+    peak_bytes = (
+        cache_bytes + num_estimators * query_rows * (columns + 4) * 8_192
+    )
+    return num_estimators if peak_bytes <= available_memory * 0.25 else 1
