@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 import sdm.processing as sp
@@ -37,7 +38,6 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
         "num_1": [False, True, False, False, False],
         "num_2": [False, False, False, False, False],
         "cat_0": [False, False, False, False, False],
-        "cat_0__count": [False, False, False, False, False],
     }
 
     for member_id in range(len(output)):
@@ -104,12 +104,16 @@ def test_default_recipe_keeps_values_distinct_beside_outliers() -> None:
     assert max(num_unique) == 99
 
 
-def test_default_recipe_adds_category_counts() -> None:
+@pytest.mark.parametrize("cardinality", [50, 51])
+def test_default_recipe_adds_category_counts(cardinality: int) -> None:
+    codes = torch.cat(
+        [torch.arange(cardinality), torch.zeros(300 - cardinality)]
+    )
     features = TableTensor(
         numerical=torch.randn(300, 2),
         categorical=CategoricalTensor(
-            code=torch.randint(3, (300, 1)),
-            categories=(torch.arange(3),),
+            code=codes.long().unsqueeze(-1),
+            categories=(torch.arange(cardinality),),
         ),
     )
 
@@ -117,12 +121,13 @@ def test_default_recipe_adds_category_counts() -> None:
         EnsembleTable.from_table(features, num_members=2)
     )
 
-    assert set(output[0].columns[Stype.numerical]) == {
-        "num_0",
-        "num_1",
-        "cat_0",
-        "cat_0__count",
-    }
+    expected_columns = {"num_0", "num_1", "cat_0"}
+    if cardinality > 50:
+        expected_columns.add("cat_0__count")
+    for member_id in range(len(output)):
+        assert (
+            set(output[member_id].columns[Stype.numerical]) == expected_columns
+        )
 
 
 def test_default_recipe_reduces_outputs_per_task() -> None:
