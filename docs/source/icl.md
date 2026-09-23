@@ -41,7 +41,7 @@ df = load_breast_cancer(as_frame=True).frame
 
 table = sdm.TableTensor.from_pandas(
     df=df,
-    stypes=sdm.infer_stypes(df),
+    stypes=sdm.infer_stypes(df, overrides={"target": "categorical"}),
     device="cuda",
 )
 
