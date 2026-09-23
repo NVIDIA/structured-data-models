@@ -7,11 +7,11 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Embedding, Linear, ModuleList, RMSNorm, Sequential
+from torch.nn import GELU, Embedding, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.nn import LogScale
+from sdm.nn import LogScale, RMSNorm
 
 
 class ICLBlock(torch.nn.Module):
