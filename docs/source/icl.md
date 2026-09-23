@@ -30,7 +30,10 @@ Specifically, an in-context learning task has three core inputs, as defined in t
 - `x_query` ({py:class}`~sdm.tensor.TableTensor` | {py:class}`torch.Tensor`): feature rows whose targets should be predicted.
 
 The context rows are not used to update model weights.
-They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context:
+They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context.
+
+Calling {py:meth}`~sdm.models.ICLModel.forward` while the model is in train mode (`model.train()`) enables gradient tracking through the full call — including post-processing — so the returned predictions can be used in an ordinary training loop (`loss.backward()`, an optimizer step) to fine-tune the model's parameters.
+Context rows still don't update weights *through in-context adaptation itself*; this is a conventional, separate training step around the model.
 
 ```python
 from sklearn.datasets import load_breast_cancer
@@ -69,6 +72,9 @@ model.clear()
 
 The cached interface has the same prediction contract as the one-shot call.
 Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls when tasks change frequently, and use the {py:meth}`~sdm.models.ICLModel.fit`+{py:meth}`~sdm.models.ICLModel.predict` flow for large batch predictions over a single fixed task.
+
+Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.predict` does not support gradient-based fine-tuning and raises if the model is in train mode: the context is encoded once in {py:meth}`~sdm.models.ICLModel.fit` under `torch.no_grad()` and cached, so gradients through {py:meth}`~sdm.models.ICLModel.predict` would never cover parameters used only to encode the context, and reusing the same cache across further optimizer steps would compute gradients against stale, pre-update weights.
+Call `model.eval()` before {py:meth}`~sdm.models.ICLModel.fit`/{py:meth}`~sdm.models.ICLModel.predict`, or use {py:meth}`~sdm.models.ICLModel.forward` for gradient-based fine-tuning.
 
 ## Model Concepts
 
