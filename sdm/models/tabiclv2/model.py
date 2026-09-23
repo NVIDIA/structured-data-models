@@ -72,8 +72,8 @@ class TabICLv2(ICLModel):
       for in-context prediction.
       Training-row embeddings are combined with target embeddings, and test
       rows attend to the labeled training rows. The resulting test-row states
-      are mapped to task outputs, such as class logits for classification or
-      quantile predictions for regression.
+      are mapped to task outputs, such as class probabilities for
+      classification or quantile predictions for regression.
 
     .. testcode::
 

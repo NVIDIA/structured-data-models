@@ -159,9 +159,7 @@ def test_rejects_mismatched_batches(model: KumoForecasting) -> None:
 
 def test_custom_recipe(model: KumoForecasting) -> None:
     x, y, query = torch.randn(32, 1), torch.randn(32, 1), torch.empty(3, 1)
-    recipe = sp.Recipe(
-        target=sp.Standardize(), output=sp.ReduceEstimators(method="mean")
-    )
+    recipe = sp.Recipe(target=sp.Standardize(), output=sp.AverageEstimators())
     direct = model(x, y, query, recipe=recipe)
     model.fit(x, y, recipe=recipe)
     torch.testing.assert_close(

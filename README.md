@@ -17,20 +17,14 @@
 
 **A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
 
-- **Models:** Reference implementations of structured data foundation models such as the tabular [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and the relational [`KumoRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRelational), built on a unified interface with room for future model families.
+- **Models:** Reference implementations of structured data foundation models, including tabular models ([`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2), [`KumoTabular`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoTabular), *etc*), and relational models ([`KumoRelational`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRelational)), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
 ## Installation
 
 The `structured-data-models` package is available from Python 3.11 and PyTorch 2.7 onwards.
-Install via:
-
-```bash
-pip install structured-data-models
-```
-
-To install from the `main` branch:
+Install from the `main` branch:
 
 ```bash
 pip install git+https://github.com/NVIDIA/structured-data-models.git
@@ -44,6 +38,7 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 **Tabular Foundation Models:**
 
 - **[`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2)** from Qu *et al.*: [TabICLv2: A Better, Faster, Scalable, and Open Tabular Foundation Model](https://arxiv.org/abs/2602.11139) (ICML '26)
+- **[`KumoTabular`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoTabular)** from Qu *et al.* ('26)
 - **[`TabFM`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabFM)** from Kong *et al.*: [Introducing TabFM: A Zero-shot Foundation Model for Tabular Data](https://research.google/blog/introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data) ('26)
 
 **Relational Foundation Models:**
@@ -102,12 +97,11 @@ Use this software and the retrieved materials at your own risk.
 ## License
 
 The NVIDIA-authored source code is licensed under the [Apache License 2.0](LICENSE).
-
 Third-party software and separately distributed model assets are documented in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md):
 
-- `sdm/models/tabiclv2/` contains code derived from TabICLv2 under the BSD 3-Clause License; its terms are distributed in [`sdm/models/tabiclv2/LICENSE`](sdm/models/tabiclv2/LICENSE).
-- `sdm/models/tabfm/` contains code derived from TabFM under the Apache License 2.0; its terms are distributed in [`sdm/models/tabfm/LICENSE`](sdm/models/tabfm/LICENSE).
-- `sdm/models/timesfm3/` contains code derived from TimesFM 3.0 under the Apache License 2.0; its terms are distributed in [`sdm/models/timesfm3/LICENSE`](sdm/models/timesfm3/LICENSE).
-- [`sdm/models/kumo/relational/NOTICE`](sdm/models/kumo/relational/NOTICE) documents KumoRelational's reuse of TabICLv2-derived components and pretrained weights.
-- `third_party/pytorch/` contains the BSD 3-Clause License for material adapted from PyTorch in [`CONTRIBUTING.md`](CONTRIBUTING.md); its terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).
-- `third_party/contributor-covenant/` contains the MIT License for Contributor Covenant version 1.4; its terms are distributed in [`third_party/contributor-covenant/LICENSE`](third_party/contributor-covenant/LICENSE).
+- [**`sdm/models/tabiclv2/`**](sdm/models/tabiclv2/) contains code derived from [`TabICLv2`](https://github.com/soda-inria/tabicl) under the BSD 3-Clause License; its terms are distributed in [`sdm/models/tabiclv2/LICENSE`](sdm/models/tabiclv2/LICENSE).
+- [**`sdm/models/tabfm/`**](sdm/models/tabfm/) contains code derived from [`TabFM`](https://github.com/google-research/tabfm) under the Apache License 2.0; its terms are distributed in [`sdm/models/tabfm/LICENSE`](sdm/models/tabfm/LICENSE).
+- [**`sdm/models/timesfm3/`**](sdm/models/timesfm3/) contains code derived from [`TimesFM`](https://github.com/google-research/timesfm) under the Apache License 2.0; its terms are distributed in [`sdm/models/timesfm3/LICENSE`](sdm/models/timesfm3/LICENSE).
+- [**`sdm/models/kumo/relational/NOTICE`**](sdm/models/kumo/relational/NOTICE) documents [`KumoRelational`](sdm/models/kumo/relational/)'s reuse of [`TabICLv2`](sdm/models/tabiclv2/)-derived components.
+- [**`third_party/pytorch/`**](third_party/pytorch/) contains the BSD 3-Clause License for material adapted from [PyTorch](https://github.com/pytorch/pytorch) in [`CONTRIBUTING.md`](CONTRIBUTING.md); its terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).
+- [**`third_party/contributor-covenant/`**](third_party/contributor-covenant/) contains the MIT License for [Contributor Covenant version 1.4](https://www.contributor-covenant.org/version/1/4/code-of-conduct); its terms are distributed in [`third_party/contributor-covenant/LICENSE`](third_party/contributor-covenant/LICENSE).

@@ -48,5 +48,5 @@ def default_recipe() -> sp.Recipe:
     return sp.Recipe(
         features=_Standardize(),
         target=_Standardize(),
-        output=sp.ReduceEstimators(method="mean"),
+        output=sp.AverageEstimators(),
     )
