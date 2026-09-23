@@ -40,7 +40,8 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
 
 
 def preserve_autograd_state(fn: Callable) -> Callable:
-    r"""Re-apply the caller's autograd/inference-mode state for a tensor copy.
+    r"""Re-apply the caller's autograd/inference-mode state for non-view ops
+    on a tensor.
 
     ``__torch_dispatch__`` redispatch does not automatically retain the
     caller's inference-mode and grad-enabled state for nested per-block ops,
