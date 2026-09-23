@@ -40,7 +40,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         ],
         output=[
             sp.TaskDispatch(regression=sp.SortQuantiles()),
-            sp.ReduceEstimators(method="mean"),
+            sp.AverageEstimators(),
             sp.TaskDispatch(classification=sp.Softmax(temperature=0.9)),
         ],
     )

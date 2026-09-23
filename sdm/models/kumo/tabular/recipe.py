@@ -53,15 +53,12 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         ],
         output=sp.TaskDispatch(
             classification=[
-                sp.ReduceEstimators(method="mean"),
+                sp.AverageEstimators(),
                 sp.Softmax(),
             ],
             regression=[
                 sp.SortQuantiles(),
-                sp.ReduceEstimators(
-                    method="trimmed_mean",
-                    proportion=0.2,
-                ),
+                sp.AverageEstimators(trim_fraction=0.2),
             ],
         ),
     )
