@@ -9,6 +9,7 @@ import torch
 import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
+from sdm.testing import withCUDA
 
 
 def _build(task: Literal["classification", "regression"]) -> KumoTabular:
@@ -180,3 +181,48 @@ def test_missing_values_pass_through_fit_predict() -> None:
     assert cached.shape == direct.shape
     assert (direct.numerical.diff(dim=-1) >= 0).all()
     assert (cached.numerical.diff(dim=-1) >= 0).all()
+
+
+@withCUDA
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_weight_dtype(
+    task: Literal["classification", "regression"],
+    device: torch.device,
+) -> None:
+    reference = _build(task).to(device)
+    model = KumoTabular(
+        task=task,
+        pretrained=False,
+        device=device,
+        weight_dtype=torch.float16,
+    )
+    model.load_state_dict(reference.state_dict())
+    for module in model.modules():
+        if isinstance(module, torch.nn.Linear):
+            assert module.weight.dtype == torch.float16
+            if module.bias is not None:
+                assert module.bias.dtype == torch.float32
+        else:
+            for parameter in module.parameters(recurse=False):
+                assert parameter.dtype == torch.float32
+
+    x_context, x_query = (x.to(device) for x in _features())
+    target = (_cls_target() if task == "classification" else _reg_target()).to(
+        device
+    )
+    with torch.autocast(device.type, dtype=torch.float16):
+        expected = reference(x_context, target, x_query, recipe=_recipe())
+        actual = model(x_context, target, x_query, recipe=_recipe())
+        reference.fit(x_context, target, recipe=_recipe())
+        model.fit(x_context, target, recipe=_recipe())
+        expected_cached = reference.predict(x_query)
+        actual_cached = model.predict(x_query)
+
+    assert actual.numerical.isfinite().all()
+    assert actual_cached.numerical.isfinite().all()
+    torch.testing.assert_close(
+        actual.numerical, expected.numerical, rtol=0, atol=0
+    )
+    torch.testing.assert_close(
+        actual_cached.numerical, expected_cached.numerical, rtol=0, atol=0
+    )

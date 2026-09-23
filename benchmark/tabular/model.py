@@ -208,7 +208,11 @@ class SDMKumoTabularModel(SDMModel):
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
-        return sdm.models.KumoTabular(task=task, device=device)
+        return sdm.models.KumoTabular(
+            task=task,
+            device=device,
+            weight_dtype=torch.float16 if device.type == "cuda" else None,
+        )
 
 
 class SDMTabFMModel(SDMModel):

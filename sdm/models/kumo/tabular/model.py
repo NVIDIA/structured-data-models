@@ -94,6 +94,11 @@ class KumoTabular(ICLModel):
         size: The size of the model.
         pretrained: Whether to load pretrained checkpoints.
         device: The device.
+        weight_dtype: The dtype of linear projection weights. If ``None``,
+            retain their original dtype. Other parameters, including Fourier
+            frequencies, normalization weights, and biases, retain their
+            original precision. Use matching autocast for low-precision
+            weights.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -111,6 +116,7 @@ class KumoTabular(ICLModel):
         size: Literal["small", "large"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        weight_dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__(task=task)
 
@@ -125,6 +131,14 @@ class KumoTabular(ICLModel):
 
         if pretrained:
             self.models[task] = self._load_from_pretrained(size, device=device)
+
+        if weight_dtype is not None:
+            for module in self.modules():
+                if isinstance(module, Linear):
+                    module.weight = torch.nn.Parameter(
+                        module.weight.to(dtype=weight_dtype),
+                        requires_grad=module.weight.requires_grad,
+                    )
 
         self.eval()
 
