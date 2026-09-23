@@ -291,7 +291,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
         cache = Cache(
             recipe_execution=recipe_execution,
             kwargs=kwargs,
+            kv_cache=kv_cache,
         )
+        seeds: list[int] = []
+        if not kv_cache:
+            # Estimators run their context at prediction, seeded here so that
+            # predictions repeat and follow `generator`.
+            seeds = torch.randint(
+                high=2**63 - 1,
+                size=(len(contexts),),
+                generator=generator,
+                device="cpu" if generator is None else generator.device,
+            ).tolist()
         for i, context in enumerate(contexts):
             for callback in callbacks:
                 context = MemberContext(
@@ -332,6 +343,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     x_context=context.x,
                     y_context=context.y,
                     related_context_tables=context.related_tables,
+                    seed=seeds[i],
                 )
 
             if x.is_cuda and len(contexts) > 1:
@@ -403,6 +415,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             cast(Cache, self._cache[i])
             for i in range(recipe_execution.num_members)
         ]
+        kv_cache = cast(bool, self._cache["kv_cache"])
         next_cache = caches[0]
 
         compute_stream: torch.cuda.Stream | None = None
@@ -455,13 +468,20 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
-                # Without key/value caching, the cache holds the context.
-                x_context = cast(TableTensor | None, cache.get("x_context"))
-                y_context = cast(TableTensor | None, cache.get("y_context"))
-                related_context_tables = cast(
-                    RelatedTables[TableTensor] | None,
-                    cache.get("related_context_tables"),
-                )
+                x_context: TableTensor | None = None
+                y_context: TableTensor | None = None
+                related_context_tables: RelatedTables | None = None
+                generator: torch.Generator | None = None
+                if not kv_cache:  # The cache holds the context instead.
+                    x_context = cast(TableTensor, cache["x_context"])
+                    y_context = cast(TableTensor, cache["y_context"])
+                    related_context_tables = cast(
+                        RelatedTables[TableTensor] | None,
+                        cache["related_context_tables"],
+                    )
+                    generator = torch.Generator(x.device).manual_seed(
+                        cast(int, cache["seed"])
+                    )
                 with inference_mode("grad" if requires_grad else "inference"):
                     out = self._forward(
                         x_context=x_context,
@@ -469,8 +489,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         x_query=query.x,
                         related_context_tables=related_context_tables,
                         related_query_tables=query.related_tables,
-                        cache=cache if x_context is None else None,
-                        generator=None,
+                        cache=cache if kv_cache else None,
+                        generator=generator,
                         **cast(dict[str, Any], self._cache["kwargs"]),
                     )
 
