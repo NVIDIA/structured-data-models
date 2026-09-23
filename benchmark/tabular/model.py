@@ -7,7 +7,7 @@ import abc
 import copy
 import math
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal
 
 import numpy as np
 import pandas as pd
@@ -21,8 +21,6 @@ from tabarena.models.warmup import warmup_torch
 
 import sdm
 import sdm.processing as sp
-from sdm.cache import Cache
-from sdm.models.base import _can_batch_cache
 from sdm.processing.execution import RecipeExecution
 
 Task = Literal["classification", "regression"]
@@ -271,8 +269,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         num_rows, num_cols = self._context_shape
         num_rows = max(num_rows, x.size(-2))
         if num_rows > 2_000 or num_rows * num_cols >= 50_000:
-            return 1
-        if not _can_batch_cache(cast(Cache, self.model._cache)):
             return 1
         return self._num_estimators
 

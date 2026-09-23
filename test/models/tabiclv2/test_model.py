@@ -235,8 +235,10 @@ def test_tabiclv2_hierarchical_log_probs(
 
 
 @withCUDA
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
 def test_tabiclv2_many_classes_forward_and_cache(
     device: torch.device,
+    estimator_batch_size: int | None,
 ) -> None:
     torch.manual_seed(1)
     model = TabICLv2(pretrained=False, device=device)
@@ -250,7 +252,7 @@ def test_tabiclv2_many_classes_forward_and_cache(
     ).unsqueeze(-1)
 
     torch.manual_seed(1)
-    out = model(x_context, y_context, x_query)
+    out = model(x_context, y_context, x_query, num_estimators=3)
 
     assert out.size() == (test_size, num_classes)
     probabilities = out.numerical
@@ -260,8 +262,11 @@ def test_tabiclv2_many_classes_forward_and_cache(
     )
 
     torch.manual_seed(1)
-    model.fit(x_context, y_context)
-    assert model.predict(x_query).allclose(out)
+    model.fit(x_context, y_context, num_estimators=3)
+    assert model.predict(
+        x=x_query,
+        estimator_batch_size=estimator_batch_size,
+    ).allclose(out)
 
 
 @onlyCUDA

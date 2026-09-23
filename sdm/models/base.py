@@ -389,6 +389,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 execution. ``None`` runs all estimators together; ``1`` runs
                 them sequentially. This can differ from the batch size used
                 for :meth:`fit` when the model uses compatible tensor caches.
+                Sequentially fitted caches that cannot be batched stay
+                sequential.
                 Callbacks require ``1``.
             callbacks: Callbacks applied in sequence to this model call.
 
@@ -432,6 +434,12 @@ class ICLModel(torch.nn.Module, abc.ABC):
         )
         if estimator_batch_size is None:
             estimator_batch_size = recipe_execution.num_members
+        if (
+            estimator_batch_size > 1
+            and self._cache["estimator_batch_size"] == 1
+            and not _can_batch_cache(self._cache)
+        ):
+            estimator_batch_size = 1
         starts = range(0, recipe_execution.num_members, estimator_batch_size)
         with inference_mode("no_grad" if requires_grad else "inference"):
             caches = _prediction_caches(self._cache, estimator_batch_size)
