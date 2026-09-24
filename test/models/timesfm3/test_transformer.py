@@ -185,38 +185,46 @@ def _transformer_config(
 
 @withCUDA
 @pytest.mark.parametrize("use_sdpa", [False, True])
+@pytest.mark.parametrize(
+    ("use_memory_efficient_attention", "expected"),
+    [(True, 2.3272503), (False, 2.2684078)],
+)
 def test_mixing_transformer_uses_attention_scaling_config(
     device: torch.device,
     use_sdpa: bool,
+    use_memory_efficient_attention: bool,
+    expected: float,
 ) -> None:
-    scaled = MixingTransformer(
+    config = replace(
         _transformer_config(
-            use_memory_efficient_attention=True,
+            use_memory_efficient_attention=use_memory_efficient_attention,
             use_sdpa=use_sdpa,
         ),
-        use_variate_attention=False,
-        device=device,
+        model_dims=2,
+        num_heads=1,
+        qk_norm="none",
+        use_rope_seq=False,
     )
-    unscaled = MixingTransformer(
-        _transformer_config(
-            use_memory_efficient_attention=False,
-            use_sdpa=use_sdpa,
-        ),
-        use_variate_attention=False,
-        device=device,
+    transformer = MixingTransformer(
+        config, use_variate_attention=False, device=device
     )
-    unscaled.load_state_dict(scaled.state_dict())
-    inputs = torch.arange(
-        4 * 8,
-        device=device,
-        dtype=torch.float32,
-    ).reshape(1, 1, 4, 8)
-    patch_mask = torch.zeros(1, 1, 4, dtype=torch.bool, device=device)
+    with torch.no_grad():
+        transformer.pre_seq_attn_ln.weight.fill_(1 / math.sqrt(2))
+        for projection in (
+            transformer.seq_attn.query_proj,
+            transformer.seq_attn.key_proj,
+            transformer.seq_attn.value_proj,
+            transformer.seq_attn.out_proj,
+        ):
+            projection.weight.copy_(torch.eye(2, device=device))
+        transformer.ff1.weight.zero_()
+    inputs = torch.eye(2, device=device)[None, None]
+    patch_mask = torch.zeros(1, 1, 2, dtype=torch.bool, device=device)
 
-    scaled_output = scaled(inputs, patch_mask)[0]
-    unscaled_output = unscaled(inputs, patch_mask)[0]
+    output = transformer(inputs, patch_mask)[0]
 
-    assert not torch.allclose(scaled_output, unscaled_output)
+    # Full-layer values use sigmoid(1) or sigmoid(1 / sqrt(2)).
+    torch.testing.assert_close(output[0, 0, 1, 1], inputs.new_tensor(expected))
 
 
 @withCUDA
@@ -239,6 +247,38 @@ def test_mixing_transformer_residuals(device: torch.device) -> None:
     output = transformer(inputs, patch_mask)[0]
 
     torch.testing.assert_close(output, inputs)
+
+
+@withCUDA
+def test_mixing_transformer_routes_temporal_masks(
+    device: torch.device,
+) -> None:
+    transformer = MixingTransformer(
+        _transformer_config(),
+        use_variate_attention=False,
+        device=device,
+    )
+    inputs = torch.arange(48, device=device, dtype=torch.float32).reshape(
+        1, 2, 3, 8
+    )
+    patch_mask = torch.tensor(
+        [[[False, True, False], [False, False, True]]], device=device
+    )
+
+    output, attention_mask = transformer(inputs, patch_mask)
+    torch.testing.assert_close(
+        attention_mask, make_attn_mask(patch_mask.reshape(2, 3))
+    )
+
+    masked_input = inputs.clone()
+    masked_input[0, 0, 1, 0] += 100
+    masked_output = transformer(masked_input, patch_mask)[0]
+    torch.testing.assert_close(masked_output[0, 0, 2], output[0, 0, 2])
+
+    future_input = inputs.clone()
+    future_input[0, 0, 2, 0] += 100
+    future_output = transformer(future_input, patch_mask)[0]
+    torch.testing.assert_close(future_output[0, 0, 0], output[0, 0, 0])
 
 
 @withCUDA
@@ -279,6 +319,51 @@ def test_mixing_transformer_uses_variate_attention_and_rope(
 
     assert not torch.allclose(rope_output, inputs)
     assert not torch.allclose(rope_output, no_rope_output)
+
+
+@withCUDA
+def test_mixing_transformer_variate_attention_isolates_patches_and_masks(
+    device: torch.device,
+) -> None:
+    transformer = MixingTransformer(_transformer_config(), device=device)
+    with torch.no_grad():
+        transformer.seq_attn.out_proj.weight.zero_()
+        transformer.ff1.weight.zero_()
+        for projection in (
+            transformer.var_attn.query_proj,
+            transformer.var_attn.key_proj,
+            transformer.var_attn.value_proj,
+            transformer.var_attn.out_proj,
+        ):
+            projection.weight.copy_(torch.eye(8, device=device))
+
+    inputs = torch.zeros(1, 3, 2, 8, device=device)
+    inputs[0, 0, 0, 0] = 1
+    inputs[0, 2, 0, 1] = 1
+    inputs[0, 0, 1, 2] = 1
+    inputs[0, 2, 1, 3] = 1
+    patch_mask = torch.tensor(
+        [[[False, False], [False, True], [True, False]]], device=device
+    )
+    output = transformer(inputs, patch_mask)[0]
+
+    changed = inputs.clone()
+    changed[0, 0, 0, 0] = 0
+    changed[0, 0, 0, 1] = 1
+    changed_output = transformer(changed, patch_mask)[0]
+    assert not torch.allclose(changed_output[0, 1, 0], output[0, 1, 0])
+
+    other_patch = inputs.clone()
+    other_patch[0, 0, 1, 2] = 0
+    other_patch[0, 0, 1, 5] = 1
+    other_patch_output = transformer(other_patch, patch_mask)[0]
+    torch.testing.assert_close(other_patch_output[0, 1, 0], output[0, 1, 0])
+
+    masked = inputs.clone()
+    masked[0, 2, 0, 1] = 0
+    masked[0, 2, 0, 4] = 1
+    masked_output = transformer(masked, patch_mask)[0]
+    torch.testing.assert_close(masked_output[0, 1, 0], output[0, 1, 0])
 
 
 @withCUDA
