@@ -3,6 +3,7 @@
 
 """Numerical preprocessing transforms."""
 
+from sdm.processing.numerical.cast import Cast
 from sdm.processing.numerical.clip import Clip
 from sdm.processing.numerical.quantile_clip import ClipQuantiles
 from sdm.processing.numerical.sigma_clip import ClipSigma
@@ -18,6 +19,7 @@ from sdm.processing.numerical.pca import PCA
 from sdm.processing.numerical.random_projection import RandomProjection
 
 __all__ = [
+    "Cast",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",

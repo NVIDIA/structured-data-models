@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 from sdm import CategoricalTensor, Stype, TableTensor
@@ -77,8 +78,10 @@ def test_add_category_counts_uses_fitted_counts(device: torch.device) -> None:
 
 
 @withCUDA
+@pytest.mark.parametrize("min_cardinality", [0, 3])
 def test_add_category_counts_fits_leading_batches_independently(
     device: torch.device,
+    min_cardinality: int,
 ) -> None:
     batched = _table(
         [
@@ -88,9 +91,11 @@ def test_add_category_counts_fits_leading_batches_independently(
         device=device,
     )
 
-    output = AddCategoryCounts().fit_transform(batched)
+    output = AddCategoryCounts(min_cardinality=min_cardinality).fit_transform(
+        batched,
+    )
 
-    assert output.size() == (2, 4, 4)
+    assert output.size() == (2, 4, 4 if min_cardinality == 0 else 3)
     torch.testing.assert_close(
         output.numerical[..., 0],
         torch.tensor(
@@ -118,3 +123,37 @@ def test_add_category_counts_avoids_float16_count_overflow() -> None:
         output.numerical[:, 0],
         expected.expand(num_rows),
     )
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    ("min_cardinality", "columns"),
+    [
+        (0, ("city__count", "kind__count")),
+        (2, ("city__count",)),
+        (3, ("city__count",)),
+        (4, ()),
+        (5, ()),
+    ],
+)
+def test_add_category_counts_selects_by_fitted_vocabulary_size(
+    device: torch.device,
+    min_cardinality: int,
+    columns: tuple[str, ...],
+) -> None:
+    # City has four vocabulary entries but only three observed categories.
+    context = _table([[0, 0], [0, 1], [1, 0], [2, 1], [-1, -1]], device)
+    query = _table([[0, 1], [0, 1]], device)
+    processor = AddCategoryCounts(min_cardinality=min_cardinality).fit(context)
+
+    output = processor.transform(query)
+
+    assert output.columns[Stype.numerical] == columns
+    assert output.categorical.equal(query.categorical)
+    expected = torch.full((2, len(columns)), 2.0, device=device).log1p()
+    torch.testing.assert_close(output.numerical, expected)
+
+    restored = AddCategoryCounts(min_cardinality=min_cardinality)
+    restored.load_state_dict(processor.state_dict())
+    restored.to(device=device)
+    assert restored.transform(query).equal(output)
