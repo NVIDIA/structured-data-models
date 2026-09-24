@@ -394,6 +394,9 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                 ]
             )
 
+        if (output := cls._concatenate_numerical(tables)) is not None:
+            return output
+
         # TODO: Concatenate compatible groups directly and unpack logical
         # members only when their layouts differ.
         outputs: list[TableTensor] = []
@@ -419,6 +422,75 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
         return cls.from_tables(
             tables=outputs,
             member_table_ids=member_table_ids,
+        )
+
+    @classmethod
+    def _concatenate_numerical(cls, tables: Sequence[Self]) -> Self | None:
+        if any(len(table._groups) == 0 for table in tables):
+            return None
+        first = tables[0]._groups[0]
+        if first.device.type not in (
+            "cpu",
+            "cuda",
+        ) or torch.is_autocast_enabled(first.device.type):
+            return None
+
+        dtype = first.numerical.dtype
+        columns: list[str] = []
+        for table in tables:
+            ref = table._groups[0]
+            for group in table._groups:
+                numerical = group.numerical
+                if (
+                    type(group) is not TableTensor
+                    or type(numerical) is not Tensor
+                    or numerical.layout != torch.strided
+                    or numerical.is_quantized
+                    or numerical.requires_grad
+                    or group.dim() != 3
+                    or numerical.size(-1) == 0
+                    or group.size(-1) != numerical.size(-1)
+                    or group.columns != ref.columns
+                    or numerical.size()[1:] != ref.numerical.size()[1:]
+                    or numerical.dtype != ref.numerical.dtype
+                    or numerical.size(-2) != first.numerical.size(-2)
+                    or numerical.device != first.device
+                ):
+                    return None
+            dtype = torch.promote_types(dtype, ref.numerical.dtype)
+            columns.extend(ref.columns[Stype.numerical])
+
+        output_ids: dict[tuple[tuple[int, int], ...], int] = {}
+        locations = []
+        for member_id in range(len(tables[0])):
+            sources = tuple(table._locations[member_id] for table in tables)
+            output_id = output_ids.setdefault(sources, len(output_ids))
+            locations.append((output_id, 0))
+
+        # Copy and cast each source directly into the final allocation.
+        numerical = first.numerical.new_empty(
+            (len(output_ids), first.size(-2), len(columns)), dtype=dtype
+        )
+        for sources, output_id in output_ids.items():
+            start = 0
+            for table, (group_id, position) in zip(
+                tables, sources, strict=True
+            ):
+                source = table._groups[group_id].numerical[position]
+                stop = start + source.size(-1)
+                numerical[output_id, :, start:stop].copy_(source)
+                start = stop
+
+        # Keep distinct source combinations in separate groups.
+        return cls(
+            groups=tuple(
+                TableTensor(
+                    columns={Stype.numerical: columns},
+                    numerical=member.unsqueeze(0),
+                )
+                for member in numerical.unbind(0)
+            ),
+            locations=locations,
         )
 
     def replace_tables(

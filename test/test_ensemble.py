@@ -6,7 +6,8 @@ from typing import cast
 import pytest
 import torch
 
-from sdm import EnsembleTable, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
+from sdm.testing import withCUDA
 
 
 def test_shared_member_table() -> None:
@@ -268,3 +269,135 @@ def test_concatenate_columns_rejects_different_member_counts() -> None:
                 EnsembleTable.from_table(table, num_members=3),
             )
         )
+
+
+@withCUDA
+@pytest.mark.parametrize("num_rows", [0, 4])
+@pytest.mark.parametrize(
+    ("left_dtype", "right_dtype"),
+    [
+        (torch.float32, torch.float32),
+        (torch.float32, torch.float64),
+        (torch.bfloat16, torch.float32),
+    ],
+)
+def test_concatenate_numerical_groups_preserves_members(
+    device: torch.device,
+    num_rows: int,
+    left_dtype: torch.dtype,
+    right_dtype: torch.dtype,
+) -> None:
+    values = torch.arange(64, dtype=left_dtype, device=device).view(2, 8, 4)
+    groups = tuple(
+        TableTensor.from_tensor(
+            tensor=(values + offset)[:, : num_rows * 2 : 2, ::2],
+            columns=("left_0", "left_1"),
+        )
+        for offset in (0, 100)
+    )
+    left = EnsembleTable(
+        groups=groups,
+        locations=((1, 1), (0, 1), (1, 1), (0, 0), (1, 0)),
+    )
+    right_table = TableTensor.from_tensor(
+        tensor=torch.arange(32, dtype=right_dtype, device=device).view(8, 4)[
+            : num_rows * 2 : 2, ::2
+        ],
+        columns=("right_0", "right_1"),
+    )
+    right = EnsembleTable.from_table(right_table, num_members=5)
+    originals = [group.numerical.clone() for group in (*groups, right_table)]
+
+    out = EnsembleTable.concatenate_columns((left, right))
+
+    assert len(out) == 5
+    assert out.num_groups == 4
+    for member_id in range(len(out)):
+        expected = torch.cat(
+            (left[member_id].numerical, right[member_id].numerical), dim=-1
+        )
+        assert out[member_id].columns[Stype.numerical] == (
+            "left_0",
+            "left_1",
+            "right_0",
+            "right_1",
+        )
+        torch.testing.assert_close(out[member_id].numerical, expected)
+
+    # Shared members alias; independent members and inputs remain unchanged.
+    independent = out[1].numerical.clone()
+    out[0].numerical.fill_(-1)
+    torch.testing.assert_close(out[2].numerical, out[0].numerical)
+    torch.testing.assert_close(out[1].numerical, independent)
+    for original, table in zip(originals, (*groups, right_table), strict=True):
+        torch.testing.assert_close(table.numerical, original)
+
+
+def test_concatenate_numerical_preserves_heterogeneous_groups() -> None:
+    left = EnsembleTable.from_tables(
+        tables=tuple(
+            TableTensor.from_tensor(
+                tensor=torch.ones(2, 1, dtype=dtype), columns=("left",)
+            )
+            for dtype in (torch.float32, torch.float64)
+        ),
+        member_table_ids=(0, 1, 0),
+    )
+    right = EnsembleTable.from_table(
+        TableTensor.from_tensor(torch.ones(2, 1), columns=("right",)),
+        num_members=3,
+    )
+
+    out = EnsembleTable.concatenate_columns((left, right))
+
+    assert out.num_groups == 2
+    for member_id in range(len(out)):
+        torch.testing.assert_close(
+            out[member_id].numerical,
+            torch.ones(2, 2, dtype=left[member_id].numerical.dtype),
+        )
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
+def test_concatenate_numerical_preserves_autocast(dtype: torch.dtype) -> None:
+    left = EnsembleTable.from_tables(
+        tables=tuple(
+            TableTensor.from_tensor(
+                tensor=torch.full((2, 1), value, dtype=dtype),
+                columns=("left",),
+            )
+            for value in (1, 2)
+        ),
+        member_table_ids=(1, 0),
+    )
+    right = EnsembleTable.from_table(
+        TableTensor.from_tensor(torch.ones(2, 1), columns=("right",)),
+        num_members=2,
+    )
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        out = EnsembleTable.concatenate_columns((left, right))
+        for member_id in range(len(out)):
+            expected = torch.cat(
+                (left[member_id].numerical, right[member_id].numerical), dim=-1
+            )
+            torch.testing.assert_close(out[member_id].numerical, expected)
+
+
+def test_concatenate_numerical_preserves_grad() -> None:
+    values = torch.randn(2, 3, 1, requires_grad=True)
+    left = EnsembleTable.from_tables(
+        tables=tuple(
+            TableTensor(numerical=member, columns={"numerical": ("left",)})
+            for member in values
+        ),
+        member_table_ids=(1, 0, 1),
+    )
+    right = EnsembleTable.from_table(
+        TableTensor.from_tensor(torch.ones(3, 1), columns=("right",)),
+        num_members=3,
+    )
+    out = EnsembleTable.concatenate_columns((left, right))
+    torch.stack([member.numerical.sum() for member in out]).sum().backward()
+    torch.testing.assert_close(
+        values.grad, values.new_tensor([1, 2]).view(2, 1, 1).expand_as(values)
+    )
