@@ -35,7 +35,15 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.AlignCategories(),
                     sp.ShuffleCategories(method="shift"),
                 ],
-                numerical=sp.Standardize(),
+                numerical=[
+                    sp.Choice(
+                        sp.Identity(),
+                        sp.PowerTransform(),
+                        sp.QuantileTransform(),
+                        method="round_robin",
+                    ),
+                    sp.Standardize(),
+                ],
             ),
         ],
         output=[
