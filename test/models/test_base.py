@@ -32,6 +32,7 @@ class _RecordingModel(ICLModel):
     def __init__(self) -> None:
         super().__init__(task=None)
         self.calls: list[_Call] = []
+        self.eval()
 
     def _forward(
         self,
@@ -316,6 +317,22 @@ def test_train_mode_enables_grad() -> None:
     model.train()
     out = model(x_context, y_context, x_query)
     assert not torch.is_inference(out)
+
+
+def test_train_mode_disallowed_for_predict() -> None:
+    model = _RecordingModel()
+    x_context = torch.tensor([[0.0], [2.0]])
+    y_context = torch.tensor([[0.0], [1.0]])
+    x_query = torch.tensor([[3.0]])
+
+    model.eval()
+    model.fit(x_context, y_context)
+    out = model.predict(x_query)
+    assert torch.is_inference(out)
+
+    model.train()
+    with pytest.raises(RuntimeError, match="does not support"):
+        model.predict(x_query)
 
 
 def test_related_table_preprocessing_forward_and_cache() -> None:

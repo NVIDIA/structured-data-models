@@ -34,6 +34,14 @@ Its weights are not bundled with this project and may be downloaded only after t
 The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
 Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
+## TabPFN Extensions
+
+- Source: https://github.com/PriorLabs/tabpfn-extensions
+- License: Apache License 2.0
+- License terms: [`third_party/tabpfn-extensions/LICENSE`](third_party/tabpfn-extensions/LICENSE)
+
+The [`sdm/models/ecoc.py`](sdm/models/ecoc.py) implementation contains code derived from [`TabPFN Extensions`](https://github.com/PriorLabs/tabpfn-extensions).
+
 ## PyTorch Contribution Guide
 
 Portions of [`CONTRIBUTING.md`](CONTRIBUTING.md) are adapted from the [PyTorch contribution guide](https://github.com/pytorch/pytorch/blob/main/CONTRIBUTING.md), distributed under the BSD 3-Clause License. The complete copyright notices and license terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).
