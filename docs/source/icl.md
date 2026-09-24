@@ -269,4 +269,7 @@ For example, {py:class}`~sdm.models.KumoRelational` consumes the `x_context` and
 
 To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we provide heterogeneous, temporally aware subgraph samplers with CPU and CUDA backends, based on [`pyg-lib`](https://github.com/pyg-team/pyg-lib) and [`cugraph`](https://docs.rapids.ai/api/cugraph), respectively.
 Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
-The full relational sampling and prediction flow is shown in [`examples/kumo/relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/rel_bench.py).
+
+```{note}
+The full relational sampling and prediction flow, including temporal sampling, is shown in [`examples/kumo/relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/rel_bench.py).
+```
