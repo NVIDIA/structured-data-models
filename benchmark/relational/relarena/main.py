@@ -10,9 +10,9 @@ import numpy as np
 import pandas as pd
 import torch
 import tqdm
-from relarena.model import RelArenaModel
-from relarena.registry import register_model
-from relarena.search_space import SearchSpace, TaskStats
+from relarena_core.model import RelArenaModel
+from relarena_core.registry import register_model
+from relarena_core.search_space import SearchSpace, TaskStats
 from relbench.base import Database, EntityTask, Table, TaskType
 
 import sdm
