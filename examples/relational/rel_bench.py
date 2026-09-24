@@ -95,8 +95,7 @@ if len(context) > args.context_size:
     # Sample different context per estimator:
     repeats = math.ceil(args.context_size * num_estimators / len(context))
     perm = torch.cat([torch.randperm(len(context)) for _ in range(repeats)])
-    perm = perm[: args.context_size * num_estimators]
-    context = context[perm]
+    context = context[perm[: args.context_size * num_estimators]]
     if num_estimators > 1:
         context = context.unflatten(0, (num_estimators, args.context_size))
         query = query.expand(num_estimators, *query.size())

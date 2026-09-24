@@ -1,13 +1,12 @@
 import argparse
 import math
-import sys
-import tqdm
 from functools import lru_cache
 from itertools import product
 
 import numpy as np
 import pandas as pd
 import torch
+import tqdm
 from relarena.model import RelArenaModel
 from relarena.registry import register_model
 from relarena.search_space import SearchSpace, TaskStats
@@ -90,7 +89,16 @@ def search_space(stats: TaskStats) -> SearchSpace:
         num_estimators = [1]
     else:
         # print("Large Data Regime", stats.num_train_nodes)
-        num_neighbors = [[], [1, 1], [8, 8], [16, 16], [32, 32], [64, 64], [96, 96], [128, 128]]
+        num_neighbors = [
+            [],
+            [1, 1],
+            [8, 8],
+            [16, 16],
+            [32, 32],
+            [64, 64],
+            [96, 96],
+            [128, 128],
+        ]
         # num_neighbors = [[8, 8], [16, 16], [32, 32], [64, 64]]
         # num_neighbors = [[4, 4], [8, 8], [16, 16], [32, 32], [4], [8]u
         # num_neighbors = [[32, 32]]
@@ -147,7 +155,7 @@ def search_space(stats: TaskStats) -> SearchSpace:
 def get_sampler(db: Database) -> sdm.relational.RelationalSampler:
     tables = {}
     for name, table in db.table_dict.items():
-        stypes=sdm.infer_stypes(
+        stypes = sdm.infer_stypes(
             table.df.head(10_000),
             overrides={
                 table.pkey_col: "id",
@@ -161,7 +169,7 @@ def get_sampler(db: Database) -> sdm.relational.RelationalSampler:
         #     print(col, stype)
         # if name == 'races':
         #     del stypes['name']
-        if name == 'drivers':
+        if name == "drivers":
             # del stypes["code"]
             del stypes["forename"]
             del stypes["surname"]
@@ -258,8 +266,8 @@ class KumoRelationalModel(RelArenaModel):
             context = context[perm[: context_size * num_estimators]]
             if num_estimators > 1:
                 context = context.unflatten(0, (num_estimators, context_size))
-                num_estimators = None
                 self.expand_query = True
+                num_estimators = None
         else:
             perm = torch.randperm(len(context), generator=generator)
             context = context[perm[:context_size]]
@@ -360,6 +368,5 @@ if __name__ == "__main__":
     known_args, unknown_args = parser.parse_known_args()
     NUM_NEIGHBORS = known_args.num_neighbors
     NUM_LAGS = known_args.num_lags
-
 
     main(["--model", KumoRelationalModel.name, *unknown_args])
