@@ -443,7 +443,12 @@ class TableTensor(Tensor):
                         dtype=dtype,
                     )
                 else:
-                    values = df[numerical_columns].to_numpy(
+                    numerical_df = (
+                        df
+                        if numerical_columns == list(df.columns)
+                        else df[numerical_columns]
+                    )
+                    values = numerical_df.to_numpy(
                         dtype=numpy_dtype,
                         na_value=np.nan,
                     )
@@ -474,22 +479,33 @@ class TableTensor(Tensor):
                         )
                         code[:, i] = column_code
 
-                    array = pa.array(values, from_pandas=True)
-                    is_string = pa.types.is_string(array.type)
-                    is_large_string = pa.types.is_large_string(array.type)
-                    if is_string or is_large_string:
-                        category = StringTensor.from_arrow(
-                            array,
-                            device=device,
-                        )
-                    elif pa.types.is_null(array.type):
-                        category = torch.empty(
-                            0,
-                            dtype=torch.int64,
+                    category_dtype = values.dtype
+                    if (
+                        pd.api.types.is_bool_dtype(category_dtype)
+                        or pd.api.types.is_integer_dtype(category_dtype)
+                        or pd.api.types.is_float_dtype(category_dtype)
+                    ):
+                        category = torch.tensor(
+                            np.asarray(values),
                             device=device,
                         )
                     else:
-                        category = arrow_as_tensor(array, device=device)
+                        array = pa.array(values, from_pandas=True)
+                        is_string = pa.types.is_string(array.type)
+                        is_large_string = pa.types.is_large_string(array.type)
+                        if is_string or is_large_string:
+                            category = StringTensor.from_arrow(
+                                array,
+                                device=device,
+                            )
+                        elif pa.types.is_null(array.type):
+                            category = torch.empty(
+                                0,
+                                dtype=torch.int64,
+                                device=device,
+                            )
+                        else:
+                            category = arrow_as_tensor(array, device=device)
                     categories.append(category)
 
                 code_tensor = (
