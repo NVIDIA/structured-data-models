@@ -3,12 +3,12 @@
 
 # ruff: noqa: D101
 
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import torch
 from torch.nn import GELU, Linear, RMSNorm, Sequential
 
-from sdm.models.kumo.tabular.norm import RMSNorm as CompiledRMSNorm
+from sdm.models.kumo.tabular.norm import ColumnRMSNorm, RowRMSNorm
 from sdm.nn import QueryScaling, RotaryEmbedding, TransformerBlock
 
 
@@ -19,7 +19,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
         num_heads: int,
         query_scaling: QueryScaling | None,
         rope: RotaryEmbedding | None = None,
-        compile_input_norms: bool = False,
+        compile_input_norms: Literal["column", "row"] | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -56,7 +56,13 @@ class KumoTabularTransformerBlock(TransformerBlock):
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).weight)
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).bias)
 
-        input_norm = CompiledRMSNorm if compile_input_norms else RMSNorm
+        if compile_input_norms is None:
+            input_norm = RMSNorm
+        elif compile_input_norms == "column":
+            input_norm = ColumnRMSNorm
+        else:
+            assert compile_input_norms == "row"
+            input_norm = RowRMSNorm
 
         super().__init__(
             channels=channels,

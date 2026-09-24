@@ -4,7 +4,7 @@
 import torch
 
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.models.kumo.tabular.norm import RMSNorm
+from sdm.models.kumo.tabular.norm import ColumnRMSNorm, RowRMSNorm
 from sdm.nn import LogScale
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
@@ -27,9 +27,9 @@ def test_transformer_block(device: torch.device) -> None:
 
 @onlyCUDA
 @onlyFullTest
-def test_rms_norm_compile_dynamic_shapes() -> None:
+def test_column_rms_norm_compile_dynamic_shapes() -> None:
     torch._dynamo.reset()
-    norm = RMSNorm(128, device="cuda")
+    norm = ColumnRMSNorm(128, device="cuda")
 
     def make_input(columns: int, rows: int) -> torch.Tensor:
         return torch.randn(
@@ -54,5 +54,38 @@ def test_rms_norm_compile_dynamic_shapes() -> None:
             with torch._dynamo.config.patch(error_on_recompile=True):
                 for columns, rows in [(100, 10_000), (10, 100_000)]:
                     norm(make_input(columns, rows))
+    finally:
+        torch._dynamo.reset()
+
+
+@onlyCUDA
+@onlyFullTest
+def test_row_rms_norm_compile_dynamic_shapes() -> None:
+    torch._dynamo.reset()
+    norm = RowRMSNorm(128, device="cuda")
+
+    def make_input(rows: int, columns: int) -> torch.Tensor:
+        return torch.randn(
+            rows,
+            columns + 4,
+            128,
+            dtype=torch.float16,
+            device="cuda",
+        )
+
+    try:
+        with torch.inference_mode(), torch.autocast("cuda", torch.float16):
+            x = make_input(rows=4_000, columns=10)
+            expected = torch.nn.functional.rms_norm(
+                x,
+                norm.normalized_shape,
+                weight=norm.weight,
+                eps=norm.eps,
+            )
+            torch.testing.assert_close(norm(x), expected)
+
+            with torch._dynamo.config.patch(error_on_recompile=True):
+                for rows, columns in [(10_000, 100), (2_000, 500)]:
+                    norm(make_input(rows, columns))
     finally:
         torch._dynamo.reset()

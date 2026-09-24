@@ -76,14 +76,14 @@ class RowEmbedding(torch.nn.Module):
                         num_heads=num_heads,
                         **factory_kwargs,
                     ),
-                    compile_input_norms=True,
+                    compile_input_norms="column",
                     **factory_kwargs,
                 ),
                 output_block=KumoTabularTransformerBlock(
                     channels=channels,
                     num_heads=num_heads,
                     query_scaling=None,
-                    compile_input_norms=True,
+                    compile_input_norms="column",
                     **factory_kwargs,
                 ),
                 **factory_kwargs,
@@ -101,6 +101,7 @@ class RowEmbedding(torch.nn.Module):
                     **factory_kwargs,
                 ),
                 rope=rope,
+                compile_input_norms="row",
                 **factory_kwargs,
             )
             for _ in range(num_layers)
