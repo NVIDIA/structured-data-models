@@ -11,9 +11,18 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
+
+# cuDNN attention builds an execution plan for every new input shape, which
+# costs more than the attention itself on the ever-changing shapes of tables.
+_SDPA_BACKENDS = [
+    SDPBackend.FLASH_ATTENTION,
+    SDPBackend.EFFICIENT_ATTENTION,
+    SDPBackend.MATH,
+]
 
 
 class SDPA(torch.nn.Module):
@@ -144,16 +153,17 @@ class SDPA(torch.nn.Module):
         if query.size(-2) != key.size(-2):
             enable_gqa = True
 
-        out = F.scaled_dot_product_attention(
-            query=query.transpose(-3, -2),  # [B, Hq, Q, C],
-            key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
-            value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
-            attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
-            if attn_mask is not None
-            else None,
-            enable_gqa=enable_gqa,
-            scale=self.scale,
-        ).transpose(-3, -2)  # [B, Q, Hq, C]
+        with sdpa_kernel(_SDPA_BACKENDS):
+            out = F.scaled_dot_product_attention(
+                query=query.transpose(-3, -2),  # [B, Hq, Q, C],
+                key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
+                value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
+                attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
+                if attn_mask is not None
+                else None,
+                enable_gqa=enable_gqa,
+                scale=self.scale,
+            ).transpose(-3, -2)  # [B, Q, Hq, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
