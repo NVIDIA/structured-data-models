@@ -281,9 +281,10 @@ class TableTensor(Tensor):
 
         column_names = list(chain.from_iterable(columns.values()))
         column_to_loc: dict[str, tuple[Stype, int]] = {}
-        for stype, names in columns.items():
+        for stype_like, names in columns.items():
+            stype = Stype(stype_like)
             for i, name in enumerate(names):
-                column_to_loc[name] = (Stype(stype), i)
+                column_to_loc[name] = (stype, i)
         if len(column_names) != len(column_to_loc):
             raise ValueError("Expected column names to be unique")
 
