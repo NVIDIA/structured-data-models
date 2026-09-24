@@ -28,6 +28,16 @@ if TYPE_CHECKING:
 
 aten = torch.ops.aten
 
+_NUMPY_TORCH_DTYPES = {
+    np.dtype(np.float16): torch.float16,
+    np.dtype(np.float32): torch.float32,
+    np.dtype(np.float64): torch.float64,
+}
+_TORCH_NUMPY_DTYPES = {
+    torch_dtype: numpy_dtype
+    for numpy_dtype, torch_dtype in _NUMPY_TORCH_DTYPES.items()
+}
+
 
 def preserve_view_inference_mode(fn: Callable) -> Callable:
     r"""Preserve input inference state for tensor view operations."""
@@ -468,11 +478,9 @@ class TableTensor(Tensor):
             numerical_columns = columns.get(Stype.numerical)
             if numerical_columns:
                 dtype = torch.get_default_dtype()
-                numpy_dtype = {
-                    torch.float16: np.float16,
-                    torch.float32: np.float32,
-                    torch.float64: np.float64,
-                }.get(dtype, np.float32)
+                numpy_dtype = _TORCH_NUMPY_DTYPES.get(
+                    dtype, np.dtype(np.float32)
+                )
                 if len(df) == 0:
                     blocks[Stype.numerical] = torch.empty(
                         (0, len(numerical_columns)),
