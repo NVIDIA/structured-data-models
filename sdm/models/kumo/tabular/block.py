@@ -6,9 +6,32 @@
 from typing import Any, cast
 
 import torch
+from torch import Tensor
 from torch.nn import GELU, Linear, RMSNorm, Sequential
 
+from sdm._kernels import rms_norm
 from sdm.nn import QueryScaling, RotaryEmbedding, TransformerBlock
+
+
+class _RMSNorm(RMSNorm):
+    # Autocast runs RMSNorm in single precision, and the projection or
+    # attention consuming it casts the result back. At inference, normalize
+    # straight into the autocast dtype instead.
+    def forward(self, x: Tensor) -> Tensor:
+        if (
+            torch.is_grad_enabled()
+            or torch.compiler.is_compiling()
+            or not x.is_cuda
+            or not torch.is_autocast_enabled("cuda")
+        ):
+            return super().forward(x)
+        eps = torch.finfo(torch.float32).eps if self.eps is None else self.eps
+        return rms_norm(
+            x,
+            weight=self.weight,
+            eps=eps,
+            dtype=torch.get_autocast_dtype("cuda"),
+        )
 
 
 class KumoTabularTransformerBlock(TransformerBlock):
@@ -29,7 +52,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
             query_transforms.append(rope)
             key_transforms.append(rope)
         query_transforms.append(
-            RMSNorm(
+            _RMSNorm(
                 channels // num_heads,
                 eps=1e-6,
                 elementwise_affine=False,
@@ -37,7 +60,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
             )
         )
         key_transforms.append(
-            RMSNorm(
+            _RMSNorm(
                 channels // num_heads,
                 eps=1e-6,
                 elementwise_affine=False,
@@ -46,7 +69,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
         )
 
         mlp = Sequential(
-            RMSNorm(channels, **factory_kwargs),
+            _RMSNorm(channels, **factory_kwargs),
             Linear(channels, 2 * channels, **factory_kwargs),
             GELU(),
             Linear(2 * channels, channels, **factory_kwargs),
@@ -58,8 +81,8 @@ class KumoTabularTransformerBlock(TransformerBlock):
             channels=channels,
             num_query_heads=num_heads,
             mlp=mlp,
-            query_norm=RMSNorm(channels, **factory_kwargs),
-            key_value_norm=RMSNorm(channels, **factory_kwargs),
+            query_norm=_RMSNorm(channels, **factory_kwargs),
+            key_value_norm=_RMSNorm(channels, **factory_kwargs),
             query_transform=Sequential(*query_transforms),
             key_transform=Sequential(*key_transforms),
             query_scaling=query_scaling,
