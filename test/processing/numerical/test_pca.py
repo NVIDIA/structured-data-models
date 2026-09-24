@@ -38,3 +38,41 @@ def test_pca_projects_onto_fitted_dominant_direction() -> None:
         out.numerical.abs().squeeze(1),
         (transform_table.numerical - fit_mean).norm(dim=1),
     )
+
+
+def test_appends_components_and_holds_out_excluded_columns() -> None:
+    generator = torch.Generator().manual_seed(0)
+    numerical = torch.randn(8, 4, generator=generator)
+    # A missing value in every column, which the projection must survive.
+    numerical.diagonal().fill_(float("nan"))
+    table = TableTensor(numerical=numerical)
+    pca = PCA(2, append_original=True, exclude_columns=("num_0",))
+
+    out = pca.fit_transform(table)
+    components = out.numerical[:, 4:]
+
+    assert out.columns[Stype.numerical] == (
+        *table.columns[Stype.numerical],
+        "pca_0",
+        "pca_1",
+    )
+    torch.testing.assert_close(out.numerical[:, :4], numerical, equal_nan=True)
+    assert components.isfinite().all()
+
+    shifted = table.replace_blocks(numerical=numerical.clone())
+    shifted.numerical[:, 0] += 100.0
+    torch.testing.assert_close(
+        pca.transform(shifted).numerical[:, 4:],
+        components,
+    )
+
+
+def test_without_centering_the_projection_keeps_the_mean() -> None:
+    table = TableTensor(numerical=torch.ones(4, 3))
+    pca = PCA(1, center=False)
+
+    out = pca.fit_transform(table)
+
+    # A centered projection maps constant columns onto the origin.
+    assert (pca.mean == 0).all()
+    assert out.numerical.abs().min() > 0
