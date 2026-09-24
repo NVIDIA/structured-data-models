@@ -9,6 +9,8 @@ import torch
 from torch.nn import GELU, Linear, RMSNorm, Sequential
 
 from sdm.nn import QueryScaling, RotaryEmbedding, TransformerBlock
+from sdm.nn._rmsnorm_for_linear import _RMSNormForLinear
+from sdm.nn._rope_rmsnorm import _RoPERMSNorm
 
 
 class KumoTabularTransformerBlock(TransformerBlock):
@@ -46,7 +48,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
         )
 
         mlp = Sequential(
-            RMSNorm(channels, **factory_kwargs),
+            _RMSNormForLinear(channels, **factory_kwargs),
             Linear(channels, 2 * channels, **factory_kwargs),
             GELU(),
             Linear(2 * channels, channels, **factory_kwargs),
@@ -54,14 +56,15 @@ class KumoTabularTransformerBlock(TransformerBlock):
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).weight)
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).bias)
 
+        transform = Sequential if rope is None else _RoPERMSNorm
         super().__init__(
             channels=channels,
             num_query_heads=num_heads,
             mlp=mlp,
-            query_norm=RMSNorm(channels, **factory_kwargs),
-            key_value_norm=RMSNorm(channels, **factory_kwargs),
-            query_transform=Sequential(*query_transforms),
-            key_transform=Sequential(*key_transforms),
+            query_norm=_RMSNormForLinear(channels, **factory_kwargs),
+            key_value_norm=_RMSNormForLinear(channels, **factory_kwargs),
+            query_transform=transform(*query_transforms),
+            key_transform=transform(*key_transforms),
             query_scaling=query_scaling,
             **factory_kwargs,
         )

@@ -7,11 +7,12 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Embedding, Linear, ModuleList, RMSNorm, Sequential
+from torch.nn import GELU, Embedding, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.nn import LogScale
+from sdm.nn._rmsnorm_for_linear import _RMSNormForLinear
 
 
 class ICLBlock(torch.nn.Module):
@@ -50,7 +51,7 @@ class ICLBlock(torch.nn.Module):
             for _ in range(num_layers)
         )
 
-        self.norm = RMSNorm(channels, **factory_kwargs)
+        self.norm = _RMSNormForLinear(channels, **factory_kwargs)
         self.head = Sequential(
             Linear(channels, 2 * channels, **factory_kwargs),
             GELU(),

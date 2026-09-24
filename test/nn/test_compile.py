@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
 import os
 from collections.abc import Callable, Iterator
 
@@ -16,6 +17,8 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
+from sdm.nn._rmsnorm_for_linear import _RMSNormForLinear
+from sdm.nn._rope_rmsnorm import _RoPERMSNorm
 from sdm.testing import withCUDA
 
 # Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
@@ -39,6 +42,34 @@ def fullgraph(module: torch.nn.Module) -> Callable[..., Tensor]:
     # code generation, keeping the tests fast while staying numerically
     # identical to the uncompiled module.
     return torch.compile(module, fullgraph=True, backend="eager")
+
+
+@withCUDA
+@pytest.mark.parametrize("rope", [False, True])
+def test_fused_norm_compile(device: torch.device, rope: bool) -> None:
+    channels = 32 if rope else 128
+    native = torch.nn.RMSNorm(
+        channels, eps=1e-6, elementwise_affine=not rope, device=device
+    )
+    if rope:
+        native = torch.nn.Sequential(
+            RotaryEmbedding(channels, layout="split_half", device=device),
+            native,
+        )
+        fused = _RoPERMSNorm(*copy.deepcopy(native))
+    else:
+        fused = _RMSNormForLinear(channels, eps=1e-6, device=device)
+        fused.load_state_dict(native.state_dict())
+    native.eval()
+    fused.eval()
+    compiled = fullgraph(fused)
+    with (
+        torch.inference_mode(),
+        torch.autocast(device.type, enabled=device.type == "cuda"),
+    ):
+        for rows in (1, 17, 257):
+            x = torch.randn(2, rows, 4, channels, device=device)
+            torch.testing.assert_close(compiled(x), native(x), rtol=0, atol=0)
 
 
 @withCUDA
