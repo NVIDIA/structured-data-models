@@ -214,11 +214,6 @@ class SDMKumoTabularModel(SDMModel):
         hyperparameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        """Warm the environment before TabArena starts timing.
-
-        Extend this hook with data-independent Kumo kernel compilation.
-        Never access benchmark data or retain fitted state here.
-        """
         warmup_torch(cuda=None if num_gpus is None else num_gpus > 0)
 
     @staticmethod
