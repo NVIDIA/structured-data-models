@@ -525,17 +525,52 @@ class TableTensor(Tensor):
                     )
 
             if categorical_columns := columns.get(Stype.categorical):
-                code = np.empty(
-                    (len(df), len(categorical_columns)),
-                    dtype=np.int32,
+                categorical_series = [df[name] for name in categorical_columns]
+                all_categorical = all(
+                    isinstance(ser.dtype, pd.CategoricalDtype)
+                    for ser in categorical_series
                 )
+                use_int64_code = not all_categorical and any(
+                    isinstance(ser.dtype, pd.ArrowDtype)
+                    and pa.types.is_dictionary(ser.dtype.pyarrow_dtype)
+                    and pa.types.is_int64(ser.dtype.pyarrow_dtype.index_type)
+                    for ser in categorical_series
+                )
+                numpy_code_dtype = np.int64 if use_int64_code else np.int32
+                torch_code_dtype = (
+                    torch.int64 if use_int64_code else torch.int32
+                )
+                if all_categorical:
+                    code = np.stack(
+                        [ser.array.codes for ser in categorical_series], axis=1
+                    ).astype(
+                        numpy_code_dtype,
+                        copy=False,
+                    )
+                else:
+                    code = np.empty(
+                        (len(df), len(categorical_columns)),
+                        dtype=numpy_code_dtype,
+                    )
                 categories: list[Tensor] = []
-                for i, name in enumerate(categorical_columns):
-                    ser = df[name]
-                    if isinstance(ser.dtype, pd.CategoricalDtype):
+                for i, ser in enumerate(categorical_series):
+                    if all_categorical:
+                        categorical = ser.array
+                        values = categorical.categories
+                    elif isinstance(ser.dtype, pd.CategoricalDtype):
                         categorical = ser.array
                         code[:, i] = categorical.codes
                         values = categorical.categories
+                    elif ser.dtype.kind == "f" or (
+                        isinstance(ser.dtype, pd.ArrowDtype)
+                        and pa.types.is_dictionary(ser.dtype.pyarrow_dtype)
+                    ):
+                        categorical = CategoricalTensor.from_arrow(
+                            pa.array(ser, from_pandas=True)
+                        )
+                        code[:, i] = categorical.code[:, 0].numpy()
+                        categories.append(categorical.categories[0])
+                        continue
                     else:
                         column_code, values = pd.factorize(
                             ser,
@@ -545,15 +580,8 @@ class TableTensor(Tensor):
                         code[:, i] = column_code
 
                     category_dtype = values.dtype
-                    if (
-                        pd.api.types.is_bool_dtype(category_dtype)
-                        or pd.api.types.is_integer_dtype(category_dtype)
-                        or pd.api.types.is_float_dtype(category_dtype)
-                    ):
-                        category = torch.tensor(
-                            np.asarray(values),
-                            device="cpu",
-                        )
+                    if category_dtype.kind in "biuf":
+                        category = torch.from_numpy(np.asarray(values).copy())
                     else:
                         array = pa.array(values, from_pandas=True)
                         is_string = pa.types.is_string(array.type)
@@ -569,6 +597,16 @@ class TableTensor(Tensor):
                                 dtype=torch.int64,
                                 device="cpu",
                             )
+                        elif ser.dtype.kind == "O" and (
+                            pa.types.is_boolean(array.type)
+                            or pa.types.is_integer(array.type)
+                            or pa.types.is_floating(array.type)
+                        ):
+                            categorical = CategoricalTensor.from_arrow(
+                                pa.array(ser, from_pandas=True)
+                            )
+                            code[:, i] = categorical.code[:, 0].numpy()
+                            category = categorical.categories[0]
                         else:
                             category = arrow_as_tensor(array, device="cpu")
                     categories.append(category)
@@ -578,7 +616,7 @@ class TableTensor(Tensor):
                     if len(df) > 0
                     else torch.empty(
                         (0, len(categorical_columns)),
-                        dtype=torch.int32,
+                        dtype=torch_code_dtype,
                         device=target_device,
                     )
                 )

@@ -1303,6 +1303,124 @@ def test_from_pandas_categorical_default_device() -> None:
             )
 
 
+@pytest.mark.parametrize(
+    ("pandas_dtype", "torch_dtype"),
+    [("float32", torch.float32), ("float64", torch.float64)],
+)
+def test_from_pandas_float_categorical_signed_zero(
+    pandas_dtype: str,
+    torch_dtype: torch.dtype,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "category": pd.Series(
+                [-0.0, 0.0, None, -0.0],
+                dtype=pandas_dtype,
+            )
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"category": Stype.categorical},
+    )
+
+    assert tensor.categorical.code.equal(
+        torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32)
+    )
+    category = tensor.categorical.categories[0]
+    assert category.dtype == torch_dtype
+    assert category.numel() == 2
+    assert category.signbit().equal(torch.tensor([True, False]))
+
+
+@pytest.mark.parametrize(
+    ("index_type", "code_dtype"),
+    [(pa.int8(), torch.int32), (pa.int64(), torch.int64)],
+)
+def test_from_pandas_arrow_dictionary_categorical(
+    index_type: pa.DataType,
+    code_dtype: torch.dtype,
+) -> None:
+    dtype = pd.ArrowDtype(pa.dictionary(index_type, pa.string()))
+    df = pd.DataFrame(
+        {"category": pd.Series(["b", None, "a", "b"], dtype=dtype)}
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"category": Stype.categorical},
+    )
+
+    assert tensor.categorical.code.equal(
+        torch.tensor([[0], [-1], [1], [0]], dtype=code_dtype)
+    )
+    assert tensor.categorical.code.dtype == code_dtype
+    assert tensor.categorical.categories[0].tolist() == ["b", "a"]
+
+    empty = TableTensor.from_pandas(
+        df=df.iloc[:0],
+        stypes={"category": Stype.categorical},
+    )
+    assert empty.categorical.code.dtype == code_dtype
+
+
+def test_from_pandas_object_numeric_categorical() -> None:
+    df = pd.DataFrame(
+        {
+            "category": pd.Series(
+                [1, 1.0, 2, 2.0],
+                dtype=object,
+            )
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"category": Stype.categorical},
+    )
+
+    assert tensor.categorical.code.equal(
+        torch.tensor([[0], [0], [1], [1]], dtype=torch.int32)
+    )
+    category = tensor.categorical.categories[0]
+    assert category.dtype == torch.float64
+    assert category.equal(torch.tensor([1.0, 2.0], dtype=torch.float64))
+
+
+def test_from_pandas_declared_categoricals() -> None:
+    df = pd.DataFrame(
+        {
+            "string": pd.Categorical(
+                ["b", None, "a"],
+                categories=["unused", "a", "b"],
+            ),
+            "number": pd.Categorical(
+                [2, 1, None],
+                categories=[1, 2],
+            ),
+        }
+    )
+
+    stypes = {
+        "string": Stype.categorical,
+        "number": Stype.categorical,
+    }
+    tensor = TableTensor.from_pandas(df=df, stypes=stypes)
+
+    assert tensor.categorical.code.is_contiguous()
+    assert tensor.categorical.code.equal(
+        torch.tensor([[2, 1], [-1, 0], [1, -1]], dtype=torch.int32)
+    )
+    assert tensor.categorical.categories[0].tolist() == ["unused", "a", "b"]
+    assert tensor.categorical.categories[1].equal(torch.tensor([1, 2]))
+
+    empty = TableTensor.from_pandas(df=df.iloc[:0], stypes=stypes)
+    assert empty.categorical.code.size() == (0, 2)
+    assert empty.categorical.code.dtype == torch.int32
+    assert empty.categorical.code.is_contiguous()
+
+
 @withCUDA
 def test_from_pandas_nullable_and_categorical_dtypes(
     device: torch.device,
