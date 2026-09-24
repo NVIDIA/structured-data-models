@@ -128,7 +128,7 @@ def get_sampler(
             unsupported="drop",
         )
         if name == "drivers" and text == "off":
-            # Discard miscategorized text columns:
+            # Discard misclassified text columns:
             del stypes["forename"], stypes["surname"]
         tables[name] = sdm.TableTensor.from_pandas(table.df, stypes)
 
@@ -214,7 +214,7 @@ class KumoRelationalModel(RelArenaModel):
 
         self.sampler = get_sampler(
             db=db,
-            # NOTE Stype logic miscategorizes categorical columns in rel-trial:
+            # Stype inference misclassifies text columns in rel-trial:
             text="off" if task.entity_table == "facilities" else "drop",
         )
 
@@ -247,8 +247,6 @@ class KumoRelationalModel(RelArenaModel):
         table: Table,
     ) -> np.ndarray:
 
-        device = torch.device("cuda:0")
-
         query = get_context(
             df=table.df,
             history=self.train_df,
@@ -270,9 +268,9 @@ class KumoRelationalModel(RelArenaModel):
                 },
                 num_neighbors=num_neighbors,
                 task_time_column=task.time_col,
-            ).to(device)
+            ).to(self.model.device)
 
-            with torch.amp.autocast(device.type, torch.float16):
+            with torch.amp.autocast(self.model.device.type, torch.float16):
                 outs.append(self.model.predict(batch, related_tables))
         out = cast(sdm.TableTensor, torch.cat(outs, dim=-2))
 
