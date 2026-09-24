@@ -454,8 +454,11 @@ This makes it possible to represent disjoint relational neighborhoods for differ
 <p>The <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.supports_related_tables" title="sdm.models.ICLModel.supports_related_tables"><code class="xref py py-attr docutils literal notranslate"><span class="pre">supports_related_tables</span></code></a> attribute denotes whether an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> supports relational context.
 For example, <a class="reference internal" href="api/generated/sdm.models.KumoRelational.html#sdm.models.KumoRelational" title="sdm.models.KumoRelational"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoRelational</span></code></a> consumes the <code class="docutils literal notranslate"><span class="pre">x_context</span></code> and <code class="docutils literal notranslate"><span class="pre">x_query</span></code> together with related tables, propagates information through its induced relational subgraph, and then predicts the query rows from the labeled context rows.</p>
 <p>To simplify the construction of <a class="reference internal" href="api/generated/sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.RelatedTables"><code class="xref py py-class docutils literal notranslate"><span class="pre">RelatedTables</span></code></a>, we provide heterogeneous, temporally aware subgraph samplers with CPU and CUDA backends, based on <a class="reference external" href="https://github.com/pyg-team/pyg-lib"><code class="docutils literal notranslate"><span class="pre">pyg-lib</span></code></a> and <a class="reference external" href="https://docs.rapids.ai/api/cugraph"><code class="docutils literal notranslate"><span class="pre">cugraph</span></code></a>, respectively.
-Given rows from <code class="docutils literal notranslate"><span class="pre">x_context</span></code> or <code class="docutils literal notranslate"><span class="pre">x_query</span></code>, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
-The full relational sampling and prediction flow is shown in <a class="reference external" href="https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/rel_bench.py"><code class="docutils literal notranslate"><span class="pre">examples/kumo/relational/rel_bench.py</span></code></a>.</p>
+Given rows from <code class="docutils literal notranslate"><span class="pre">x_context</span></code> or <code class="docutils literal notranslate"><span class="pre">x_query</span></code>, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The full relational sampling and prediction flow, including temporal sampling, is shown in <a class="reference external" href="https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/rel_bench.py"><code class="docutils literal notranslate"><span class="pre">examples/kumo/relational/rel_bench.py</span></code></a>.</p>
+</div>
 </section>
 </section>
 
@@ -483,7 +486,7 @@ The full relational sampling and prediction flow is shown in <a class="reference
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=d095d4e6"></script>
+      <script src="_static/documentation_options.js?v=9dbb1fe6"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
