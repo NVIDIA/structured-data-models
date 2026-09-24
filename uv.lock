@@ -19,11 +19,6 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
-autogluon-common = false
-autogluon-core = false
-autogluon-features = false
-autogluon-tabular = false
-bencheval = false
 libcugraph-cu13 = false
 pylibraft-cu13 = false
 libcuvs-cu13 = false
@@ -38,7 +33,6 @@ libkvikio-cu13 = false
 relbench = false
 triton = false
 cudf-cu13 = false
-tabarena = false
 
 [[package]]
 name = "alabaster"

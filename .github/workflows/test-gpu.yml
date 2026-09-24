@@ -156,16 +156,22 @@ jobs:
             --find-links=https://data.pyg.org/whl/torch-2.14.0+cu130.html \
             --index-strategy=unsafe-best-match \
             --prerelease=allow \
+            --exclude-newer-package='autogluon-common=0 days' \
+            --exclude-newer-package='autogluon-core=0 days' \
+            --exclude-newer-package='autogluon-features=0 days' \
+            --exclude-newer-package='autogluon-tabular=0 days' \
+            --exclude-newer-package='bencheval=0 days' \
+            --exclude-newer-package='tabarena=0 days' \
             . \
             'TALENT@git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6' \
-            'autogluon.tabular>=1.6.4b20260924,<=1.6.4' \
+            'autogluon.tabular>=1.6.4b20260924,<=1.7.0' \
             'cudf-cu13>=26.6,<26.8' \
             'pandas<3' \
             pyg-lib \
             'pylibcugraph-cu13>=26.6,<26.8' \
             'relbench>=3.0.1' \
             scikit-learn \
-            'tabarena[data-foundry,plot]>=0.1.1.dev20260924104714,<=0.1.1' \
+            'tabarena[data-foundry,plot]>=0.1.1.dev20260924104714,<=0.2.0' \
             torchmetrics \
             tqdm
 

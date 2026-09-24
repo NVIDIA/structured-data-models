@@ -8,8 +8,8 @@ Run the commands below from the repository root:
 
 ```bash
 pip install . \
-  "autogluon.tabular>=1.6.4b20260924,<=1.6.4" \
-  "tabarena[data-foundry,plot]>=0.1.1.dev20260924104714,<=0.1.1"
+  "autogluon.tabular>=1.6.4b20260924,<=1.7.0" \
+  "tabarena[data-foundry,plot]>=0.1.1.dev20260924104714,<=0.2.0"
 ```
 
 ______________________________________________________________________
