@@ -8,6 +8,7 @@ from typing import Any, cast
 import torch
 from torch.nn import GELU, Linear, RMSNorm, Sequential
 
+from sdm.models.kumo.tabular.norm import RMSNorm as CompiledRMSNorm
 from sdm.nn import QueryScaling, RotaryEmbedding, TransformerBlock
 
 
@@ -18,6 +19,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
         num_heads: int,
         query_scaling: QueryScaling | None,
         rope: RotaryEmbedding | None = None,
+        compile_input_norms: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -54,12 +56,14 @@ class KumoTabularTransformerBlock(TransformerBlock):
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).weight)
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).bias)
 
+        input_norm = CompiledRMSNorm if compile_input_norms else RMSNorm
+
         super().__init__(
             channels=channels,
             num_query_heads=num_heads,
             mlp=mlp,
-            query_norm=RMSNorm(channels, **factory_kwargs),
-            key_value_norm=RMSNorm(channels, **factory_kwargs),
+            query_norm=input_norm(channels, **factory_kwargs),
+            key_value_norm=input_norm(channels, **factory_kwargs),
             query_transform=Sequential(*query_transforms),
             key_transform=Sequential(*key_transforms),
             query_scaling=query_scaling,
