@@ -61,15 +61,35 @@ class DropConstantColumns(EnsembleProcessor):
                 dtype=torch.bool,
             )
         if self.threshold == 1:
-            # Any mismatch with the first row proves a second unique value.
-            different = (data != data[..., :1, :]).any(dim=-2)
+            if data.dtype in (
+                torch.bool,
+                torch.uint8,
+                torch.int8,
+                torch.int16,
+                torch.int32,
+                torch.int64,
+                torch.float16,
+                torch.bfloat16,
+                torch.float32,
+                torch.float64,
+            ):
+                # Avoid a full-table comparison mask. NaN bounds compare
+                # unequal; an entirely NaN column is still one unique value.
+                lower, upper = torch.aminmax(data, dim=-2)
+                different = lower != upper
+            else:
+                different = (data != data[..., :1, :]).any(dim=-2)
             return different & ~data.isnan().all(dim=-2)
 
         # A sorted column with k unique values has k - 1 transitions.
         values = data.sort(dim=-2).values
         left, right = values[..., :-1, :], values[..., 1:, :]
         changed = (right != left) & ~(right.isnan() & left.isnan())
-        return changed.sum(dim=-2) >= self.threshold
+        del values, left, right
+        count_dtype = (
+            torch.int32 if data.size(-2) <= 2**31 - 1 else torch.int64
+        )
+        return changed.sum(dim=-2, dtype=count_dtype) >= self.threshold
 
     @staticmethod
     def _select_columns(
@@ -134,11 +154,9 @@ class DropConstantColumns(EnsembleProcessor):
 
         masks = ensemble_table.replace_groups(
             [
-                TableTensor.from_tensor(
-                    tensor=self._keep_mask(group.numerical)
-                    .to(dtype=group.numerical.dtype)
-                    .unsqueeze(-2),
-                    columns=group.columns[Stype.numerical],
+                TableTensor(
+                    numerical=self._keep_mask(group.numerical).unsqueeze(-2),
+                    columns={Stype.numerical: group.columns[Stype.numerical]},
                 )
                 for group in groups
             ]
@@ -151,7 +169,7 @@ class DropConstantColumns(EnsembleProcessor):
             table = masks[member_id]
             key = (table.numerical.size(-1), table.device)
             masks_by_size_and_device.setdefault(key, []).append(
-                (member_id, table.numerical[0].bool())
+                (member_id, table.numerical[0])
             )
 
         kept_indices_by_member: list[tuple[int, ...]]

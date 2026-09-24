@@ -107,6 +107,93 @@ def test_drop_constant_columns_ensemble_matches_member_fits(
         assert separate_query_output[member_id].equal(expected_query)
 
 
+@withCUDA
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.bool,
+        torch.uint8,
+        torch.int8,
+        torch.int16,
+        torch.int32,
+        torch.int64,
+        torch.float16,
+        torch.bfloat16,
+        torch.float32,
+        torch.float64,
+        torch.complex64,
+    ],
+)
+def test_drop_constant_columns_preserves_strided_values(
+    device: torch.device, dtype: torch.dtype
+) -> None:
+    values = (
+        torch.tensor(
+            [[0, 1, 1, 2], [0, 0, 1, 3], [0, 1, 1, 4]],
+            device=device,
+            dtype=dtype,
+        )
+        .T.contiguous()
+        .T
+    )
+    original = values.clone()
+    table = TableTensor(
+        numerical=values, columns={Stype.numerical: ("a", "b", "c", "d")}
+    )
+
+    out = DropConstantColumns().fit_transform(table)
+
+    indices = [1] if dtype == torch.bool else [1, 3]
+    assert out.columns[Stype.numerical] == tuple(
+        table.columns[Stype.numerical][i] for i in indices
+    )
+    torch.testing.assert_close(out.numerical, values[:, indices])
+    torch.testing.assert_close(values, original)
+
+
+@withCUDA
+@pytest.mark.parametrize("threshold", [1, 2])
+def test_drop_constant_columns_counts_nan_once_in_batched_groups(
+    device: torch.device, threshold: int
+) -> None:
+    nan = float("nan")
+    values = torch.tensor(
+        [
+            [nan, 1.0, 1.0, float("inf"), 0.0],
+            [nan, nan, 2.0, float("inf"), -0.0],
+            [nan, nan, nan, float("inf"), 0.0],
+            [nan, nan, nan, float("inf"), -0.0],
+        ],
+        dtype=torch.float64,
+        device=device,
+    )
+    original = values.clone()
+    columns = ("missing", "two", "three", "infinite", "zero")
+    ensemble = EnsembleTable(
+        groups=(
+            TableTensor(
+                numerical=values.expand(2, -1, -1),
+                columns={Stype.numerical: columns},
+            ),
+        ),
+        locations=((0, 1), (0, 0), (0, 1)),
+    )
+
+    out = DropConstantColumns(threshold=threshold).fit_transform_ensemble(
+        ensemble
+    )
+
+    indices = [1, 2] if threshold == 1 else [2]
+    for member in out:
+        assert member.columns[Stype.numerical] == tuple(
+            columns[i] for i in indices
+        )
+        torch.testing.assert_close(
+            member.numerical, values[:, indices], equal_nan=True
+        )
+    torch.testing.assert_close(values, original, equal_nan=True)
+
+
 def test_drop_constant_columns_requires_fitted_member_count() -> None:
     table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     processor = DropConstantColumns().fit_ensemble(
