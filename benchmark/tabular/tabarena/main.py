@@ -25,8 +25,9 @@ parser.add_argument(
 parser.add_argument(
     "--no_kv_cache",
     action="store_true",
-    help="kumo-tabular: run the context inside predict instead of caching "
-    "it at fit, like the other in-context wrappers.",
+    help="kumo-tabular: run the context through the model inside predict "
+    "instead of caching its key/value projections at fit, like the other "
+    "in-context wrappers.",
 )
 parser.add_argument(
     "--registry_hp",

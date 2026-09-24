@@ -90,7 +90,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
 
         self._cache: Cache | None = None
-        self._context: dict[str, Any] | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     def forward(
@@ -247,12 +246,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         Repeated calls to :meth:`predict` can then reuse the same in-context
         examples while only providing new query examples.
 
-        With ``kv_cache`` the in-context examples run through the model here
-        and their key/value projections are cached, so :meth:`predict` only
-        runs the query examples. Without it, :meth:`fit` stores the examples
-        and every :meth:`predict` runs them together with the queries in one
-        pass, as most in-context models do.
-
         Args:
             x: The feature tensor of in-context examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``C`` columns.
@@ -268,32 +261,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
-            kv_cache: Whether to run the in-context examples now and cache
-                their key/value projections for :meth:`predict`.
+            kv_cache: Whether to run the model over the in-context examples
+                and cache their key/value projections. If ``False``, only the
+                pre-processed in-context examples are cached, and
+                :meth:`predict` runs them through the model together with the
+                query examples.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
 
         self.clear()
-
-        self._cache = None
-        self._context = None
-        if not kv_cache:
-            self._context = dict(
-                x_context=x,
-                y_context=y,
-                related_context_tables=related_tables,
-                recipe=recipe,
-                num_estimators=num_estimators,
-                generator_state=(
-                    None if generator is None else generator.get_state()
-                ),
-                generator_device=(
-                    None if generator is None else generator.device
-                ),
-                kwargs=kwargs,
-            )
-            return
 
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
@@ -313,7 +290,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
         cache = Cache(
             recipe_execution=recipe_execution,
             kwargs=kwargs,
+            kv_cache=kv_cache,
         )
+        seeds: list[int] = []
+        if not kv_cache:
+            # Estimators run their context at prediction, seeded here so that
+            # predictions repeat and follow `generator`.
+            seeds = torch.randint(
+                high=2**63 - 1,
+                size=(len(contexts),),
+                generator=generator,
+                device="cpu" if generator is None else generator.device,
+            ).tolist()
         for i, context in enumerate(contexts):
             for callback in callbacks:
                 context = MemberContext(
@@ -337,16 +325,24 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ),
             )
 
-            with inference_mode("no_grad"):
-                self._forward(
+            if kv_cache:
+                with inference_mode("no_grad"):
+                    self._forward(
+                        x_context=context.x,
+                        y_context=context.y,
+                        x_query=None,
+                        related_context_tables=context.related_tables,
+                        related_query_tables=None,
+                        cache=estimator_cache,
+                        generator=generator,
+                        **kwargs,
+                    )
+            else:
+                estimator_cache.update(
                     x_context=context.x,
                     y_context=context.y,
-                    x_query=None,
                     related_context_tables=context.related_tables,
-                    related_query_tables=None,
-                    cache=estimator_cache,
-                    generator=generator,
-                    **kwargs,
+                    seed=seeds[i],
                 )
 
             if x.is_cuda and len(contexts) > 1:
@@ -392,27 +388,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
 
-        if self._context is not None:
-            # Fitted without a cache: one pass over the stored examples and
-            # the queries, with the same draws every time.
-            context = self._context
-            generator = None
-            if context["generator_state"] is not None:
-                generator = torch.Generator(context["generator_device"])
-                generator.set_state(context["generator_state"])
-            return self.forward(
-                x_context=context["x_context"],
-                y_context=context["y_context"],
-                x_query=x,
-                related_context_tables=context["related_context_tables"],
-                related_query_tables=related_tables,
-                recipe=context["recipe"],
-                num_estimators=context["num_estimators"],
-                callbacks=callbacks,
-                generator=generator,
-                **context["kwargs"],
-            )
-
         if self._cache is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} not yet fitted. Make sure to "
@@ -439,6 +414,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             cast(Cache, self._cache[i])
             for i in range(recipe_execution.num_members)
         ]
+        kv_cache = cast(bool, self._cache["kv_cache"])
         next_cache = caches[0]
 
         compute_stream: torch.cuda.Stream | None = None
@@ -491,15 +467,29 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
+                x_context: TableTensor | None = None
+                y_context: TableTensor | None = None
+                related_context_tables: RelatedTables | None = None
+                generator: torch.Generator | None = None
+                if not kv_cache:  # The cache holds the context instead.
+                    x_context = cast(TableTensor, cache["x_context"])
+                    y_context = cast(TableTensor, cache["y_context"])
+                    related_context_tables = cast(
+                        RelatedTables[TableTensor] | None,
+                        cache["related_context_tables"],
+                    )
+                    generator = torch.Generator(x.device).manual_seed(
+                        cast(int, cache["seed"])
+                    )
                 with inference_mode("grad" if requires_grad else "inference"):
                     out = self._forward(
-                        x_context=None,
-                        y_context=None,
+                        x_context=x_context,
+                        y_context=y_context,
                         x_query=query.x,
-                        related_context_tables=None,
+                        related_context_tables=related_context_tables,
                         related_query_tables=query.related_tables,
-                        cache=cache,
-                        generator=None,
+                        cache=cache if kv_cache else None,
+                        generator=generator,
                         **cast(dict[str, Any], self._cache["kwargs"]),
                     )
 
@@ -539,9 +529,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             return recipe_execution.transform_output(outs)
 
     def clear(self) -> None:
-        r"""Clear the context state created by :meth:`fit`."""
+        r"""Clear cached context state created by :meth:`fit`."""
         self._cache = None
-        self._context = None
 
     def __getstate__(self) -> dict[str, object]:
         for stream in self._transfer_streams.values():
