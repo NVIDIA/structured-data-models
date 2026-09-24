@@ -474,6 +474,9 @@ class TableTensor(Tensor):
         if columns and set(columns).issubset(
             {Stype.numerical, Stype.categorical}
         ):
+            target_device = (
+                torch.get_default_device() if device is None else device
+            )
             blocks: dict[Stype, Tensor] = {}
 
             if numerical_columns := columns.get(Stype.numerical):
@@ -497,7 +500,7 @@ class TableTensor(Tensor):
                         )
                     blocks[Stype.numerical] = torch.empty(
                         (0, len(numerical_columns)),
-                        device=device,
+                        device=target_device,
                         dtype=dtype,
                     )
                 else:
@@ -517,7 +520,7 @@ class TableTensor(Tensor):
                     values = values.copy(order="C")
                     blocks[Stype.numerical] = torch.as_tensor(
                         values,
-                        device=device,
+                        device=target_device,
                         dtype=dtype,
                     )
 
@@ -549,6 +552,7 @@ class TableTensor(Tensor):
                     ):
                         category = torch.tensor(
                             np.asarray(values),
+                            device="cpu",
                         )
                     else:
                         array = pa.array(values, from_pandas=True)
@@ -557,29 +561,30 @@ class TableTensor(Tensor):
                         if is_string or is_large_string:
                             category = StringTensor.from_arrow(
                                 array,
+                                device="cpu",
                             )
                         elif pa.types.is_null(array.type):
                             category = torch.empty(
                                 0,
                                 dtype=torch.int64,
+                                device="cpu",
                             )
                         else:
-                            category = arrow_as_tensor(array)
+                            category = arrow_as_tensor(array, device="cpu")
                     categories.append(category)
 
-                categories = list(_move_categories(categories, device))
                 code_tensor = (
-                    torch.from_numpy(code).to(device)
+                    torch.from_numpy(code).to(target_device)
                     if len(df) > 0
                     else torch.empty(
                         (0, len(categorical_columns)),
                         dtype=torch.int32,
-                        device=device,
+                        device=target_device,
                     )
                 )
                 blocks[Stype.categorical] = CategoricalTensor(
                     code=code_tensor,
-                    categories=categories,
+                    categories=_move_categories(categories, target_device),
                 )
 
             return cls(

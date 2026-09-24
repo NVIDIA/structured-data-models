@@ -1257,6 +1257,52 @@ def test_from_pandas_rejects_complex_numerical() -> None:
             )
 
 
+def test_from_pandas_categorical_default_device() -> None:
+    dfs = (
+        pd.DataFrame(
+            {
+                "value": [1.0],
+                "number": [1],
+                "string": pd.Series(["a"], dtype="string"),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "value": pd.Series(dtype="float64"),
+                "number": pd.Series(dtype="int64"),
+                "string": pd.Series(dtype="string"),
+            }
+        ),
+    )
+    stypes = {
+        "value": Stype.numerical,
+        "number": Stype.categorical,
+        "string": Stype.categorical,
+    }
+
+    with torch.device("meta"):
+        default_tensors = tuple(
+            TableTensor.from_pandas(df=df, stypes=stypes) for df in dfs
+        )
+        cpu_tensors = tuple(
+            TableTensor.from_pandas(df=df, stypes=stypes, device="cpu")
+            for df in dfs
+        )
+
+    for tensors, device_type in (
+        (default_tensors, "meta"),
+        (cpu_tensors, "cpu"),
+    ):
+        for tensor in tensors:
+            assert tensor.device.type == device_type
+            assert tensor.numerical.device.type == device_type
+            assert tensor.categorical.code.device.type == device_type
+            assert all(
+                category.device.type == device_type
+                for category in tensor.categorical.categories
+            )
+
+
 @withCUDA
 def test_from_pandas_nullable_and_categorical_dtypes(
     device: torch.device,
