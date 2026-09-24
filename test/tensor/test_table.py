@@ -1171,6 +1171,92 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+def test_from_pandas_numerical_storage_is_independent() -> None:
+    df = pd.DataFrame({"number": pd.Series([1.0, 2.0], dtype="float32")})
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"number": Stype.numerical},
+    )
+
+    df.iloc[0, 0] = 3.0
+    tensor.numerical[1, 0] = 4.0
+
+    assert tensor.numerical.equal(torch.tensor([[1.0], [4.0]]))
+    assert df["number"].tolist() == [3.0, 2.0]
+
+
+def test_from_pandas_empty_numerical() -> None:
+    df = pd.DataFrame({"number": pd.Series(dtype="float32")})
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"number": Stype.numerical},
+    )
+
+    assert tensor.size() == (0, 1)
+    assert tensor.numerical.size() == (0, 1)
+    assert tensor.numerical.dtype == torch.get_default_dtype()
+    assert tensor.numerical.is_contiguous()
+
+    with pytest.raises(KeyError, match="missing"):
+        TableTensor.from_pandas(
+            df=df,
+            stypes={"missing": Stype.numerical},
+        )
+
+
+def test_from_pandas_numerical_default_device() -> None:
+    dfs = (
+        pd.DataFrame({"number": [1.0]}),
+        pd.DataFrame({"number": pd.Series(dtype="float32")}),
+    )
+
+    with torch.device("meta"):
+        tensors = tuple(
+            TableTensor.from_pandas(
+                df=df,
+                stypes={"number": Stype.numerical},
+            )
+            for df in dfs
+        )
+
+    assert all(tensor.device.type == "meta" for tensor in tensors)
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float16, torch.float32, torch.float64, torch.bfloat16],
+)
+def test_from_pandas_numerical_default_dtype(dtype: torch.dtype) -> None:
+    default_dtype = torch.get_default_dtype()
+    try:
+        torch.set_default_dtype(dtype)
+        tensor = TableTensor.from_pandas(
+            df=pd.DataFrame({"number": [1.0000000000000002]}),
+            stypes={"number": Stype.numerical},
+        )
+    finally:
+        torch.set_default_dtype(default_dtype)
+
+    assert tensor.numerical.dtype == dtype
+    assert tensor.numerical.equal(
+        torch.tensor([[1.0000000000000002]], dtype=dtype)
+    )
+
+
+def test_from_pandas_rejects_complex_numerical() -> None:
+    dfs = (
+        pd.DataFrame({"number": [1 + 2j, 3 + 4j]}),
+        pd.DataFrame({"number": pd.Series(dtype="complex64")}),
+    )
+
+    for df in dfs:
+        with pytest.raises(TypeError, match="real values"):
+            TableTensor.from_pandas(
+                df=df,
+                stypes={"number": Stype.numerical},
+            )
+
+
 @withCUDA
 def test_from_pandas_nullable_and_categorical_dtypes(
     device: torch.device,

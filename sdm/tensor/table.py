@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import functools
 import math
+import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -480,24 +481,42 @@ class TableTensor(Tensor):
                 numpy_dtype = _TORCH_NUMPY_DTYPES.get(
                     dtype, np.dtype(np.float32)
                 )
+                numerical_df = (
+                    df
+                    if len(numerical_columns) == len(df.columns)
+                    and numerical_columns == df.columns.tolist()
+                    else df[numerical_columns]
+                )
                 if len(df) == 0:
+                    if any(
+                        pd.api.types.is_complex_dtype(dtype)
+                        for dtype in numerical_df.dtypes
+                    ):
+                        raise TypeError(
+                            "Expected numerical columns to contain real values"
+                        )
                     blocks[Stype.numerical] = torch.empty(
                         (0, len(numerical_columns)),
                         device=device,
                         dtype=dtype,
                     )
                 else:
-                    numerical_df = (
-                        df
-                        if numerical_columns == list(df.columns)
-                        else df[numerical_columns]
-                    )
-                    values = numerical_df.to_numpy(
-                        dtype=numpy_dtype,
-                        na_value=np.nan,
-                    )
-                    values = np.ascontiguousarray(values)
-                    blocks[Stype.numerical] = torch.from_numpy(values).to(
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.simplefilter(
+                                "error", np.exceptions.ComplexWarning
+                            )
+                            values = numerical_df.to_numpy(
+                                dtype=numpy_dtype,
+                                na_value=np.nan,
+                            )
+                    except np.exceptions.ComplexWarning as error:
+                        raise TypeError(
+                            "Expected numerical columns to contain real values"
+                        ) from error
+                    values = values.copy(order="C")
+                    blocks[Stype.numerical] = torch.as_tensor(
+                        values,
                         device=device,
                         dtype=dtype,
                     )
