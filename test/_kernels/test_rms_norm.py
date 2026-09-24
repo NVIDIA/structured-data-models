@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from sdm._kernels import rms_norm
+from sdm.nn import RotaryEmbedding
 from sdm.testing import onlyCUDA
 
 
@@ -44,6 +45,23 @@ def test_rms_norm_heads() -> None:
     out = rms_norm(query, None, eps=1e-6, dtype=torch.float16)
 
     torch.testing.assert_close(out, _expected(query, None))
+
+
+@onlyCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_rms_norm_rope(dtype: torch.dtype) -> None:
+    rope = RotaryEmbedding(
+        channels=32,
+        layout="split_half",
+        requires_grad=False,
+        device="cuda",
+    )
+    qkv = torch.randn(3, 2, 70, 3 * 128, device="cuda").mul(4).to(dtype)
+    query = qkv[..., :128].unflatten(-1, (4, 32))
+
+    out = rms_norm(query, None, eps=1e-6, dtype=torch.float16, rope=rope)
+
+    torch.testing.assert_close(out, _expected(rope(query), None))
 
 
 def test_rms_norm_fallback() -> None:
