@@ -97,8 +97,7 @@ class KumoTabular(ICLModel):
     Args:
         task: The tasks to initialize. If ``None``, all tasks supported by this
             model are initialized.
-        size: The model size, ``"small"`` or ``"medium"``. Defaults to
-            ``"small"``.
+        size: The model size, ``"small"`` or ``"medium"``.
         pretrained: Whether to load pretrained checkpoints.
         device: The device.
     """
