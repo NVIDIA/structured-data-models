@@ -155,7 +155,6 @@ jobs:
             --extra-index-url="${RAPIDS_INDEX_URL}" \
             --find-links=https://data.pyg.org/whl/torch-2.14.0+cu130.html \
             --index-strategy=unsafe-best-match \
-            --prerelease=allow \
             --exclude-newer-package='autogluon-common=0 days' \
             --exclude-newer-package='autogluon-core=0 days' \
             --exclude-newer-package='autogluon-features=0 days' \
