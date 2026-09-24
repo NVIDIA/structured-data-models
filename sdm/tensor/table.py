@@ -1756,12 +1756,56 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     tensors = cast(Sequence[TableTensor], tensors)
 
     ref = tensors[0]
-    tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
+    blocks: dict[Stype, Tensor] = {}
+    if (
+        ref.numerical.size() == ref.size()
+        and ref.device.type in {"cpu", "cuda"}
+        and not torch.is_autocast_enabled(ref.device.type)
+        and any(tensor._columns != ref._columns for tensor in tensors[1:])
+        and all(
+            type(tensor.numerical) is Tensor
+            and tensor.numerical.layout == torch.strided
+            and not tensor.numerical.is_quantized
+            and not tensor.numerical.requires_grad
+            and tensor.numerical.size() == ref.numerical.size()
+            and tensor.dtype == ref.dtype
+            and tensor.device == ref.device
+            for tensor in tensors
+        )
+    ):
+        for tensor in tensors[1:]:
+            if tensor.stypes != ref.stypes:
+                raise ValueError(
+                    "Expected tensors to have the same column names and stypes"
+                )
+        size = list(ref.numerical.size())
+        size.insert(dim, len(tensors))
+        # Align directly into the stack without a reordered table copy.
+        numerical = ref.numerical.new_empty(size)
+        for i, tensor in enumerate(tensors):
+            destination = numerical.select(dim, i)
+            if tensor._columns == ref._columns:
+                destination.copy_(tensor.numerical)
+            else:
+                index = tensor.numerical.new_tensor(
+                    [
+                        tensor._column_to_loc[column][1]
+                        for column in ref._columns[Stype.numerical]
+                    ],
+                    dtype=torch.long,
+                )
+                torch.index_select(
+                    tensor.numerical, -1, index, out=destination
+                )
+        blocks[Stype.numerical] = numerical
+    else:
+        tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
 
-    blocks = {
-        stype: torch.stack([tensor.blocks[stype] for tensor in tensors], dim)
-        for stype in ref._columns
-    }
+    for stype in ref._columns:
+        if stype not in blocks:
+            blocks[stype] = torch.stack(
+                [tensor.blocks[stype] for tensor in tensors], dim
+            )
 
     return ref.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], ref._columns),

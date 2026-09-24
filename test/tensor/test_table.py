@@ -1020,6 +1020,116 @@ def test_cat_stack_reorder() -> None:
     )
 
 
+@withCUDA
+@pytest.mark.parametrize("dim", [0, 1, -2])
+@pytest.mark.parametrize("inference", [False, True])
+@pytest.mark.parametrize(
+    ("dtype1", "dtype2"),
+    [
+        (torch.float32, torch.float32),
+        (torch.int32, torch.int32),
+        (torch.float32, torch.float64),
+    ],
+)
+def test_stack_reorder_preserves_inputs(
+    device: torch.device,
+    dim: int,
+    inference: bool,
+    dtype1: torch.dtype,
+    dtype2: torch.dtype,
+) -> None:
+    values = torch.arange(96, device=device).reshape(2, 8, 6)
+    first = values.to(dtype1)[:, 1::2, ::2]
+    second = (values + 100).to(dtype2)[:, 1::2, ::2]
+    tensors = [
+        TableTensor(
+            columns={"numerical": columns},
+            numerical=numerical,
+            categorical=CategoricalTensor(
+                code=torch.empty((2, 4, 0), dtype=torch.int64, device=device),
+                categories=(),
+            ),
+        )
+        for columns, numerical in (
+            (("a", "b", "c"), first),
+            (("c", "a", "b"), second),
+        )
+    ]
+    expected = torch.stack([first, second[..., [1, 2, 0]]], dim=dim)
+    originals = [first.clone(), second.clone()]
+
+    with torch.inference_mode(inference):
+        out = cast(
+            TableTensor,
+            torch.stack(cast(list[torch.Tensor], tensors), dim=dim),
+        )
+        assert out.columns == tensors[0].columns
+        torch.testing.assert_close(out.numerical, expected)
+        assert out.categorical.code.dtype == torch.int64
+        out.numerical.fill_(-1)
+
+    for tensor, original in zip(tensors, originals):
+        torch.testing.assert_close(tensor.numerical, original)
+
+
+@pytest.mark.parametrize(
+    "dtype", [torch.float32, torch.bfloat16, torch.float16]
+)
+def test_stack_reorder_autocast(dtype: torch.dtype) -> None:
+    values = torch.arange(12, dtype=dtype).reshape(4, 3)
+    first = TableTensor(
+        columns={"numerical": ("a", "b", "c")}, numerical=values
+    )
+    second = TableTensor(
+        columns={"numerical": ("c", "a", "b")}, numerical=values + 20
+    )
+
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        if dtype == torch.float16:
+            with pytest.raises(RuntimeError, match="Unexpected floating"):
+                torch.stack([first, second])
+        else:
+            out = cast(TableTensor, torch.stack([first, second]))
+            expected = torch.stack([values, second.numerical[..., [1, 2, 0]]])
+            torch.testing.assert_close(out.numerical, expected)
+
+
+def test_stack_reorder_preserves_grad() -> None:
+    first = torch.randn(4, 3, requires_grad=True)
+    second = torch.randn(4, 3, requires_grad=True)
+    out = cast(
+        TableTensor,
+        torch.stack(
+            [
+                TableTensor(
+                    columns={"numerical": ("a", "b", "c")}, numerical=first
+                ),
+                TableTensor(
+                    columns={"numerical": ("c", "a", "b")}, numerical=second
+                ),
+            ]
+        ),
+    )
+    weights = first.new_tensor([1, 2, 3])
+    (out.numerical * weights).sum().backward()
+    torch.testing.assert_close(first.grad, weights.expand_as(first))
+    torch.testing.assert_close(
+        second.grad, weights[[2, 0, 1]].expand_as(second)
+    )
+
+
+def test_stack_reorder_rejects_mismatched_shapes() -> None:
+    first = TableTensor(
+        columns={"numerical": ("a", "b")}, numerical=torch.ones(4, 2)
+    )
+    second = TableTensor(
+        columns={"numerical": ("b", "a")}, numerical=torch.ones(1, 2)
+    )
+
+    with pytest.raises(RuntimeError, match="stack expects each tensor"):
+        torch.stack([first, second])
+
+
 def test_pin_memory() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
