@@ -11,8 +11,11 @@ from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import KumoTabular
 
 
-def _build(task: Literal["classification", "regression"]) -> KumoTabular:
-    model = KumoTabular(task=task, pretrained=False)
+def _build(
+    task: Literal["classification", "regression"],
+    size: Literal["small", "medium"],
+) -> KumoTabular:
+    model = KumoTabular(task=task, size=size, pretrained=False)
     # Residual branches are zero-initialized, so an untrained model maps every
     # row onto the same constant. Randomize them to make the prediction depend
     # on the features it is given.
@@ -23,13 +26,18 @@ def _build(task: Literal["classification", "regression"]) -> KumoTabular:
 
 
 @pytest.fixture
-def cls_model() -> KumoTabular:
-    return _build("classification")
+def cls_model(size: Literal["small", "medium"]) -> KumoTabular:
+    return _build("classification", size)
 
 
 @pytest.fixture
-def reg_model() -> KumoTabular:
-    return _build("regression")
+def reg_model(size: Literal["small", "medium"]) -> KumoTabular:
+    return _build("regression", size)
+
+
+@pytest.fixture(params=["small", "medium"])
+def size(request: pytest.FixtureRequest) -> Literal["small", "medium"]:
+    return request.param
 
 
 def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
@@ -161,8 +169,10 @@ def test_fit_predict(
     )
 
 
-def test_missing_values_pass_through_fit_predict() -> None:
-    model = _build("regression")
+def test_missing_values_pass_through_fit_predict(
+    size: Literal["small", "medium"],
+) -> None:
+    model = _build("regression", size)
     x_context = TableTensor.from_tensor(
         torch.tensor(
             [
