@@ -684,6 +684,88 @@ def test_transformer_block_chunked_noncontiguous_out() -> None:
     torch.testing.assert_close(actual, expected)
 
 
+@withCUDA
+@pytest.mark.parametrize("batch_size_limit", [1, 2, 4])
+def test_transformer_block_chunked_in_place(
+    device: torch.device,
+    batch_size_limit: int,
+) -> None:
+    channels = 8
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        mlp=torch.nn.Linear(channels, channels, device=device),
+        device=device,
+    ).eval()
+    with torch.no_grad():
+        module.attn.out_lin.weight.copy_(torch.eye(channels, device=device))
+
+    query = torch.randn(2, 4, 3, channels, device=device).transpose(-2, -3)
+    expected = module(query=query)
+    with torch.no_grad():
+        actual = module(
+            query=query,
+            batch_size_limit=batch_size_limit,
+            out=query,
+        )
+
+    assert actual is query
+    torch.testing.assert_close(actual, expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("batch_size_limit", [1, 4])
+@pytest.mark.parametrize("use_mask", [False, True])
+def test_transformer_block_chunked_kv_cache(
+    device: torch.device,
+    batch_size_limit: int,
+    use_mask: bool,
+) -> None:
+    channels = 8
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        mlp=torch.nn.Identity(),
+        device=device,
+    ).eval()
+    query = torch.randn(2, 5, 3, channels, device=device).transpose(-2, -3)
+    key_value = torch.randn(2, 7, 3, channels, device=device).transpose(-2, -3)
+    lengths = torch.tensor([7, 5, 3], dtype=torch.int32, device=device)
+    mask = torch.arange(7, device=device) < lengths[:, None]
+    mask = mask[:, None, :].expand(3, 5, 7)
+    kwargs = {
+        "attn_mask": mask if use_mask else None,
+        "seqused_key_value": None if use_mask else lengths,
+    }
+
+    with torch.no_grad():
+        module.attn.out_lin.weight.copy_(torch.eye(channels, device=device))
+        expected, expected_kv = module(
+            query=query,
+            key_value=key_value,
+            return_key_value=True,
+            **kwargs,
+        )
+        actual, kv = module(
+            query=query,
+            key_value=key_value,
+            return_key_value=True,
+            batch_size_limit=batch_size_limit,
+            **kwargs,
+        )
+        cached = module(
+            query=query,
+            key_value=kv,
+            batch_size_limit=batch_size_limit,
+            **kwargs,
+        )
+
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(kv.key, expected_kv.key)
+    torch.testing.assert_close(kv.value, expected_kv.value)
+    torch.testing.assert_close(cached, expected)
+
+
 def test_transformer_block_kv_cache() -> None:
     batch_size = 2
     query_len = 3
