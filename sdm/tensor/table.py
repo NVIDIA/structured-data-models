@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
+import numpy as np
 import pyarrow as pa
 import torch
 from torch import Tensor
@@ -417,6 +418,99 @@ class TableTensor(Tensor):
             device: The device.
         """
         import pandas as pd
+
+        columns: dict[Stype, list[str]] = defaultdict(list)
+        for name, stype in stypes.items():
+            columns[Stype(stype)].append(name)
+
+        if columns and set(columns).issubset(
+            {Stype.numerical, Stype.categorical}
+        ):
+            blocks: dict[Stype, Tensor] = {}
+
+            numerical_columns = columns.get(Stype.numerical)
+            if numerical_columns:
+                dtype = torch.get_default_dtype()
+                numpy_dtype = {
+                    torch.float16: np.float16,
+                    torch.float32: np.float32,
+                    torch.float64: np.float64,
+                }.get(dtype, np.float32)
+                if len(df) == 0:
+                    blocks[Stype.numerical] = torch.empty(
+                        (0, len(numerical_columns)),
+                        device=device,
+                        dtype=dtype,
+                    )
+                else:
+                    values = df[numerical_columns].to_numpy(
+                        dtype=numpy_dtype,
+                        na_value=np.nan,
+                    )
+                    values = np.ascontiguousarray(values)
+                    blocks[Stype.numerical] = torch.from_numpy(values).to(
+                        device=device,
+                        dtype=dtype,
+                    )
+
+            categorical_columns = columns.get(Stype.categorical)
+            if categorical_columns:
+                code = np.empty(
+                    (len(df), len(categorical_columns)),
+                    dtype=np.int32,
+                )
+                categories: list[Tensor] = []
+                for i, name in enumerate(categorical_columns):
+                    ser = df[name]
+                    if isinstance(ser.dtype, pd.CategoricalDtype):
+                        categorical = ser.array
+                        code[:, i] = categorical.codes
+                        values = categorical.categories
+                    else:
+                        column_code, values = pd.factorize(
+                            ser,
+                            sort=False,
+                            use_na_sentinel=True,
+                        )
+                        code[:, i] = column_code
+
+                    array = pa.array(values, from_pandas=True)
+                    is_string = pa.types.is_string(array.type)
+                    is_large_string = pa.types.is_large_string(array.type)
+                    if is_string or is_large_string:
+                        category = StringTensor.from_arrow(
+                            array,
+                            device=device,
+                        )
+                    elif pa.types.is_null(array.type):
+                        category = torch.empty(
+                            0,
+                            dtype=torch.int64,
+                            device=device,
+                        )
+                    else:
+                        category = arrow_as_tensor(array, device=device)
+                    categories.append(category)
+
+                code_tensor = (
+                    torch.from_numpy(code).to(device)
+                    if len(df) > 0
+                    else torch.empty(
+                        (0, len(categorical_columns)),
+                        dtype=torch.int32,
+                        device=device,
+                    )
+                )
+                blocks[Stype.categorical] = CategoricalTensor(
+                    code=code_tensor,
+                    categories=categories,
+                )
+
+            return cls(
+                size=(len(df),),
+                columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+                **blocks,
+            )
 
         df = df[stypes.keys()]
         # Resolve period ordinals before Arrow casts them as timestamps, which

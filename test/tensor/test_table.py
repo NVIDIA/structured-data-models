@@ -1171,6 +1171,59 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+def test_from_pandas_nullable_and_categorical_dtypes() -> None:
+    df = pd.DataFrame(
+        {
+            "ignored": ["not", "converted", "by", "the fast path"],
+            "number": pd.Series([1, None, 3, 4], dtype="Int64"),
+            "category": pd.Categorical(
+                ["b", None, "a", "b"],
+                categories=["unused", "a", "b"],
+            ),
+            "string": pd.Series(["b", None, "a", "b"], dtype="string"),
+            "boolean": pd.Series([True, False, None, True], dtype="boolean"),
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={
+            "category": "categorical",
+            "number": "numerical",
+            "string": "categorical",
+            "boolean": "categorical",
+        },
+    )
+
+    assert tensor.columns[Stype.numerical] == ("number",)
+    assert tensor.columns[Stype.categorical] == (
+        "category",
+        "string",
+        "boolean",
+    )
+    assert tensor.numerical.dtype == torch.get_default_dtype()
+    assert tensor.numerical.is_contiguous()
+    torch.testing.assert_close(
+        tensor.numerical,
+        torch.tensor([[1.0], [float("nan")], [3.0], [4.0]]),
+        equal_nan=True,
+    )
+    assert tensor.categorical.code.equal(
+        torch.tensor(
+            [
+                [2, 0, 0],
+                [-1, -1, 1],
+                [1, 1, -1],
+                [2, 0, 0],
+            ],
+            dtype=torch.int32,
+        )
+    )
+    assert tensor.categorical.categories[0].tolist() == ["unused", "a", "b"]
+    assert tensor.categorical.categories[1].tolist() == ["b", "a"]
+    assert tensor.categorical.categories[2].tolist() == [True, False]
+
+
 def test_from_pandas_period() -> None:
     df = pd.DataFrame(
         {
