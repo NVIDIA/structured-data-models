@@ -15,6 +15,7 @@ from autogluon.core.constants import BINARY, MULTICLASS, REGRESSION
 from autogluon.tabular.models.abstract.abstract_torch_model import (
     AbstractTorchModel,
 )
+from tabarena.models.warmup import warmup_torch
 
 import sdm
 import sdm.processing as sp
@@ -202,6 +203,18 @@ class SDMKumoTabularModel(SDMModel):
     ag_name = "SDMKumoTabular"
     default_num_estimators = 8
     autocast_dtype = torch.float16
+
+    @classmethod
+    def warmup(
+        cls,
+        *,
+        problem_type: str | None = None,
+        num_cpus: int | None = None,
+        num_gpus: float | None = None,
+        hyperparameters: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        warmup_torch(cuda=None if num_gpus is None else num_gpus > 0)
 
     @staticmethod
     def _create_model(
