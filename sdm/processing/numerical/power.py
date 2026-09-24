@@ -19,28 +19,25 @@ def _yeojohnson_transform(
     inp: Tensor,
     lambdas: Tensor,
     *,
-    positive_log: Tensor | None = None,
-    negative_log: Tensor | None = None,
+    magnitude_log: Tensor | None = None,
+    positive: Tensor | None = None,
+    exponents: Tensor | None = None,
+    out: Tensor | None = None,
 ) -> Tensor:
-    if positive_log is None:
-        positive_log = inp.clamp_min(0).log1p()
-    if negative_log is None:
-        negative_log = (-inp).clamp_min(0).log1p()
-
     eps = torch.finfo(inp.dtype).eps
-
-    positive = (lambdas * positive_log).expm1() / lambdas
-    positive = torch.where(lambdas.abs() < eps, positive_log, positive)
-
     two_minus_lambda = 2 - lambdas
-    negative = -((two_minus_lambda * negative_log).expm1() / two_minus_lambda)
-    negative = torch.where(
-        two_minus_lambda.abs() < eps,
-        -negative_log,
-        negative,
+    if magnitude_log is None:
+        magnitude_log = inp.abs().log1p_()
+    if positive is None:
+        positive = inp >= 0
+    exponents = torch.where(positive, lambdas, two_minus_lambda, out=exponents)
+    out = torch.mul(exponents, magnitude_log, out=out)
+    out.expm1_().div_(exponents)
+    zero_exponent = torch.where(
+        positive, lambdas.abs() < eps, two_minus_lambda.abs() < eps
     )
-
-    return torch.where(inp >= 0, positive, negative)
+    torch.where(zero_exponent, magnitude_log, out, out=out)
+    return out.copysign_(inp)
 
 
 def _yeojohnson_inverse_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
@@ -112,26 +109,28 @@ def _yeojohnson_bounds(inp: Tensor) -> tuple[Tensor, Tensor]:
 def _yeojohnson_log_likelihood(
     inp: Tensor,
     lambdas: Tensor,
-    positive_log: Tensor,
-    negative_log: Tensor,
+    magnitude_log: Tensor,
+    positive: Tensor,
     log_jacobian: Tensor,
     count: Tensor,
+    exponents: Tensor,
+    transformed: Tensor,
 ) -> Tensor:
     transformed = _yeojohnson_transform(
-        inp,
-        lambdas,
-        positive_log=positive_log,
-        negative_log=negative_log,
+        inp=inp,
+        lambdas=lambdas,
+        magnitude_log=magnitude_log,
+        positive=positive,
+        exponents=exponents,
+        out=transformed,
     )
     mean = transformed.nanmean(dim=-2, keepdim=True)
-    variance = (transformed - mean).square().nanmean(dim=-2, keepdim=True)
+    variance = transformed.sub_(mean).square_().nanmean(dim=-2, keepdim=True)
     tiny = torch.finfo(inp.dtype).tiny
-    loglike = -count / 2 * variance.log() + (lambdas - 1) * log_jacobian
-    return torch.where(
-        variance.isfinite() & (variance >= tiny),
-        loglike,
-        torch.full_like(loglike, -math.inf),
-    )
+    valid = variance.isfinite() & (variance >= tiny)
+    loglike = variance.log_().mul_(-count / 2)
+    loglike.add_((lambdas - 1) * log_jacobian)
+    return loglike.masked_fill_(~valid, -math.inf)
 
 
 def _optimize_lambdas(
@@ -140,76 +139,76 @@ def _optimize_lambdas(
     *,
     count: Tensor,
 ) -> Tensor:
-    # Reuse the sign-specific log terms across all likelihood evaluations;
-    # the golden-section search only changes the per-feature lambdas.
-    positive_log = inp.clamp_min(0).log1p()
-    negative_log = (-inp).clamp_min(0).log1p()
-    log_jacobian = torch.where(inp >= 0, positive_log, -negative_log).nansum(
-        dim=-2,
-        keepdim=True,
-    )
+    # Reuse full-table workspaces throughout the golden-section search.
+    magnitude_log = inp.abs().log1p_()
+    positive = inp >= 0
+    log_jacobian = magnitude_log.copysign(inp).nansum(dim=-2, keepdim=True)
+    exponents = torch.empty_like(inp)
+    transformed = torch.empty_like(inp)
 
     left, right = _yeojohnson_bounds(inp)
-    identity = torch.ones_like(left)
-    left = torch.where(constant_features, identity, left)
-    right = torch.where(constant_features, identity, right)
+    left = left.masked_fill(constant_features, 1.0)
+    right = right.masked_fill(constant_features, 1.0)
 
     invphi = (math.sqrt(5) - 1) / 2
-    c = right - invphi * (right - left)
-    d = left + invphi * (right - left)
+    span = (right - left).mul_(invphi)
+    c = right - span
+    d = left + span
     fc = _yeojohnson_log_likelihood(
-        inp,
-        c,
-        positive_log,
-        negative_log,
-        log_jacobian,
-        count,
+        inp=inp,
+        lambdas=c,
+        magnitude_log=magnitude_log,
+        positive=positive,
+        log_jacobian=log_jacobian,
+        count=count,
+        exponents=exponents,
+        transformed=transformed,
     )
     fd = _yeojohnson_log_likelihood(
-        inp,
-        d,
-        positive_log,
-        negative_log,
-        log_jacobian,
-        count,
+        inp=inp,
+        lambdas=d,
+        magnitude_log=magnitude_log,
+        positive=positive,
+        log_jacobian=log_jacobian,
+        count=count,
+        exponents=exponents,
+        transformed=transformed,
     )
+    c_next = torch.empty_like(c)
+    d_next = torch.empty_like(d)
+    new_point = torch.empty_like(c)
+    choose_right = torch.empty_like(c, dtype=torch.bool)
 
     for _ in range(_YEOJOHNSON_OPTIMIZATION_STEPS):
-        choose_right = fc < fd
-        old_fc = fc
-        old_fd = fd
+        choose_right = torch.lt(fc, fd, out=choose_right)
         # Keep the search fully vectorized: each feature independently
         # chooses its next interval without per-column Python branching.
-        left_next = torch.where(choose_right, c, left)
-        right_next = torch.where(choose_right, right, d)
-        c_next = torch.where(
-            choose_right,
-            d,
-            right_next - invphi * (right_next - left_next),
-        )
-        d_next = torch.where(
-            choose_right,
-            left_next + invphi * (right_next - left_next),
-            c,
-        )
-        new_point = torch.where(choose_right, d_next, c_next)
+        left = torch.where(choose_right, c, left, out=left)
+        right = torch.where(choose_right, right, d, out=right)
+        span = torch.sub(right, left, out=span).mul_(invphi)
+        c_next = torch.sub(right, span, out=c_next)
+        c_next = torch.where(choose_right, d, c_next, out=c_next)
+        d_next = torch.add(left, span, out=d_next)
+        d_next = torch.where(choose_right, d_next, c, out=d_next)
+        new_point = torch.where(choose_right, d_next, c_next, out=new_point)
         new_score = _yeojohnson_log_likelihood(
-            inp,
-            new_point,
-            positive_log,
-            negative_log,
-            log_jacobian,
-            count,
+            inp=inp,
+            lambdas=new_point,
+            magnitude_log=magnitude_log,
+            positive=positive,
+            log_jacobian=log_jacobian,
+            count=count,
+            exponents=exponents,
+            transformed=transformed,
         )
-        fc = torch.where(choose_right, old_fd, new_score)
-        fd = torch.where(choose_right, new_score, old_fc)
-        left = left_next
-        right = right_next
-        c = c_next
-        d = d_next
+        fc = torch.where(choose_right, new_score, fc, out=fc)
+        fd = torch.where(choose_right, fd, new_score, out=fd)
+        fc, fd = fd, fc
+        c, c_next = c_next, c
+        d, d_next = d_next, d
 
-    lambdas = (left + right) / 2
-    return torch.where(constant_features, identity, lambdas)
+    lambdas = (left + right).div_(2)
+    return lambdas.masked_fill_(constant_features, 1.0)
 
 
 class PowerTransform(Processor, InvertibleMixin):
@@ -299,12 +298,12 @@ class PowerTransform(Processor, InvertibleMixin):
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
         transformed = _yeojohnson_transform(table.numerical, self.lambdas)
-        numerical = (transformed - self.mean) / self.scale
+        numerical = transformed.sub_(self.mean).div_(self.scale)
         # The fitted lambdas only keep the fitted range representable, so a
         # query far outside it can overflow.
         bound = torch.finfo(numerical.dtype).max
         return table.replace_blocks(
-            numerical=numerical.clamp(min=-bound, max=bound)
+            numerical=numerical.clamp_(min=-bound, max=bound)
         )
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
