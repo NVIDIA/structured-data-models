@@ -684,6 +684,28 @@ def test_transformer_block_chunked_noncontiguous_out() -> None:
     torch.testing.assert_close(actual, expected)
 
 
+@pytest.mark.parametrize("batch_size_limit", [1, 2, 4])
+def test_transformer_block_chunked_in_place(batch_size_limit: int) -> None:
+    channels = 8
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        mlp=torch.nn.Linear(channels, channels),
+    ).eval()
+
+    query = torch.randn(2, 4, 3, channels).transpose(-2, -3)
+    expected = module(query=query)
+    with torch.no_grad():
+        actual = module(
+            query=query,
+            batch_size_limit=batch_size_limit,
+            out=query,
+        )
+
+    assert actual is query
+    torch.testing.assert_close(actual, expected)
+
+
 def test_transformer_block_kv_cache() -> None:
     batch_size = 2
     query_len = 3

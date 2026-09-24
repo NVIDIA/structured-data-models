@@ -3,6 +3,7 @@
 
 """Attention modules for structured tensor models."""
 
+import itertools
 import math
 import os
 from typing import Any, Literal, overload
@@ -602,84 +603,56 @@ class TransformerBlock(torch.nn.Module):
                 out=out,
             )
 
-        flat_out: Tensor | None = None
-        flat_key: Tensor | None = None
-        flat_value: Tensor | None = None
-
-        if out is not None and (out.dim() <= 3 or out.is_contiguous()):
-            flat_out = out.view(batch_size, *query.size()[-2:])
-
-        for start in range(0, batch_size, batch_size_limit):
-            end = min(start + batch_size_limit, batch_size)
-
+        key: Tensor | None = None
+        value: Tensor | None = None
+        for index in _chunk_indices(batch_shape, batch_size_limit):
             result = self._forward(
-                query=_chunk(query, batch_shape, 2, start, end),
-                key_value=_chunk(key_value, batch_shape, 2, start, end),
+                query=_chunk(query, batch_shape, 2, index),
+                key_value=_chunk(key_value, batch_shape, 2, index),
                 seqused_key_value=_chunk(
                     seqused_key_value,
                     batch_shape,
                     trailing_dims=0,
-                    start=start,
-                    end=end,
+                    index=index,
                 ),
                 attn_mask=_chunk(
                     attn_mask,
                     batch_shape,
                     trailing_dims=2,
-                    start=start,
-                    end=end,
+                    index=index,
                 ),
                 return_key_value=return_key_value,
-                out=flat_out[start:end] if flat_out is not None else None,
+                out=out[index] if out is not None else None,
             )
 
             if isinstance(result, tuple):
                 chunk, chunk_kv = result
-
-                if flat_key is None:
-                    flat_key = chunk_kv.key.new_empty(
-                        batch_size, *chunk_kv.key.size()[-3:]
+                if key is None or value is None:
+                    key = chunk_kv.key.new_empty(
+                        batch_shape + chunk_kv.key.size()[-3:]
                     )
-                if flat_value is None:
-                    flat_value = chunk_kv.value.new_empty(
-                        batch_size, *chunk_kv.value.size()[-3:]
+                    value = chunk_kv.value.new_empty(
+                        batch_shape + chunk_kv.value.size()[-3:]
                     )
-
-                flat_key[start:end] = chunk_kv.key
-                flat_value[start:end] = chunk_kv.value
-
+                key[index] = chunk_kv.key
+                value[index] = chunk_kv.value
                 del chunk_kv
-
             else:
                 chunk = result
 
-            if flat_out is None and out is not None:
-                flat_index = torch.arange(start, end, device=out.device)
-                batch_indices: list[Tensor] = []
-                for size in reversed(batch_shape):
-                    batch_indices.append(flat_index % size)
-                    flat_index = flat_index // size
-                out[tuple(reversed(batch_indices))] = chunk
-            elif flat_out is None:
-                flat_out = chunk.new_empty((batch_size, *query.size()[-2:]))
-                flat_out[start:end] = chunk
+            if out is None:  # Later chunks write into `out` directly.
+                out = chunk.new_empty(batch_shape + chunk.size()[-2:])
+                out[index] = chunk
 
             del chunk, result
 
-        if out is None:
-            assert flat_out is not None
-            out = flat_out.view(*batch_shape, *query.size()[-2:])
-
+        assert out is not None
         if not return_key_value:
             return out
 
-        assert flat_key is not None
-        assert flat_value is not None
-
-        return out, KVCacheEntry(
-            key=flat_key.view(*batch_shape, *flat_key.size()[-3:]),
-            value=flat_value.view(*batch_shape, *flat_value.size()[-3:]),
-        )
+        assert key is not None
+        assert value is not None
+        return out, KVCacheEntry(key=key, value=value)
 
     def _forward(
         self,
@@ -757,13 +730,30 @@ def _batch_shape(
     return torch.broadcast_shapes(*shapes)
 
 
+def _chunk_indices(
+    batch_shape: torch.Size,
+    batch_size_limit: int,
+) -> list[tuple[int | slice, ...]]:
+    # Take whole trailing batch dimensions and slice the first one that does
+    # not fit, so that every chunk is a view of its (broadcast) input.
+    dim, inner = len(batch_shape) - 1, 1
+    while dim > 0 and inner * batch_shape[dim] <= batch_size_limit:
+        inner *= batch_shape[dim]
+        dim -= 1
+    step = max(batch_size_limit // inner, 1)
+    return [
+        (*outer, slice(start, start + step))
+        for outer in itertools.product(*map(range, batch_shape[:dim]))
+        for start in range(0, batch_shape[dim], step)
+    ]
+
+
 @overload
 def _chunk(
     tensor: Tensor,
     batch_shape: torch.Size,
     trailing_dims: int,
-    start: int,
-    end: int,
+    index: tuple[int | slice, ...],
 ) -> Tensor: ...
 
 
@@ -772,8 +762,7 @@ def _chunk(
     tensor: KVCacheEntry,
     batch_shape: torch.Size,
     trailing_dims: int,
-    start: int,
-    end: int,
+    index: tuple[int | slice, ...],
 ) -> KVCacheEntry: ...
 
 
@@ -782,8 +771,7 @@ def _chunk(
     tensor: None,
     batch_shape: torch.Size,
     trailing_dims: int,
-    start: int,
-    end: int,
+    index: tuple[int | slice, ...],
 ) -> None: ...
 
 
@@ -791,8 +779,7 @@ def _chunk(
     tensor: Tensor | KVCacheEntry | None,
     batch_shape: torch.Size,
     trailing_dims: int,
-    start: int,
-    end: int,
+    index: tuple[int | slice, ...],
 ) -> Tensor | KVCacheEntry | None:
 
     if tensor is None:
@@ -800,18 +787,9 @@ def _chunk(
 
     if isinstance(tensor, KVCacheEntry):
         return KVCacheEntry(
-            key=_chunk(tensor.key, batch_shape, 3, start, end),
-            value=_chunk(tensor.value, batch_shape, 3, start, end),
+            key=_chunk(tensor.key, batch_shape, 3, index),
+            value=_chunk(tensor.value, batch_shape, 3, index),
         )
 
     trailing_shape = tensor.size()[-trailing_dims:] if trailing_dims else ()
-    tensor = tensor.expand(batch_shape + trailing_shape)
-    if len(batch_shape) == 1:
-        return tensor[start:end]
-
-    flat_index = torch.arange(start, end, device=tensor.device)
-    batch_indices: list[Tensor] = []
-    for size in reversed(batch_shape):
-        batch_indices.append(flat_index % size)
-        flat_index = flat_index // size
-    return tensor[tuple(reversed(batch_indices))]
+    return tensor.expand(batch_shape + trailing_shape)[index]
