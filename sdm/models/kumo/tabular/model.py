@@ -342,7 +342,7 @@ class KumoTabular(ICLModel):
                 )
                 for start in range(0, len(x_queries), group_size)
             ]
-        )  # [E, R_query, num_classes or 999]
+        ).to(x_queries[0].dtype)  # [E, R_query, num_classes or 999]
 
         if classes is None:
             columns = [f"q{i:03d}" for i in range(1, 1000)]
