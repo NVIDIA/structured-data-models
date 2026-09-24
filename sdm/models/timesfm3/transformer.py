@@ -22,7 +22,9 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from sdm.models.timesfm3.configs import TransformerConfig
 from sdm.models.timesfm3.normalization import PerDimScale
+from sdm.models.timesfm3.util import get_activation_fn
 
 
 def make_attn_mask(patch_mask: Tensor, causal: bool = True) -> Tensor:
@@ -321,3 +323,141 @@ class MultiHeadAttention(torch.nn.Module):
             .view(batch_size, num_patches, self.in_features)
         )
         return self.out_proj(x), attn_mask
+
+
+class MixingTransformer(torch.nn.Module):
+    """Apply temporal attention, variate attention, and a feed-forward block.
+
+    Args:
+        config: Transformer configuration.
+        use_variate_attention: Whether to attend across variates.
+        device: Device on which to create parameters and buffers.
+        dtype: Data type of parameters.
+    """
+
+    def __init__(
+        self,
+        config: TransformerConfig,
+        use_variate_attention: bool = True,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.config = config
+        self.use_variate_attention = use_variate_attention
+        rescale_logits = not config.use_memory_efficient_attention
+
+        self.pre_seq_attn_ln = torch.nn.RMSNorm(
+            config.model_dims,
+            **factory_kwargs,
+        )
+        self.post_seq_attn_ln = torch.nn.RMSNorm(
+            config.model_dims,
+            **factory_kwargs,
+        )
+        self.seq_attn = MultiHeadAttention(
+            num_heads=config.num_heads,
+            in_features=config.model_dims,
+            use_rotary_position_embeddings=config.use_rope_seq,
+            qk_norm=config.qk_norm,
+            v_norm=config.v_norm,
+            causal_attention=config.causal_attention,
+            use_bias=config.use_bias,
+            use_sdpa=config.use_sdpa,
+            rescale_logits=rescale_logits,
+            **factory_kwargs,
+        )
+
+        if use_variate_attention:
+            self.pre_var_attn_ln = torch.nn.RMSNorm(
+                config.model_dims,
+                **factory_kwargs,
+            )
+            self.post_var_attn_ln = torch.nn.RMSNorm(
+                config.model_dims,
+                **factory_kwargs,
+            )
+            self.var_attn = MultiHeadAttention(
+                num_heads=config.num_heads,
+                in_features=config.model_dims,
+                use_rotary_position_embeddings=config.use_rope_var,
+                qk_norm=config.qk_norm,
+                v_norm=config.v_norm,
+                causal_attention=False,
+                use_bias=config.use_bias,
+                use_sdpa=config.use_sdpa,
+                rescale_logits=rescale_logits,
+                **factory_kwargs,
+            )
+
+        self.pre_ff_ln = torch.nn.RMSNorm(
+            config.model_dims,
+            **factory_kwargs,
+        )
+        self.post_ff_ln = torch.nn.RMSNorm(
+            config.model_dims,
+            **factory_kwargs,
+        )
+        self.ff0 = torch.nn.Linear(
+            config.model_dims,
+            config.hidden_dims,
+            bias=config.use_bias,
+            **factory_kwargs,
+        )
+        self.ff1 = torch.nn.Linear(
+            config.hidden_dims,
+            config.model_dims,
+            bias=config.use_bias,
+            **factory_kwargs,
+        )
+        self.activation = get_activation_fn(config.ff_activation)
+
+    def forward(
+        self,
+        input_embeddings: Tensor,
+        patch_mask: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        """Apply one mixing transformer layer.
+
+        Args:
+            input_embeddings: Inputs with shape ``[B, V, N, D]``.
+            patch_mask: Masked patches with shape ``[B, V, N]``.
+
+        Returns:
+            Output with shape ``[B, V, N, D]`` and the temporal attention
+            mask.
+        """
+        batch_size, num_variates, num_patches, model_dims = (
+            input_embeddings.shape
+        )
+        seq_input = self.pre_seq_attn_ln(input_embeddings).reshape(
+            batch_size * num_variates, num_patches, model_dims
+        )
+        seq_patch_mask = patch_mask.reshape(
+            batch_size * num_variates, num_patches
+        )
+        seq_output, seq_attn_mask = self.seq_attn(
+            seq_input, patch_mask=seq_patch_mask
+        )
+        seq_output = seq_output.view(
+            batch_size, num_variates, num_patches, model_dims
+        )
+        hidden = self.post_seq_attn_ln(seq_output) + input_embeddings
+
+        if self.use_variate_attention:
+            var_input = self.pre_var_attn_ln(hidden)
+            var_input = var_input.permute(0, 2, 1, 3).reshape(
+                batch_size * num_patches, num_variates, model_dims
+            )
+            var_patch_mask = patch_mask.permute(0, 2, 1).reshape(
+                batch_size * num_patches, num_variates
+            )
+            var_output, _ = self.var_attn(var_input, patch_mask=var_patch_mask)
+            var_output = var_output.view(
+                batch_size, num_patches, num_variates, model_dims
+            ).permute(0, 2, 1, 3)
+            hidden = self.post_var_attn_ln(var_output) + hidden
+
+        ff_output = self.ff1(self.activation(self.ff0(self.pre_ff_ln(hidden))))
+        return self.post_ff_ln(ff_output) + hidden, seq_attn_mask
