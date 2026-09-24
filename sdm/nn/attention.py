@@ -18,9 +18,16 @@ from sdm.nn import QueryScaling
 
 # cuDNN attention builds an execution plan for every new input shape, which
 # costs more than the attention itself on the ever-changing shapes of tables.
+# Memory-efficient attention is about twice as fast as flash attention on
+# sequences of up to 64 elements, e.g., across the columns of a row.
 _SDPA_BACKENDS = [
     SDPBackend.FLASH_ATTENTION,
     SDPBackend.EFFICIENT_ATTENTION,
+    SDPBackend.MATH,
+]
+_SHORT_SDPA_BACKENDS = [
+    SDPBackend.EFFICIENT_ATTENTION,
+    SDPBackend.FLASH_ATTENTION,
     SDPBackend.MATH,
 ]
 
@@ -153,7 +160,12 @@ class SDPA(torch.nn.Module):
         if query.size(-2) != key.size(-2):
             enable_gqa = True
 
-        with sdpa_kernel(_SDPA_BACKENDS):
+        with sdpa_kernel(
+            _SHORT_SDPA_BACKENDS
+            if max(query.size(-3), key.size(-3)) <= 64
+            else _SDPA_BACKENDS,
+            set_priority=True,
+        ):
             out = F.scaled_dot_product_attention(
                 query=query.transpose(-3, -2),  # [B, Hq, Q, C],
                 key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
