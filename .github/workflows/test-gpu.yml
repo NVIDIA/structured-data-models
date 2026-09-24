@@ -155,30 +155,31 @@ jobs:
             --extra-index-url="${RAPIDS_INDEX_URL}" \
             --find-links=https://data.pyg.org/whl/torch-2.14.0+cu130.html \
             --index-strategy=unsafe-best-match \
-            --exclude-newer-package='autogluon-common=0 days' \
-            --exclude-newer-package='autogluon-core=0 days' \
-            --exclude-newer-package='autogluon-features=0 days' \
-            --exclude-newer-package='autogluon-tabular=0 days' \
-            --exclude-newer-package='bencheval=0 days' \
-            --exclude-newer-package='tabarena=0 days' \
             . \
-            'TALENT@git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6' \
-            'autogluon.tabular>=1.6.4b20260924,<=1.7.0' \
-            'cudf-cu13>=26.6,<26.8' \
-            'numpy<2.5' \
-            'pandas<3' \
+            'cudf-cu13>=26.8' \
+            pandas \
             pyg-lib \
-            'pylibcugraph-cu13>=26.6,<26.8' \
+            'pylibcugraph-cu13>=26.8' \
             'relbench>=3.0.1' \
             scikit-learn \
-            'tabarena[data-foundry,plot,preprocessing]>=0.1.1.dev20260924104714,<=0.2.0' \
             torchmetrics \
             tqdm
 
       - name: GPU sanity check
         run: |
           nvidia-smi
-          python -c 'import torch; assert torch.cuda.is_available(), "CUDA not available to torch"'
+          python - <<'PY'
+          import cudf
+          import numpy
+          import pandas
+          import torch
+
+          assert torch.cuda.is_available(), "CUDA not available to torch"
+          print("cudf", cudf.__version__)
+          print("numpy", numpy.__version__)
+          print("pandas", pandas.__version__)
+          print("torch", torch.__version__)
+          PY
 
       - name: Run TabICLv2 quickstart example
         timeout-minutes: 2
@@ -200,6 +201,26 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python examples/relational/rel_bench.py --dataset rel-f1 --task driver-position
+
+      - name: Install benchmark dependencies
+        run: |
+          # AutoGluon requires pandas 2, while the cuDF examples use pandas 3.
+          uv venv "${RUNNER_TEMP}/benchmark-venv"
+          uv pip install \
+            --python="${RUNNER_TEMP}/benchmark-venv/bin/python" \
+            --torch-backend=cu130 \
+            --exclude-newer-package='autogluon-common=0 days' \
+            --exclude-newer-package='autogluon-core=0 days' \
+            --exclude-newer-package='autogluon-features=0 days' \
+            --exclude-newer-package='autogluon-tabular=0 days' \
+            --exclude-newer-package='bencheval=0 days' \
+            --exclude-newer-package='tabarena=0 days' \
+            . \
+            'TALENT@git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6' \
+            'autogluon.tabular>=1.6.4b20260924,<=1.7.0' \
+            'tabarena[data-foundry,plot,preprocessing]>=0.1.1.dev20260924104714,<=0.2.0'
+          echo "VIRTUAL_ENV=${RUNNER_TEMP}/benchmark-venv" >> "${GITHUB_ENV}"
+          echo "${RUNNER_TEMP}/benchmark-venv/bin" >> "${GITHUB_PATH}"
 
       - name: Test TabArena benchmark
         timeout-minutes: 5
