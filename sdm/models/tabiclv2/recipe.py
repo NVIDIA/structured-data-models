@@ -36,12 +36,12 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.ShuffleCategories(method="shift"),
                 ],
                 numerical=[
-                    sp.Choice(
-                        sp.Identity(),
-                        sp.PowerTransform(),
-                        sp.QuantileTransform(),
-                        method="round_robin",
-                    ),
+                    # sp.Choice(
+                    #     sp.Identity(),
+                    #     # sp.PowerTransform(),
+                    #     # sp.QuantileTransform(output_distribution="normal"),
+                    #     method="round_robin",
+                    # ),
                     sp.Standardize(),
                 ],
             ),
@@ -51,4 +51,17 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             sp.ReduceEstimators(method="mean"),
             sp.TaskDispatch(classification=sp.Softmax(temperature=0.9)),
         ],
+        # output=sp.TaskDispatch(
+        #     classification=[
+        #         sp.ReduceEstimators(method="mean"),
+        #         sp.Softmax(temperature=0.9),
+        #     ],
+        #     regression=[
+        #         sp.SortQuantiles(),
+        #         sp.ReduceEstimators(
+        #             method="trimmed_mean",
+        #             proportion=0.2,
+        #         ),
+        #     ],
+        # ),
     )

@@ -101,7 +101,7 @@ def search_space(stats: TaskStats) -> SearchSpace:
         num_estimators = [8]
 
     num_estimators = [8]
-    context_size = [20_000]
+    context_size = [20_00]
 
     if NUM_LAGS is not None:
         num_lags = [NUM_LAGS]
@@ -145,21 +145,33 @@ def search_space(stats: TaskStats) -> SearchSpace:
 
 @lru_cache(maxsize=1)
 def get_sampler(db: Database) -> sdm.relational.RelationalSampler:
-    tables = {
-        name: sdm.TableTensor.from_pandas(
-            df=table.df,
-            stypes=sdm.infer_stypes(
-                table.df.head(10_000),
-                overrides={
-                    table.pkey_col: "id",
-                    **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
-                },
-                text="drop",
-                unsupported="drop",
-            ),
+    tables = {}
+    for name, table in db.table_dict.items():
+        stypes=sdm.infer_stypes(
+            table.df.head(10_000),
+            overrides={
+                table.pkey_col: "id",
+                **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
+            },
+            text="drop",
+            unsupported="drop",
         )
-        for name, table in db.table_dict.items()
-    }
+        # print(name, "========================")
+        # for col, stype in stypes.items():
+        #     print(col, stype)
+        # if name == 'races':
+        #     del stypes['name']
+        if name == 'drivers':
+            # del stypes["code"]
+            del stypes["forename"]
+            del stypes["surname"]
+        # if name == "customer":
+        #     del stypes["customer_name"]
+        # print(name)
+        # for col, stype in stypes.items():
+        #     print(col, stype)
+        tables[name] = sdm.TableTensor.from_pandas(table.df, stypes)
+
     relationships = [
         {
             "left_table": name,
@@ -195,6 +207,10 @@ class KumoRelationalModel(RelArenaModel):
         time_limit: float | None = None,
     ) -> None:
 
+        # torch.manual_seed(seed)
+
+        # print("SEED", seed)
+
         if task.task_type == TaskType.REGRESSION:
             self.target_stype = "numerical"
         else:
@@ -227,10 +243,10 @@ class KumoRelationalModel(RelArenaModel):
         context_size = self.config["context_size"]
         num_estimators = self.config["num_estimators"]
         generator = torch.Generator().manual_seed(seed)
-        if len(context) > context_size * num_estimators:
-            perm = context.datetime.view(-1).argsort(descending=True)
-            context = context[perm]
-            context = context[:context_size * num_estimators]
+        # if len(context) > context_size * num_estimators:
+        #     perm = context.datetime.view(-1).argsort(descending=True)
+        #     context = context[perm]
+        #     context = context[:context_size * num_estimators]
         if self.config["ensemble_context"] and len(context) > context_size:
             repeats = math.ceil(context_size * num_estimators / len(context))
             perm = torch.cat(
@@ -259,6 +275,7 @@ class KumoRelationalModel(RelArenaModel):
             num_neighbors=self.config["num_neighbors"],
             task_time_column=task.time_col,
         ).cuda()
+        print(related_tables.tables.keys())
 
         self.model = sdm.models.KumoRelational(
             task="regression"
