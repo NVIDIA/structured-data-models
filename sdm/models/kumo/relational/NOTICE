@@ -1,5 +1,5 @@
-Kumo-Relational reuses TabICLv2-derived model components and fine-tunes
-from pretrained TabICLv2 weights.
+Kumo-Relational reuses TabICLv2-derived model components and finetunes
+pretrained TabICLv2 weights, licensed under BSD-3-Clause.
 
 See the TabICLv2 third-party license notice at:
 sdm/models/tabiclv2/LICENSE
