@@ -16,22 +16,33 @@ from sdm.nn import QueryScaling, RotaryEmbedding, TransformerBlock
 class _RMSNorm(RMSNorm):
     # Autocast runs RMSNorm in single precision, and the projection or
     # attention consuming it casts the result back. At inference, normalize
-    # straight into the autocast dtype instead.
-    def forward(self, x: Tensor) -> Tensor:
+    # straight into the autocast dtype instead, optionally rotating first.
+    def forward(
+        self,
+        x: Tensor,
+        rope: RotaryEmbedding | None = None,
+    ) -> Tensor:
         if (
             torch.is_grad_enabled()
             or torch.compiler.is_compiling()
             or not x.is_cuda
             or not torch.is_autocast_enabled("cuda")
         ):
-            return super().forward(x)
+            return super().forward(x if rope is None else rope(x))
         eps = torch.finfo(torch.float32).eps if self.eps is None else self.eps
         return rms_norm(
             x,
             weight=self.weight,
             eps=eps,
             dtype=torch.get_autocast_dtype("cuda"),
+            rope=rope,
         )
+
+
+class _RoPERMSNorm(Sequential):
+    def forward(self, input: Tensor) -> Tensor:  # noqa: A002
+        rope, norm = self
+        return norm(input, rope=rope)
 
 
 class KumoTabularTransformerBlock(TransformerBlock):
@@ -77,14 +88,15 @@ class KumoTabularTransformerBlock(TransformerBlock):
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).weight)
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).bias)
 
+        transform = Sequential if rope is None else _RoPERMSNorm
         super().__init__(
             channels=channels,
             num_query_heads=num_heads,
             mlp=mlp,
             query_norm=_RMSNorm(channels, **factory_kwargs),
             key_value_norm=_RMSNorm(channels, **factory_kwargs),
-            query_transform=Sequential(*query_transforms),
-            key_transform=Sequential(*key_transforms),
+            query_transform=transform(*query_transforms),
+            key_transform=transform(*key_transforms),
             query_scaling=query_scaling,
             **factory_kwargs,
         )
