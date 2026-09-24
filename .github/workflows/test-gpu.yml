@@ -155,16 +155,17 @@ jobs:
             --extra-index-url="${RAPIDS_INDEX_URL}" \
             --find-links=https://data.pyg.org/whl/torch-2.14.0+cu130.html \
             --index-strategy=unsafe-best-match \
+            --prerelease=allow \
             . \
             'TALENT@git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6' \
-            'autogluon.tabular==1.6.4b20260923' \
+            'autogluon.tabular>=1.6.4b20260924,<=1.6.4' \
             'cudf-cu13>=26.6,<26.8' \
             'pandas<3' \
             pyg-lib \
             'pylibcugraph-cu13>=26.6,<26.8' \
             'relbench>=3.0.1' \
             scikit-learn \
-            'tabarena[data-foundry,plot]==0.1.1.dev20260922190631' \
+            'tabarena[data-foundry,plot]>=0.1.1.dev20260924104714,<=0.1.1' \
             torchmetrics \
             tqdm
 

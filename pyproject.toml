@@ -93,6 +93,11 @@ find-links = ["https://data.pyg.org/whl/torch-2.14.0+cpu.html"]
 exclude-newer = "7 days"
 
 [tool.uv.exclude-newer-package]
+autogluon-common = false
+autogluon-core = false
+autogluon-features = false
+autogluon-tabular = false
+bencheval = false
 cudf-cu13 = false
 libcudf-cu13 = false
 libcugraph-cu13 = false
@@ -105,6 +110,7 @@ pylibcugraph-cu13 = false
 pylibraft-cu13 = false
 rmm-cu13 = false
 relbench = false
+tabarena = false
 torch = false
 triton = false
 
