@@ -63,6 +63,38 @@ def preserve_autograd_state(fn: Callable) -> Callable:
     return wrapper
 
 
+def _move_categories(
+    categories: Sequence[Tensor],
+    device: torch.device | str | None,
+) -> tuple[Tensor, ...]:
+    device = _resolve_device(device)
+    if device is None or device.type == "cpu":
+        return tuple(categories)
+
+    groups: dict[tuple[type[Tensor], torch.dtype], list[int]] = defaultdict(
+        list
+    )
+    moved: list[Tensor | None] = [None] * len(categories)
+    for i, category in enumerate(categories):
+        if type(category) is Tensor or isinstance(category, StringTensor):
+            groups[(type(category), category.dtype)].append(i)
+        else:
+            moved[i] = category.to(device)
+
+    for indices in groups.values():
+        tensors = [categories[i] for i in indices]
+        if len(tensors) == 1:
+            parts = (tensors[0].to(device),)
+        else:
+            sizes = [tensor.numel() for tensor in tensors]
+            parts = torch.cat(tensors).to(device).split(sizes)
+        for i, part in zip(indices, parts):
+            moved[i] = part
+
+    assert all(category is not None for category in moved)
+    return cast(tuple[Tensor, ...], tuple(moved))
+
+
 @dataclass(frozen=True)
 class TableSchema:
     r"""The schema of a :class:`TableTensor`.
@@ -487,7 +519,6 @@ class TableTensor(Tensor):
                     ):
                         category = torch.tensor(
                             np.asarray(values),
-                            device=device,
                         )
                     else:
                         array = pa.array(values, from_pandas=True)
@@ -496,18 +527,17 @@ class TableTensor(Tensor):
                         if is_string or is_large_string:
                             category = StringTensor.from_arrow(
                                 array,
-                                device=device,
                             )
                         elif pa.types.is_null(array.type):
                             category = torch.empty(
                                 0,
                                 dtype=torch.int64,
-                                device=device,
                             )
                         else:
-                            category = arrow_as_tensor(array, device=device)
+                            category = arrow_as_tensor(array)
                     categories.append(category)
 
+                categories = list(_move_categories(categories, device))
                 code_tensor = (
                     torch.from_numpy(code).to(device)
                     if len(df) > 0

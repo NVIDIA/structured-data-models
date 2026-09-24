@@ -1171,7 +1171,10 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
-def test_from_pandas_nullable_and_categorical_dtypes() -> None:
+@withCUDA
+def test_from_pandas_nullable_and_categorical_dtypes(
+    device: torch.device,
+) -> None:
     df = pd.DataFrame(
         {
             "ignored": ["not", "converted", "by", "the fast path"],
@@ -1193,6 +1196,7 @@ def test_from_pandas_nullable_and_categorical_dtypes() -> None:
             "string": "categorical",
             "boolean": "categorical",
         },
+        device=device,
     )
 
     assert tensor.columns[Stype.numerical] == ("number",)
@@ -1205,7 +1209,10 @@ def test_from_pandas_nullable_and_categorical_dtypes() -> None:
     assert tensor.numerical.is_contiguous()
     torch.testing.assert_close(
         tensor.numerical,
-        torch.tensor([[1.0], [float("nan")], [3.0], [4.0]]),
+        torch.tensor(
+            [[1.0], [float("nan")], [3.0], [4.0]],
+            device=device,
+        ),
         equal_nan=True,
     )
     assert tensor.categorical.code.equal(
@@ -1217,7 +1224,11 @@ def test_from_pandas_nullable_and_categorical_dtypes() -> None:
                 [2, 0, 0],
             ],
             dtype=torch.int32,
+            device=device,
         )
+    )
+    assert all(
+        category.device == device for category in tensor.categorical.categories
     )
     assert tensor.categorical.categories[0].tolist() == ["unused", "a", "b"]
     assert tensor.categorical.categories[1].tolist() == ["b", "a"]
