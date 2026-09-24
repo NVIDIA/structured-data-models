@@ -361,6 +361,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        if self.training:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r}.predict() does not support "
+                "gradient-based training through a fitted context cache. "
+                "To fix, call `model.eval()`."
+            )
+
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
 
@@ -479,13 +486,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
         if cast(Cache, self._cache[0])["classes"] is None:
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode(),
+                inference_mode("grad" if requires_grad else "inference"),
             ):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
         with (
             torch.amp.autocast(x.device.type, enabled=False),
-            inference_mode(),
+            inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
 

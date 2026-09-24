@@ -7,7 +7,7 @@ This directory contains benchmarks of `structured-data-models` on TabArena/Beyon
 Run the commands below from the repository root:
 
 ```bash
-pip install structured-data-models \
+pip install . \
   "autogluon.common @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=common" \
   "autogluon.core @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=core" \
   "autogluon.features @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=features" \

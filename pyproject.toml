@@ -18,6 +18,7 @@ license-files = [
     "sdm/models/kumo/relational/NOTICE",
     "third_party/contributor-covenant/LICENSE",
     "third_party/pytorch/LICENSE",
+    "third_party/tabpfn-extensions/LICENSE",
 ]
 authors = [
     { name = "NVIDIA" },

@@ -91,8 +91,7 @@ task_table = sdm.TableTensor.from_pandas(
 context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
 
 num_estimators = args.num_estimators
-if len(context) > args.context_size:
-    # Sample different context per estimator:
+if len(context) > args.context_size:  # Sample different context per estimator:
     repeats = math.ceil(args.context_size * num_estimators / len(context))
     perm = torch.cat([torch.randperm(len(context)) for _ in range(repeats)])
     context = context[perm[: args.context_size * num_estimators]]
