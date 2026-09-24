@@ -475,8 +475,7 @@ class TableTensor(Tensor):
         ):
             blocks: dict[Stype, Tensor] = {}
 
-            numerical_columns = columns.get(Stype.numerical)
-            if numerical_columns:
+            if numerical_columns := columns.get(Stype.numerical):
                 dtype = torch.get_default_dtype()
                 numpy_dtype = _TORCH_NUMPY_DTYPES.get(
                     dtype, np.dtype(np.float32)
@@ -503,8 +502,7 @@ class TableTensor(Tensor):
                         dtype=dtype,
                     )
 
-            categorical_columns = columns.get(Stype.categorical)
-            if categorical_columns:
+            if categorical_columns := columns.get(Stype.categorical):
                 code = np.empty(
                     (len(df), len(categorical_columns)),
                     dtype=np.int32,
