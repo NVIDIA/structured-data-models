@@ -165,6 +165,7 @@ jobs:
             'TALENT@git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6' \
             'autogluon.tabular>=1.6.4b20260924,<=1.7.0' \
             'cudf-cu13>=26.6,<26.8' \
+            'numpy<2.5' \
             'pandas<3' \
             pyg-lib \
             'pylibcugraph-cu13>=26.6,<26.8' \
