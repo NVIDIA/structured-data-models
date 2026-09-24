@@ -150,6 +150,12 @@ include = ["examples/**", "benchmark/**"]
 unresolved-import = "ignore"
 unresolved-attribute = "ignore"
 
+[[tool.ty.overrides]]
+include = ["sdm/_kernels/triton/**"]
+
+[tool.ty.overrides.rules]
+unused-ignore-comment = "ignore"
+
 [tool.ruff]  # https://docs.astral.sh/ruff/rules
 src = ["pyproject.toml", "sdm", "test", "examples", "benchmark"]
 line-length = 79
