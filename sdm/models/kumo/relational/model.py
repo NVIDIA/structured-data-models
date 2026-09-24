@@ -37,11 +37,11 @@ class KumoRelational(ICLModel):
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
-    .. figure:: /images/rfm_light.svg
+    .. figure:: /images/kumo_relational_light.svg
         :figclass: light-only
         :width: 100%
 
-    .. figure:: /images/rfm_dark.svg
+    .. figure:: /images/kumo_relational_dark.svg
         :figclass: dark-only
         :width: 100%
 

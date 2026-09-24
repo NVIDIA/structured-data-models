@@ -38,7 +38,7 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 **Tabular Foundation Models:**
 
 - **[`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2)** from Qu *et al.*: [TabICLv2: A Better, Faster, Scalable, and Open Tabular Foundation Model](https://arxiv.org/abs/2602.11139) (ICML '26)
-- **[`KumoTabular`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoTabular)** from Qu *et al.* ('26)
+- **[`KumoTabular`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoTabular)** from Qu *et al.*: [NVIDIA Kumo Tabular Sets a New Accuracy-Efficiency Frontier for Tabular Prediction](https://huggingface.co/blog/nvidia/kumo-tabular) ('26)
 - **[`TabFM`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabFM)** from Kong *et al.*: [Introducing TabFM: A Zero-shot Foundation Model for Tabular Data](https://research.google/blog/introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data) ('26)
 
 **Relational Foundation Models:**

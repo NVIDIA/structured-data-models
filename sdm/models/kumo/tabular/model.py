@@ -51,7 +51,12 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 
 
 class KumoTabular(ICLModel):
-    r"""The Kumo tabular foundation model.
+    r"""The tabular foundation model from `"NVIDIA Kumo Tabular Sets a New
+    Accuracy-Efficiency Frontier for Tabular Prediction"
+    <https://huggingface.co/blog/nvidia/kumo-tabular>`__.
+
+    .. figure:: /images/kumo_tabular.svg
+        :width: 100%
 
     Architecturally, :class:`KumoTabular` combines the compression-then-ICL
     structure of :class:`TabICLv2` with interleaved row/column attention from
