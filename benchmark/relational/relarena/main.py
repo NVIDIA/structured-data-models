@@ -12,7 +12,7 @@ import torch
 import tqdm
 from relarena.model import RelArenaModel
 from relarena.registry import register_model
-from relarena.search_space import SearchSpace
+from relarena.search_space import SearchSpace, TaskStats
 from relbench.base import Database, EntityTask, Table, TaskType
 
 import sdm
@@ -30,7 +30,7 @@ NUM_NEIGHBORS = {
 }
 
 
-def search_space() -> SearchSpace:
+def search_space(stats: TaskStats) -> SearchSpace:
     return SearchSpace(
         default_overrides={},
         fixed_grid=[
