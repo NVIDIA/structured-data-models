@@ -120,17 +120,31 @@ def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
     assert not categorical.allclose(numerical)
 
 
+@pytest.mark.parametrize("num_estimators", [1, 3])
 @pytest.mark.parametrize("kv_cache", [True, False])
 def test_fit_predict(
     cls_model: KumoTabular,
     reg_model: KumoTabular,
     kv_cache: bool,
+    num_estimators: int,
 ) -> None:
     x_context, x_query = _features()
     target = _cls_target()
 
-    expected = cls_model(x_context, target, x_query, recipe=_recipe())
-    cls_model.fit(x_context, target, recipe=_recipe(), kv_cache=kv_cache)
+    expected = cls_model(
+        x_context,
+        target,
+        x_query,
+        recipe=_recipe(),
+        num_estimators=num_estimators,
+    )
+    cls_model.fit(
+        x_context,
+        target,
+        recipe=_recipe(),
+        num_estimators=num_estimators,
+        kv_cache=kv_cache,
+    )
     actual = cls_model.predict(x_query)
 
     assert actual.allclose(expected, atol=1e-5)
@@ -139,8 +153,20 @@ def test_fit_predict(
     x_context, x_query = _features(Stype.numerical)
     target = _reg_target()
     recipe = _recipe()
-    expected = reg_model(x_context, target, x_query, recipe=recipe)
-    reg_model.fit(x_context, target, recipe=recipe, kv_cache=kv_cache)
+    expected = reg_model(
+        x_context,
+        target,
+        x_query,
+        recipe=recipe,
+        num_estimators=num_estimators,
+    )
+    reg_model.fit(
+        x_context,
+        target,
+        recipe=recipe,
+        num_estimators=num_estimators,
+        kv_cache=kv_cache,
+    )
     actual = reg_model.predict(x_query)
 
     torch.testing.assert_close(
