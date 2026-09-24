@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
@@ -20,6 +21,7 @@ from sdm import (
     Task,
     TaskLike,
 )
+from sdm._graphs import GraphCache
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -29,6 +31,9 @@ from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
 from sdm.processing.categorical.encode_ecoc import EncodeECOC, ecoc_code_count
 from sdm.tensor.table import TableSchema
+
+# Input cells up to which inference replays CUDA graphs.
+_GRAPH_CELLS = 2**18
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
     "small": {
@@ -444,8 +449,40 @@ class _KumoTabular(torch.nn.Module):
             num_key_value_heads_for_query=num_icl_key_value_heads_for_query,
             **factory_kwargs,
         )
+        self._graphs = GraphCache()
 
     def forward(
+        self,
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
+        categorical_mask: Tensor,  # [..., C]
+        *,
+        cache: Cache | None = None,
+    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
+        # Small inputs wait for kernel launches rather than the GPU. When they
+        # repeat in shape, e.g., across folds of a table, replay CUDA graphs.
+        if (
+            cache is None
+            and x.is_cuda
+            and x.numel() <= _GRAPH_CELLS
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+        ):
+            key = (
+                torch.is_autocast_enabled("cuda"),
+                torch.get_autocast_dtype("cuda"),
+                *(
+                    tensor.data_ptr()
+                    for tensor in itertools.chain(
+                        self.parameters(),
+                        self.buffers(),
+                    )
+                ),
+            )
+            return self._graphs(self._forward, x, y, categorical_mask, key=key)
+        return self._forward(x, y, categorical_mask, cache=cache)
+
+    def _forward(
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
