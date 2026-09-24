@@ -71,13 +71,18 @@ def _move_categories(
     if device is None or device.type == "cpu":
         return tuple(categories)
 
-    groups: dict[tuple[type[Tensor], torch.dtype], list[int]] = defaultdict(
-        list
-    )
+    groups: dict[
+        tuple[type[Tensor], torch.dtype, torch.dtype | None], list[int]
+    ] = defaultdict(list)
     moved: list[Tensor | None] = [None] * len(categories)
     for i, category in enumerate(categories):
         if type(category) is Tensor or isinstance(category, StringTensor):
-            groups[(type(category), category.dtype)].append(i)
+            offset_dtype = (
+                category.data_offset[1].dtype
+                if isinstance(category, StringTensor)
+                else None
+            )
+            groups[(type(category), category.dtype, offset_dtype)].append(i)
         else:
             moved[i] = category.to(device)
 
