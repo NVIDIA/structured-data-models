@@ -8,13 +8,10 @@ from sdm.processing import Processor
 
 
 class Cast(Processor):
-    r"""Cast numerical columns to a floating point dtype.
-
-    Statistics fitted by the processors that follow are then computed in
-    that precision; cast back before handing the table to a model.
+    """Cast numerical columns to a floating-point dtype.
 
     Args:
-        dtype: The floating point dtype of the numerical columns.
+        dtype: The floating-point dtype of the numerical columns.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -22,6 +19,8 @@ class Cast(Processor):
 
     def __init__(self, dtype: torch.dtype) -> None:
         super().__init__()
+        if not dtype.is_floating_point:
+            raise ValueError(f"Expected a floating-point dtype (got {dtype})")
         self.dtype = dtype
 
     def _transform(self, table: TableTensor) -> TableTensor:
