@@ -51,9 +51,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     ) -> sdm.models.ICLModel:
         pass
 
-    def _create_recipe(self) -> sdm.Recipe:
-        return self.model.default_recipe()
-
     def _set_default_params(self) -> None:
         self._set_default_param_value(
             "num_estimators",
@@ -128,7 +125,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             num_estimators = None
         self._expand_query = num_estimators is None
 
-        recipe = self._create_recipe()
+        recipe = self.model.default_recipe()
         if params["max_columns"] is not None:
             for processor in recipe.features.modules():
                 if isinstance(processor, sp.SelectColumns):
@@ -348,25 +345,6 @@ class SDMKumoTabularModel(SDMModel):
                 task=task,
                 device=self._device,
             )
-
-    def _create_recipe(self) -> sdm.Recipe:
-        recipe = super()._create_recipe()
-        # TabArena aligns features with its fitted generator and targets with
-        # its label cleaner.
-        for pipeline in (recipe.features, recipe.target):
-            stype_dispatch = next(
-                processor
-                for processor in pipeline.modules()
-                if isinstance(processor, sp.StypeDispatch)
-            )
-            categorical = stype_dispatch.processors[str(sdm.Stype.categorical)]
-            assert isinstance(categorical, sp.Sequential)
-            processors = iter(categorical)
-            assert isinstance(next(processors), sp.AlignCategories)
-            stype_dispatch.processors[str(sdm.Stype.categorical)] = (
-                sp.Sequential(*processors)
-            )
-        return recipe
 
 
 class SDMTabFMModel(SDMModel):
