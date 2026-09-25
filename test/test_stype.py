@@ -145,6 +145,40 @@ def test_id_detection() -> None:
     }
 
 
+@pytest.mark.parametrize("backend", _BACKENDS)
+def test_low_cardinality_detection(backend: str) -> None:
+    def make_table(num_rows: int) -> pa.Table | pd.DataFrame | cudf.DataFrame:
+        data = {
+            "binary": [i % 2 for i in range(num_rows)],
+            "ternary": [(0.5, 1.5, None)[i % 3] for i in range(num_rows)],
+            "count": [(0, 1, 2, None)[i % 4] for i in range(num_rows)],
+            # Two more values in the last rows only.
+            "late": [
+                i % 2 if i < num_rows - 2 else i for i in range(num_rows)
+            ],
+            "constant": [1] * num_rows,
+        }
+        if backend == "pandas":
+            return pd.DataFrame(data)
+        if backend == "arrow":
+            return pa.table(data)
+        cudf = pytest.importorskip("cudf")
+        return cudf.DataFrame(data)
+
+    expected = dict.fromkeys(
+        ["binary", "ternary", "count", "late", "constant"],
+        Stype.numerical,
+    )
+    assert infer_stypes(make_table(2048)) == expected
+    assert infer_stypes(make_table(150), low_cardinality="infer") == expected
+    for num_rows in (151, 2048):
+        assert infer_stypes(make_table(num_rows), low_cardinality="infer") == {
+            **expected,
+            "binary": Stype.categorical,
+            "ternary": Stype.categorical,
+        }
+
+
 def test_overrides() -> None:
     table = pa.table(
         {

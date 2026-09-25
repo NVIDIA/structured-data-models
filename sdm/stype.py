@@ -58,6 +58,7 @@ def infer_stypes(
     *,
     text: Literal["off", "infer", "drop"] = "off",
     id: Literal["off", "infer", "drop"] = "off",
+    low_cardinality: Literal["off", "infer"] = "off",
     unsupported: Literal["error", "warn", "drop"] = "error",
 ) -> dict[str, StypeLike]:
     r"""Infer semantic types from raw data statistics.
@@ -80,6 +81,10 @@ def infer_stypes(
       :attr:`~Stype.id` if its name contains ``"id"`` as a whole word
       (*e.g.*, ``"user_id"``, ``"userId"``, ``"id"``, but not ``"solid"`` or
       ``"covid"``).
+    * Integer, floating-point, and decimal columns are inferred as
+      :attr:`~Stype.categorical` if the table has more than 150 rows and the
+      column contains two or three distinct values, counting missing values as
+      one.
 
     Args:
         table: A :class:`pandas.DataFrame`, :class:`pyarrow.Table`, or
@@ -93,6 +98,10 @@ def infer_stypes(
             ``"off"`` disables :attr:`~Stype.id` column detection.
             ``"infer"`` includes inferred :attr:`~Stype.id` columns.
             ``"drop"`` omits inferred :attr:`~Stype.id` columns.
+        low_cardinality: The detection policy for low-cardinality integer,
+            floating-point, and decimal columns.
+            ``"off"`` keeps them :attr:`~Stype.numerical`.
+            ``"infer"`` infers them as :attr:`~Stype.categorical`.
         unsupported: How to handle unsupported dtypes.
             ``"error"`` raises a :class:`TypeError`.
             ``"warn"`` emits a warning and omits the column.
@@ -103,7 +112,13 @@ def infer_stypes(
     """
     overrides = overrides or {}
 
-    fn: Callable[[str, object, Policy, Policy], Stype | None] | None = None
+    fn: (
+        Callable[
+            [str, object, Policy, Policy, Literal["off", "infer"]],
+            Stype | None,
+        ]
+        | None
+    ) = None
     columns: Iterable[tuple[Hashable, object]] | None = None
     if isinstance(table, pa.Table):
         fn = _infer_arrow_stype
@@ -136,7 +151,7 @@ def infer_stypes(
             continue
 
         try:
-            stype = fn(name, column, text, id)
+            stype = fn(name, column, text, id, low_cardinality)
         except TypeError:
             if unsupported == "error":
                 raise
@@ -169,6 +184,7 @@ def _infer_arrow_stype(
     array: object,
     text: Policy,
     id: Policy,
+    low_cardinality: Literal["off", "infer"],
 ) -> Stype | None:
     assert isinstance(array, pa.Array | pa.ChunkedArray)
     dtype = array.type
@@ -189,6 +205,8 @@ def _infer_arrow_stype(
         or pa.types.is_floating(dtype)
         or pa.types.is_decimal(dtype)
     ):
+        if low_cardinality != "off" and _is_arrow_low_cardinality(array):
+            return Stype.categorical
         return Stype.numerical
 
     if pa.types.is_boolean(dtype) or pa.types.is_dictionary(dtype):
@@ -210,6 +228,7 @@ def _infer_pandas_stype(
     ser: object,
     text: Policy,
     id: Policy,
+    low_cardinality: Literal["off", "infer"],
 ) -> Stype | None:
     import pandas as pd
     from pandas.api.types import (
@@ -237,6 +256,8 @@ def _infer_pandas_stype(
         return None if id == "drop" else Stype.id
 
     if is_integer_dtype(dtype) or is_float_dtype(dtype):
+        if low_cardinality != "off" and _is_series_low_cardinality(ser):
+            return Stype.categorical
         return Stype.numerical
 
     if is_bool_dtype(dtype) or isinstance(dtype, pd.CategoricalDtype):
@@ -258,6 +279,7 @@ def _infer_cudf_stype(
     ser: object,
     text: Policy,
     id: Policy,
+    low_cardinality: Literal["off", "infer"],
 ) -> Stype | None:
     import cudf
     from cudf.api.types import (
@@ -284,6 +306,8 @@ def _infer_cudf_stype(
         or is_float_dtype(dtype)
         or is_decimal_dtype(dtype)
     ):
+        if low_cardinality != "off" and _is_series_low_cardinality(ser):
+            return Stype.categorical
         return Stype.numerical
 
     if is_bool_dtype(dtype) or isinstance(dtype, cudf.CategoricalDtype):
@@ -343,3 +367,38 @@ def _is_cudf_text(ser: cudf.Series) -> bool:
     unique = ser.dropna().unique()
     avg_words = unique.str.token_count().mean()
     return avg_words >= _TEXT_MIN_AVERAGE_WORD_COUNT
+
+
+_LOW_CARDINALITY_MIN_ROWS = 151
+_LOW_CARDINALITY_MAX_UNIQUE_VALUES = 3
+_LOW_CARDINALITY_PREFIX_ROWS = 1024
+
+
+def _is_arrow_low_cardinality(array: pa.Array | pa.ChunkedArray) -> bool:
+    if len(array) < _LOW_CARDINALITY_MIN_ROWS:
+        return False
+
+    # A prefix holds a subset of the distinct values, so most columns are
+    # ruled out without a full pass.
+    options = pc.CountOptions(mode="all")
+    prefix = array.slice(0, _LOW_CARDINALITY_PREFIX_ROWS)
+    num_unique = pc.call_function("count_distinct", [prefix], options).as_py()
+    if num_unique > _LOW_CARDINALITY_MAX_UNIQUE_VALUES:
+        return False
+
+    num_unique = pc.call_function("count_distinct", [array], options).as_py()
+    return 1 < num_unique <= _LOW_CARDINALITY_MAX_UNIQUE_VALUES
+
+
+def _is_series_low_cardinality(ser: pd.Series | cudf.Series) -> bool:
+    if len(ser) < _LOW_CARDINALITY_MIN_ROWS:
+        return False
+
+    # A prefix holds a subset of the distinct values, so most columns are
+    # ruled out without a full pass.
+    prefix = ser.iloc[:_LOW_CARDINALITY_PREFIX_ROWS]
+    if prefix.nunique(dropna=False) > _LOW_CARDINALITY_MAX_UNIQUE_VALUES:
+        return False
+
+    num_unique = ser.nunique(dropna=False)
+    return 1 < num_unique <= _LOW_CARDINALITY_MAX_UNIQUE_VALUES
