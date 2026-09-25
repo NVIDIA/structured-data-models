@@ -170,9 +170,10 @@ def test_low_cardinality_detection(backend: str) -> None:
         Stype.numerical,
     )
     assert infer_stypes(make_table(2048)) == expected
-    assert infer_stypes(make_table(150), low_cardinality="infer") == expected
+    assert infer_stypes(make_table(150), _low_cardinality="infer") == expected
     for num_rows in (151, 2048):
-        assert infer_stypes(make_table(num_rows), low_cardinality="infer") == {
+        table = make_table(num_rows)
+        assert infer_stypes(table, _low_cardinality="infer") == {
             **expected,
             "binary": Stype.categorical,
             "ternary": Stype.categorical,

@@ -58,7 +58,7 @@ def infer_stypes(
     *,
     text: Literal["off", "infer", "drop"] = "off",
     id: Literal["off", "infer", "drop"] = "off",
-    low_cardinality: Literal["off", "infer"] = "off",
+    _low_cardinality: Literal["off", "infer"] = "off",
     unsupported: Literal["error", "warn", "drop"] = "error",
 ) -> dict[str, StypeLike]:
     r"""Infer semantic types from raw data statistics.
@@ -81,10 +81,6 @@ def infer_stypes(
       :attr:`~Stype.id` if its name contains ``"id"`` as a whole word
       (*e.g.*, ``"user_id"``, ``"userId"``, ``"id"``, but not ``"solid"`` or
       ``"covid"``).
-    * Integer, floating-point, and decimal columns are inferred as
-      :attr:`~Stype.categorical` if the table has more than 150 rows and the
-      column contains two or three distinct values, counting missing values as
-      one.
 
     Args:
         table: A :class:`pandas.DataFrame`, :class:`pyarrow.Table`, or
@@ -98,10 +94,6 @@ def infer_stypes(
             ``"off"`` disables :attr:`~Stype.id` column detection.
             ``"infer"`` includes inferred :attr:`~Stype.id` columns.
             ``"drop"`` omits inferred :attr:`~Stype.id` columns.
-        low_cardinality: The detection policy for low-cardinality integer,
-            floating-point, and decimal columns.
-            ``"off"`` keeps them :attr:`~Stype.numerical`.
-            ``"infer"`` infers them as :attr:`~Stype.categorical`.
         unsupported: How to handle unsupported dtypes.
             ``"error"`` raises a :class:`TypeError`.
             ``"warn"`` emits a warning and omits the column.
@@ -151,7 +143,7 @@ def infer_stypes(
             continue
 
         try:
-            stype = fn(name, column, text, id, low_cardinality)
+            stype = fn(name, column, text, id, _low_cardinality)
         except TypeError:
             if unsupported == "error":
                 raise

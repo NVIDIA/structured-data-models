@@ -362,7 +362,7 @@ class SDMKumoTabularModel(SDMModel):
         # codes would follow the order of appearance: pin the categories seen
         # in training in value order instead; other values become missing.
         if is_train:
-            stypes = sdm.infer_stypes(X, low_cardinality="infer")
+            stypes = sdm.infer_stypes(X, _low_cardinality="infer")
             self._low_cardinality_dtypes = {
                 column: pd.CategoricalDtype(
                     categories=np.sort(X[column].dropna().unique())
