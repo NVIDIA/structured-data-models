@@ -88,7 +88,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 self.random_seed
             )
 
-        X = self.preprocess(X, y=y)
+        X = self.preprocess(X, y=y, is_train=True)
         self.stypes = sdm.infer_stypes(X)
         x_context = sdm.TableTensor.from_pandas(
             df=X,
@@ -348,6 +348,32 @@ class SDMKumoTabularModel(SDMModel):
                 task=task,
                 device=self._device,
             )
+
+    def _preprocess(
+        self,
+        X: pd.DataFrame,
+        is_train: bool = False,
+        **kwargs: Any,
+    ) -> pd.DataFrame:
+        X = super()._preprocess(X, **kwargs)
+        # AutoGluon's feature generator hands binary columns over as integers,
+        # so low-cardinality numerical columns are typed categorical. The
+        # recipe runs without AlignCategories (see `_create_recipe`), so their
+        # codes would follow the order of appearance: pin the categories seen
+        # in training in value order instead; other values become missing.
+        if is_train:
+            stypes = sdm.infer_stypes(X, _low_cardinality="infer")
+            self._low_cardinality_dtypes = {
+                column: pd.CategoricalDtype(
+                    categories=np.sort(X[column].dropna().unique())
+                )
+                for column, stype in stypes.items()
+                if stype == sdm.Stype.categorical
+                and X[column].dtype.kind in "iuf"
+            }
+        if self._low_cardinality_dtypes:
+            X = X.astype(self._low_cardinality_dtypes, copy=False)
+        return X
 
     def _create_recipe(self) -> sdm.Recipe:
         recipe = super()._create_recipe()
