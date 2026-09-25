@@ -11,8 +11,16 @@ import torch
 from torch import Tensor
 
 import sdm.processing as sp
-from sdm import EnsembleTable, Recipe, RelatedTables, Stype, TableTensor
+from sdm import (
+    EnsembleTable,
+    Recipe,
+    RelatedTables,
+    Stype,
+    StypeLike,
+    TableTensor,
+)
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.tensor.table import TableSchema
 
 
 class MemberContext(NamedTuple):
@@ -21,6 +29,8 @@ class MemberContext(NamedTuple):
     x: TableTensor
     y: TableTensor
     related_tables: RelatedTables[TableTensor] | None
+    #: The feature schema before ``recipe.features``.
+    input_schema: TableSchema
 
 
 class MemberQuery(NamedTuple):
@@ -28,6 +38,41 @@ class MemberQuery(NamedTuple):
 
     x: TableTensor
     related_tables: RelatedTables[TableTensor] | None
+
+
+class MemberSchemas(NamedTuple):
+    """Feature schemas of the ensemble members run in one model call.
+
+    Args:
+        inputs: The feature schema of each member before ``recipe.features``.
+        members: The feature schema of each member after ``recipe.features``.
+    """
+
+    inputs: tuple[TableSchema, ...]
+    members: tuple[TableSchema, ...]
+
+    def stype_mask(self, stype: StypeLike, *, like: Tensor) -> Tensor:
+        r"""Mark numerical columns that had ``stype`` before preprocessing.
+
+        Args:
+            stype: The semantic type to mark.
+            like: The numerical feature block ``[..., R, C]`` of one member or
+                ``[E, ..., R, C]`` of the stacked members.
+
+        Returns:
+            A boolean mask of shape ``[C]`` for one member, or
+            ``[E, 1, ..., C]`` for stacked members, which broadcasts to
+            ``like[..., 0, :]``.
+        """
+        stype = Stype(stype)
+        rows: list[list[bool]] = []
+        for inp, member in zip(self.inputs, self.members, strict=True):
+            marked = set(inp.columns[stype])
+            rows.append([c in marked for c in member.columns[Stype.numerical]])
+        mask = torch.tensor(rows, dtype=torch.bool, device=like.device)
+        if len(self.members) == 1:
+            return mask[0]
+        return mask.view(mask.size(0), *(1,) * (like.dim() - 3), -1)
 
 
 class RecipeExecution:
@@ -124,8 +169,11 @@ class RecipeExecution:
             if isinstance(module, sp.TableDispatch):
                 module._route = "task"
 
-        x = _to_ensemble_table(x, num_members)
-        x = self.recipe.features.fit_transform_ensemble(x, generator=generator)
+        inputs = _to_ensemble_table(x, num_members)
+        x = self.recipe.features.fit_transform_ensemble(
+            inputs,
+            generator=generator,
+        )
         if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
@@ -148,6 +196,7 @@ class RecipeExecution:
                     x=x[member_id],
                     y=y[member_id],
                     related_tables=related_tables_i,
+                    input_schema=inputs[member_id].schema,
                 )
             )
 

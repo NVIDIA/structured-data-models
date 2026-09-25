@@ -78,6 +78,7 @@ class _GradientCallback(Callback):
             objective,
             [numerical for _, _, numerical in self._inputs],
             allow_unused=True,
+            retain_graph=True,  # Batched estimators share one graph.
         )
         grad_tables: dict[str | None, TableTensor] = {}
         for (table_name, columns, numerical), grad in zip(

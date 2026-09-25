@@ -18,7 +18,7 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
-from sdm.tensor.table import TableSchema
+from sdm.processing.execution import MemberSchemas
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
     "small": {
@@ -166,22 +166,6 @@ class KumoTabular(ICLModel):
 
         return model
 
-    def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
-        x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
-        if not isinstance(x_context, TableTensor):
-            x_context = TableTensor.from_tensor(x_context)
-        kwargs["_schema"] = x_context.schema
-        return super().forward(*args, **kwargs)
-
-    def fit(self, *args: Any, **kwargs: Any) -> None:
-        r""":meta private:"""  # noqa: D415
-        x = kwargs["x"] if "x" in kwargs else args[0]
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        kwargs["_schema"] = x.schema
-        return super().fit(*args, **kwargs)
-
     def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
@@ -191,6 +175,8 @@ class KumoTabular(ICLModel):
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
+        *,
+        schemas: MemberSchemas,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -218,17 +204,7 @@ class KumoTabular(ICLModel):
             )
 
         if cache is None or cache.is_recording:
-            assert x_context is not None
-            schema: TableSchema = kwargs["_schema"]
-            categorical_columns = set(schema.columns[Stype.categorical])
-            categorical_mask = torch.tensor(
-                [
-                    column in categorical_columns
-                    for column in x_context.columns[Stype.numerical]
-                ],
-                device=x.device,
-                dtype=torch.bool,
-            )
+            categorical_mask = schemas.stype_mask(Stype.categorical, like=x)
             if cache is not None:
                 cache["categorical_mask"] = categorical_mask
         else:

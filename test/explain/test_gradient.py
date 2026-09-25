@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 import torch
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import CategoricalTensor, Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.explain import GradientExplainer
 from sdm.models import ICLModel
@@ -14,7 +14,7 @@ from sdm.models import ICLModel
 
 class _LinearModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
-    supported_target_stypes = frozenset({Stype.numerical})
+    supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_multi_target = False
     supports_related_tables = True
 
@@ -48,11 +48,24 @@ class _LinearModel(ICLModel):
         return Recipe()
 
 
-@pytest.mark.parametrize("fitted", [False, True])
-def test_returns_query_input_gradients(fitted: bool) -> None:
+@pytest.mark.parametrize(
+    ("fitted", "num_estimators"),
+    [(False, 1), (False, 3), (True, 1), (True, 3)],
+)
+@pytest.mark.parametrize("classification", [False, True])
+def test_returns_query_input_gradients(
+    fitted: bool, num_estimators: int, classification: bool
+) -> None:
     model = _LinearModel()
     x_context = torch.zeros(1, 2)
-    y_context = torch.zeros(1, 1)
+    y_context = TableTensor(numerical=torch.zeros(1, 1))
+    if classification:
+        y_context = TableTensor(
+            categorical=CategoricalTensor(
+                code=torch.zeros(1, 1, dtype=torch.long),
+                categories=(torch.arange(2),),
+            ),
+        )
     x_query = torch.ones(1, 2)
     related_tables = RelatedTables(
         tables={
@@ -76,7 +89,12 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
     )
 
     if fitted:
-        model.fit(x_context, y_context, related_tables)
+        model.fit(
+            x=x_context,
+            y=y_context,
+            related_tables=related_tables,
+            num_estimators=num_estimators,
+        )
         result = explainer.explain(model, x_query, related_tables)
     else:
         result = explainer.explain(
@@ -86,6 +104,7 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
             x_context=x_context,
             y_context=y_context,
             related_context_tables=related_tables,
+            num_estimators=num_estimators,
         )
 
     torch.testing.assert_close(
@@ -102,3 +121,48 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
     )
     assert result.related_tables.relationships == related_tables.relationships
     assert result.related_tables.task_links == related_tables.task_links
+
+
+@pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize("classification", [False, True])
+def test_gradients_with_estimator_batching(
+    fitted: bool,
+    classification: bool,
+) -> None:
+    model = _LinearModel()
+    x_context = torch.zeros(1, 2)
+    y_context = TableTensor(numerical=torch.zeros(1, 1))
+    if classification:
+        y_context = TableTensor(
+            categorical=CategoricalTensor(
+                code=torch.zeros(1, 1, dtype=torch.long),
+                categories=(torch.arange(2),),
+            ),
+        )
+    x_query = torch.ones(1, 2)
+    explainer = GradientExplainer(
+        output=lambda prediction: prediction.numerical
+    )
+
+    if fitted:
+        model.fit(
+            x=x_context,
+            y=y_context,
+            num_estimators=3,
+            estimator_batch_size=None,
+        )
+        result = explainer.explain(model, x_query)
+    else:
+        result = explainer.explain(
+            model,
+            x_query,
+            x_context=x_context,
+            y_context=y_context,
+            num_estimators=3,
+            estimator_batch_size=None,
+        )
+
+    torch.testing.assert_close(
+        result.x.numerical, torch.full_like(x_query, 2.0)
+    )
+    assert result.related_tables is None

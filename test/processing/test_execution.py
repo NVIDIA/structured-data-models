@@ -5,8 +5,16 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import EnsembleTable, Recipe, RelatedTables, TableTensor
-from sdm.processing.execution import RecipeExecution
+from sdm import (
+    CategoricalTensor,
+    EnsembleTable,
+    Recipe,
+    RelatedTables,
+    Stype,
+    TableTensor,
+)
+from sdm.processing.execution import MemberSchemas, RecipeExecution
+from sdm.tensor.table import TableSchema
 
 
 def test_sequence_uses_batched_fit_states_for_shared_query() -> None:
@@ -354,3 +362,46 @@ def test_sequence_rejects_queries_that_cannot_form_fitted_batch() -> None:
                 task_links=[],
             ),
         )
+
+
+def test_member_context_keeps_input_schema() -> None:
+    x = TableTensor(
+        columns={Stype.numerical: ("a",), Stype.categorical: ("b",)},
+        numerical=torch.zeros(3, 1),
+        categorical=CategoricalTensor.from_tensor(torch.zeros(3, 1).long()),
+    )
+    execution = RecipeExecution(Recipe(features=sp.ToNumerical()))
+
+    members = execution.fit_transform(
+        x=x,
+        y=TableTensor.from_tensor(torch.zeros(3, 1)),
+        related_tables=None,
+        num_members=2,
+    )
+
+    assert len(members) == 2
+    for member in members:
+        assert member.input_schema == x.schema
+        assert member.x.columns[Stype.numerical] == ("a", "b")
+
+
+@pytest.mark.parametrize("like_dim", [3, 4])
+def test_member_schemas_stype_mask(like_dim: int) -> None:
+    inputs = TableSchema(
+        columns={Stype.numerical: ("a", "b"), Stype.categorical: ("c",)},
+    )
+    first = TableSchema(columns={Stype.numerical: ("a", "c", "b")})
+    second = TableSchema(columns={Stype.numerical: ("c", "b", "a")})
+
+    single = MemberSchemas(inputs=(inputs,), members=(first,))
+    mask = single.stype_mask("categorical", like=torch.empty(5, 3))
+    assert mask.tolist() == [False, True, False]
+
+    both = MemberSchemas(inputs=(inputs, inputs), members=(first, second))
+    like = torch.empty(*(2,) * (like_dim - 2), 5, 3)
+    mask = both.stype_mask(Stype.categorical, like=like)
+    assert mask.size() == (2, *(1,) * (like_dim - 3), 3)
+    assert mask.flatten(1).tolist() == [
+        [False, True, False],
+        [True, False, False],
+    ]

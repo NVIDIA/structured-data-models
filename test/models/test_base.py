@@ -8,7 +8,14 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    EnsembleTable,
+    RelatedTables,
+    Stype,
+    TableTensor,
+)
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models.callback import Callback
@@ -56,6 +63,45 @@ class _RecordingModel(ICLModel):
         table = x_query if x_query is not None else x_context
         assert table is not None
         return table.select_stypes(Stype.numerical)
+
+    @classmethod
+    def default_recipe(cls) -> sp.Recipe:
+        return sp.Recipe()
+
+
+class _ClassFrequencyModel(ICLModel):
+    """Predict the context class frequencies, one column per class."""
+
+    supported_feature_stypes = frozenset({Stype.numerical})
+    supported_target_stypes = frozenset({Stype.categorical})
+    supports_multi_target = False
+    supports_related_tables = False
+
+    def __init__(self) -> None:
+        super().__init__(task=None)
+        self.eval()
+
+    def _forward(
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> TableTensor:
+        assert y_context is not None
+        assert x_query is not None
+        classes = y_context.categorical.categories[0]
+        code = y_context.categorical.code.squeeze(-1).long()  # [..., R]
+        counts = torch.nn.functional.one_hot(code, len(classes)).float()
+        frequency = counts.mean(dim=-2, keepdim=True)  # [..., 1, K]
+        return TableTensor(
+            columns={Stype.numerical: [str(c) for c in classes.tolist()]},
+            numerical=frequency.expand(*x_query.size()[:-1], -1),
+        )
 
     @classmethod
     def default_recipe(cls) -> sp.Recipe:
@@ -304,18 +350,34 @@ def test_callback() -> None:
     ]
 
 
-def test_train_mode_enables_grad() -> None:
+@pytest.mark.parametrize("num_estimators", [1, 3])
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_train_mode_enables_grad(
+    num_estimators: int, estimator_batch_size: int | None
+) -> None:
     model = _RecordingModel()
     x_context = torch.tensor([[0.0], [2.0]])
     y_context = torch.tensor([[0.0], [1.0]])
     x_query = torch.tensor([[3.0]])
 
     model.eval()
-    out = model(x_context, y_context, x_query)
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=num_estimators,
+        estimator_batch_size=estimator_batch_size,
+    )
     assert torch.is_inference(out)
 
     model.train()
-    out = model(x_context, y_context, x_query)
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=num_estimators,
+        estimator_batch_size=estimator_batch_size,
+    )
     assert not torch.is_inference(out)
 
 
@@ -533,3 +595,207 @@ def test_ensemble_output_reduce() -> None:
     )
 
     assert out.size() == (2, 3)
+
+
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_estimator_batching_runs_callbacks_per_member(
+    estimator_batch_size: int | None,
+) -> None:
+    model = _RecordingModel()
+    x = torch.arange(30.0).view(5, 3, 2)
+    y = torch.zeros(5, 3, 1)
+    events: list[str] = []
+    callbacks = (MyCallback("affine", 2.0, 3.0, events),)
+
+    out = model(
+        x_context=x,
+        y_context=y,
+        x_query=x,
+        estimator_batch_size=estimator_batch_size,
+        callbacks=callbacks,
+    )
+    torch.testing.assert_close(out.numerical, 2.0 * x + 3.0)
+
+    model.fit(
+        x,
+        y,
+        estimator_batch_size=estimator_batch_size,
+        callbacks=callbacks,
+    )
+    out = model.predict(x, callbacks=callbacks)
+    torch.testing.assert_close(out.numerical, 2.0 * x + 3.0)
+
+    for event in (
+        "context_preprocessing_end",
+        "query_preprocessing_end",
+        "model_forward_end",
+    ):
+        assert events.count(f"affine_{event}") == 2 * 5
+
+
+@pytest.mark.parametrize(
+    ("estimator_batch_size", "num_calls", "query_size"),
+    [(1, 4, (2, 2)), (2, 2, (2, 2, 2)), (None, 1, (4, 2, 2))],
+)
+def test_estimator_batching_groups_consecutive_members(
+    estimator_batch_size: int | None,
+    num_calls: int,
+    query_size: tuple[int, ...],
+) -> None:
+    model = _RecordingModel()
+    x = torch.randn(4, 3, 2)
+    y = torch.zeros(4, 3, 1)
+    x_query = torch.randn(4, 2, 2)
+
+    out = model(x, y, x_query, estimator_batch_size=estimator_batch_size)
+
+    torch.testing.assert_close(out.numerical, x_query)
+    assert len(model.calls) == num_calls
+    assert model.calls[0].x_query is not None
+    assert model.calls[0].x_query.size() == query_size
+
+    model.calls.clear()
+    model.fit(x, y, estimator_batch_size=estimator_batch_size)
+    out = model.predict(x_query)
+
+    torch.testing.assert_close(out.numerical, x_query)
+    assert len(model.calls) == 2 * num_calls
+    assert model.calls[-1].x_query is not None
+    assert model.calls[-1].x_query.size() == query_size
+
+
+def test_estimator_batching_relabels_shuffled_classes() -> None:
+    model = _ClassFrequencyModel()
+    x = torch.randn(4, 2)
+    y = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [0], [0]]),
+            categories=(torch.tensor([10, 20]),),
+        ),
+    )
+    recipe = sp.Recipe(
+        target=sp.StypeDispatch(
+            categorical=sp.ShuffleCategories(method="shift")
+        ),
+    )
+
+    out = model(
+        x,
+        y,
+        x,
+        recipe=recipe,
+        num_estimators=2,
+        estimator_batch_size=None,
+    )
+
+    columns = out.columns[Stype.numerical]
+    assert sorted(columns) == ["10", "20"]
+    frequency = torch.tensor([0.75 if c == "10" else 0.25 for c in columns])
+    torch.testing.assert_close(out.numerical, frequency.expand(2, 4, -1))
+
+
+def test_estimator_batching_rejects_related_tables() -> None:
+    model = _RecordingModel()
+    x_context = _table([0.0, 2.0], [1, 2], value_column="feature")
+    x_query = _table([3.0], [3], value_column="feature")
+    y_context = TableTensor.from_tensor(torch.tensor([[0.0], [1.0]]))
+
+    with pytest.raises(ValueError, match="Related tables require"):
+        model(
+            x_context,
+            y_context,
+            x_query,
+            _related_tables(query=False),
+            _related_tables(query=True),
+            num_estimators=2,
+            estimator_batch_size=None,
+        )
+    with pytest.raises(ValueError, match="Related tables require"):
+        model.fit(
+            x_context,
+            y_context,
+            _related_tables(query=False),
+            num_estimators=2,
+            estimator_batch_size=None,
+        )
+
+
+def test_estimator_batching_incompatible_shapes() -> None:
+    model = _RecordingModel()
+    x = EnsembleTable.from_tables(
+        tables=[
+            TableTensor(numerical=torch.ones(3, 2)),
+            TableTensor(numerical=torch.ones(4, 2)),
+        ],
+        member_table_ids=(0, 1),
+    )
+    y = EnsembleTable.from_tables(
+        tables=[
+            TableTensor(numerical=torch.ones(3, 1)),
+            TableTensor(numerical=torch.ones(4, 1)),
+        ],
+        member_table_ids=(0, 1),
+    )
+    with pytest.raises(RuntimeError, match="stack expects"):
+        model.fit(x, y, estimator_batch_size=None)
+    query = TableTensor(numerical=torch.randn(2, 2, 2))
+    with pytest.raises(RuntimeError, match="stack expects"):
+        model(x, y, query, estimator_batch_size=None)
+    model.fit(x, y)
+    torch.testing.assert_close(model.predict(query).numerical, query.numerical)
+
+
+def test_estimator_batching_incompatible_categories() -> None:
+    model = _RecordingModel()
+    y = EnsembleTable.from_tables(
+        tables=[
+            TableTensor(
+                categorical=CategoricalTensor(
+                    code=torch.zeros(3, 1, dtype=torch.long),
+                    categories=(torch.arange(count),),
+                ),
+            )
+            for count in (2, 3)
+        ],
+        member_table_ids=(0, 1),
+    )
+    with pytest.raises(ValueError, match="share column names and class"):
+        model.fit(
+            torch.ones(3, 2), y, num_estimators=2, estimator_batch_size=None
+        )
+    with pytest.raises(ValueError, match="share column names and class"):
+        model(
+            x_context=torch.ones(3, 2),
+            y_context=y,
+            x_query=torch.ones(1, 2),
+            num_estimators=2,
+            estimator_batch_size=None,
+        )
+
+
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_forward_batching_validates_each_query_schema(
+    estimator_batch_size: int | None,
+) -> None:
+    model = _RecordingModel()
+    context = TableTensor(
+        columns={Stype.numerical: ("a", "b")},
+        numerical=torch.ones(3, 2),
+    )
+    x = EnsembleTable.from_tables(
+        tables=[
+            context,
+            TableTensor(
+                columns={Stype.numerical: ("b", "a")},
+                numerical=torch.ones(3, 2),
+            ),
+        ],
+        member_table_ids=(0, 1),
+    )
+    y = torch.zeros(2, 3, 1)
+    query = EnsembleTable.from_tables(
+        tables=[context[:1]],
+        member_table_ids=(0, 0),
+    )
+    with pytest.raises(ValueError, match="share the same schema"):
+        model(x, y, query, estimator_batch_size=estimator_batch_size)
