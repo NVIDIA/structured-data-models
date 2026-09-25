@@ -152,6 +152,21 @@ class RowEmbedding(torch.nn.Module):
             else:
                 x = self.lin(x, out=buffer[..., K:, :])  # [..., R, C, D]
 
+        projection_dtype = x.dtype
+        stabilize_amp = (
+            y.numel() > 0
+            and x.is_cuda
+            and projection_dtype in (torch.float16, torch.bfloat16)
+            and self.lin.weight.dtype == torch.float32
+        )
+        if stabilize_amp:
+            # Preserve the residual carrier before target injection.
+            if buffer is None:
+                x = x.float()
+            else:
+                buffer = buffer.float()
+                x = buffer[..., K:, :]
+
         if y.numel() > 0:
             if self.y_emb is not None:
                 y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
@@ -181,13 +196,22 @@ class RowEmbedding(torch.nn.Module):
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
+                # The target-conditioned column blocks are AMP-sensitive.
+                _force_output_block_float32=stabilize_amp,
                 batch_size_limit="auto",
                 out=None if torch.is_grad_enabled() else x,
             )  # [..., C, R, D]
             del key_value
 
             if cache is not None and cache.is_recording:
-                x, cache[key] = result
+                x, key_value = result
+                if stabilize_amp:
+                    # Replay uses the original AMP dtype.
+                    key_value = KVCacheEntry(
+                        key=key_value.key.to(dtype=projection_dtype),
+                        value=key_value.value.to(dtype=projection_dtype),
+                    )
+                cache[key] = key_value
             else:
                 x = result
             del result

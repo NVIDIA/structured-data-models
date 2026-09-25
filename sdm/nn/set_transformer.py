@@ -74,6 +74,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
+        _force_output_block_float32: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor: ...
@@ -87,6 +88,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
+        _force_output_block_float32: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -100,6 +102,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
+        _force_output_block_float32: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -112,6 +115,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., KV]
         *,
         return_key_value: bool = False,
+        _force_output_block_float32: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
@@ -153,6 +157,27 @@ class InducedTransformerBlock(torch.nn.Module):
                 attn_mask=attn_mask,  # [..., 1, KV]
                 batch_size_limit=batch_size_limit,
             )  # [..., M, C]
+        if _force_output_block_float32:
+            if self.output_block.attn.qkv_lin.weight.dtype != torch.float32:
+                raise RuntimeError(
+                    "Full-precision transformer execution requires "
+                    "float32 parameters"
+                )
+            if isinstance(key_value, KVCacheEntry):
+                key_value = KVCacheEntry(
+                    key=key_value.key.float(),
+                    value=key_value.value.float(),
+                )
+            else:
+                key_value = key_value.float()
+            with torch.amp.autocast(query.device.type, enabled=False):
+                return self.output_block(
+                    query=query.float(),  # [..., Q, C]
+                    key_value=key_value,  # [..., M, C]
+                    return_key_value=return_key_value,
+                    batch_size_limit=batch_size_limit,
+                    out=out,
+                )  # [..., Q, C]
         return self.output_block(
             query=query,  # [..., Q, C]
             key_value=key_value,  # [..., M, C]
