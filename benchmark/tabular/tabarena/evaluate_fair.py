@@ -196,6 +196,7 @@ def main() -> None:
             != record["fitted_settings_sha256"]
         ):
             raise ValueError(f"Fitted settings changed: {settings}")
+        raw_result = load_pickle(raw)
         for name in (
             "time_train_s",
             "time_infer_s",
@@ -207,7 +208,13 @@ def main() -> None:
                 name.startswith("time_") and value < 0
             ):
                 raise ValueError(f"Invalid result value {name}: {identity}")
-            record["metrics"][name] = value
+            raw_value = raw_result[name]
+            if type(raw_value)(value) != raw_value:
+                raise ValueError(
+                    f"Summary differs from raw numeric value: "
+                    f"{identity} {name}"
+                )
+            record["metrics"][name] = float(raw_value)
         identities[model].add(json.dumps(record["identity"], sort_keys=True))
         records[identity] = record
         result_paths[identity] = raw
@@ -383,13 +390,11 @@ def main() -> None:
                 can_hpo=False,
                 artifact_dir=args.output / "artifacts" / model,
             )
-            processed = EndToEnd.from_path_raw(
-                path_raw=args.run_root[0],
-                file_paths=raw_files[model],
+            processed = EndToEnd.from_raw(
+                results_lst=[load_pickle(path) for path in raw_files[model]],
                 method_metadata=metadata,
                 task_metadata=context.task_metadata_collection,
                 backend="native",
-                num_cpus=2,
             )
             result_frame = processed.get_results(
                 new_result_prefix=f"[{model}] "
