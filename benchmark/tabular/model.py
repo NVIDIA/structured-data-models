@@ -263,12 +263,14 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             return 1
 
         num_rows, num_cols = self._context_shape
-        # Uncached inference processes context and query rows together.
-        num_rows = (
-            max(num_rows, x.size(-2))
-            if params["kv_cache"]
-            else num_rows + x.size(-2)
-        )
+        if not params["kv_cache"]:
+            # Uncached inference processes context and query rows together.
+            num_rows += x.size(-2)
+            if num_rows > 3_000 or num_rows * num_cols > 50_000:
+                return 1
+            return self._num_estimators
+
+        num_rows = max(num_rows, x.size(-2))
         if num_rows > 2_000 or num_rows * num_cols >= 50_000:
             return 1
         return self._num_estimators
