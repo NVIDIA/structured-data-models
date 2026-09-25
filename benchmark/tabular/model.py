@@ -170,12 +170,22 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             out = self.model.predict(x_query)
 
         if self.problem_type == REGRESSION:
-            return out.numerical.float().mean(dim=-1).cpu().numpy()
+            return (
+                out.numerical.mean(dim=-1, dtype=torch.float32).cpu().numpy()
+            )
 
         assert self.num_classes is not None
         columns = out.columns[sdm.Stype.numerical]
-        indices = [columns.index(str(i)) for i in range(self.num_classes)]
-        probabilities = out.numerical[..., indices].float().cpu().numpy()
+        expected_columns = tuple(str(i) for i in range(self.num_classes))
+        probabilities = out.numerical
+        if columns != expected_columns:
+            index = {column: i for i, column in enumerate(columns)}
+            indices = [index[column] for column in expected_columns]
+            probabilities = probabilities[..., indices]
+        probabilities = probabilities.to(
+            device="cpu",
+            dtype=torch.float32,
+        ).numpy()
         return self._convert_proba_to_unified_form(probabilities)
 
     def get_device(self) -> str:
