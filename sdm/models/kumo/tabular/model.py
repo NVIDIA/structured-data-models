@@ -4,7 +4,7 @@
 # ruff: noqa: D205
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -109,6 +109,7 @@ class KumoTabular(ICLModel):
     )
     supports_multi_target: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    _member_batch_cells: ClassVar[int] = 2**21
 
     def __init__(
         self,
@@ -260,6 +261,106 @@ class KumoTabular(ICLModel):
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
             numerical=out,
         )
+
+    def _forward_members(
+        self,
+        x_contexts: Sequence[TableTensor],  # E x [R_context, D]
+        y_contexts: Sequence[TableTensor],  # E x [R_context, 1]
+        x_queries: Sequence[TableTensor],  # E x [R_query, D]
+        **kwargs: Any,
+    ) -> list[TableTensor] | None:
+        # Small tables leave the GPU mostly idle during one estimator's
+        # forward, so estimators of equal shape run as one batch of up to
+        # `_member_batch_cells` input cells.
+        context_size = x_contexts[0].numerical.size()
+        query_size = x_queries[0].numerical.size()
+        if len(context_size) != 2 or any(
+            x_context.numerical.size() != context_size
+            or x_query.numerical.size() != query_size
+            or x_context.dtype != x_contexts[0].dtype
+            or x_query.dtype != x_queries[0].dtype
+            or y_context.dtype != y_contexts[0].dtype
+            or x_context.device != x_query.device
+            or y_context.device != x_query.device
+            for x_context, y_context, x_query in zip(
+                x_contexts, y_contexts, x_queries, strict=True
+            )
+        ):
+            return None
+        is_categorical = [y.categorical.size(-1) > 0 for y in y_contexts]
+        if len(set(is_categorical)) != 1:
+            return None
+        cells = (context_size[0] + query_size[0]) * max(context_size[1], 1)
+        group_size = min(len(x_queries), self._member_batch_cells // cells)
+        if group_size < 2:
+            return None
+
+        device = x_queries[0].device
+        classes: list[Tensor] | None = None
+        if is_categorical[0]:
+            classes = [y.categorical.categories[0] for y in y_contexts]
+            if any(len(c) > self.ecoc.max_classes for c in classes):
+                return None
+            y = torch.stack(
+                [y.categorical.code.squeeze(-1) for y in y_contexts]
+            ).to(device, non_blocking=True)  # [E, R_context]
+            task = Task.classification
+        else:
+            y = torch.stack([y.numerical.squeeze(-1) for y in y_contexts]).to(
+                device, non_blocking=True
+            )  # [E, R_context]
+            task = Task.regression
+
+        x = torch.cat(
+            [
+                torch.stack([x.numerical for x in x_contexts]).to(
+                    device, non_blocking=True
+                ),
+                torch.stack([x.numerical for x in x_queries]),
+            ],
+            dim=-2,
+        )  # [E, R, D]
+
+        categorical_columns = set(kwargs["_schema"].columns[Stype.categorical])
+        categorical_mask = torch.tensor(
+            [
+                [column in categorical_columns for column in columns]
+                for columns in (x.columns[Stype.numerical] for x in x_contexts)
+            ],
+            device=device,
+            dtype=torch.bool,
+        )  # [E, D]
+
+        out = torch.cat(
+            [
+                self.models[task](
+                    x=x[start : start + group_size],
+                    y=y[start : start + group_size],
+                    categorical_mask=categorical_mask[
+                        start : start + group_size
+                    ],
+                )
+                for start in range(0, len(x_queries), group_size)
+            ]
+        )  # [E, R_query, num_classes or 999]
+
+        if classes is None:
+            columns = [f"q{i:03d}" for i in range(1, 1000)]
+            return [
+                TableTensor(columns={Stype.numerical: columns}, numerical=o)
+                for o in out.unbind()
+            ]
+        labels = [str(label) for label in torch.cat(classes).tolist()]
+        outs: list[TableTensor] = []
+        for o, c in zip(out.unbind(), classes, strict=True):
+            outs.append(
+                TableTensor(
+                    columns={Stype.numerical: labels[: len(c)]},
+                    numerical=o[..., : len(c)],
+                )
+            )
+            labels = labels[len(c) :]
+        return outs
 
 
 class _KumoTabular(torch.nn.Module):

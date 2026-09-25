@@ -343,7 +343,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     seed=seeds[i],
                 )
 
-            if x.is_cuda and len(contexts) > 1:
+            # Key/value caches outgrow device memory; contexts are as small as
+            # the input and stay on the device.
+            if kv_cache and x.is_cuda and len(contexts) > 1:
                 try:  # Copy to pinned CPU memory:
                     estimator_cache = estimator_cache._apply_tensor(
                         lambda tensor: torch.ops.aten._to_copy.default(
@@ -446,73 +448,86 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 assert transfer_stream is not None
                 compute_stream.wait_stream(transfer_stream)
 
-            outs: list[TableTensor] = []
-            for i, query in enumerate(queries):
-                cache, next_cache = next_cache, None
-                assert cache is not None
-
-                for callback in callbacks:
-                    query = MemberQuery(
-                        *callback.on_query_preprocessing_end(self, *query)
-                    )
-                self._validate_query(
-                    x_context=cast(TableSchema, cache["x_schema"]),
-                    x_query=query.x,
-                    related_context_tables=cast(
-                        RelatedTablesSchema,
-                        cache["related_tables_schema"],
-                    ),
-                    related_query_tables=query.related_tables,
+            outs: list[TableTensor] | None = None
+            if not kv_cache and not callbacks and related_tables is None:
+                outs = self._predict_members(
+                    caches=[next_cache, *caches[1:]],
+                    queries=queries,
+                    kwargs=cast(dict[str, Any], self._cache["kwargs"]),
+                    compute_stream=compute_stream,
                 )
-
-                if i + 1 < len(caches):
-                    next_cache = caches[i + 1]
-                if x.is_cuda and next_cache is not None:
-                    assert transfer_stream is not None
-                    with torch.cuda.stream(transfer_stream):
-                        next_cache = next_cache.to(x.device, non_blocking=True)
-
-                x_context: TableTensor | None = None
-                y_context: TableTensor | None = None
-                related_context_tables: RelatedTables | None = None
-                generator: torch.Generator | None = None
-                if not kv_cache:
-                    x_context = cast(TableTensor, cache["x_context"])
-                    y_context = cast(TableTensor, cache["y_context"])
-                    related_context_tables = cast(
-                        RelatedTables[TableTensor] | None,
-                        cache["related_context_tables"],
-                    )
-                    generator = torch.Generator(x.device).manual_seed(
-                        cast(int, cache["seed"])
-                    )
-                with inference_mode("grad" if requires_grad else "inference"):
-                    out = self._forward(
-                        x_context=x_context,
-                        y_context=y_context,
-                        x_query=query.x,
-                        related_context_tables=related_context_tables,
-                        related_query_tables=query.related_tables,
-                        cache=cache if kv_cache else None,
-                        generator=generator,
-                        **cast(dict[str, Any], self._cache["kwargs"]),
-                    )
+            if outs is None:
+                outs = []
+                for i, query in enumerate(queries):
+                    cache, next_cache = next_cache, None
+                    assert cache is not None
 
                     for callback in callbacks:
-                        out = callback.on_model_forward_end(self, out)
+                        query = MemberQuery(
+                            *callback.on_query_preprocessing_end(self, *query)
+                        )
+                    self._validate_query(
+                        x_context=cast(TableSchema, cache["x_schema"]),
+                        x_query=query.x,
+                        related_context_tables=cast(
+                            RelatedTablesSchema,
+                            cache["related_tables_schema"],
+                        ),
+                        related_query_tables=query.related_tables,
+                    )
 
-                if x.is_cuda:
-                    assert compute_stream is not None
-                    for tensor in cache._tensors():
-                        tensor.record_stream(compute_stream)
+                    if i + 1 < len(caches):
+                        next_cache = caches[i + 1]
+                    if x.is_cuda and next_cache is not None:
+                        assert transfer_stream is not None
+                        with torch.cuda.stream(transfer_stream):
+                            next_cache = next_cache.to(
+                                x.device, non_blocking=True
+                            )
 
-                out = cast(TableTensor, out.to(query.x.dtype))
-                outs.append(out)
+                    x_context: TableTensor | None = None
+                    y_context: TableTensor | None = None
+                    related_context_tables: RelatedTables | None = None
+                    generator: torch.Generator | None = None
+                    if not kv_cache:
+                        x_context = cast(TableTensor, cache["x_context"])
+                        y_context = cast(TableTensor, cache["y_context"])
+                        related_context_tables = cast(
+                            RelatedTables[TableTensor] | None,
+                            cache["related_context_tables"],
+                        )
+                        generator = torch.Generator(x.device).manual_seed(
+                            cast(int, cache["seed"])
+                        )
+                    with inference_mode(
+                        "grad" if requires_grad else "inference"
+                    ):
+                        out = self._forward(
+                            x_context=x_context,
+                            y_context=y_context,
+                            x_query=query.x,
+                            related_context_tables=related_context_tables,
+                            related_query_tables=query.related_tables,
+                            cache=cache if kv_cache else None,
+                            generator=generator,
+                            **cast(dict[str, Any], self._cache["kwargs"]),
+                        )
 
-                if x.is_cuda and next_cache is not None:
-                    assert compute_stream is not None
-                    assert transfer_stream is not None
-                    compute_stream.wait_stream(transfer_stream)
+                        for callback in callbacks:
+                            out = callback.on_model_forward_end(self, out)
+
+                    if x.is_cuda:
+                        assert compute_stream is not None
+                        for tensor in cache._tensors():
+                            tensor.record_stream(compute_stream)
+
+                    out = cast(TableTensor, out.to(query.x.dtype))
+                    outs.append(out)
+
+                    if x.is_cuda and next_cache is not None:
+                        assert compute_stream is not None
+                        assert transfer_stream is not None
+                        compute_stream.wait_stream(transfer_stream)
 
         except BaseException:
             if transfer_stream is not None:
@@ -552,6 +567,61 @@ class ICLModel(torch.nn.Module, abc.ABC):
         device = next(self.parameters()).device
         device_repr = f"device={device}" if device.type != "cpu" else ""
         return f"{self.__class__.__name__}({device_repr})"
+
+    def _predict_members(
+        self,
+        caches: Sequence[Cache],
+        queries: Sequence[MemberQuery],
+        kwargs: dict[str, Any],
+        compute_stream: torch.cuda.Stream | None,
+    ) -> list[TableTensor] | None:
+        # Without key/value caches, the model may run several estimators in
+        # one forward; `None` falls back to one estimator at a time.
+        for cache, query in zip(caches, queries, strict=True):
+            self._validate_query(
+                x_context=cast(TableSchema, cache["x_schema"]),
+                x_query=query.x,
+                related_context_tables=cast(
+                    RelatedTablesSchema,
+                    cache["related_tables_schema"],
+                ),
+                related_query_tables=query.related_tables,
+            )
+        with inference_mode("inference"):
+            outs = self._forward_members(
+                x_contexts=[
+                    cast(TableTensor, cache["x_context"]) for cache in caches
+                ],
+                y_contexts=[
+                    cast(TableTensor, cache["y_context"]) for cache in caches
+                ],
+                x_queries=[query.x for query in queries],
+                **kwargs,
+            )
+        if outs is None:
+            return None
+        if compute_stream is not None:
+            for cache in caches:
+                for tensor in cache._tensors():
+                    tensor.record_stream(compute_stream)
+        return [
+            cast(TableTensor, out.to(query.x.dtype))
+            for out, query in zip(outs, queries, strict=True)
+        ]
+
+    def _forward_members(
+        self,
+        x_contexts: Sequence[TableTensor],  # E x [R_context, D]
+        y_contexts: Sequence[TableTensor],  # E x [R_context, Y]
+        x_queries: Sequence[TableTensor],  # E x [R_query, D]
+        **kwargs: Any,
+    ) -> list[TableTensor] | None:
+        r"""Run the estimators' forward passes together, or return ``None``.
+
+        Models that can batch estimators override this; the default runs
+        them one at a time.
+        """
+        return None
 
     # Abstract Methods ########################################################
 

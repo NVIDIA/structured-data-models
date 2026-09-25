@@ -9,6 +9,7 @@ import torch
 import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import KumoTabular
+from sdm.models.callback import Callback
 
 
 def _build(
@@ -128,39 +129,64 @@ def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
     assert not categorical.allclose(numerical)
 
 
+@pytest.mark.parametrize("num_estimators", [1, 3])
+@pytest.mark.parametrize("kv_cache", [True, False])
 def test_fit_predict(
     cls_model: KumoTabular,
     reg_model: KumoTabular,
+    kv_cache: bool,
+    num_estimators: int,
 ) -> None:
     x_context, x_query = _features()
     for num_classes in (3, 11):
         target = _cls_target(num_classes)
-        expected = cls_model(
-            x_context=x_context,
-            y_context=target,
-            x_query=x_query,
-            recipe=_recipe(),
-            generator=torch.Generator().manual_seed(0),
-        )
+        if kv_cache or num_classes <= 10:
+            expected = cls_model(
+                x_context=x_context,
+                y_context=target,
+                x_query=x_query,
+                recipe=_recipe(),
+                num_estimators=num_estimators,
+                generator=torch.Generator().manual_seed(0),
+            )
         cls_model.fit(
             x=x_context,
             y=target,
             recipe=_recipe(),
+            num_estimators=num_estimators,
             generator=torch.Generator().manual_seed(0),
+            kv_cache=kv_cache,
         )
+        if not kv_cache and num_classes > 10:
+            # A callback uses sequential prediction with the same ECOC seeds.
+            expected = cls_model.predict(x_query, callbacks=[Callback()])
         actual = cls_model.predict(x_query)
 
         assert actual.size() == (2, num_classes)
         assert actual.allclose(expected, atol=1e-5)
         assert actual.columns == expected.columns
+        assert actual.dtype == x_query.dtype
 
     x_context, x_query = _features(Stype.numerical)
     target = _reg_target()
     recipe = _recipe()
-    expected = reg_model(x_context, target, x_query, recipe=recipe)
-    reg_model.fit(x_context, target, recipe=recipe)
+    expected = reg_model(
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        recipe=recipe,
+        num_estimators=num_estimators,
+    )
+    reg_model.fit(
+        x=x_context,
+        y=target,
+        recipe=recipe,
+        num_estimators=num_estimators,
+        kv_cache=kv_cache,
+    )
     actual = reg_model.predict(x_query)
 
+    assert actual.dtype == x_query.dtype
     torch.testing.assert_close(
         actual.numerical,
         expected.numerical,
