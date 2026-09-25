@@ -15,6 +15,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.base import _categorical_mask
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -220,20 +221,18 @@ class KumoTabular(ICLModel):
         if cache is None or cache.is_recording:
             assert x_context is not None
             schema: TableSchema = kwargs["_schema"]
-            categorical_columns = set(schema.columns[Stype.categorical])
-            categorical_mask = torch.tensor(
-                [
-                    column in categorical_columns
-                    for column in x_context.columns[Stype.numerical]
-                ],
-                device=x.device,
-                dtype=torch.bool,
+            categorical_mask = _categorical_mask(
+                x=x_context,
+                schema=schema,
+                schemas=kwargs.get("_x_schemas", (x_context.schema,))
+                if cache is None
+                else cast(tuple[TableSchema, ...], cache["x_schemas"]),
             )
+            categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
             if cache is not None:
                 cache["categorical_mask"] = categorical_mask
         else:
             categorical_mask = cast(Tensor, cache["categorical_mask"])
-        categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
         if classes is None:
             out = self.models[Task.regression](

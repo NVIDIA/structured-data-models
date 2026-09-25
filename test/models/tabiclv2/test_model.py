@@ -109,14 +109,23 @@ def test_autocast_preserves_gradients_in_forward(
     assert any(p.grad is not None for p in model.parameters())
 
 
-def test_train_mode_preserves_gradients_with_ensembling() -> None:
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_train_mode_preserves_gradients_with_ensembling(
+    estimator_batch_size: int | None,
+) -> None:
     model = TabICLv2(pretrained=False)
     model.train()
     x_context = torch.eye(2)
     y_context = torch.tensor([[0.0], [1.0]])
     x_query = torch.ones(1, 2)
 
-    out = model(x_context, y_context, x_query, num_estimators=2)
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=3,
+        estimator_batch_size=estimator_batch_size,
+    )
 
     assert not torch.is_inference(out.numerical)
     out.numerical.sum().backward()
@@ -124,7 +133,10 @@ def test_train_mode_preserves_gradients_with_ensembling() -> None:
 
 
 @pytest.mark.parametrize("batch_shape", [(), (2,)])
-def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_num_estimators(
+    batch_shape: tuple[int, ...], estimator_batch_size: int | None
+) -> None:
     model = TabICLv2(pretrained=False)
 
     R_context, R_query, C = 5, 3, 6
@@ -133,13 +145,17 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     x_query = torch.randn(*batch_shape, R_query, C)
     y_context = torch.randn(*batch_shape, R_context, 1)
 
-    out = model(x_context, y_context, x_query, num_estimators=2)
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=3,
+        estimator_batch_size=estimator_batch_size,
+    )
     assert out.size() == (*batch_shape, R_query, 999)
 
     model.fit(x_context, y_context, num_estimators=3)
     assert model._cache is not None
-    assert 0 in model._cache
-    assert 1 in model._cache
     assert model._cache.size() > 0
     assert model._cache.is_cpu
 
@@ -237,8 +253,10 @@ def test_tabiclv2_hierarchical_log_probs(
 
 
 @withCUDA
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
 def test_tabiclv2_many_classes_forward_and_cache(
     device: torch.device,
+    estimator_batch_size: int | None,
 ) -> None:
     torch.manual_seed(1)
     model = TabICLv2(pretrained=False, device=device)
@@ -252,7 +270,7 @@ def test_tabiclv2_many_classes_forward_and_cache(
     ).unsqueeze(-1)
 
     torch.manual_seed(1)
-    out = model(x_context, y_context, x_query)
+    out = model(x_context, y_context, x_query, num_estimators=3)
 
     assert out.size() == (test_size, num_classes)
     probabilities = out.numerical
@@ -262,8 +280,11 @@ def test_tabiclv2_many_classes_forward_and_cache(
     )
 
     torch.manual_seed(1)
-    model.fit(x_context, y_context)
-    assert model.predict(x_query).allclose(out)
+    model.fit(x_context, y_context, num_estimators=3)
+    assert model.predict(
+        x=x_query,
+        estimator_batch_size=estimator_batch_size,
+    ).allclose(out)
 
 
 @onlyCUDA
