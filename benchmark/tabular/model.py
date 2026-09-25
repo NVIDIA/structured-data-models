@@ -24,6 +24,7 @@ import sdm.processing as sp
 from sdm.processing.execution import RecipeExecution
 
 Task = Literal["classification", "regression"]
+KumoTabularSize = Literal["small", "medium", "large"]
 
 
 class SDMModel(AbstractTorchModel, abc.ABC):
@@ -280,13 +281,21 @@ class SDMTabICLv2Model(SDMModel):
         return sdm.models.TabICLv2(task=task, device=device)
 
 
-def _load_kumo_network(*, task: str, device: torch.device) -> torch.nn.Module:
-    return sdm.models.KumoTabular(task=task, device=device).models[task]
+def _load_kumo_network(
+    *,
+    task: str,
+    size: KumoTabularSize,
+    device: torch.device,
+) -> torch.nn.Module:
+    return sdm.models.KumoTabular(
+        task=task,
+        size=size,
+        device=device,
+    ).models[task]
 
 
 class SDMKumoTabularModel(SDMModel):
-    ag_key = "SDM-KUMO-TABULAR"
-    ag_name = "SDMKumoTabular"
+    size: ClassVar[KumoTabularSize]
     default_num_estimators = 16
     autocast_dtype = torch.float16
     # Bagged children are fit one at a time in this process, so they share the
@@ -296,7 +305,7 @@ class SDMKumoTabularModel(SDMModel):
     }
     shared_weights: ClassVar[SharedWeights] = SharedWeights(
         loader="benchmark.tabular.model:_load_kumo_network",
-        key=("task",),
+        key=("task", "size"),
     )
 
     @classmethod
@@ -311,17 +320,23 @@ class SDMKumoTabularModel(SDMModel):
     ) -> None:
         warmup_torch(cuda=None if num_gpus is None else num_gpus > 0)
 
-    @staticmethod
+    @classmethod
     def _create_model(
+        cls,
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
         model = sdm.models.KumoTabular(
             task=task,
+            size=cls.size,
             pretrained=False,
             device="meta",
         )
-        model.models[task] = _load_kumo_network(task=task, device=device)
+        model.models[task] = _load_kumo_network(
+            task=task,
+            size=cls.size,
+            device=device,
+        )
         return model
 
     # AutoGluon does not look inside the served model for the shared network,
@@ -346,6 +361,7 @@ class SDMKumoTabularModel(SDMModel):
         for task in served.models:
             served.models[task] = _load_kumo_network(
                 task=task,
+                size=self.size,
                 device=self._device,
             )
 
@@ -367,6 +383,24 @@ class SDMKumoTabularModel(SDMModel):
                 sp.Sequential(*processors)
             )
         return recipe
+
+
+class SDMKumoTabularSmallModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-SMALL"
+    ag_name = "SDMKumoTabularSmall"
+    size = "small"
+
+
+class SDMKumoTabularMediumModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-MEDIUM"
+    ag_name = "SDMKumoTabularMedium"
+    size = "medium"
+
+
+class SDMKumoTabularLargeModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-LARGE"
+    ag_name = "SDMKumoTabularLarge"
+    size = "large"
 
 
 class SDMTabFMModel(SDMModel):
@@ -406,9 +440,17 @@ MODEL_CONFIGS = {
         name="TabICLv2",
         model_cls=SDMTabICLv2Model,
     ),
-    "kumo-tabular": ModelConfig(
-        name="KumoTabular",
-        model_cls=SDMKumoTabularModel,
+    "kumo-tabular-small": ModelConfig(
+        name="KumoTabular-Small",
+        model_cls=SDMKumoTabularSmallModel,
+    ),
+    "kumo-tabular-medium": ModelConfig(
+        name="KumoTabular-Medium",
+        model_cls=SDMKumoTabularMediumModel,
+    ),
+    "kumo-tabular-large": ModelConfig(
+        name="KumoTabular-Large",
+        model_cls=SDMKumoTabularLargeModel,
     ),
     "tabfm": ModelConfig(
         name="TabFM",
