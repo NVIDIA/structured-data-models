@@ -18,6 +18,7 @@ license-files = [
     "sdm/models/kumo/relational/NOTICE",
     "third_party/contributor-covenant/LICENSE",
     "third_party/pytorch/LICENSE",
+    "third_party/tabpfn-extensions/LICENSE",
 ]
 authors = [
     { name = "NVIDIA" },
@@ -148,6 +149,12 @@ include = ["examples/**", "benchmark/**"]
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
 unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["sdm/_kernels/triton/**"]
+
+[tool.ty.overrides.rules]
+unused-ignore-comment = "ignore"
 
 [tool.ruff]  # https://docs.astral.sh/ruff/rules
 src = ["pyproject.toml", "sdm", "test", "examples", "benchmark"]
