@@ -221,24 +221,20 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 generator = torch.Generator(self._device).set_state(
                     self._rng_state
                 )
-                outputs = []
-                for context, query in zip(self._contexts, queries):
-                    with torch.amp.autocast(
-                        self._device.type,
-                        self.autocast_dtype,
-                        enabled=x_query.is_cuda,
-                    ):
-                        out = self.model._forward(
-                            x_context=context.x.to(self._device),
-                            y_context=context.y.to(self._device),
-                            x_query=query.x,
-                            related_context_tables=None,
-                            related_query_tables=None,
-                            cache=None,
-                            generator=generator,
-                            _schema=self._schema,
-                        )
-                    outputs.append(out.to(query.x.dtype))
+                with torch.amp.autocast(
+                    self._device.type,
+                    self.autocast_dtype,
+                    enabled=x_query.is_cuda,
+                ):
+                    outputs = self.model._forward_estimators(
+                        contexts=self._contexts,
+                        queries=queries,
+                        estimator_batch_size=self._estimator_batch_size(
+                            x_query
+                        ),
+                        generator=generator,
+                        _schema=self._schema,
+                    )
 
                 if self.problem_type == REGRESSION:
                     outputs = list(
@@ -267,7 +263,12 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             return 1
 
         num_rows, num_cols = self._context_shape
-        num_rows = max(num_rows, x.size(-2))
+        # Uncached inference processes context and query rows together.
+        num_rows = (
+            max(num_rows, x.size(-2))
+            if params["kv_cache"]
+            else num_rows + x.size(-2)
+        )
         if num_rows > 2_000 or num_rows * num_cols >= 50_000:
             return 1
         return self._num_estimators

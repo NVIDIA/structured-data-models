@@ -70,6 +70,7 @@ def test_forward(
         y_context=y_context,
         x_query=x_query,
         num_estimators=9,
+        estimator_batch_size=predict_estimator_batch_size,
         generator=generator,
     )
     assert out.dtype == x_context.dtype

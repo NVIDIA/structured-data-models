@@ -112,6 +112,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
+        estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -134,6 +135,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 used as the estimator dimension, allowing input data to be
                 customized per estimator (*e.g.*, different in-context examples
                 per estimator).
+            estimator_batch_size: Maximum number of estimators per model
+                execution. ``None`` runs all estimators together; ``1`` runs
+                them sequentially. Batched estimators must have compatible
+                shapes, target columns, and feature categories. Larger batches
+                use more device memory. Callbacks require ``1``.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -144,6 +150,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
+        if callbacks and estimator_batch_size != 1:
+            raise ValueError("Callbacks require 'estimator_batch_size=1'")
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
@@ -182,48 +190,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables=related_query_tables,
             )
 
-        outs: list[TableTensor] = []
-        for context, query in zip(contexts, queries):
-            for callback in callbacks:
-                context = MemberContext(
-                    *callback.on_context_preprocessing_end(self, *context)
-                )
-            self._validate_context(
-                x=context.x,
-                y=context.y,
-                related_tables=context.related_tables,
-            )
-
-            for callback in callbacks:
-                query = MemberQuery(
-                    *callback.on_query_preprocessing_end(self, *query)
-                )
-            self._validate_query(
-                x_context=context.x.schema,
-                x_query=query.x,
-                related_context_tables=context.related_tables.schema
-                if context.related_tables is not None
-                else None,
-                related_query_tables=query.related_tables,
-            )
-
-            with inference_mode("grad" if requires_grad else "inference"):
-                out = self._forward(
-                    x_context=context.x,
-                    y_context=context.y,
-                    x_query=query.x,
-                    related_context_tables=context.related_tables,
-                    related_query_tables=query.related_tables,
-                    cache=None,
-                    generator=generator,
-                    **kwargs,
-                )
-
-                for callback in callbacks:
-                    out = callback.on_model_forward_end(self, out)
-
-            out = cast(TableTensor, out.to(query.x.dtype))
-            outs.append(out)
+        outs = self._forward_estimators(
+            contexts=contexts,
+            queries=queries,
+            estimator_batch_size=estimator_batch_size,
+            callbacks=callbacks,
+            generator=generator,
+            **kwargs,
+        )
 
         # Regression: invert target before stacking estimator outputs.
         if contexts[0].y.numerical.size(-1) > 0:
@@ -609,6 +583,102 @@ class ICLModel(torch.nn.Module, abc.ABC):
         r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################
+
+    def _forward_estimators(
+        self,
+        contexts: Sequence[MemberContext],
+        queries: Sequence[MemberQuery],
+        *,
+        estimator_batch_size: int | None = 1,
+        callbacks: Sequence[Callback] = (),
+        generator: torch.Generator | None = None,
+        **kwargs: Any,
+    ) -> list[TableTensor]:
+        if estimator_batch_size is None:
+            estimator_batch_size = len(contexts)
+        requires_grad = self.training or any(
+            callback.requires_grad for callback in callbacks
+        )
+        outs: list[TableTensor] = []
+        for start in range(0, len(contexts), estimator_batch_size):
+            members = contexts[start : start + estimator_batch_size]
+            query_members = queries[start : start + estimator_batch_size]
+            with inference_mode("no_grad" if requires_grad else "inference"):
+                context = _stack_contexts(members)
+                query = _stack_queries(query_members)
+                if context.x.device != query.x.device:
+                    # Transfer only the current batch of offloaded contexts.
+                    context = MemberContext(
+                        x=cast(TableTensor, context.x.to(query.x.device)),
+                        y=cast(TableTensor, context.y.to(query.x.device)),
+                        related_tables=context.related_tables.to(
+                            query.x.device
+                        )
+                        if context.related_tables is not None
+                        else None,
+                    )
+
+            for callback in callbacks:
+                context = MemberContext(
+                    *callback.on_context_preprocessing_end(self, *context)
+                )
+            self._validate_context(
+                x=context.x,
+                y=context.y,
+                related_tables=context.related_tables,
+            )
+
+            for callback in callbacks:
+                query = MemberQuery(
+                    *callback.on_query_preprocessing_end(self, *query)
+                )
+            self._validate_query(
+                x_context=context.x.schema,
+                x_query=query.x,
+                related_context_tables=context.related_tables.schema
+                if context.related_tables is not None
+                else None,
+                related_query_tables=query.related_tables,
+            )
+            if len(members) > 1 and any(
+                context.x.schema != query.x.schema
+                for context, query in zip(members, query_members)
+            ):
+                raise ValueError(
+                    "Expected context and query features to share "
+                    "the same schema"
+                )
+
+            with inference_mode("grad" if requires_grad else "inference"):
+                out = self._forward(
+                    x_context=context.x,
+                    y_context=context.y,
+                    x_query=query.x,
+                    related_context_tables=context.related_tables,
+                    related_query_tables=query.related_tables,
+                    cache=None,
+                    generator=generator,
+                    _x_schemas=tuple(member.x.schema for member in members)
+                    if len(members) > 1
+                    else (context.x.schema,),
+                    **kwargs,
+                )
+                outputs = _unstack_output(
+                    out=out,
+                    num_members=len(members),
+                    columns=_output_columns(members)
+                    if len(members) > 1
+                    else None,
+                )
+                for callback in callbacks:
+                    outputs = [
+                        callback.on_model_forward_end(self, out)
+                        for out in outputs
+                    ]
+                outs.extend(
+                    cast(TableTensor, out.to(query.x.dtype)) for out in outputs
+                )
+        return outs
 
     def _validate_context(
         self,

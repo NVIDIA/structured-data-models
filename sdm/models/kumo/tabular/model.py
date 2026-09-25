@@ -222,7 +222,7 @@ class KumoTabular(ICLModel):
             categorical_mask = _categorical_mask(
                 x=x_context,
                 schema=schema,
-                schemas=(x_context.schema,)
+                schemas=kwargs.get("_x_schemas", (x_context.schema,))
                 if cache is None
                 else cast(tuple[TableSchema, ...], cache["x_schemas"]),
             )

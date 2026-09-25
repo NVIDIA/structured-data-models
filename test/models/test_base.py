@@ -312,18 +312,33 @@ def test_callback() -> None:
 
 
 @pytest.mark.parametrize("num_estimators", [1, 3])
-def test_train_mode_enables_grad(num_estimators: int) -> None:
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_train_mode_enables_grad(
+    num_estimators: int, estimator_batch_size: int | None
+) -> None:
     model = _RecordingModel()
     x_context = torch.tensor([[0.0], [2.0]])
     y_context = torch.tensor([[0.0], [1.0]])
     x_query = torch.tensor([[3.0]])
 
     model.eval()
-    out = model(x_context, y_context, x_query, num_estimators=num_estimators)
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=num_estimators,
+        estimator_batch_size=estimator_batch_size,
+    )
     assert torch.is_inference(out)
 
     model.train()
-    out = model(x_context, y_context, x_query, num_estimators=num_estimators)
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=num_estimators,
+        estimator_batch_size=estimator_batch_size,
+    )
     assert not torch.is_inference(out)
 
 
@@ -551,6 +566,14 @@ def test_estimator_callbacks(estimator_batch_size: int | None) -> None:
     callbacks = (MyCallback("affine", 2.0, 3.0, []),)
     if estimator_batch_size != 1:
         with pytest.raises(ValueError, match="Callbacks require"):
+            model(
+                x_context=x,
+                y_context=y,
+                x_query=x,
+                estimator_batch_size=estimator_batch_size,
+                callbacks=callbacks,
+            )
+        with pytest.raises(ValueError, match="Callbacks require"):
             model.fit(
                 x=x,
                 y=y,
@@ -594,6 +617,8 @@ def test_estimator_batching_incompatible_shapes() -> None:
     )
     with pytest.raises(RuntimeError, match="stack expects"):
         model.fit(x, y, estimator_batch_size=None)
+    with pytest.raises(RuntimeError, match="stack expects"):
+        model(x, y, torch.ones(2, 2, 2), estimator_batch_size=None)
     model.fit(x, y)
     query = torch.randn(2, 2, 2)
     torch.testing.assert_close(
@@ -620,6 +645,42 @@ def test_estimator_batching_incompatible_categories() -> None:
         model.fit(
             torch.ones(3, 2), y, num_estimators=2, estimator_batch_size=None
         )
+    with pytest.raises(ValueError, match="matching class counts"):
+        model(
+            x_context=torch.ones(3, 2),
+            y_context=y,
+            x_query=torch.ones(1, 2),
+            num_estimators=2,
+            estimator_batch_size=None,
+        )
     model.fit(torch.ones(3, 2), y, num_estimators=2)
     with pytest.raises(ValueError, match="compatible caches"):
         model.predict(torch.ones(1, 2), estimator_batch_size=None)
+
+
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_forward_batching_validates_each_query_schema(
+    estimator_batch_size: int | None,
+) -> None:
+    model = _RecordingModel()
+    context = TableTensor(
+        columns={Stype.numerical: ("a", "b")},
+        numerical=torch.ones(3, 2),
+    )
+    x = EnsembleTable.from_tables(
+        tables=[
+            context,
+            TableTensor(
+                columns={Stype.numerical: ("b", "a")},
+                numerical=torch.ones(3, 2),
+            ),
+        ],
+        member_table_ids=(0, 1),
+    )
+    y = torch.zeros(2, 3, 1)
+    query = EnsembleTable.from_tables(
+        tables=[context[:1]],
+        member_table_ids=(0, 0),
+    )
+    with pytest.raises(ValueError, match="share the same schema"):
+        model(x, y, query, estimator_batch_size=estimator_batch_size)
