@@ -5,6 +5,7 @@ r"""Run an SDM tabular model on TabArena."""
 
 import argparse
 import gc
+from itertools import groupby
 from pathlib import Path
 
 import torch
@@ -78,9 +79,14 @@ jobs = context.build_jobs(
     subset=args.subset,
     dataset_names=[args.dataset] if args.dataset is not None else None,
 )
-for job in jobs:
+# TabArena orders jobs by task, then split, then experiment.
+for _, dataset_jobs in groupby(jobs, key=lambda job: job.task.dataset):
     try:
-        context.run_jobs(jobs=[job], expname=result_dir, register=False)
+        context.run_jobs(
+            jobs=list(dataset_jobs),
+            expname=result_dir,
+            register=False,
+        )
     finally:
         gc.collect()
         if torch.cuda.is_initialized():
