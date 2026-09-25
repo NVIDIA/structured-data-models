@@ -8,6 +8,7 @@ import pytest
 import torch
 from torch import Tensor
 
+from sdm.cache import Int8KVCacheEntry
 from sdm.nn import (
     SDPA,
     Attention,
@@ -216,6 +217,8 @@ def test_attention_compile(
 @withCUDA
 def test_attention_compile_key_value_cache(device: torch.device) -> None:
     module = Attention(channels=8, num_query_heads=2, device=device)
+    with torch.no_grad():
+        module.out_lin.weight.copy_(torch.eye(8, device=device))
     query = torch.randn(2, 3, 8, device=device)
     key_value = torch.randn(2, 5, 8, device=device)
 
@@ -232,6 +235,11 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
     # Replaying the cached projections also compiles without graph breaks.
     expected = module(query=query, key_value=expected_kv)
     out = fullgraph(module)(query=query, key_value=kv)
+    torch.testing.assert_close(out, expected)
+
+    quantized = Int8KVCacheEntry.from_entry(expected_kv)
+    expected = module(query=query, key_value=quantized)
+    out = fullgraph(module)(query=query, key_value=quantized)
     torch.testing.assert_close(out, expected)
 
 

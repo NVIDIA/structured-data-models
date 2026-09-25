@@ -256,6 +256,15 @@ def test_forward(
             task_links=related_tables.task_links[::-1],
         ),
     ).allclose(out, atol=1e-4, rtol=1e-4)
+
+    assert model._cache is not None
+    native_size = model._cache.size()
+    model.fit(x, y, related_tables, kv_cache_dtype=torch.int8)
+    assert model._cache is not None
+    assert model._cache.size() < native_size
+    quantized_out = model.predict(x, related_tables)
+    assert quantized_out.size() == out.size()
+    assert quantized_out.numerical.isfinite().all()
     model.clear()
 
 

@@ -505,7 +505,7 @@ class _KumoRelational(torch.nn.Module):
         # by distributing them to related tables via task-row assignment:
         _cache: Cache | None = None
         if cache is not None and cache.is_recording:
-            _cache = Cache()
+            _cache = cache.new_empty()
         elif cache is not None:
             _cache = cast(Cache, cache[cache_key])
 

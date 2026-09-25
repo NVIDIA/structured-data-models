@@ -299,3 +299,31 @@ def test_compile(dtype: torch.dtype) -> None:
     predicted = model.predict(x_query)
     assert predicted.allclose(expected, atol=5e-4, rtol=5e-3)
     assert torch.is_inference(predicted)
+
+
+@withCUDA
+@pytest.mark.parametrize("autocast", [False, True])
+def test_int8_kv_cache(device: torch.device, autocast: bool) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    x_context = torch.randn(64, 6, device=device)
+    y_context = torch.randint(0, 3, (64, 1), device=device)
+    x_query = torch.randn(16, 6, device=device)
+    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
+
+    with torch.autocast(
+        device_type=device.type, dtype=dtype, enabled=autocast
+    ):
+        model.fit(x_context, y_context)
+        assert model._cache is not None
+        native_size = model._cache.size()
+        expected = model.predict(x_query)
+
+        model.fit(x_context, y_context, kv_cache_dtype=torch.int8)
+        assert model._cache is not None
+        assert model._cache.size() < native_size
+        out = model.predict(x_query)
+
+    assert out.size() == expected.size()
+    assert out.dtype == expected.dtype
+    assert out.numerical.isfinite().all()
+    model.clear()
