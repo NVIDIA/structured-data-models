@@ -219,6 +219,33 @@ def test_adapter_inverse_restores_input() -> None:
         assert restored[member_id].equal(ensemble_table[member_id])
 
 
+@pytest.mark.parametrize("num_members", [1, 3])
+@pytest.mark.parametrize("inverse", [False, True])
+def test_adapter_rejects_changed_member_count(
+    num_members: int,
+    inverse: bool,
+) -> None:
+    table = TableTensor.from_tensor(torch.tensor([[1.0], [3.0]]))
+    context = EnsembleTable.from_table(table, num_members=2)
+    processor = EnsembleProcessorAdapter(Standardize())
+    processor.fit_ensemble(context)
+    restored = EnsembleProcessorAdapter(Standardize())
+    restored.load_state_dict(processor.state_dict())
+    query = EnsembleTable.from_table(table, num_members=num_members)
+
+    for candidate in (processor, restored):
+        transformed = candidate.transform_ensemble(context)
+        recovered = candidate.inverse_transform_ensemble(transformed)
+        assert all(recovered.table(i).equal(table) for i in range(2))
+        operation = (
+            candidate.inverse_transform_ensemble
+            if inverse
+            else candidate.transform_ensemble
+        )
+        with pytest.raises(RuntimeError, match=r"fitted with 2.*got"):
+            operation(query)
+
+
 def test_stateless_adapter_supports_transform_and_inverse() -> None:
     table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     processor = EnsembleProcessorAdapter(_StatelessProcessor())
