@@ -47,6 +47,19 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
         "num_icl_heads": 8,
         "num_icl_key_value_heads_for_query": 2,
     },
+    "large": {
+        "cell_channels": 256,
+        "num_embedding_layers": 6,
+        "num_embedding_heads": 4,
+        "num_inducing_points": 256,
+        "group_size": 3,
+        "num_frequencies": 32,
+        "num_readout_tokens": 4,
+        "icl_channels": 1024,
+        "num_icl_layers": 24,
+        "num_icl_heads": 16,
+        "num_icl_key_value_heads_for_query": 2,
+    },
 }
 
 
@@ -58,16 +71,11 @@ class KumoTabular(ICLModel):
     .. figure:: /images/kumo_tabular.svg
         :width: 100%
 
-    Architecturally, :class:`KumoTabular` combines the compression-then-ICL
-    structure of :class:`TabICLv2` with interleaved row/column attention from
-    `TabPFN <https://github.com/PriorLabs/tabpfn>`__ and Fourier cell
-    embeddings as introduced by :class:`TabFM`. Numerical and categorical
-    values use separate learned Fourier frequencies and projections. Each cell
-    embedding represents a repeated group of features, with missing values
-    handled via learned missingness projections.
-
-    The cell representations are processed by fully interleaved attention
-    stages, scaled up to six stages with 256 hidden cell dimension:
+    :class:`KumoTabular` processes a table in two stages. First, an interleaved
+    row/column encoder transforms raw table cells into fixed-size row
+    representations. Numerical and categorical cells use separate learned
+    Fourier frequencies and projections, together with a learned missingness
+    projection. Each encoder stage consists of:
 
     * **Column-wise:** Each feature group is processed across rows using
       induced set attention. Both context and query cells attend only to
@@ -76,29 +84,23 @@ class KumoTabular(ICLModel):
       attend to one another, combining feature interactions into a fixed-size
       row representation.
 
-    A final dataset-wise transformer processes the compressed
-    row representations and predicts each query target from the labeled
-    context rows.
-
-    The transformer blocks leverage :class:`torch.nn.RMSNorm`, with
-    normalization applied on query/key/value inputs and before
-    :class:`~torch.nn.GELU` feed-forward networks, and non-affine per-head
-    normalization applied on projected queries and keys.
-
-    Additionally, :class:`KumoTabular` applies learned logarithmic
-    context-length scaling via :class:`sdm.nn.LogScale` during column-wise and
-    dataset-wise attention, and query-gated logarithmic scaling via
-    :class:`sdm.nn.GatedLogScale` during row-wise attention.
+    Second, a dataset-wise in-context learning transformer processes the row
+    representations and predicts each query target from the labeled context
+    rows. The ``"large"`` model widens this transformer to 1024 channels and
+    16 attention heads. Its four 256-channel readout tokens concatenate
+    directly to that width without a projection layer.
 
     For regression tasks, :class:`KumoTabular` predicts 999 quantiles named
-    ``"q001"`` through ``"q999"``, similar to :class:`TabICLv2`.
+    ``"q001"`` through ``"q999"``.
 
     Args:
         task: The tasks to initialize. If ``None``, all tasks supported by this
             model are initialized.
-        size: The model size, ``"small"`` or ``"medium"``.
+        size: The model size, one of ``"small"``, ``"medium"``, or
+            ``"large"``. Defaults to ``"large"``.
         pretrained: Whether to load pretrained checkpoints.
-        device: The device.
+        device: The device for model parameters. If ``None``, uses PyTorch's
+            default device.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -113,7 +115,7 @@ class KumoTabular(ICLModel):
     def __init__(
         self,
         task: TaskLike | Iterable[TaskLike] | None = None,
-        size: Literal["small", "medium"] = "small",
+        size: Literal["small", "medium", "large"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
@@ -142,7 +144,7 @@ class KumoTabular(ICLModel):
 
     def _load_from_pretrained(
         self,
-        size: Literal["small", "medium"],
+        size: Literal["small", "medium", "large"],
         device: torch.device | str | None,
     ) -> _KumoTabular:
         device = torch.get_default_device() if device is None else device
@@ -157,7 +159,7 @@ class KumoTabular(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Tabular",
                 filename=filename,
-                revision="v1.0.6",
+                revision="v1.0.7",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
             model.load_state_dict(ckpt, assign=True)
