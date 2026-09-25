@@ -6,9 +6,16 @@
 from typing import Any, cast
 
 import torch
+from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
 from sdm.nn import QueryScaling, RMSNorm, RotaryEmbedding, TransformerBlock
+
+
+class _RoPERMSNorm(Sequential):
+    def forward(self, input: Tensor) -> Tensor:  # noqa: A002
+        rope, norm = self
+        return norm(input, rope=rope)
 
 
 class KumoTabularTransformerBlock(TransformerBlock):
@@ -54,14 +61,15 @@ class KumoTabularTransformerBlock(TransformerBlock):
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).weight)
         torch.nn.init.zeros_(cast(Linear, mlp[-1]).bias)
 
+        transform = Sequential if rope is None else _RoPERMSNorm
         super().__init__(
             channels=channels,
             num_query_heads=num_heads,
             mlp=mlp,
             query_norm=RMSNorm(channels, **factory_kwargs),
             key_value_norm=RMSNorm(channels, **factory_kwargs),
-            query_transform=Sequential(*query_transforms),
-            key_transform=Sequential(*key_transforms),
+            query_transform=transform(*query_transforms),
+            key_transform=transform(*key_transforms),
             query_scaling=query_scaling,
             **factory_kwargs,
         )

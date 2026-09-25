@@ -5,6 +5,7 @@ r"""Run an SDM tabular model on TabArena."""
 
 import argparse
 import gc
+import os
 from pathlib import Path
 
 import torch
@@ -52,6 +53,8 @@ parser.add_argument(
     "across prediction batches.",
 )
 args = parser.parse_args()
+
+os.environ["SDM_ENABLE_CATEGORY_CHECKS"] = "0"
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
