@@ -18,6 +18,10 @@ class _LinearModel(ICLModel):
     supports_multi_target = False
     supports_related_tables = True
 
+    def __init__(self) -> None:
+        super().__init__(task=None)
+        self.eval()
+
     def _forward(
         self,
         x_context: TableTensor | None,

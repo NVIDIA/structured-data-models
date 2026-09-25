@@ -8,11 +8,14 @@ import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
-from sdm.models.kumo.tabular import KumoTabular
+from sdm.models import KumoTabular
 
 
-def _build(task: Literal["classification", "regression"]) -> KumoTabular:
-    model = KumoTabular(task=task, pretrained=False)
+def _build(
+    task: Literal["classification", "regression"],
+    size: Literal["small", "medium"],
+) -> KumoTabular:
+    model = KumoTabular(task=task, size=size, pretrained=False)
     # Residual branches are zero-initialized, so an untrained model maps every
     # row onto the same constant. Randomize them to make the prediction depend
     # on the features it is given.
@@ -23,13 +26,18 @@ def _build(task: Literal["classification", "regression"]) -> KumoTabular:
 
 
 @pytest.fixture
-def cls_model() -> KumoTabular:
-    return _build("classification")
+def cls_model(size: Literal["small", "medium"]) -> KumoTabular:
+    return _build("classification", size)
 
 
 @pytest.fixture
-def reg_model() -> KumoTabular:
-    return _build("regression")
+def reg_model(size: Literal["small", "medium"]) -> KumoTabular:
+    return _build("regression", size)
+
+
+@pytest.fixture(params=["small", "medium"])
+def size(request: pytest.FixtureRequest) -> Literal["small", "medium"]:
+    return request.param
 
 
 def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
@@ -57,12 +65,12 @@ def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
     return x.split(3, dim=0)
 
 
-def _cls_target() -> TableTensor:
+def _cls_target(num_classes: int = 3) -> TableTensor:
     return TableTensor(
         columns={Stype.categorical: ("target",)},
         categorical=CategoricalTensor(
-            code=torch.tensor([[0], [2], [0]]),
-            categories=(torch.arange(3).mul(10),),
+            code=torch.tensor([[0], [num_classes - 1], [0]]),
+            categories=(torch.arange(num_classes).mul(10),),
         ),
     )
 
@@ -125,14 +133,26 @@ def test_fit_predict(
     reg_model: KumoTabular,
 ) -> None:
     x_context, x_query = _features()
-    target = _cls_target()
+    for num_classes in (3, 11):
+        target = _cls_target(num_classes)
+        expected = cls_model(
+            x_context=x_context,
+            y_context=target,
+            x_query=x_query,
+            recipe=_recipe(),
+            generator=torch.Generator().manual_seed(0),
+        )
+        cls_model.fit(
+            x=x_context,
+            y=target,
+            recipe=_recipe(),
+            generator=torch.Generator().manual_seed(0),
+        )
+        actual = cls_model.predict(x_query)
 
-    expected = cls_model(x_context, target, x_query, recipe=_recipe())
-    cls_model.fit(x_context, target, recipe=_recipe())
-    actual = cls_model.predict(x_query)
-
-    assert actual.allclose(expected, atol=1e-5)
-    assert actual.columns == expected.columns
+        assert actual.size() == (2, num_classes)
+        assert actual.allclose(expected, atol=1e-5)
+        assert actual.columns == expected.columns
 
     x_context, x_query = _features(Stype.numerical)
     target = _reg_target()
@@ -149,8 +169,10 @@ def test_fit_predict(
     )
 
 
-def test_missing_values_pass_through_fit_predict() -> None:
-    model = _build("regression")
+def test_missing_values_pass_through_fit_predict(
+    size: Literal["small", "medium"],
+) -> None:
+    model = _build("regression", size)
     x_context = TableTensor.from_tensor(
         torch.tensor(
             [

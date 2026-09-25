@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
+import math
 from typing import Any, cast
 
 import pandas as pd
 import relbench
 import torch
 import torchmetrics
-import tqdm
+from tqdm import tqdm
 
 import sdm
 
@@ -54,7 +55,7 @@ data = sdm.RelationalData(
             "right_column": cast(str, db.table_dict[right_table].pkey_col),
         }
         for left_table, table in db.table_dict.items()
-        for left_column, right_table in (table.fkey_col_to_pkey_table.items())
+        for left_column, right_table in table.fkey_col_to_pkey_table.items()
     ],
 )
 sampler = data.sampler(
@@ -88,8 +89,16 @@ task_table = sdm.TableTensor.from_pandas(
     },
 )
 context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
-perm = torch.randperm(len(context))[: args.context_size * args.num_estimators]
-context = context[torch.randperm(len(context))[: args.context_size]]
+
+num_estimators = args.num_estimators
+if len(context) > args.context_size:  # Sample different context per estimator:
+    repeats = math.ceil(args.context_size * num_estimators / len(context))
+    perm = torch.cat([torch.randperm(len(context)) for _ in range(repeats)])
+    context = context[perm[: args.context_size * num_estimators]]
+    if num_estimators > 1:
+        context = context.unflatten(0, (num_estimators, args.context_size))
+        query = query.expand(num_estimators, *query.size())
+        num_estimators = None
 
 # Execute Model ###############################################################
 model = sdm.models.KumoRelational(device=device)
@@ -109,7 +118,7 @@ with torch.amp.autocast(device.type, torch.float16, enabled=True):
         x=context.drop_columns(task.target_col),
         y=context[task.target_col],
         related_tables=related_tables,
-        num_estimators=args.num_estimators,
+        num_estimators=num_estimators,
     )
 
 if task.task_type == relbench.base.TaskType.REGRESSION:
@@ -120,9 +129,11 @@ elif task.task_type == relbench.base.TaskType.BINARY_CLASSIFICATION:
 else:
     metric = torchmetrics.classification.MulticlassAccuracy(average="micro")
 metric = metric.to(device)
-for batch in tqdm.tqdm(query.split(args.batch_size)[: args.max_test_steps]):
+for batch in tqdm(query.split(args.batch_size, -2)[: args.max_test_steps]):
     x_query = batch.drop_columns(task.target_col)
     y_query = batch[task.target_col].to(device)
+    if num_estimators is None:
+        y_query = y_query[0]
     with torch.amp.autocast(device.type, torch.float16, enabled=True):
         out = model.predict(*sampler(x_query, **kwargs).to(device))
 
