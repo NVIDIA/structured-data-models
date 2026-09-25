@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import math
 from collections.abc import Sequence
 from typing import Literal, cast
 
@@ -39,6 +40,11 @@ class AlignCategories(EnsembleProcessor):
         min_frequency: Minimum number of observations required to retain a
             category. Values of rarer categories receive code ``-1``.
             Must be positive.
+
+    Ordinary tables with shape ``[..., N, C]`` retain their batch shape.
+    Each batch independently applies ``min_frequency`` while sharing one
+    vocabulary per column; frequency ordering uses counts across batches.
+    Fitted batch dimensions must broadcast to the transform batch dimensions.
 
     >>> import pandas as pd
     >>> import sdm
@@ -82,6 +88,7 @@ class AlignCategories(EnsembleProcessor):
             raise ValueError("min_frequency must be positive")
         self.sort_by = sort_by
         self.min_frequency = min_frequency
+        self._retained: BufferList[Tensor] = BufferList()
         self._categories: BufferList[BufferList[Tensor]] = BufferList()
 
     def _fit_column(
@@ -222,6 +229,10 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        if table.dim() > 2:
+            self._fit_batched(table)
+            return
+        self._retained = BufferList()
         fitted_categories, _ = self._fit_columns(
             table,
             align_codes=False,
@@ -236,6 +247,10 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
+        if table.dim() > 2:
+            self._fit_batched(table)
+            return self._transform_batched(table)
+        self._retained = BufferList()
         fitted_categories, aligned_tables = self._fit_and_align(table)
         self._categories = BufferList(
             BufferList(categories) for categories in fitted_categories
@@ -243,6 +258,8 @@ class AlignCategories(EnsembleProcessor):
         return aligned_tables[0]
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if len(self._retained) or table.dim() > 2:
+            return self._transform_batched(table)
         return self._align_to_categories(
             table,
             cast(Sequence[Sequence[Tensor]], self._categories),
@@ -271,6 +288,7 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        self._retained = BufferList()
         fitted_categories = []
         for group in ensemble_table._iter_groups():
             group_categories, _ = self._fit_columns(
@@ -288,6 +306,7 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
+        self._retained = BufferList()
         fitted_categories = []
         aligned_tables = []
         for group in ensemble_table._iter_groups():
@@ -525,6 +544,95 @@ class AlignCategories(EnsembleProcessor):
                 ),
             )
             for batch_index, batch_categories in enumerate(fitted_categories)
+        )
+
+    def _fit_batched(self, table: TableTensor) -> None:
+        codes = table.categorical.code
+        batch_shape = codes.shape[:-2]
+        batch_size = math.prod(batch_shape)
+        categories = []
+        retained = []
+        for column, vocabulary in enumerate(table.categorical.categories):
+            column_codes = codes[..., column].reshape(
+                batch_size, codes.size(-2)
+            )
+            observed = column_codes >= 0
+            indices = column_codes.clamp_min(0).long()
+            counts = column_codes.new_zeros((batch_size, vocabulary.numel()))
+            if vocabulary.numel():
+                counts.scatter_add_(1, indices, observed.to(codes.dtype))
+                keep = (counts >= self.min_frequency).any(dim=0)
+                column_codes = torch.where(
+                    observed & keep[indices], column_codes, -1
+                )
+            fitted, aligned = self._fit_column(
+                vocabulary,
+                column_codes.reshape(1, -1),
+                align_codes=True,
+            )
+            assert aligned is not None
+            category = fitted[0]
+            categories.append(category)
+            aligned = aligned.reshape(batch_size, codes.size(-2))
+            counts = aligned.new_zeros((batch_size, category.numel()))
+            if category.numel():
+                counts.scatter_add_(
+                    1,
+                    aligned.clamp_min(0).long(),
+                    (aligned >= 0).to(codes.dtype),
+                )
+            retained.append(
+                (counts >= self.min_frequency).reshape(
+                    *batch_shape, category.numel()
+                )
+            )
+        self._categories = BufferList((BufferList(categories),))
+        self._retained = BufferList(retained)
+
+    def _transform_batched(self, table: TableTensor) -> TableTensor:
+        codes = table.categorical.code
+        batch_shape = codes.shape[:-2]
+        fitted_batch_shape = (
+            self._retained[0].shape[:-1] if len(self._retained) else ()
+        )
+        try:
+            output_shape = torch.broadcast_shapes(
+                fitted_batch_shape, batch_shape
+            )
+        except RuntimeError:
+            output_shape = None
+        if output_shape != batch_shape:
+            raise ValueError(
+                "AlignCategories fitted batch shape must broadcast to the "
+                f"transform batch shape; got {fitted_batch_shape} "
+                f"and {batch_shape}."
+            )
+        flat_table = cast(
+            TableTensor, table.contiguous().view(-1, table.size(-1))
+        )
+        aligned = self._align_to_categories(
+            flat_table,
+            cast(Sequence[Sequence[Tensor]], self._categories),
+        )[0].categorical
+        aligned_codes = aligned.code.reshape(codes.shape)
+        batch_size = math.prod(batch_shape)
+        for column, retained in enumerate(self._retained):
+            if not retained.size(-1):
+                continue
+            column_codes = aligned_codes[..., column].reshape(
+                batch_size, codes.size(-2)
+            )
+            retained = retained.expand(
+                *batch_shape, retained.size(-1)
+            ).reshape(batch_size, retained.size(-1))
+            keep = retained.gather(1, column_codes.clamp_min(0).long())
+            aligned_codes[..., column] = torch.where(
+                keep & (column_codes >= 0), column_codes, -1
+            ).reshape(*batch_shape, codes.size(-2))
+        return table.replace_blocks(
+            categorical=CategoricalTensor(
+                aligned_codes, categories=aligned.categories
+            )
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
