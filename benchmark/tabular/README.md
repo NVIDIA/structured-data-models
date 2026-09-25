@@ -31,7 +31,9 @@ ______________________________________________________________________
 - **`KumoTabular`:**
 
   ```bash
-  python -m benchmark.tabular.tabarena.main --model kumo-tabular
+  python -m benchmark.tabular.tabarena.main --model kumo-tabular-large
+  python -m benchmark.tabular.tabarena.main --model kumo-tabular-medium
+  python -m benchmark.tabular.tabarena.main --model kumo-tabular-small
   ```
 
 - **`TabFM`:**
@@ -44,7 +46,7 @@ Pass a dataset name to run only that TabArena dataset:
 
 ```bash
 python -m benchmark.tabular.tabarena.main \
-  --model kumo-tabular \
+  --model kumo-tabular-large \
   --dataset blood-transfusion-service-center
 ```
 
@@ -71,7 +73,9 @@ ______________________________________________________________________
 - **`KumoTabular`:**
 
   ```bash
-  python -m benchmark.tabular.beyondarena.main --model kumo-tabular
+  python -m benchmark.tabular.beyondarena.main --model kumo-tabular-large
+  python -m benchmark.tabular.beyondarena.main --model kumo-tabular-medium
+  python -m benchmark.tabular.beyondarena.main --model kumo-tabular-small
   ```
 
 - **`TabFM`:**

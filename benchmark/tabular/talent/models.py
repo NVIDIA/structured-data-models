@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -59,8 +59,9 @@ def _create_tabiclv2(
 def _create_kumo_tabular(
     task: Task,
     device: torch.device,
+    size: Literal["small", "medium", "large"],
 ) -> sdm.models.KumoTabular:
-    return sdm.models.KumoTabular(task=task, device=device)
+    return sdm.models.KumoTabular(task=task, size=size, device=device)
 
 
 @lru_cache(maxsize=1)
@@ -82,10 +83,24 @@ MODEL_CONFIGS = {
         num_estimators=8,
         autocast_dtype=torch.float16,
     ),
-    "kumo-tabular": ModelConfig(
-        name="KumoTabular",
-        factory=_create_kumo_tabular,
-        num_estimators=8,
+    "kumo-tabular-small": ModelConfig(
+        name="KumoTabular-Small",
+        factory=partial(_create_kumo_tabular, size="small"),
+        num_estimators=16,
+        autocast_dtype=torch.float16,
+        max_classes=10,
+    ),
+    "kumo-tabular-medium": ModelConfig(
+        name="KumoTabular-Medium",
+        factory=partial(_create_kumo_tabular, size="medium"),
+        num_estimators=16,
+        autocast_dtype=torch.float16,
+        max_classes=10,
+    ),
+    "kumo-tabular-large": ModelConfig(
+        name="KumoTabular-Large",
+        factory=partial(_create_kumo_tabular, size="large"),
+        num_estimators=16,
         autocast_dtype=torch.float16,
         max_classes=10,
     ),
