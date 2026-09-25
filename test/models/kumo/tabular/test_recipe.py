@@ -105,7 +105,9 @@ def test_default_recipe_keeps_values_distinct_beside_outliers() -> None:
 
 
 @pytest.mark.parametrize("cardinality", [50, 51])
-def test_default_recipe_adds_category_counts(cardinality: int) -> None:
+def test_default_recipe_adds_category_counts_to_half_the_members(
+    cardinality: int,
+) -> None:
     codes = torch.cat(
         [torch.arange(cardinality), torch.zeros(300 - cardinality)]
     )
@@ -121,13 +123,12 @@ def test_default_recipe_adds_category_counts(cardinality: int) -> None:
         EnsembleTable.from_table(features, num_members=2)
     )
 
-    expected_columns = {"num_0", "num_1", "cat_0"}
+    without_counts = {"num_0", "num_1", "cat_0"}
+    with_counts = without_counts.copy()
     if cardinality > 50:
-        expected_columns.add("cat_0__count")
-    for member_id in range(len(output)):
-        assert (
-            set(output[member_id].columns[Stype.numerical]) == expected_columns
-        )
+        with_counts.add("cat_0__count")
+    assert set(output[0].columns[Stype.numerical]) == with_counts
+    assert set(output[1].columns[Stype.numerical]) == without_counts
 
 
 def test_default_recipe_reduces_outputs_per_task() -> None:
