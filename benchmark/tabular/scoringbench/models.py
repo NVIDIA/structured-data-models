@@ -52,7 +52,7 @@ MODEL_CONFIGS = {
         method="sdm_kumo_tabular",
         factory=_create_kumo_tabular,
         autocast_dtype=torch.float16,
-        num_estimators=8,
+        num_estimators=16,
     ),
 }
 

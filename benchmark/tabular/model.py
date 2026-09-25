@@ -287,7 +287,7 @@ def _load_kumo_network(*, task: str, device: torch.device) -> torch.nn.Module:
 class SDMKumoTabularModel(SDMModel):
     ag_key = "SDM-KUMO-TABULAR"
     ag_name = "SDMKumoTabular"
-    default_num_estimators = 8
+    default_num_estimators = 16
     autocast_dtype = torch.float16
     # Bagged children are fit one at a time in this process, so they share the
     # pretrained network of their task through AutoGluon's registry.

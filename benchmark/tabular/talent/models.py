@@ -85,7 +85,7 @@ MODEL_CONFIGS = {
     "kumo-tabular": ModelConfig(
         name="KumoTabular",
         factory=_create_kumo_tabular,
-        num_estimators=8,
+        num_estimators=16,
         autocast_dtype=torch.float16,
         max_classes=10,
     ),
