@@ -114,6 +114,7 @@ def get_sampler(
     text: Literal["off", "drop"],
 ) -> sdm.relational.RelationalSampler:
     r"""Initialize the relational sampler to gather time-aware subgraphs."""
+    print("GET SAMPLER")
     tables = {}
     for name, table in db.table_dict.items():
         stypes = sdm.infer_stypes(
@@ -184,9 +185,9 @@ class KumoRelationalModel(RelArenaModel):
         )
 
         if task.task_type == TaskType.REGRESSION:
-            context_size = 2_000  # TODO
-        else:
             context_size = 20_000  # TODO
+        else:
+            context_size = 2_000  # TODO
         num_estimators = 8
 
         if (
