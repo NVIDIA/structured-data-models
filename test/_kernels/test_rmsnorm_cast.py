@@ -27,7 +27,7 @@ def test_rmsnorm_cast(
     channels = 64
     x = torch.randn(
         2,
-        17,
+        4097,
         channels * (2 if strided else 1),
         device=device,
         dtype=dtype,
