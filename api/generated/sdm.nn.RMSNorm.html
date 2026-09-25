@@ -236,11 +236,16 @@ data-aria-dark="Switch to auto color mode">
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.nn.RMSNorm.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.nn.RMSNorm.forward" title="Link to this definition">#</a></dt>
-<dd><p>Runs the forward pass.</p>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">rope</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.nn.RotaryEmbedding.html#sdm.nn.RotaryEmbedding" title="sdm.nn.rope.RotaryEmbedding"><span class="pre">RotaryEmbedding</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.nn.RMSNorm.forward" title="Link to this definition">#</a></dt>
+<dd><p>Apply optional rotary embeddings before normalization.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>x</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a>)</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a>) – Input with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C]</span></code>, or <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">S,</span> <span class="pre">H,</span> <span class="pre">C]</span></code> with
+rotary embeddings, where <code class="docutils literal notranslate"><span class="pre">S</span></code> is the sequence length,
+<code class="docutils literal notranslate"><span class="pre">H</span></code> is the number of heads, and <code class="docutils literal notranslate"><span class="pre">C</span></code> is channels per head.</p></li>
+<li><p><strong>rope</strong> (<a class="reference internal" href="sdm.nn.RotaryEmbedding.html#sdm.nn.RotaryEmbedding" title="sdm.nn.rope.RotaryEmbedding"><em>RotaryEmbedding</em></a><em> | </em><em>None</em>) – Optional rotary embedding applied to the input.</p></li>
+</ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a></p>
@@ -276,7 +281,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=0b429498"></script>
+      <script src="../../_static/documentation_options.js?v=8c316c60"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
