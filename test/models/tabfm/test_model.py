@@ -14,9 +14,11 @@ from sdm.testing import withCUDA
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
 def test_forward(
     device: torch.device,
     dtype: torch.dtype,
+    estimator_batch_size: int | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -36,6 +38,10 @@ def test_forward(
         pretrained=False,
         device=device,
     )
+    # Make predictions sensitive to cached attention and feature permutations.
+    for parameter in model.parameters():
+        if not parameter.any():
+            torch.nn.init.normal_(parameter, std=0.02)
     if device.type == "cpu":
         assert repr(model) == "TabFM()"
     else:
@@ -55,7 +61,14 @@ def test_forward(
         y_context = torch.tensor([0, 1, 0, 1, 0], device=device).unsqueeze(-1)
 
     generator = torch.Generator(device=device).manual_seed(1)
-    out = model(x_context, y_context, x_query, generator=generator)
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=9,
+        estimator_batch_size=estimator_batch_size,
+        generator=generator,
+    )
     assert out.dtype == x_context.dtype
     assert out.device == device
     assert torch.is_inference(out)
@@ -65,8 +78,69 @@ def test_forward(
         assert out.size() == (3, 2)
 
     generator = torch.Generator(device=device).manual_seed(1)
-    model.fit(x_context, y_context, generator=generator)
+    model.fit(
+        x=x_context,
+        y=y_context,
+        num_estimators=9,
+        estimator_batch_size=estimator_batch_size,
+        generator=generator,
+    )
     assert model._cache is not None
     assert model._cache.size() > 0
     assert model.predict(x_query).allclose(out, atol=1e-4, rtol=1e-4)
     model.clear()
+
+
+@withCUDA
+def test_fit_predict_estimator_batching(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        tabfm_module,
+        "_TabFM",
+        functools.partial(
+            tabfm_module._TabFM,
+            channels=64,
+            num_inducing_points=128,
+            num_readout_tokens=4,
+            num_icl_layers=4,
+        ),
+    )
+    model = TabFM(task="classification", pretrained=False, device=device)
+    for parameter in model.parameters():
+        if not parameter.any():
+            torch.nn.init.normal_(parameter, std=0.02)
+
+    x = TableTensor(
+        numerical=torch.randn(8, 3, device=device),
+        categorical=CategoricalTensor.from_tensor(
+            torch.randint(0, 2, (8, 3), device=device)
+        ),
+    )
+    x_context, x_query = x.split(5, dim=0)
+    y_context = torch.tensor([0, 1, 2, 1, 0], device=device).unsqueeze(-1)
+
+    expected = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=5,
+        generator=torch.Generator(device=device).manual_seed(1),
+    )
+    model.fit(
+        x=x_context,
+        y=y_context,
+        num_estimators=5,
+        estimator_batch_size=None,
+        generator=torch.Generator(device=device).manual_seed(1),
+    )
+    actual = model.predict(x_query)
+
+    assert actual.columns == expected.columns
+    torch.testing.assert_close(
+        actual=actual.numerical,
+        expected=expected.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )

@@ -3,7 +3,7 @@
 
 import abc
 import copy
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -14,6 +14,7 @@ from sdm import (
     Recipe,
     RelatedTables,
     Stype,
+    StypeLike,
     TableTensor,
     Task,
     TaskLike,
@@ -102,6 +103,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
+        estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -124,6 +126,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 used as the estimator dimension, allowing input data to be
                 customized per estimator (*e.g.*, different in-context examples
                 per estimator).
+            estimator_batch_size: Maximum number of estimators run through the
+                model in one call. ``1`` (default) runs estimators one by one,
+                exactly as before; ``None`` runs all of them together.
+                Estimators in one batch must share column names, table shapes
+                and class counts, and related tables require ``1``. Device
+                memory grows with the batch size. Estimators fitted together
+                are predicted together. Model-side randomness drawn per call
+                (*e.g.*, ECOC codebooks for more than 10 classes) is shared
+                within a batch, so batched and sequential predictions differ
+                numerically there.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -134,8 +146,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
-        requires_grad = self.training
-        requires_grad |= any(callback.requires_grad for callback in callbacks)
+        requires_grad = self._requires_grad(callbacks)
 
         if (related_context_tables is None) != (related_query_tables is None):
             raise ValueError(
@@ -172,48 +183,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables=related_query_tables,
             )
 
-        outs: list[TableTensor] = []
-        for context, query in zip(contexts, queries):
-            for callback in callbacks:
-                context = MemberContext(
-                    *callback.on_context_preprocessing_end(self, *context)
-                )
-            self._validate_context(
-                x=context.x,
-                y=context.y,
-                related_tables=context.related_tables,
-            )
-
-            for callback in callbacks:
-                query = MemberQuery(
-                    *callback.on_query_preprocessing_end(self, *query)
-                )
-            self._validate_query(
-                x_context=context.x.schema,
-                x_query=query.x,
-                related_context_tables=context.related_tables.schema
-                if context.related_tables is not None
-                else None,
-                related_query_tables=query.related_tables,
-            )
-
-            with inference_mode("grad" if requires_grad else "inference"):
-                out = self._forward(
-                    x_context=context.x,
-                    y_context=context.y,
-                    x_query=query.x,
-                    related_context_tables=context.related_tables,
-                    related_query_tables=query.related_tables,
-                    cache=None,
-                    generator=generator,
-                    **kwargs,
-                )
-
-                for callback in callbacks:
-                    out = callback.on_model_forward_end(self, out)
-
-            out = cast(TableTensor, out.to(query.x.dtype))
-            outs.append(out)
+        outs = self._forward_members(
+            contexts,
+            queries,
+            estimator_batch_size=estimator_batch_size,
+            callbacks=callbacks,
+            generator=generator,
+            **kwargs,
+        )
 
         # Regression: invert target before stacking estimator outputs.
         if contexts[0].y.numerical.size(-1) > 0:
@@ -237,6 +214,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
+        estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -258,6 +236,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 used as the estimator dimension, allowing input data to be
                 customized per estimator (*e.g.*, different in-context examples
                 per estimator).
+            estimator_batch_size: Maximum number of estimators run through the
+                model in one call. ``1`` (default) runs estimators one by one,
+                exactly as before; ``None`` runs all of them together.
+                Estimators in one batch must share column names, table shapes
+                and class counts, and related tables require ``1``. Device
+                memory grows with the batch size. Estimators fitted together
+                are predicted together. Model-side randomness drawn per call
+                (*e.g.*, ECOC codebooks for more than 10 classes) is shared
+                within a batch, so batched and sequential predictions differ
+                numerically there.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -282,22 +270,23 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 generator=generator,
             )
 
+        if estimator_batch_size is None:
+            estimator_batch_size = len(contexts)
+        batches = range(0, len(contexts), estimator_batch_size)
         cache = Cache(
             recipe_execution=recipe_execution,
             kwargs=kwargs,
+            estimator_batch_size=estimator_batch_size,
         )
-        for i, context in enumerate(contexts):
-            for callback in callbacks:
-                context = MemberContext(
-                    *callback.on_context_preprocessing_end(self, *context)
-                )
-            self._validate_context(
-                x=context.x,
-                y=context.y,
-                related_tables=context.related_tables,
-            )
-            estimator_cache = Cache(
-                x_schema=context.x.schema,
+        for i, start in enumerate(batches):
+            members = [
+                self._prepare_context(context, callbacks)
+                for context in contexts[start : start + estimator_batch_size]
+            ]
+            with inference_mode("no_grad"):
+                context = _stack_context(members)
+            batch_cache = Cache(
+                x_schemas=tuple(member.x.schema for member in members),
                 y_schema=context.y.schema,
                 related_tables_schema=context.related_tables.schema
                 if context.related_tables is not None
@@ -307,6 +296,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     if context.y.categorical.size(-1) > 0
                     else None
                 ),
+                class_values=_class_values(members),
+                categorical_mask=_categorical_mask(members),
             )
 
             with inference_mode("no_grad"):
@@ -316,14 +307,17 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     x_query=None,
                     related_context_tables=context.related_tables,
                     related_query_tables=None,
-                    cache=estimator_cache,
+                    cache=batch_cache,
                     generator=generator,
+                    categorical_mask=cast(
+                        Tensor, batch_cache["categorical_mask"]
+                    ),
                     **kwargs,
                 )
 
-            if x.is_cuda and len(contexts) > 1:
+            if x.is_cuda and len(batches) > 1:
                 try:  # Copy to pinned CPU memory:
-                    estimator_cache = estimator_cache._apply_tensor(
+                    batch_cache = batch_cache._apply_tensor(
                         lambda tensor: torch.ops.aten._to_copy.default(
                             tensor,
                             device="cpu",
@@ -334,7 +328,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 finally:
                     torch.cuda.current_stream(x.device).synchronize()
 
-            cache[i] = estimator_cache
+            cache[i] = batch_cache
 
         self._cache = cache.freeze()
 
@@ -369,7 +363,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             )
 
         callbacks = () if callbacks is None else callbacks
-        requires_grad = any(callback.requires_grad for callback in callbacks)
+        requires_grad = self._requires_grad(callbacks)
 
         if self._cache is None:
             raise RuntimeError(
@@ -393,9 +387,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
             RecipeExecution,
             self._cache["recipe_execution"],
         )
+        size = cast(int, self._cache["estimator_batch_size"])
         caches = [
             cast(Cache, self._cache[i])
-            for i in range(recipe_execution.num_members)
+            for i in range(len(range(0, recipe_execution.num_members, size)))
         ]
         next_cache = caches[0]
 
@@ -424,23 +419,29 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 compute_stream.wait_stream(transfer_stream)
 
             outs: list[TableTensor] = []
-            for i, query in enumerate(queries):
+            start = 0
+            for i in range(len(caches)):
                 cache, next_cache = next_cache, None
                 assert cache is not None
 
-                for callback in callbacks:
-                    query = MemberQuery(
-                        *callback.on_query_preprocessing_end(self, *query)
+                x_schemas = cast(tuple[TableSchema, ...], cache["x_schemas"])
+                members = [
+                    self._prepare_query(
+                        query,
+                        x_schema,
+                        cast(
+                            RelatedTablesSchema | None,
+                            cache["related_tables_schema"],
+                        ),
+                        callbacks,
                     )
-                self._validate_query(
-                    x_context=cast(TableSchema, cache["x_schema"]),
-                    x_query=query.x,
-                    related_context_tables=cast(
-                        RelatedTablesSchema,
-                        cache["related_tables_schema"],
-                    ),
-                    related_query_tables=query.related_tables,
-                )
+                    for query, x_schema in zip(
+                        queries[start : start + len(x_schemas)],
+                        x_schemas,
+                        strict=True,
+                    )
+                ]
+                start += len(x_schemas)
 
                 if i + 1 < len(caches):
                     next_cache = caches[i + 1]
@@ -449,28 +450,25 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
-                with inference_mode("grad" if requires_grad else "inference"):
-                    out = self._forward(
-                        x_context=None,
-                        y_context=None,
-                        x_query=query.x,
-                        related_context_tables=None,
-                        related_query_tables=query.related_tables,
-                        cache=cache,
-                        generator=None,
-                        **cast(dict[str, Any], self._cache["kwargs"]),
-                    )
-
-                    for callback in callbacks:
-                        out = callback.on_model_forward_end(self, out)
+                outs += self._forward_batch(
+                    None,
+                    members,
+                    cache=cache,
+                    categorical_mask=cast(Tensor, cache["categorical_mask"]),
+                    class_values=cast(
+                        tuple[tuple[Any, ...], ...] | None,
+                        cache["class_values"],
+                    ),
+                    callbacks=callbacks,
+                    requires_grad=requires_grad,
+                    generator=None,
+                    **cast(dict[str, Any], self._cache["kwargs"]),
+                )
 
                 if x.is_cuda:
                     assert compute_stream is not None
                     for tensor in cache._tensors():
                         tensor.record_stream(compute_stream)
-
-                out = cast(TableTensor, out.to(query.x.dtype))
-                outs.append(out)
 
                 if x.is_cuda and next_cache is not None:
                     assert compute_stream is not None
@@ -528,9 +526,44 @@ class ICLModel(torch.nn.Module, abc.ABC):
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
+        *,
+        categorical_mask: Tensor,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
-        pass
+        r"""Run the model on preprocessed tables of one estimator batch.
+
+        Tables carry shape ``[E, ..., R, D]`` when ``E > 1`` estimators run
+        together and ``[..., R, D]`` otherwise. Column names and category
+        vocabularies are those of the first estimator; per-estimator column
+        and class order is not observable from the tables.
+
+        Args:
+            x_context: The feature tensor of in-context examples, or ``None``
+                when replaying a cache.
+            y_context: The targets of in-context examples, or ``None`` when
+                replaying a cache.
+            x_query: The feature tensor of query examples, or ``None`` when
+                recording a cache.
+            related_context_tables: Related context for in-context examples.
+            related_query_tables: Related context for query examples.
+            cache: The cache to record into or replay from, or ``None``.
+                Recorded tensors are replayed with queries of the same
+                estimator batch.
+            generator: Pseudorandom number generator for model execution.
+            categorical_mask: Boolean ``[C]`` or ``[E, 1, ..., C]`` tensor
+                broadcastable to ``x.numerical.size()[:-2] + (C,)`` marking
+                numerical feature columns that were categorical before
+                preprocessing. Passed on recording, replaying and uncached
+                calls alike.
+            kwargs: Additional keyword arguments passed by the caller.
+
+        Returns:
+            Predictions of shape ``[..., R_query, *]``. Classification outputs
+            hold one column per class in the order of
+            ``y_context.categorical.categories[0]`` (``cache["classes"]`` on
+            replay), named by class value; :class:`ICLModel` relabels them
+            per estimator when stacked.
+        """
 
     @classmethod
     @abc.abstractmethod
@@ -538,6 +571,140 @@ class ICLModel(torch.nn.Module, abc.ABC):
         r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################
+
+    def _requires_grad(self, callbacks: Sequence[Callback]) -> bool:
+        return self.training or any(
+            callback.requires_grad for callback in callbacks
+        )
+
+    def _forward_members(
+        self,
+        contexts: Sequence[MemberContext],
+        queries: Sequence[MemberQuery],
+        *,
+        estimator_batch_size: int | None = 1,
+        callbacks: Sequence[Callback] | None = None,
+        generator: torch.Generator | None = None,
+        **kwargs: Any,
+    ) -> list[TableTensor]:
+        r"""Run recipe-transformed members that live on the model device.
+
+        Returns one output per member before target inversion and
+        ``recipe.output``.
+        """
+        callbacks = () if callbacks is None else callbacks
+        requires_grad = self._requires_grad(callbacks)
+        if estimator_batch_size is None:
+            estimator_batch_size = len(contexts)
+        outs: list[TableTensor] = []
+        for start in range(0, len(contexts), estimator_batch_size):
+            members = [
+                self._prepare_context(context, callbacks)
+                for context in contexts[start : start + estimator_batch_size]
+            ]
+            query_members = [
+                self._prepare_query(
+                    query,
+                    member.x.schema,
+                    member.related_tables.schema
+                    if member.related_tables is not None
+                    else None,
+                    callbacks,
+                )
+                for member, query in zip(
+                    members,
+                    queries[start : start + estimator_batch_size],
+                    strict=True,
+                )
+            ]
+            outs += self._forward_batch(
+                members,
+                query_members,
+                cache=None,
+                categorical_mask=_categorical_mask(members),
+                class_values=_class_values(members),
+                callbacks=callbacks,
+                requires_grad=requires_grad,
+                generator=generator,
+                **kwargs,
+            )
+        return outs
+
+    def _prepare_context(
+        self,
+        context: MemberContext,
+        callbacks: Sequence[Callback],
+    ) -> MemberContext:
+        for callback in callbacks:
+            x, y, related_tables = callback.on_context_preprocessing_end(
+                self,
+                context.x,
+                context.y,
+                context.related_tables,
+            )
+            context = context._replace(x=x, y=y, related_tables=related_tables)
+        self._validate_context(
+            x=context.x,
+            y=context.y,
+            related_tables=context.related_tables,
+        )
+        return context
+
+    def _prepare_query(
+        self,
+        query: MemberQuery,
+        x_schema: TableSchema,
+        related_tables_schema: RelatedTablesSchema | None,
+        callbacks: Sequence[Callback],
+    ) -> MemberQuery:
+        for callback in callbacks:
+            query = MemberQuery(
+                *callback.on_query_preprocessing_end(self, *query)
+            )
+        self._validate_query(
+            x_context=x_schema,
+            x_query=query.x,
+            related_context_tables=related_tables_schema,
+            related_query_tables=query.related_tables,
+        )
+        return query
+
+    def _forward_batch(
+        self,
+        contexts: Sequence[MemberContext] | None,
+        queries: Sequence[MemberQuery],
+        *,
+        cache: Cache | None,
+        categorical_mask: Tensor,
+        class_values: tuple[tuple[Any, ...], ...] | None,
+        callbacks: Sequence[Callback],
+        requires_grad: bool,
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> list[TableTensor]:
+        # Stacking inside the autograd region keeps callback-captured leaves
+        # attached to the graph.
+        with inference_mode("grad" if requires_grad else "inference"):
+            context = None if contexts is None else _stack_context(contexts)
+            query = _stack_query(queries)
+            out = self._forward(
+                x_context=None if context is None else context.x,
+                y_context=None if context is None else context.y,
+                x_query=query.x,
+                related_context_tables=(
+                    None if context is None else context.related_tables
+                ),
+                related_query_tables=query.related_tables,
+                cache=cache,
+                generator=generator,
+                categorical_mask=categorical_mask,
+                **kwargs,
+            )
+            outs = _unstack(out, class_values, len(queries))
+            for i in range(len(outs)):
+                for callback in callbacks:
+                    outs[i] = callback.on_model_forward_end(self, outs[i])
+        return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]
 
     def _validate_context(
         self,
@@ -632,3 +799,116 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     "Expected related context and query tables to share the "
                     "same schema"
                 )
+
+
+def _stack(tables: Sequence[TableTensor]) -> TableTensor:
+    ref = tables[0]
+    if len(tables) == 1:
+        return ref
+    # torch.stack aligns columns by name, which would undo per-estimator column
+    # shuffles; renaming to the first member's names stacks blocks by position.
+    columns = cast(Mapping[StypeLike, Sequence[str]], ref.columns)
+    renamed: list[Tensor] = [
+        ref,
+        *(
+            table.__class__(columns=columns, **dict(table.items()))
+            for table in tables[1:]
+        ),
+    ]
+    return cast(TableTensor, torch.stack(renamed))
+
+
+def _check_compatible(tables: Sequence[TableTensor]) -> None:
+    ref = tables[0]
+    names = {stype: frozenset(names) for stype, names in ref.columns.items()}
+    counts = tuple(c.numel() for c in ref.categorical.categories)
+    for table in tables[1:]:
+        if {
+            stype: frozenset(names) for stype, names in table.columns.items()
+        } != names or (
+            tuple(c.numel() for c in table.categorical.categories) != counts
+        ):
+            raise ValueError(
+                "Estimators in one batch must share column names and class "
+                "counts; use 'estimator_batch_size=1'"
+            )
+
+
+def _stack_context(members: Sequence[MemberContext]) -> MemberContext:
+    if len(members) == 1:
+        return members[0]
+    if members[0].related_tables is not None:
+        raise ValueError("Related tables require 'estimator_batch_size=1'")
+    xs = [member.x for member in members]
+    ys = [member.y for member in members]
+    _check_compatible(xs)
+    _check_compatible(ys)
+    return MemberContext(
+        x=_stack(xs),
+        y=_stack(ys),
+        related_tables=None,
+        input_stypes=members[0].input_stypes,
+    )
+
+
+def _stack_query(members: Sequence[MemberQuery]) -> MemberQuery:
+    if len(members) == 1:
+        return members[0]
+    xs = [member.x for member in members]
+    _check_compatible(xs)
+    return MemberQuery(x=_stack(xs), related_tables=None)
+
+
+def _categorical_mask(members: Sequence[MemberContext]) -> Tensor:
+    x = members[0].x
+    mask = torch.tensor(
+        [
+            [
+                member.input_stypes.get(column) == Stype.categorical
+                for column in member.x.columns[Stype.numerical]
+            ]
+            for member in members
+        ],
+        dtype=torch.bool,
+        device=x.device,
+    )  # [E, C]
+    if len(members) == 1:
+        return mask[0]
+    # Insert the member's batch dimensions so the mask broadcasts over them:
+    return mask.view(len(members), *(1,) * (x.dim() - 2), -1)  # [E, 1, ..., C]
+
+
+def _class_values(
+    members: Sequence[MemberContext],
+) -> tuple[tuple[Any, ...], ...] | None:
+    if len(members) == 1 or members[0].y.categorical.size(-1) == 0:
+        return None
+    return tuple(
+        tuple(member.y.categorical.categories[0].tolist())
+        for member in members
+    )
+
+
+def _unstack(
+    out: TableTensor,
+    class_values: tuple[tuple[Any, ...], ...] | None,
+    num_members: int,
+) -> list[TableTensor]:
+    outs = (
+        [out]
+        if num_members == 1
+        else list(cast(tuple[TableTensor, ...], out.unbind(0)))
+    )
+    labels = out.columns[Stype.numerical]
+    if class_values is None or len(labels) != len(class_values[0]):
+        return outs
+    # The model labels columns in the first member's class order; member `e`'s
+    # column `j` holds class `class_values[e][j]`.
+    index = {value: i for i, value in enumerate(class_values[0])}
+    return [
+        TableTensor(
+            columns={Stype.numerical: [labels[index[v]] for v in values]},
+            numerical=member_out.numerical,
+        )
+        for member_out, values in zip(outs, class_values, strict=True)
+    ]

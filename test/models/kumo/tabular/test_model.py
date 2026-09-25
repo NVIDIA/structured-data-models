@@ -130,6 +130,77 @@ def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
     assert not categorical.allclose(numerical)
 
 
+@pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("estimator_batch_size", [2, None])
+def test_forward_estimator_batching(
+    task: Literal["classification", "regression"],
+    size: Literal["small", "medium"],
+    estimator_batch_size: int | None,
+) -> None:
+    model = _build(task, size)
+    x_context, x_query = _features()
+    target = _cls_target() if task == "classification" else _reg_target()
+    # Match the shuffled features and target categories in both executions.
+    expected = model(
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        num_estimators=5,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = model(
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        num_estimators=5,
+        estimator_batch_size=estimator_batch_size,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    assert actual.columns == expected.columns
+    assert actual.dtype == expected.dtype
+    assert torch.is_inference(actual)
+    torch.testing.assert_close(
+        actual=actual.numerical,
+        expected=expected.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
+
+
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_fit_predict_estimator_batching(
+    task: Literal["classification", "regression"],
+    size: Literal["small", "medium"],
+) -> None:
+    model = _build(task, size)
+    x_context, x_query = _features()
+    target = _cls_target() if task == "classification" else _reg_target()
+    expected = model(
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        num_estimators=5,
+        generator=torch.Generator().manual_seed(0),
+    )
+    model.fit(
+        x=x_context,
+        y=target,
+        num_estimators=5,
+        estimator_batch_size=None,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = model.predict(x_query)
+
+    assert actual.columns == expected.columns
+    torch.testing.assert_close(
+        actual=actual.numerical,
+        expected=expected.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
+
+
 def test_fit_predict(
     cls_model: KumoTabular,
     reg_model: KumoTabular,
