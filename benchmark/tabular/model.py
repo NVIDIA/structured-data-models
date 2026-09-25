@@ -353,7 +353,7 @@ class SDMKumoTabularModel(SDMModel):
         recipe = super()._create_recipe()
         # TabArena aligns features with its fitted generator and targets with
         # its label cleaner.
-        for pipeline in (recipe.features, recipe.target):
+        for pipeline in (recipe.target,):
             stype_dispatch = next(
                 processor
                 for processor in pipeline.modules()
