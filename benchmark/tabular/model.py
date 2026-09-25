@@ -25,6 +25,9 @@ from sdm.processing.execution import RecipeExecution
 
 Task = Literal["classification", "regression"]
 
+# Batching all estimators multiplies activation memory by their count.
+_MAX_BATCHED_CONTEXT_CELLS = 50_000
+
 
 class SDMModel(AbstractTorchModel, abc.ABC):
     """AutoGluon adapter shared by SDM in-context tabular models."""
@@ -62,6 +65,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
         self._set_default_param_value("kv_cache", False)
+        self._set_default_param_value("estimator_batch_size", "auto")
 
     def _fit(
         self,
@@ -127,6 +131,17 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             y_context = y_context[perm].unflatten(0, shape)
             num_estimators = None
         self._expand_query = num_estimators is None
+        self._estimator_batch_size = params["estimator_batch_size"]
+        if self._estimator_batch_size == "auto":
+            # Per-estimator context subsets can fit different columns.
+            if not x_context.is_cuda or self._expand_query:
+                self._estimator_batch_size = 1
+            elif x_context.size(-2) * x_context.size(-1) <= (
+                _MAX_BATCHED_CONTEXT_CELLS
+            ):
+                self._estimator_batch_size = None
+            else:
+                self._estimator_batch_size = 1
 
         recipe = self._create_recipe()
         if params["max_columns"] is not None:
@@ -146,13 +161,12 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                     y=y_context,
                     recipe=recipe,
                     num_estimators=num_estimators,
+                    estimator_batch_size=self._estimator_batch_size,
                     generator=generator,
                 )
             return
 
         self._recipe_execution = RecipeExecution(recipe)
-        # KumoTabular and TabFM need the column types before preprocessing.
-        self._schema = x_context.schema
         with (
             torch.inference_mode(),
             torch.amp.autocast(self._device.type, enabled=False),
@@ -215,24 +229,31 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 generator = torch.Generator(self._device).set_state(
                     self._rng_state
                 )
-                outputs = []
-                for context, query in zip(self._contexts, queries):
+                size = self._estimator_batch_size or len(self._contexts)
+                outputs: list[sdm.TableTensor] = []
+                for start in range(0, len(self._contexts), size):
+                    contexts = [
+                        context._replace(
+                            x=cast(
+                                sdm.TableTensor, context.x.to(self._device)
+                            ),
+                            y=cast(
+                                sdm.TableTensor, context.y.to(self._device)
+                            ),
+                        )
+                        for context in self._contexts[start : start + size]
+                    ]
                     with torch.amp.autocast(
                         self._device.type,
                         self.autocast_dtype,
                         enabled=x_query.is_cuda,
                     ):
-                        out = self.model._forward(
-                            x_context=context.x.to(self._device),
-                            y_context=context.y.to(self._device),
-                            x_query=query.x,
-                            related_context_tables=None,
-                            related_query_tables=None,
-                            cache=None,
+                        outputs += self.model._forward_members(
+                            contexts,
+                            queries[start : start + size],
+                            estimator_batch_size=None,
                             generator=generator,
-                            _schema=self._schema,
                         )
-                    outputs.append(out.to(query.x.dtype))
 
                 if self.problem_type == REGRESSION:
                     outputs = list(

@@ -225,10 +225,7 @@ class TabICLv2(ICLModel):
         out = self.models[Task.classification](
             x, y, cache=cache, num_classes=len(classes)
         )
-        return TableTensor(
-            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=out[..., : len(classes)],
-        )
+        return TableTensor(numerical=out[..., : len(classes)])
 
 
 class _TabICLv2(torch.nn.Module):

@@ -234,10 +234,7 @@ class KumoRelational(ICLModel):
                 numerical=out,
             )
 
-        return TableTensor(
-            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=out[..., : len(classes)],
-        )
+        return TableTensor(numerical=out[..., : len(classes)])
 
     @classmethod
     def default_recipe(cls) -> Recipe:
