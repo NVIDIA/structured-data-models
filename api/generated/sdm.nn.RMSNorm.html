@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>SentenceTransformer - Structured Data Models</title><link rel="shortcut icon" href="../../_static/nvidia.svg"/><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="AddCalendarFields" href="sdm.processing.datetime.AddCalendarFields.html" /><link rel="prev" title="TFIDF" href="sdm.processing.text.TFIDF.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>RMSNorm - Structured Data Models</title><link rel="shortcut icon" href="../../_static/nvidia.svg"/><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="QueryScaling" href="sdm.nn.QueryScaling.html" /><link rel="prev" title="SoftplusScale" href="sdm.nn.SoftplusScale.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -20,7 +20,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="SentenceTransformer"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="RMSNorm"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -96,7 +96,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.relational.RelationalSampler.html">RelationalSampler</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="reference internal" href="../processing.html">sdm.processing</a><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../processing.html">sdm.processing</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html">EnsembleProcessor</a></li>
@@ -133,18 +133,18 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.AddCategoryCounts.html">AddCategoryCounts</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.text.TFIDF.html">TFIDF</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">SentenceTransformer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.text.SentenceTransformer.html">SentenceTransformer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.AverageEstimators.html">AverageEstimators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.Softmax.html">Softmax</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.SortQuantiles.html">SortQuantiles</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../nn.html">sdm.nn</a><ul>
+<li class="toctree-l1 current"><a class="reference internal" href="../nn.html">sdm.nn</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.RotaryEmbedding.html">RotaryEmbedding</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.SwiGLU.html">SwiGLU</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.SoftplusScale.html">SoftplusScale</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.nn.RMSNorm.html">RMSNorm</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">RMSNorm</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.QueryScaling.html">QueryScaling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.QASSMax.html">QASSMax</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.LogScale.html">LogScale</a></li>
@@ -180,8 +180,10 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.text.SentenceTransformer"><code class="docutils literal notranslate"><span class="pre">SentenceTransformer</span></code></a></li>
-<li><a class="reference internal" href="#capabilities">Capabilities</a></li>
+<li><a class="reference internal" href="#sdm.nn.RMSNorm"><code class="docutils literal notranslate"><span class="pre">RMSNorm</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.nn.RMSNorm.forward"><code class="docutils literal notranslate"><span class="pre">RMSNorm.forward()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -199,11 +201,11 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="1" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <a itemprop="item" href="../processing.html"><span itemprop="name">sdm.processing</span></a>
+        <a itemprop="item" href="../nn.html"><span itemprop="name">sdm.nn</span></a>
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">SentenceTransformer</strong>
+        <strong itemprop="name">RMSNorm</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -216,44 +218,38 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="sentencetransformer">
-<h1>SentenceTransformer<a class="headerlink" href="#sentencetransformer" title="Link to this heading">#</a></h1>
+          <section id="rmsnorm">
+<h1>RMSNorm<a class="headerlink" href="#rmsnorm" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.text.SentenceTransformer">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.text.</span></span><span class="sig-name descname"><span class="pre">SentenceTransformer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.text.SentenceTransformer" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
-<p>Transform text columns with a
-<code class="xref py py-class docutils literal notranslate"><span class="pre">sentence_transformers.SentenceTransformer</span></code> model.</p>
+<dt class="sig sig-object py" id="sdm.nn.RMSNorm">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.nn.</span></span><span class="sig-name descname"><span class="pre">RMSNorm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">normalized_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><span class="pre">Size</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elementwise_affine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.nn.RMSNorm" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.normalization.RMSNorm.html#torch.nn.modules.normalization.RMSNorm" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">RMSNorm</span></code></a></p>
+<p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html#torch.nn.RMSNorm" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.RMSNorm</span></code></a> that dispatches to an efficient kernel.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>model_name</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Model name or local path passed to
-<code class="xref py py-class docutils literal notranslate"><span class="pre">sentence_transformers.SentenceTransformer</span></code></p></li>
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Batch size passed to
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">sentence_transformers.SentenceTransformer.encode()</span></code>.
-Adjusting the batch size can significantly improve processing
-speed. The optimal value depends on your hardware, model size,
-precision, and input length.</p></li>
+<li><p><strong>normalized_shape</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>...</em><em>]</em>)</p></li>
+<li><p><strong>eps</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>elementwise_affine</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
 </ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.nn.RMSNorm.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.nn.RMSNorm.forward" title="Link to this definition">#</a></dt>
+<dd><p>Runs the forward pass.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>x</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
 
-<section id="capabilities">
-<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
-<div class="table-wrapper docutils container">
-<table class="docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><strong>Handled Semantic Types</strong></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">text</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p><strong>Requires Fitting</strong></p></td>
-<td><p>❌</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
+</dd></dl>
+
 </section>
 
         </article><button class="back-to-top" type="button">
@@ -262,16 +258,16 @@ precision, and input length.</p></li>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.text.TFIDF.html">
+    <a href="sdm.nn.SoftplusScale.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">TFIDF</div></div>
+        <span>Previous</span><div class="title">SoftplusScale</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.datetime.AddCalendarFields.html">
+    <a href="sdm.nn.QueryScaling.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">AddCalendarFields</div>
+        <div class="title">QueryScaling</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>

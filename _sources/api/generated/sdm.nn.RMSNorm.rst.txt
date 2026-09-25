@@ -1,0 +1,8 @@
+﻿RMSNorm
+=======
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: RMSNorm
+   :members:
+   :show-inheritance:
