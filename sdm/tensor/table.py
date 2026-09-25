@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import functools
 import math
+import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
+import numpy as np
 import pyarrow as pa
 import torch
 from torch import Tensor
@@ -26,6 +28,16 @@ if TYPE_CHECKING:
     import pandas as pd
 
 aten = torch.ops.aten
+
+_NUMPY_TORCH_DTYPES = {
+    np.dtype(np.float16): torch.float16,
+    np.dtype(np.float32): torch.float32,
+    np.dtype(np.float64): torch.float64,
+}
+_TORCH_NUMPY_DTYPES = {
+    torch_dtype: numpy_dtype
+    for numpy_dtype, torch_dtype in _NUMPY_TORCH_DTYPES.items()
+}
 
 
 def preserve_view_inference_mode(fn: Callable) -> Callable:
@@ -60,6 +72,43 @@ def preserve_autograd_state(fn: Callable) -> Callable:
             return fn(*args, **kwargs)
 
     return wrapper
+
+
+def _move_categories(
+    categories: Sequence[Tensor],
+    device: torch.device | str | None,
+) -> tuple[Tensor, ...]:
+    device = _resolve_device(device)
+    if device is None or device.type == "cpu":
+        return tuple(categories)
+
+    groups: dict[
+        tuple[type[Tensor], torch.dtype, torch.dtype | None], list[int]
+    ] = defaultdict(list)
+    moved: list[Tensor | None] = [None] * len(categories)
+    for i, category in enumerate(categories):
+        if type(category) is Tensor or isinstance(category, StringTensor):
+            offset_dtype = (
+                category.data_offset[1].dtype
+                if isinstance(category, StringTensor)
+                else None
+            )
+            groups[(type(category), category.dtype, offset_dtype)].append(i)
+        else:
+            moved[i] = category.to(device)
+
+    for indices in groups.values():
+        tensors = [categories[i] for i in indices]
+        if len(tensors) == 1:
+            parts = (tensors[0].to(device),)
+        else:
+            sizes = [tensor.numel() for tensor in tensors]
+            parts = torch.cat(tensors).to(device).split(sizes)
+        for i, part in zip(indices, parts):
+            moved[i] = part
+
+    assert all(category is not None for category in moved)
+    return cast(tuple[Tensor, ...], tuple(moved))
 
 
 @dataclass(frozen=True)
@@ -417,6 +466,170 @@ class TableTensor(Tensor):
             device: The device.
         """
         import pandas as pd
+
+        columns: dict[Stype, list[str]] = defaultdict(list)
+        for name, stype in stypes.items():
+            columns[Stype(stype)].append(name)
+
+        if columns and set(columns).issubset(
+            {Stype.numerical, Stype.categorical}
+        ):
+            target_device = (
+                torch.get_default_device() if device is None else device
+            )
+            blocks: dict[Stype, Tensor] = {}
+
+            if numerical_columns := columns.get(Stype.numerical):
+                dtype = torch.get_default_dtype()
+                numpy_dtype = _TORCH_NUMPY_DTYPES.get(
+                    dtype, np.dtype(np.float32)
+                )
+                numerical_df = (
+                    df
+                    if len(numerical_columns) == len(df.columns)
+                    and numerical_columns == df.columns.tolist()
+                    else df[numerical_columns]
+                )
+                if len(df) == 0:
+                    if any(
+                        pd.api.types.is_complex_dtype(dtype)
+                        for dtype in numerical_df.dtypes
+                    ):
+                        raise TypeError(
+                            "Expected numerical columns to contain real values"
+                        )
+                    blocks[Stype.numerical] = torch.empty(
+                        (0, len(numerical_columns)),
+                        device=target_device,
+                        dtype=dtype,
+                    )
+                else:
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.simplefilter(
+                                "error", np.exceptions.ComplexWarning
+                            )
+                            values = numerical_df.to_numpy(
+                                dtype=numpy_dtype,
+                                na_value=np.nan,
+                            )
+                    except np.exceptions.ComplexWarning as error:
+                        raise TypeError(
+                            "Expected numerical columns to contain real values"
+                        ) from error
+                    values = values.copy(order="C")
+                    blocks[Stype.numerical] = torch.as_tensor(
+                        values,
+                        device=target_device,
+                        dtype=dtype,
+                    )
+
+            if categorical_columns := columns.get(Stype.categorical):
+                categorical_series = [df[name] for name in categorical_columns]
+                all_categorical = all(
+                    isinstance(ser.dtype, pd.CategoricalDtype)
+                    for ser in categorical_series
+                )
+                use_int64_code = not all_categorical and any(
+                    isinstance(ser.dtype, pd.ArrowDtype)
+                    and pa.types.is_dictionary(ser.dtype.pyarrow_dtype)
+                    and pa.types.is_int64(ser.dtype.pyarrow_dtype.index_type)
+                    for ser in categorical_series
+                )
+                numpy_code_dtype = np.int64 if use_int64_code else np.int32
+                torch_code_dtype = (
+                    torch.int64 if use_int64_code else torch.int32
+                )
+                if all_categorical:
+                    code = np.stack(
+                        [ser.array.codes for ser in categorical_series], axis=1
+                    ).astype(
+                        numpy_code_dtype,
+                        copy=False,
+                    )
+                else:
+                    code = np.empty(
+                        (len(df), len(categorical_columns)),
+                        dtype=numpy_code_dtype,
+                    )
+                categories: list[Tensor] = []
+                for i, ser in enumerate(categorical_series):
+                    if all_categorical:
+                        categorical = ser.array
+                        values = categorical.categories
+                    elif isinstance(ser.dtype, pd.CategoricalDtype):
+                        categorical = ser.array
+                        code[:, i] = categorical.codes
+                        values = categorical.categories
+                    elif ser.dtype.kind == "f" or (
+                        isinstance(ser.dtype, pd.ArrowDtype)
+                        and pa.types.is_dictionary(ser.dtype.pyarrow_dtype)
+                    ):
+                        categorical = CategoricalTensor.from_arrow(
+                            pa.array(ser, from_pandas=True)
+                        )
+                        code[:, i] = categorical.code[:, 0].numpy()
+                        categories.append(categorical.categories[0])
+                        continue
+                    else:
+                        column_code, values = pd.factorize(
+                            ser,
+                            sort=False,
+                            use_na_sentinel=True,
+                        )
+                        code[:, i] = column_code
+
+                    category_dtype = values.dtype
+                    if category_dtype.kind in "biuf":
+                        category = torch.from_numpy(np.asarray(values).copy())
+                    else:
+                        array = pa.array(values, from_pandas=True)
+                        is_string = pa.types.is_string(array.type)
+                        is_large_string = pa.types.is_large_string(array.type)
+                        if is_string or is_large_string:
+                            category = StringTensor.from_arrow(
+                                array,
+                                device="cpu",
+                            )
+                        elif pa.types.is_null(array.type):
+                            category = torch.empty(
+                                0,
+                                dtype=torch.int64,
+                                device="cpu",
+                            )
+                        elif ser.dtype.kind == "O" and (
+                            pa.types.is_boolean(array.type)
+                            or pa.types.is_integer(array.type)
+                            or pa.types.is_floating(array.type)
+                        ):
+                            categorical = CategoricalTensor.from_arrow(
+                                pa.array(ser, from_pandas=True)
+                            )
+                            code[:, i] = categorical.code[:, 0].numpy()
+                            category = categorical.categories[0]
+                        else:
+                            category = arrow_as_tensor(array, device="cpu")
+                    categories.append(category)
+
+                code_tensor = (
+                    torch.from_numpy(code).to(target_device)
+                    if len(df) > 0
+                    else torch.empty(
+                        (0, len(categorical_columns)),
+                        dtype=torch_code_dtype,
+                        device=target_device,
+                    )
+                )
+                blocks[Stype.categorical] = CategoricalTensor(
+                    code=code_tensor,
+                    categories=_move_categories(categories, target_device),
+                )
+
+            return cls(
+                size=(len(df),),
+                columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+                **blocks,
+            )
 
         df = df[stypes.keys()]
         # Resolve period ordinals before Arrow casts them as timestamps, which
