@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import os
+
 from torch import Tensor
 
 from sdm import Stype, TableTensor
@@ -15,6 +17,8 @@ def _check_categorical_codes(table: TableTensor) -> None:
     Args:
         table: The table whose categorical codes are validated.
     """
+    if os.getenv("SDM_ENABLE_CATEGORY_CHECKS", "1") == "0":
+        return
     columns = table.columns[Stype.categorical]
     for index, category in enumerate(table.categorical.categories):
         codes = table.categorical[..., index]
@@ -35,6 +39,8 @@ def _check_categories(
         table: The table whose category vocabularies are validated.
         categories: The fitted category vocabulary of every column.
     """
+    if os.getenv("SDM_ENABLE_CATEGORY_CHECKS", "1") == "0":
+        return
     columns = table.columns[Stype.categorical]
     if len(table.categorical.categories) != len(categories):
         raise ValueError(
