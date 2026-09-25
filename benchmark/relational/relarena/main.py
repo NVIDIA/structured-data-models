@@ -41,22 +41,21 @@ def search_space(stats: TaskStats) -> SearchSpace:
     )
 
 
-@lru_cache(maxsize=1)
 def get_context(
     df: pd.DataFrame,
     history: pd.DataFrame,
     task: EntityTask,
     num_lags: int,
+    with_target: bool,
 ) -> sdm.TableTensor:
     """Return the context table with added historical target features."""
-    print("GET CONTEXT")
     stypes = {
         task.entity_col: "id",
         task.time_col: "datetime",
     }
-    if task.target_col in df and task.task_type == TaskType.REGRESSION:
+    if with_target and task.task_type == TaskType.REGRESSION:
         stypes[task.target_col] = "numerical"
-    elif task.target_col in df:
+    elif with_target:
         stypes[task.target_col] = "categorical"
 
     history_time_col = "__history_time__"
@@ -115,7 +114,6 @@ def get_sampler(
     text: Literal["off", "drop"],
 ) -> sdm.relational.RelationalSampler:
     r"""Initialize the relational sampler to gather time-aware subgraphs."""
-    print("GET SAMPLER")
     tables = {}
     for name, table in db.table_dict.items():
         stypes = sdm.infer_stypes(
@@ -127,7 +125,7 @@ def get_sampler(
             text=text,
             unsupported="drop",
         )
-        if name == "drivers" and text == "off":
+        if name == "drivers" and text == "drop":
             # Discard misclassified text columns:
             del stypes["forename"], stypes["surname"]
         tables[name] = sdm.TableTensor.from_pandas(table.df, stypes)
@@ -182,15 +180,19 @@ class KumoRelationalModel(RelArenaModel):
             history=train_table.df,
             task=task,
             num_lags=20,
+            with_target=True,
         )
 
-        context_size = 20_000  # TODO
+        if task.task_type == TaskType.REGRESSION:
+            context_size = 2_000  # TODO
+        else:
+            context_size = 20_000  # TODO
         num_estimators = 8
 
         if (
             task.task_type != TaskType.REGRESSION
             and len(context) > context_size * num_estimators
-        ):
+        ):  # Sort by recency for classification tasks:
             perm = context.datetime.view(-1).argsort(descending=True)
             context = context[perm]
             context = context[: context_size * num_estimators]
@@ -247,11 +249,14 @@ class KumoRelationalModel(RelArenaModel):
         table: Table,
     ) -> np.ndarray:
 
+        device = torch.device("cuda:0")
+
         query = get_context(
             df=table.df,
             history=self.train_df,
             task=task,
             num_lags=20,
+            with_target=False,
         )
         if self.expand_query:
             query = query.expand(8, *query.size())
@@ -268,9 +273,9 @@ class KumoRelationalModel(RelArenaModel):
                 },
                 num_neighbors=num_neighbors,
                 task_time_column=task.time_col,
-            ).to(self.model.device)
+            ).to(device)
 
-            with torch.amp.autocast(self.model.device.type, torch.float16):
+            with torch.amp.autocast(device.type, torch.float16):
                 outs.append(self.model.predict(batch, related_tables))
         out = cast(sdm.TableTensor, torch.cat(outs, dim=-2))
 
