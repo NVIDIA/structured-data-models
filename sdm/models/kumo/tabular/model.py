@@ -15,7 +15,6 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -35,7 +34,7 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
         "num_icl_heads": 8,
         "num_icl_key_value_heads_for_query": None,
     },
-    "large": {
+    "medium": {
         "cell_channels": 256,
         "num_embedding_layers": 6,
         "num_embedding_heads": 4,
@@ -97,7 +96,7 @@ class KumoTabular(ICLModel):
     Args:
         task: The tasks to initialize. If ``None``, all tasks supported by this
             model are initialized.
-        size: The size of the model.
+        size: The model size, ``"small"`` or ``"medium"``.
         pretrained: Whether to load pretrained checkpoints.
         device: The device.
     """
@@ -114,7 +113,7 @@ class KumoTabular(ICLModel):
     def __init__(
         self,
         task: TaskLike | Iterable[TaskLike] | None = None,
-        size: Literal["small", "large"] = "large",
+        size: Literal["small", "medium"] = "small",
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
@@ -143,7 +142,7 @@ class KumoTabular(ICLModel):
 
     def _load_from_pretrained(
         self,
-        size: Literal["small", "large"],
+        size: Literal["small", "medium"],
         device: torch.device | str | None,
     ) -> _KumoTabular:
         device = torch.get_default_device() if device is None else device
@@ -158,14 +157,9 @@ class KumoTabular(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Tabular",
                 filename=filename,
-                revision="v1.0.3",
+                revision="v1.0.6",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(
-                ckpt=ckpt["model"],
-                is_classifier=task == Task.classification,
-                num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
-            )
             model.load_state_dict(ckpt, assign=True)
 
         return model
