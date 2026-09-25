@@ -15,7 +15,6 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -164,11 +163,6 @@ class KumoTabular(ICLModel):
                 revision="v1.0.7",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(
-                ckpt=ckpt["model"],
-                is_classifier=task == Task.classification,
-                num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
-            )
             model.load_state_dict(ckpt, assign=True)
 
         return model
