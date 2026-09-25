@@ -97,9 +97,8 @@ class KumoTabular(ICLModel):
         task: The tasks to initialize. If ``None``, all tasks supported by this
             model are initialized.
         size: The model size, one of ``"small"``, ``"medium"``, or
-            ``"large"``.
-        pretrained: Whether to load pretrained checkpoints. Checkpoints are
-            currently available for ``"small"`` and ``"medium"``.
+            ``"large"``. Defaults to ``"large"``.
+        pretrained: Whether to load pretrained checkpoints.
         device: The device for model parameters. If ``None``, uses PyTorch's
             default device.
     """
@@ -116,7 +115,7 @@ class KumoTabular(ICLModel):
     def __init__(
         self,
         task: TaskLike | Iterable[TaskLike] | None = None,
-        size: Literal["small", "medium", "large"] = "small",
+        size: Literal["small", "medium", "large"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
