@@ -25,6 +25,10 @@ from sdm.processing.execution import RecipeExecution
 
 Task = Literal["classification", "regression"]
 
+# Batching all estimators multiplies activation memory by their count, so
+# "auto" only does it for problems up to this many context and query cells.
+_BATCH_ALL_MAX_CELLS = 50_000
+
 
 class SDMModel(AbstractTorchModel, abc.ABC):
     """AutoGluon adapter shared by SDM in-context tabular models."""
@@ -62,6 +66,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
         self._set_default_param_value("kv_cache", False)
+        self._set_default_param_value("estimator_batch_size", "auto")
 
     def _fit(
         self,
@@ -127,6 +132,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             y_context = y_context[perm].unflatten(0, shape)
             num_estimators = None
         self._expand_query = num_estimators is None
+        self._context_rows = x_context.size(-2)
 
         recipe = self._create_recipe()
         if params["max_columns"] is not None:
@@ -151,8 +157,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             return
 
         self._recipe_execution = RecipeExecution(recipe)
-        # KumoTabular and TabFM need the column types before preprocessing.
-        self._schema = x_context.schema
         with (
             torch.inference_mode(),
             torch.amp.autocast(self._device.type, enabled=False),
@@ -202,7 +206,10 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 self.autocast_dtype,
                 enabled=x_query.is_cuda,
             ):
-                out = self.model.predict(x_query)
+                out = self.model.predict(
+                    x_query,
+                    estimator_batch_size=self._estimator_batch_size(x_query),
+                )
         else:
             with (
                 torch.inference_mode(),
@@ -215,24 +222,33 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 generator = torch.Generator(self._device).set_state(
                     self._rng_state
                 )
-                outputs = []
-                for context, query in zip(self._contexts, queries):
+                size = self._estimator_batch_size(x_query)
+                size = len(self._contexts) if size is None else size
+                outputs: list[sdm.TableTensor] = []
+                for start in range(0, len(self._contexts), size):
+                    # Move only the current batch of offloaded contexts.
+                    contexts = [
+                        context._replace(
+                            x=cast(
+                                sdm.TableTensor, context.x.to(self._device)
+                            ),
+                            y=cast(
+                                sdm.TableTensor, context.y.to(self._device)
+                            ),
+                        )
+                        for context in self._contexts[start : start + size]
+                    ]
                     with torch.amp.autocast(
                         self._device.type,
                         self.autocast_dtype,
                         enabled=x_query.is_cuda,
                     ):
-                        out = self.model._forward(
-                            x_context=context.x.to(self._device),
-                            y_context=context.y.to(self._device),
-                            x_query=query.x,
-                            related_context_tables=None,
-                            related_query_tables=None,
-                            cache=None,
+                        outputs += self.model._forward_members(
+                            contexts,
+                            queries[start : start + size],
+                            estimator_batch_size=None,
                             generator=generator,
-                            _schema=self._schema,
                         )
-                    outputs.append(out.to(query.x.dtype))
 
                 if self.problem_type == REGRESSION:
                     outputs = list(
@@ -250,6 +266,16 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         indices = [columns.index(str(i)) for i in range(self.num_classes)]
         probabilities = out.numerical[..., indices].float().cpu().numpy()
         return self._convert_proba_to_unified_form(probabilities)
+
+    def _estimator_batch_size(self, x: torch.Tensor) -> int | None:
+        estimator_batch_size = self._get_model_params()["estimator_batch_size"]
+        if estimator_batch_size != "auto":
+            return estimator_batch_size
+        # Subsampled contexts can fit different columns per estimator.
+        if not x.is_cuda or self._expand_query:
+            return 1
+        cells = (self._context_rows + x.size(-2)) * x.size(-1)
+        return None if cells <= _BATCH_ALL_MAX_CELLS else 1
 
     def get_device(self) -> str:
         return str(next(self.model.parameters()).device)

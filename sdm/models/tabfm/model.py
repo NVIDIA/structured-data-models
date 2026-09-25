@@ -34,7 +34,6 @@ from sdm.models.tabfm.ckpt import remap_ckpt
 from sdm.models.tabfm.icl import ICLBlock
 from sdm.models.tabfm.recipe import default_recipe
 from sdm.models.tabfm.row_embedding import RowEmbedding
-from sdm.tensor.table import TableSchema
 
 
 class TabFM(ICLModel):
@@ -147,22 +146,6 @@ class TabFM(ICLModel):
 
         return self
 
-    def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
-        x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
-        if not isinstance(x_context, TableTensor):
-            x_context = TableTensor.from_tensor(x_context)
-        kwargs["_schema"] = x_context.schema
-        return super().forward(*args, **kwargs)
-
-    def fit(self, *args: Any, **kwargs: Any) -> None:
-        r""":meta private:"""  # noqa: D415
-        x = kwargs["x"] if "x" in kwargs else args[0]
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        kwargs["_schema"] = x.schema
-        return super().fit(*args, **kwargs)
-
     def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
@@ -172,6 +155,8 @@ class TabFM(ICLModel):
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
+        *,
+        categorical_mask: Tensor,  # [C] or [E, 1, ..., C]
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 1]
 
@@ -204,22 +189,6 @@ class TabFM(ICLModel):
                 f"(got {len(classes)})"
             )
 
-        if cache is None or cache.is_recording:
-            assert x_context is not None
-            schema: TableSchema = kwargs["_schema"]
-            categorical_columns = set(schema.columns[Stype.categorical])
-            categorical_mask = torch.tensor(
-                [
-                    column in categorical_columns
-                    for column in x_context.columns[Stype.numerical]
-                ],
-                device=x.device,
-                dtype=torch.bool,
-            )
-            if cache is not None:
-                cache["categorical_mask"] = categorical_mask
-        else:
-            categorical_mask = cast(Tensor, cache["categorical_mask"])
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
         task = Task.classification if classes is not None else Task.regression

@@ -8,10 +8,12 @@ from collections.abc import (
     Iterator,
     Mapping,
     MutableMapping,
+    Sequence,
 )
 from enum import StrEnum
-from typing import NamedTuple, Self
+from typing import NamedTuple, Self, cast
 
+import torch
 from torch import Tensor
 
 from sdm.tensor.mixin import DeviceMixin
@@ -81,6 +83,70 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
             tensor.numel() * tensor.element_size()
             for tensor in self._tensors()
         )
+
+    @classmethod
+    def stack(
+        cls,
+        caches: Sequence[Self],
+        *,
+        device: torch.device | None = None,
+        non_blocking: bool = False,
+    ) -> Self:
+        r"""Stack the values of caches along a new leading dimension.
+
+        Every value is copied into its slice of a freshly allocated buffer, so
+        pinned caches can be assembled on ``device`` without an intermediate
+        host copy. The stacked cache is replayed with inputs that carry the
+        same leading dimension.
+
+        Args:
+            caches: Caches with identical keys whose values are tensors or
+                :class:`KVCacheEntry` instances of matching shapes.
+            device: Device of the stacked buffers. If ``None``, the device of
+                the first cache is used.
+            non_blocking: Whether copies from pinned memory are asynchronous
+                with respect to the host.
+        """
+
+        def _stack(tensors: Sequence[Tensor]) -> Tensor:
+            ref = tensors[0]
+            if any(
+                tensor.shape != ref.shape or tensor.dtype != ref.dtype
+                for tensor in tensors[1:]
+            ):
+                raise ValueError(
+                    "Cache tensors must share shapes and dtypes to batch "
+                    "estimators"
+                )
+            out = torch.empty(
+                (len(tensors), *ref.shape),
+                dtype=ref.dtype,
+                device=ref.device if device is None else device,
+            )
+            for slot, tensor in zip(out.unbind(0), tensors, strict=True):
+                slot.copy_(tensor, non_blocking=non_blocking)
+            return out
+
+        first = caches[0]
+        items: dict[Hashable, object] = {}
+        for key, value in first.items():
+            if isinstance(value, KVCacheEntry):
+                entries = [cast(KVCacheEntry, cache[key]) for cache in caches]
+                items[key] = KVCacheEntry(
+                    key=_stack([entry.key for entry in entries]),
+                    value=_stack([entry.value for entry in entries]),
+                )
+            elif isinstance(value, Tensor):
+                items[key] = _stack(
+                    [cast(Tensor, cache[key]) for cache in caches]
+                )
+            else:
+                raise ValueError(
+                    "Cache values must be tensors to batch estimators"
+                )
+        out = cls(items)
+        out._mode = first._mode
+        return out
 
     def freeze(self) -> Self:
         r"""Freeze the cache to replay mode."""

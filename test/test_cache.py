@@ -3,6 +3,7 @@
 
 from typing import cast
 
+import pytest
 import torch
 
 from sdm.cache import Cache, KVCacheEntry
@@ -45,3 +46,40 @@ def test_cache_size() -> None:
     )
 
     assert cache.size() == 3 * 4 + 2 * 8 + 5 * 1 + 4 * 2
+
+
+def test_cache_stack() -> None:
+    caches = [
+        Cache(
+            entry=KVCacheEntry(key=torch.randn(3, 2), value=torch.randn(3, 4)),
+            mean=torch.randn(1, 2),
+        ).freeze()
+        for _ in range(2)
+    ]
+
+    stacked = Cache.stack(caches)
+
+    assert stacked.is_replaying
+    assert stacked.keys() == caches[0].keys()
+    entry = cast(KVCacheEntry, stacked["entry"])
+    assert entry.key.size() == (2, 3, 2)
+    assert entry.value.size() == (2, 3, 4)
+    assert cast(torch.Tensor, stacked["mean"]).size() == (2, 1, 2)
+    for i, cache in enumerate(caches):
+        assert torch.equal(
+            entry.key[i], cast(KVCacheEntry, cache["entry"]).key
+        )
+        assert torch.equal(
+            entry.value[i], cast(KVCacheEntry, cache["entry"]).value
+        )
+        assert torch.equal(
+            cast(torch.Tensor, stacked["mean"])[i],
+            cast(torch.Tensor, cache["mean"]),
+        )
+
+    with pytest.raises(ValueError, match="share shapes"):
+        Cache.stack(
+            [Cache(mean=torch.randn(1, 2)), Cache(mean=torch.randn(2))]
+        )
+    with pytest.raises(ValueError, match="must be tensors"):
+        Cache.stack([Cache(trees=[1]), Cache(trees=[2])])

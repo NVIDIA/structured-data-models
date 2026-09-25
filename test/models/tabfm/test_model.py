@@ -14,9 +14,15 @@ from sdm.testing import withCUDA
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+@pytest.mark.parametrize(
+    ("forward_estimator_batch_size", "predict_estimator_batch_size"),
+    [(1, 1), (1, 8), (8, 1), (2, None), (None, 2)],
+)
 def test_forward(
     device: torch.device,
     dtype: torch.dtype,
+    forward_estimator_batch_size: int | None,
+    predict_estimator_batch_size: int | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -36,6 +42,10 @@ def test_forward(
         pretrained=False,
         device=device,
     )
+    # Make predictions sensitive to cached attention and feature permutations.
+    for parameter in model.parameters():
+        if not parameter.any():
+            torch.nn.init.normal_(parameter, std=0.02)
     if device.type == "cpu":
         assert repr(model) == "TabFM()"
     else:
@@ -55,7 +65,14 @@ def test_forward(
         y_context = torch.tensor([0, 1, 0, 1, 0], device=device).unsqueeze(-1)
 
     generator = torch.Generator(device=device).manual_seed(1)
-    out = model(x_context, y_context, x_query, generator=generator)
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=9,
+        estimator_batch_size=forward_estimator_batch_size,
+        generator=generator,
+    )
     assert out.dtype == x_context.dtype
     assert out.device == device
     assert torch.is_inference(out)
@@ -65,8 +82,16 @@ def test_forward(
         assert out.size() == (3, 2)
 
     generator = torch.Generator(device=device).manual_seed(1)
-    model.fit(x_context, y_context, generator=generator)
+    model.fit(
+        x=x_context,
+        y=y_context,
+        num_estimators=9,
+        generator=generator,
+    )
     assert model._cache is not None
     assert model._cache.size() > 0
-    assert model.predict(x_query).allclose(out, atol=1e-4, rtol=1e-4)
+    assert model.predict(
+        x=x_query,
+        estimator_batch_size=predict_estimator_batch_size,
+    ).allclose(out, atol=1e-4, rtol=1e-4)
     model.clear()

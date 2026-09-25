@@ -211,7 +211,7 @@ class KumoRelational(ICLModel):
         classes: Tensor | None = None
         if y_context is not None and y_context.categorical.size(-1) > 0:
             classes = y_context.categorical.categories[0]
-        elif cache is not None:
+        elif cache is not None and cache.is_replaying:
             classes = cast(Tensor | None, cache["classes"])
 
         task = Task.classification if classes is not None else Task.regression
