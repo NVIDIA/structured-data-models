@@ -204,7 +204,11 @@ class SDMTabICLv2Model(SDMModel):
 
 
 def _load_kumo_network(*, task: str, device: torch.device) -> torch.nn.Module:
-    return sdm.models.KumoTabular(task=task, device=device).models[task]
+    return sdm.models.KumoTabular(
+        task=task,
+        device=device,
+        weight_dtype=torch.float16 if device.type == "cuda" else None,
+    ).models[task]
 
 
 class SDMKumoTabularModel(SDMModel):
