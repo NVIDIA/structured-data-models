@@ -299,7 +299,12 @@ class KumoTabular(ICLModel):
         classes: list[Tensor] | None = None
         if is_categorical[0]:
             classes = [y.categorical.categories[0] for y in y_contexts]
-            if any(len(c) > self.ecoc.max_classes for c in classes):
+            if any(
+                len(c) > self.ecoc.max_classes
+                or type(c) is not type(classes[0])
+                or c.dtype != classes[0].dtype
+                for c in classes
+            ):
                 return None
             y = torch.stack(
                 [y.categorical.code.squeeze(-1) for y in y_contexts]

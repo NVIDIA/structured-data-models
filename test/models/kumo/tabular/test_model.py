@@ -7,7 +7,13 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    EnsembleTable,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm.models import KumoTabular
 from sdm.models.callback import Callback
 
@@ -193,6 +199,33 @@ def test_fit_predict(
         atol=1e-4,
         rtol=1e-4,
     )
+
+
+def test_predict_with_different_category_types(cls_model: KumoTabular) -> None:
+    x_context, x_query = _features()
+    target = _cls_target()
+    string_target = target.replace_blocks(
+        categorical=CategoricalTensor(
+            code=target.categorical.code,
+            categories=(StringTensor.from_list(["0", "10", "20"]),),
+        )
+    )
+    cls_model.fit(
+        x=x_context,
+        y=EnsembleTable.from_tables(
+            tables=[target, string_target],
+            member_table_ids=[0, 1],
+        ),
+        recipe=_recipe(),
+        num_estimators=2,
+        kv_cache=False,
+    )
+
+    expected = cls_model.predict(x_query, callbacks=[Callback()])
+    actual = cls_model.predict(x_query)
+
+    assert actual.columns[Stype.numerical] == ("0", "10", "20")
+    torch.testing.assert_close(actual.numerical, expected.numerical)
 
 
 def test_missing_values_pass_through_fit_predict(
