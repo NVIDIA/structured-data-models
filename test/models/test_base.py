@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pickle
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -13,6 +14,7 @@ from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models.callback import Callback
 from sdm.processing import InvertibleMixin, Processor
+from sdm.testing import onlyCUDA
 
 
 @dataclass
@@ -67,6 +69,39 @@ class _UnsupportedRecordingModel(_RecordingModel):
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_multi_target = False
     supports_related_tables = False
+
+
+class _CachingRecordingModel(_RecordingModel):
+    def _forward(
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> TableTensor:
+        if cache is not None and cache.is_recording:
+            assert x_context is not None
+            cache["context"] = x_context.numerical
+        out = super()._forward(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_context_tables,
+            related_query_tables=related_query_tables,
+            cache=cache,
+            generator=generator,
+            **kwargs,
+        )
+        if cache is not None and cache.is_replaying:
+            context = cast(torch.Tensor, cache["context"])
+            out = out.replace_blocks(
+                numerical=out.numerical + context.sum(),
+            )
+        return out
 
 
 class MyCallback(Callback):
@@ -424,6 +459,83 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         model.calls[-1].related_query_tables.tables["users"].numerical,
         torch.tensor([[3.0]]),
     )
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    ("offload_cache", "free_memory", "expected_offloaded"),
+    [
+        (None, 2**60, False),
+        (None, 0, True),
+        (False, 0, False),
+        (True, 2**60, True),
+    ],
+)
+def test_cache_offload_policy(
+    monkeypatch: pytest.MonkeyPatch,
+    offload_cache: bool | None,
+    free_memory: int,
+    expected_offloaded: bool,
+) -> None:
+    monkeypatch.setattr(
+        torch.cuda,
+        "mem_get_info",
+        lambda *args: (free_memory, free_memory),
+    )
+    model = _CachingRecordingModel()
+    x_context = TableTensor.from_tensor(
+        torch.arange(6, dtype=torch.float32, device="cuda").reshape(3, 2)
+    )
+    y_context = TableTensor.from_tensor(
+        torch.arange(3, dtype=torch.float32, device="cuda")[:, None]
+    )
+    x_query = TableTensor.from_tensor(torch.ones(1, 2, device="cuda"))
+
+    model.fit(
+        x_context,
+        y_context,
+        recipe=sp.Recipe(features=sp.Standardize()),
+        num_estimators=2,
+        offload_cache=offload_cache,
+    )
+
+    assert model._cache is not None
+    assert model._cache["cache_offloaded"] is expected_offloaded
+    estimator_cache = cast(Cache, model._cache[0])
+    assert estimator_cache.is_cpu is expected_offloaded
+    assert estimator_cache.is_cuda is not expected_offloaded
+    if expected_offloaded:
+        assert estimator_cache.is_pinned()
+
+    expected = model.predict(x_query)
+    assert expected.is_cuda
+    for _ in range(2):
+        output = model.predict(x_query)
+        assert output.is_cuda
+        torch.testing.assert_close(output.numerical, expected.numerical)
+
+    if not expected_offloaded:
+        model.cpu()
+        assert cast(Cache, model._cache[0]).is_cpu
+        cpu_output = model.predict(x_query.cpu())
+        torch.testing.assert_close(
+            cpu_output.numerical,
+            expected.numerical.cpu(),
+        )
+
+        model = pickle.loads(pickle.dumps(model))
+        assert model._cache is not None
+        assert model._cache["cache_offloaded"] is False
+        restored_output = model.predict(x_query.cpu())
+        torch.testing.assert_close(
+            restored_output.numerical,
+            expected.numerical.cpu(),
+        )
+
+        model.cuda()
+        assert cast(Cache, model._cache[0]).is_cuda
+        cuda_output = model.predict(x_query)
+        torch.testing.assert_close(cuda_output.numerical, expected.numerical)
 
 
 def test_task_dispatch() -> None:

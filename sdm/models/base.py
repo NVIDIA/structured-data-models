@@ -3,8 +3,8 @@
 
 import abc
 import copy
-from collections.abc import Iterable, Sequence
-from typing import Any, ClassVar, cast
+from collections.abc import Callable, Iterable, Sequence
+from typing import Any, ClassVar, Self, cast
 
 import torch
 from torch import Tensor
@@ -91,6 +91,34 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         self._cache: Cache | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
+
+    def _apply(
+        self,
+        fn: Callable[[Tensor], Tensor],
+        recurse: bool = True,
+    ) -> Self:
+        super()._apply(fn, recurse=recurse)
+        if self._cache is None:
+            return self
+
+        recipe_execution = cast(
+            RecipeExecution,
+            self._cache["recipe_execution"],
+        )
+        for processor in (
+            recipe_execution.recipe.features,
+            recipe_execution.recipe.target,
+            recipe_execution.recipe.output,
+        ):
+            processor._apply(fn)
+
+        cache_offloaded = cast(
+            bool,
+            self._cache.get("cache_offloaded", True),
+        )
+        if not cache_offloaded:
+            self._cache = self._cache._apply_tensor(fn)
+        return self
 
     def forward(
         self,
@@ -239,6 +267,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_estimators: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
+        offload_cache: bool | None = True,
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -261,6 +290,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            offload_cache: Whether to move CUDA estimator caches to pinned CPU
+                memory. If ``None``, caches remain on the compute device when
+                their measured aggregate size is at most half of currently
+                free device memory, and are offloaded otherwise.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
@@ -286,6 +319,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             recipe_execution=recipe_execution,
             kwargs=kwargs,
         )
+        cache_offloaded = False
+        should_offload = offload_cache
         for i, context in enumerate(contexts):
             for callback in callbacks:
                 context = MemberContext(
@@ -322,6 +357,15 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 )
 
             if x.is_cuda and len(contexts) > 1:
+                if should_offload is None:
+                    free_memory, _ = torch.cuda.mem_get_info(x.device)
+                    should_offload = (
+                        estimator_cache.size() * len(contexts)
+                        > free_memory // 2
+                    )
+                cache_offloaded = bool(should_offload)
+
+            if cache_offloaded:
                 try:  # Copy to pinned CPU memory:
                     estimator_cache = estimator_cache._apply_tensor(
                         lambda tensor: torch.ops.aten._to_copy.default(
@@ -336,6 +380,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
             cache[i] = estimator_cache
 
+        cache["cache_offloaded"] = cache_offloaded
         self._cache = cache.freeze()
 
     def predict(
@@ -397,12 +442,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
             cast(Cache, self._cache[i])
             for i in range(recipe_execution.num_members)
         ]
+        cache_offloaded = cast(
+            bool,
+            self._cache.get("cache_offloaded", True),
+        )
         next_cache = caches[0]
 
         compute_stream: torch.cuda.Stream | None = None
         transfer_stream: torch.cuda.Stream | None = None
         try:
-            if x.is_cuda:
+            if x.is_cuda and cache_offloaded:
                 compute_stream = torch.cuda.current_stream(x.device)
                 if x.device not in self._transfer_streams:
                     transfer_stream = torch.cuda.Stream(x.device)
@@ -418,7 +467,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             ):
                 queries = recipe_execution.transform(x, related_tables)
 
-            if x.is_cuda:
+            if x.is_cuda and cache_offloaded:
                 assert compute_stream is not None
                 assert transfer_stream is not None
                 compute_stream.wait_stream(transfer_stream)
@@ -444,7 +493,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
                 if i + 1 < len(caches):
                     next_cache = caches[i + 1]
-                if x.is_cuda and next_cache is not None:
+                if x.is_cuda and cache_offloaded and next_cache is not None:
                     assert transfer_stream is not None
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
@@ -464,7 +513,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     for callback in callbacks:
                         out = callback.on_model_forward_end(self, out)
 
-                if x.is_cuda:
+                if x.is_cuda and cache_offloaded:
                     assert compute_stream is not None
                     for tensor in cache._tensors():
                         tensor.record_stream(compute_stream)
@@ -472,7 +521,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 out = cast(TableTensor, out.to(query.x.dtype))
                 outs.append(out)
 
-                if x.is_cuda and next_cache is not None:
+                if x.is_cuda and cache_offloaded and next_cache is not None:
                     assert compute_stream is not None
                     assert transfer_stream is not None
                     compute_stream.wait_stream(transfer_stream)
