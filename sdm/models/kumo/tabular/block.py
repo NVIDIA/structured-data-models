@@ -6,9 +6,9 @@
 from typing import Any, cast
 
 import torch
-from torch.nn import GELU, Linear, RMSNorm, Sequential
+from torch.nn import GELU, Linear, Sequential
 
-from sdm.nn import QueryScaling, RotaryEmbedding, TransformerBlock
+from sdm.nn import QueryScaling, RMSNorm, RotaryEmbedding, TransformerBlock
 
 
 class KumoTabularTransformerBlock(TransformerBlock):
