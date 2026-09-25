@@ -9,7 +9,6 @@ import triton.language as tl
 from torch import Tensor
 
 
-# TODO: Optimize RMS norm or migrate to an external kernel library.
 @triton.jit(do_not_specialize=["rows"])
 def _rmsnorm_cast_kernel(
     x_ptr,
