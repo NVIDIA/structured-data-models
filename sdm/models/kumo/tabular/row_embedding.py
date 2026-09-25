@@ -16,7 +16,6 @@ from sdm.nn import (
     GatedLogScale,
     InducedTransformerBlock,
     LogScale,
-    RMSNorm,
     RotaryEmbedding,
 )
 
@@ -104,7 +103,7 @@ class RowEmbedding(torch.nn.Module):
             )
             for _ in range(num_layers)
         )
-        self.norm = RMSNorm(channels, **factory_kwargs)
+        self.norm = torch.nn.RMSNorm(channels, **factory_kwargs)
 
     def forward(
         self,

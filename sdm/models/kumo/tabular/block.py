@@ -29,7 +29,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
             query_transforms.append(rope)
             key_transforms.append(rope)
         query_transforms.append(
-            RMSNorm(
+            torch.nn.RMSNorm(
                 channels // num_heads,
                 eps=1e-6,
                 elementwise_affine=False,
@@ -37,7 +37,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
             )
         )
         key_transforms.append(
-            RMSNorm(
+            torch.nn.RMSNorm(
                 channels // num_heads,
                 eps=1e-6,
                 elementwise_affine=False,
