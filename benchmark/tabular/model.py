@@ -171,12 +171,13 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             )
             for context in contexts
         )
-        self._seeds = torch.randint(
-            high=2**63 - 1,
-            size=(len(contexts),),
-            generator=generator,
-            device="cpu" if generator is None else generator.device,
-        ).tolist()
+        # Replay the same model-side randomness as the cached fit path.
+        if generator is not None:
+            self._rng_state = generator.get_state()
+        elif self._device.type == "cuda":
+            self._rng_state = torch.cuda.get_rng_state(self._device)
+        else:
+            self._rng_state = torch.get_rng_state()
 
     def _predict_proba(
         self,
@@ -211,10 +212,11 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                     x=x_query,
                     related_tables=None,
                 )
+                generator = torch.Generator(self._device).set_state(
+                    self._rng_state
+                )
                 outputs = []
-                for context, query, seed in zip(
-                    self._contexts, queries, self._seeds
-                ):
+                for context, query in zip(self._contexts, queries):
                     with torch.amp.autocast(
                         self._device.type,
                         self.autocast_dtype,
@@ -227,9 +229,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                             related_context_tables=None,
                             related_query_tables=None,
                             cache=None,
-                            generator=torch.Generator(
-                                self._device
-                            ).manual_seed(seed),
+                            generator=generator,
                             _schema=self._schema,
                         )
                     outputs.append(out.to(query.x.dtype))
