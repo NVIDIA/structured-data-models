@@ -10,6 +10,85 @@ from sdm.models.kumo.tabular import KumoTabular
 from sdm.testing import withCUDA
 
 
+def _legacy_feature_processor() -> sp.Sequential:
+    def numerical_processor() -> sp.Sequential:
+        return sp.Sequential(
+            sp.Cast(torch.float64),
+            sp.DropConstantColumns(),
+            sp.Standardize(eps=1e-6),
+            sp.Clip(-100.0, 100.0),
+            sp.Choice(
+                sp.Identity(),
+                sp.PowerTransform(),
+                [sp.RobustScale(), sp.ClipSoft(3.0)],
+                method="round_robin",
+            ),
+            sp.ClipSigma(threshold=4.0),
+        )
+
+    return sp.Sequential(
+        sp.StypeDispatch(
+            numerical=[numerical_processor(), sp.FlipSign()],
+            categorical=[
+                sp.AlignCategories(sort_by="value"),
+                sp.AddCategoryCounts(min_cardinality=50),
+                sp.ToNumerical(),
+                numerical_processor(),
+            ],
+        ),
+        sp.ShuffleColumns(method="latin"),
+        sp.SelectColumns(500, method="first"),
+        sp.Cast(torch.float32),
+    )
+
+
+@pytest.mark.parametrize("num_columns", [8, 502])
+def test_default_recipe_dtype_reordering_preserves_features(
+    num_columns: int,
+) -> None:
+    num_rows = 64
+    values = torch.arange(num_rows, dtype=torch.float32)[:, None]
+    numerical = values + torch.arange(num_columns, dtype=torch.float32)
+    numerical[:, 0] = 3.0
+    numerical[0, 1] = 1e12
+    numerical[1, 2] = float("nan")
+    numerical[2, 3] = float("inf")
+    categorical = CategoricalTensor(
+        code=torch.stack(
+            (
+                torch.arange(num_rows) % 3,
+                torch.arange(num_rows) % 60,
+            ),
+            dim=-1,
+        ),
+        categories=(torch.arange(3), torch.arange(60)),
+    )
+    features = EnsembleTable.from_table(
+        TableTensor(numerical=numerical, categorical=categorical),
+        num_members=8,
+    )
+
+    expected = _legacy_feature_processor().fit_transform_ensemble(
+        features,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = KumoTabular.default_recipe().features.fit_transform_ensemble(
+        features,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    assert len(actual) == len(expected)
+    for member_id in range(len(actual)):
+        assert actual[member_id].columns == expected[member_id].columns
+        torch.testing.assert_close(
+            actual[member_id].numerical,
+            expected[member_id].numerical,
+            rtol=0,
+            atol=0,
+            equal_nan=True,
+        )
+
+
 @withCUDA
 def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
     features = TableTensor(

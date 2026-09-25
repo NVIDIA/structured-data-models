@@ -157,3 +157,19 @@ def test_add_category_counts_selects_by_fitted_vocabulary_size(
     restored.load_state_dict(processor.state_dict())
     restored.to(device=device)
     assert restored.transform(query).equal(output)
+
+
+def test_add_category_counts_ignores_unselected_category_metadata() -> None:
+    context = _table([[0, 0], [1, 1]])
+    query = TableTensor(
+        columns={Stype.categorical: ("city", "kind")},
+        categorical=CategoricalTensor(
+            code=torch.tensor([[8, 7]], dtype=torch.int32),
+            categories=(torch.arange(9), torch.arange(8)),
+        ),
+    )
+    processor = AddCategoryCounts(min_cardinality=10).fit(context)
+
+    output = processor.transform(query)
+
+    assert output is query

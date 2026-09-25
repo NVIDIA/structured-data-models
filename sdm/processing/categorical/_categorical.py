@@ -44,6 +44,8 @@ def _check_categories(
     for index, (actual, expected) in enumerate(
         zip(table.categorical.categories, categories)
     ):
+        if actual is expected:
+            continue
         expected = expected.to(device=actual.device)
         if not actual.equal(expected):
             raise ValueError(

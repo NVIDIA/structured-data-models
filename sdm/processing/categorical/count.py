@@ -22,9 +22,10 @@ class AddCategoryCounts(Processor):
     holding ``log1p`` of the number of fitted rows sharing the row's code.
     Negative codes (missing or unknown values) share one count.
 
-    Transform inputs must use the fitted per-column category vocabularies.
-    Use :class:`~sdm.processing.AlignCategories` before this processor when
-    training and transform inputs were tensorized independently.
+    Transform inputs for eligible columns must use the fitted per-column
+    category vocabularies. Use :class:`~sdm.processing.AlignCategories` before
+    this processor when training and transform inputs were tensorized
+    independently.
 
     Args:
         min_cardinality: A count column is added when its fitted vocabulary
@@ -60,7 +61,6 @@ class AddCategoryCounts(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        _check_categorical_codes(table)
         self._columns = tuple(
             column
             for column, categories in zip(
@@ -68,7 +68,17 @@ class AddCategoryCounts(Processor):
             )
             if categories.numel() > self.min_cardinality
         )
-        categorical = table.select_columns(self._columns).categorical
+        if not self._columns:
+            self._log_counts = table.numerical.new_empty(0)
+            self._num_categories = table.categorical.code.new_empty(
+                0,
+                dtype=torch.long,
+            )
+            self._categories = BufferList()
+            return
+        selected = table.select_columns(self._columns)
+        _check_categorical_codes(selected)
+        categorical = selected.categorical
         codes = categorical.code  # [*batch, num_rows, num_columns]
         sizes = [categories.numel() for categories in categorical.categories]
         num_categories = codes.new_tensor(sizes, dtype=torch.long)
@@ -91,14 +101,15 @@ class AddCategoryCounts(Processor):
         )
         self._log_counts = counts.to(count_dtype).log1p().to(dtype)
         self._num_categories = num_categories
-        self._categories = BufferList(table.categorical.categories)
+        self._categories = BufferList(categorical.categories)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        _check_categories(table, self._categories)
-        _check_categorical_codes(table)
         if not self._columns:
             return table
-        codes = table.select_columns(self._columns).categorical.code
+        selected = table.select_columns(self._columns)
+        _check_categories(selected, self._categories)
+        _check_categorical_codes(selected)
+        codes = selected.categorical.code
         slots = torch.where(codes >= 0, codes.long(), self._num_categories)
         counts = self._log_counts.gather(-1, slots.transpose(-2, -1))
 

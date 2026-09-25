@@ -49,6 +49,8 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
     },
 }
 
+_QUANTILE_COLUMNS = tuple(f"q{i:03d}" for i in range(1, 1000))
+
 
 class KumoTabular(ICLModel):
     r"""The tabular foundation model from `"NVIDIA Kumo Tabular Sets a New
@@ -202,14 +204,23 @@ class KumoTabular(ICLModel):
             x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
         classes: Tensor | None = None
+        class_columns: tuple[str, ...] | None = None
         if y_context is not None and y_context.categorical.size(-1) > 0:
             y = y_context.categorical.code.squeeze(-1)
             classes = y_context.categorical.categories[0]
+            class_columns = tuple(str(value) for value in classes.tolist())
+            if cache is not None:
+                cache["class_columns"] = class_columns
         elif y_context is not None and y_context.numerical.size(-1) > 0:
             y = y_context.numerical.squeeze(-1)
         else:
             assert cache is not None
             classes = cast(Tensor | None, cache["classes"])
+            if classes is not None:
+                class_columns = cast(
+                    tuple[str, ...],
+                    cache["class_columns"],
+                )
             y = x.new_empty(
                 (*x.size()[:-2], 0),
                 dtype=torch.int64 if classes is not None else x.dtype,
@@ -241,23 +252,22 @@ class KumoTabular(ICLModel):
                 cache=cache,
             )
             return TableTensor(
-                columns={
-                    Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
-                },
+                columns={Stype.numerical: _QUANTILE_COLUMNS},
                 numerical=out,
             )
 
+        assert class_columns is not None
         out = self.ecoc(
             model=self.models[Task.classification],
             x=x,
             y=y,
-            num_classes=len(classes),
+            num_classes=len(class_columns),
             cache=cache,
             generator=generator,
             categorical_mask=categorical_mask,
         )
         return TableTensor(
-            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
+            columns={Stype.numerical: class_columns},
             numerical=out,
         )
 
