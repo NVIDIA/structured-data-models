@@ -62,6 +62,32 @@ class _RecordingModel(ICLModel):
         return sp.Recipe()
 
 
+class _NoisyRecordingModel(_RecordingModel):
+    def _forward(
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> TableTensor:
+        out = super()._forward(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_context_tables,
+            related_query_tables=related_query_tables,
+            cache=cache,
+            generator=generator,
+            **kwargs,
+        )
+        noise = torch.rand(out.numerical.size(), generator=generator)
+        return out.replace_blocks(numerical=out.numerical + noise)
+
+
 class _UnsupportedRecordingModel(_RecordingModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
@@ -424,6 +450,51 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         model.calls[-1].related_query_tables.tables["users"].numerical,
         torch.tensor([[3.0]]),
     )
+
+
+def test_fit_without_kv_cache_runs_context_with_queries() -> None:
+    model = _RecordingModel()
+    model.fit(
+        _table([0.0, 2.0], [1, 2], value_column="feature"),
+        TableTensor.from_tensor(torch.tensor([[0.0], [1.0]])),
+        _related_tables(query=False),
+        recipe=_recipe(),
+        num_estimators=2,
+        kv_cache=False,
+    )
+    assert model.calls == []
+
+    model.predict(
+        _table([3.0], [3], value_column="feature"),
+        _related_tables(query=True),
+    )
+
+    assert len(model.calls) == 2
+    for call in model.calls:
+        assert call.x_context is not None
+        assert call.related_context_tables is not None
+        torch.testing.assert_close(
+            call.x_context.numerical,
+            torch.tensor([[-1.0], [1.0]]),
+        )
+
+
+def test_fit_without_kv_cache_repeats_predictions() -> None:
+    model = _NoisyRecordingModel()
+    model.fit(
+        _table([0.0, 2.0], [1, 2], value_column="feature"),
+        TableTensor.from_tensor(torch.tensor([[0.0], [1.0]])),
+        _related_tables(query=False),
+        recipe=_recipe(),
+        num_estimators=2,
+        kv_cache=False,
+    )
+    x_query = _table([3.0], [3], value_column="feature")
+
+    expected = model.predict(x_query, _related_tables(query=True))
+    actual = model.predict(x_query, _related_tables(query=True))
+
+    torch.testing.assert_close(actual.numerical, expected.numerical)
 
 
 def test_task_dispatch() -> None:

@@ -239,6 +239,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_estimators: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
+        kv_cache: bool = True,
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -261,6 +262,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            kv_cache: Whether to cache the in-context key/value projections.
+                If ``False``, cache the pre-processed in-context examples and
+                run them together with the query examples in :meth:`predict`.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
@@ -285,7 +289,17 @@ class ICLModel(torch.nn.Module, abc.ABC):
         cache = Cache(
             recipe_execution=recipe_execution,
             kwargs=kwargs,
+            kv_cache=kv_cache,
         )
+        seeds: list[int] = []
+        if not kv_cache:
+            # Keep stochastic model execution repeatable across predictions.
+            seeds = torch.randint(
+                high=2**63 - 1,
+                size=(len(contexts),),
+                generator=generator,
+                device="cpu" if generator is None else generator.device,
+            ).tolist()
         for i, context in enumerate(contexts):
             for callback in callbacks:
                 context = MemberContext(
@@ -309,16 +323,24 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ),
             )
 
-            with inference_mode("no_grad"):
-                self._forward(
+            if kv_cache:
+                with inference_mode("no_grad"):
+                    self._forward(
+                        x_context=context.x,
+                        y_context=context.y,
+                        x_query=None,
+                        related_context_tables=context.related_tables,
+                        related_query_tables=None,
+                        cache=estimator_cache,
+                        generator=generator,
+                        **kwargs,
+                    )
+            else:
+                estimator_cache.update(
                     x_context=context.x,
                     y_context=context.y,
-                    x_query=None,
                     related_context_tables=context.related_tables,
-                    related_query_tables=None,
-                    cache=estimator_cache,
-                    generator=generator,
-                    **kwargs,
+                    seed=seeds[i],
                 )
 
             if x.is_cuda and len(contexts) > 1:
@@ -397,6 +419,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             cast(Cache, self._cache[i])
             for i in range(recipe_execution.num_members)
         ]
+        kv_cache = cast(bool, self._cache["kv_cache"])
         next_cache = caches[0]
 
         compute_stream: torch.cuda.Stream | None = None
@@ -449,15 +472,29 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
+                x_context: TableTensor | None = None
+                y_context: TableTensor | None = None
+                related_context_tables: RelatedTables | None = None
+                generator: torch.Generator | None = None
+                if not kv_cache:
+                    x_context = cast(TableTensor, cache["x_context"])
+                    y_context = cast(TableTensor, cache["y_context"])
+                    related_context_tables = cast(
+                        RelatedTables[TableTensor] | None,
+                        cache["related_context_tables"],
+                    )
+                    generator = torch.Generator(x.device).manual_seed(
+                        cast(int, cache["seed"])
+                    )
                 with inference_mode("grad" if requires_grad else "inference"):
                     out = self._forward(
-                        x_context=None,
-                        y_context=None,
+                        x_context=x_context,
+                        y_context=y_context,
                         x_query=query.x,
-                        related_context_tables=None,
+                        related_context_tables=related_context_tables,
                         related_query_tables=query.related_tables,
-                        cache=cache,
-                        generator=None,
+                        cache=cache if kv_cache else None,
+                        generator=generator,
                         **cast(dict[str, Any], self._cache["kwargs"]),
                     )
 
