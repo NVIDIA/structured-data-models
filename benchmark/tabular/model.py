@@ -41,6 +41,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
 
     default_num_estimators: ClassVar[int]
     autocast_dtype: ClassVar[torch.dtype]
+    offload_cache: ClassVar[bool | None] = True
 
     @staticmethod
     @abc.abstractmethod
@@ -143,6 +144,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 recipe=recipe,
                 num_estimators=num_estimators,
                 generator=generator,
+                offload_cache=self.offload_cache,
             )
 
     def _predict_proba(
@@ -212,6 +214,7 @@ class SDMKumoTabularModel(SDMModel):
     ag_name = "SDMKumoTabular"
     default_num_estimators = 8
     autocast_dtype = torch.float16
+    offload_cache = None
     # Bagged children are fit one at a time in this process, so they share the
     # pretrained network of their task through AutoGluon's registry.
     _default_ag_args_ensemble_extra: ClassVar[dict[str, Any]] = {
