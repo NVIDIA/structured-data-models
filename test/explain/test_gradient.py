@@ -102,3 +102,37 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
     )
     assert result.related_tables.relationships == related_tables.relationships
     assert result.related_tables.task_links == related_tables.task_links
+
+
+@pytest.mark.parametrize("fitted", [False, True])
+def test_gradients_with_estimator_batching(fitted: bool) -> None:
+    model = _LinearModel()
+    x_context = torch.zeros(1, 2)
+    y_context = torch.zeros(1, 1)
+    x_query = torch.ones(1, 2)
+    explainer = GradientExplainer(
+        output=lambda prediction: prediction.numerical
+    )
+
+    if fitted:
+        model.fit(
+            x=x_context,
+            y=y_context,
+            num_estimators=3,
+            estimator_batch_size=None,
+        )
+        result = explainer.explain(model, x_query)
+    else:
+        result = explainer.explain(
+            model,
+            x_query,
+            x_context=x_context,
+            y_context=y_context,
+            num_estimators=3,
+            estimator_batch_size=None,
+        )
+
+    torch.testing.assert_close(
+        result.x.numerical, torch.full_like(x_query, 2.0)
+    )
+    assert result.related_tables is None
