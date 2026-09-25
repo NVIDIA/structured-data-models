@@ -26,6 +26,7 @@ class _RMSNorm(RMSNorm):
             torch.is_grad_enabled()
             or torch.compiler.is_compiling()
             or not x.is_cuda
+            or x.dtype == torch.float64
             or not torch.is_autocast_enabled("cuda")
         ):
             return super().forward(x if rope is None else rope(x))
