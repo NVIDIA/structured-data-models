@@ -96,3 +96,89 @@ def test_ecoc(
                 num_classes=num_classes + 1,
                 cache=cache,
             )
+
+
+@withCUDA
+def test_ecoc_members_draw_codebooks_in_order(device: torch.device) -> None:
+    model = MyModel(10)
+    ecoc = ECOC(max_classes=10)
+    num_members, num_classes, num_context = 3, 12, 11
+    x = torch.randn(
+        num_members,
+        num_context + 2,
+        num_context,
+        device=device,
+        dtype=torch.float64,
+    )
+    y = torch.rand(num_members, num_classes, device=device).argsort(dim=-1)[
+        ..., :num_context
+    ]
+
+    generator = torch.Generator(device).manual_seed(0)
+    expected = torch.stack(
+        [
+            ecoc(
+                model=model,
+                x=x[member],
+                y=y[member],
+                num_classes=num_classes,
+                generator=generator,
+            )
+            for member in range(num_members)
+        ]
+    )
+
+    generator = torch.Generator(device).manual_seed(0)
+    actual = ecoc(
+        model=model,
+        x=x,
+        y=y,
+        num_classes=num_classes,
+        num_members=num_members,
+        generator=generator,
+    )
+    torch.testing.assert_close(actual, expected)
+
+    cache = Cache()
+    ecoc(
+        model=model,
+        x=x[..., :num_context, :],
+        y=y,
+        num_classes=num_classes,
+        num_members=num_members,
+        cache=cache,
+        generator=torch.Generator(device).manual_seed(0),
+    )
+    cache.freeze()
+    replayed = ecoc(
+        model=model,
+        x=x[..., num_context:, :],
+        y=y[..., :0],
+        num_classes=num_classes,
+        num_members=num_members,
+        cache=cache,
+    )
+    torch.testing.assert_close(replayed, expected)
+
+
+@pytest.mark.parametrize("num_classes", [3, 10, 11, 100, 201])
+def test_ecoc_num_tasks(num_classes: int) -> None:
+    ecoc = ECOC(max_classes=10)
+    x = torch.randn(num_classes + 2, num_classes, dtype=torch.float64)
+    y = torch.arange(num_classes)
+    cache = Cache()
+
+    ecoc(
+        model=MyModel(10),
+        x=x[:num_classes],
+        y=y,
+        num_classes=num_classes,
+        cache=cache,
+    )
+
+    num_tasks = (
+        cast(Tensor, cache["ecoc_codebook"]).size(-2)
+        if num_classes > 10
+        else 1
+    )
+    assert ecoc.num_tasks(num_classes) == num_tasks
