@@ -84,9 +84,9 @@ def test_shuffle_categories_random_permutes_each_categorical_column(
     assert transformed.categorical.tolist() == features.categorical.tolist()
 
 
-@pytest.mark.parametrize("method", ["shift", "random"])
+@pytest.mark.parametrize("method", ["shift", "random", "balanced_shift"])
 def test_shuffle_categories_is_reproducible_with_generator(
-    method: Literal["shift", "random"],
+    method: Literal["shift", "random", "balanced_shift"],
 ) -> None:
     features = _table(
         [[0, 0], [1, 1], [2, -1], [1, 0]],
@@ -201,3 +201,49 @@ def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
     )
 
     assert output.equal(expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("num_classes", [1, 2, 3, 10])
+@pytest.mark.parametrize("num_members", [1, 8, 21])
+def test_balanced_shifts_cover_classes(
+    device: torch.device,
+    num_classes: int,
+    num_members: int,
+) -> None:
+    target = _table(
+        [[i] for i in range(num_classes)] + [[-1]],
+        (tuple(str(i) for i in range(num_classes)),),
+        device=device,
+    )
+    ensemble = EnsembleTable.from_table(target, num_members=num_members)
+    processor = ShuffleCategories(method="balanced_shift")
+    output = processor.fit_transform_ensemble(ensemble)
+    shifts = torch.stack(
+        [output[i].categorical.code[0, 0] for i in range(num_members)]
+    ).long()
+    counts = shifts.bincount(minlength=num_classes)
+    assert int(counts.max() - counts.min()) <= 1
+    for start in range(0, num_members, num_classes):
+        cycle = shifts[start : start + num_classes]
+        assert cycle.unique().numel() == cycle.numel()
+    query_output = processor.transform_ensemble(ensemble)
+    for i in range(num_members):
+        assert output[i].categorical.tolist() == target.categorical.tolist()
+        assert output[i].equal(query_output[i])
+
+
+def test_balanced_shifts_reproducible_ensemble() -> None:
+    target = _table([[0], [1], [2], [-1]], (("a", "b", "c"),))
+    ensemble = EnsembleTable.from_table(target, num_members=8)
+    processor = ShuffleCategories(method="balanced_shift")
+    first = processor.fit_transform_ensemble(
+        ensemble,
+        generator=torch.Generator().manual_seed(7),
+    )
+    second = processor.fit_transform_ensemble(
+        ensemble,
+        generator=torch.Generator().manual_seed(7),
+    )
+    for i in range(8):
+        assert first[i].equal(second[i])
