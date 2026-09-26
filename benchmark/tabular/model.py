@@ -52,9 +52,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     ) -> sdm.models.ICLModel:
         pass
 
-    def _create_recipe(self) -> sdm.Recipe:
-        return self.model.default_recipe()
-
     def _set_default_params(self) -> None:
         self._set_default_param_value(
             "num_estimators",
@@ -90,7 +87,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 self.random_seed
             )
 
-        X = self.preprocess(X, y=y, is_train=True)
+        X = self.preprocess(X, y=y)
         self.stypes = sdm.infer_stypes(X)
         x_context = sdm.TableTensor.from_pandas(
             df=X,
@@ -131,7 +128,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._expand_query = num_estimators is None
         self._context_shape = x_context.shape[-2:]
 
-        recipe = self._create_recipe()
+        recipe = self.model.default_recipe()
         if params["max_columns"] is not None:
             for processor in recipe.features.modules():
                 if isinstance(processor, sp.SelectColumns):
@@ -395,51 +392,6 @@ class SDMKumoTabularModel(SDMModel):
                 size=self.size,
                 device=self._device,
             )
-
-    def _preprocess(
-        self,
-        X: pd.DataFrame,
-        is_train: bool = False,
-        **kwargs: Any,
-    ) -> pd.DataFrame:
-        X = super()._preprocess(X, **kwargs)
-        # AutoGluon's feature generator hands binary columns over as integers,
-        # so low-cardinality numerical columns are typed categorical. The
-        # recipe runs without AlignCategories (see `_create_recipe`), so their
-        # codes would follow the order of appearance: pin the categories seen
-        # in training in value order instead; other values become missing.
-        if is_train:
-            stypes = sdm.infer_stypes(X, _low_cardinality="infer")
-            self._low_cardinality_dtypes = {
-                column: pd.CategoricalDtype(
-                    categories=np.sort(X[column].dropna().unique())
-                )
-                for column, stype in stypes.items()
-                if stype == sdm.Stype.categorical
-                and X[column].dtype.kind in "iuf"
-            }
-        if self._low_cardinality_dtypes:
-            X = X.astype(self._low_cardinality_dtypes, copy=False)
-        return X
-
-    def _create_recipe(self) -> sdm.Recipe:
-        recipe = super()._create_recipe()
-        # TabArena aligns features with its fitted generator and targets with
-        # its label cleaner.
-        for pipeline in (recipe.features, recipe.target):
-            stype_dispatch = next(
-                processor
-                for processor in pipeline.modules()
-                if isinstance(processor, sp.StypeDispatch)
-            )
-            categorical = stype_dispatch.processors[str(sdm.Stype.categorical)]
-            assert isinstance(categorical, sp.Sequential)
-            processors = iter(categorical)
-            assert isinstance(next(processors), sp.AlignCategories)
-            stype_dispatch.processors[str(sdm.Stype.categorical)] = (
-                sp.Sequential(*processors)
-            )
-        return recipe
 
 
 class SDMKumoTabularSmallModel(SDMKumoTabularModel):
