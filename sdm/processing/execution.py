@@ -21,6 +21,8 @@ class MemberContext(NamedTuple):
     x: TableTensor
     y: TableTensor
     related_tables: RelatedTables[TableTensor] | None
+    #: Semantic types of the raw context columns before ``recipe.features``.
+    input_stypes: Mapping[str, Stype]
 
 
 class MemberQuery(NamedTuple):
@@ -124,8 +126,11 @@ class RecipeExecution:
             if isinstance(module, sp.TableDispatch):
                 module._route = "task"
 
-        x = _to_ensemble_table(x, num_members)
-        x = self.recipe.features.fit_transform_ensemble(x, generator=generator)
+        inputs = _to_ensemble_table(x, num_members)
+        x = self.recipe.features.fit_transform_ensemble(
+            inputs,
+            generator=generator,
+        )
         if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
@@ -148,6 +153,7 @@ class RecipeExecution:
                     x=x[member_id],
                     y=y[member_id],
                     related_tables=related_tables_i,
+                    input_stypes=inputs[member_id].stypes,
                 )
             )
 
