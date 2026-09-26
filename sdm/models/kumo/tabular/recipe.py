@@ -31,7 +31,32 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         features=[
             sp.StypeDispatch(
                 numerical=[
-                    numerical_processor(),
+                    sp.Cast(torch.float64),
+                    sp.DropConstantColumns(),
+                    # Period 12 preserves the original three-way schedule
+                    # while replacing every fourth view with Gaussian ranks.
+                    sp.Choice(
+                        *[
+                            [
+                                sp.RankGaussian(),
+                                sp.Standardize(),
+                                sp.ClipSigma(threshold=4.0),
+                            ]
+                            if i % 4 == 3
+                            else [
+                                sp.Standardize(eps=1e-6),
+                                sp.Clip(-100.0, 100.0),
+                                (
+                                    sp.Identity(),
+                                    sp.PowerTransform(),
+                                    [sp.RobustScale(), sp.ClipSoft(3.0)],
+                                )[i % 3],
+                                sp.ClipSigma(threshold=4.0),
+                            ]
+                            for i in range(12)
+                        ],
+                        method="round_robin",
+                    ),
                     sp.FlipSign(),
                 ],
                 categorical=[
@@ -49,7 +74,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             sp.StypeDispatch(
                 categorical=[
                     sp.AlignCategories(),
-                    sp.ShuffleCategories(method="shift"),
+                    sp.ShuffleCategories(method="balanced_shift"),
                 ],
                 numerical=[
                     sp.Standardize(),

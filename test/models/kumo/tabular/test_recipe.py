@@ -150,3 +150,73 @@ def test_default_recipe_reduces_outputs_per_task() -> None:
     )
     assert output.size() == (5, 3)
     torch.testing.assert_close(output.numerical.sum(dim=-1), torch.ones(5))
+
+
+@withCUDA
+@pytest.mark.parametrize("num_members", [1, 4, 8, 16])
+def test_default_recipe_numerical_schedule(
+    num_members: int, device: torch.device
+) -> None:
+    values = torch.arange(1, 101, device=device).double().square()
+    values[7] = torch.nan
+    features = TableTensor.from_tensor(values.unsqueeze(-1))
+    recipe = KumoTabular.default_recipe()
+    output = recipe.features.fit_transform_ensemble(
+        EnsembleTable.from_table(features, num_members=num_members)
+    )
+    query = features[:13]
+    prediction_features = recipe.features.transform_ensemble(
+        EnsembleTable.from_table(query, num_members=num_members)
+    )
+    for i in range(num_members):
+        if i % 4 == 3:
+            processor = sp.Sequential(
+                sp.RankGaussian(),
+                sp.Standardize(),
+                sp.ClipSigma(threshold=4.0),
+            )
+        else:
+            processor = sp.Sequential(
+                sp.Standardize(eps=1e-6),
+                sp.Clip(-100.0, 100.0),
+                (
+                    sp.Identity(),
+                    sp.PowerTransform(),
+                    [sp.RobustScale(), sp.ClipSoft(3.0)],
+                )[i % 3],
+                sp.ClipSigma(threshold=4.0),
+            )
+        expected = processor.fit_transform(features).numerical.float()
+        # Independent sign flips are allowed; magnitudes identify each view.
+        torch.testing.assert_close(
+            output[i].numerical.abs(), expected.abs(), equal_nan=True
+        )
+        torch.testing.assert_close(
+            prediction_features[i].numerical,
+            output[i].numerical[:13],
+            equal_nan=True,
+        )
+
+
+@withCUDA
+@pytest.mark.parametrize("num_members", [1, 8, 16])
+@pytest.mark.parametrize("num_classes", [2, 3, 10])
+def test_default_recipe_balances_class_shifts(
+    num_members: int, num_classes: int, device: torch.device
+) -> None:
+    target = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.arange(num_classes, device=device).unsqueeze(-1),
+            categories=(torch.arange(num_classes, device=device),),
+        )
+    )
+    output = KumoTabular.default_recipe().target.fit_transform_ensemble(
+        EnsembleTable.from_table(target, num_members=num_members)
+    )
+    codes = torch.stack(
+        [output[i].categorical.code[0, 0] for i in range(num_members)]
+    )
+    counts = codes.long().bincount(minlength=num_classes)
+    assert counts.max() - counts.min() <= 1
+    for i in range(num_members):
+        assert output[i].categorical.tolist() == target.categorical.tolist()

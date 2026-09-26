@@ -12,7 +12,7 @@ from sdm.processing import EnsembleProcessor
 
 
 class ShuffleCategories(EnsembleProcessor):
-    """Independently permute the integer codes of categorical columns.
+    """Permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn when the processor is
     fitted. Codes and their corresponding category vectors are permuted
@@ -24,7 +24,10 @@ class ShuffleCategories(EnsembleProcessor):
     Args:
         method: Permutation strategy. ``"shift"`` cyclically shifts the
             codes by a drawn offset, and ``"random"`` remaps the codes with
-            a drawn permutation.
+            a drawn permutation. ``"balanced_shift"`` draws cyclic offsets
+            without replacement before starting another cycle, balancing
+            their counts across ensemble members for each column and class
+            count.
     """
 
     handles_stypes = frozenset({Stype.categorical})
@@ -32,7 +35,7 @@ class ShuffleCategories(EnsembleProcessor):
 
     def __init__(
         self,
-        method: Literal["shift", "random"] = "random",
+        method: Literal["shift", "random", "balanced_shift"] = "random",
     ) -> None:
         super().__init__()
         self.method = method
@@ -51,21 +54,34 @@ class ShuffleCategories(EnsembleProcessor):
         self,
         table: TableTensor,
         *,
+        shifts: dict[tuple[torch.device, int, int], Tensor],
         generator: torch.Generator | None = None,
     ) -> list[Tensor]:
         device = table.categorical.device
         permutations: list[Tensor] = []
-        for category in table.categorical.categories:
+        for column, category in enumerate(table.categorical.categories):
             n_classes = category.numel()
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
-            elif self.method == "shift":
-                offset = torch.randint(
-                    n_classes,
-                    (1,),
-                    generator=generator,
-                    device=device,
-                )
+            elif self.method in ("shift", "balanced_shift"):
+                if self.method == "balanced_shift":
+                    key = (device, column, n_classes)
+                    remaining = shifts.get(key)
+                    if remaining is None or remaining.numel() == 0:
+                        remaining = torch.randperm(
+                            n_classes,
+                            generator=generator,
+                            device=device,
+                        )
+                    offset = remaining[:1]
+                    shifts[key] = remaining[1:]
+                else:
+                    offset = torch.randint(
+                        n_classes,
+                        (1,),
+                        generator=generator,
+                        device=device,
+                    )
                 permutation = (
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes
@@ -92,9 +108,11 @@ class ShuffleCategories(EnsembleProcessor):
             tuple[torch.device, tuple[tuple[int, ...], ...]], int
         ] = {}
 
+        shifts: dict[tuple[torch.device, int, int], Tensor] = {}
         for member_id in range(len(ensemble_table)):
             permutations = self._draw_permutations(
                 ensemble_table[member_id],
+                shifts=shifts,
                 generator=generator,
             )
             key = (
