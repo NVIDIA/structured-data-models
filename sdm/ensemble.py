@@ -16,6 +16,7 @@ from sdm.tensor import TableTensor
 from sdm.tensor.mixin import DeviceMixin
 
 T = TypeVar("T")
+TensorT = TypeVar("TensorT", bound=Tensor)
 
 
 class EnsembleData(abc.ABC, Generic[T]):
@@ -67,7 +68,23 @@ class EnsembleData(abc.ABC, Generic[T]):
         pass
 
 
-class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
+class EnsembleTensor(EnsembleData[TensorT]):
+    """Store and group tensors as an ensemble.
+
+    Args:
+        groups: Tensors containing the ensemble members.
+        locations: Group index and position for each ensemble member.
+    """
+
+    @staticmethod
+    def _select_member(
+        group: TensorT,
+        position: int,
+    ) -> TensorT:
+        return cast(TensorT, group[position])
+
+
+class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
     """Store and group input :class:`~sdm.tensor.TableTensor` as an ensemble.
 
     Each ensemble member is associated with one
@@ -292,13 +309,6 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
             group_id: Zero-based group index.
         """
         return sum(i == group_id for i, _ in self._locations)
-
-    @staticmethod
-    def _select_member(
-        group: TableTensor,
-        position: int,
-    ) -> TableTensor:
-        return group[position]
 
     def expanded_group(self, group_id: int) -> TableTensor:
         """Return the logical members assigned to one group.

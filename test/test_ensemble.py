@@ -6,7 +6,17 @@ from typing import cast
 import pytest
 import torch
 
-from sdm import EnsembleTable, TableTensor
+from sdm import EnsembleTable, EnsembleTensor, TableTensor
+
+
+def test_tensor_member() -> None:
+    group = torch.tensor([[1.0], [2.0]])
+    ensemble = EnsembleTensor(
+        groups=(group,),
+        locations=((0, 1), (0, 0), (0, 1)),
+    )
+
+    torch.testing.assert_close(ensemble[0], group[1])
 
 
 def test_shared_member_table() -> None:
