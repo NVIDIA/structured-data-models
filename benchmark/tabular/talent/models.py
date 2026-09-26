@@ -86,14 +86,14 @@ MODEL_CONFIGS = {
     "kumo-tabular-small": ModelConfig(
         name="KumoTabular-Small",
         factory=partial(_create_kumo_tabular, size="small"),
-        num_estimators=16,
+        num_estimators=8,
         autocast_dtype=torch.float16,
         max_classes=10,
     ),
     "kumo-tabular-medium": ModelConfig(
         name="KumoTabular-Medium",
         factory=partial(_create_kumo_tabular, size="medium"),
-        num_estimators=16,
+        num_estimators=8,
         autocast_dtype=torch.float16,
         max_classes=10,
     ),

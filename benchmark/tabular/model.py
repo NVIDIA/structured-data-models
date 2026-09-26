@@ -404,12 +404,14 @@ class SDMKumoTabularSmallModel(SDMKumoTabularModel):
     ag_key = "SDM-KUMO-TABULAR-SMALL"
     ag_name = "SDMKumoTabularSmall"
     size = "small"
+    default_num_estimators = 8
 
 
 class SDMKumoTabularMediumModel(SDMKumoTabularModel):
     ag_key = "SDM-KUMO-TABULAR-MEDIUM"
     ag_name = "SDMKumoTabularMedium"
     size = "medium"
+    default_num_estimators = 8
 
 
 class SDMKumoTabularLargeModel(SDMKumoTabularModel):
