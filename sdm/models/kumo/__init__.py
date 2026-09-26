@@ -5,9 +5,11 @@
 
 from sdm.models.kumo.relational import KumoRelational
 from sdm.models.kumo.tabular import KumoTabular
+from sdm.models.kumo.timeseries import KumoForecasting
 
 
 __all__ = [
     "KumoRelational",
     "KumoTabular",
+    "KumoForecasting",
 ]

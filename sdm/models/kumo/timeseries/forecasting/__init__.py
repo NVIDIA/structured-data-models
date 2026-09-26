@@ -2,3 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Kumo time-series forecasting model components."""
+
+from sdm.models.kumo.timeseries.forecasting.model import KumoForecasting
+
+
+__all__ = ["KumoForecasting"]
