@@ -63,25 +63,27 @@ class ShuffleCategories(EnsembleProcessor):
             n_classes = category.numel()
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
-            elif self.method in ("shift", "balanced_shift"):
-                if self.method == "balanced_shift":
-                    key = (device, column, n_classes)
-                    remaining = shifts.get(key)
-                    if remaining is None or remaining.numel() == 0:
-                        remaining = torch.randperm(
-                            n_classes,
-                            generator=generator,
-                            device=device,
-                        )
-                    offset = remaining[:1]
-                    shifts[key] = remaining[1:]
-                else:
-                    offset = torch.randint(
+            elif self.method == "shift":
+                offset = torch.randint(
+                    n_classes,
+                    (1,),
+                    generator=generator,
+                    device=device,
+                )
+                permutation = (
+                    torch.arange(n_classes, device=device) - offset
+                ) % n_classes
+            elif self.method == "balanced_shift":
+                key = (device, column, n_classes)
+                remaining = shifts.get(key)
+                if remaining is None or remaining.numel() == 0:
+                    remaining = torch.randperm(
                         n_classes,
-                        (1,),
                         generator=generator,
                         device=device,
                     )
+                offset = remaining[:1]
+                shifts[key] = remaining[1:]
                 permutation = (
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes

@@ -169,23 +169,17 @@ def test_default_recipe_numerical_schedule(
         EnsembleTable.from_table(query, num_members=num_members)
     )
     for i in range(num_members):
-        if i % 4 == 3:
-            processor = sp.Sequential(
+        processor = sp.Sequential(
+            sp.Standardize(eps=1e-6),
+            sp.Clip(-100.0, 100.0),
+            (
+                sp.Identity(),
+                sp.PowerTransform(),
+                [sp.RobustScale(), sp.ClipSoft(3.0)],
                 sp.RankGaussian(),
-                sp.Standardize(),
-                sp.ClipSigma(threshold=4.0),
-            )
-        else:
-            processor = sp.Sequential(
-                sp.Standardize(eps=1e-6),
-                sp.Clip(-100.0, 100.0),
-                (
-                    sp.Identity(),
-                    sp.PowerTransform(),
-                    [sp.RobustScale(), sp.ClipSoft(3.0)],
-                )[i % 3],
-                sp.ClipSigma(threshold=4.0),
-            )
+            )[i % 4],
+            sp.ClipSigma(threshold=4.0),
+        )
         expected = processor.fit_transform(features).numerical.float()
         # Independent sign flips are allowed; magnitudes identify each view.
         torch.testing.assert_close(
