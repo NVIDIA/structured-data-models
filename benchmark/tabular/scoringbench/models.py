@@ -8,7 +8,8 @@ from __future__ import annotations
 import abc
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import ClassVar
+from functools import partial
+from typing import ClassVar, Literal
 
 import numpy as np
 import pandas as pd
@@ -35,8 +36,11 @@ def _create_tabiclv2(device: torch.device) -> sdm.models.TabICLv2:
     return sdm.models.TabICLv2(task="regression", device=device)
 
 
-def _create_kumo_tabular(device: torch.device) -> sdm.models.KumoTabular:
-    return sdm.models.KumoTabular(task="regression", device=device)
+def _create_kumo_tabular(
+    device: torch.device,
+    size: Literal["small", "medium", "large"],
+) -> sdm.models.KumoTabular:
+    return sdm.models.KumoTabular(task="regression", size=size, device=device)
 
 
 MODEL_CONFIGS = {
@@ -47,12 +51,26 @@ MODEL_CONFIGS = {
         autocast_dtype=torch.float16,
         num_estimators=8,
     ),
-    "kumo-tabular": ModelConfig(
-        name="KumoTabular",
-        method="sdm_kumo_tabular",
-        factory=_create_kumo_tabular,
+    "kumo-tabular-small": ModelConfig(
+        name="KumoTabular-Small",
+        method="sdm_kumo_tabular_small",
+        factory=partial(_create_kumo_tabular, size="small"),
         autocast_dtype=torch.float16,
-        num_estimators=8,
+        num_estimators=16,
+    ),
+    "kumo-tabular-medium": ModelConfig(
+        name="KumoTabular-Medium",
+        method="sdm_kumo_tabular_medium",
+        factory=partial(_create_kumo_tabular, size="medium"),
+        autocast_dtype=torch.float16,
+        num_estimators=16,
+    ),
+    "kumo-tabular-large": ModelConfig(
+        name="KumoTabular-Large",
+        method="sdm_kumo_tabular_large",
+        factory=partial(_create_kumo_tabular, size="large"),
+        autocast_dtype=torch.float16,
+        num_estimators=16,
     ),
 }
 
@@ -137,11 +155,21 @@ class SDMTabICLv2Wrapper(SDMQuantileWrapper):
     config = MODEL_CONFIGS["tabiclv2"]
 
 
-class SDMKumoTabularWrapper(SDMQuantileWrapper):
-    config = MODEL_CONFIGS["kumo-tabular"]
+class SDMKumoTabularSmallWrapper(SDMQuantileWrapper):
+    config = MODEL_CONFIGS["kumo-tabular-small"]
+
+
+class SDMKumoTabularMediumWrapper(SDMQuantileWrapper):
+    config = MODEL_CONFIGS["kumo-tabular-medium"]
+
+
+class SDMKumoTabularLargeWrapper(SDMQuantileWrapper):
+    config = MODEL_CONFIGS["kumo-tabular-large"]
 
 
 WRAPPERS: dict[str, type[SDMQuantileWrapper]] = {
     "tabiclv2": SDMTabICLv2Wrapper,
-    "kumo-tabular": SDMKumoTabularWrapper,
+    "kumo-tabular-small": SDMKumoTabularSmallWrapper,
+    "kumo-tabular-medium": SDMKumoTabularMediumWrapper,
+    "kumo-tabular-large": SDMKumoTabularLargeWrapper,
 }

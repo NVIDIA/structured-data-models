@@ -24,6 +24,7 @@ import sdm.processing as sp
 from sdm.processing.execution import RecipeExecution
 
 Task = Literal["classification", "regression"]
+KumoTabularSize = Literal["small", "medium", "large"]
 
 
 class SDMModel(AbstractTorchModel, abc.ABC):
@@ -89,7 +90,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 self.random_seed
             )
 
-        X = self.preprocess(X, y=y)
+        X = self.preprocess(X, y=y, is_train=True)
         self.stypes = sdm.infer_stypes(X)
         x_context = sdm.TableTensor.from_pandas(
             df=X,
@@ -311,14 +312,22 @@ class SDMTabICLv2Model(SDMModel):
         return sdm.models.TabICLv2(task=task, device=device)
 
 
-def _load_kumo_network(*, task: str, device: torch.device) -> torch.nn.Module:
-    return sdm.models.KumoTabular(task=task, device=device).models[task]
+def _load_kumo_network(
+    *,
+    task: str,
+    size: KumoTabularSize,
+    device: torch.device,
+) -> torch.nn.Module:
+    return sdm.models.KumoTabular(
+        task=task,
+        size=size,
+        device=device,
+    ).models[task]
 
 
 class SDMKumoTabularModel(SDMModel):
-    ag_key = "SDM-KUMO-TABULAR"
-    ag_name = "SDMKumoTabular"
-    default_num_estimators = 8
+    size: ClassVar[KumoTabularSize]
+    default_num_estimators = 16
     autocast_dtype = torch.float16
     # Bagged children are fit one at a time in this process, so they share the
     # pretrained network of their task through AutoGluon's registry.
@@ -327,7 +336,7 @@ class SDMKumoTabularModel(SDMModel):
     }
     shared_weights: ClassVar[SharedWeights] = SharedWeights(
         loader="benchmark.tabular.model:_load_kumo_network",
-        key=("task",),
+        key=("task", "size"),
     )
 
     @classmethod
@@ -342,17 +351,23 @@ class SDMKumoTabularModel(SDMModel):
     ) -> None:
         warmup_torch(cuda=None if num_gpus is None else num_gpus > 0)
 
-    @staticmethod
+    @classmethod
     def _create_model(
+        cls,
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
         model = sdm.models.KumoTabular(
             task=task,
+            size=cls.size,
             pretrained=False,
             device="meta",
         )
-        model.models[task] = _load_kumo_network(task=task, device=device)
+        model.models[task] = _load_kumo_network(
+            task=task,
+            size=cls.size,
+            device=device,
+        )
         return model
 
     # AutoGluon does not look inside the served model for the shared network,
@@ -377,8 +392,35 @@ class SDMKumoTabularModel(SDMModel):
         for task in served.models:
             served.models[task] = _load_kumo_network(
                 task=task,
+                size=self.size,
                 device=self._device,
             )
+
+    def _preprocess(
+        self,
+        X: pd.DataFrame,
+        is_train: bool = False,
+        **kwargs: Any,
+    ) -> pd.DataFrame:
+        X = super()._preprocess(X, **kwargs)
+        # AutoGluon's feature generator hands binary columns over as integers,
+        # so low-cardinality numerical columns are typed categorical. The
+        # recipe runs without AlignCategories (see `_create_recipe`), so their
+        # codes would follow the order of appearance: pin the categories seen
+        # in training in value order instead; other values become missing.
+        if is_train:
+            stypes = sdm.infer_stypes(X, _low_cardinality="infer")
+            self._low_cardinality_dtypes = {
+                column: pd.CategoricalDtype(
+                    categories=np.sort(X[column].dropna().unique())
+                )
+                for column, stype in stypes.items()
+                if stype == sdm.Stype.categorical
+                and X[column].dtype.kind in "iuf"
+            }
+        if self._low_cardinality_dtypes:
+            X = X.astype(self._low_cardinality_dtypes, copy=False)
+        return X
 
     def _create_recipe(self) -> sdm.Recipe:
         recipe = super()._create_recipe()
@@ -398,6 +440,24 @@ class SDMKumoTabularModel(SDMModel):
                 sp.Sequential(*processors)
             )
         return recipe
+
+
+class SDMKumoTabularSmallModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-SMALL"
+    ag_name = "SDMKumoTabularSmall"
+    size = "small"
+
+
+class SDMKumoTabularMediumModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-MEDIUM"
+    ag_name = "SDMKumoTabularMedium"
+    size = "medium"
+
+
+class SDMKumoTabularLargeModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-LARGE"
+    ag_name = "SDMKumoTabularLarge"
+    size = "large"
 
 
 class SDMTabFMModel(SDMModel):
@@ -437,9 +497,17 @@ MODEL_CONFIGS = {
         name="TabICLv2",
         model_cls=SDMTabICLv2Model,
     ),
-    "kumo-tabular": ModelConfig(
-        name="KumoTabular",
-        model_cls=SDMKumoTabularModel,
+    "kumo-tabular-small": ModelConfig(
+        name="KumoTabular-Small",
+        model_cls=SDMKumoTabularSmallModel,
+    ),
+    "kumo-tabular-medium": ModelConfig(
+        name="KumoTabular-Medium",
+        model_cls=SDMKumoTabularMediumModel,
+    ),
+    "kumo-tabular-large": ModelConfig(
+        name="KumoTabular-Large",
+        model_cls=SDMKumoTabularLargeModel,
     ),
     "tabfm": ModelConfig(
         name="TabFM",

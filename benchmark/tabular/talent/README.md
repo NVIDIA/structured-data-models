@@ -24,7 +24,9 @@ Download and extract the datasets from the [official TALENT dataset page](https:
 - **`KumoTabular`:**
 
   ```bash
-  python -m benchmark.tabular.talent.main --model kumo-tabular --dataset-path /path/to/talent/data
+  python -m benchmark.tabular.talent.main --model kumo-tabular-large --dataset-path /path/to/talent/data
+  python -m benchmark.tabular.talent.main --model kumo-tabular-medium --dataset-path /path/to/talent/data
+  python -m benchmark.tabular.talent.main --model kumo-tabular-small --dataset-path /path/to/talent/data
   ```
 
 - **`TabFM`:**
@@ -41,7 +43,7 @@ Pass a dataset name to run only that TALENT dataset:
 
 ```bash
 python -m benchmark.tabular.talent.main \
-  --model kumo-tabular \
+  --model kumo-tabular-large \
   --dataset-path /path/to/talent/data \
   --dataset Bank_Customer_Churn_Dataset
 ```
