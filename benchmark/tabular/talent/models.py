@@ -88,21 +88,18 @@ MODEL_CONFIGS = {
         factory=partial(_create_kumo_tabular, size="small"),
         num_estimators=8,
         autocast_dtype=torch.float16,
-        max_classes=10,
     ),
     "kumo-tabular-medium": ModelConfig(
         name="KumoTabular-Medium",
         factory=partial(_create_kumo_tabular, size="medium"),
         num_estimators=8,
         autocast_dtype=torch.float16,
-        max_classes=10,
     ),
     "kumo-tabular-large": ModelConfig(
         name="KumoTabular-Large",
         factory=partial(_create_kumo_tabular, size="large"),
         num_estimators=16,
         autocast_dtype=torch.float16,
-        max_classes=10,
     ),
     "tabfm": ModelConfig(
         name="TabFM",

@@ -92,8 +92,7 @@ for dataset in datasets:
             config=config,
             seed_num=SEED_NUM,
             tune=False,
-            tune_threshold=True,
-            threshold_metric="f1",
+            tune_threshold=False,
         )
         record = {
             "status": "success",
