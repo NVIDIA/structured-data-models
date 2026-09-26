@@ -131,11 +131,11 @@ def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
 
 
 @pytest.mark.parametrize("task", ["classification", "regression"])
-@pytest.mark.parametrize("estimator_batch_size", [2, None])
+@pytest.mark.parametrize("estimator_batch_size", [2, None, "auto"])
 def test_estimator_batching(
     task: Literal["classification", "regression"],
     size: Literal["small", "medium", "large"],
-    estimator_batch_size: int | None,
+    estimator_batch_size: int | Literal["auto"] | None,
 ) -> None:
     model = _build(task, size)
     x_context, x_query = _features()
@@ -146,6 +146,7 @@ def test_estimator_batching(
         y_context=target,
         x_query=x_query,
         num_estimators=5,
+        estimator_batch_size=1,
         generator=torch.Generator().manual_seed(0),
     )
 
@@ -258,3 +259,120 @@ def test_missing_values_pass_through_fit_predict(
     assert cached.shape == direct.shape
     assert (direct.numerical.diff(dim=-1) >= 0).all()
     assert (cached.numerical.diff(dim=-1) >= 0).all()
+
+
+def _assert_batching_matches_sequential(
+    model: KumoTabular,
+    x_context: TableTensor,
+    y_context: TableTensor,
+    x_query: TableTensor,
+    estimator_batch_size: int | Literal["auto"] | None,
+) -> None:
+    def forward(size: int | Literal["auto"] | None) -> TableTensor:
+        return model(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            num_estimators=4,
+            estimator_batch_size=size,
+            generator=torch.Generator().manual_seed(0),
+        )
+
+    expected = forward(1)
+    actual = forward(estimator_batch_size)
+    assert actual.columns == expected.columns
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+
+    model.fit(
+        x=x_context,
+        y=y_context,
+        num_estimators=4,
+        estimator_batch_size=estimator_batch_size,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = model.predict(x_query)
+    assert actual.columns == expected.columns
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+
+
+@pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("estimator_batch_size", [None, "auto"])
+def test_estimator_batching_wide_table(
+    task: Literal["classification", "regression"],
+    estimator_batch_size: Literal["auto"] | None,
+) -> None:
+    # The default recipe keeps a different set of 500 columns per estimator.
+    model = _build(task, "small")
+    x_context, x_query = TableTensor.from_tensor(torch.randn(12, 520)).split(
+        8, dim=0
+    )
+    target = (
+        TableTensor(
+            columns={Stype.categorical: ("target",)},
+            categorical=CategoricalTensor(
+                code=torch.tensor([[0], [1], [2], [0], [1], [2], [0], [1]]),
+                categories=(torch.arange(3),),
+            ),
+        )
+        if task == "classification"
+        else TableTensor.from_tensor(torch.randn(8, 1))
+    )
+    _assert_batching_matches_sequential(
+        model=model,
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        estimator_batch_size=estimator_batch_size,
+    )
+
+
+@pytest.mark.parametrize("estimator_batch_size", [2, None, "auto"])
+def test_estimator_batching_many_classes(
+    estimator_batch_size: int | Literal["auto"] | None,
+) -> None:
+    # More than 10 classes run through ECOC codebooks drawn per estimator.
+    model = _build("classification", "small")
+    x_context, x_query = TableTensor.from_tensor(torch.randn(28, 4)).split(
+        24, dim=0
+    )
+    target = TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor(
+            code=torch.arange(24).remainder(12).unsqueeze(-1),
+            categories=(torch.arange(12),),
+        ),
+    )
+    _assert_batching_matches_sequential(
+        model=model,
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        estimator_batch_size=estimator_batch_size,
+    )
+
+
+def test_estimator_batching_many_classes_query_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 4 estimators of 24 context rows x 4 columns x 8 ECOC tasks fit one batch,
+    # so predict replays their codebooks over chunks of the 40 query rows.
+    monkeypatch.setattr(KumoTabular, "_estimator_batch_cells", 4 * 24 * 4 * 8)
+    monkeypatch.setattr(KumoTabular, "_estimator_row_cells", 0)
+    model = _build("classification", "small")
+    x_context, x_query = TableTensor.from_tensor(torch.randn(64, 4)).split(
+        [24, 40], dim=0
+    )
+    target = TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor(
+            code=torch.arange(24).remainder(12).unsqueeze(-1),
+            categories=(torch.arange(12),),
+        ),
+    )
+    _assert_batching_matches_sequential(
+        model=model,
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        estimator_batch_size="auto",
+    )
