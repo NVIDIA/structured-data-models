@@ -33,10 +33,16 @@ def cpm_iterative_revin_refine(
     num_quantiles: int,
     value_clip: float = 1e9,
 ) -> tuple[Tensor, Tensor]:
-    """Refine RevIN statistics for Contiguous Patch Masking (CPM).
+    """Refine normalization statistics across hidden time-series patches.
 
-    Each masked position incorporates model-estimated values from preceding
-    CPM patches in its block. Statistics at unmasked positions are unchanged.
+    A patch is a short span of time steps. RevIN (reversible instance
+    normalization) scales values using their mean and standard deviation, then
+    restores predictions to the original scale. Contiguous patch masking (CPM)
+    hides adjacent patches. For hidden patches, this function uses earlier
+    median predictions in place of missing values to update the statistics
+    (or zeros before any prediction is available). Updates carry across
+    output-patch blocks; visible patches keep their supplied statistics and
+    reset the run.
 
     Args:
         raw_logits: Normalized predictions with shape ``[B, V, N, O * Q]``,
@@ -46,8 +52,8 @@ def cpm_iterative_revin_refine(
         revin_n: Running counts with shape ``[B, V, N]``.
         revin_mu: Running means with shape ``[B, V, N]``.
         revin_sigma: Running standard deviations with shape ``[B, V, N]``.
-        patch_cpm_mask: Contiguous Patch Masking indicator with shape
-            ``[B, N]``.
+        patch_cpm_mask: Boolean mask with shape ``[B, N]``; ``True`` marks
+            a hidden patch.
         median_q_idx: Index of the median quantile used as the point estimate.
         rolls: Number of input patches covered by each output patch.
         patch_len: Input patch length.
