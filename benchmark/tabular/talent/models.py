@@ -12,6 +12,7 @@ from functools import lru_cache, partial
 from typing import Any, Literal, cast
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 from TALENT.model.lib.data import (
@@ -45,6 +46,7 @@ class ModelConfig:
     num_estimators: int
     autocast_dtype: torch.dtype
     max_classes: int | None = None
+    low_cardinality: Literal["off", "infer"] = "off"
 
 
 @lru_cache(maxsize=2)
@@ -88,18 +90,21 @@ MODEL_CONFIGS = {
         factory=partial(_create_kumo_tabular, size="small"),
         num_estimators=8,
         autocast_dtype=torch.float16,
+        low_cardinality="infer",
     ),
     "kumo-tabular-medium": ModelConfig(
         name="KumoTabular-Medium",
         factory=partial(_create_kumo_tabular, size="medium"),
         num_estimators=8,
         autocast_dtype=torch.float16,
+        low_cardinality="infer",
     ),
     "kumo-tabular-large": ModelConfig(
         name="KumoTabular-Large",
         factory=partial(_create_kumo_tabular, size="large"),
         num_estimators=16,
         autocast_dtype=torch.float16,
+        low_cardinality="infer",
     ),
     "tabfm": ModelConfig(
         name="TabFM",
@@ -120,6 +125,18 @@ def _target_vector(values: np.ndarray) -> np.ndarray:
     raise ValueError(f"Expected one target column, got shape {values.shape}.")
 
 
+def _as_float(
+    arrays: dict[str, np.ndarray] | None,
+) -> dict[str, np.ndarray] | None:
+    # TALENT's float conversion of numerical features, without imputation.
+    if arrays is None:
+        return None
+    return {
+        split: np.asarray(values, dtype=float).reshape(len(values), -1)
+        for split, values in arrays.items()
+    }
+
+
 class SDMMethod(Method):
     """Run an SDM in-context model through TALENT's evaluation protocol."""
 
@@ -138,6 +155,11 @@ class SDMMethod(Method):
             "num_estimators",
             self._config.num_estimators,
         )
+        self._low_cardinality = general.get(
+            "low_cardinality",
+            self._config.low_cardinality,
+        )
+        self._numerical_stypes: list[str] = []
 
     def data_format(
         self,
@@ -146,18 +168,24 @@ class SDMMethod(Method):
         C: dict[str, np.ndarray] | None = None,
         y: dict[str, np.ndarray] | None = None,
     ) -> None:
+        # Missing numerical values reach the model as NaN, which SDM models
+        # handle natively, instead of TALENT's train-mean imputation.
         if is_train:
             (
-                self.N,
+                _,
                 self.C,
                 self.num_new_value,
                 self.imputer,
                 self.cat_new_value,
             ) = data_nan_process(
-                self.N,
+                None,
                 self.C,
                 self.args.num_nan_policy,
                 self.args.cat_nan_policy,
+            )
+            self.N = _as_float(self.N)
+            self._numerical_stypes = self._infer_numerical_stypes(
+                None if self.N is None else self.N["train"]
             )
             self.y, self.y_info, self.label_encoder = data_label_process(
                 self.y,
@@ -170,8 +198,8 @@ class SDMMethod(Method):
             self.criterion = F.mse_loss if self.is_regression else F.nll_loss
             return
 
-        N_test, C_test, _, _, _ = data_nan_process(
-            N,
+        _, C_test, _, _, _ = data_nan_process(
+            None,
             C,
             self.args.num_nan_policy,
             self.args.cat_nan_policy,
@@ -179,6 +207,7 @@ class SDMMethod(Method):
             self.imputer,
             self.cat_new_value,
         )
+        N_test = _as_float(N)
         assert y is not None
         y_test, _, _ = data_label_process(
             y,
@@ -202,7 +231,7 @@ class SDMMethod(Method):
             for i, column in enumerate(numerical.T):
                 name = f"num_{i}"
                 data[name] = cast(Sequence[Any], column)
-                stypes[name] = "numerical"
+                stypes[name] = self._numerical_stypes[i]
         if categorical is not None:
             categorical = np.asarray(categorical)
             for i, column in enumerate(categorical.T):
@@ -214,6 +243,24 @@ class SDMMethod(Method):
             stypes=stypes,
             device=self._device,
         )
+
+    def _infer_numerical_stypes(
+        self,
+        numerical: np.ndarray | None,
+    ) -> list[str]:
+        if numerical is None:
+            return []
+        if self._low_cardinality == "off":
+            return ["numerical"] * numerical.shape[1]
+        # Typed from the train rows, as the TabArena wrapper types its
+        # context: numerical columns with 2 or 3 distinct values become
+        # categorical.
+        frame = pd.DataFrame(numerical).rename(columns=str)
+        stypes = sdm.infer_stypes(
+            frame,
+            _low_cardinality=self._low_cardinality,
+        )
+        return [str(stypes[column]) for column in frame.columns]
 
     def _to_target(self, values: np.ndarray) -> sdm.TableTensor:
         return sdm.TableTensor.from_columns(
