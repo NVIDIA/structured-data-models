@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping, Sequence
+import math
+from collections.abc import Callable, Mapping, Sequence
 from typing import NamedTuple, cast
 
 import torch
@@ -12,6 +13,7 @@ from torch import Tensor
 
 import sdm.processing as sp
 from sdm import EnsembleTable, Recipe, RelatedTables, Stype, TableTensor
+from sdm._memory import split_size
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 
 
@@ -44,6 +46,7 @@ class RecipeExecution:
         ) = None
         self._num_estimators: int | None = None
         self._y_locations: tuple[tuple[int, int], ...] | None = None
+        self._numerical_target = False
 
     @property
     def num_members(self) -> int:
@@ -68,6 +71,7 @@ class RecipeExecution:
 
         self._num_estimators = num_members
         self._y_locations = y._locations
+        self._numerical_target = y[0].numerical.size(-1) > 0
 
         task_dispatchers = tuple(
             module
@@ -164,9 +168,13 @@ class RecipeExecution:
         x: Tensor | TableTensor | EnsembleTable,
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
-        """Transform query data."""
+        """Transform query data.
+
+        Fitted processors transform query rows independently, so large
+        queries are transformed in passes over their rows.
+        """
         x = _to_ensemble_table(x, self._num_estimators)
-        x = self.recipe.features.transform_ensemble(x)
+        x = _transform_rows(self.recipe.features.transform_ensemble, x)
         if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
@@ -254,8 +262,44 @@ class RecipeExecution:
     def transform_output(
         self,
         outputs: Sequence[TableTensor],
+        dtype: torch.dtype,
     ) -> TableTensor:
-        """Apply ``recipe.output`` to member outputs."""
+        """Apply ``recipe.output`` to member outputs in ``dtype``.
+
+        Outputs of numerical targets first pass through the inverted target
+        transforms. Output rows are processed independently, so large outputs
+        are processed in passes over their rows.
+        """
+        # Output cells are processed in double precision at most.
+        size = split_size(
+            num_items=outputs[0].size(-2),
+            item_bytes=sum(
+                math.prod(output.size()[:-2]) * output.size(-1)
+                for output in outputs
+            )
+            * torch.float64.itemsize,
+            device=outputs[0].device,
+        )
+        if size >= outputs[0].size(-2):
+            return self._transform_output(outputs, dtype)
+        parts = tuple(
+            self._transform_output(chunk, dtype)
+            for chunk in zip(
+                *(output.split(size, dim=-2) for output in outputs),
+                strict=True,
+            )
+        )
+        return cast(TableTensor, torch.cat(parts, dim=-2))
+
+    def _transform_output(
+        self,
+        outputs: Sequence[TableTensor],
+        dtype: torch.dtype,
+    ) -> TableTensor:
+        outputs = [cast(TableTensor, output.to(dtype)) for output in outputs]
+        if self._numerical_target:
+            outputs = list(self.inverse_transform_target(outputs))
+
         if len(outputs) == 1:
             out = outputs[0].unsqueeze(0)
         else:
@@ -271,6 +315,38 @@ class RecipeExecution:
             out = torch.stack(list(outputs), dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
+
+
+def _transform_rows(
+    transform: Callable[[EnsembleTable], EnsembleTable],
+    table: EnsembleTable,
+) -> EnsembleTable:
+    # Member cells are transformed in double precision at most.
+    first = table._groups[0]  # [members, ..., rows, columns]
+    size = split_size(
+        num_items=first.size(-2),
+        item_bytes=len(table)
+        * math.prod(first.size()[1:-2])
+        * first.size(-1)
+        * torch.float64.itemsize,
+        device=first.device,
+    )
+    if size >= first.size(-2):
+        return transform(table)
+    parts = [
+        transform(table.replace_groups(groups))
+        for groups in zip(
+            *(group.split(size, dim=-2) for group in table._groups),
+            strict=True,
+        )
+    ]
+    # Passes share the fitted state and thus the member layout:
+    return parts[0].replace_groups(
+        [
+            cast(TableTensor, torch.cat(groups, dim=-2))
+            for groups in zip(*(part._groups for part in parts), strict=True)
+        ]
+    )
 
 
 def _align_to_fitted_groups(

@@ -13,7 +13,9 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm.models import KumoTabular
 from sdm.processing.execution import RecipeExecution
+from sdm.testing import onlyCUDA
 
 
 def test_sequence_uses_batched_fit_states_for_shared_query() -> None:
@@ -380,3 +382,67 @@ def test_member_context_exposes_input_stypes() -> None:
 
     assert context.input_stypes == x.stypes
     assert context.x.columns[Stype.numerical] == ("n", "c")
+
+
+@onlyCUDA
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_row_passes_match_single_pass(
+    task: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    device = torch.device("cuda:0")
+    x = torch.randn(28, 4, device=device)
+    x[::3, 0] = float("nan")
+    x_context, x_query = TableTensor.from_tensor(x).split([8, 20], dim=0)
+    if task == "classification":
+        y = TableTensor(
+            columns={Stype.categorical: ("target",)},
+            categorical=CategoricalTensor(
+                code=torch.arange(8, device=device).unsqueeze(-1) % 3,
+                categories=(torch.arange(3, device=device),),
+            ),
+        )
+        num_outputs = 3
+    else:
+        y = TableTensor.from_tensor(torch.randn(8, 1, device=device))
+        num_outputs = 5
+    execution = RecipeExecution(KumoTabular.default_recipe())
+    execution.fit_transform(
+        x=x_context,
+        y=y,
+        related_tables=None,
+        num_members=4,
+    )
+    columns = [str(i) for i in range(num_outputs)]
+    outputs = [
+        TableTensor(
+            columns={Stype.numerical: columns},
+            numerical=torch.randn(20, num_outputs, device=device).half(),
+        )
+        for _ in range(4)
+    ]
+
+    # Passes run without autograd, like model inference.
+    @torch.inference_mode()
+    def run() -> tuple[tuple[TableTensor, ...], TableTensor]:
+        queries = execution.transform(x=x_query, related_tables=None)
+        output = execution.transform_output(outputs, torch.float32)
+        return tuple(query.x for query in queries), output
+
+    expected_queries, expected_output = run()
+    # Passes of a single row:
+    monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "1e-12")
+    queries, output = run()
+
+    for query, expected_query in zip(queries, expected_queries, strict=True):
+        assert query.columns == expected_query.columns
+        torch.testing.assert_close(
+            query.numerical,
+            expected_query.numerical,
+            rtol=0,
+            atol=0,
+            equal_nan=True,
+        )
+    assert output.columns == expected_output.columns
+    assert output.numerical.dtype == torch.float32
+    assert torch.equal(output.numerical, expected_output.numerical)

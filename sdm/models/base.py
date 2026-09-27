@@ -204,19 +204,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
             **kwargs,
         )
 
-        # Regression: invert target before stacking estimator outputs.
-        if contexts[0].y.numerical.size(-1) > 0:
-            with (
-                torch.amp.autocast(x_query.device.type, enabled=False),
-                inference_mode("grad" if requires_grad else "inference"),
-            ):
-                outs = list(recipe_execution.inverse_transform_target(outs))
-
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
         ):
-            return recipe_execution.transform_output(outs)
+            return recipe_execution.transform_output(
+                outs,
+                dtype=queries[0].x.dtype,
+            )
 
     def fit(
         self,
@@ -529,19 +524,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 transfer_stream.synchronize()
             raise
 
-        # Regression: invert target before stacking estimator outputs.
-        if cast(Cache, self._cache[0])["classes"] is None:
-            with (
-                torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode("grad" if requires_grad else "inference"),
-            ):
-                outs = list(recipe_execution.inverse_transform_target(outs))
-
         with (
             torch.amp.autocast(x.device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
         ):
-            return recipe_execution.transform_output(outs)
+            return recipe_execution.transform_output(
+                outs,
+                dtype=queries[0].x.dtype,
+            )
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
@@ -796,7 +786,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             for i in range(len(outs)):
                 for callback in callbacks:
                     outs[i] = callback.on_model_forward_end(self, outs[i])
-        return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]
+        return outs
 
     def _validate_context(
         self,
