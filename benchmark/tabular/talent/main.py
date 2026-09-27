@@ -64,6 +64,7 @@ config = {
         "model": args.model,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "num_estimators": model.num_estimators,
+        "low_cardinality": model.low_cardinality,
     },
 }
 
