@@ -7,6 +7,7 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
+from sdm.processing.numerical._stats import _isfinite
 
 
 class ClipSoft(Processor):
@@ -39,15 +40,13 @@ class ClipSoft(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
         bound = self.max_absolute_value
-        ratio = (numerical / bound).abs()
-        squared = 1 + ratio.square()
-        unit = torch.where(
-            squared.isfinite(),
-            ratio / squared.sqrt(),
-            1.0,
-        )
-        clipped = numerical.sign() * bound * unit
-        clipped = torch.where(numerical.isnan(), numerical, clipped)
+        unit = numerical.div(bound).abs_()
+        root = unit.square().add_(1).sqrt_()
+        # 'root' is finite exactly where '1 + unit ** 2' is.
+        unit.div_(root).masked_fill_(~_isfinite(root), 1.0)
+        del root
+        clipped = numerical.sign().mul_(bound).mul_(unit)
+        torch.where(numerical.isnan(), numerical, clipped, out=clipped)
         return table.replace_blocks(numerical=clipped)
 
     def __repr__(self, *, indent: int = 0) -> str:

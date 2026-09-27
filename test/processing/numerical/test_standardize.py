@@ -77,6 +77,26 @@ def test_standardize(device: torch.device) -> None:
 
 
 @withCUDA
+def test_standardize_ignores_non_finite_values_in_many_rows(
+    device: torch.device,
+) -> None:
+    inp = torch.randn(2, 600, 3, dtype=torch.float64, device=device)
+    inp[inp > 1.0] = float("nan")
+    inp[inp < -1.5] = float("inf")
+
+    out = Standardize().fit_transform(TableTensor.from_tensor(inp))
+
+    finite = inp.masked_fill(~inp.isfinite(), float("nan"))
+    mean = finite.nanmean(-2, keepdim=True)
+    std = (finite - mean).square().nanmean(-2, keepdim=True).sqrt()
+    torch.testing.assert_close(
+        out.numerical,
+        (inp - mean) / std,
+        equal_nan=True,
+    )
+
+
+@withCUDA
 def test_standardize_single_sample_uses_unit_scale(
     device: torch.device,
 ) -> None:

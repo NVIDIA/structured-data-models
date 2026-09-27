@@ -4,7 +4,9 @@
 import torch
 
 from sdm import Stype, TableTensor
+from sdm._memory import split_size
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.numerical._stats import _isfinite
 
 
 class RobustScale(Processor, InvertibleMixin):
@@ -44,27 +46,39 @@ class RobustScale(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
-        finite_or_nan = numerical.masked_fill(~numerical.isfinite(), torch.nan)
+        finite_or_nan = numerical.masked_fill(~_isfinite(numerical), torch.nan)
         q_low, q_high = (value / 100.0 for value in self.quantile_range)
         # 'nanquantile' requires single or double precision input.
         quantile_input = finite_or_nan.to(
             dtype=torch.promote_types(numerical.dtype, torch.float32),
         )
-        lower, median, upper = quantile_input.nanquantile(
-            quantile_input.new_tensor([q_low, 0.5, q_high]),
-            dim=-2,
-            keepdim=True,
+        q = quantile_input.new_tensor([q_low, 0.5, q_high])
+        # 'nanquantile' allocates several copies of its input, including
+        # int64 sort indices, which chunks of the independent columns bound.
+        size = split_size(
+            num_items=quantile_input.size(-1),
+            item_bytes=quantile_input[..., :1].numel()
+            * 4
+            * torch.int64.itemsize,
+            device=quantile_input.device,
+        )
+        lower, median, upper = torch.cat(
+            [
+                chunk.nanquantile(q, dim=-2, keepdim=True)
+                for chunk in quantile_input.split(size, dim=-1)
+            ],
+            dim=-1,
         )
         self.median = median.to(dtype=numerical.dtype)
         scale = torch.where(lower == upper, 1.0, upper - lower)
         self.scale = scale.to(dtype=numerical.dtype)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = (table.numerical - self.median) / self.scale
+        numerical = table.numerical.sub(self.median).div_(self.scale)
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical * self.scale + self.median
+        numerical = table.numerical.mul(self.scale).add_(self.median)
         return table.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:

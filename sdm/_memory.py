@@ -17,3 +17,17 @@ def chunk_memory_limit(device: torch.device) -> int:
         * torch.cuda.get_per_process_memory_fraction(device)
         * float(os.getenv("SDM_CHUNK_MEMORY_FRACTION", "0.05"))
     )
+
+
+def split_size(num_items: int, item_bytes: int, device: torch.device) -> int:
+    r"""Split size of balanced chunks of items of ``item_bytes`` bytes each.
+
+    On CUDA devices, chunks fit :func:`chunk_memory_limit`. Autograd keeps
+    the memory of every chunk, so one chunk holds all items elsewhere or
+    while gradients are enabled.
+    """
+    if device.type != "cuda" or torch.is_grad_enabled():
+        return max(num_items, 1)
+    limit = max(chunk_memory_limit(device), 1)
+    num_chunks = max(-(-num_items * item_bytes // limit), 1)
+    return max(-(-num_items // num_chunks), 1)
