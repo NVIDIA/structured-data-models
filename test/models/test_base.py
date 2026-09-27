@@ -1075,7 +1075,7 @@ def test_forward_members_moves_contexts_to_query_device() -> None:
     )
     x_query = torch.randn(4, 2, 2)
     queries = [
-        query._replace(x=query.x.cuda())
+        query._replace(x=cast(TableTensor, query.x.cuda()))
         for query in recipe.transform(x=x_query, related_tables=None)
     ]
 
