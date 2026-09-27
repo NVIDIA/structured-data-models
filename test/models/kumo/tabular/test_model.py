@@ -9,6 +9,8 @@ import torch
 import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import KumoTabular
+from sdm.models.kumo.tabular.row_embedding import RowEmbedding
+from sdm.testing import onlyCUDA
 
 
 def _build(
@@ -376,3 +378,49 @@ def test_estimator_batching_many_classes_query_chunks(
         x_query=x_query,
         estimator_batch_size="auto",
     )
+
+
+@onlyCUDA
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_query_passes_match_single_pass(
+    task: Literal["classification", "regression"],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = _build(task, "small").cuda().eval()
+    x = torch.randn(1008, 4, device="cuda")
+    x[::3, 0] = float("nan")
+    x_context, x_query = TableTensor.from_tensor(x).split([8, 1000], dim=0)
+    # 12 classes run through ECOC.
+    target = (
+        TableTensor(
+            columns={Stype.categorical: ("target",)},
+            categorical=CategoricalTensor(
+                code=torch.arange(8, device="cuda").unsqueeze(-1),
+                categories=(torch.arange(12, device="cuda"),),
+            ),
+        )
+        if task == "classification"
+        else TableTensor.from_tensor(torch.randn(8, 1, device="cuda"))
+    )
+
+    def forward() -> TableTensor:
+        return model(
+            x_context=x_context,
+            y_context=target,
+            x_query=x_query,
+            num_estimators=2,
+            generator=torch.Generator("cuda").manual_seed(0),
+        )
+
+    # A chunk memory limit of 1 MiB embeds the query rows in passes.
+    total_memory = torch.cuda.get_device_properties("cuda").total_memory
+    monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", str(2**20 / total_memory))
+    actual = forward()
+    monkeypatch.setattr(
+        RowEmbedding,
+        "_pass_starts",
+        lambda self, x, train_size, cache: [0],
+    )
+    expected = forward()
+
+    torch.testing.assert_close(actual.numerical, expected.numerical)
