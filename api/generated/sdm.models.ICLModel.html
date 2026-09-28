@@ -301,11 +301,7 @@ through the model in one call. <code class="docutils literal notranslate"><span 
 one by one; <code class="docutils literal notranslate"><span class="pre">None</span></code> batches as many as possible. Estimators
 whose preprocessed tables differ in shape or target class
 set, or that come with related tables, run in separate
-calls. Device memory grows with the batch size.
-Model-side randomness drawn per call (<em>e.g.</em>, the ECOC codebook
-of <a class="reference internal" href="sdm.models.KumoTabular.html#sdm.models.KumoTabular" title="sdm.models.KumoTabular"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoTabular</span></code></a> for more than 10 classes)
-is shared within a batch, so batched and sequential predictions
-differ numerically there.</p></li>
+calls. Device memory grows with the batch size.</p></li>
 <li><p><strong>callbacks</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><em>Callback</em><em>] </em><em>| </em><em>None</em>) – Callbacks applied in sequence to this model call.</p></li>
 <li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom number generator used for sampling during
 pre-processing and model execution.</p></li>
@@ -348,11 +344,7 @@ one by one; <code class="docutils literal notranslate"><span class="pre">None</s
 whose preprocessed tables differ in shape or target class
 set, or that come with related tables, run in separate
 calls. Device memory grows with the batch size. Estimators
-fitted together are predicted together.
-Model-side randomness drawn per call (<em>e.g.</em>, the ECOC codebook
-of <a class="reference internal" href="sdm.models.KumoTabular.html#sdm.models.KumoTabular" title="sdm.models.KumoTabular"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoTabular</span></code></a> for more than 10 classes)
-is shared within a batch, so batched and sequential predictions
-differ numerically there.</p></li>
+fitted together are predicted together.</p></li>
 <li><p><strong>callbacks</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><em>Callback</em><em>] </em><em>| </em><em>None</em>) – Callbacks applied in sequence to this model call.</p></li>
 <li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom number generator used for sampling during
 pre-processing and model execution.</p></li>
@@ -442,7 +434,7 @@ stacked estimator outputs with shape <code class="docutils literal notranslate">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=668c89c7"></script>
+      <script src="../../_static/documentation_options.js?v=dbb6d843"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
