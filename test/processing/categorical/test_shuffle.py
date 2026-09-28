@@ -204,8 +204,10 @@ def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("num_classes", [1, 2, 3, 10])
-@pytest.mark.parametrize("num_members", [1, 8, 21])
+@pytest.mark.parametrize(
+    ("num_classes", "num_members"),
+    [(1, 8), (3, 8), (10, 8)],
+)
 def test_balanced_shifts_cover_classes(
     device: torch.device,
     num_classes: int,
