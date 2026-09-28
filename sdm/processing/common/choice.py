@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator
 from typing import Literal, cast
 
 import torch
@@ -79,14 +80,13 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     def _tables_by_option(
         self,
         ensemble_table: EnsembleTable,
-    ) -> dict[int, EnsembleTable]:
+    ) -> Iterator[tuple[int, EnsembleTable]]:
         member_ids_by_option: dict[int, list[int]] = {}
         for member_id, option_id in enumerate(self._option_ids):
             member_ids_by_option.setdefault(option_id, []).append(member_id)
-        return {
-            option_id: ensemble_table[member_ids]
-            for option_id, member_ids in sorted(member_ids_by_option.items())
-        }
+        # Select lazily, since selecting members may copy them.
+        for option_id, member_ids in sorted(member_ids_by_option.items()):
+            yield option_id, ensemble_table[member_ids]
 
     def _gather_outputs(
         self,
@@ -124,7 +124,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             ensemble_table,
             generator=generator,
         )
-        for option_id, table in self._tables_by_option(ensemble_table).items():
+        for option_id, table in self._tables_by_option(ensemble_table):
             self.options[option_id].fit_ensemble(table, generator=generator)
 
     def _fit_transform_ensemble(
@@ -142,9 +142,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
                 table,
                 generator=generator,
             )
-            for option_id, table in self._tables_by_option(
-                ensemble_table
-            ).items()
+            for option_id, table in self._tables_by_option(ensemble_table)
         }
         return self._gather_outputs(ensemble_table, outputs)
 
@@ -155,9 +153,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         self._check_num_members(ensemble_table)
         outputs = {
             option_id: self.options[option_id].transform_ensemble(table)
-            for option_id, table in self._tables_by_option(
-                ensemble_table
-            ).items()
+            for option_id, table in self._tables_by_option(ensemble_table)
         }
         return self._gather_outputs(ensemble_table, outputs)
 
@@ -167,7 +163,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         self._check_num_members(ensemble_table)
         outputs = {}
-        for option_id, table in self._tables_by_option(ensemble_table).items():
+        for option_id, table in self._tables_by_option(ensemble_table):
             processor = self.options[option_id]
             if not isinstance(processor, EnsembleInvertibleMixin):
                 raise TypeError(
