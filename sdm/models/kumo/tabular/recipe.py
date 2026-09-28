@@ -49,7 +49,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             sp.StypeDispatch(
                 categorical=[
                     sp.AlignCategories(),
-                    sp.ShuffleCategories(method="balanced_shift"),
+                    sp.ShuffleCategories(method="shift"),
                 ],
                 numerical=[
                     sp.Standardize(),

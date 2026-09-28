@@ -84,9 +84,9 @@ def test_shuffle_categories_random_permutes_each_categorical_column(
     assert transformed.categorical.tolist() == features.categorical.tolist()
 
 
-@pytest.mark.parametrize("method", ["shift", "random", "balanced_shift"])
+@pytest.mark.parametrize("method", ["shift", "random"])
 def test_shuffle_categories_is_reproducible_with_generator(
-    method: Literal["shift", "random", "balanced_shift"],
+    method: Literal["shift", "random"],
 ) -> None:
     features = _table(
         [[0, 0], [1, 1], [2, -1], [1, 0]],
@@ -119,10 +119,7 @@ def test_shuffle_categories_preserves_missing() -> None:
     assert output.categorical.tolist() == target.categorical.tolist()
 
 
-@pytest.mark.parametrize("method", ["shift", "random"])
-def test_shuffle_categories_ensemble_matches_independent_processors(
-    method: Literal["shift", "random"],
-) -> None:
+def test_shuffle_categories_random_matches_independent_processors() -> None:
     first_context = _table(
         [[0, 0], [1, 1], [2, -1], [1, 0]],
         (("a", "b", "c"), ("x", "y")),
@@ -148,7 +145,7 @@ def test_shuffle_categories_ensemble_matches_independent_processors(
         tables=(first_query, second_query),
         member_table_ids=table_ids,
     )
-    processor = ShuffleCategories(method=method)
+    processor = ShuffleCategories(method="random")
 
     context_output = processor.fit_transform_ensemble(
         context,
@@ -160,7 +157,7 @@ def test_shuffle_categories_ensemble_matches_independent_processors(
     context_tables = (first_context, second_context)
     query_tables = (first_query, second_query)
     for member_id, table_id in enumerate(table_ids):
-        reference = ShuffleCategories(method=method)
+        reference = ShuffleCategories(method="random")
         expected_context = reference.fit_transform(
             context_tables[table_id],
             generator=generator,
@@ -204,75 +201,22 @@ def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize(
-    ("num_classes", "num_members"),
-    [(1, 8), (3, 8), (10, 8)],
-)
-def test_balanced_shifts_cover_classes(
+def test_shuffle_categories_shift_uses_each_offset_before_reuse(
     device: torch.device,
-    num_classes: int,
-    num_members: int,
 ) -> None:
+    num_classes = 3
+    num_members = 8
     target = _table(
-        [[i] for i in range(num_classes)] + [[-1]],
-        (tuple(str(i) for i in range(num_classes)),),
+        [[0, 0], [1, 1], [2, 2], [-1, -1]],
+        (("a", "b", "c"), ("x", "y", "z")),
         device=device,
     )
     ensemble = EnsembleTable.from_table(target, num_members=num_members)
-    processor = ShuffleCategories(method="balanced_shift")
-    output = processor.fit_transform_ensemble(ensemble)
+    output = ShuffleCategories(method="shift").fit_transform_ensemble(ensemble)
     shifts = torch.stack(
-        [output[i].categorical.code[0, 0] for i in range(num_members)]
-    ).long()
-    counts = shifts.bincount(minlength=num_classes)
-    assert int(counts.max() - counts.min()) <= 1
-    for start in range(0, num_members, num_classes):
-        cycle = shifts[start : start + num_classes]
-        assert cycle.unique().numel() == cycle.numel()
-    query_output = processor.transform_ensemble(ensemble)
-    for i in range(num_members):
-        assert output[i].categorical.tolist() == target.categorical.tolist()
-        assert output[i].equal(query_output[i])
-
-
-def test_balanced_shifts_separate_columns(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        torch,
-        "randperm",
-        lambda n, **kwargs: torch.arange(n, device=kwargs.get("device")),
-    )
-    tables = tuple(
-        TableTensor(
-            columns={Stype.categorical: (name,)},
-            categorical=CategoricalTensor.from_tensor(
-                torch.tensor([[0], [1]])
-            ),
-        )
-        for name in ("first", "second")
-    )
-    ensemble = EnsembleTable.from_tables(tables, (0, 1, 0, 1))
-    output = ShuffleCategories(method="balanced_shift").fit_transform_ensemble(
-        ensemble
+        [output[i].categorical.code[0] for i in range(num_members)]
     )
 
-    for member_ids in ((0, 2), (1, 3)):
-        shifts = {output[i].categorical.code[0, 0].item() for i in member_ids}
-        assert shifts == {0, 1}
-
-
-def test_balanced_shifts_reproducible_ensemble() -> None:
-    target = _table([[0], [1], [2], [-1]], (("a", "b", "c"),))
-    ensemble = EnsembleTable.from_table(target, num_members=8)
-    processor = ShuffleCategories(method="balanced_shift")
-    first = processor.fit_transform_ensemble(
-        ensemble,
-        generator=torch.Generator().manual_seed(7),
-    )
-    second = processor.fit_transform_ensemble(
-        ensemble,
-        generator=torch.Generator().manual_seed(7),
-    )
-    for i in range(8):
-        assert first[i].equal(second[i])
+    for cycle in shifts.split(num_classes):
+        for column in range(shifts.size(1)):
+            assert cycle[:, column].unique().numel() == cycle.size(0)
