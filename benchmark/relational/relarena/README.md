@@ -18,7 +18,7 @@ pip install relarena==0.1.0
   python -m benchmark.relational.relarena.kumo_relational
   ```
 
-Pass a dataset name or task name to run only that RelBench dataset/task:
+Pass a dataset name or task name to run only that [RelBench](https://star-project.stanford.edu/relbench) dataset/task:
 
 ```bash
 python -m benchmark.relational.relarena.kumo_relational \
