@@ -658,6 +658,22 @@ class ICLModel(torch.nn.Module, abc.ABC):
         if requires_grad and estimator_batch_size == "auto":
             estimator_batch_size = 1
 
+        # Complete each sequential member before preparing the next member.
+        if estimator_batch_size == 1 and len(contexts) > 1:
+            outs: list[TableTensor] = []
+            for context, query in zip(contexts, queries, strict=True):
+                outs.extend(
+                    self._forward_members(
+                        contexts=(context,),
+                        queries=(query,),
+                        estimator_batch_size=1,
+                        callbacks=callbacks,
+                        generator=generator,
+                        **kwargs,
+                    )
+                )
+            return outs
+
         members = [
             self._prepare_context(context, callbacks) for context in contexts
         ]
