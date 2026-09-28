@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from dataclasses import dataclass
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import pytest
 import torch
@@ -20,6 +20,7 @@ from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models.callback import Callback
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.execution import RecipeExecution
 
 
 @dataclass
@@ -606,8 +607,10 @@ def test_ensemble_output_reduce() -> None:
     assert out.size() == (2, 3)
 
 
-@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
-def test_estimator_callbacks(estimator_batch_size: int | None) -> None:
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None, "auto"])
+def test_estimator_callbacks(
+    estimator_batch_size: int | Literal["auto"] | None,
+) -> None:
     model = _RecordingModel()
     x = torch.arange(30.0).view(5, 3, 2)
     y = torch.zeros(5, 3, 1)
@@ -649,10 +652,11 @@ def test_estimator_callbacks(estimator_batch_size: int | None) -> None:
         (1, 4, (2, 2)),
         (2, 2, (2, 2, 2)),
         (None, 1, (4, 2, 2)),
+        ("auto", 1, (4, 2, 2)),
     ],
 )
 def test_estimator_batching_groups_consecutive_members(
-    estimator_batch_size: int | None,
+    estimator_batch_size: int | Literal["auto"] | None,
     num_calls: int,
     query_size: tuple[int, ...],
 ) -> None:
@@ -920,6 +924,80 @@ def test_estimator_batching_preserves_member_order() -> None:
     ] == [(), (), (2,)]
 
 
+def test_auto_estimator_batching_keeps_cell_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Every estimator costs 3 context and 2 query rows of 2 columns plus 1.
+    monkeypatch.setattr(_RecordingModel, "_estimator_batch_cells", 30)
+    monkeypatch.setattr(_RecordingModel, "_estimator_row_cells", 1)
+    model = _RecordingModel()
+    x = torch.randn(4, 3, 2)
+    y = torch.zeros(4, 3, 1)
+    x_query = torch.randn(4, 2, 2)
+
+    out = model(x, y, x_query, estimator_batch_size="auto")
+
+    torch.testing.assert_close(out.numerical, x_query)
+    assert [
+        cast(TableTensor, call.x_query).size() for call in model.calls
+    ] == [(2, 2, 2), (2, 2, 2)]
+
+
+def test_auto_estimator_batching_counts_rows_without_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_RecordingModel, "_estimator_batch_cells", 9)
+    monkeypatch.setattr(_RecordingModel, "_estimator_row_cells", 1)
+    model = _RecordingModel()
+
+    model(
+        torch.randn(2, 3, 0),
+        torch.zeros(2, 3, 1),
+        torch.randn(2, 2, 0),
+        estimator_batch_size="auto",
+    )
+
+    assert len(model.calls) == 2
+
+
+def test_auto_estimator_batching_is_sequential_with_gradients() -> None:
+    model = _RecordingModel()
+    model.train()
+
+    model(
+        torch.randn(3, 3, 2),
+        torch.zeros(3, 3, 1),
+        torch.randn(3, 2, 2),
+        estimator_batch_size="auto",
+    )
+
+    assert len(model.calls) == 3
+
+
+def test_predict_splits_batched_query_rows_within_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Two estimators with 3 context rows of 2 columns plus 1 each fit one
+    # batch, but their 5 query rows exceed the budget together.
+    monkeypatch.setattr(_RecordingModel, "_estimator_batch_cells", 18)
+    monkeypatch.setattr(_RecordingModel, "_estimator_row_cells", 1)
+    model = _RecordingModel()
+    model.fit(
+        torch.randn(2, 3, 2),
+        torch.zeros(2, 3, 1),
+        estimator_batch_size="auto",
+    )
+    model.calls.clear()
+    x_query = torch.randn(2, 5, 2)
+
+    out = model.predict(x_query)
+
+    torch.testing.assert_close(out.numerical, x_query)
+    assert [
+        cast(TableTensor, call.x_query).size() for call in model.calls
+    ] == [(2, 3, 2), (2, 2, 2)]
+
+
 @pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
 def test_forward_batching_validates_each_query_schema(
     estimator_batch_size: int | None,
@@ -946,6 +1024,30 @@ def test_forward_batching_validates_each_query_schema(
     )
     with pytest.raises(ValueError, match="share the same schema"):
         model(x, y, query, estimator_batch_size=estimator_batch_size)
+
+
+def test_predict_keeps_queries_whole_with_callbacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Without callbacks, this budget splits the query rows into two calls.
+    monkeypatch.setattr(_RecordingModel, "_estimator_batch_cells", 18)
+    monkeypatch.setattr(_RecordingModel, "_estimator_row_cells", 1)
+    model = _RecordingModel()
+    model.fit(
+        torch.randn(2, 3, 2),
+        torch.zeros(2, 3, 1),
+        estimator_batch_size="auto",
+    )
+    model.calls.clear()
+    events: list[str] = []
+
+    model.predict(
+        torch.randn(2, 5, 2),
+        callbacks=(MyCallback("affine", 2.0, 3.0, events),),
+    )
+
+    assert len(model.calls) == 1
+    assert events.count("affine_model_forward_end") == 2
 
 
 @pytest.mark.parametrize("change", ["category_counts", "dtype"])
@@ -977,3 +1079,30 @@ def test_estimator_batching_splits_different_feature_blocks(
     )
 
     assert len(model.calls) == 2
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_forward_members_moves_contexts_to_query_device() -> None:
+    model = _RecordingModel()
+    recipe = RecipeExecution(model.default_recipe())
+    contexts = recipe.fit_transform(
+        x=torch.randn(4, 3, 2),
+        y=torch.zeros(4, 3, 1),
+        related_tables=None,
+        num_members=None,
+    )
+    x_query = torch.randn(4, 2, 2)
+    queries = [
+        query._replace(x=cast(TableTensor, query.x.cuda()))
+        for query in recipe.transform(x=x_query, related_tables=None)
+    ]
+
+    outs = model._forward_members(contexts=contexts, queries=queries)
+
+    assert all(
+        cast(TableTensor, call.x_context).is_cuda for call in model.calls
+    )
+    torch.testing.assert_close(
+        torch.stack([out.numerical.cpu() for out in outs]),
+        x_query,
+    )
