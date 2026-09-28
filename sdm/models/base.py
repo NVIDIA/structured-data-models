@@ -129,13 +129,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
                 one by one; ``None`` batches as many as possible. Estimators
-                whose preprocessed tables differ in shape, category counts or
-                classes, or that come with related tables, run in separate
+                whose preprocessed tables differ in shape or target class
+                set, or that come with related tables, run in separate
                 calls. Device memory grows with the batch size.
-                Model-side randomness drawn per call (*e.g.*, the ECOC codebook
-                of :class:`~sdm.models.KumoTabular` for more than 10 classes)
-                is shared within a batch, so batched and sequential predictions
-                differ numerically there.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -240,14 +236,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
                 one by one; ``None`` batches as many as possible. Estimators
-                whose preprocessed tables differ in shape, category counts or
-                classes, or that come with related tables, run in separate
+                whose preprocessed tables differ in shape or target class
+                set, or that come with related tables, run in separate
                 calls. Device memory grows with the batch size. Estimators
                 fitted together are predicted together.
-                Model-side randomness drawn per call (*e.g.*, the ECOC codebook
-                of :class:`~sdm.models.KumoTabular` for more than 10 classes)
-                is shared within a batch, so batched and sequential predictions
-                differ numerically there.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -316,7 +308,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     cache=batch_cache,
                     generator=generator,
                     categorical_mask=categorical_mask,
-                    num_members=batch.stop - batch.start,
                     **kwargs,
                 )
 
@@ -530,7 +521,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         generator: torch.Generator | None,
         *,
         categorical_mask: Tensor,
-        num_members: int = 1,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
         r"""Run the model on preprocessed tables of one estimator batch.
@@ -558,9 +548,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 numerical feature columns that were categorical before
                 preprocessing. Passed on recording, replaying and uncached
                 calls alike.
-            num_members: The number of estimators ``E`` in the batch.
-                Model-side randomness must be drawn per estimator, in order,
-                so that a batch matches separate calls.
             kwargs: Additional keyword arguments passed by the caller.
 
         Returns:
@@ -718,7 +705,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 cache=cache,
                 generator=generator,
                 categorical_mask=categorical_mask,
-                num_members=len(queries),
                 **kwargs,
             )
             outs = _unstack(out, class_values, len(queries))
@@ -865,7 +851,8 @@ def _batch_slices(
     estimator_batch_size: int | None,
 ) -> list[slice]:
     # Consecutive estimators that can go through one `_forward` together,
-    # split when the layout changes or the batch is full.
+    # split when shapes/dtypes or the target class set change, or the
+    # batch is full.
     related = any(context.related_tables is not None for context in contexts)
     if queries is not None:
         related = related or any(
@@ -877,7 +864,7 @@ def _batch_slices(
     batches: list[slice] = []
     start = 0
     key: Hashable = None
-    # Estimators stack when tables share layout, category counts, and classes.
+    # Stack when table shapes/dtypes match and the target class set matches.
     for i, context in enumerate(contexts):
         query = None if queries is None else queries[i]
         tables = (

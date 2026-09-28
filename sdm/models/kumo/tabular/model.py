@@ -176,7 +176,6 @@ class KumoTabular(ICLModel):
         generator: torch.Generator | None,
         *,
         categorical_mask: Tensor,
-        num_members: int = 1,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -219,12 +218,13 @@ class KumoTabular(ICLModel):
                 numerical=out,
             )
 
+        # A single member is ``[R, C]``; stacked members are ``[E, R, C]``.
         out = self.ecoc(
             model=self.models[Task.classification],
             x=x,
             y=y,
             num_classes=len(classes),
-            num_members=num_members,
+            num_members=x.size(0) if x.dim() > 2 else 1,
             cache=cache,
             generator=generator,
             categorical_mask=categorical_mask,
