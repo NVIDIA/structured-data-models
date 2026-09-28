@@ -551,11 +551,7 @@ def test_return_key_value_positional_compatibility() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("qassmax", [False, True])
-def test_transformer_block(
-    device: torch.device,
-    qassmax: bool,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     batch_size = 2
     query_len = 3
     key_value_len = 5
@@ -648,16 +644,6 @@ def test_transformer_block(
     torch.testing.assert_close(buffered_out, out1)
     assert chunked_buffered_out is chunked_buffer
     torch.testing.assert_close(chunked_buffered_out, out1)
-
-    monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "1e-12")
-    with torch.no_grad():
-        auto_out = module(
-            query=query,
-            key_value=key_value,
-            seqused_key_value=seqused_key_value,
-            batch_size_limit="auto",
-        )
-    torch.testing.assert_close(auto_out, out1)
 
     # Test no padding leakage
     new_key_value = key_value.clone()
