@@ -6,6 +6,7 @@
 import abc
 import copy
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal, cast
 
@@ -44,6 +45,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
     default_num_estimators: ClassVar[int]
     autocast_dtype: ClassVar[torch.dtype]
     low_cardinality: ClassVar[Literal["off", "infer"]] = "off"
+    _estimator_batch_budget: ClassVar[int] = 2**20
 
     @staticmethod
     @abc.abstractmethod
@@ -62,6 +64,27 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._set_default_param_value("max_columns", None)
         self._set_default_param_value("kv_cache", False)
         self._set_default_param_value("estimator_batch_size", "auto")
+
+    def _estimator_cost(
+        self,
+        x: sdm.TableTensor,
+        num_classes: int,
+    ) -> int:
+        del num_classes
+        rows = math.prod(x.size()[:-1])
+        return rows * (x.size(-1) + 32)
+
+    def _estimator_batching(
+        self,
+    ) -> tuple[
+        int | None,
+        Callable[[sdm.TableTensor, int], int] | None,
+        int | None,
+    ]:
+        estimator_batch_size = self._get_model_params()["estimator_batch_size"]
+        if estimator_batch_size == "auto":
+            return None, self._estimator_cost, self._estimator_batch_budget
+        return cast(int | None, estimator_batch_size), None, None
 
     def _fit(
         self,
@@ -130,7 +153,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             y_context = y_context[perm].unflatten(0, shape)
             num_estimators = None
         self._expand_query = num_estimators is None
-        self._context_shape = x_context.shape[-2:]
 
         recipe = self.model.default_recipe()
         if params["max_columns"] is not None:
@@ -140,6 +162,9 @@ class SDMModel(AbstractTorchModel, abc.ABC):
 
         self._recipe_execution: RecipeExecution | None = None
         if params["kv_cache"]:
+            estimator_batch_size, estimator_cost, estimator_max_cost = (
+                self._estimator_batching()
+            )
             with torch.amp.autocast(
                 self._device.type,
                 self.autocast_dtype,
@@ -150,8 +175,10 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                     y=y_context,
                     recipe=recipe,
                     num_estimators=num_estimators,
-                    estimator_batch_size=self._estimator_batch_size(x_context),
+                    estimator_batch_size=estimator_batch_size,
                     generator=generator,
+                    _estimator_cost=estimator_cost,
+                    _estimator_max_cost=estimator_max_cost,
                 )
             return
 
@@ -218,32 +245,22 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 generator = torch.Generator(self._device).set_state(
                     self._rng_state
                 )
-                outputs: list[sdm.TableTensor] = []
-                size = self._estimator_batch_size(x_query)
-                size = len(self._contexts) if size is None else size
-                for start in range(0, len(self._contexts), size):
-                    batch = [
-                        context._replace(
-                            x=cast(
-                                sdm.TableTensor, context.x.to(self._device)
-                            ),
-                            y=cast(
-                                sdm.TableTensor, context.y.to(self._device)
-                            ),
-                        )
-                        for context in self._contexts[start : start + size]
-                    ]
-                    with torch.amp.autocast(
-                        self._device.type,
-                        self.autocast_dtype,
-                        enabled=x_query.is_cuda,
-                    ):
-                        outputs += self.model._forward_members(
-                            contexts=batch,
-                            queries=queries[start : start + size],
-                            estimator_batch_size=None,
-                            generator=generator,
-                        )
+                estimator_batch_size, estimator_cost, estimator_max_cost = (
+                    self._estimator_batching()
+                )
+                with torch.amp.autocast(
+                    self._device.type,
+                    self.autocast_dtype,
+                    enabled=x_query.is_cuda,
+                ):
+                    outputs = self.model._forward_members(
+                        contexts=self._contexts,
+                        queries=queries,
+                        estimator_batch_size=estimator_batch_size,
+                        estimator_cost=estimator_cost,
+                        estimator_max_cost=estimator_max_cost,
+                        generator=generator,
+                    )
 
                 if self.problem_type == REGRESSION:
                     outputs = list(
@@ -261,28 +278,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         indices = [columns.index(str(i)) for i in range(self.num_classes)]
         probabilities = out.numerical[..., indices].float().cpu().numpy()
         return self._convert_proba_to_unified_form(probabilities)
-
-    def _estimator_batch_size(self, x: torch.Tensor) -> int | None:
-        params = self._get_model_params()
-        estimator_batch_size = params["estimator_batch_size"]
-        if estimator_batch_size != "auto":
-            return estimator_batch_size
-        # Subsampled contexts can produce different cache shapes per estimator.
-        if not x.is_cuda or self._expand_query:
-            return 1
-
-        num_rows, num_cols = self._context_shape
-        if not params["kv_cache"]:
-            # Uncached inference processes context and query rows together.
-            num_rows += x.size(-2)
-            if num_rows > 3_000 or num_rows * num_cols > 50_000:
-                return 1
-            return self._num_estimators
-
-        num_rows = max(num_rows, x.size(-2))
-        if num_rows > 2_000 or num_rows * num_cols >= 50_000:
-            return 1
-        return self._num_estimators
 
     def get_device(self) -> str:
         return str(next(self.model.parameters()).device)
@@ -341,6 +336,17 @@ class SDMKumoTabularModel(SDMModel):
         loader="benchmark.tabular.model:_load_kumo_network",
         key=("task", "size"),
     )
+
+    def _estimator_cost(
+        self,
+        x: sdm.TableTensor,
+        num_classes: int,
+    ) -> int:
+        cost = super()._estimator_cost(x, num_classes)
+        if num_classes == 0:
+            return cost
+        model = cast(sdm.models.KumoTabular, self.model)
+        return cost * model.ecoc.num_tasks(num_classes)
 
     @classmethod
     def warmup(
