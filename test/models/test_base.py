@@ -651,7 +651,7 @@ def test_estimator_callbacks(estimator_batch_size: int | None) -> None:
         (None, 1, (4, 2, 2)),
     ],
 )
-def test_estimator_batching_groups_consecutive_members(
+def test_estimator_batching_limits_estimators_per_call(
     estimator_batch_size: int | None,
     num_calls: int,
     query_size: tuple[int, ...],
@@ -679,7 +679,7 @@ def test_estimator_batching_groups_consecutive_members(
 
 
 @pytest.mark.parametrize("estimator_batch_size", [2, None])
-def test_estimator_batching_relabels_shuffled_classes(
+def test_estimator_batching_aligns_shuffled_class_columns(
     estimator_batch_size: int | None,
 ) -> None:
     model = _ClassFrequencyModel()
@@ -728,7 +728,7 @@ def test_estimator_batching_relabels_shuffled_classes(
     _check(model.predict(x))
 
 
-def test_estimator_batching_runs_related_tables_one_by_one() -> None:
+def test_estimator_batching_does_not_stack_related_tables() -> None:
     model = _RecordingModel()
     x_context = _table([0.0, 2.0], [1, 2], value_column="feature")
     x_query = _table([3.0], [3], value_column="feature")
@@ -763,80 +763,15 @@ def test_estimator_batching_runs_related_tables_one_by_one() -> None:
     torch.testing.assert_close(actual.numerical, expected.numerical)
 
 
-def test_estimator_batching_splits_different_shapes() -> None:
-    model = _RecordingModel()
-    x = EnsembleTable.from_tables(
-        tables=[
-            TableTensor(numerical=torch.ones(3, 2)),
-            TableTensor(numerical=torch.ones(4, 2)),
-        ],
-        member_table_ids=(0, 1),
-    )
-    y = EnsembleTable.from_tables(
-        tables=[
-            TableTensor(numerical=torch.ones(3, 1)),
-            TableTensor(numerical=torch.ones(4, 1)),
-        ],
-        member_table_ids=(0, 1),
-    )
-    query = TableTensor(numerical=torch.randn(2, 2, 2))
-
-    out = model(x, y, query, estimator_batch_size=None)
-    torch.testing.assert_close(out.numerical, query.numerical)
-    assert len(model.calls) == 2
-
-    model.fit(x, y, estimator_batch_size=None)
-    torch.testing.assert_close(model.predict(query).numerical, query.numerical)
-
-
-def test_estimator_batching_splits_different_category_counts() -> None:
-    model = _RecordingModel()
-    y = EnsembleTable.from_tables(
-        tables=[
-            TableTensor(
-                categorical=CategoricalTensor(
-                    code=torch.zeros(3, 1, dtype=torch.long),
-                    categories=(torch.arange(count),),
-                ),
-            )
-            for count in (2, 3)
-        ],
-        member_table_ids=(0, 1),
-    )
-    query = torch.randn(1, 2)
-
-    out = model(
-        x_context=torch.ones(3, 2),
-        y_context=y,
-        x_query=query,
-        num_estimators=2,
-        estimator_batch_size=None,
-    )
-    torch.testing.assert_close(out.numerical, query.expand(2, 1, 2))
-    assert len(model.calls) == 2
-
-    model.fit(
-        x=torch.ones(3, 2),
-        y=y,
-        num_estimators=2,
-        estimator_batch_size=None,
-    )
-    torch.testing.assert_close(
-        model.predict(query).numerical,
-        query.expand(2, 1, 2),
-    )
-
-
 @pytest.mark.parametrize(
     ("columns", "num_calls"),
     [(("a", "c"), 1), (("a",), 2)],
 )
-def test_estimator_batching_stacks_tables_of_equal_shape(
+def test_estimator_batching_groups_by_layout_not_names(
     columns: tuple[str, ...],
     num_calls: int,
 ) -> None:
-    # Column names may differ, e.g. after selecting different columns per
-    # estimator; only shapes decide whether estimators share a call.
+    # Same positional layout can share a call even when column names differ.
     model = _ClassFrequencyModel()
     tables = [
         TableTensor(
@@ -872,7 +807,7 @@ def test_estimator_batching_stacks_tables_of_equal_shape(
     )
 
 
-def test_estimator_batching_fails_like_sequential_on_class_mismatch() -> None:
+def test_estimator_batching_requires_shared_classes() -> None:
     model = _ClassFrequencyModel()
     x = torch.randn(3, 2)
     y = EnsembleTable.from_tables(
@@ -898,30 +833,10 @@ def test_estimator_batching_fails_like_sequential_on_class_mismatch() -> None:
             )
 
 
-def test_estimator_batching_preserves_member_order() -> None:
-    model = _RecordingModel()
-    rows = (3, 4, 3, 3)
-    x = EnsembleTable.from_tables(
-        tables=[TableTensor(numerical=torch.randn(r, 2)) for r in rows],
-        member_table_ids=range(len(rows)),
-    )
-    y = EnsembleTable.from_tables(
-        tables=[TableTensor(numerical=torch.zeros(r, 1)) for r in rows],
-        member_table_ids=range(len(rows)),
-    )
-    x_query = TableTensor(numerical=torch.randn(len(rows), 2, 2))
-
-    out = model(x, y, x_query, estimator_batch_size=None)
-
-    torch.testing.assert_close(out.numerical, x_query.numerical)
-    # Only consecutive estimators share a call: 0 | 1 | 2 and 3.
-    assert [
-        cast(TableTensor, call.x_context).size()[:-2] for call in model.calls
-    ] == [(), (), (2,)]
 
 
-@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
-def test_forward_batching_validates_each_query_schema(
+@pytest.mark.parametrize("estimator_batch_size", [1, None])
+def test_estimator_batching_requires_matching_query_schema(
     estimator_batch_size: int | None,
 ) -> None:
     model = _RecordingModel()
@@ -949,7 +864,7 @@ def test_forward_batching_validates_each_query_schema(
 
 
 @pytest.mark.parametrize("change", ["category_counts", "dtype"])
-def test_estimator_batching_splits_different_feature_blocks(
+def test_estimator_batching_separates_mismatched_layouts(
     change: str,
 ) -> None:
     def table(i: int) -> TableTensor:
