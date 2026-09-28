@@ -181,7 +181,7 @@ def test_clip_sigma_gradients(
 
 
 @onlyCUDA
-def test_clip_sigma_transform_passes_match_single_pass(
+def test_clip_sigma_row_chunks_match_single_chunk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     inp = torch.randn(2, 50, 3, device="cuda", dtype=torch.float64)
