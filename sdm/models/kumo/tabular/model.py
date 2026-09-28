@@ -223,6 +223,7 @@ class KumoTabular(ICLModel):
             x=x,
             y=y,
             num_classes=len(classes),
+            num_members=x.size(0) if x.dim() > 2 else 1,
             cache=cache,
             generator=generator,
             categorical_mask=categorical_mask,
