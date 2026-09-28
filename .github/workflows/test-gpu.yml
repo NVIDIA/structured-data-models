@@ -155,20 +155,23 @@ jobs:
             --extra-index-url="${RAPIDS_INDEX_URL}" \
             --find-links=https://data.pyg.org/whl/torch-2.14.0+cu130.html \
             --index-strategy=unsafe-best-match \
+            --exclude-newer-package='autogluon-common=0 days' \
+            --exclude-newer-package='autogluon-core=0 days' \
+            --exclude-newer-package='autogluon-features=0 days' \
+            --exclude-newer-package='autogluon-tabular=0 days' \
+            --exclude-newer-package='bencheval=0 days' \
+            --exclude-newer-package='tabarena=0 days' \
             . \
             'TALENT@git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6' \
-            'autogluon.common@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=common' \
-            'autogluon.core@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=core' \
-            'autogluon.features@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=features' \
-            'autogluon.tabular@git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=tabular' \
-            'bencheval@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/bencheval' \
+            'autogluon.tabular>=1.6.4b20260924,<=1.7.0' \
             'cudf-cu13>=26.6,<26.8' \
+            'numpy<2.5' \
             'pandas<3' \
             pyg-lib \
             'pylibcugraph-cu13>=26.6,<26.8' \
             'relbench>=3.0.1' \
             scikit-learn \
-            'tabarena[data-foundry,plot]@git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena' \
+            'tabarena[data-foundry,plot,preprocessing]>=0.1.1.dev20260924104714,<=0.2.0' \
             torchmetrics \
             tqdm
 

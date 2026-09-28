@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import Any
 
 BENCHMARK_DIR = Path(__file__).parent.parent
-MODEL_NAMES = ("tabiclv2", "kumo-tabular")
+MODEL_NAMES = (
+    "tabiclv2",
+    "kumo-tabular-small",
+    "kumo-tabular-medium",
+    "kumo-tabular-large",
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -25,7 +30,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         choices=MODEL_NAMES,
-        default="kumo-tabular",
+        default="kumo-tabular-large",
     )
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--dataset")

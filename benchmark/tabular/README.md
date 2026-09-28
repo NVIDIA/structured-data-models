@@ -8,12 +8,8 @@ Run the commands below from the repository root:
 
 ```bash
 pip install . \
-  "autogluon.common @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=common" \
-  "autogluon.core @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=core" \
-  "autogluon.features @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=features" \
-  "autogluon.tabular @ git+https://github.com/autogluon/autogluon.git@61764c3921250b2bff1c94e1217b5f3f089a25ac#subdirectory=tabular" \
-  "bencheval @ git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/bencheval" \
-  "tabarena[data-foundry,plot] @ git+https://github.com/autogluon/tabarena.git@f64c3742f2cb1b734ecbfa6b429cba76afec2c73#subdirectory=packages/tabarena"
+  "autogluon.tabular>=1.6.4b20260924,<=1.7.0" \
+  "tabarena[data-foundry,plot,preprocessing]>=0.1.1.dev20260924104714,<=0.2.0"
 ```
 
 ______________________________________________________________________
@@ -35,7 +31,9 @@ ______________________________________________________________________
 - **`KumoTabular`:**
 
   ```bash
-  python -m benchmark.tabular.tabarena.main --model kumo-tabular
+  python -m benchmark.tabular.tabarena.main --model kumo-tabular-large
+  python -m benchmark.tabular.tabarena.main --model kumo-tabular-medium
+  python -m benchmark.tabular.tabarena.main --model kumo-tabular-small
   ```
 
 - **`TabFM`:**
@@ -48,7 +46,7 @@ Pass a dataset name to run only that TabArena dataset:
 
 ```bash
 python -m benchmark.tabular.tabarena.main \
-  --model kumo-tabular \
+  --model kumo-tabular-large \
   --dataset blood-transfusion-service-center
 ```
 
@@ -75,7 +73,9 @@ ______________________________________________________________________
 - **`KumoTabular`:**
 
   ```bash
-  python -m benchmark.tabular.beyondarena.main --model kumo-tabular
+  python -m benchmark.tabular.beyondarena.main --model kumo-tabular-large
+  python -m benchmark.tabular.beyondarena.main --model kumo-tabular-medium
+  python -m benchmark.tabular.beyondarena.main --model kumo-tabular-small
   ```
 
 - **`TabFM`:**

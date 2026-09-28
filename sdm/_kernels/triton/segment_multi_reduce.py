@@ -1,17 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import sys
 from typing import Any, cast
 
 import torch
-from torch import Tensor
-
-if sys.platform != "linux":
-    raise ImportError("Triton kernels are only available on Linux")
-
 import triton
 import triton.language as tl
+from torch import Tensor
 
 _NUM_STATISTICS = 5
 

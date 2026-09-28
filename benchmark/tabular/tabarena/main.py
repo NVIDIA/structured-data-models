@@ -5,6 +5,7 @@ r"""Run an SDM tabular model on TabArena."""
 
 import argparse
 import gc
+import os
 from pathlib import Path
 
 import torch
@@ -45,7 +46,15 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+parser.add_argument(
+    "--enable-kv-cache",
+    action="store_true",
+    help="Cache context key/value projections at fit and reuse them "
+    "across prediction batches.",
+)
 args = parser.parse_args()
+
+os.environ["SDM_ENABLE_CATEGORY_CHECKS"] = "0"
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
@@ -59,6 +68,7 @@ result_dir.mkdir(parents=True, exist_ok=True)
 config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
+    "kv_cache": args.enable_kv_cache,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size

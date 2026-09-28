@@ -32,7 +32,15 @@ pip install -r ScoringBench/requirements.txt
   ```bash
   python -m benchmark.tabular.scoringbench.main \
     --scoringbench-path /path/to/ScoringBench \
-    --model kumo-tabular
+    --model kumo-tabular-large
+
+  python -m benchmark.tabular.scoringbench.main \
+    --scoringbench-path /path/to/ScoringBench \
+    --model kumo-tabular-medium
+
+  python -m benchmark.tabular.scoringbench.main \
+    --scoringbench-path /path/to/ScoringBench \
+    --model kumo-tabular-small
   ```
 
 Pass `--dataset cpu_act` to run one dataset, `--dataset-index 0` to select by validated index, or `--lite` to use two folds.

@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import Embedding, Linear, ModuleList, Parameter, RMSNorm
+from torch.nn import Embedding, Linear, ModuleList, Parameter
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
@@ -16,6 +16,7 @@ from sdm.nn import (
     GatedLogScale,
     InducedTransformerBlock,
     LogScale,
+    RMSNorm,
     RotaryEmbedding,
 )
 

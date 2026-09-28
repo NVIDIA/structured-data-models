@@ -64,6 +64,7 @@ config = {
         "model": args.model,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "num_estimators": model.num_estimators,
+        "low_cardinality": model.low_cardinality,
     },
 }
 
@@ -92,8 +93,7 @@ for dataset in datasets:
             config=config,
             seed_num=SEED_NUM,
             tune=False,
-            tune_threshold=True,
-            threshold_metric="f1",
+            tune_threshold=False,
         )
         record = {
             "status": "success",

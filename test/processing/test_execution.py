@@ -5,7 +5,14 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import EnsembleTable, Recipe, RelatedTables, TableTensor
+from sdm import (
+    CategoricalTensor,
+    EnsembleTable,
+    Recipe,
+    RelatedTables,
+    Stype,
+    TableTensor,
+)
 from sdm.processing.execution import RecipeExecution
 
 
@@ -354,3 +361,22 @@ def test_sequence_rejects_queries_that_cannot_form_fitted_batch() -> None:
                 task_links=[],
             ),
         )
+
+
+def test_member_context_exposes_input_stypes() -> None:
+    x = TableTensor(
+        columns={Stype.numerical: ("n",), Stype.categorical: ("c",)},
+        numerical=torch.randn(3, 1),
+        categorical=CategoricalTensor.from_tensor(torch.zeros(3, 1).long()),
+    )
+    y = torch.zeros(3, 1)
+    recipe = Recipe(features=sp.ToNumerical())
+
+    (context,) = RecipeExecution(recipe).fit_transform(
+        x=x,
+        y=y,
+        related_tables=None,
+    )
+
+    assert context.input_stypes == x.stypes
+    assert context.x.columns[Stype.numerical] == ("n", "c")

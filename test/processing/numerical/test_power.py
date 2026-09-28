@@ -86,6 +86,79 @@ def test_power_transform_standardized_fit_transform_and_inverse_round_trip(
 
 
 @withCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_power_transform_preserves_expanded_inputs_and_fitted_state(
+    device: torch.device, dtype: torch.dtype
+) -> None:
+    values = (
+        torch.tensor(
+            [-3.0, -1.0, -1e-12, 0.0, 1e-12, 1.0, 3.0, float("nan")],
+            device=device,
+            dtype=dtype,
+        )
+        .view(1, -1, 1)
+        .expand(2, -1, 4)
+    )
+    original = values.clone()
+    table = TableTensor(numerical=values)
+    processor = PowerTransform(standardize=False).fit(table)
+    processor.lambdas.copy_(
+        values.new_tensor([0, torch.finfo(dtype).eps / 2, 1, 2])
+    )
+    lambdas = processor.lambdas.clone()
+
+    first = processor.transform(table)
+    second = processor.transform(table)
+
+    torch.testing.assert_close(
+        first.numerical, second.numerical, equal_nan=True
+    )
+    torch.testing.assert_close(
+        processor.inverse_transform(first).numerical,
+        values,
+        rtol=1e-5,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    torch.testing.assert_close(values, original, equal_nan=True)
+    torch.testing.assert_close(processor.lambdas, lambdas)
+
+
+@withCUDA
+def test_power_transform_fits_strided_nonfinite_context(
+    device: torch.device,
+) -> None:
+    values = (
+        torch.tensor(
+            [
+                [-3.0, float("nan"), 1.0],
+                [-1.0, -float("inf"), 2.0],
+                [0.0, float("inf"), 4.0],
+                [1.0, float("nan"), 16.0],
+                [3.0, float("nan"), 32.0],
+            ],
+            dtype=torch.float64,
+            device=device,
+        )
+        .T.contiguous()
+        .T
+    )
+    before = values.clone()
+    processor = PowerTransform().fit(TableTensor(numerical=values))
+    reference = PowerTransform().fit(
+        TableTensor(numerical=values.contiguous())
+    )
+    query = TableTensor(numerical=values[:3, :])
+
+    torch.testing.assert_close(
+        processor.transform(query).numerical,
+        reference.transform(query).numerical,
+        equal_nan=True,
+    )
+    torch.testing.assert_close(values, before, equal_nan=True)
+
+
+@withCUDA
 def test_power_transform_wide_inverse_round_trip(device: torch.device) -> None:
     inp = torch.linspace(-3, 3, steps=32 * 40, device=device).view(32, 40)
 

@@ -11,8 +11,11 @@ from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import KumoTabular
 
 
-def _build(task: Literal["classification", "regression"]) -> KumoTabular:
-    model = KumoTabular(task=task, pretrained=False)
+def _build(
+    task: Literal["classification", "regression"],
+    size: Literal["small", "medium", "large"],
+) -> KumoTabular:
+    model = KumoTabular(task=task, size=size, pretrained=False)
     # Residual branches are zero-initialized, so an untrained model maps every
     # row onto the same constant. Randomize them to make the prediction depend
     # on the features it is given.
@@ -23,13 +26,20 @@ def _build(task: Literal["classification", "regression"]) -> KumoTabular:
 
 
 @pytest.fixture
-def cls_model() -> KumoTabular:
-    return _build("classification")
+def cls_model(size: Literal["small", "medium", "large"]) -> KumoTabular:
+    return _build("classification", size)
 
 
 @pytest.fixture
-def reg_model() -> KumoTabular:
-    return _build("regression")
+def reg_model(size: Literal["small", "medium", "large"]) -> KumoTabular:
+    return _build("regression", size)
+
+
+@pytest.fixture(params=["small", "medium", "large"])
+def size(
+    request: pytest.FixtureRequest,
+) -> Literal["small", "medium", "large"]:
+    return request.param
 
 
 def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
@@ -120,6 +130,60 @@ def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
     assert not categorical.allclose(numerical)
 
 
+@pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("estimator_batch_size", [2, None])
+def test_estimator_batching(
+    task: Literal["classification", "regression"],
+    size: Literal["small", "medium", "large"],
+    estimator_batch_size: int | None,
+) -> None:
+    model = _build(task, size)
+    x_context, x_query = _features()
+    target = _cls_target() if task == "classification" else _reg_target()
+    # Match the shuffled features and target categories in both executions.
+    expected = model(
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        num_estimators=5,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    actual = model(
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        num_estimators=5,
+        estimator_batch_size=estimator_batch_size,
+        generator=torch.Generator().manual_seed(0),
+    )
+    assert actual.columns == expected.columns
+    assert actual.dtype == expected.dtype
+    assert torch.is_inference(actual)
+    torch.testing.assert_close(
+        actual=actual.numerical,
+        expected=expected.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
+
+    model.fit(
+        x=x_context,
+        y=target,
+        num_estimators=5,
+        estimator_batch_size=estimator_batch_size,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = model.predict(x_query)
+    assert actual.columns == expected.columns
+    torch.testing.assert_close(
+        actual=actual.numerical,
+        expected=expected.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
+
+
 def test_fit_predict(
     cls_model: KumoTabular,
     reg_model: KumoTabular,
@@ -161,8 +225,10 @@ def test_fit_predict(
     )
 
 
-def test_missing_values_pass_through_fit_predict() -> None:
-    model = _build("regression")
+def test_missing_values_pass_through_fit_predict(
+    size: Literal["small", "medium", "large"],
+) -> None:
+    model = _build("regression", size)
     x_context = TableTensor.from_tensor(
         torch.tensor(
             [
