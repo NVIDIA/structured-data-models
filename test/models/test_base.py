@@ -905,7 +905,7 @@ def test_auto_estimator_batching_keeps_cell_budget(
     y = torch.zeros(4, 3, 1)
     x_query = torch.randn(4, 2, 2)
 
-    out = model(x, y, x_query, estimator_batch_size="auto")
+    out = model(x, y, x_query)
 
     torch.testing.assert_close(out.numerical, x_query)
     assert [
@@ -920,12 +920,7 @@ def test_auto_estimator_batching_counts_rows_without_columns(
     monkeypatch.setattr(_RecordingModel, "_estimator_row_cells", 1)
     model = _RecordingModel()
 
-    model(
-        torch.randn(2, 3, 0),
-        torch.zeros(2, 3, 1),
-        torch.randn(2, 2, 0),
-        estimator_batch_size="auto",
-    )
+    model(torch.randn(2, 3, 0), torch.zeros(2, 3, 1), torch.randn(2, 2, 0))
 
     assert len(model.calls) == 2
 
@@ -934,12 +929,7 @@ def test_auto_estimator_batching_is_sequential_with_gradients() -> None:
     model = _RecordingModel()
     model.train()
 
-    model(
-        torch.randn(3, 3, 2),
-        torch.zeros(3, 3, 1),
-        torch.randn(3, 2, 2),
-        estimator_batch_size="auto",
-    )
+    model(torch.randn(3, 3, 2), torch.zeros(3, 3, 1), torch.randn(3, 2, 2))
 
     assert len(model.calls) == 3
 
@@ -952,11 +942,7 @@ def test_predict_splits_batched_query_rows_within_budget(
     monkeypatch.setattr(_RecordingModel, "_estimator_batch_cells", 18)
     monkeypatch.setattr(_RecordingModel, "_estimator_row_cells", 1)
     model = _RecordingModel()
-    model.fit(
-        torch.randn(2, 3, 2),
-        torch.zeros(2, 3, 1),
-        estimator_batch_size="auto",
-    )
+    model.fit(torch.randn(2, 3, 2), torch.zeros(2, 3, 1))
     model.calls.clear()
     x_query = torch.randn(2, 5, 2)
 
@@ -975,11 +961,7 @@ def test_predict_keeps_queries_whole_with_callbacks(
     monkeypatch.setattr(_RecordingModel, "_estimator_batch_cells", 18)
     monkeypatch.setattr(_RecordingModel, "_estimator_row_cells", 1)
     model = _RecordingModel()
-    model.fit(
-        torch.randn(2, 3, 2),
-        torch.zeros(2, 3, 1),
-        estimator_batch_size="auto",
-    )
+    model.fit(torch.randn(2, 3, 2), torch.zeros(2, 3, 1))
     model.calls.clear()
     events: list[str] = []
 
