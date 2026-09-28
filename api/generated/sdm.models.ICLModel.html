@@ -296,12 +296,12 @@ If <code class="docutils literal notranslate"><span class="pre">None</span></cod
 used as the estimator dimension, allowing input data to be
 customized per estimator (<em>e.g.</em>, different in-context examples
 per estimator).</p></li>
-<li><p><strong>estimator_batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – Maximum number of estimators run through the
-model in one call. <code class="docutils literal notranslate"><span class="pre">1</span></code> (default) runs estimators one by one;
-<code class="docutils literal notranslate"><span class="pre">None</span></code> runs all of them together. Estimators in one batch
-must share column names, table shapes, category counts and
-classes, and related tables require <code class="docutils literal notranslate"><span class="pre">1</span></code>. Device memory grows
-with the batch size.
+<li><p><strong>estimator_batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – Maximum number of consecutive estimators run
+through the model in one call. <code class="docutils literal notranslate"><span class="pre">1</span></code> (default) runs estimators
+one by one; <code class="docutils literal notranslate"><span class="pre">None</span></code> batches as many as possible. Estimators
+whose preprocessed tables differ in shape or target class
+set, or that come with related tables, run in separate
+calls. Device memory grows with the batch size.
 Model-side randomness drawn per call (<em>e.g.</em>, the ECOC codebook
 of <a class="reference internal" href="sdm.models.KumoTabular.html#sdm.models.KumoTabular" title="sdm.models.KumoTabular"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoTabular</span></code></a> for more than 10 classes)
 is shared within a batch, so batched and sequential predictions
@@ -342,13 +342,13 @@ If <code class="docutils literal notranslate"><span class="pre">None</span></cod
 used as the estimator dimension, allowing input data to be
 customized per estimator (<em>e.g.</em>, different in-context examples
 per estimator).</p></li>
-<li><p><strong>estimator_batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – Maximum number of estimators run through the
-model in one call. <code class="docutils literal notranslate"><span class="pre">1</span></code> (default) runs estimators one by one;
-<code class="docutils literal notranslate"><span class="pre">None</span></code> runs all of them together. Estimators in one batch
-must share column names, table shapes, category counts and
-classes, and related tables require <code class="docutils literal notranslate"><span class="pre">1</span></code>. Device memory grows
-with the batch size. Estimators fitted together are predicted
-together.
+<li><p><strong>estimator_batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – Maximum number of consecutive estimators run
+through the model in one call. <code class="docutils literal notranslate"><span class="pre">1</span></code> (default) runs estimators
+one by one; <code class="docutils literal notranslate"><span class="pre">None</span></code> batches as many as possible. Estimators
+whose preprocessed tables differ in shape or target class
+set, or that come with related tables, run in separate
+calls. Device memory grows with the batch size. Estimators
+fitted together are predicted together.
 Model-side randomness drawn per call (<em>e.g.</em>, the ECOC codebook
 of <a class="reference internal" href="sdm.models.KumoTabular.html#sdm.models.KumoTabular" title="sdm.models.KumoTabular"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoTabular</span></code></a> for more than 10 classes)
 is shared within a batch, so batched and sequential predictions
@@ -442,7 +442,7 @@ stacked estimator outputs with shape <code class="docutils literal notranslate">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=6e29ad6c"></script>
+      <script src="../../_static/documentation_options.js?v=668c89c7"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
