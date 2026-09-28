@@ -17,16 +17,25 @@ from relbench.base import Database, EntityTask, Table, TaskType
 
 import sdm
 
+
+REGRESSION = TaskType.REGRESSION
+CLASSIFICATION = TaskType.BINARY_CLASSIFICATION
+
+CONTEXT_SIZE = {
+        "small": 2_000,
+        "large": 2_000,
+        }
+
 NUM_NEIGHBORS = {
+    # Vary number of neighbor grid based on task type + context size:
     # Regression generally benefits from a wide range of neighbors, while
     # entity table features + lag target features is a strong baseline:
-    TaskType.REGRESSION: {"small": [], "medium": [8, 8], "large": [64, 64]},
-    # Classification excels between 1 to 32 neighbors.
-    TaskType.BINARY_CLASSIFICATION: {
-        "small": [1, 1],
-        "medium": [8, 8],
-        "large": [32, 32],
-    },
+    (REGRESSION, "small"): {"small": 0, "medium": 8, "large": 64},
+    (REGRESSION, "large"): {"small": 0, "medium": 8, "large": 64},
+    # Classification excels with less number of neighbors. On smaller context
+    # size, we also decrease number of neighbors:
+    (CLASSIFICATION, "small"): {"small": 1, "medium": 4, "large": 16},
+    (CLASSIFICATION, "large"): {"small": 1, "medium": 8, "large": 32},
 }
 
 
@@ -34,9 +43,13 @@ def search_space(stats: TaskStats) -> SearchSpace:
     return SearchSpace(
         default_overrides={},
         fixed_grid=[
-            {"subgraph": "small"},
-            {"subgraph": "medium"},
-            {"subgraph": "large"},
+            {
+                "subgraph_size": subgraph_size,
+                "context_size": context_size,
+            }
+            for context_size in ["small"] if stats.num_train_nodes <= 2000
+            else ["large"]
+            for subgraph_size in ["small", "medium", "large"]
         ],
     )
 
@@ -114,7 +127,6 @@ def get_sampler(
     text: Literal["off", "drop"],
 ) -> sdm.relational.RelationalSampler:
     r"""Initialize the relational sampler to gather time-aware subgraphs."""
-    print("GET SAMPLER")
     tables = {}
     for name, table in db.table_dict.items():
         stypes = sdm.infer_stypes(
@@ -171,9 +183,9 @@ class KumoRelationalModel(RelArenaModel):
         time_limit: float | None = None,
     ) -> None:
 
-        device = torch.device("cuda:0")
+        self.device = torch.device("cuda:0")
         cpu_generator = torch.Generator().manual_seed(seed)
-        cuda_generator = torch.Generator(device).manual_seed(seed)
+        cuda_generator = torch.Generator(self.device).manual_seed(seed)
 
         self.train_df = train_table.df
         context = get_context(
@@ -184,11 +196,13 @@ class KumoRelationalModel(RelArenaModel):
             with_target=True,
         )
 
-        if task.task_type == TaskType.REGRESSION:
-            context_size = 20_000  # TODO
-        else:
-            context_size = 2_000  # TODO
+        context_size = CONTEXT_SIZE[self.config["context_size"]
+        subgraph_size = self.config["subgraph_size"]
+        N = NUM_NEIGHBORS[(task.task_type, self.config["context_size"])][self.config["subgraph_size"]]
+
         num_estimators = 8
+
+        self.num_neighbors=[N] * 2
 
         if (
             task.task_type != TaskType.REGRESSION
@@ -199,7 +213,7 @@ class KumoRelationalModel(RelArenaModel):
             context = context[: context_size * num_estimators]
 
         self.expand_query = False
-        if len(context) > context_size:  # Different context per estimator:
+        if len(context) > 1.2 * context_size:  # Differ context per estimator:
             repeats = math.ceil(context_size * num_estimators / len(context))
             perm = torch.cat(
                 [
@@ -221,7 +235,6 @@ class KumoRelationalModel(RelArenaModel):
             text="off" if task.entity_table == "facilities" else "drop",
         )
 
-        num_neighbors = NUM_NEIGHBORS[task.task_type][self.config["subgraph"]]
         context, related_tables = self.sampler(
             context,
             task_link={
@@ -229,12 +242,12 @@ class KumoRelationalModel(RelArenaModel):
                 "table": task.entity_table,
                 "table_column": db.table_dict[task.entity_table].pkey_col,
             },
-            num_neighbors=num_neighbors,
+            num_neighbors=self.num_neighbors,
             task_time_column=task.time_col,
-        ).to(device)
+        ).to(self.device)
 
-        self.model = get_model(device)
-        with torch.amp.autocast(device.type, torch.float16):
+        self.model = get_model(self.device)
+        with torch.amp.autocast(self.device.type, torch.float16):
             self.model.fit(
                 x=context.drop_columns(task.target_col),
                 y=context[task.target_col],
@@ -250,8 +263,6 @@ class KumoRelationalModel(RelArenaModel):
         table: Table,
     ) -> np.ndarray:
 
-        device = torch.device("cuda:0")
-
         query = get_context(
             df=table.df,
             history=self.train_df,
@@ -263,7 +274,6 @@ class KumoRelationalModel(RelArenaModel):
             query = query.expand(8, *query.size())
 
         outs = []
-        num_neighbors = NUM_NEIGHBORS[task.task_type][self.config["subgraph"]]
         for batch in tqdm.tqdm(query.split(10_000, dim=-2)):
             batch, related_tables = self.sampler(
                 batch,
@@ -272,11 +282,11 @@ class KumoRelationalModel(RelArenaModel):
                     "table": task.entity_table,
                     "table_column": db.table_dict[task.entity_table].pkey_col,
                 },
-                num_neighbors=num_neighbors,
+                num_neighbors=self.num_neighbors,
                 task_time_column=task.time_col,
-            ).to(device)
+            ).to(self.device)
 
-            with torch.amp.autocast(device.type, torch.float16):
+            with torch.amp.autocast(self.device.type, torch.float16):
                 outs.append(self.model.predict(batch, related_tables))
         out = cast(sdm.TableTensor, torch.cat(outs, dim=-2))
 
