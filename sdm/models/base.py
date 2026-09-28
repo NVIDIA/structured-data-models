@@ -317,6 +317,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     cache=batch_cache,
                     generator=generator,
                     categorical_mask=categorical_mask,
+                    num_members=batch.stop - batch.start,
                     **kwargs,
                 )
 
@@ -530,6 +531,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         generator: torch.Generator | None,
         *,
         categorical_mask: Tensor,
+        num_members: int = 1,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
         r"""Run the model on preprocessed tables of one estimator batch.
@@ -557,6 +559,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 numerical feature columns that were categorical before
                 preprocessing. Passed on recording, replaying and uncached
                 calls alike.
+            num_members: The number of estimators ``E`` in the batch.
+                Model-side randomness must be drawn per estimator, in order,
+                so that a batch matches separate calls.
             kwargs: Additional keyword arguments passed by the caller.
 
         Returns:
@@ -715,6 +720,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 cache=cache,
                 generator=generator,
                 categorical_mask=categorical_mask,
+                num_members=len(queries),
                 **kwargs,
             )
             outs = _unstack(out, class_values, len(queries))

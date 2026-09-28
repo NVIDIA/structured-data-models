@@ -176,6 +176,7 @@ class KumoTabular(ICLModel):
         generator: torch.Generator | None,
         *,
         categorical_mask: Tensor,
+        num_members: int = 1,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -223,6 +224,7 @@ class KumoTabular(ICLModel):
             x=x,
             y=y,
             num_classes=len(classes),
+            num_members=num_members,
             cache=cache,
             generator=generator,
             categorical_mask=categorical_mask,
