@@ -3,12 +3,14 @@
 
 # ruff: noqa: D101, D102
 
+import math
 from typing import Any, cast
 
 import torch
 from torch import Tensor
 from torch.nn import Embedding, Linear, ModuleList, Parameter
 
+from sdm._memory import chunk_memory_limit
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
@@ -66,7 +68,7 @@ class RowEmbedding(torch.nn.Module):
             **factory_kwargs,
         )
 
-        self.col_blocks = ModuleList(
+        self.col_blocks: ModuleList[InducedTransformerBlock] = ModuleList(
             InducedTransformerBlock(
                 channels=channels,
                 num_inducing_points=num_inducing_points,
@@ -89,7 +91,7 @@ class RowEmbedding(torch.nn.Module):
             )
             for _ in range(num_layers)
         )
-        self.row_blocks = ModuleList(
+        self.row_blocks: ModuleList[KumoTabularTransformerBlock] = ModuleList(
             KumoTabularTransformerBlock(
                 channels=channels,
                 num_heads=num_heads,
@@ -107,6 +109,105 @@ class RowEmbedding(torch.nn.Module):
         self.norm = RMSNorm(channels, **factory_kwargs)
 
     def forward(
+        self,
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
+        categorical_mask: Tensor,  # [..., C]
+        *,
+        cache: Cache | None = None,
+    ) -> Tensor:  # [..., R, K * D]
+        starts = self._pass_starts(x, train_size=y.size(-1), cache=cache)
+        if len(starts) == 1:
+            return self._forward(x, y, categorical_mask, cache=cache)
+
+        # Query rows only read context state, which the first pass records
+        # for replay in later passes.
+        cache = Cache() if cache is None else cache
+        first = self._forward(
+            x=x[..., : starts[1], :],
+            y=y,
+            categorical_mask=categorical_mask,
+            cache=cache,
+        )  # [..., starts[1], K * D]
+        cache.freeze()
+        out = first.new_empty((*first.shape[:-2], x.size(-2), first.size(-1)))
+        out[..., : starts[1], :] = first
+        del first
+        ends = [*starts[2:], x.size(-2)]
+        for start, end in zip(starts[1:], ends, strict=True):
+            out[..., start:end, :] = self._forward(
+                x=x[..., start:end, :],
+                y=y[..., :0],
+                categorical_mask=categorical_mask,
+                cache=cache,
+            )
+        return out
+
+    def _pass_starts(
+        self,
+        x: Tensor,  # [..., R, C]
+        train_size: int,
+        cache: Cache | None,
+    ) -> list[int]:
+        # First rows of the passes that embed the rows of `x`. Passes run
+        # without gradients on CUDA and replay context state from a cache.
+        if (
+            torch.is_grad_enabled()
+            or not x.is_cuda
+            or (cache is not None and cache.is_recording)
+        ):
+            return [0]
+        *B, R, C = x.size()
+        N = math.prod(B)
+        K, D = self.readout_token.size(-2), self.channels
+        G = self.cell_embedding.group_size
+        M = self.col_blocks[0].inducing_points.size(-2)
+        s = (
+            torch.get_autocast_dtype(x.device.type).itemsize
+            if torch.is_autocast_enabled(x.device.type)
+            else x.element_size()
+        )
+        budget = chunk_memory_limit(x.device)
+        # Bytes per row: the cell buffer, plus the missingness mask, imputed
+        # values and their feature groups while embedding cells.
+        row_bytes = N * (
+            (K + C) * D * s + (G + 1) * (x.element_size() + 1) * C
+        )
+        # Without a cache, the context pass records the key/value projections
+        # of all column blocks for the query passes. Query rows that fit the
+        # chunk memory budget plus these projections run with the context.
+        state_bytes = 0
+        if cache is None:
+            state_bytes = 2 * N * C * M * D * s * len(self.col_blocks)
+        if (R - train_size) * row_bytes <= budget + state_bytes:
+            return [0]
+
+        # Row blocks run the rows of all batch entries in chunks of `chunk`
+        # rows. In passes starting on multiples of `grid` rows, every row runs
+        # in a chunk of the same size as in a single pass, since the last pass
+        # holds the partial last chunk of a single pass, the last
+        # `N * R % chunk` rows of the last batch entry. Attention over long
+        # rows rounds differently in small chunks, so this keeps passes equal
+        # to a single pass up to rare rounding differences in small passes.
+        chunk = self.row_blocks[0].auto_batch_size_limit(
+            device=x.device,
+            element_size=s,
+            query_length=K + C,
+            key_value_length=K + C,
+        )
+        grid = chunk // math.gcd(N, chunk)
+        context = -(-train_size // grid) * grid
+        last = R - max(N * R % chunk, 1)
+        if context > last:
+            return [0]
+        # Balanced query passes need no more memory than the context pass,
+        # the budget or one grid of rows, whichever is more.
+        grids = max(max(train_size, budget // row_bytes) // grid, 1)
+        num_passes = -(-(R - context) // (grids * grid))
+        step = -(-(R - context) // (num_passes * grid)) * grid
+        return [0, *range(context or step, last + 1, step)]
+
+    def _forward(
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
