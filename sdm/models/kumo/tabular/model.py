@@ -218,7 +218,6 @@ class KumoTabular(ICLModel):
                 numerical=out,
             )
 
-        # A single member is ``[R, C]``; stacked members are ``[E, R, C]``.
         out = self.ecoc(
             model=self.models[Task.classification],
             x=x,
