@@ -40,6 +40,14 @@ class ClipSoft(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
         bound = self.max_absolute_value
+        if torch.is_grad_enabled() and numerical.requires_grad:
+            unit = numerical.div(bound).abs()
+            root = unit.square().add(1).sqrt()
+            unit = unit.div(root).masked_fill(~_isfinite(root), 1.0)
+            clipped = numerical.sign().mul(bound).mul(unit)
+            clipped = torch.where(numerical.isnan(), numerical, clipped)
+            return table.replace_blocks(numerical=clipped)
+
         unit = numerical.div(bound).abs_()
         root = unit.square().add_(1).sqrt_()
         # 'root' is finite exactly where '1 + unit ** 2' is.

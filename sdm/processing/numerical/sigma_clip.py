@@ -90,6 +90,12 @@ class ClipSigma(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
         dtype = torch.promote_types(numerical.dtype, self.lower_bound.dtype)
+        if torch.is_grad_enabled() and numerical.requires_grad:
+            log_abs = numerical.abs().log1p().to(dtype)
+            clipped = torch.maximum(self.lower_bound - log_abs, numerical)
+            clipped = torch.minimum(log_abs + self.upper_bound, clipped)
+            return table.replace_blocks(numerical=clipped)
+
         out = torch.empty_like(numerical, dtype=dtype)
         # Chunks of rows bound the temporary besides the output.
         size = split_size(
