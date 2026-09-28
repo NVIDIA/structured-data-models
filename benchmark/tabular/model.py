@@ -214,7 +214,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                     x=x_query,
                     related_tables=None,
                 )
-                dtypes = tuple(query.x.dtype for query in queries)
                 generator = torch.Generator(self._device).set_state(
                     self._rng_state
                 )
@@ -223,7 +222,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                     self.autocast_dtype,
                     enabled=x_query.is_cuda,
                 ):
-                    outputs = self.model._forward_members(
+                    outputs, dtypes = self.model._forward_members(
                         contexts=self._contexts,
                         queries=queries,
                         estimator_batch_size=self._get_model_params()[

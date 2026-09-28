@@ -168,11 +168,7 @@ class RecipeExecution:
         x: Tensor | TableTensor | EnsembleTable,
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
-        """Transform query data.
-
-        Fitted processors transform query rows independently, so large
-        queries are transformed in passes over their rows.
-        """
+        """Transform query data."""
         x = _to_ensemble_table(x, self._num_estimators)
         x = _transform_rows(self.recipe.features.transform_ensemble, x)
         if len(x) != self.num_members:
@@ -266,9 +262,8 @@ class RecipeExecution:
     ) -> TableTensor:
         """Apply ``recipe.output`` after restoring each member dtype.
 
-        Outputs of numerical targets first pass through the inverted target
-        transforms. Output rows are processed independently, so large outputs
-        are processed in passes over their rows.
+        Numerical targets are inverse-transformed before applying the output
+        recipe.
         """
         # Output cells are processed in double precision at most.
         size = split_size(
@@ -296,26 +291,17 @@ class RecipeExecution:
         outputs: Sequence[TableTensor],
         dtypes: Sequence[torch.dtype],
     ) -> TableTensor:
-        outputs = [
+        outputs = tuple(
             cast(TableTensor, output.to(dtype))
             for output, dtype in zip(outputs, dtypes, strict=True)
-        ]
+        )
         if self._numerical_target:
-            outputs = list(self.inverse_transform_target(outputs))
+            outputs = self.inverse_transform_target(outputs)
 
         if len(outputs) == 1:
             out = outputs[0].unsqueeze(0)
         else:
-            expected = set(outputs[0].columns[Stype.numerical])
-            for output in outputs[1:]:
-                if set(output.columns[Stype.numerical]) != expected:
-                    raise ValueError(
-                        "Expected all model outputs to have the same columns "
-                        "before applying 'Recipe.output'. Ensure every target "
-                        "contains the same set of classes."
-                    )
-
-            out = torch.stack(list(outputs), dim=0)
+            out = torch.stack(outputs, dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
 
@@ -327,8 +313,6 @@ def _transform_rows(
     # Member cells are transformed in double precision at most.
     # Groups have shape [stored members, ..., rows, columns].
     num_rows = table._groups[0].size(-2)
-    if any(group.size(-2) != num_rows for group in table._groups[1:]):
-        raise ValueError("Expected all ensemble groups to have the same row count")
     row_bytes_by_device: dict[torch.device, int] = {}
     # Count logical members because several members may share one stored table.
     for group_id, _ in table._locations:
@@ -344,6 +328,10 @@ def _transform_rows(
     )
     if rows_per_pass >= num_rows:
         return transform(table)
+    if any(group.size(-2) != num_rows for group in table._groups[1:]):
+        raise ValueError(
+            "Expected all ensemble groups to have the same row count"
+        )
     parts = [
         transform(table.replace_groups(groups))
         for groups in zip(

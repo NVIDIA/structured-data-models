@@ -14,7 +14,7 @@ from sdm import (
     TableTensor,
 )
 from sdm.models import KumoTabular
-from sdm.processing.execution import RecipeExecution, _transform_rows
+from sdm.processing.execution import RecipeExecution
 from sdm.testing import onlyCUDA
 
 
@@ -451,28 +451,29 @@ def test_row_passes_match_single_pass(
     assert torch.equal(output.numerical, expected_output.numerical)
 
 
-def test_transform_rows_sizes_every_member(
+@onlyCUDA
+@pytest.mark.parametrize("member_ids", [(0, 1, 1), (1, 0, 0)])
+def test_row_passes_preserve_heterogeneous_members(
+    member_ids: tuple[int, ...],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    item_bytes: list[int] = []
+    tables = [
+        TableTensor.from_tensor(torch.randn(20, columns, device="cuda"))
+        for columns in (1, 4)
+    ]
+    table = EnsembleTable.from_tables(tables, member_ids)
+    execution = RecipeExecution(Recipe(features=sp.Standardize()))
+    with torch.inference_mode():
+        execution.fit_transform(
+            x=table,
+            y=tables[0],
+            related_tables=None,
+            num_members=3,
+        )
+        expected = execution.transform(x=table, related_tables=None)
+        monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "1e-12")
+        actual = execution.transform(x=table, related_tables=None)
 
-    def record_size(
-        num_items: int,
-        bytes_per_item: int,
-        device: torch.device,
-    ) -> int:
-        del device
-        item_bytes.append(bytes_per_item)
-        return num_items
-
-    monkeypatch.setattr("sdm.processing.execution.split_size", record_size)
-    narrow = TableTensor.from_tensor(torch.zeros(3, 1))
-    wide = TableTensor.from_tensor(torch.zeros(3, 4))
-    for tables, member_ids in (
-        ((narrow, wide), (0, 1, 1)),
-        ((wide, narrow), (1, 0, 0)),
-    ):
-        table = EnsembleTable.from_tables(tables, member_ids)
-        _transform_rows(lambda value: value, table)
-
-    assert item_bytes == [9 * torch.float64.itemsize] * 2
+    for query, reference in zip(actual, expected, strict=True):
+        assert query.x.columns == reference.x.columns
+        torch.testing.assert_close(query.x.numerical, reference.x.numerical)

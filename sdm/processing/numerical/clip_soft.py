@@ -41,10 +41,10 @@ class ClipSoft(Processor):
         numerical = table.numerical
         bound = self.max_absolute_value
         if torch.is_grad_enabled() and numerical.requires_grad:
-            unit = numerical.div(bound).abs()
-            root = unit.square().add(1).sqrt()
-            unit = unit.div(root).masked_fill(~_isfinite(root), 1.0)
-            clipped = numerical.sign().mul(bound).mul(unit)
+            ratio = (numerical / bound).abs()
+            squared = 1 + ratio.square()
+            unit = torch.where(squared.isfinite(), ratio / squared.sqrt(), 1.0)
+            clipped = numerical.sign() * bound * unit
             clipped = torch.where(numerical.isnan(), numerical, clipped)
             return table.replace_blocks(numerical=clipped)
 

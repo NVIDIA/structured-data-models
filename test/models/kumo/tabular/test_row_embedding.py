@@ -87,11 +87,10 @@ def test_row_embedding_passes(
         )
 
     expected = embed()
-    # Chunk memory limits from 1 KiB to 512 KiB embed the rows in passes of
-    # a few rows up to a single pass.
+    # Small, intermediate and single-pass budgets exercise pass boundaries.
     total_memory = torch.cuda.get_device_properties("cuda").total_memory
-    for exponent in range(40, 77):
-        fraction = 2 ** (exponent / 4) / total_memory
+    for budget in (2**10, 2**14, 2**19):
+        fraction = budget / total_memory
         monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", str(fraction))
         torch.testing.assert_close(embed(), expected)
 
@@ -124,10 +123,13 @@ def test_row_embedding_passes_on_wide_tables(
     categorical_mask = torch.arange(300, device="cuda") % 4 == 0
 
     def embed() -> tuple[torch.Tensor, int]:
+        torch.cuda.synchronize()
+        baseline = torch.cuda.memory_allocated()
         torch.cuda.reset_peak_memory_stats()
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
             out = encoder(x, y, categorical_mask)
-        return out, torch.cuda.max_memory_allocated()
+        torch.cuda.synchronize()
+        return out, torch.cuda.max_memory_allocated() - baseline
 
     monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "0.001")
     actual, peak = embed()

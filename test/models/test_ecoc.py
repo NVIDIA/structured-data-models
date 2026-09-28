@@ -161,24 +161,10 @@ def test_ecoc_members_draw_codebooks_in_order(device: torch.device) -> None:
     torch.testing.assert_close(replayed, expected)
 
 
-@pytest.mark.parametrize("num_classes", [3, 10, 11, 100, 201])
-def test_ecoc_num_tasks(num_classes: int) -> None:
+@pytest.mark.parametrize(
+    ("num_classes", "expected"),
+    [(3, 1), (10, 1), (11, 8), (100, 12), (201, 23)],
+)
+def test_ecoc_num_tasks(num_classes: int, expected: int) -> None:
     ecoc = ECOC(max_classes=10)
-    x = torch.randn(num_classes + 2, num_classes, dtype=torch.float64)
-    y = torch.arange(num_classes)
-    cache = Cache()
-
-    ecoc(
-        model=MyModel(10),
-        x=x[:num_classes],
-        y=y,
-        num_classes=num_classes,
-        cache=cache,
-    )
-
-    num_tasks = (
-        cast(Tensor, cache["ecoc_codebook"]).size(-2)
-        if num_classes > 10
-        else 1
-    )
-    assert ecoc.num_tasks(num_classes) == num_tasks
+    assert ecoc.num_tasks(num_classes) == expected

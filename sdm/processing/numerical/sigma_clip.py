@@ -57,8 +57,13 @@ class ClipSigma(Processor):
         mean = finite_or_nan.nansum(-2, keepdim=True) / count_finite
         mean.masked_fill_(mean.isnan(), 0.0)
 
-        var = finite_or_nan.sub_(mean).square_().nansum(-2, keepdim=True)
-        del finite_or_nan
+        centered = (
+            finite_or_nan.sub(mean)
+            if torch.is_grad_enabled()
+            else finite_or_nan.sub_(mean)
+        )
+        var = centered.square_().nansum(-2, keepdim=True)
+        del centered, finite_or_nan
         var /= (count_finite - 1).clamp_(min=1)
         std = var.sqrt().clamp(min=1e-6)
 
@@ -90,7 +95,7 @@ class ClipSigma(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
         dtype = torch.promote_types(numerical.dtype, self.lower_bound.dtype)
-        if torch.is_grad_enabled() and numerical.requires_grad:
+        if torch.is_grad_enabled():
             log_abs = numerical.abs().log1p().to(dtype)
             clipped = torch.maximum(self.lower_bound - log_abs, numerical)
             clipped = torch.minimum(log_abs + self.upper_bound, clipped)

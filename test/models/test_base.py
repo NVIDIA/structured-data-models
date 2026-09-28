@@ -21,6 +21,7 @@ from sdm.models import ICLModel
 from sdm.models.callback import Callback
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.execution import RecipeExecution
+from sdm.testing import withCUDA
 
 
 @dataclass
@@ -318,6 +319,52 @@ def test_model_recipe_generator_does_not_advance_global_rng(
     _fit_draws(seed=0, cached=cached)
 
     assert torch.equal(torch.get_rng_state(), state)
+
+
+@withCUDA
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("estimator_batch_size", [1, "auto"])
+def test_callback_query_dtype_is_preserved(
+    device: torch.device,
+    cached: bool,
+    estimator_batch_size: int | Literal["auto"],
+) -> None:
+    class DoubleQuery(Callback):
+        def on_query_preprocessing_end(
+            self,
+            model: torch.nn.Module,
+            x: TableTensor,
+            related_tables: RelatedTables[TableTensor] | None,
+        ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
+            return (
+                x.replace_blocks(numerical=x.numerical.double() + 2**-40),
+                related_tables,
+            )
+
+    model = _RecordingModel().to(device)
+    context = torch.ones(4, 1, device=device)
+    target = torch.arange(4, device=device).float().unsqueeze(-1)
+    query = torch.ones(2, 1, device=device)
+    if cached:
+        model.fit(
+            x=context,
+            y=target,
+            num_estimators=2,
+            estimator_batch_size=estimator_batch_size,
+        )
+        output = model.predict(query, callbacks=[DoubleQuery()])
+    else:
+        output = model(
+            x_context=context,
+            y_context=target,
+            x_query=query,
+            num_estimators=2,
+            estimator_batch_size=estimator_batch_size,
+            callbacks=[DoubleQuery()],
+        )
+
+    expected = (query.double() + 2**-40).expand(2, -1, -1)
+    torch.testing.assert_close(output.numerical, expected, rtol=0, atol=0)
 
 
 def test_callback() -> None:
@@ -892,7 +939,7 @@ def test_estimator_batching_fails_like_sequential_on_class_mismatch() -> None:
         member_table_ids=(0, 1),
     )
     for estimator_batch_size in (1, None):
-        with pytest.raises(ValueError, match="same set of classes"):
+        with pytest.raises(ValueError, match="column names"):
             model(
                 x,
                 y,
@@ -1079,7 +1126,7 @@ def test_forward_members_moves_contexts_to_query_device() -> None:
         for query in recipe.transform(x=x_query, related_tables=None)
     ]
 
-    outs = model._forward_members(contexts=contexts, queries=queries)
+    outs, _ = model._forward_members(contexts=contexts, queries=queries)
 
     assert all(
         cast(TableTensor, call.x_context).is_cuda for call in model.calls
