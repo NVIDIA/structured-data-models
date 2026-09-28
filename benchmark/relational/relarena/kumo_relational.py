@@ -37,11 +37,6 @@ def search_space(stats: TaskStats) -> SearchSpace:
 REGRESSION = TaskType.REGRESSION
 CLASSIFICATION = TaskType.BINARY_CLASSIFICATION
 
-CONTEXT_SIZE = {
-    "small": 2_000,
-    "large": 20_000,
-}
-
 NUM_NEIGHBORS = {
     # Vary number of neighbor grid search based on task type + context size:
     # Regression generally benefits from a wide range of neighbors, while
@@ -54,8 +49,15 @@ NUM_NEIGHBORS = {
     (CLASSIFICATION, "large"): {"small": 1, "medium": 8, "large": 32},
 }
 
+CONTEXT_SIZE = {
+    (CLASSIFICATION, "small"): 2_000,
+    (CLASSIFICATION, "large"): 20_000,
+    (REGRESSION, "small"): 20_000,
+    (REGRESSION, "large"): 20_000,
+}
 
-@lru_cache(maxsize=1)
+
+@lru_cache(maxsize=2)
 def get_task_table(
     task_table: Table,
     history_table: Table,
@@ -201,7 +203,7 @@ class KumoRelationalModel(RelArenaModel):
         context_size = self.config["context_size"]
         subgraph_size = self.config["subgraph_size"]
         N = NUM_NEIGHBORS[(task.task_type, context_size)][subgraph_size]
-        context_size = CONTEXT_SIZE[self.config["context_size"]]
+        context_size = CONTEXT_SIZE[(task.task_type, context_size)]
         self.num_neighbors = [N] * 2
 
         if (
