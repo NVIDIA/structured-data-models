@@ -17,18 +17,11 @@ class RankGaussian(Processor):
     Each fitted value receives probability ``(L + R) / (2 * N)``, where
     ``L`` and ``R`` count finite fitted values strictly below and at or below
     it, and ``N`` is the number of finite fitted values. Ties share a rank.
-    Query probabilities interpolate between the fitted values kept as knots
-    and clamp to the endpoint probabilities, keeping finite outputs even
-    outside the range.
+    Query probabilities interpolate between retained fitted value-rank pairs
+    and clamp to the endpoint probabilities.
 
-    Each column keeps at most ``max_knots`` knots. A column with at most
-    ``max_knots`` distinct finite fitted values keeps all of them, which
-    matches interpolating between all fitted values. A column with more
-    distinct values keeps the fitted values whose mid-ranks come closest to
-    ``max_knots`` normal quantiles evenly spaced between its extremes.
-    Knots then stay dense in the tails, where the normal quantile function
-    magnifies rank errors, and outputs stay within about two knot spacings
-    in normal scores of interpolating between all fitted values.
+    Each column retains at most ``max_knots`` pairs. When needed, knots are
+    selected at evenly spaced normal quantiles between the fitted extremes.
 
     NaN and infinite values are ignored during fitting. NaNs are preserved
     during transformation. Constant columns map to zero; columns without
@@ -77,14 +70,7 @@ class RankGaussian(Processor):
         self,
         numerical: Tensor,  # [..., N, C]
     ) -> tuple[Tensor, Tensor]:  # [..., C, K] knot values and probabilities
-        *batch, num_rows, num_columns = numerical.shape
-        if num_rows == 0:
-            missing = numerical.new_full(
-                (*batch, num_columns, 1),
-                torch.nan,
-                dtype=torch.float64,
-            )
-            return missing, missing.clone()
+        num_rows = numerical.size(-2)
 
         # Double precision keeps tail ranks open.
         columns = numerical.double().movedim(-1, -2)  # [..., C, N]
