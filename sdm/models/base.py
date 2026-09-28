@@ -500,14 +500,19 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         ),
                     )
                 ]
-                outs += (
-                    chunks[0]
-                    if len(chunks) == 1
-                    else [
+
+                if len(chunks) == 1:
+                    batch_outputs = chunks[0]
+                else:
+                    batch_outputs = [
                         cast(TableTensor, torch.cat(parts, dim=-2))
                         for parts in zip(*chunks, strict=True)
                     ]
-                )
+
+                # Drop source chunk references before the next estimator
+                # batch. A single chunk stays alive through `batch_outputs`.
+                del chunks
+                outs.extend(batch_outputs)
 
                 if x.is_cuda:
                     assert compute_stream is not None
