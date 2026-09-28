@@ -5,6 +5,7 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
+from sdm.processing.numerical._stats import _count, _isfinite
 
 
 class ClipSigma(Processor):
@@ -43,30 +44,42 @@ class ClipSigma(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
 
-        finite = table.numerical.isfinite()
-        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
+        numerical = table.numerical
+        finite = _isfinite(numerical)
+        count_finite = _count(finite)
+        finite_or_nan = numerical.masked_fill(~finite, torch.nan)
 
-        # Compute finite mean and standard deviation:
-        mean = finite_or_nan.nanmean(-2, keepdim=True)
+        # Compute finite mean and standard deviation (equal to 'nanmean',
+        # which would copy its input to count values):
+        mean = finite_or_nan.nansum(-2, keepdim=True) / count_finite
         mean.masked_fill_(mean.isnan(), 0.0)
 
-        var = (finite_or_nan - mean).square().nansum(-2, keepdim=True)
-        var /= (finite.sum(-2, keepdim=True) - 1).clamp_(min=1)
+        centered = (
+            finite_or_nan.sub(mean)
+            if torch.is_grad_enabled()
+            else finite_or_nan.sub_(mean)
+        )
+        var = centered.square_().nansum(-2, keepdim=True)
+        del centered, finite_or_nan
+        var /= (count_finite - 1).clamp_(min=1)
         std = var.sqrt().clamp(min=1e-6)
 
-        # Find values within range:
+        # Find values within range (non-finite values are never kept):
         lower = mean - self.threshold * std
         upper = mean + self.threshold * std
-        keep = finite & (finite_or_nan >= lower) & (finite_or_nan <= upper)
-        count = keep.sum(-2, keepdim=True)
+        keep = (numerical >= lower).logical_and_(numerical <= upper)
+        keep.logical_and_(finite)
+        del finite
+        count = _count(keep)
 
         # Compute mean and standard deviation of kept values:
-        kept_mean = torch.where(keep, finite_or_nan, 0.0).sum(-2, keepdim=True)
+        kept_mean = torch.where(keep, numerical, 0.0).sum(-2, keepdim=True)
         kept_mean /= count.clamp(min=1)
 
-        centered = torch.where(keep, finite_or_nan - kept_mean, 0.0)
+        centered = numerical.sub(kept_mean).masked_fill_(~keep, 0.0)
         denominator = (count - 1).clamp(min=1)
-        kept_var = centered.square().sum(-2, keepdim=True) / denominator
+        kept_var = centered.square_().sum(-2, keepdim=True) / denominator
+        del centered
         kept_std = kept_var.sqrt().clamp(min=1e-6)
 
         has_kept = count > 0

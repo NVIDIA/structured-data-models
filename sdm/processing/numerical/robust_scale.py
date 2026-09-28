@@ -5,6 +5,7 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.numerical._stats import _isfinite
 
 
 class RobustScale(Processor, InvertibleMixin):
@@ -44,7 +45,7 @@ class RobustScale(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
-        finite_or_nan = numerical.masked_fill(~numerical.isfinite(), torch.nan)
+        finite_or_nan = numerical.masked_fill(~_isfinite(numerical), torch.nan)
         q_low, q_high = (value / 100.0 for value in self.quantile_range)
         # 'nanquantile' requires single or double precision input.
         quantile_input = finite_or_nan.to(
@@ -60,11 +61,11 @@ class RobustScale(Processor, InvertibleMixin):
         self.scale = scale.to(dtype=numerical.dtype)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = (table.numerical - self.median) / self.scale
+        numerical = table.numerical.sub(self.median).div_(self.scale)
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical * self.scale + self.median
+        numerical = table.numerical.mul(self.scale).add_(self.median)
         return table.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:
