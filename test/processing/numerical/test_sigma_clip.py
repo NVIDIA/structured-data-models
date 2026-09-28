@@ -153,3 +153,28 @@ def test_clip_sigma_preserves_nonfinite(
         ),
         equal_nan=True,
     )
+
+
+@withCUDA
+@pytest.mark.parametrize("fit_transform", [False, True])
+def test_clip_sigma_gradients(
+    device: torch.device,
+    fit_transform: bool,
+) -> None:
+    context = torch.tensor(
+        [[1.0], [2.0], [4.0], [100.0]],
+        dtype=torch.float64,
+        device=device,
+        requires_grad=True,
+    )
+    query = TableTensor.from_tensor(context.detach().clone())
+
+    def transform(values: torch.Tensor) -> torch.Tensor:
+        processor = ClipSigma(threshold=1.0)
+        table = TableTensor.from_tensor(values)
+        if fit_transform:
+            return processor.fit_transform(table).numerical
+        processor.fit(table)
+        return processor.transform(query).numerical
+
+    assert torch.autograd.gradcheck(transform, (context,))
