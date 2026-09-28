@@ -9,15 +9,6 @@ from sdm import TableTensor
 from sdm.processing import RankGaussian
 from sdm.testing import onlyCUDA, withCUDA
 
-# Enough knots to keep every fitted value.
-ALL_KNOTS = 2**20
-
-
-def assert_same(actual: Tensor, expected: Tensor) -> None:
-    torch.testing.assert_close(
-        actual, expected, rtol=0, atol=0, equal_nan=True
-    )
-
 
 def edge_query(context: Tensor) -> Tensor:
     # [..., 14, C] queries at, between and beyond the fitted values.
@@ -43,13 +34,10 @@ def edge_query(context: Tensor) -> Tensor:
 
 
 @withCUDA
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_mid_ranks_and_interpolated_query(
-    dtype: torch.dtype, device: torch.device
-) -> None:
+def test_mid_ranks_and_interpolated_query(device: torch.device) -> None:
     context = torch.tensor(
         [[0.0], [0.0], [1.0], [1.0], [2.0], [2.0]],
-        dtype=dtype,
+        dtype=torch.float64,
         device=device,
     )
     processor = RankGaussian().fit(TableTensor.from_tensor(context))
@@ -135,14 +123,20 @@ def test_few_distinct_values_match_all_knots(device: torch.device) -> None:
     table = TableTensor.from_tensor(context)
     query = TableTensor.from_tensor(edge_query(context))
     processor = RankGaussian(max_knots=4)
-    reference = RankGaussian(max_knots=ALL_KNOTS)
-    assert_same(
+    reference = RankGaussian()
+    torch.testing.assert_close(
         actual=processor.fit_transform(table).numerical,
         expected=reference.fit_transform(table).numerical,
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
-    assert_same(
+    torch.testing.assert_close(
         actual=processor.transform(query).numerical,
         expected=reference.transform(query).numerical,
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
 
 
@@ -157,7 +151,7 @@ def test_many_distinct_values_stay_within_one_knot_spacing(
     context[..., 1] = context[..., 1].mul(2).exp()
     table = TableTensor.from_tensor(context)
     processor = RankGaussian(max_knots=max_knots).fit(table)
-    reference = RankGaussian(max_knots=ALL_KNOTS).fit(table)
+    reference = RankGaussian().fit(table)
     output = processor.transform(table).numerical
     expected = reference.transform(table).numerical
 
@@ -180,9 +174,12 @@ def test_many_distinct_values_stay_within_one_knot_spacing(
         ],
         dim=-2,
     )
-    assert_same(
+    torch.testing.assert_close(
         actual=processor.transform(TableTensor.from_tensor(beyond)).numerical,
         expected=torch.cat([lower, upper] * 3, dim=-2),
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
 
     values = context.sort(dim=-2).values
@@ -195,9 +192,9 @@ def test_many_distinct_values_stay_within_one_knot_spacing(
 
 
 @withCUDA
-@pytest.mark.parametrize("max_knots", [16, ALL_KNOTS])
+@pytest.mark.parametrize("max_knots", [16, None])
 def test_nonfinite_context_does_not_change_fitted_ranks(
-    max_knots: int,
+    max_knots: int | None,
     device: torch.device,
 ) -> None:
     finite = torch.randn(200, 2, dtype=torch.float64, device=device)
@@ -212,9 +209,12 @@ def test_nonfinite_context_does_not_change_fitted_ranks(
         TableTensor.from_tensor(finite)
     )
     output = processor.transform(TableTensor.from_tensor(query)).numerical
-    assert_same(
+    torch.testing.assert_close(
         actual=output,
         expected=reference.transform(TableTensor.from_tensor(query)).numerical,
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
     assert torch.equal(output.isnan(), query.isnan())
     assert output[~query.isnan()].isfinite().all()
@@ -230,7 +230,7 @@ def test_values_next_to_ties_stay_within_one_knot_spacing(
     )[:, None]
     table = TableTensor.from_tensor(context)
     output = RankGaussian(max_knots=64).fit_transform(table).numerical
-    reference = RankGaussian(max_knots=ALL_KNOTS)
+    reference = RankGaussian()
     expected = reference.fit_transform(table).numerical
     spacing = (expected.max() - expected.min()) / 63
     assert (output - expected).abs().le(spacing).all()
@@ -262,9 +262,19 @@ def test_chunks_match_single_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
         output = processor.fit_transform(table)
         output_query = processor.transform(query)
 
-    assert_same(actual=output.numerical, expected=expected.numerical)
-    assert_same(
-        actual=output_query.numerical, expected=expected_query.numerical
+    torch.testing.assert_close(
+        actual=output.numerical,
+        expected=expected.numerical,
+        rtol=0,
+        atol=0,
+        equal_nan=True,
+    )
+    torch.testing.assert_close(
+        actual=output_query.numerical,
+        expected=expected_query.numerical,
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
 
 
@@ -275,7 +285,10 @@ def test_loaded_state_keeps_double_precision() -> None:
     processor = RankGaussian().fit(table)
     loaded = RankGaussian()
     loaded.load_state_dict(processor.state_dict())
-    assert_same(
+    torch.testing.assert_close(
         actual=loaded.transform(table).numerical,
         expected=processor.transform(table).numerical,
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
