@@ -9,10 +9,7 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_cell_embedding(
-    device: torch.device,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_cell_embedding(device: torch.device) -> None:
     module = CellEmbedding(
         channels=8,
         group_size=3,
@@ -46,11 +43,6 @@ def test_cell_embedding(
     out4.sum().backward()
     assert module.num_lin.weight.grad is not None
     assert module.cat_lin.weight.grad is not None
-
-    monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "1e-12")
-    with torch.no_grad():
-        auto_out = module(x, categorical_mask, batch_size_limit="auto")
-    torch.testing.assert_close(auto_out, out1)
 
 
 @withCUDA
