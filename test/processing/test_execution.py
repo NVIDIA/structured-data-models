@@ -426,7 +426,10 @@ def test_row_passes_match_single_pass(
     @torch.inference_mode()
     def run() -> tuple[tuple[TableTensor, ...], TableTensor]:
         queries = execution.transform(x=x_query, related_tables=None)
-        output = execution.transform_output(outputs, torch.float32)
+        output = execution.transform_output(
+            outputs,
+            (torch.float32,) * len(outputs),
+        )
         return tuple(query.x for query in queries), output
 
     expected_queries, expected_output = run()

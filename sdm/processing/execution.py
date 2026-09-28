@@ -262,9 +262,9 @@ class RecipeExecution:
     def transform_output(
         self,
         outputs: Sequence[TableTensor],
-        dtype: torch.dtype,
+        dtypes: Sequence[torch.dtype],
     ) -> TableTensor:
-        """Apply ``recipe.output`` to member outputs in ``dtype``.
+        """Apply ``recipe.output`` after restoring each member dtype.
 
         Outputs of numerical targets first pass through the inverted target
         transforms. Output rows are processed independently, so large outputs
@@ -281,9 +281,9 @@ class RecipeExecution:
             device=outputs[0].device,
         )
         if size >= outputs[0].size(-2):
-            return self._transform_output(outputs, dtype)
+            return self._transform_output(outputs, dtypes)
         parts = tuple(
-            self._transform_output(chunk, dtype)
+            self._transform_output(chunk, dtypes)
             for chunk in zip(
                 *(output.split(size, dim=-2) for output in outputs),
                 strict=True,
@@ -294,9 +294,12 @@ class RecipeExecution:
     def _transform_output(
         self,
         outputs: Sequence[TableTensor],
-        dtype: torch.dtype,
+        dtypes: Sequence[torch.dtype],
     ) -> TableTensor:
-        outputs = [cast(TableTensor, output.to(dtype)) for output in outputs]
+        outputs = [
+            cast(TableTensor, output.to(dtype))
+            for output, dtype in zip(outputs, dtypes, strict=True)
+        ]
         if self._numerical_target:
             outputs = list(self.inverse_transform_target(outputs))
 

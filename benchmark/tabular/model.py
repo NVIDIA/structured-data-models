@@ -214,7 +214,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                     x=x_query,
                     related_tables=None,
                 )
-                dtype = queries[0].x.dtype
+                dtypes = tuple(query.x.dtype for query in queries)
                 generator = torch.Generator(self._device).set_state(
                     self._rng_state
                 )
@@ -232,7 +232,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                         generator=generator,
                     )
                 del queries
-                out = self._recipe_execution.transform_output(outputs, dtype)
+                out = self._recipe_execution.transform_output(outputs, dtypes)
 
         if self.problem_type == REGRESSION:
             return out.numerical.float().mean(dim=-1).cpu().numpy()

@@ -210,7 +210,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         ):
             return recipe_execution.transform_output(
                 outs,
-                dtype=queries[0].x.dtype,
+                dtypes=tuple(query.x.dtype for query in queries),
             )
 
     def fit(
@@ -530,7 +530,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         ):
             return recipe_execution.transform_output(
                 outs,
-                dtype=queries[0].x.dtype,
+                dtypes=tuple(query.x.dtype for query in queries),
             )
 
     def clear(self) -> None:
