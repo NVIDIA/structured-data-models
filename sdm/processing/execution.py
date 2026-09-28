@@ -322,21 +322,27 @@ def _transform_rows(
     table: EnsembleTable,
 ) -> EnsembleTable:
     # Member cells are transformed in double precision at most.
-    first = table._groups[0]  # [members, ..., rows, columns]
-    size = split_size(
-        num_items=first.size(-2),
-        item_bytes=len(table)
-        * math.prod(first.size()[1:-2])
-        * first.size(-1)
-        * torch.float64.itemsize,
-        device=first.device,
+    # Groups have shape [stored members, ..., rows, columns].
+    num_rows = table._groups[0].size(-2)
+    row_bytes_by_device: dict[torch.device, int] = {}
+    # Count logical members because several members may share one stored table.
+    for group_id, _ in table._locations:
+        group = table._groups[group_id]
+        batch_size = math.prod(group.size()[1:-2])
+        row_bytes = batch_size * group.size(-1) * torch.float64.itemsize
+        row_bytes_by_device[group.device] = (
+            row_bytes_by_device.get(group.device, 0) + row_bytes
+        )
+    rows_per_pass = min(
+        split_size(num_rows, row_bytes, device)
+        for device, row_bytes in row_bytes_by_device.items()
     )
-    if size >= first.size(-2):
+    if rows_per_pass >= num_rows:
         return transform(table)
     parts = [
         transform(table.replace_groups(groups))
         for groups in zip(
-            *(group.split(size, dim=-2) for group in table._groups),
+            *(group.split(rows_per_pass, dim=-2) for group in table._groups),
             strict=True,
         )
     ]

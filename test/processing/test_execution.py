@@ -14,7 +14,7 @@ from sdm import (
     TableTensor,
 )
 from sdm.models import KumoTabular
-from sdm.processing.execution import RecipeExecution
+from sdm.processing.execution import RecipeExecution, _transform_rows
 from sdm.testing import onlyCUDA
 
 
@@ -446,3 +446,30 @@ def test_row_passes_match_single_pass(
     assert output.columns == expected_output.columns
     assert output.numerical.dtype == torch.float32
     assert torch.equal(output.numerical, expected_output.numerical)
+
+
+def test_transform_rows_sizes_every_member(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item_bytes: list[int] = []
+
+    def record_size(
+        num_items: int,
+        bytes_per_item: int,
+        device: torch.device,
+    ) -> int:
+        del device
+        item_bytes.append(bytes_per_item)
+        return num_items
+
+    monkeypatch.setattr("sdm.processing.execution.split_size", record_size)
+    narrow = TableTensor.from_tensor(torch.zeros(3, 1))
+    wide = TableTensor.from_tensor(torch.zeros(3, 4))
+    for tables, member_ids in (
+        ((narrow, wide), (0, 1, 1)),
+        ((wide, narrow), (1, 0, 0)),
+    ):
+        table = EnsembleTable.from_tables(tables, member_ids)
+        _transform_rows(lambda value: value, table)
+
+    assert item_bytes == [9 * torch.float64.itemsize] * 2
