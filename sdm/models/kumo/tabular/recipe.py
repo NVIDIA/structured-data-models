@@ -22,6 +22,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.RobustScale(),
                     sp.ClipSoft(3.0),
                 ],
+                sp.RankGaussian(),
                 method="round_robin",
             ),
             sp.ClipSigma(threshold=4.0),
