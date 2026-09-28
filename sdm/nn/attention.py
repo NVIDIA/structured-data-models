@@ -4,7 +4,6 @@
 """Attention modules for structured tensor models."""
 
 import math
-import os
 from typing import Any, Literal, overload
 
 import torch
@@ -12,6 +11,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
+from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
 
@@ -533,32 +533,22 @@ class TransformerBlock(torch.nn.Module):
             )
 
         if batch_size_limit == "auto":
-            batch_size_limit = None
-            if query.is_cuda:
-                key_value_length: int | None = None
-                if isinstance(key_value, Tensor):
-                    key_value_length = key_value.size(-2)
-                elif isinstance(key_value, KVCacheEntry):
-                    key_value_length = key_value.key.size(-3)
+            key_value_length: int | None = None
+            if isinstance(key_value, Tensor):
+                key_value_length = key_value.size(-2)
+            elif isinstance(key_value, KVCacheEntry):
+                key_value_length = key_value.key.size(-3)
 
-                bytes_per_example = self.peak_bytes_per_example(
-                    element_size=torch.empty(
-                        size=(),
-                        dtype=torch.get_autocast_dtype(query.device.type),
-                    ).element_size()
-                    if torch.is_autocast_enabled(query.device.type)
-                    else query.element_size(),
-                    query_length=query.size(-2),
-                    key_value_length=key_value_length,
-                )
-
-                memory_limit = int(
-                    torch.cuda.get_device_properties(query.device).total_memory
-                    * torch.cuda.get_per_process_memory_fraction(query.device)
-                    * float(os.getenv("SDM_CHUNK_MEMORY_FRACTION", "0.05"))
-                )
-                batch_size_limit = memory_limit // max(bytes_per_example, 1)
-                batch_size_limit = max(batch_size_limit, 1)
+            batch_size_limit = self.auto_batch_size_limit(
+                device=query.device,
+                element_size=torch.get_autocast_dtype(
+                    query.device.type
+                ).itemsize
+                if torch.is_autocast_enabled(query.device.type)
+                else query.element_size(),
+                query_length=query.size(-2),
+                key_value_length=key_value_length,
+            )
 
         batch_size_limit = min(batch_size_limit or 65_535, 65_535)
 
@@ -727,6 +717,24 @@ class TransformerBlock(torch.nn.Module):
     ) -> int:
         r""":meta private:"""  # noqa: D415
         return 0
+
+    def auto_batch_size_limit(
+        self,
+        device: torch.device,
+        element_size: int,
+        query_length: int,
+        key_value_length: int | None = None,
+    ) -> int:
+        r""":meta private:"""  # noqa: D415
+        if device.type != "cuda":
+            return 65_535
+        bytes_per_example = self.peak_bytes_per_example(
+            element_size=element_size,
+            query_length=query_length,
+            key_value_length=key_value_length,
+        )
+        limit = chunk_memory_limit(device) // max(bytes_per_example, 1)
+        return min(max(limit, 1), 65_535)
 
 
 def _batch_shape(
