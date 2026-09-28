@@ -17,26 +17,6 @@ from relbench.base import Database, EntityTask, Table, TaskType
 
 import sdm
 
-REGRESSION = TaskType.REGRESSION
-CLASSIFICATION = TaskType.BINARY_CLASSIFICATION
-
-CONTEXT_SIZE = {
-    "small": 2_000,
-    "large": 20_000,
-}
-
-NUM_NEIGHBORS = {
-    # Vary number of neighbor grid based on task type + context size:
-    # Regression generally benefits from a wide range of neighbors, while
-    # entity table features + lag target features is a strong baseline:
-    (REGRESSION, "small"): {"small": 0, "medium": 8, "large": 64},
-    (REGRESSION, "large"): {"small": 0, "medium": 8, "large": 64},
-    # Classification excels with less number of neighbors. On smaller context
-    # size, we also decrease number of neighbors:
-    (CLASSIFICATION, "small"): {"small": 1, "medium": 4, "large": 16},
-    (CLASSIFICATION, "large"): {"small": 1, "medium": 8, "large": 32},
-}
-
 
 def search_space(stats: TaskStats) -> SearchSpace:
     return SearchSpace(
@@ -54,6 +34,28 @@ def search_space(stats: TaskStats) -> SearchSpace:
     )
 
 
+REGRESSION = TaskType.REGRESSION
+CLASSIFICATION = TaskType.BINARY_CLASSIFICATION
+
+CONTEXT_SIZE = {
+    "small": 2_000,
+    "large": 20_000,
+}
+
+NUM_NEIGHBORS = {
+    # Vary number of neighbor grid search based on task type + context size:
+    # Regression generally benefits from a wide range of neighbors, while
+    # entity table features + lag target features is a strong baseline:
+    (REGRESSION, "small"): {"small": 0, "medium": 8, "large": 64},
+    (REGRESSION, "large"): {"small": 0, "medium": 8, "large": 64},
+    # Classification excels with less number of neighbors. On smaller context
+    # size, it can be beneficial to search over decreased number of neighbors:
+    (CLASSIFICATION, "small"): {"small": 1, "medium": 4, "large": 16},
+    (CLASSIFICATION, "large"): {"small": 1, "medium": 8, "large": 32},
+}
+
+
+@lru_cache(maxsize=1)
 def get_task_table(
     task_table: Table,
     history_table: Table,
@@ -61,12 +63,12 @@ def get_task_table(
     num_lags: int,
     is_train: bool,
 ) -> sdm.TableTensor:
-    """Return the context table with added historical target features."""
+    """Return the task table with added historical target features."""
     stypes = {
         task.entity_col: "id",
         task.time_col: "datetime",
     }
-    if is_train and task.task_type == TaskType.REGRESSION:
+    if is_train and task.task_type == REGRESSION:
         stypes[task.target_col] = "numerical"
     elif is_train:
         stypes[task.target_col] = "categorical"
@@ -89,7 +91,7 @@ def get_task_table(
 
     for lag in range(1, num_lags + 1):
         lag_col = f"{task.target_col}_lag_{lag}"
-        if task.task_type == TaskType.REGRESSION:
+        if task.task_type == REGRESSION:
             out[lag_col] = np.nan
             stypes[lag_col] = "numerical"
         else:
@@ -203,7 +205,7 @@ class KumoRelationalModel(RelArenaModel):
         self.num_neighbors = [N] * 2
 
         if (
-            task.task_type != TaskType.REGRESSION
+            task.task_type != REGRESSION
             and len(context) > context_size * num_estimators
         ):  # Sort by recency for classification tasks:
             perm = context.datetime.view(-1).argsort(descending=True)
@@ -288,7 +290,7 @@ class KumoRelationalModel(RelArenaModel):
                 outs.append(self.model.predict(batch, related_tables))
         out = cast(sdm.TableTensor, torch.cat(outs, dim=-2))
 
-        if task.task_type == TaskType.REGRESSION:
+        if task.task_type == REGRESSION:
             out = out["q500"].numerical.squeeze(-1)
         elif "1" in out.column_names:
             out = out["1"].numerical.squeeze(-1)
