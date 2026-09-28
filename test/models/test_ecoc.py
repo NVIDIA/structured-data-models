@@ -96,3 +96,38 @@ def test_ecoc(
                 num_classes=num_classes + 1,
                 cache=cache,
             )
+
+
+@withCUDA
+def test_ecoc_members(device: torch.device) -> None:
+    model = MyModel(10)
+    ecoc = ECOC(max_classes=10)
+    num_members, num_classes, num_context = 3, 12, 11
+    x = torch.randn(
+        num_members,
+        num_context + 2,
+        num_context,
+        device=device,
+        dtype=torch.float64,
+    )
+    y = torch.rand(num_members, num_classes, device=device).argsort(dim=-1)[
+        ..., :num_context
+    ]
+    forward = partial(
+        ecoc, model=model, num_classes=num_classes, num_members=num_members
+    )
+    scores = forward(
+        x=x, y=y, generator=torch.Generator(device).manual_seed(0)
+    )
+
+    cache = Cache()
+    recorded = forward(
+        x=x[..., :num_context, :],
+        y=y,
+        cache=cache,
+        generator=torch.Generator(device).manual_seed(0),
+    )
+    assert recorded.shape == (num_members, 0, num_classes)
+    cache.freeze()
+    replayed = forward(x=x[..., num_context:, :], y=y[..., :0], cache=cache)
+    torch.testing.assert_close(replayed, scores)

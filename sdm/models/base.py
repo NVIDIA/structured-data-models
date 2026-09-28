@@ -132,10 +132,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 whose preprocessed tables differ in shape or target class
                 set, or that come with related tables, run in separate
                 calls. Device memory grows with the batch size.
-                Model-side randomness drawn per call (*e.g.*, the ECOC codebook
-                of :class:`~sdm.models.KumoTabular` for more than 10 classes)
-                is shared within a batch, so batched and sequential predictions
-                differ numerically there.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -244,10 +240,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 set, or that come with related tables, run in separate
                 calls. Device memory grows with the batch size. Estimators
                 fitted together are predicted together.
-                Model-side randomness drawn per call (*e.g.*, the ECOC codebook
-                of :class:`~sdm.models.KumoTabular` for more than 10 classes)
-                is shared within a batch, so batched and sequential predictions
-                differ numerically there.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
