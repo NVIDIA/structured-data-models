@@ -119,7 +119,10 @@ def test_shuffle_categories_preserves_missing() -> None:
     assert output.categorical.tolist() == target.categorical.tolist()
 
 
-def test_shuffle_categories_random_matches_independent_processors() -> None:
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_categories_ensemble_matches_independent_processors(
+    method: Literal["shift", "random"],
+) -> None:
     first_context = _table(
         [[0, 0], [1, 1], [2, -1], [1, 0]],
         (("a", "b", "c"), ("x", "y")),
@@ -145,7 +148,7 @@ def test_shuffle_categories_random_matches_independent_processors() -> None:
         tables=(first_query, second_query),
         member_table_ids=table_ids,
     )
-    processor = ShuffleCategories(method="random")
+    processor = ShuffleCategories(method=method)
 
     context_output = processor.fit_transform_ensemble(
         context,
@@ -157,7 +160,7 @@ def test_shuffle_categories_random_matches_independent_processors() -> None:
     context_tables = (first_context, second_context)
     query_tables = (first_query, second_query)
     for member_id, table_id in enumerate(table_ids):
-        reference = ShuffleCategories(method="random")
+        reference = ShuffleCategories(method=method)
         expected_context = reference.fit_transform(
             context_tables[table_id],
             generator=generator,
@@ -198,25 +201,3 @@ def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
     )
 
     assert output.equal(expected)
-
-
-@withCUDA
-def test_shuffle_categories_shift_uses_each_offset_before_reuse(
-    device: torch.device,
-) -> None:
-    num_classes = 3
-    num_members = 8
-    target = _table(
-        [[0, 0], [1, 1], [2, 2], [-1, -1]],
-        (("a", "b", "c"), ("x", "y", "z")),
-        device=device,
-    )
-    ensemble = EnsembleTable.from_table(target, num_members=num_members)
-    output = ShuffleCategories(method="shift").fit_transform_ensemble(ensemble)
-    shifts = torch.stack(
-        [output[i].categorical.code[0] for i in range(num_members)]
-    )
-
-    for cycle in shifts.split(num_classes):
-        for column in range(shifts.size(1)):
-            assert cycle[:, column].unique().numel() == cycle.size(0)
