@@ -29,6 +29,10 @@ class Recipe:
       the output remains stacked. Steps before the reducer must support
       stacked outputs, while steps after it receive already-reduced outputs.
 
+    Fitted ``features`` and ``output`` steps, and inverse ``target`` steps,
+    transform each row on its own, so models may apply them to large query
+    sets in passes over rows.
+
     Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
     steps are invertible, ``inverse_transform``. Call them directly, e.g.
     ``recipe.features.transform(table)`` or

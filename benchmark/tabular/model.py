@@ -222,7 +222,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                     self.autocast_dtype,
                     enabled=x_query.is_cuda,
                 ):
-                    outputs = self.model._forward_members(
+                    outputs, dtypes = self.model._forward_members(
                         contexts=self._contexts,
                         queries=queries,
                         estimator_batch_size=self._get_model_params()[
@@ -230,14 +230,8 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                         ],
                         generator=generator,
                     )
-
-                if self.problem_type == REGRESSION:
-                    outputs = list(
-                        self._recipe_execution.inverse_transform_target(
-                            outputs
-                        )
-                    )
-                out = self._recipe_execution.transform_output(outputs)
+                del queries
+                out = self._recipe_execution.transform_output(outputs, dtypes)
 
         if self.problem_type == REGRESSION:
             return out.numerical.float().mean(dim=-1).cpu().numpy()
