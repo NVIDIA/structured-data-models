@@ -129,8 +129,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
                 one by one; ``None`` batches as many as possible. Estimators
-                whose preprocessed tables differ in shape, category counts or
-                classes, or that come with related tables, run in separate
+                whose preprocessed tables differ in shape or target class
+                set, or that come with related tables, run in separate
                 calls. Device memory grows with the batch size.
                 Model-side randomness drawn per call (*e.g.*, the ECOC codebook
                 of :class:`~sdm.models.KumoTabular` for more than 10 classes)
@@ -240,8 +240,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
                 one by one; ``None`` batches as many as possible. Estimators
-                whose preprocessed tables differ in shape, category counts or
-                classes, or that come with related tables, run in separate
+                whose preprocessed tables differ in shape or target class
+                set, or that come with related tables, run in separate
                 calls. Device memory grows with the batch size. Estimators
                 fitted together are predicted together.
                 Model-side randomness drawn per call (*e.g.*, the ECOC codebook
@@ -859,7 +859,8 @@ def _batch_slices(
     estimator_batch_size: int | None,
 ) -> list[slice]:
     # Consecutive estimators that can go through one `_forward` together,
-    # split when the layout changes or the batch is full.
+    # split when shapes/dtypes or the target class set change, or the
+    # batch is full.
     related = any(context.related_tables is not None for context in contexts)
     if queries is not None:
         related = related or any(
@@ -871,7 +872,7 @@ def _batch_slices(
     batches: list[slice] = []
     start = 0
     key: Hashable = None
-    # Estimators stack when tables share layout, category counts, and classes.
+    # Stack when table shapes/dtypes match and the target class set matches.
     for i, context in enumerate(contexts):
         query = None if queries is None else queries[i]
         tables = (
