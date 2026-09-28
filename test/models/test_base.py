@@ -833,8 +833,6 @@ def test_estimator_batching_requires_shared_classes() -> None:
             )
 
 
-
-
 @pytest.mark.parametrize("estimator_batch_size", [1, None])
 def test_estimator_batching_requires_matching_query_schema(
     estimator_batch_size: int | None,
