@@ -4,6 +4,7 @@
 # ruff: noqa: D205
 from __future__ import annotations
 
+import itertools
 from collections.abc import Iterable
 from typing import Any, ClassVar, Literal, cast
 
@@ -12,6 +13,7 @@ from torch import Tensor
 from torch.nn import Identity, Linear, ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
+from sdm._graphs import GraphCache
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -291,8 +293,40 @@ class _KumoTabular(torch.nn.Module):
             num_key_value_heads_for_query=num_icl_key_value_heads_for_query,
             **factory_kwargs,
         )
+        self._graphs = GraphCache()
 
     def forward(
+        self,
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
+        categorical_mask: Tensor,  # [..., C]
+        *,
+        cache: Cache | None = None,
+    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
+        # Small inputs leave the GPU waiting for kernel launches. When inputs
+        # repeat in shape, e.g., across folds of a table, the graph cache
+        # replays CUDA graphs for the shapes where this is measured to help.
+        if (
+            cache is None
+            and x.is_cuda
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+        ):
+            key = (
+                torch.is_autocast_enabled("cuda"),
+                torch.get_autocast_dtype("cuda"),
+                *(
+                    tensor.data_ptr()
+                    for tensor in itertools.chain(
+                        self.parameters(),
+                        self.buffers(),
+                    )
+                ),
+            )
+            return self._graphs(self._forward, x, y, categorical_mask, key=key)
+        return self._forward(x, y, categorical_mask, cache=cache)
+
+    def _forward(
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
