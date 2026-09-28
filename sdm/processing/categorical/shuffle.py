@@ -96,7 +96,7 @@ class ShuffleCategories(EnsembleProcessor):
         permutation_ids = []
         permutation_id_by_key: dict[tuple[tuple[int, ...], ...], int] = {}
 
-        # (column name, n_classes) -> cyclic offsets not yet used for that column.
+        # (column name, n_classes) -> unused cyclic offsets for that column.
         unused_offsets: dict[tuple[str, int], Tensor] = {}
         for member_id in range(len(ensemble_table)):
             permutations = self._draw_permutations(
