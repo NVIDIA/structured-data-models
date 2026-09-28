@@ -233,6 +233,33 @@ def test_balanced_shifts_cover_classes(
         assert output[i].equal(query_output[i])
 
 
+def test_balanced_shifts_separate_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        torch,
+        "randperm",
+        lambda n, **kwargs: torch.arange(n, device=kwargs.get("device")),
+    )
+    tables = tuple(
+        TableTensor(
+            columns={Stype.categorical: (name,)},
+            categorical=CategoricalTensor.from_tensor(
+                torch.tensor([[0], [1]])
+            ),
+        )
+        for name in ("first", "second")
+    )
+    ensemble = EnsembleTable.from_tables(tables, (0, 1, 0, 1))
+    output = ShuffleCategories(method="balanced_shift").fit_transform_ensemble(
+        ensemble
+    )
+
+    for member_ids in ((0, 2), (1, 3)):
+        shifts = {output[i].categorical.code[0, 0].item() for i in member_ids}
+        assert shifts == {0, 1}
+
+
 def test_balanced_shifts_reproducible_ensemble() -> None:
     target = _table([[0], [1], [2], [-1]], (("a", "b", "c"),))
     ensemble = EnsembleTable.from_table(target, num_members=8)

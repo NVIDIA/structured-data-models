@@ -26,8 +26,8 @@ class ShuffleCategories(EnsembleProcessor):
             codes by a drawn offset, and ``"random"`` remaps the codes with
             a drawn permutation. ``"balanced_shift"`` draws cyclic offsets
             without replacement before starting another cycle, balancing
-            their counts across ensemble members for each column and class
-            count.
+            their counts across ensemble members for each named column and
+            class count.
     """
 
     handles_stypes = frozenset({Stype.categorical})
@@ -54,12 +54,12 @@ class ShuffleCategories(EnsembleProcessor):
         self,
         table: TableTensor,
         *,
-        shifts: dict[tuple[torch.device, int, int], Tensor],
+        shifts: dict[tuple[torch.device, str, int], Tensor],
         generator: torch.Generator | None = None,
     ) -> list[Tensor]:
         device = table.categorical.device
         permutations: list[Tensor] = []
-        for column, category in enumerate(table.categorical.categories):
+        for column_index, category in enumerate(table.categorical.categories):
             n_classes = category.numel()
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
@@ -74,7 +74,8 @@ class ShuffleCategories(EnsembleProcessor):
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes
             elif self.method == "balanced_shift":
-                key = (device, column, n_classes)
+                column_name = table.columns[Stype.categorical][column_index]
+                key = (device, column_name, n_classes)
                 remaining = shifts.get(key)
                 if remaining is None or remaining.numel() == 0:
                     remaining = torch.randperm(
@@ -110,7 +111,7 @@ class ShuffleCategories(EnsembleProcessor):
             tuple[torch.device, tuple[tuple[int, ...], ...]], int
         ] = {}
 
-        shifts: dict[tuple[torch.device, int, int], Tensor] = {}
+        shifts: dict[tuple[torch.device, str, int], Tensor] = {}
         for member_id in range(len(ensemble_table)):
             permutations = self._draw_permutations(
                 ensemble_table[member_id],
