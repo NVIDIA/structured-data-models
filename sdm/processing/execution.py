@@ -327,6 +327,8 @@ def _transform_rows(
     # Member cells are transformed in double precision at most.
     # Groups have shape [stored members, ..., rows, columns].
     num_rows = table._groups[0].size(-2)
+    if any(group.size(-2) != num_rows for group in table._groups[1:]):
+        raise ValueError("Expected all ensemble groups to have the same row count")
     row_bytes_by_device: dict[torch.device, int] = {}
     # Count logical members because several members may share one stored table.
     for group_id, _ in table._locations:
