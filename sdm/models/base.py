@@ -112,7 +112,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
-        estimator_batch_size: int | Literal["auto"] | None = 1,
+        estimator_batch_size: int | Literal["auto"] | None = "auto",
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -136,11 +136,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 customized per estimator (*e.g.*, different in-context examples
                 per estimator).
             estimator_batch_size: Maximum number of consecutive estimators run
-                through the model in one call. ``1`` (default) runs estimators
-                one by one, which minimizes device memory; ``"auto"`` batches
-                estimators up to a size budget for their preprocessed tables
-                and runs them one by one when gradients are required; ``None``
-                batches as many as possible. Estimators whose
+                through the model in one call. ``"auto"`` (default) batches
+                estimators up to a size budget for their preprocessed tables,
+                and runs them one by one when gradients are required. ``1``
+                runs estimators one by one, which minimizes device memory;
+                ``None`` batches as many as possible. Estimators whose
                 preprocessed tables differ in shape, category counts or
                 classes, or that come with related tables, run in separate
                 calls. Batched and sequential predictions are equal up to
@@ -226,7 +226,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
-        estimator_batch_size: int | Literal["auto"] | None = 1,
+        estimator_batch_size: int | Literal["auto"] | None = "auto",
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -249,10 +249,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 customized per estimator (*e.g.*, different in-context examples
                 per estimator).
             estimator_batch_size: Maximum number of consecutive estimators run
-                through the model in one call. ``1`` (default) runs estimators
-                one by one, which minimizes device memory; ``"auto"`` batches
-                estimators up to a size budget for their preprocessed tables;
-                ``None`` batches as many as possible. Estimators whose
+                through the model in one call. ``"auto"`` (default) batches
+                estimators up to a size budget for their preprocessed tables.
+                ``1`` runs estimators one by one, which minimizes device
+                memory; ``None`` batches as many as possible. Estimators whose
                 preprocessed tables differ in shape, category counts or
                 classes, or that come with related tables, run in separate
                 calls. Estimators fitted together are predicted together; with
@@ -640,7 +640,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         contexts: Sequence[MemberContext],
         queries: Sequence[MemberQuery],
         *,
-        estimator_batch_size: int | Literal["auto"] | None = 1,
+        estimator_batch_size: int | Literal["auto"] | None = "auto",
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
