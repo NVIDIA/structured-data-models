@@ -879,6 +879,7 @@ def _batch_slices(
             if query is None
             else [context.x, context.y, query.x]
         )
+        classes = class_values[i]
         member_key = (
             tuple(
                 (
@@ -890,7 +891,7 @@ def _batch_slices(
                 )
                 for table in tables
             ),
-            None if class_values[i] is None else frozenset(class_values[i]),
+            None if classes is None else frozenset(classes),
         )
         if i > start and (
             member_key != key
@@ -953,20 +954,20 @@ def _unstack(
         if num_members == 1
         else list(cast(tuple[TableTensor, ...], out.unbind(0)))
     )
-    if (
-        class_values is None
-        or len(class_values) == 1
-        or class_values[0] is None
-    ):
+    if class_values is None or len(class_values) == 1:
+        return outs
+    first = class_values[0]
+    if first is None:
         return outs
     # The model labels columns in the first member's class order; member `e`'s
     # column `j` holds class `class_values[e][j]`.
     labels = out.columns[Stype.numerical]
-    index = {value: i for i, value in enumerate(class_values[0])}
+    index = {value: i for i, value in enumerate(first)}
+    stacked = cast(Sequence[tuple[Any, ...]], class_values)
     return [
         TableTensor(
             columns={Stype.numerical: [labels[index[v]] for v in classes]},
             numerical=member_out.numerical,
         )
-        for member_out, classes in zip(outs, class_values, strict=True)
+        for member_out, classes in zip(outs, stacked, strict=True)
     ]
