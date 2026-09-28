@@ -17,14 +17,13 @@ from relbench.base import Database, EntityTask, Table, TaskType
 
 import sdm
 
-
 REGRESSION = TaskType.REGRESSION
 CLASSIFICATION = TaskType.BINARY_CLASSIFICATION
 
 CONTEXT_SIZE = {
-        "small": 2_000,
-        "large": 2_000,
-        }
+    "small": 2_000,
+    "large": 20_000,
+}
 
 NUM_NEIGHBORS = {
     # Vary number of neighbor grid based on task type + context size:
@@ -47,38 +46,38 @@ def search_space(stats: TaskStats) -> SearchSpace:
                 "subgraph_size": subgraph_size,
                 "context_size": context_size,
             }
-            for context_size in ["small"] if stats.num_train_nodes <= 2000
-            else ["large"]
+            for context_size in (
+                ["small"] if stats.num_train_nodes <= 20_000 else ["large"]
+            )
             for subgraph_size in ["small", "medium", "large"]
         ],
     )
 
 
-def get_context(
-    df: pd.DataFrame,
-    history: pd.DataFrame,
+def get_task_table(
+    task_table: Table,
+    history_table: Table,
     task: EntityTask,
     num_lags: int,
-    with_target: bool,
+    is_train: bool,
 ) -> sdm.TableTensor:
     """Return the context table with added historical target features."""
     stypes = {
         task.entity_col: "id",
         task.time_col: "datetime",
     }
-    if with_target and task.task_type == TaskType.REGRESSION:
+    if is_train and task.task_type == TaskType.REGRESSION:
         stypes[task.target_col] = "numerical"
-    elif with_target:
+    elif is_train:
         stypes[task.target_col] = "categorical"
 
     history_time_col = "__history_time__"
     lookup_time_col = "__lookup_time__"
     row_col = "__row__"
 
-    out = df.copy()
-    right = history[[task.entity_col, task.time_col, task.target_col]].rename(
-        columns={task.time_col: history_time_col}
-    )
+    out = task_table.df.copy()
+    right = history_table.df[[task.entity_col, task.time_col, task.target_col]]
+    right = right.rename(columns={task.time_col: history_time_col})
     right = right.sort_values([history_time_col, task.entity_col])
     left = pd.DataFrame(
         {
@@ -187,22 +186,21 @@ class KumoRelationalModel(RelArenaModel):
         cpu_generator = torch.Generator().manual_seed(seed)
         cuda_generator = torch.Generator(self.device).manual_seed(seed)
 
-        self.train_df = train_table.df
-        context = get_context(
-            df=train_table.df,
-            history=train_table.df,
+        self.history_table = train_table
+        context = get_task_table(
+            task_table=train_table,
+            history_table=self.history_table,
             task=task,
             num_lags=20,
-            with_target=True,
+            is_train=True,
         )
 
-        context_size = CONTEXT_SIZE[self.config["context_size"]
-        subgraph_size = self.config["subgraph_size"]
-        N = NUM_NEIGHBORS[(task.task_type, self.config["context_size"])][self.config["subgraph_size"]]
-
         num_estimators = 8
-
-        self.num_neighbors=[N] * 2
+        context_size = self.config["context_size"]
+        subgraph_size = self.config["subgraph_size"]
+        N = NUM_NEIGHBORS[(task.task_type, context_size)][subgraph_size]
+        context_size = CONTEXT_SIZE[self.config["context_size"]]
+        self.num_neighbors = [N] * 2
 
         if (
             task.task_type != TaskType.REGRESSION
@@ -263,12 +261,12 @@ class KumoRelationalModel(RelArenaModel):
         table: Table,
     ) -> np.ndarray:
 
-        query = get_context(
-            df=table.df,
-            history=self.train_df,
+        query = get_task_table(
+            task_table=table,
+            history_table=self.history_table,
             task=task,
             num_lags=20,
-            with_target=False,
+            is_train=False,
         )
         if self.expand_query:
             query = query.expand(8, *query.size())
