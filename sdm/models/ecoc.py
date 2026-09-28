@@ -138,6 +138,16 @@ class ECOC(torch.nn.Module):
         active = index != self.max_classes - 1
         return scores.masked_fill(~active, 0).sum(dim=0) / active.sum(dim=0)
 
+    def num_tasks(self, num_classes: int) -> int:
+        """Return the number of tasks the model runs for ``num_classes``."""
+        if num_classes <= self.max_classes:
+            return 1
+        return max(
+            # Give every class its own output in at least one task.
+            math.ceil(num_classes / (self.max_classes - 1)),
+            4 * math.ceil(math.log(num_classes, self.max_classes)),
+        )
+
     def _draw_codebook(
         self,
         num_classes: int,
@@ -145,11 +155,7 @@ class ECOC(torch.nn.Module):
         generator: torch.Generator | None,
     ) -> Tensor:
         rest_idx = self.max_classes - 1
-        num_codes = max(
-            # Give every class its own output in at least one task.
-            math.ceil(num_classes / rest_idx),
-            4 * math.ceil(math.log(num_classes, self.max_classes)),
-        )
+        num_codes = self.num_tasks(num_classes)
         # Bound the quadratic distance search for large targets.
         num_draws = 50 if num_classes <= 200 else 1
         codebook = torch.full(

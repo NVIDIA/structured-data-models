@@ -3,8 +3,9 @@
 
 import abc
 import copy
-from collections.abc import Hashable, Iterable, Mapping, Sequence
-from typing import Any, ClassVar, cast
+import math
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -60,6 +61,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
+    #: Cells per estimator batch with ``estimator_batch_size="auto"``, as
+    #: counted by :meth:`_estimator_cells`. Larger batches add memory without
+    #: speeding up inference on GPUs.
+    _estimator_batch_cells: ClassVar[int] = 2**20
+
+    #: Cells each table row adds for per-row work such as in-context learning.
+    _estimator_row_cells: ClassVar[int] = 32
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -103,7 +112,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
-        estimator_batch_size: int | None = 1,
+        estimator_batch_size: int | Literal["auto"] | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -128,11 +137,17 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 per estimator).
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
-                one by one; ``None`` batches as many as possible. Estimators
-                whose preprocessed tables differ in shape or target class
+                one by one, which minimizes device memory; ``"auto"`` batches
+                estimators up to a size budget for their preprocessed tables
+                and runs them one by one when gradients are required; ``None``
+                batches as many as possible. Estimators whose
+                preprocessed tables differ in shape or target class
                 set, or that come with related tables, run in separate
-                calls. Device memory grows with the batch size.
-            callbacks: Callbacks applied in sequence to this model call.
+                calls. Batched and sequential predictions are equal up to
+                floating-point rounding.
+            callbacks: Callbacks applied in sequence to this model call. The
+                preprocessing hooks of all estimators run before their model
+                forward hooks.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
@@ -211,7 +226,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
-        estimator_batch_size: int | None = 1,
+        estimator_batch_size: int | Literal["auto"] | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -235,11 +250,15 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 per estimator).
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
-                one by one; ``None`` batches as many as possible. Estimators
-                whose preprocessed tables differ in shape or target class
+                one by one, which minimizes device memory; ``"auto"`` batches
+                estimators up to a size budget for their preprocessed tables;
+                ``None`` batches as many as possible. Estimators whose
+                preprocessed tables differ in shape or target class
                 set, or that come with related tables, run in separate
-                calls. Device memory grows with the batch size. Estimators
-                fitted together are predicted together.
+                calls. Estimators fitted together are predicted together; with
+                ``"auto"`` and without callbacks, :meth:`predict` splits their
+                query rows into chunks that keep the budget. Batched and
+                sequential predictions are equal up to floating-point rounding.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -273,11 +292,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
             queries=None,
             class_values=class_values,
             estimator_batch_size=estimator_batch_size,
+            max_cells=self._estimator_batch_cells,
+            cells=self._estimator_cells,
         )
         cache = Cache(
             recipe_execution=recipe_execution,
             kwargs=kwargs,
             num_batches=len(batches),
+            max_cells=(
+                self._estimator_batch_cells
+                if estimator_batch_size == "auto"
+                else None
+            ),
         )
         for i, batch in enumerate(batches):
             with inference_mode("no_grad"):
@@ -384,6 +410,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             self._cache["recipe_execution"],
         )
         num_batches = cast(int, self._cache["num_batches"])
+        # Callbacks see every estimator output once, so queries stay whole.
+        max_cells = None if callbacks else self._cache["max_cells"]
         caches = [cast(Cache, self._cache[i]) for i in range(num_batches)]
         next_cache = caches[0]
 
@@ -418,7 +446,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 assert cache is not None
 
                 x_schemas = cast(tuple[TableSchema, ...], cache["x_schemas"])
-                batch_queries = [
+                classes = cast(Tensor | None, cache["classes"])
+                members = [
                     self._prepare_query(
                         query=query,
                         x_schema=x_schema,
@@ -443,20 +472,45 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
-                outs += self._forward_batch(
-                    contexts=None,
-                    queries=batch_queries,
-                    cache=cache,
-                    categorical_mask=cast(Tensor, cache["categorical_mask"]),
-                    class_values=cast(
-                        Sequence[tuple[Any, ...] | None] | None,
-                        cache["class_values"],
-                    ),
-                    callbacks=callbacks,
-                    requires_grad=requires_grad,
-                    generator=None,
-                    **cast(dict[str, Any], self._cache["kwargs"]),
-                )
+                chunks = [
+                    self._forward_batch(
+                        contexts=None,
+                        queries=chunk,
+                        cache=cache,
+                        categorical_mask=cast(
+                            Tensor, cache["categorical_mask"]
+                        ),
+                        class_values=cast(
+                            Sequence[tuple[Any, ...] | None] | None,
+                            cache["class_values"],
+                        ),
+                        callbacks=callbacks,
+                        requires_grad=requires_grad,
+                        generator=None,
+                        **cast(dict[str, Any], self._cache["kwargs"]),
+                    )
+                    for chunk in _query_chunks(
+                        queries=members,
+                        max_cells=cast(int | None, max_cells),
+                        cells=self._estimator_cells,
+                        num_classes=(
+                            0 if classes is None else classes.numel()
+                        ),
+                    )
+                ]
+
+                if len(chunks) == 1:
+                    batch_outputs = chunks[0]
+                else:
+                    batch_outputs = [
+                        cast(TableTensor, torch.cat(parts, dim=-2))
+                        for parts in zip(*chunks, strict=True)
+                    ]
+
+                # Drop source chunk references before the next estimator
+                # batch. A single chunk stays alive through `batch_outputs`.
+                del chunks
+                outs.extend(batch_outputs)
 
                 if x.is_cuda:
                     assert compute_stream is not None
@@ -563,6 +617,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
     def default_recipe(cls) -> Recipe:
         r"""Return the default processing recipe for this model."""
 
+    def _estimator_cells(self, x: TableTensor, num_classes: int) -> int:
+        r"""Count how expensive one estimator's table is against the budget.
+
+        Rows of the preprocessed table ``x`` count their columns plus
+        ``_estimator_row_cells``. ``num_classes`` is ``0`` for regression.
+        Models that run an estimator as several tasks scale the count up.
+        """
+        rows = math.prod(x.size()[:-1])
+        return rows * (x.size(-1) + self._estimator_row_cells)
+
     # Helpers #################################################################
 
     def _forward_members(
@@ -570,19 +634,23 @@ class ICLModel(torch.nn.Module, abc.ABC):
         contexts: Sequence[MemberContext],
         queries: Sequence[MemberQuery],
         *,
-        estimator_batch_size: int | None = 1,
+        estimator_batch_size: int | Literal["auto"] | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> list[TableTensor]:
-        r"""Run recipe-transformed members that live on the model device.
+        r"""Run recipe-transformed members on the device of their queries.
 
+        Context features and targets may live on another device; each batch
+        is moved when it runs.
         Returns one output per member before target inversion and
         ``recipe.output``.
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
+        if requires_grad and estimator_batch_size == "auto":
+            estimator_batch_size = 1
 
         if estimator_batch_size == 1 and len(contexts) > 1:
             outs: list[TableTensor] = []
@@ -620,9 +688,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
             queries=queries,
             class_values=class_values,
             estimator_batch_size=estimator_batch_size,
+            max_cells=self._estimator_batch_cells,
+            cells=self._estimator_cells,
         ):
+            device = queries[batch.start].x.device
             outs += self._forward_batch(
-                contexts=contexts[batch],
+                contexts=[
+                    context._replace(
+                        x=cast(TableTensor, context.x.to(device)),
+                        y=cast(TableTensor, context.y.to(device)),
+                    )
+                    for context in contexts[batch]
+                ],
                 queries=queries[batch],
                 cache=None,
                 categorical_mask=None,
@@ -848,11 +925,13 @@ def _batch_slices(
     contexts: Sequence[MemberContext],
     queries: Sequence[MemberQuery] | None,
     class_values: Sequence[tuple[Any, ...] | None],
-    estimator_batch_size: int | None,
+    estimator_batch_size: int | Literal["auto"] | None,
+    max_cells: int,
+    cells: Callable[[TableTensor, int], int],
 ) -> list[slice]:
     # Consecutive estimators that can go through one `_forward` together,
-    # split when shapes/dtypes or the target class set change, or the
-    # batch is full.
+    # split when shapes/dtypes or the target class set change, the batch
+    # is full, or, for ``"auto"``, the cell budget would be exceeded.
     related = any(context.related_tables is not None for context in contexts)
     if queries is not None:
         related = related or any(
@@ -862,7 +941,7 @@ def _batch_slices(
         return [slice(i, i + 1) for i in range(len(contexts))]
 
     batches: list[slice] = []
-    start = 0
+    start = total = 0
     key: Hashable = None
     # Stack when table shapes/dtypes match and the target class set matches.
     for i, context in enumerate(contexts):
@@ -886,18 +965,55 @@ def _batch_slices(
             ),
             None if classes is None else frozenset(classes),
         )
+        num_classes = (
+            context.y.categorical.categories[0].numel()
+            if context.y.categorical.size(-1) > 0
+            else 0
+        )
+        member_cells = cells(context.x, num_classes)
+        if query is not None:
+            member_cells += cells(query.x, num_classes)
         if i > start and (
             member_key != key
             or (
                 estimator_batch_size is not None
+                and estimator_batch_size != "auto"
                 and i - start == estimator_batch_size
+            )
+            or (
+                estimator_batch_size == "auto"
+                and total + member_cells > max_cells
             )
         ):
             batches.append(slice(start, i))
-            start = i
+            start, total = i, 0
         key = member_key
+        total += member_cells
     batches.append(slice(start, len(contexts)))
     return batches
+
+
+def _query_chunks(
+    queries: Sequence[MemberQuery],
+    max_cells: int | None,
+    cells: Callable[[TableTensor, int], int],
+    num_classes: int,
+) -> list[list[MemberQuery]]:
+    # Row chunks of a batch's queries within the cell budget, but never smaller
+    # than the queries of one estimator on their own.
+    total = sum(cells(query.x, num_classes) for query in queries)
+    if max_cells is None or len(queries) == 1 or total <= max_cells:
+        return [list(queries)]
+    rows = queries[0].x.size(-2)
+    budget = max(max_cells, total // len(queries))
+    splits = [
+        query.x.split(max(1, budget * rows // total), dim=-2)
+        for query in queries
+    ]
+    return [
+        [MemberQuery(x=x, related_tables=None) for x in xs]
+        for xs in zip(*splits, strict=True)
+    ]
 
 
 def _categorical_mask(members: Sequence[MemberContext]) -> Tensor:
@@ -921,7 +1037,7 @@ def _categorical_mask(members: Sequence[MemberContext]) -> Tensor:
 
 def _class_values(
     contexts: Sequence[MemberContext],
-    estimator_batch_size: int | None,
+    estimator_batch_size: int | Literal["auto"] | None,
 ) -> list[tuple[Any, ...] | None]:
     # Class labels per estimator, used to group and relabel stacked batches.
     # Unused when each estimator already has its own ``_forward``.

@@ -154,7 +154,7 @@ def test_num_estimators(
     )
     assert out.size() == (*batch_shape, R_query, 999)
 
-    model.fit(x_context, y_context, num_estimators=3)
+    model.fit(x_context, y_context, num_estimators=3, estimator_batch_size=1)
     assert model._cache is not None
     assert 0 in model._cache
     assert 1 in model._cache

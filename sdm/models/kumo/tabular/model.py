@@ -233,6 +233,12 @@ class KumoTabular(ICLModel):
             numerical=out,
         )
 
+    def _estimator_cells(self, x: TableTensor, num_classes: int) -> int:
+        cells = super()._estimator_cells(x, num_classes)
+        if num_classes == 0:
+            return cells
+        return cells * self.ecoc.num_tasks(num_classes)
+
 
 class _KumoTabular(torch.nn.Module):
     def __init__(
