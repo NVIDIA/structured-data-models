@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import math
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -20,6 +21,7 @@ from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models.callback import Callback
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.execution import RecipeExecution
 
 
 @dataclass
@@ -890,3 +892,149 @@ def test_estimator_batching_separates_mismatched_layouts(
     )
 
     assert len(model.calls) == 2
+
+
+def _estimator_cost(x: TableTensor, num_classes: int) -> int:
+    del num_classes
+    return math.prod(x.size()[:-1]) * (x.size(-1) + 1)
+
+
+def test_estimator_batching_keeps_cost_budget() -> None:
+    # Every estimator costs 3 context and 2 query rows of 2 columns plus 1.
+    model = _RecordingModel()
+    x = torch.randn(4, 3, 2)
+    y = torch.zeros(4, 3, 1)
+    x_query = torch.randn(4, 2, 2)
+
+    out = model(
+        x,
+        y,
+        x_query,
+        estimator_batch_size=None,
+        _estimator_cost=_estimator_cost,
+        _estimator_max_cost=30,
+    )
+
+    torch.testing.assert_close(out.numerical, x_query)
+    assert [
+        cast(TableTensor, call.x_query).size() for call in model.calls
+    ] == [(2, 2, 2), (2, 2, 2)]
+
+
+def test_estimator_batching_runs_over_budget_member_alone() -> None:
+    model = _RecordingModel()
+    x_query = torch.randn(2, 2, 2)
+
+    out = model(
+        torch.randn(2, 3, 2),
+        torch.zeros(2, 3, 1),
+        x_query,
+        estimator_batch_size=None,
+        _estimator_cost=_estimator_cost,
+        _estimator_max_cost=14,
+    )
+
+    torch.testing.assert_close(out.numerical, x_query)
+    assert len(model.calls) == 2
+
+
+def test_estimator_batching_counts_rows_without_columns() -> None:
+    model = _RecordingModel()
+
+    model(
+        torch.randn(2, 3, 0),
+        torch.zeros(2, 3, 1),
+        torch.randn(2, 2, 0),
+        estimator_batch_size=None,
+        _estimator_cost=_estimator_cost,
+        _estimator_max_cost=9,
+    )
+
+    assert len(model.calls) == 2
+
+
+def test_estimator_cost_batching_is_sequential_with_gradients() -> None:
+    model = _RecordingModel()
+    model.train()
+
+    model(
+        torch.randn(3, 3, 2),
+        torch.zeros(3, 3, 1),
+        torch.randn(3, 2, 2),
+        estimator_batch_size=None,
+        _estimator_cost=_estimator_cost,
+        _estimator_max_cost=2**20,
+    )
+
+    assert len(model.calls) == 3
+
+
+def test_predict_splits_batched_query_rows_within_budget() -> None:
+    # Two estimators with 3 context rows of 2 columns plus 1 each fit one
+    # batch, but their 5 query rows exceed the budget together.
+    model = _RecordingModel()
+    model.fit(
+        torch.randn(2, 3, 2),
+        torch.zeros(2, 3, 1),
+        estimator_batch_size=None,
+        _estimator_cost=_estimator_cost,
+        _estimator_max_cost=18,
+    )
+    model.calls.clear()
+    x_query = torch.randn(2, 5, 2)
+
+    out = model.predict(x_query)
+
+    torch.testing.assert_close(out.numerical, x_query)
+    assert [
+        cast(TableTensor, call.x_query).size() for call in model.calls
+    ] == [(2, 3, 2), (2, 2, 2)]
+
+
+def test_predict_keeps_queries_whole_with_callbacks() -> None:
+    # Without callbacks, this budget splits the query rows into two calls.
+    model = _RecordingModel()
+    model.fit(
+        torch.randn(2, 3, 2),
+        torch.zeros(2, 3, 1),
+        estimator_batch_size=None,
+        _estimator_cost=_estimator_cost,
+        _estimator_max_cost=18,
+    )
+    model.calls.clear()
+    events: list[str] = []
+
+    model.predict(
+        torch.randn(2, 5, 2),
+        callbacks=(MyCallback("affine", 2.0, 3.0, events),),
+    )
+
+    assert len(model.calls) == 1
+    assert events.count("affine_model_forward_end") == 2
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_forward_members_moves_contexts_to_query_device() -> None:
+    model = _RecordingModel()
+    recipe = RecipeExecution(model.default_recipe())
+    contexts = recipe.fit_transform(
+        x=torch.randn(4, 3, 2),
+        y=torch.zeros(4, 3, 1),
+        related_tables=None,
+        num_members=None,
+    )
+    x_query = torch.randn(4, 2, 2)
+    queries = [
+        query._replace(x=cast(TableTensor, query.x.cuda()))
+        for query in recipe.transform(x=x_query, related_tables=None)
+    ]
+
+    outs = model._forward_members(contexts=contexts, queries=queries)
+
+    assert all(
+        cast(TableTensor, call.x_context).is_cuda for call in model.calls
+    )
+    torch.testing.assert_close(
+        torch.stack([out.numerical.cpu() for out in outs]),
+        x_query,
+    )

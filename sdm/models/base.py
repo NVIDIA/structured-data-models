@@ -3,7 +3,7 @@
 
 import abc
 import copy
-from collections.abc import Hashable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -128,11 +128,15 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 per estimator).
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
-                one by one; ``None`` batches as many as possible. Estimators
-                whose preprocessed tables differ in shape or target class
+                one by one, which minimizes device memory; ``None`` batches as
+                many as possible. Estimators whose
+                preprocessed tables differ in shape or target class
                 set, or that come with related tables, run in separate
-                calls. Device memory grows with the batch size.
-            callbacks: Callbacks applied in sequence to this model call.
+                calls. Batched and sequential predictions are equal up to
+                floating-point rounding.
+            callbacks: Callbacks applied in sequence to this model call. The
+                preprocessing hooks of all estimators run before their model
+                forward hooks.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
@@ -142,6 +146,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
+        estimator_cost = cast(
+            Callable[[TableTensor, int], int] | None,
+            kwargs.pop("_estimator_cost", None),
+        )
+        estimator_max_cost = cast(
+            int | None,
+            kwargs.pop("_estimator_max_cost", None),
+        )
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
@@ -184,6 +196,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             contexts=contexts,
             queries=queries,
             estimator_batch_size=estimator_batch_size,
+            estimator_cost=estimator_cost,
+            estimator_max_cost=estimator_max_cost,
             callbacks=callbacks,
             generator=generator,
             **kwargs,
@@ -235,17 +249,27 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 per estimator).
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
-                one by one; ``None`` batches as many as possible. Estimators
-                whose preprocessed tables differ in shape or target class
+                one by one, which minimizes device memory; ``None`` batches as
+                many as possible. Estimators whose
+                preprocessed tables differ in shape or target class
                 set, or that come with related tables, run in separate
-                calls. Device memory grows with the batch size. Estimators
-                fitted together are predicted together.
+                calls. Estimators fitted together are predicted together.
+                Batched and sequential predictions are equal up to
+                floating-point rounding.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
+        estimator_cost = cast(
+            Callable[[TableTensor, int], int] | None,
+            kwargs.pop("_estimator_cost", None),
+        )
+        estimator_max_cost = cast(
+            int | None,
+            kwargs.pop("_estimator_max_cost", None),
+        )
 
         self.clear()
 
@@ -273,11 +297,15 @@ class ICLModel(torch.nn.Module, abc.ABC):
             queries=None,
             class_values=class_values,
             estimator_batch_size=estimator_batch_size,
+            max_cost=estimator_max_cost,
+            cost=estimator_cost,
         )
         cache = Cache(
             recipe_execution=recipe_execution,
             kwargs=kwargs,
             num_batches=len(batches),
+            estimator_cost=estimator_cost,
+            estimator_max_cost=estimator_max_cost,
         )
         for i, batch in enumerate(batches):
             with inference_mode("no_grad"):
@@ -384,6 +412,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
             self._cache["recipe_execution"],
         )
         num_batches = cast(int, self._cache["num_batches"])
+        # Callbacks see every estimator output once, so queries stay whole.
+        estimator_max_cost = (
+            None if callbacks else self._cache["estimator_max_cost"]
+        )
+        estimator_cost = cast(
+            Callable[[TableTensor, int], int] | None,
+            self._cache["estimator_cost"],
+        )
         caches = [cast(Cache, self._cache[i]) for i in range(num_batches)]
         next_cache = caches[0]
 
@@ -418,7 +454,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 assert cache is not None
 
                 x_schemas = cast(tuple[TableSchema, ...], cache["x_schemas"])
-                batch_queries = [
+                classes = cast(Tensor | None, cache["classes"])
+                members = [
                     self._prepare_query(
                         query=query,
                         x_schema=x_schema,
@@ -443,20 +480,45 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
-                outs += self._forward_batch(
-                    contexts=None,
-                    queries=batch_queries,
-                    cache=cache,
-                    categorical_mask=cast(Tensor, cache["categorical_mask"]),
-                    class_values=cast(
-                        Sequence[tuple[Any, ...] | None] | None,
-                        cache["class_values"],
-                    ),
-                    callbacks=callbacks,
-                    requires_grad=requires_grad,
-                    generator=None,
-                    **cast(dict[str, Any], self._cache["kwargs"]),
-                )
+                chunks = [
+                    self._forward_batch(
+                        contexts=None,
+                        queries=chunk,
+                        cache=cache,
+                        categorical_mask=cast(
+                            Tensor, cache["categorical_mask"]
+                        ),
+                        class_values=cast(
+                            Sequence[tuple[Any, ...] | None] | None,
+                            cache["class_values"],
+                        ),
+                        callbacks=callbacks,
+                        requires_grad=requires_grad,
+                        generator=None,
+                        **cast(dict[str, Any], self._cache["kwargs"]),
+                    )
+                    for chunk in _query_chunks(
+                        queries=members,
+                        max_cost=cast(int | None, estimator_max_cost),
+                        cost=estimator_cost,
+                        num_classes=(
+                            0 if classes is None else classes.numel()
+                        ),
+                    )
+                ]
+
+                if len(chunks) == 1:
+                    batch_outputs = chunks[0]
+                else:
+                    batch_outputs = [
+                        cast(TableTensor, torch.cat(parts, dim=-2))
+                        for parts in zip(*chunks, strict=True)
+                    ]
+
+                # Drop source chunk references before the next estimator
+                # batch. A single chunk stays alive through `batch_outputs`.
+                del chunks
+                outs.extend(batch_outputs)
 
                 if x.is_cuda:
                     assert compute_stream is not None
@@ -571,18 +633,25 @@ class ICLModel(torch.nn.Module, abc.ABC):
         queries: Sequence[MemberQuery],
         *,
         estimator_batch_size: int | None = 1,
+        estimator_cost: Callable[[TableTensor, int], int] | None = None,
+        estimator_max_cost: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> list[TableTensor]:
-        r"""Run recipe-transformed members that live on the model device.
+        r"""Run recipe-transformed members on the device of their queries.
 
+        Context features and targets may live on another device; each batch
+        is moved when it runs.
         Returns one output per member before target inversion and
         ``recipe.output``.
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
+        if requires_grad and estimator_max_cost is not None:
+            estimator_batch_size = 1
+            estimator_max_cost = None
 
         if estimator_batch_size == 1 and len(contexts) > 1:
             outs: list[TableTensor] = []
@@ -592,6 +661,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         contexts=(context,),
                         queries=(query,),
                         estimator_batch_size=1,
+                        estimator_cost=estimator_cost,
+                        estimator_max_cost=estimator_max_cost,
                         callbacks=callbacks,
                         generator=generator,
                         **kwargs,
@@ -620,9 +691,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
             queries=queries,
             class_values=class_values,
             estimator_batch_size=estimator_batch_size,
+            max_cost=estimator_max_cost,
+            cost=estimator_cost,
         ):
+            device = queries[batch.start].x.device
             outs += self._forward_batch(
-                contexts=contexts[batch],
+                contexts=[
+                    context._replace(
+                        x=cast(TableTensor, context.x.to(device)),
+                        y=cast(TableTensor, context.y.to(device)),
+                    )
+                    for context in contexts[batch]
+                ],
                 queries=queries[batch],
                 cache=None,
                 categorical_mask=None,
@@ -849,10 +929,12 @@ def _batch_slices(
     queries: Sequence[MemberQuery] | None,
     class_values: Sequence[tuple[Any, ...] | None],
     estimator_batch_size: int | None,
+    max_cost: int | None,
+    cost: Callable[[TableTensor, int], int] | None,
 ) -> list[slice]:
     # Consecutive estimators that can go through one `_forward` together,
-    # split when shapes/dtypes or the target class set change, or the
-    # batch is full.
+    # split when shapes/dtypes or the target class set change, the batch is
+    # full, or the optional cost budget would be exceeded.
     related = any(context.related_tables is not None for context in contexts)
     if queries is not None:
         related = related or any(
@@ -862,7 +944,7 @@ def _batch_slices(
         return [slice(i, i + 1) for i in range(len(contexts))]
 
     batches: list[slice] = []
-    start = 0
+    start = total = 0
     key: Hashable = None
     # Stack when table shapes/dtypes match and the target class set matches.
     for i, context in enumerate(contexts):
@@ -886,18 +968,57 @@ def _batch_slices(
             ),
             None if classes is None else frozenset(classes),
         )
+        member_cost = 0
+        if max_cost is not None:
+            assert cost is not None
+            num_classes = (
+                context.y.categorical.categories[0].numel()
+                if context.y.categorical.size(-1) > 0
+                else 0
+            )
+            member_cost = cost(context.x, num_classes)
+            if query is not None:
+                member_cost += cost(query.x, num_classes)
         if i > start and (
             member_key != key
             or (
                 estimator_batch_size is not None
                 and i - start == estimator_batch_size
             )
+            or (max_cost is not None and total + member_cost > max_cost)
         ):
             batches.append(slice(start, i))
-            start = i
+            start, total = i, 0
         key = member_key
+        total += member_cost
     batches.append(slice(start, len(contexts)))
     return batches
+
+
+def _query_chunks(
+    queries: Sequence[MemberQuery],
+    max_cost: int | None,
+    cost: Callable[[TableTensor, int], int] | None,
+    num_classes: int,
+) -> list[list[MemberQuery]]:
+    # Row chunks of a batch's queries within the cost budget, but never smaller
+    # than the queries of one estimator on their own.
+    if max_cost is None or len(queries) == 1:
+        return [list(queries)]
+    assert cost is not None
+    total = sum(cost(query.x, num_classes) for query in queries)
+    if total <= max_cost:
+        return [list(queries)]
+    rows = queries[0].x.size(-2)
+    budget = max(max_cost, total // len(queries))
+    splits = [
+        query.x.split(max(1, budget * rows // total), dim=-2)
+        for query in queries
+    ]
+    return [
+        [MemberQuery(x=x, related_tables=None) for x in xs]
+        for xs in zip(*splits, strict=True)
+    ]
 
 
 def _categorical_mask(members: Sequence[MemberContext]) -> Tensor:
