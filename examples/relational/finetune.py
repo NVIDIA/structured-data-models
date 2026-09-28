@@ -21,7 +21,7 @@ parser.add_argument("--max-epochs", type=int, default=5)
 parser.add_argument("--steps-per-epoch", type=int, default=10)
 parser.add_argument("--context-size", type=int, default=500)
 parser.add_argument("--query-size", type=int, default=32)
-parser.add_argument("--test-size", type=int, default=64)
+parser.add_argument("--eval-batch-size", type=int, default=64)
 parser.add_argument("--num-neighbors", type=int, nargs="+", default=[8, 8])
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--seed", type=int, default=42)
@@ -95,7 +95,6 @@ ordered = frames[0].sort_values(
 val_context = train_table[
     torch.as_tensor(ordered.tail(args.context_size).index.to_numpy())
 ]
-val_query = val_table[: args.test_size]
 
 # The test context uses only train and validation labels.
 test_context_rows = (
@@ -106,7 +105,6 @@ test_context_rows = (
 test_context = task_table[: len(train_table) + len(val_table)][
     torch.as_tensor(test_context_rows.index.to_numpy())
 ]
-test_query = test_table[: args.test_size]
 
 task_link = {
     "task_column": task.entity_col,
@@ -127,9 +125,7 @@ def sample(
 
 
 val_context, val_related_context = sample(val_context)
-val_query, val_related_query = sample(val_query)
 test_context, test_related_context = sample(test_context)
-test_query, test_related_query = sample(test_query)
 
 model = sdm.models.KumoRelational(task="classification", device=device)
 train_recipe = model.default_recipe()
@@ -143,31 +139,37 @@ def evaluate(
     context: sdm.TableTensor,
     query: sdm.TableTensor,
     related_context: sdm.RelatedTables[sdm.TableTensor],
-    related_query: sdm.RelatedTables[sdm.TableTensor],
 ) -> float:
     model.eval()
+    generator = torch.Generator(device=device).manual_seed(args.seed)
+    scores: list[torch.Tensor] = []
+    labels: list[torch.Tensor] = []
     with (
         torch.inference_mode(),
         torch.autocast(device.type, enabled=device.type == "cuda"),
     ):
-        out = model(
-            x_context=context.drop_columns(target),
-            y_context=context[target],
-            x_query=query.drop_columns(target),
-            related_context_tables=related_context,
-            related_query_tables=related_query,
-            num_hops=len(args.num_neighbors),
-            generator=torch.Generator(device=device).manual_seed(args.seed),
-        )
-    score, label = sdm.evaluation.to_binary_class(
-        out, query[target], positive_class=1
-    )
-    return float(roc_auc_score(label.cpu(), score.cpu()))
+        for start in range(0, len(query), args.eval_batch_size):
+            batch, related_query = sample(
+                query[start : start + args.eval_batch_size]
+            )
+            out = model(
+                x_context=context.drop_columns(target),
+                y_context=context[target],
+                x_query=batch.drop_columns(target),
+                related_context_tables=related_context,
+                related_query_tables=related_query,
+                num_hops=len(args.num_neighbors),
+                generator=generator,
+            )
+            score, label = sdm.evaluation.to_binary_class(
+                out, batch[target], positive_class=1
+            )
+            scores.append(score.cpu())
+            labels.append(label.cpu())
+    return float(roc_auc_score(torch.cat(labels), torch.cat(scores)))
 
 
-val_auc = evaluate(
-    val_context, val_query, val_related_context, val_related_query
-)
+val_auc = evaluate(val_context, val_table, val_related_context)
 print(f"epoch=0/{args.max_epochs} val_auroc={val_auc:.4f}")
 torch.save(model.state_dict(), args.checkpoint)
 
@@ -213,12 +215,9 @@ for epoch in range(1, args.max_epochs + 1):
             )
             loss = F.cross_entropy(logits, label)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         total_loss += float(loss.detach())
-    metric = evaluate(
-        val_context, val_query, val_related_context, val_related_query
-    )
+    metric = evaluate(val_context, val_table, val_related_context)
     print(
         f"epoch={epoch}/{args.max_epochs} "
         f"val_auroc={metric:.4f} "
@@ -231,7 +230,5 @@ for epoch in range(1, args.max_epochs + 1):
 model.load_state_dict(
     torch.load(args.checkpoint, map_location=device, weights_only=True)
 )
-test_auc = evaluate(
-    test_context, test_query, test_related_context, test_related_query
-)
+test_auc = evaluate(test_context, test_table, test_related_context)
 print(f"test_auroc={test_auc:.4f}")
