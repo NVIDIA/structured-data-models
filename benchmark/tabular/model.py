@@ -248,13 +248,20 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 estimator_batch_size, estimator_cost, estimator_max_cost = (
                     self._estimator_batching()
                 )
+                contexts = [
+                    context._replace(
+                        x=cast(sdm.TableTensor, context.x.to(self._device)),
+                        y=cast(sdm.TableTensor, context.y.to(self._device)),
+                    )
+                    for context in self._contexts
+                ]
                 with torch.amp.autocast(
                     self._device.type,
                     self.autocast_dtype,
                     enabled=x_query.is_cuda,
                 ):
                     outputs = self.model._forward_members(
-                        contexts=self._contexts,
+                        contexts=contexts,
                         queries=queries,
                         estimator_batch_size=estimator_batch_size,
                         estimator_cost=estimator_cost,
