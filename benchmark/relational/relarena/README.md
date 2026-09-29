@@ -31,33 +31,6 @@ python -m benchmark.relational.relarena.kumo_relational \
 - **`KumoRelational`** uses a maximum of 20K context examples up to two hops, excluding text columns.
   It achieves an Elo of 1832.2 (rank 3/12) on the models-only leaderboard, and an Elo of 1827.8 (rank 4/14) on the combined models-and-systems leaderboard (as of 2026-09-29).
 
-| Classification Tasks (AUROC) | `kumo-relational` |
-| ---------------------------- | ----------------: |
-| `rel-amazon/item-churn`      |            0.8252 |
-| `rel-amazon/user-churn`      |            0.6958 |
-| `rel-avito/user-clicks`      |            0.6800 |
-| `rel-avito/user-visits`      |            0.6701 |
-| `rel-event/user-ignore`      |            0.8593 |
-| `rel-event/user-repeat`      |            0.7806 |
-| `rel-f1/driver-dnf`          |            0.7331 |
-| `rel-f1/driver-top3`         |            0.8258 |
-| `rel-hm/user-churn`          |            0.6979 |
-| `rel-stack/user-badge`       |            0.8647 |
-| `rel-stack/user-engagement`  |            0.9007 |
-| `rel-trial/study-outcome`    |            0.7095 |
-
-| Regression Tasks (MAE)      | `kumo-relational` |
-| --------------------------- | ----------------: |
-| `rel-amazon/item-ltv`       |           44.6104 |
-| `rel-amazon/user-ltv`       |           14.1884 |
-| `rel-avito/ad-ctr`          |            0.0313 |
-| `rel-event/user-attendance` |            0.2412 |
-| `rel-f1/driver-position`    |            3.8294 |
-| `rel-hm/item-sales`         |            0.0400 |
-| `rel-stack/post-votes`      |            0.0638 |
-| `rel-trial/site-success`    |            0.3989 |
-| `rel-trial/study-adverse`   |           41.1757 |
-
 | Classification Task (AUROC ⬆️) | `kumo-relational` | Regression Task (MAE ⬇️)    | `kumo-relational` |
 | :----------------------------- | ----------------: | :-------------------------- | ----------------: |
 | `rel-amazon/item-churn`        |            0.8252 | `rel-amazon/item-ltv`       |           44.6104 |
