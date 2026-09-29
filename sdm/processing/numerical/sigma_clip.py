@@ -1,9 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import math
+
 import torch
 
 from sdm import Stype, TableTensor
+from sdm._memory import split_size
 from sdm.processing import Processor
 from sdm.processing.numerical._stats import _count, _isfinite
 
@@ -91,10 +94,32 @@ class ClipSigma(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
-        log_abs = numerical.abs().log1p()
-        clipped = torch.maximum(-log_abs + self.lower_bound, numerical)
-        numerical = torch.minimum(log_abs + self.upper_bound, clipped)
-        return table.replace_blocks(numerical=numerical)
+        dtype = torch.promote_types(numerical.dtype, self.lower_bound.dtype)
+        if torch.is_grad_enabled():
+            log_abs = numerical.abs().log1p().to(dtype)
+            clipped = torch.maximum(self.lower_bound - log_abs, numerical)
+            clipped = torch.minimum(log_abs + self.upper_bound, clipped)
+            return table.replace_blocks(numerical=clipped)
+
+        out = torch.empty_like(numerical, dtype=dtype)
+        # Chunks of rows bound the temporary besides the output.
+        size = split_size(
+            num_items=numerical.size(-2),
+            item_bytes=math.prod(out.size()[:-2])
+            * out.size(-1)
+            * out.element_size(),
+            device=out.device,
+        )
+        for inp, clipped in zip(
+            numerical.split(size, dim=-2),
+            out.split(size, dim=-2),
+            strict=True,
+        ):
+            log_abs = inp.abs().log1p_().to(dtype)
+            torch.sub(self.lower_bound, log_abs, out=clipped)
+            torch.maximum(clipped, inp, out=clipped)
+            torch.minimum(log_abs.add_(self.upper_bound), clipped, out=clipped)
+        return table.replace_blocks(numerical=out)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
