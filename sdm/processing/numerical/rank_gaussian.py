@@ -49,18 +49,19 @@ class RankGaussian(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
+        dtype = torch.promote_types(numerical.dtype, torch.float32)
         # Columns are fitted on their own, so chunks of columns bound the
         # sorting and ranking temporaries of about ten values per cell.
         size = split_size(
             num_items=numerical.size(-1),
-            item_bytes=numerical[..., :1].numel() * 10 * numerical.itemsize,
+            item_bytes=numerical[..., :1].numel() * 10 * dtype.itemsize,
             device=numerical.device,
         )
         knots = []
         for chunk in numerical.split(size, dim=-1):
             num_rows = chunk.size(-2)
             max_knots = num_rows if self.max_knots is None else self.max_knots
-            columns = chunk.movedim(-1, -2)  # [..., C, N]
+            columns = chunk.to(dtype).movedim(-1, -2)  # [..., C, N]
             finite = _isfinite(columns)
             count = finite.sum(dim=-1, keepdim=True)  # [..., C, 1]
             values = columns.masked_fill(~finite, torch.inf)
@@ -70,6 +71,8 @@ class RankGaussian(Processor):
             probabilities = (left + right).to(values.dtype) / (
                 2 * count.clamp_min(1)
             )
+            # Rounding to one would give an infinite normal quantile.
+            probabilities.clamp_(max=1 - torch.finfo(dtype).eps)
             last = (count - 1).clamp_min(0)
             rows = torch.arange(num_rows, device=values.device)
 

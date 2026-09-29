@@ -34,27 +34,39 @@ def edge_query(context: Tensor) -> Tensor:
 
 
 @withCUDA
-def test_mid_ranks_and_interpolated_query(device: torch.device) -> None:
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+)
+@pytest.mark.parametrize("max_knots", [None, 3])
+def test_mid_ranks_and_interpolated_query(
+    device: torch.device, dtype: torch.dtype, max_knots: int | None
+) -> None:
     context = torch.tensor(
         [[0.0], [0.0], [1.0], [1.0], [2.0], [2.0]],
+        dtype=dtype,
+        device=device,
+    )
+    processor = RankGaussian(max_knots=max_knots).fit(
+        TableTensor.from_tensor(context)
+    )
+    probabilities = torch.tensor(
+        [[1 / 6], [1 / 6], [0.5], [0.5], [5 / 6], [5 / 6]],
         dtype=torch.float64,
         device=device,
     )
-    processor = RankGaussian().fit(TableTensor.from_tensor(context))
-    probabilities = context.new_tensor(
-        [[1 / 6], [1 / 6], [0.5], [0.5], [5 / 6], [5 / 6]]
-    )
     torch.testing.assert_close(
         processor.transform(TableTensor.from_tensor(context)).numerical,
-        torch.special.ndtri(probabilities),
+        torch.special.ndtri(probabilities).to(dtype),
     )
     query = context.new_tensor([[-100.0], [0.5], [1.5], [100.0], [torch.nan]])
-    expected = context.new_tensor(
-        [[1 / 6], [1 / 3], [2 / 3], [5 / 6], [torch.nan]]
+    expected = torch.tensor(
+        [[1 / 6], [1 / 3], [2 / 3], [5 / 6], [torch.nan]],
+        dtype=torch.float64,
+        device=device,
     )
     torch.testing.assert_close(
         processor.transform(TableTensor.from_tensor(query)).numerical,
-        torch.special.ndtri(expected),
+        torch.special.ndtri(expected).to(dtype),
         equal_nan=True,
     )
 
