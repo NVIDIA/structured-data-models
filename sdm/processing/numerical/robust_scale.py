@@ -4,6 +4,7 @@
 import torch
 
 from sdm import Stype, TableTensor
+from sdm._memory import split_size
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _isfinite
 
@@ -51,10 +52,22 @@ class RobustScale(Processor, InvertibleMixin):
         quantile_input = finite_or_nan.to(
             dtype=torch.promote_types(numerical.dtype, torch.float32),
         )
-        lower, median, upper = quantile_input.nanquantile(
-            quantile_input.new_tensor([q_low, 0.5, q_high]),
-            dim=-2,
-            keepdim=True,
+        q = quantile_input.new_tensor([q_low, 0.5, q_high])
+        # 'nanquantile' allocates several copies of its input, including
+        # int64 sort indices, which chunks of the independent columns bound.
+        size = split_size(
+            num_items=quantile_input.size(-1),
+            item_bytes=quantile_input[..., :1].numel()
+            * 4
+            * torch.int64.itemsize,
+            device=quantile_input.device,
+        )
+        lower, median, upper = torch.cat(
+            [
+                chunk.nanquantile(q, dim=-2, keepdim=True)
+                for chunk in quantile_input.split(size, dim=-1)
+            ],
+            dim=-1,
         )
         self.median = median.to(dtype=numerical.dtype)
         scale = torch.where(lower == upper, 1.0, upper - lower)
