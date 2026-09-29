@@ -154,6 +154,7 @@ unresolved-attribute = "ignore"
 include = ["sdm/_kernels/triton/**"]
 
 [tool.ty.overrides.rules]
+unresolved-import = "ignore"
 unused-ignore-comment = "ignore"
 
 [tool.ruff]  # https://docs.astral.sh/ruff/rules
