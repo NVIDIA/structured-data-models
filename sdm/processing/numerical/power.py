@@ -146,7 +146,6 @@ def _optimize_lambdas(
     *,
     count: Tensor,
 ) -> Tensor:
-    # Find the bounds before allocating the workspaces.
     left, right = _yeojohnson_bounds(inp)
     left = left.masked_fill(constant_features, 1.0)
     right = right.masked_fill(constant_features, 1.0)
