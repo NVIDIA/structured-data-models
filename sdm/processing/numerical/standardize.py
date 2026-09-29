@@ -7,7 +7,6 @@ from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
-    _count,
     _isfinite,
 )
 
@@ -42,15 +41,13 @@ class Standardize(Processor, InvertibleMixin):
     ) -> None:
 
         finite = _isfinite(table.numerical)
-        count = _count(finite)
+        count = finite.sum(dim=-2, keepdim=True)
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
         finite_or_nan = finite_or_nan.double()  # Ensure high precision.
 
-        # Equal to 'nanmean', which would copy its input to count values.
-        self.mean = finite_or_nan.nansum(-2, keepdim=True) / count
+        self.mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
         self.mean.masked_fill_(self.mean.isnan(), 0.0)
 
-        # 'finite_or_nan' is a private copy, so it can be modified in place.
         var = finite_or_nan.sub_(self.mean).square_().nansum(-2, keepdim=True)
         var /= count
         var.masked_fill_(var.isnan(), 0.0)
@@ -64,12 +61,12 @@ class Standardize(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         dtype = table.numerical.dtype
-        numerical = table.numerical.sub(self.mean).div_(self.scale)
+        numerical = (table.numerical - self.mean).div_(self.scale)
         return table.replace_blocks(numerical=numerical.to(dtype=dtype))
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         dtype = table.numerical.dtype
-        numerical = table.numerical.mul(self.scale).add_(self.mean)
+        numerical = (table.numerical * self.scale).add_(self.mean)
         return table.replace_blocks(numerical=numerical.to(dtype=dtype))
 
     def __repr__(self, *, indent: int = 0) -> str:

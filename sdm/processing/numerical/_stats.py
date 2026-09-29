@@ -12,17 +12,6 @@ def _isfinite(x: Tensor) -> Tensor:
     return x.gt(-math.inf).logical_and_(x.lt(math.inf))
 
 
-def _count(mask: Tensor) -> Tensor:
-    # [..., N, C] -> [..., 1, C] int64 number of true values per column.
-    # Summing bool first casts all of 'mask' to int64. Sum blocks of 255 rows
-    # as uint8 instead, which cannot overflow.
-    num_blocks = mask.size(-2) // 255
-    blocks = mask[..., : num_blocks * 255, :].unflatten(-2, (num_blocks, 255))
-    count = blocks.view(torch.uint8).sum(-2, dtype=torch.uint8)
-    remainder = mask[..., num_blocks * 255 :, :]
-    return count.sum(-2, keepdim=True) + remainder.sum(-2, keepdim=True)
-
-
 def _constant_feature_mask(
     var: Tensor,
     mean: Tensor,

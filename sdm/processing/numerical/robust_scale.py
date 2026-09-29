@@ -61,11 +61,11 @@ class RobustScale(Processor, InvertibleMixin):
         self.scale = scale.to(dtype=numerical.dtype)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical.sub(self.median).div_(self.scale)
+        numerical = (table.numerical - self.median).div_(self.scale)
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical.mul(self.scale).add_(self.median)
+        numerical = (table.numerical * self.scale).add_(self.median)
         return table.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:

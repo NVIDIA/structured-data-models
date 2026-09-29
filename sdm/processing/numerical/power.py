@@ -10,7 +10,6 @@ from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
-    _count,
     _isfinite,
 )
 
@@ -128,9 +127,7 @@ def _yeojohnson_log_likelihood(
         exponents=exponents,
         out=transformed,
     )
-    # 'transformed' is NaN exactly where 'inp' is, so this equals 'nanmean',
-    # which would copy its input to count values.
-    mean = transformed.nansum(dim=-2, keepdim=True) / count
+    mean = transformed.nansum(dim=-2, keepdim=True).div_(count)
     variance = transformed.sub_(mean).square_().nansum(dim=-2, keepdim=True)
     variance /= count
     tiny = torch.finfo(inp.dtype).tiny
@@ -261,14 +258,11 @@ class PowerTransform(Processor, InvertibleMixin):
     ) -> None:
         finite = _isfinite(table.numerical)
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
-        count = _count(finite)
+        count = finite.sum(dim=-2, keepdim=True).clamp_(min=1)
 
-        # Equal to 'nanmean', which would copy its input to count values:
-        mean = finite_or_nan.nansum(-2, keepdim=True) / count
-        mean.masked_fill_(mean.isnan(), 0.0)
+        mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
         var = finite_or_nan.sub(mean).square_().nansum(-2, keepdim=True)
         var /= count
-        var.masked_fill_(var.isnan(), 0.0)
         constant_features = _constant_feature_mask(
             var,
             mean,
@@ -293,11 +287,9 @@ class PowerTransform(Processor, InvertibleMixin):
         if self.standardize:
             transformed = _yeojohnson_transform(finite_or_nan, self.lambdas)
             del finite_or_nan
-            mean = transformed.nansum(dim=-2, keepdim=True) / count
-            mean.masked_fill_(mean.isnan(), 0.0)
+            mean = transformed.nansum(dim=-2, keepdim=True).div_(count)
             var = transformed.sub_(mean).square_().nansum(-2, keepdim=True)
             var /= count
-            var.masked_fill_(var.isnan(), 0.0)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, mean, count)] = 1.0
             self.mean = mean

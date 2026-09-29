@@ -39,21 +39,13 @@ class ClipSoft(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
+        assert not numerical.requires_grad
         bound = self.max_absolute_value
-        if torch.is_grad_enabled() and numerical.requires_grad:
-            ratio = (numerical / bound).abs()
-            squared = 1 + ratio.square()
-            unit = torch.where(squared.isfinite(), ratio / squared.sqrt(), 1.0)
-            clipped = numerical.sign() * bound * unit
-            clipped = torch.where(numerical.isnan(), numerical, clipped)
-            return table.replace_blocks(numerical=clipped)
-
         unit = numerical.div(bound).abs_()
         root = unit.square().add_(1).sqrt_()
-        # 'root' is finite exactly where '1 + unit ** 2' is.
         unit.div_(root).masked_fill_(~_isfinite(root), 1.0)
         del root
-        clipped = numerical.sign().mul_(bound).mul_(unit)
+        clipped = (numerical.sign() * bound).mul_(unit)
         torch.where(numerical.isnan(), numerical, clipped, out=clipped)
         return table.replace_blocks(numerical=clipped)
 

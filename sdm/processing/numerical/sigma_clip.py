@@ -5,7 +5,7 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
-from sdm.processing.numerical._stats import _count, _isfinite
+from sdm.processing.numerical._stats import _isfinite
 
 
 class ClipSigma(Processor):
@@ -45,22 +45,17 @@ class ClipSigma(Processor):
     ) -> None:
 
         numerical = table.numerical
+        assert not numerical.requires_grad
         finite = _isfinite(numerical)
-        count_finite = _count(finite)
+        count_finite = finite.sum(dim=-2, keepdim=True)
         finite_or_nan = numerical.masked_fill(~finite, torch.nan)
 
-        # Compute finite mean and standard deviation (equal to 'nanmean',
-        # which would copy its input to count values):
-        mean = finite_or_nan.nansum(-2, keepdim=True) / count_finite
+        # Compute finite mean and standard deviation:
+        mean = finite_or_nan.nansum(-2, keepdim=True).div_(count_finite)
         mean.masked_fill_(mean.isnan(), 0.0)
 
-        centered = (
-            finite_or_nan.sub(mean)
-            if torch.is_grad_enabled()
-            else finite_or_nan.sub_(mean)
-        )
-        var = centered.square_().nansum(-2, keepdim=True)
-        del centered, finite_or_nan
+        var = finite_or_nan.sub_(mean).square_().nansum(-2, keepdim=True)
+        del finite_or_nan
         var /= (count_finite - 1).clamp_(min=1)
         std = var.sqrt().clamp(min=1e-6)
 
@@ -68,9 +63,9 @@ class ClipSigma(Processor):
         lower = mean - self.threshold * std
         upper = mean + self.threshold * std
         keep = (numerical >= lower).logical_and_(numerical <= upper)
-        keep.logical_and_(finite)
+        keep &= finite
         del finite
-        count = _count(keep)
+        count = keep.sum(dim=-2, keepdim=True)
 
         # Compute mean and standard deviation of kept values:
         kept_mean = torch.where(keep, numerical, 0.0).sum(-2, keepdim=True)
