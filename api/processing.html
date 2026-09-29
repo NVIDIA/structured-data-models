@@ -122,6 +122,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.RankGaussian.html">RankGaussian</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Standardize.html">Standardize</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.RobustScale.html">RobustScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.FlipSign.html">FlipSign</a></li>
@@ -317,22 +318,25 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.QuantileTransform.html#sdm.processing.numerical.QuantileTransform" title="sdm.processing.numerical.QuantileTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QuantileTransform</span></code></a></p></td>
 <td><p>Map numerical columns through their empirical quantiles.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Standardize.html#sdm.processing.numerical.Standardize" title="sdm.processing.numerical.Standardize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Standardize</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RankGaussian.html#sdm.processing.numerical.RankGaussian" title="sdm.processing.numerical.RankGaussian"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RankGaussian</span></code></a></p></td>
+<td><p>Map interpolated empirical mid-ranks to standard normal quantiles.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Standardize.html#sdm.processing.numerical.Standardize" title="sdm.processing.numerical.Standardize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Standardize</span></code></a></p></td>
 <td><p>Center and scale each feature column.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RobustScale.html#sdm.processing.numerical.RobustScale" title="sdm.processing.numerical.RobustScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RobustScale</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RobustScale.html#sdm.processing.numerical.RobustScale" title="sdm.processing.numerical.RobustScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RobustScale</span></code></a></p></td>
 <td><p>Center and scale each feature column with median and quantile range.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.FlipSign.html#sdm.processing.numerical.FlipSign" title="sdm.processing.numerical.FlipSign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlipSign</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.FlipSign.html#sdm.processing.numerical.FlipSign" title="sdm.processing.numerical.FlipSign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlipSign</span></code></a></p></td>
 <td><p>Randomly negate numerical columns.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html#sdm.processing.numerical.DropConstantColumns" title="sdm.processing.numerical.DropConstantColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DropConstantColumns</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html#sdm.processing.numerical.DropConstantColumns" title="sdm.processing.numerical.DropConstantColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DropConstantColumns</span></code></a></p></td>
 <td><p>Remove non-informative numerical columns learned during fit.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html#sdm.processing.numerical.PCA" title="sdm.processing.numerical.PCA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCA</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html#sdm.processing.numerical.PCA" title="sdm.processing.numerical.PCA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCA</span></code></a></p></td>
 <td><p>Project numerical columns onto their principal components.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html#sdm.processing.numerical.RandomProjection" title="sdm.processing.numerical.RandomProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomProjection</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html#sdm.processing.numerical.RandomProjection" title="sdm.processing.numerical.RandomProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomProjection</span></code></a></p></td>
 <td><p>Randomly project numerical columns.</p></td>
 </tr>
 </tbody>
@@ -431,7 +435,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=4ee883ed"></script>
+      <script src="../_static/documentation_options.js?v=11c0c5f0"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
