@@ -284,7 +284,7 @@ def test_loaded_state_keeps_double_precision() -> None:
     table = TableTensor.from_tensor(context[:, None])
     processor = RankGaussian().fit(table)
     loaded = RankGaussian()
-    loaded.load_state_dict(processor.state_dict())
+    loaded.load_state_dict(processor.state_dict(), assign=True)
     torch.testing.assert_close(
         actual=loaded.transform(table).numerical,
         expected=processor.transform(table).numerical,

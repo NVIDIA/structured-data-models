@@ -39,11 +39,8 @@ class RankGaussian(Processor):
         if max_knots is not None and max_knots < 2:
             raise ValueError("max_knots must be at least 2.")
         self.max_knots = max_knots
-        self.register_buffer("_values", torch.empty(0, dtype=torch.float64))
-        self.register_buffer(
-            "_probabilities",
-            torch.empty(0, dtype=torch.float64),
-        )
+        self.register_buffer("_values", torch.empty(0))
+        self.register_buffer("_probabilities", torch.empty(0))
 
     def _fit(
         self,
@@ -53,10 +50,10 @@ class RankGaussian(Processor):
     ) -> None:
         numerical = table.numerical
         # Columns are fitted on their own, so chunks of columns bound the
-        # sorting and ranking temporaries of about ten doubles per cell.
+        # sorting and ranking temporaries of about ten values per cell.
         size = split_size(
             num_items=numerical.size(-1),
-            item_bytes=numerical[..., :1].numel() * 10 * 8,
+            item_bytes=numerical[..., :1].numel() * 10 * numerical.itemsize,
             device=numerical.device,
         )
         knots = []
@@ -141,10 +138,10 @@ class RankGaussian(Processor):
         probabilities = self._probabilities.flatten(end_dim=-2)
         output = torch.empty_like(numerical)
         # Rows transform on their own, so chunks of rows bound the
-        # interpolation temporaries of about a dozen doubles per cell.
+        # interpolation temporaries of about a dozen values per cell.
         size = split_size(
             num_items=columns.size(-1),
-            item_bytes=columns[..., :1].numel() * 12 * 8,
+            item_bytes=columns[..., :1].numel() * 12 * values.itemsize,
             device=numerical.device,
         )
         for rows, out in zip(
