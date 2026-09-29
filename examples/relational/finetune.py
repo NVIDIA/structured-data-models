@@ -29,6 +29,8 @@ parser.add_argument(
     "--checkpoint", type=Path, default=Path("ckpt-kumo-relational.pt")
 )
 args = parser.parse_args()
+if args.context_size < 2:
+    raise ValueError("--context-size must be at least 2 for this binary task")
 
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -92,18 +94,30 @@ train_table, val_table, test_table = task_table.split(
 ordered = frames[0].sort_values(
     [task.time_col, task.entity_col], kind="mergesort"
 )
+
+
+def context_rows(available: pd.DataFrame) -> pd.DataFrame:
+    rows = available.tail(args.context_size)
+    if rows[target].nunique() == 2:
+        return rows
+    missing = available.loc[~available[target].isin(rows[target])].tail(1)
+    if missing.empty:
+        raise ValueError("Context needs an earlier row from each target class")
+    return pd.concat([rows.iloc[1:], missing]).sort_values(
+        [task.time_col, task.entity_col], kind="mergesort"
+    )
+
+
 val_context = train_table[
-    torch.as_tensor(ordered.tail(args.context_size).index.to_numpy())
+    torch.as_tensor(context_rows(ordered).index.to_numpy())
 ]
 
 # The test context uses only train and validation labels.
-test_context_rows = (
-    pd.concat(frames[:2], ignore_index=True)
-    .sort_values([task.time_col, task.entity_col], kind="mergesort")
-    .tail(args.context_size)
+test_context_rows = pd.concat(frames[:2], ignore_index=True).sort_values(
+    [task.time_col, task.entity_col], kind="mergesort"
 )
 test_context = task_table[: len(train_table) + len(val_table)][
-    torch.as_tensor(test_context_rows.index.to_numpy())
+    torch.as_tensor(context_rows(test_context_rows).index.to_numpy())
 ]
 
 task_link = {
@@ -176,24 +190,29 @@ torch.save(model.state_dict(), args.checkpoint)
 optimizer = torch.optim.AdamW(
     model.parameters(), lr=args.lr, weight_decay=0.01
 )
+# Queries begin after both classes have appeared in the available history.
+first_query = ordered[task.time_col].searchsorted(
+    ordered.groupby(target)[task.time_col].min().max(), side="right"
+)
+min_end = max(args.context_size, first_query) + args.query_size
 for epoch in range(1, args.max_epochs + 1):
     model.train()
     total_loss = 0.0
     for _ in range(args.steps_per_epoch):
         end = int(
             torch.randint(
-                args.context_size + args.query_size,
+                min_end,
                 len(ordered) + 1,
                 (1,),
             )
         )
         query_rows = ordered.iloc[end - args.query_size : end]
-        context_rows = ordered.iloc[: end - args.query_size]
-        context_rows = context_rows.loc[
-            context_rows[task.time_col] < query_rows[task.time_col].min()
-        ].tail(args.context_size)
+        available = ordered.iloc[: end - args.query_size]
+        available = available.loc[
+            available[task.time_col] < query_rows[task.time_col].min()
+        ]
         train_context = train_table[
-            torch.as_tensor(context_rows.index.to_numpy())
+            torch.as_tensor(context_rows(available).index.to_numpy())
         ]
         train_query = train_table[torch.as_tensor(query_rows.index.to_numpy())]
         train_context, train_related_context = sample(train_context)
