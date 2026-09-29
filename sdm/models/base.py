@@ -104,6 +104,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
         estimator_batch_size: int | None = 1,
+        estimator_cost: Callable[[TableTensor, int], int] | None = None,
+        estimator_max_cost: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -132,11 +134,14 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 many as possible. Estimators whose
                 preprocessed tables differ in shape or target class
                 set, or that come with related tables, run in separate
-                calls. Batched and sequential predictions are equal up to
-                floating-point rounding.
-            callbacks: Callbacks applied in sequence to this model call. The
-                preprocessing hooks of all estimators run before their model
-                forward hooks.
+                calls. Device memory grows with the batch size.
+            estimator_cost: Cost of a preprocessed table given its number of
+                target classes. Used with ``estimator_max_cost``.
+            estimator_max_cost: Maximum total ``estimator_cost`` of the
+                tables in one model call. Consecutive estimators that fit
+                the budget run together; a single estimator that exceeds it
+                still runs. Has no effect during gradient-based training.
+            callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
@@ -146,14 +151,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
-        estimator_cost = cast(
-            Callable[[TableTensor, int], int] | None,
-            kwargs.pop("_estimator_cost", None),
-        )
-        estimator_max_cost = cast(
-            int | None,
-            kwargs.pop("_estimator_max_cost", None),
-        )
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
@@ -226,6 +223,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
         estimator_batch_size: int | None = 1,
+        estimator_cost: Callable[[TableTensor, int], int] | None = None,
+        estimator_max_cost: int | None = None,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
@@ -253,24 +252,22 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 many as possible. Estimators whose
                 preprocessed tables differ in shape or target class
                 set, or that come with related tables, run in separate
-                calls. Estimators fitted together are predicted together.
-                Batched and sequential predictions are equal up to
-                floating-point rounding.
+                calls. Device memory grows with the batch size. Estimators
+                fitted together are predicted together.
+            estimator_cost: Cost of a preprocessed table given its number of
+                target classes. Used with ``estimator_max_cost``.
+            estimator_max_cost: Maximum total ``estimator_cost`` of the
+                tables in one model call. Consecutive estimators that fit
+                the budget are fitted together and later predicted together;
+                a single estimator that exceeds it still runs. On
+                :meth:`predict`, query rows of a fitted batch may split to
+                stay within the budget.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
-        estimator_cost = cast(
-            Callable[[TableTensor, int], int] | None,
-            kwargs.pop("_estimator_cost", None),
-        )
-        estimator_max_cost = cast(
-            int | None,
-            kwargs.pop("_estimator_max_cost", None),
-        )
-
         self.clear()
 
         recipe_execution = RecipeExecution(

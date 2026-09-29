@@ -911,8 +911,8 @@ def test_estimator_batching_keeps_cost_budget() -> None:
         y,
         x_query,
         estimator_batch_size=None,
-        _estimator_cost=_estimator_cost,
-        _estimator_max_cost=30,
+        estimator_cost=_estimator_cost,
+        estimator_max_cost=30,
     )
 
     torch.testing.assert_close(out.numerical, x_query)
@@ -930,8 +930,8 @@ def test_estimator_batching_runs_over_budget_member_alone() -> None:
         torch.zeros(2, 3, 1),
         x_query,
         estimator_batch_size=None,
-        _estimator_cost=_estimator_cost,
-        _estimator_max_cost=14,
+        estimator_cost=_estimator_cost,
+        estimator_max_cost=14,
     )
 
     torch.testing.assert_close(out.numerical, x_query)
@@ -946,8 +946,8 @@ def test_estimator_batching_counts_rows_without_columns() -> None:
         torch.zeros(2, 3, 1),
         torch.randn(2, 2, 0),
         estimator_batch_size=None,
-        _estimator_cost=_estimator_cost,
-        _estimator_max_cost=9,
+        estimator_cost=_estimator_cost,
+        estimator_max_cost=9,
     )
 
     assert len(model.calls) == 2
@@ -962,8 +962,8 @@ def test_estimator_cost_batching_is_sequential_with_gradients() -> None:
         torch.zeros(3, 3, 1),
         torch.randn(3, 2, 2),
         estimator_batch_size=None,
-        _estimator_cost=_estimator_cost,
-        _estimator_max_cost=2**20,
+        estimator_cost=_estimator_cost,
+        estimator_max_cost=2**20,
     )
 
     assert len(model.calls) == 3
@@ -977,8 +977,8 @@ def test_predict_splits_batched_query_rows_within_budget() -> None:
         torch.randn(2, 3, 2),
         torch.zeros(2, 3, 1),
         estimator_batch_size=None,
-        _estimator_cost=_estimator_cost,
-        _estimator_max_cost=18,
+        estimator_cost=_estimator_cost,
+        estimator_max_cost=18,
     )
     model.calls.clear()
     x_query = torch.randn(2, 5, 2)
@@ -998,8 +998,8 @@ def test_predict_keeps_queries_whole_with_callbacks() -> None:
         torch.randn(2, 3, 2),
         torch.zeros(2, 3, 1),
         estimator_batch_size=None,
-        _estimator_cost=_estimator_cost,
-        _estimator_max_cost=18,
+        estimator_cost=_estimator_cost,
+        estimator_max_cost=18,
     )
     model.calls.clear()
     events: list[str] = []
