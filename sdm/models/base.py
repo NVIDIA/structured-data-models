@@ -195,7 +195,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 related_tables=related_query_tables,
             )
 
-        outs = self._forward_members(
+        outs, dtypes = self._forward_members(
             contexts=contexts,
             queries=queries,
             estimator_batch_size=estimator_batch_size,
@@ -204,19 +204,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
             **kwargs,
         )
 
-        # Regression: invert target before stacking estimator outputs.
-        if contexts[0].y.numerical.size(-1) > 0:
-            with (
-                torch.amp.autocast(x_query.device.type, enabled=False),
-                inference_mode("grad" if requires_grad else "inference"),
-            ):
-                outs = list(recipe_execution.inverse_transform_target(outs))
-
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
         ):
-            return recipe_execution.transform_output(outs)
+            return recipe_execution.transform_output(outs, dtypes)
 
     def fit(
         self,
@@ -440,6 +432,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 compute_stream.wait_stream(transfer_stream)
 
             outs: list[TableTensor] = []
+            dtypes: list[torch.dtype] = []
             start = 0
             for i in range(len(caches)):
                 cache, next_cache = next_cache, None
@@ -463,6 +456,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         strict=True,
                     )
                 ]
+                dtypes.extend(query.x.dtype for query in members)
                 start += len(x_schemas)
 
                 if i + 1 < len(caches):
@@ -527,19 +521,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 transfer_stream.synchronize()
             raise
 
-        # Regression: invert target before stacking estimator outputs.
-        if cast(Cache, self._cache[0])["classes"] is None:
-            with (
-                torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode("grad" if requires_grad else "inference"),
-            ):
-                outs = list(recipe_execution.inverse_transform_target(outs))
-
         with (
             torch.amp.autocast(x.device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
         ):
-            return recipe_execution.transform_output(outs)
+            return recipe_execution.transform_output(outs, dtypes)
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
@@ -638,13 +624,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
-    ) -> list[TableTensor]:
+    ) -> tuple[list[TableTensor], list[torch.dtype]]:
         r"""Run recipe-transformed members on the device of their queries.
 
         Context features and targets may live on another device; each batch
         is moved when it runs.
-        Returns one output per member before target inversion and
-        ``recipe.output``.
+        Returns member outputs before target inversion and ``recipe.output``,
+        and their callback-prepared query dtypes.
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = self.training
@@ -654,18 +640,19 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
         if estimator_batch_size == 1 and len(contexts) > 1:
             outs: list[TableTensor] = []
+            dtypes: list[torch.dtype] = []
             for context, query in zip(contexts, queries, strict=True):
-                outs.extend(
-                    self._forward_members(
-                        contexts=(context,),
-                        queries=(query,),
-                        estimator_batch_size=1,
-                        callbacks=callbacks,
-                        generator=generator,
-                        **kwargs,
-                    )
+                member_outs, member_dtypes = self._forward_members(
+                    contexts=(context,),
+                    queries=(query,),
+                    estimator_batch_size=1,
+                    callbacks=callbacks,
+                    generator=generator,
+                    **kwargs,
                 )
-            return outs
+                outs.extend(member_outs)
+                dtypes.extend(member_dtypes)
+            return outs, dtypes
 
         contexts = [
             self._prepare_context(context, callbacks) for context in contexts
@@ -709,7 +696,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 generator=generator,
                 **kwargs,
             )
-        return outs
+        return outs, [query.x.dtype for query in queries]
 
     def _prepare_context(
         self,
@@ -788,7 +775,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             for i in range(len(outs)):
                 for callback in callbacks:
                     outs[i] = callback.on_model_forward_end(self, outs[i])
-        return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]
+        return outs
 
     def _validate_context(
         self,
