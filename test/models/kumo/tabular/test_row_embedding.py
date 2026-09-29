@@ -66,6 +66,11 @@ def test_row_embedding_passes(
         num_readout_tokens=2,
         device="cuda",
     )
+    # Randomize the zero-initialized residual branches, so that attention
+    # outputs reach the embedding.
+    for parameter in encoder.parameters():
+        if not parameter.any():
+            torch.nn.init.normal_(parameter, std=0.02)
     # With many batch entries, e.g. estimators or ECOC tasks, a chunk of the
     # row attention spans more rows than the chunk memory limit allows.
     x = torch.randn(17, 64, 3, device="cuda")
