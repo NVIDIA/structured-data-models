@@ -45,7 +45,7 @@ class ClipSoft(Processor):
         root = unit.square().add_(1).sqrt_()
         unit.div_(root).masked_fill_(~_isfinite(root), 1.0)
         del root
-        clipped = (numerical.sign() * bound).mul_(unit)
+        clipped = unit.mul_(bound).mul_(numerical.sign())
         torch.where(numerical.isnan(), numerical, clipped, out=clipped)
         return table.replace_blocks(numerical=clipped)
 
