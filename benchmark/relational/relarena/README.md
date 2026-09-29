@@ -59,7 +59,7 @@ python -m benchmark.relational.relarena.kumo_relational \
 | `rel-trial/study-adverse`   |           41.1757 |
 
 | Classification Task (AUROC ⬆️) | `kumo-relational` | Regression Task (MAE ⬇️)    | `kumo-relational` |
-| ------------------------------ | ----------------: | --------------------------- | ----------------: |
+| :----------------------------- | ----------------: | :-------------------------- | ----------------: |
 | `rel-amazon/item-churn`        |            0.8252 | `rel-amazon/item-ltv`       |           44.6104 |
 | `rel-amazon/user-churn`        |            0.6958 | `rel-amazon/user-ltv`       |           14.1884 |
 | `rel-avito/user-clicks`        |            0.6800 | `rel-avito/ad-ctr`          |            0.0313 |
