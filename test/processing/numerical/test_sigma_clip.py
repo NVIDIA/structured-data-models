@@ -6,7 +6,7 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import ClipSigma
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 @withCUDA
@@ -151,5 +151,33 @@ def test_clip_sigma_preserves_nonfinite(
             ],
             device=device,
         ),
+        equal_nan=True,
+    )
+
+
+@onlyCUDA
+def test_clip_sigma_row_chunks_match_single_chunk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inp = torch.randn(2, 50, 3, device="cuda", dtype=torch.float64)
+    inp[:, ::7, 0] = float("nan")
+    inp[:, 3, 1] = float("inf")
+    processor = ClipSigma(threshold=1.0)
+    processor.fit(TableTensor.from_tensor(inp))
+    query = TableTensor.from_tensor(inp.float() * 3)
+
+    # Passes run without autograd:
+    with torch.inference_mode():
+        expected = processor.transform(query)
+        # Passes of a single row:
+        monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "1e-12")
+        out = processor.transform(query)
+
+    assert out.numerical.dtype == torch.float64
+    torch.testing.assert_close(
+        out.numerical,
+        expected.numerical,
+        rtol=0,
+        atol=0,
         equal_nan=True,
     )
