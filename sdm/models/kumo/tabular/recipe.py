@@ -25,6 +25,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 method="round_robin",
             ),
             sp.ClipSigma(threshold=4.0),
+            sp.Cast(torch.float32),
         )
 
     return sp.Recipe(
@@ -43,7 +44,6 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
             sp.ShuffleColumns(method="latin"),
             sp.SelectColumns(500, method="first"),
-            sp.Cast(torch.float32),
         ],
         target=[
             sp.StypeDispatch(
