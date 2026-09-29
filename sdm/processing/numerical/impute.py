@@ -5,14 +5,18 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
+from sdm.processing.numerical._stats import _isfinite
 
 
 class ImputeMean(Processor):
     """Replace NaN feature values with fitted per-column means.
 
+    Infinite values are ignored when fitting the means and preserved during
+    the transform.
+
     Args:
         fill_value: Finite value used for columns whose fitted mean is
-            undefined (e.g. all-NaN columns).
+            undefined (e.g. columns without finite values).
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -35,7 +39,7 @@ class ImputeMean(Processor):
     ) -> None:
         numerical = table.numerical
         mean = torch.nanmean(
-            numerical,
+            numerical.masked_fill(~_isfinite(numerical), torch.nan),
             dim=-2,
             keepdim=True,
         )
