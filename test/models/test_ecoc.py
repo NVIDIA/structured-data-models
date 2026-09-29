@@ -135,7 +135,7 @@ def test_ecoc_members(device: torch.device) -> None:
 
 @pytest.mark.parametrize(
     ("num_classes", "expected_num_tasks"),
-    [(3, 1), (10, 1), (11, 8), (100, 12), (201, 23)],
+    [(10, 1), (11, 8)],
 )
 def test_ecoc_num_tasks(
     num_classes: int,

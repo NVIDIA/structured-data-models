@@ -130,17 +130,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 per estimator).
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
-                one by one, which minimizes device memory; ``None`` batches as
-                many as possible. Estimators whose
-                preprocessed tables differ in shape or target class
+                one by one; ``None`` batches as many as possible. Estimators
+                whose preprocessed tables differ in shape or target class
                 set, or that come with related tables, run in separate
                 calls. Device memory grows with the batch size.
-            estimator_cost: Cost of a preprocessed table given its number of
-                target classes. Used with ``estimator_max_cost``.
-            estimator_max_cost: Maximum total ``estimator_cost`` of the
-                tables in one model call. Consecutive estimators that fit
-                the budget run together; a single estimator that exceeds it
-                still runs. Has no effect during gradient-based training.
+            estimator_cost: ``(table, num_classes) -> int`` cost of one table.
+            estimator_max_cost: Run estimators together until this budget
+                would be exceeded.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
@@ -248,26 +244,21 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 per estimator).
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
-                one by one, which minimizes device memory; ``None`` batches as
-                many as possible. Estimators whose
-                preprocessed tables differ in shape or target class
+                one by one; ``None`` batches as many as possible. Estimators
+                whose preprocessed tables differ in shape or target class
                 set, or that come with related tables, run in separate
                 calls. Device memory grows with the batch size. Estimators
                 fitted together are predicted together.
-            estimator_cost: Cost of a preprocessed table given its number of
-                target classes. Used with ``estimator_max_cost``.
-            estimator_max_cost: Maximum total ``estimator_cost`` of the
-                tables in one model call. Consecutive estimators that fit
-                the budget are fitted together and later predicted together;
-                a single estimator that exceeds it still runs. On
-                :meth:`predict`, query rows of a fitted batch may split to
-                stay within the budget.
+            estimator_cost: ``(table, num_classes) -> int`` cost of one table.
+            estimator_max_cost: Run estimators together until this budget
+                would be exceeded.
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
         callbacks = () if callbacks is None else callbacks
+
         self.clear()
 
         recipe_execution = RecipeExecution(
@@ -409,7 +400,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             self._cache["recipe_execution"],
         )
         num_batches = cast(int, self._cache["num_batches"])
-        # Callbacks see every estimator output once, so queries stay whole.
         estimator_max_cost = (
             None if callbacks else self._cache["estimator_max_cost"]
         )
@@ -452,7 +442,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
                 x_schemas = cast(tuple[TableSchema, ...], cache["x_schemas"])
                 classes = cast(Tensor | None, cache["classes"])
-                members = [
+                batch_queries = [
                     self._prepare_query(
                         query=query,
                         x_schema=x_schema,
@@ -495,7 +485,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         **cast(dict[str, Any], self._cache["kwargs"]),
                     )
                     for chunk in _query_chunks(
-                        queries=members,
+                        queries=batch_queries,
                         max_cost=cast(int | None, estimator_max_cost),
                         cost=estimator_cost,
                         num_classes=(
@@ -636,10 +626,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> list[TableTensor]:
-        r"""Run recipe-transformed members on the device of their queries.
+        r"""Run recipe-transformed members that live on the model device.
 
-        Context features and targets may live on another device; each batch
-        is moved when it runs.
         Returns one output per member before target inversion and
         ``recipe.output``.
         """
@@ -691,15 +679,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             max_cost=estimator_max_cost,
             cost=estimator_cost,
         ):
-            device = queries[batch.start].x.device
             outs += self._forward_batch(
-                contexts=[
-                    context._replace(
-                        x=cast(TableTensor, context.x.to(device)),
-                        y=cast(TableTensor, context.y.to(device)),
-                    )
-                    for context in contexts[batch]
-                ],
+                contexts=contexts[batch],
                 queries=queries[batch],
                 cache=None,
                 categorical_mask=None,
