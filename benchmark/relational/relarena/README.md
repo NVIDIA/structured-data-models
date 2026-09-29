@@ -32,12 +32,12 @@ Per-task runtimes aggregated over the 21 entity-level [RelBenchV1](https://star-
 
 | Model               | #Trials | Cache |    Mean |     Min |     p25 |     p50 |     p75 |      Max |
 | ------------------- | ------: | :---: | ------: | ------: | ------: | ------: | ------: | -------: |
-| `kumo-relational`   |       3 |   ✗   |   1 min | 0.1 min | 0.5 min | 0.6 min | 1.2 min |  3.1 min |
-| `rdblearn`          |       6 |   ✓   |  11 min | 0.5 min |   2 min |   7 min |  11 min |   50 min |
-| `tabpfn-rel-local`  |       3 |   ✓   |  12 min | 0.6 min | 0.8 min |   4 min |   6 min |   85 min |
-| `lightgbm`          |      30 |   ✗   |  14 min | 0.1 min | 0.2 min |   2 min |  28 min |   53 min |
-| `graphsage`         |       4 |   ✗   |  47 min |   2 min |   9 min |  35 min |  83 min |  141 min |
-| `relgnn-es`         |      10 |   ✓   |  73 min |   1 min |   6 min |  28 min |  99 min |  336 min |
-| `tabpfn-rel-client` |       3 |   ✓   |  76 min |  18 min |  72 min |  88 min |  94 min |  108 min |
-| `rt-plurel`         |       – |   ✓   | 351 min | 109 min | 129 min | 231 min | 516 min |  979 min |
-| `relgt`             |       9 |   ✓   | 511 min |  40 min | 175 min | 273 min | 466 min | 2442 min |
+| `kumo-relational`   |       3 |  ❌   |   1 min | 0.1 min | 0.5 min | 0.6 min | 1.2 min |  3.1 min |
+| `rdblearn`          |       6 |  ✅   |  11 min | 0.5 min |   2 min |   7 min |  11 min |   50 min |
+| `tabpfn-rel-local`  |       3 |  ✅   |  12 min | 0.6 min | 0.8 min |   4 min |   6 min |   85 min |
+| `lightgbm`          |      30 |  ❌   |  14 min | 0.1 min | 0.2 min |   2 min |  28 min |   53 min |
+| `graphsage`         |       4 |  ❌   |  47 min |   2 min |   9 min |  35 min |  83 min |  141 min |
+| `relgnn-es`         |      10 |  ✅   |  73 min |   1 min |   6 min |  28 min |  99 min |  336 min |
+| `tabpfn-rel-client` |       3 |  ✅   |  76 min |  18 min |  72 min |  88 min |  94 min |  108 min |
+| `rt-plurel`         |       – |  ✅   | 351 min | 109 min | 129 min | 231 min | 516 min |  979 min |
+| `relgt`             |       9 |  ✅   | 511 min |  40 min | 175 min | 273 min | 466 min | 2442 min |
