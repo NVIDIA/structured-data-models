@@ -7,6 +7,7 @@ from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
+    _high_precision_dtype,
     _isfinite,
 )
 
@@ -43,7 +44,8 @@ class Standardize(Processor, InvertibleMixin):
         finite = _isfinite(table.numerical)
         count = finite.sum(dim=-2, keepdim=True)
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
-        finite_or_nan = finite_or_nan.double()  # Ensure high precision.
+        dtype = _high_precision_dtype(finite_or_nan.device)
+        finite_or_nan = finite_or_nan.to(dtype)  # Ensure high precision.
 
         self.mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
         self.mean.masked_fill_(self.mean.isnan(), 0.0)

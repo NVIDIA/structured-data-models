@@ -262,3 +262,33 @@ def test_quantile_transform_adapter_matches_grouped_tables(
         assert context_output[member_id].equal(expected_contexts[table_id])
         assert query_output[member_id].equal(expected_queries[table_id])
         assert restored[member_id].equal(expected_restored[table_id])
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="MPS not available",
+)
+def test_quantile_transform_normal_on_mps_matches_cpu() -> None:
+    inp = torch.linspace(-3.0, 3.0, 50).pow(3).view(25, 2)
+    expected = QuantileTransform(output_distribution="normal")
+    expected = expected.fit(TableTensor.from_tensor(inp))
+    expected = expected.transform(TableTensor.from_tensor(inp))
+
+    table = TableTensor.from_tensor(inp.to("mps"))
+    processor = QuantileTransform(output_distribution="normal").fit(table)
+    actual = processor.transform(table)
+
+    # MPS computes 'ndtri' via float32 'erfinv', which loses precision in
+    # the far tails, i.e., at the clipping bounds of the first and last row.
+    torch.testing.assert_close(
+        actual.numerical[1:-1].cpu(),
+        expected.numerical[1:-1],
+        atol=1e-4,
+        rtol=1e-4,
+    )
+    torch.testing.assert_close(
+        actual.numerical.cpu(),
+        expected.numerical,
+        atol=5e-2,
+        rtol=0.0,
+    )

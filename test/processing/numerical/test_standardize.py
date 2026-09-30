@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 from sdm import TableTensor
@@ -146,3 +147,34 @@ def test_standardize_computes_in_float64() -> None:
     )
     assert output.numerical.dtype == inp.dtype
     torch.testing.assert_close(output.numerical, expected)
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="MPS not available",
+)
+def test_standardize_on_mps_matches_cpu() -> None:
+    inp = torch.tensor(
+        [
+            [1.0, 2.0, float("nan")],
+            [3.0, 6.0, float("inf")],
+            [5.0, 7.0, 1.0],
+        ]
+    )
+    expected = Standardize().fit(TableTensor.from_tensor(inp))
+    expected = expected.transform(TableTensor.from_tensor(inp))
+
+    table = TableTensor.from_tensor(inp.to("mps"))
+    processor = Standardize().fit(table)
+    out = processor.transform(table)
+
+    torch.testing.assert_close(
+        out.numerical.cpu(),
+        expected.numerical,
+        equal_nan=True,
+    )
+    torch.testing.assert_close(
+        processor.inverse_transform(out).numerical.cpu(),
+        inp,
+        equal_nan=True,
+    )

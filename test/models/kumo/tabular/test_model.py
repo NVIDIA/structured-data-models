@@ -302,3 +302,39 @@ def test_estimator_batching_many_classes(
     actual = model.predict(x_query)
     assert actual.columns == expected.columns
     torch.testing.assert_close(actual.numerical, expected.numerical)
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="MPS not available",
+)
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_default_recipe_on_mps(
+    task: Literal["classification", "regression"],
+) -> None:
+    model = _build(task, "small").to("mps")
+    if task == "classification":
+        x_context, x_query = _features()
+        target = _cls_target()
+    else:
+        x_context, x_query = _features(Stype.numerical)
+        target = _reg_target()
+    x_context, x_query, target = (
+        x_context.to("mps"),
+        x_query.to("mps"),
+        target.to("mps"),
+    )
+
+    expected = model(x_context, target, x_query, num_estimators=4)
+
+    assert expected.device == torch.device("mps", 0)
+    assert expected.numerical.isfinite().all()
+
+    model.fit(x_context, target, num_estimators=4)
+    actual = model.predict(x_query)
+
+    assert actual.size() == expected.size()
+    assert set(actual.columns[Stype.numerical]) == set(
+        expected.columns[Stype.numerical]
+    )
+    assert actual.numerical.isfinite().all()
