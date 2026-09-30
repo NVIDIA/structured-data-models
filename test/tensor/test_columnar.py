@@ -205,6 +205,25 @@ def test_empty_clone_preserves_device() -> None:
     assert out.device == tensor.device
 
 
+def test_empty_resolves_mps_device_index() -> None:
+    tensor = ColumnarTensor((), size=(2, 3), device="mps")
+
+    assert tensor.device == torch.device("mps", 0)
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="MPS not available",
+)
+def test_empty_to_mps_in_inference_mode() -> None:
+    tensor = ColumnarTensor((), size=(2, 3))
+
+    with torch.inference_mode():
+        out = tensor.to(torch.device("mps"))
+
+    assert out.device == torch.empty(0, device="mps").device
+
+
 @onlyCUDA
 def test_to_cuda() -> None:
     tensor = ColumnarTensor(
