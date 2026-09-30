@@ -90,15 +90,21 @@ class Processor(torch.nn.Module, abc.ABC):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
-        # Resize dynamically shaped buffers before PyTorch copies saved values.
+        # Resize dynamically shaped and typed buffers before PyTorch copies
+        # saved values.
         for name, buffer in self._buffers.items():
             state = state_dict.get(f"{prefix}{name}")
             if (
                 buffer is not None
                 and isinstance(state, torch.Tensor)
-                and buffer.shape != state.shape
+                and (
+                    buffer.shape != state.shape or buffer.dtype != state.dtype
+                )
             ):
-                buffer.resize_(state.shape)
+                self._buffers[name] = buffer.new_empty(
+                    state.shape,
+                    dtype=state.dtype,
+                )
         super()._load_from_state_dict(
             state_dict,
             prefix,
