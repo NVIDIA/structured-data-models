@@ -21,7 +21,7 @@ from sdm import (
 )
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
-from sdm.cache import Cache
+from sdm.cache import Cache, CachePrefetcher
 from sdm.models.callback import Callback
 from sdm.processing.execution import (
     MemberContext,
@@ -385,38 +385,26 @@ class ICLModel(torch.nn.Module, abc.ABC):
         )
         num_batches = cast(int, self._cache["num_batches"])
         caches = [cast(Cache, self._cache[i]) for i in range(num_batches)]
-        next_cache = caches[0]
-
-        compute_stream: torch.cuda.Stream | None = None
         transfer_stream: torch.cuda.Stream | None = None
-        try:
-            if x.is_cuda:
-                compute_stream = torch.cuda.current_stream(x.device)
-                if x.device not in self._transfer_streams:
-                    transfer_stream = torch.cuda.Stream(x.device)
-                    self._transfer_streams[x.device] = transfer_stream
-                else:
-                    transfer_stream = self._transfer_streams[x.device]
-                with torch.cuda.stream(transfer_stream):
-                    next_cache = next_cache.to(x.device, non_blocking=True)
+        if x.is_cuda:
+            if x.device not in self._transfer_streams:
+                self._transfer_streams[x.device] = torch.cuda.Stream(x.device)
+            transfer_stream = self._transfer_streams[x.device]
 
+        with CachePrefetcher(
+            caches=caches,
+            device=x.device,
+            transfer_stream=transfer_stream,
+        ) as prefetched_caches:
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
                 inference_mode("no_grad" if requires_grad else "inference"),
             ):
                 queries = recipe_execution.transform(x, related_tables)
 
-            if x.is_cuda:
-                assert compute_stream is not None
-                assert transfer_stream is not None
-                compute_stream.wait_stream(transfer_stream)
-
             outs: list[TableTensor] = []
             start = 0
-            for i in range(len(caches)):
-                cache, next_cache = next_cache, None
-                assert cache is not None
-
+            for cache in prefetched_caches:
                 x_schemas = cast(tuple[TableSchema, ...], cache["x_schemas"])
                 batch_queries = [
                     self._prepare_query(
@@ -436,13 +424,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ]
                 start += len(x_schemas)
 
-                if i + 1 < len(caches):
-                    next_cache = caches[i + 1]
-                if x.is_cuda and next_cache is not None:
-                    assert transfer_stream is not None
-                    with torch.cuda.stream(transfer_stream):
-                        next_cache = next_cache.to(x.device, non_blocking=True)
-
                 outs += self._forward_batch(
                     contexts=None,
                     queries=batch_queries,
@@ -457,21 +438,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     generator=None,
                     **cast(dict[str, Any], self._cache["kwargs"]),
                 )
-
-                if x.is_cuda:
-                    assert compute_stream is not None
-                    for tensor in cache._tensors():
-                        tensor.record_stream(compute_stream)
-
-                if x.is_cuda and next_cache is not None:
-                    assert compute_stream is not None
-                    assert transfer_stream is not None
-                    compute_stream.wait_stream(transfer_stream)
-
-        except BaseException:
-            if transfer_stream is not None:
-                transfer_stream.synchronize()
-            raise
 
         # Regression: invert target before stacking estimator outputs.
         if cast(Cache, self._cache[0])["classes"] is None:
