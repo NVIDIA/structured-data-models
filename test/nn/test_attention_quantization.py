@@ -36,9 +36,12 @@ def test_fp8_small_context_fallback(device: torch.device) -> None:
 @pytest.mark.parametrize(
     "dtype", [torch.float16, torch.bfloat16, torch.float32]
 )
-def test_fp8_context_cache_and_chunking(dtype: torch.dtype) -> None:
+def test_fp8_context_cache_and_chunking(
+    dtype: torch.dtype, monkeypatch: pytest.MonkeyPatch
+) -> None:
     if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
         pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
+    monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "0.00001")
     module = TabICLv2TransformerBlock(
         channels=128,
         num_heads=2,
@@ -60,7 +63,10 @@ def test_fp8_context_cache_and_chunking(dtype: torch.dtype) -> None:
         with optimize(attention="fp8"):
             full = module(joined, context)
             _, cache = module(
-                context, context, return_key_value=True, batch_size_limit=1
+                context,
+                context,
+                return_key_value=True,
+                batch_size_limit="auto",
             )
             assert isinstance(cache, QuantizedKVCacheEntry)
             actual = module(query, cache, batch_size_limit=1)
