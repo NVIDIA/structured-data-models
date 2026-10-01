@@ -21,7 +21,7 @@ from sdm import (
 )
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
-from sdm.cache import Cache, CachePrefetcher
+from sdm.cache import Cache, _CachePrefetcher
 from sdm.models.callback import Callback
 from sdm.processing.execution import (
     MemberContext,
@@ -391,7 +391,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 self._transfer_streams[x.device] = torch.cuda.Stream(x.device)
             transfer_stream = self._transfer_streams[x.device]
 
-        with CachePrefetcher(
+        with _CachePrefetcher(
             caches=caches,
             device=x.device,
             transfer_stream=transfer_stream,

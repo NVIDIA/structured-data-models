@@ -3,9 +3,10 @@
 
 from typing import cast
 
+import pytest
 import torch
 
-from sdm.cache import Cache, CachePrefetcher, KVCacheEntry
+from sdm.cache import Cache, KVCacheEntry, _CachePrefetcher
 from sdm.testing import withCUDA
 
 
@@ -57,7 +58,7 @@ def test_cache_prefetcher(device: torch.device) -> None:
         caches = [cache.pin_memory() for cache in caches]
         transfer_stream = torch.cuda.Stream(device)
 
-    with CachePrefetcher(
+    with _CachePrefetcher(
         caches=caches,
         device=device,
         transfer_stream=transfer_stream,
@@ -66,3 +67,8 @@ def test_cache_prefetcher(device: torch.device) -> None:
 
     assert all(value.device == device for value in values)
     assert [value.item() for value in values] == [0, 1, 2]
+
+
+def test_cache_prefetcher_requires_cache() -> None:
+    with pytest.raises(ValueError, match="at least one cache"):
+        _CachePrefetcher((), torch.device("cpu"), transfer_stream=None)
