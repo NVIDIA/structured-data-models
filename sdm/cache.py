@@ -214,6 +214,10 @@ class _CachePrefetcher:
             if self._compute_stream is not None:
                 assert self._transfer_stream is not None
                 self._compute_stream.wait_stream(self._transfer_stream)
+                # Record before yielding so an exception in the consumer
+                # cannot release tensors still used by queued compute.
+                for tensor in cache._tensors():
+                    tensor.record_stream(self._compute_stream)
 
             if i + 1 < len(self._caches):
                 self._next_cache = self._caches[i + 1]
@@ -228,7 +232,3 @@ class _CachePrefetcher:
                     )
 
             yield cache
-
-            if self._compute_stream is not None:
-                for tensor in cache._tensors():
-                    tensor.record_stream(self._compute_stream)
