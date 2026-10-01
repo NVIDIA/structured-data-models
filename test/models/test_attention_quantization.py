@@ -3,12 +3,19 @@
 
 import copy
 import functools
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import pytest
 import torch
 
-from sdm import ColumnarTensor, Recipe, RelatedTables, TableTensor, optimize
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    Recipe,
+    RelatedTables,
+    TableTensor,
+    optimize,
+)
 from sdm.cache import Cache, QuantizedKVCacheEntry
 from sdm.models import KumoRelational, KumoTabular, TabFM
 from sdm.models.kumo.tabular.icl import ICLBlock as KumoICLBlock
@@ -99,9 +106,12 @@ def test_fp8_icl_cache(
 
 
 @onlyCUDA
-@pytest.mark.parametrize("kind", ["kumo-small", "kumo-large", "tabfm"])
+@pytest.mark.parametrize(
+    "kind", ["kumo-small", "kumo-medium", "kumo-large", "tabfm"]
+)
+@pytest.mark.parametrize("estimator_batch_size", [1, 2])
 def test_fp8_model_fit_predict(
-    kind: str, monkeypatch: pytest.MonkeyPatch
+    kind: str, estimator_batch_size: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
         pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
@@ -112,7 +122,10 @@ def test_fp8_model_fit_predict(
     }
     if kind.startswith("kumo-"):
         model = KumoTabular(
-            size="small" if kind == "kumo-small" else "large", **kwargs
+            size=cast(
+                Literal["small", "medium", "large"], kind.removeprefix("kumo-")
+            ),
+            **kwargs,
         )
     else:
         # Keep the stock 256-channel ICL heads while reducing model depth.
@@ -130,19 +143,36 @@ def test_fp8_model_fit_predict(
     x = torch.randn(8193, 3, device="cuda")
     y = torch.randn(8193, 1, device="cuda")
     query = torch.randn(17, 3, device="cuda")
+    num_estimators = 3 if estimator_batch_size == 2 else 1
     with (
         torch.inference_mode(),
         torch.autocast("cuda", dtype=torch.float16),
         optimize(attention="fp8"),
     ):
-        expected = model(x, y, query, recipe=Recipe(), num_estimators=1)
-        model.fit(x, y, recipe=Recipe(), num_estimators=1)
+        expected = model(
+            x,
+            y,
+            query,
+            recipe=Recipe(),
+            num_estimators=num_estimators,
+            estimator_batch_size=1,
+        )
+        model.fit(
+            x,
+            y,
+            recipe=Recipe(),
+            num_estimators=num_estimators,
+            estimator_batch_size=estimator_batch_size,
+        )
         actual = model.predict(query)
     assert actual.numerical.isfinite().all()
     torch.testing.assert_close(
         actual.numerical, expected.numerical, atol=0.01, rtol=0.03
     )
     assert model._cache is not None
+    if num_estimators > 1:
+        assert model._cache.is_cpu
+        assert model._cache["num_batches"] == 2
     entries = cast(Cache, model._cache[0])
     quantized = [
         entry
@@ -150,7 +180,7 @@ def test_fp8_model_fit_predict(
         if isinstance(entry, QuantizedKVCacheEntry)
     ]
     assert quantized
-    if kind == "kumo-large":
+    if kind in {"kumo-medium", "kumo-large"}:
         assert all(entry.key.size(-2) == 2 for entry in quantized)
     with torch.autocast("cuda", dtype=torch.float16):
         with pytest.raises(RuntimeError, match=r"sdm\.optimize"):
@@ -211,4 +241,50 @@ def test_fp8_relational_fit_predict() -> None:
     entries = cast(Cache, model._cache[0])
     assert any(
         isinstance(entry, QuantizedKVCacheEntry) for entry in entries.values()
+    )
+
+
+@onlyCUDA
+def test_fp8_ecoc_cache() -> None:
+    if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
+        pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
+    model = KumoTabular(
+        task="classification", size="small", pretrained=False, device="cuda"
+    )
+    x = torch.randn(8193, 3, device="cuda")
+    query = torch.randn(17, 3, device="cuda")
+    y = TableTensor(
+        columns={"categorical": ["target"]},
+        categorical=CategoricalTensor.from_tensor(
+            (torch.arange(8193, device="cuda") % 12).unsqueeze(-1)
+        ),
+    )
+    with (
+        torch.autocast("cuda", dtype=torch.float16),
+        optimize(attention="fp8"),
+    ):
+        expected = model(
+            x,
+            y,
+            query,
+            recipe=Recipe(),
+            num_estimators=1,
+            generator=torch.Generator(device="cuda").manual_seed(0),
+        )
+        model.fit(
+            x,
+            y,
+            recipe=Recipe(),
+            num_estimators=1,
+            generator=torch.Generator(device="cuda").manual_seed(0),
+        )
+        actual = model.predict(query)
+    torch.testing.assert_close(
+        actual.numerical, expected.numerical, atol=0.01, rtol=0.03
+    )
+    assert actual.size() == (1, 17, 12)
+    assert model._cache is not None
+    nested = cast(Cache, cast(Cache, model._cache[0])["ecoc_model"])
+    assert any(
+        isinstance(entry, QuantizedKVCacheEntry) for entry in nested.values()
     )
