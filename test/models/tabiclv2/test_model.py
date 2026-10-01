@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from sdm import Recipe
+from sdm import CategoricalTensor, Recipe, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -164,6 +164,52 @@ def test_num_estimators(
     out = model.predict(x_query)
     assert out.size() == (*batch_shape, R_query, 999)
     model.clear()
+
+
+def test_context_row_order() -> None:
+    model = TabICLv2(pretrained=False)
+    # Randomize zero-initialized parameters so that classes are distinguished.
+    for parameter in model.parameters():
+        if not parameter.any():
+            torch.nn.init.normal_(parameter, std=0.02)
+    x_context = TableTensor.from_tensor(torch.randn(3, 6))
+    x_query = TableTensor.from_tensor(torch.randn(2, 6))
+    # Categories follow first appearance, as in `TableTensor.from_pandas`.
+    y_context = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [2]]),
+            categories=(torch.tensor([0, 20, 10]),),
+        ),
+    )
+    y_permuted = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [2]]),
+            categories=(torch.tensor([10, 0, 20]),),
+        ),
+    )
+
+    expected = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=3,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = model(
+        x_context=x_context[[2, 0, 1]],
+        y_context=y_permuted,
+        x_query=x_query,
+        num_estimators=3,
+        generator=torch.Generator().manual_seed(0),
+    )
+    classes = actual.columns[Stype.numerical]
+    index = [classes.index(c) for c in expected.columns[Stype.numerical]]
+    torch.testing.assert_close(
+        actual=actual.numerical[:, index],
+        expected=expected.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
 
 
 @withCUDA

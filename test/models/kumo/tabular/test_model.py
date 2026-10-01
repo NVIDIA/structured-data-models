@@ -130,6 +130,46 @@ def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
     assert not categorical.allclose(numerical)
 
 
+def test_context_row_order(cls_model: KumoTabular) -> None:
+    x_context, x_query = _features(Stype.numerical)
+    # Categories follow first appearance, as in `TableTensor.from_pandas`.
+    y_context = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [2]]),
+            categories=(torch.tensor([0, 20, 10]),),
+        ),
+    )
+    y_permuted = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [2]]),
+            categories=(torch.tensor([10, 0, 20]),),
+        ),
+    )
+
+    expected = cls_model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=3,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = cls_model(
+        x_context=x_context[[2, 0, 1]],
+        y_context=y_permuted,
+        x_query=x_query,
+        num_estimators=3,
+        generator=torch.Generator().manual_seed(0),
+    )
+    classes = actual.columns[Stype.numerical]
+    index = [classes.index(c) for c in expected.columns[Stype.numerical]]
+    torch.testing.assert_close(
+        actual=actual.numerical[:, index],
+        expected=expected.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
+
+
 @pytest.mark.parametrize("task", ["classification", "regression"])
 @pytest.mark.parametrize("estimator_batch_size", [2, None])
 def test_estimator_batching(
