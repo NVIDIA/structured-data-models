@@ -166,7 +166,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         return out
 
 
-class CachePrefetcher:
+class _CachePrefetcher:
     r"""Iterate over caches while transferring the next cache to CUDA."""
 
     def __init__(
@@ -175,23 +175,25 @@ class CachePrefetcher:
         device: torch.device,
         transfer_stream: torch.cuda.Stream | None,
     ) -> None:
-        self.caches = caches
-        self.device = device
-        self.transfer_stream = transfer_stream
-        self.compute_stream: torch.cuda.Stream | None = None
-        self.next_cache: Cache | None = None
+        if len(caches) == 0:
+            raise ValueError("Expected at least one cache to prefetch")
+        self._caches = caches
+        self._device = device
+        self._transfer_stream = transfer_stream
+        self._compute_stream: torch.cuda.Stream | None = None
+        self._next_cache: Cache | None = None
 
     def __enter__(self) -> Self:
-        if self.device.type == "cuda":
-            assert self.transfer_stream is not None
-            self.compute_stream = torch.cuda.current_stream(self.device)
-            with torch.cuda.stream(self.transfer_stream):
-                self.next_cache = self.caches[0].to(
-                    self.device,
+        if self._device.type == "cuda":
+            assert self._transfer_stream is not None
+            self._compute_stream = torch.cuda.current_stream(self._device)
+            with torch.cuda.stream(self._transfer_stream):
+                self._next_cache = self._caches[0].to(
+                    self._device,
                     non_blocking=True,
                 )
         else:
-            self.next_cache = self.caches[0]
+            self._next_cache = self._caches[0]
         return self
 
     def __exit__(
@@ -201,29 +203,32 @@ class CachePrefetcher:
         traceback: TracebackType | None,
     ) -> None:
         del exc_value, traceback
-        if exc_type is not None and self.transfer_stream is not None:
-            self.transfer_stream.synchronize()
+        if exc_type is not None and self._transfer_stream is not None:
+            self._transfer_stream.synchronize()
 
     def __iter__(self) -> Iterator[Cache]:
-        for i in range(len(self.caches)):
-            cache, self.next_cache = self.next_cache, None
+        for i in range(len(self._caches)):
+            cache, self._next_cache = self._next_cache, None
             assert cache is not None
 
-            if self.compute_stream is not None:
-                assert self.transfer_stream is not None
-                self.compute_stream.wait_stream(self.transfer_stream)
+            if self._compute_stream is not None:
+                assert self._transfer_stream is not None
+                self._compute_stream.wait_stream(self._transfer_stream)
 
-            if i + 1 < len(self.caches):
-                self.next_cache = self.caches[i + 1]
-            if self.transfer_stream is not None and self.next_cache is not None:
-                with torch.cuda.stream(self.transfer_stream):
-                    self.next_cache = self.next_cache.to(
-                        self.device,
+            if i + 1 < len(self._caches):
+                self._next_cache = self._caches[i + 1]
+            if (
+                self._transfer_stream is not None
+                and self._next_cache is not None
+            ):
+                with torch.cuda.stream(self._transfer_stream):
+                    self._next_cache = self._next_cache.to(
+                        self._device,
                         non_blocking=True,
                     )
 
             yield cache
 
-            if self.compute_stream is not None:
+            if self._compute_stream is not None:
                 for tensor in cache._tensors():
-                    tensor.record_stream(self.compute_stream)
+                    tensor.record_stream(self._compute_stream)
