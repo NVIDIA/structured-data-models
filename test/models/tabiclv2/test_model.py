@@ -332,7 +332,10 @@ def test_compile(dtype: torch.dtype) -> None:
 @onlyCUDA
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
 @pytest.mark.usefixtures("fp8_rng")
-def test_fp8_fit_predict(dtype: torch.dtype) -> None:
+@pytest.mark.parametrize("estimator_batch_size", [1, 2])
+def test_fp8_fit_predict(
+    dtype: torch.dtype, estimator_batch_size: int
+) -> None:
     if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
         pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
     model = TabICLv2(
@@ -343,19 +346,36 @@ def test_fp8_fit_predict(dtype: torch.dtype) -> None:
     x = torch.randn(8193, 3, device="cuda")
     y = torch.randn(8193, 1, device="cuda")
     query = torch.randn(17, 3, device="cuda")
+    num_estimators = 3 if estimator_batch_size == 2 else 1
     with (
         torch.inference_mode(),
         optimize(attention="fp8"),
         torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32),
     ):
-        expected = model(x, y, query, recipe=Recipe(), num_estimators=1)
-        model.fit(x, y, recipe=Recipe(), num_estimators=1)
+        expected = model(
+            x,
+            y,
+            query,
+            recipe=Recipe(),
+            num_estimators=num_estimators,
+            estimator_batch_size=1,
+        )
+        model.fit(
+            x,
+            y,
+            recipe=Recipe(),
+            num_estimators=num_estimators,
+            estimator_batch_size=estimator_batch_size,
+        )
         actual = model.predict(query)
         assert actual.numerical.isfinite().all()
         torch.testing.assert_close(
             actual.numerical, expected.numerical, atol=0.01, rtol=0.01
         )
         assert model._cache is not None
+        if num_estimators > 1:
+            assert model._cache.is_cpu
+            assert model._cache["num_batches"] == 2
         # The public lifecycle must retain real quantized tensors, not merely
         # accept an option while silently executing ordinary attention.
         entries = cast(Cache, model._cache[0])
