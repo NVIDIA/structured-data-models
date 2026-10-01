@@ -5,7 +5,7 @@ from typing import cast
 
 import torch
 
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache, CachePrefetcher, KVCacheEntry
 from sdm.testing import withCUDA
 
 
@@ -45,3 +45,24 @@ def test_cache_size() -> None:
     )
 
     assert cache.size() == 3 * 4 + 2 * 8 + 5 * 1 + 4 * 2
+
+
+@withCUDA
+def test_cache_prefetcher(device: torch.device) -> None:
+    caches = [
+        Cache(value=torch.tensor([value])).freeze() for value in range(3)
+    ]
+    transfer_stream = None
+    if device.type == "cuda":
+        caches = [cache.pin_memory() for cache in caches]
+        transfer_stream = torch.cuda.Stream(device)
+
+    with CachePrefetcher(
+        caches=caches,
+        device=device,
+        transfer_stream=transfer_stream,
+    ) as prefetcher:
+        values = [cast(torch.Tensor, cache["value"]) for cache in prefetcher]
+
+    assert all(value.device == device for value in values)
+    assert [value.item() for value in values] == [0, 1, 2]
