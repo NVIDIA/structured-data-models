@@ -8,10 +8,13 @@ from collections.abc import (
     Iterator,
     Mapping,
     MutableMapping,
+    Sequence,
 )
 from enum import StrEnum
+from types import TracebackType
 from typing import NamedTuple, Self
 
+import torch
 from torch import Tensor
 
 from sdm.tensor.mixin import DeviceMixin
@@ -161,3 +164,70 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         )
         out._mode = self._mode
         return out
+
+
+class _CachePrefetcher:
+    r"""Iterate over caches while transferring the next cache to CUDA."""
+
+    def __init__(
+        self,
+        caches: Sequence[Cache],
+        device: torch.device,
+        transfer_stream: torch.cuda.Stream | None,
+    ) -> None:
+        if len(caches) == 0:
+            raise ValueError("Expected at least one cache to prefetch")
+        self._caches = caches
+        self._device = device
+        self._transfer_stream = transfer_stream
+        self._compute_stream: torch.cuda.Stream | None = None
+        self._next_cache: Cache | None = None
+
+    def __enter__(self) -> Self:
+        if self._device.type == "cuda":
+            assert self._transfer_stream is not None
+            self._compute_stream = torch.cuda.current_stream(self._device)
+            with torch.cuda.stream(self._transfer_stream):
+                self._next_cache = self._caches[0].to(
+                    device=self._device,
+                    non_blocking=True,
+                )
+        else:
+            self._next_cache = self._caches[0]
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        if exc_type is not None and self._transfer_stream is not None:
+            self._transfer_stream.synchronize()
+
+    def __iter__(self) -> Iterator[Cache]:
+        for i in range(len(self._caches)):
+            cache, self._next_cache = self._next_cache, None
+            assert cache is not None
+
+            if self._compute_stream is not None:
+                assert self._transfer_stream is not None
+                self._compute_stream.wait_stream(self._transfer_stream)
+                # Record before yielding so an exception in the consumer
+                # cannot release tensors still used by queued compute.
+                for tensor in cache._tensors():
+                    tensor.record_stream(self._compute_stream)
+
+            if i + 1 < len(self._caches):
+                self._next_cache = self._caches[i + 1]
+            if (
+                self._transfer_stream is not None
+                and self._next_cache is not None
+            ):
+                with torch.cuda.stream(self._transfer_stream):
+                    self._next_cache = self._next_cache.to(
+                        device=self._device,
+                        non_blocking=True,
+                    )
+
+            yield cache
