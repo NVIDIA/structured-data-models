@@ -10,6 +10,7 @@ from torch.nn import Sequential
 
 from sdm.models.timesfm3.transformer import (
     MixingTransformer,
+    StackedMixingTransformer,
     TimesFM3Attention,
     make_attn_mask,
 )
@@ -397,4 +398,83 @@ def test_mixing_transformer_bfloat16_meta_loading(
     assert output.dtype == torch.bfloat16
     assert output.isfinite().all()
     assert mask.device == device
+    torch.testing.assert_close(output, expected(inputs, patch_mask)[0])
+
+
+def _stack(
+    device: torch.device | str,
+    dtype: torch.dtype | None = None,
+) -> StackedMixingTransformer:
+    return StackedMixingTransformer(
+        num_layers=2,
+        model_dims=8,
+        hidden_dims=12,
+        num_heads=2,
+        qk_norm="rms",
+        use_bias=False,
+        use_rope_seq=True,
+        use_rope_var=False,
+        use_variate_attention=False,
+        device=device,
+        dtype=dtype,
+    )
+
+
+@withCUDA
+def test_stacked_transformer_chains_layers_and_masks(
+    device: torch.device,
+) -> None:
+    transformer = _stack(device)
+    with torch.no_grad():
+        for layer in transformer.layers:
+            assert isinstance(layer, MixingTransformer)
+            _set_identity_projections(layer.seq_attn)
+            layer.ff1.weight.fill_(0.02)
+    inputs = torch.arange(192, device=device, dtype=torch.float32).reshape(
+        2, 3, 4, 8
+    )
+    patch_mask = torch.zeros(2, 3, 4, dtype=torch.bool, device=device)
+    patch_mask[0, 0, 1] = True
+    patch_mask[1, 2, 2] = True
+
+    output, masks = transformer(inputs, patch_mask)
+    first_output, _ = transformer.layers[0](inputs, patch_mask)
+    expected_output, _ = transformer.layers[1](first_output, patch_mask)
+    expected_mask = make_attn_mask(patch_mask.reshape(2 * 3, 4))
+
+    torch.testing.assert_close(output, expected_output)
+    assert not torch.allclose(output, inputs)
+    assert len(masks) == 2
+    for mask in masks:
+        torch.testing.assert_close(mask, expected_mask)
+
+
+@withCUDA
+def test_stacked_transformer_strict_meta_bfloat16_load(
+    device: torch.device,
+) -> None:
+    expected = _stack(device, dtype=torch.bfloat16)
+    transformer = _stack("meta", dtype=torch.bfloat16)
+    assert all(
+        parameter.device.type == "meta"
+        for parameter in transformer.parameters()
+    )
+    assert all(
+        buffer.device.type == "meta" for buffer in transformer.buffers()
+    )
+
+    transformer.load_state_dict(
+        expected.state_dict(), strict=True, assign=True
+    )
+    inputs = torch.arange(64, device=device, dtype=torch.bfloat16).reshape(
+        1, 2, 4, 8
+    )
+    patch_mask = torch.zeros(1, 2, 4, dtype=torch.bool, device=device)
+
+    output, masks = transformer(inputs, patch_mask)
+
+    assert output.dtype == torch.bfloat16
+    assert output.isfinite().all()
+    assert len(masks) == 2
+    assert all(buffer.device == device for buffer in transformer.buffers())
     torch.testing.assert_close(output, expected(inputs, patch_mask)[0])
