@@ -7,11 +7,6 @@ import torch
 from torch import Tensor
 
 
-def _high_precision_dtype(device: torch.device) -> torch.dtype:
-    # MPS does not support float64, so fall back to float32.
-    return torch.float32 if device.type == "mps" else torch.float64
-
-
 def _ndtri(x: Tensor) -> Tensor:
     # MPS does not implement 'torch.special.ndtri', so use 'erfinv' instead.
     if x.device.type == "mps":
