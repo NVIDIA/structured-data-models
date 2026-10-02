@@ -153,12 +153,13 @@ def test_processor_state_dict_preserves_buffer_dtype(
         )
     )
     fitted = processor_factory().fit(table)
-    reloaded = processor_factory()
 
+    reloaded = processor_factory()
     reloaded.load_state_dict(fitted.state_dict())
 
     for name, state in fitted.state_dict().items():
         assert reloaded.state_dict()[name].dtype == state.dtype
+
     torch.testing.assert_close(
         fitted.transform(table).numerical,
         reloaded.transform(table).numerical,

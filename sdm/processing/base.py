@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Self
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 
@@ -36,7 +37,7 @@ class Processor(torch.nn.Module, abc.ABC):
     #: Whether this processor requires fitting.
     requires_fit: bool
 
-    _fitted_state: torch.Tensor
+    _fitted_state: Tensor
 
     def __init__(self) -> None:
         super().__init__()
@@ -90,13 +91,12 @@ class Processor(torch.nn.Module, abc.ABC):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
-        # Resize dynamically shaped and typed buffers before PyTorch copies
-        # saved values.
+        # Resize uninitialized buffers before PyTorch copies saved values.
         for name, buffer in self._buffers.items():
             state = state_dict.get(f"{prefix}{name}")
             if (
                 buffer is not None
-                and isinstance(state, torch.Tensor)
+                and isinstance(state, Tensor)
                 and (
                     buffer.shape != state.shape or buffer.dtype != state.dtype
                 )
