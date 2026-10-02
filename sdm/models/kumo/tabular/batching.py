@@ -130,8 +130,7 @@ def _row_bytes(
     )
     # Fit projects all heads before retaining the smaller query KV heads.
     cache = tasks * element_size * 2 * layer.attn.q_dim * len(icl.layers)
-    # Fit also records each column block's key/value projections of its
-    # inducing points, per estimator rather than per row.
+    # Fit records column-block caches per estimator, not per row.
     inducing = sum(
         cast(InducedTransformerBlock, block).inducing_points.size(0)
         for block in row.col_blocks
