@@ -5,11 +5,13 @@ import math
 
 import pytest
 import torch
+from torch.nn import Sequential
 
 from sdm.models.timesfm3.transformer import (
     TimesFM3Attention,
     make_attn_mask,
 )
+from sdm.nn import RotaryEmbedding
 from sdm.testing import withCUDA
 
 
@@ -52,7 +54,10 @@ def test_attention_rope_matches_google_schedule(
     attention = TimesFM3Attention(
         model_dims=4, num_heads=1, device=device, dtype=dtype
     )
-    rope = attention.query_transform.rope
+    query_transform = attention.query_transform
+    assert isinstance(query_transform, Sequential)
+    rope = query_transform[0]
+    assert isinstance(rope, RotaryEmbedding)
     inputs = torch.tensor(
         [[[[0.0, 0.0, 0.0, 0.0]], [[1.0, 1.0, 0.0, 0.0]]]],
         device=device,
@@ -104,9 +109,7 @@ def test_attention_sdpa_fully_masked(device: torch.device) -> None:
     inputs = torch.ones(2, 3, 8, device=device, dtype=torch.float16)
     patch_mask = torch.tensor([[True, False, False]] * 2, device=device)
 
-    output = attention(
-        inputs, attn_mask=make_attn_mask(patch_mask).squeeze(1)
-    )
+    output = attention(inputs, attn_mask=make_attn_mask(patch_mask).squeeze(1))
 
     torch.testing.assert_close(output[:, 0], torch.zeros_like(output[:, 0]))
     assert output[:, 1:].abs().sum() > 0
@@ -126,15 +129,14 @@ def test_attention_matches_google_reference(
     )
     _set_identity_projections(attention)
     inputs = (
-        torch.arange(1, 13, device=device, dtype=torch.float32)
-        .reshape(1, 3, 4)
+        torch.arange(1, 13, device=device, dtype=torch.float32).reshape(
+            1, 3, 4
+        )
         / 10
     )
     patch_mask = torch.tensor([[False, True, False]], device=device)
 
-    output = attention(
-        inputs, attn_mask=make_attn_mask(patch_mask).squeeze(1)
-    )
+    output = attention(inputs, attn_mask=make_attn_mask(patch_mask).squeeze(1))
 
     # Generated with google-research/timesfm at e31dadd84cb26bd5.
     expected_last = {
@@ -151,13 +153,13 @@ def test_attention_matches_google_reference(
 def test_attention_output_projection_and_autograd(
     device: torch.device,
 ) -> None:
-    attention = TimesFM3Attention(
-        model_dims=8, num_heads=2, device=device
-    )
+    attention = TimesFM3Attention(model_dims=8, num_heads=2, device=device)
     _set_identity_projections(attention)
-    inputs = torch.arange(
-        24, device=device, dtype=torch.float32
-    ).reshape(1, 3, 8).requires_grad_()
+    inputs = (
+        torch.arange(24, device=device, dtype=torch.float32)
+        .reshape(1, 3, 8)
+        .requires_grad_()
+    )
 
     output = attention(inputs)
     output.square().sum().backward()
@@ -167,6 +169,4 @@ def test_attention_output_projection_and_autograd(
     assert attention.qkv_lin.weight.grad is not None
     with torch.no_grad():
         attention.out_lin.weight.zero_()
-    torch.testing.assert_close(
-        attention(inputs), torch.zeros_like(output)
-    )
+    torch.testing.assert_close(attention(inputs), torch.zeros_like(output))
