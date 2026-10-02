@@ -7,6 +7,7 @@ import pytest
 import torch
 
 from sdm.models.timesfm3.util import (
+    get_activation_fn,
     get_output_patch_via_roll,
     get_running_stats,
     revin,
@@ -301,6 +302,18 @@ def test_get_output_patch_via_roll_varied_sizes(
 
     torch.testing.assert_close(output, expected)
     assert torch.equal(wrap_mask, expected_mask[None, None])
+
+
+def test_get_activation_fn() -> None:
+    x = torch.tensor([-1.0, 0.0, 1.0])
+    expected_silu = x * x.sigmoid()
+
+    torch.testing.assert_close(
+        get_activation_fn("relu")(x),
+        torch.tensor([0.0, 0.0, 1.0]),
+    )
+    torch.testing.assert_close(get_activation_fn("swish")(x), expected_silu)
+    assert get_activation_fn("none")(x) is x
 
 
 @withCUDA
