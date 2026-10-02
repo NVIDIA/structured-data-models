@@ -8,7 +8,10 @@ import torch
 
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import KumoTabular
-from sdm.models.kumo.tabular import estimate_batch_size
+from sdm.models.kumo.tabular import (
+    estimate_fit_batch_size,
+    estimate_predict_batch_size,
+)
 
 
 def _context(
@@ -38,7 +41,7 @@ def _context(
         ("large", 0, 500, 1, 101),
     ],
 )
-def test_estimate_batch_size(
+def test_estimate_batch_sizes(
     size: Literal["small", "medium", "large"],
     num_classes: int,
     num_columns: int,
@@ -51,19 +54,18 @@ def test_estimate_batch_size(
     model = KumoTabular(task=task, size=size, pretrained=False, device="meta")
     x, y = _context(num_columns, num_classes)
     assert (
-        estimate_batch_size(
+        estimate_fit_batch_size(
             model, x, y, memory_budget=2**30, num_estimators=16
         )
         == fit_size
     )
     assert (
-        estimate_batch_size(
+        estimate_predict_batch_size(
             model=model,
             x=x,
             y=y,
             memory_budget=2**30,
             num_estimators=16,
-            mode="predict",
             estimator_batch_size=4,
         )
         == query_size
@@ -74,17 +76,19 @@ def test_estimate_batch_size_bounds() -> None:
     model = KumoTabular(task="regression", pretrained=False, device="meta")
     x, y = _context(30, 0)
     assert (
-        estimate_batch_size(model, x, y, memory_budget=0, num_estimators=16)
-        == 1
-    )
-    assert (
-        estimate_batch_size(
-            model, x, y, memory_budget=0, num_estimators=16, mode="predict"
+        estimate_fit_batch_size(
+            model, x, y, memory_budget=0, num_estimators=16
         )
         == 1
     )
     assert (
-        estimate_batch_size(
+        estimate_predict_batch_size(
+            model, x, y, memory_budget=0, num_estimators=16
+        )
+        == 1
+    )
+    assert (
+        estimate_fit_batch_size(
             model, x, y, memory_budget=2**60, num_estimators=16
         )
         == 16
