@@ -97,7 +97,9 @@ class TimesFM3Attention(Attention):
             else:
                 assert qk_norm == "none"
                 norm = Identity()
-            layers = OrderedDict(rope=rope, norm=norm)
+            layers: OrderedDict[str, torch.nn.Module] = OrderedDict(
+                rope=rope, norm=norm
+            )
             if is_query:
                 layers["scale"] = SoftplusScale(
                     channels=head_dim,
