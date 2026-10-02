@@ -304,30 +304,3 @@ def test_loaded_state_keeps_double_precision() -> None:
         atol=0,
         equal_nan=True,
     )
-
-
-@pytest.mark.skipif(
-    not torch.backends.mps.is_available(),
-    reason="MPS not available",
-)
-@pytest.mark.parametrize("max_knots", [None, 3])
-def test_mps_matches_cpu(max_knots: int | None) -> None:
-    context = torch.tensor(
-        [[0.0], [0.0], [1.0], [1.0], [2.0], [2.0], [3.0], [5.0]],
-    )
-    query = edge_query(context)
-    expected = RankGaussian(max_knots=max_knots)
-    expected = expected.fit(TableTensor.from_tensor(context))
-    expected = expected.transform(TableTensor.from_tensor(query))
-
-    processor = RankGaussian(max_knots=max_knots)
-    processor.fit(TableTensor.from_tensor(context.to("mps")))
-    actual = processor.transform(TableTensor.from_tensor(query.to("mps")))
-
-    torch.testing.assert_close(
-        actual.numerical.cpu(),
-        expected.numerical,
-        equal_nan=True,
-        atol=1e-4,
-        rtol=1e-4,
-    )

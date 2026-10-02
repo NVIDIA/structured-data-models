@@ -30,8 +30,8 @@ class Standardize(Processor, InvertibleMixin):
         if eps < 0:
             raise ValueError("epsilon must be non-negative.")
         self.eps = eps
-        self.register_buffer("mean", torch.empty(0, dtype=torch.float64))
-        self.register_buffer("scale", torch.empty(0, dtype=torch.float64))
+        self.register_buffer("mean", torch.empty(0))
+        self.register_buffer("scale", torch.empty(0))
 
     def _fit(
         self,
