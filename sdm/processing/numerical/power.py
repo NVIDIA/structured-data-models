@@ -332,5 +332,7 @@ class PowerTransform(Processor, InvertibleMixin):
         diverged = ~_isfinite(inverse) & ~unscaled.isnan()
         inverse = torch.where(diverged, torch.fmin(inverse, self.max), inverse)
         if low_precision:
+            bound = torch.finfo(table.numerical.dtype).max
+            inverse = inverse.clamp_(min=-bound, max=bound)
             inverse = inverse.to(table.numerical.dtype)
         return table.replace_blocks(numerical=inverse)

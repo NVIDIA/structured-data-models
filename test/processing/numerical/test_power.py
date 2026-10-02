@@ -447,3 +447,19 @@ def test_power_transform_low_precision_matches_float32_work(
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     assert not torch.allclose(actual[:, 0], inp[:, 0])
     torch.testing.assert_close(actual[:, 1], inp[:, 1])
+
+
+@withCUDA
+def test_power_transform_half_inverse_stays_representable(
+    device: torch.device,
+) -> None:
+    values = torch.linspace(-20000, 20000, 1024, device=device).half()[:, None]
+    processor = PowerTransform().fit(TableTensor.from_tensor(values))
+    query = TableTensor.from_tensor(
+        tensor=values.new_tensor([[8], [-8], [torch.nan]])
+    )
+    actual = processor.inverse_transform(query).numerical
+    torch.testing.assert_close(
+        actual=actual[:2], expected=values.new_tensor([[65504], [-65504]])
+    )
+    assert actual[2].isnan().all()
