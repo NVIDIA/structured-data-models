@@ -30,8 +30,8 @@ class Standardize(Processor, InvertibleMixin):
         if eps < 0:
             raise ValueError("epsilon must be non-negative.")
         self.eps = eps
-        self.register_buffer("mean", torch.empty(0, dtype=torch.float64))
-        self.register_buffer("scale", torch.empty(0, dtype=torch.float64))
+        self.register_buffer("mean", torch.empty(0))
+        self.register_buffer("scale", torch.empty(0))
 
     def _fit(
         self,
@@ -43,7 +43,6 @@ class Standardize(Processor, InvertibleMixin):
         finite = _isfinite(table.numerical)
         count = finite.sum(dim=-2, keepdim=True)
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
-        finite_or_nan = finite_or_nan.double()  # Ensure high precision.
 
         self.mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
         self.mean.masked_fill_(self.mean.isnan(), 0.0)
@@ -60,9 +59,8 @@ class Standardize(Processor, InvertibleMixin):
             self.scale += self.eps
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        dtype = table.numerical.dtype
         numerical = (table.numerical - self.mean).div_(self.scale)
-        return table.replace_blocks(numerical=numerical.to(dtype=dtype))
+        return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         dtype = table.numerical.dtype

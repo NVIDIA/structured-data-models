@@ -6,7 +6,7 @@ import torch
 from sdm import Stype, TableTensor
 from sdm._memory import split_size
 from sdm.processing import Processor
-from sdm.processing.numerical._stats import _isfinite
+from sdm.processing.numerical._stats import _isfinite, _ndtri
 from sdm.processing.numerical.quantile import _batched_interp
 
 
@@ -93,8 +93,8 @@ class RankGaussian(Processor):
                 # With more distinct values than knots, select rows whose
                 # mid-ranks are closest to normal quantiles spaced evenly
                 # between the extremes. Mid-ranks never decrease along rows.
-                lower = torch.special.ndtri(probabilities[..., :1])
-                upper = torch.special.ndtri(probabilities.gather(-1, last))
+                lower = _ndtri(probabilities[..., :1])
+                upper = _ndtri(probabilities.gather(-1, last))
                 quantiles = torch.special.ndtr(
                     lower.lerp(
                         upper,
@@ -157,7 +157,7 @@ class RankGaussian(Processor):
                 values,
                 probabilities,
             )
-            normal = torch.special.ndtri(quantiles).reshape(rows.shape)
+            normal = _ndtri(quantiles).reshape(rows.shape)
             out.copy_(normal.masked_fill_(rows.isnan(), torch.nan).mT)
         return table.replace_blocks(numerical=output)
 

@@ -24,7 +24,10 @@ class Cast(Processor):
         self.dtype = dtype
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical.to(self.dtype))
+        dtype = self.dtype
+        if table.device.type == "mps" and dtype == torch.float64:
+            dtype = torch.float32  # MPS does not support float64.
+        return table.replace_blocks(numerical=table.numerical.to(dtype))
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}({self.dtype})"
