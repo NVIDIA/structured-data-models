@@ -57,14 +57,13 @@ def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
 
 
 @withCUDA
-def test_impute_mean_ignores_infinities(device: torch.device) -> None:
-    inf = torch.inf
+def test_impute_mean_infinite(device: torch.device) -> None:
     inp = torch.tensor(
         [
-            [1.0, inf, inf],
-            [3.0, 2.0, -inf],
+            [1.0, torch.inf, torch.inf],
+            [3.0, 2.0, -torch.inf],
             [torch.nan, torch.nan, torch.nan],
-            [-inf, 4.0, torch.nan],
+            [-torch.inf, 4.0, torch.nan],
         ],
         device=device,
     )
@@ -72,14 +71,14 @@ def test_impute_mean_ignores_infinities(device: torch.device) -> None:
     processor = ImputeMean(fill_value=-5.0).fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
-    assert torch.equal(
+    torch.testing.assert_close(
         transformed,
         torch.tensor(
             [
-                [1.0, inf, inf],
-                [3.0, 2.0, -inf],
+                [1.0, torch.inf, torch.inf],
+                [3.0, 2.0, -torch.inf],
                 [2.0, 3.0, -5.0],
-                [-inf, 4.0, -5.0],
+                [-torch.inf, 4.0, -5.0],
             ],
             device=device,
         ),

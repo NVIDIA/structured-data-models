@@ -11,12 +11,12 @@ from sdm.processing.numerical._stats import _isfinite
 class ImputeMean(Processor):
     """Replace NaN feature values with fitted per-column means.
 
-    Infinite values are ignored when fitting the means and preserved during
-    the transform.
+    Infinite values are ignored when fitting the mean but preserved during
+    transformation.
 
     Args:
         fill_value: Finite value used for columns whose fitted mean is
-            undefined (e.g. columns without finite values).
+            undefined (columns without finite values).
     """
 
     handles_stypes = frozenset({Stype.numerical})
