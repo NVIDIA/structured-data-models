@@ -199,10 +199,9 @@ class _CachePrefetcher:
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
     ) -> None:
-        del exc_value, traceback
         if exc_type is not None and self._transfer_stream is not None:
             self._transfer_stream.synchronize()
 
