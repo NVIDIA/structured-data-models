@@ -189,7 +189,7 @@ class _CachePrefetcher:
             self._compute_stream = torch.cuda.current_stream(self._device)
             with torch.cuda.stream(self._transfer_stream):
                 self._next_cache = self._caches[0].to(
-                    self._device,
+                    device=self._device,
                     non_blocking=True,
                 )
         else:
@@ -226,7 +226,7 @@ class _CachePrefetcher:
             ):
                 with torch.cuda.stream(self._transfer_stream):
                     self._next_cache = self._next_cache.to(
-                        self._device,
+                        device=self._device,
                         non_blocking=True,
                     )
 
