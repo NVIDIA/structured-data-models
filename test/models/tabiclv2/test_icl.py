@@ -322,7 +322,7 @@ def test_icl_block_hierarchical_cached_compile() -> None:
     block(torch.randn(5, 4), y, num_classes=5, cache=cache)
     cache.freeze()
     compiled = torch.compile(
-        block, backend="eager", fullgraph=True, dynamic=True
+        model=block, backend="eager", fullgraph=True, dynamic=True
     )
 
     for num_rows in (3, 7):
