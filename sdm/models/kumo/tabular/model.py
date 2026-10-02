@@ -15,6 +15,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.tabular._compile import compile_inference
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -140,6 +141,21 @@ class KumoTabular(ICLModel):
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
+
+    def compile(self, **kwargs: Any) -> None:
+        """Compile inference tensor regions, preserving memory chunk limits.
+
+        Arguments are forwarded to :func:`torch.compile`. Preprocessing,
+        cache management, and memory chunk scheduling remain eager.
+        Inductor preserves intermediate precision casts by default, and
+        compiled inference uses native GELU to limit numerical drift.
+        Compilation is lazy; fit before compiling to avoid compiling the
+        separate context-cache recording paths on the first prediction.
+        Requires PyTorch with ``isolate_recompiles`` support (validated on
+        PyTorch 2.14); eager inference supports older PyTorch versions.
+        """
+        for model in self.models.values():
+            compile_inference(model, **kwargs)
 
     def _load_from_pretrained(
         self,
