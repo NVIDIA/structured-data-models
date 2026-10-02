@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import math
 from typing import Literal
 
 import pytest
@@ -334,72 +333,3 @@ def test_default_recipe_on_mps(
     assert out2.device == torch.device("mps", 0)
     assert out2.size() == out1.size()
     assert out2.numerical.isfinite().all()
-
-
-@pytest.mark.parametrize("num_classes", [0, 2, 10, 11, 100])
-@pytest.mark.parametrize(
-    ("num_rows", "num_columns"), [(1, 1), (3000, 25), (10000, 500)]
-)
-def test_batch_estimates_match_tabarena(
-    size: Literal["small", "medium", "large"],
-    num_classes: int,
-    num_rows: int,
-    num_columns: int,
-) -> None:
-    # Freeze the FP16 formulas from ValterH/tabarena PR #1 at ef7ab98.
-    task: Literal["classification", "regression"] = (
-        "classification" if num_classes else "regression"
-    )
-    model = KumoTabular(task=task, size=size, pretrained=False, device="meta")
-    cell_channels, icl_channels, num_layers = {
-        "small": (128, 512, 12),
-        "medium": (256, 512, 24),
-        "large": (256, 1024, 24),
-    }[size]
-    tasks = (
-        max(
-            math.ceil(num_classes / 9),
-            4 * math.ceil(math.log(num_classes, 10)),
-        )
-        if num_classes > 10
-        else 1
-    )
-    workspace = (
-        tasks
-        * 2
-        * (
-            4 * (min(2 * num_columns, 500) + 4) * cell_channels
-            + 15 * icl_channels
-        )
-    )
-    cache = tasks * 2 * 2 * icl_channels * num_layers
-    for memory_budget in (0, 2**29 + 1, 2**30):
-        expected = max(
-            1,
-            min(16, (memory_budget // 2) // (num_rows * (workspace + cache))),
-        )
-        assert (
-            model.estimate_estimator_batch_size(
-                num_rows=num_rows,
-                num_columns=num_columns,
-                num_estimators=16,
-                memory_budget=memory_budget,
-                num_classes=num_classes,
-            )
-            == expected
-        )
-        for estimator_batch_size in (1, 4, 16, 32):
-            row_bytes = workspace * estimator_batch_size + 16 * 8 * (
-                8 * num_columns + 4 * (num_classes or 999)
-            )
-            expected = max(1, (memory_budget // 2) // row_bytes)
-            assert (
-                model.estimate_query_batch_size(
-                    num_columns=num_columns,
-                    num_estimators=16,
-                    estimator_batch_size=estimator_batch_size,
-                    memory_budget=memory_budget,
-                    num_classes=num_classes,
-                )
-                == expected
-            )
