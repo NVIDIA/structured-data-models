@@ -4,6 +4,7 @@
 # ruff: noqa: D205
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from typing import Any, ClassVar, Literal, cast
 
@@ -15,6 +16,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -135,6 +137,119 @@ class KumoTabular(ICLModel):
             self.models[task] = self._load_from_pretrained(size, device=device)
 
         self.eval()
+
+    def estimate_estimator_batch_size(
+        self,
+        *,
+        num_rows: int,
+        num_columns: int,
+        num_estimators: int,
+        memory_budget: int,
+        num_classes: int = 0,
+        dtype: torch.dtype = torch.float16,
+    ) -> int:
+        """Estimate the estimator batch size for fitting the default recipe.
+
+        This inference heuristic reserves half the budget for unmodeled
+        allocations and returns at least one estimator, even when it may not
+        fit. It is not an OOM guarantee. Custom recipes and autograd execution
+        require their own estimates. No model state or batching is changed.
+
+        Args:
+            num_rows: Number of context rows.
+            num_columns: Number of input feature columns before preprocessing.
+            num_estimators: Total number of ensemble members.
+            memory_budget: Available device bytes after weights and inputs.
+            num_classes: Target class count, including absent classes; zero
+                selects regression.
+            dtype: Neural execution dtype, including any autocast setting.
+
+        Returns:
+            Estimator batch size between one and ``num_estimators``.
+        """
+        workspace, cache = self._estimate_row_bytes(
+            num_columns=num_columns, num_classes=num_classes, dtype=dtype
+        )
+        capacity = (memory_budget // 2) // max(
+            num_rows * (workspace + cache), 1
+        )
+        return max(1, min(num_estimators, capacity))
+
+    def estimate_query_batch_size(
+        self,
+        *,
+        num_columns: int,
+        num_estimators: int,
+        estimator_batch_size: int,
+        memory_budget: int,
+        num_classes: int = 0,
+        dtype: torch.dtype = torch.float16,
+    ) -> int:
+        """Estimate how many query rows to predict with the default recipe.
+
+        This inference heuristic reserves half the budget for unmodeled
+        allocations and returns at least one row, even when it may not fit.
+        It is not an OOM guarantee. Custom recipes and autograd execution
+        require their own estimates. No model state or batching is changed.
+
+        Args:
+            num_columns: Number of input feature columns before preprocessing.
+            num_estimators: Total number of ensemble members.
+            estimator_batch_size: Maximum number of estimators run together.
+            memory_budget: Available device bytes after weights, inputs, and
+                resident or staged context caches, including transfer overlap.
+            num_classes: Target class count, including absent classes; zero
+                selects regression with 999 output quantiles.
+            dtype: Neural execution dtype, including any autocast setting.
+
+        Returns:
+            Query row batch size of at least one. Cap it to the query size
+            and any runner-specific memory limit before applying it.
+        """
+        workspace, _ = self._estimate_row_bytes(
+            num_columns=num_columns, num_classes=num_classes, dtype=dtype
+        )
+        output_columns = num_classes or 999
+        # Preprocessing and output reduction retain all ensemble members.
+        row_bytes = workspace * estimator_batch_size
+        row_bytes += (
+            num_estimators * 8 * (8 * num_columns + 4 * output_columns)
+        )
+        return max(1, (memory_budget // 2) // max(row_bytes, 1))
+
+    def _estimate_row_bytes(
+        self,
+        *,
+        num_columns: int,
+        num_classes: int,
+        dtype: torch.dtype,
+    ) -> tuple[int, int]:
+        task = Task.classification if num_classes else Task.regression
+        model = cast(_KumoTabular, self.models[task])
+        row = model.row_embedding
+        icl = model.icl_block
+        layer = cast(KumoTabularTransformerBlock, icl.layers[0])
+        tasks = 1
+        if num_classes and num_classes > self.ecoc.max_classes:
+            tasks = max(
+                math.ceil(num_classes / (self.ecoc.max_classes - 1)),
+                4 * math.ceil(math.log(num_classes, self.ecoc.max_classes)),
+            )
+        # The default recipe adds count columns and keeps at most 500 features.
+        columns = min(2 * num_columns, 500)
+        element_size = dtype.itemsize
+        workspace = tasks * (
+            element_size
+            * 4
+            * (columns + row.readout_token.size(0))
+            * row.channels
+            + layer.peak_bytes_per_example(
+                element_size=element_size, query_length=1
+            )
+        )
+        # Fit projects all heads before retaining the smaller query KV heads.
+        cache = tasks * element_size * 2 * layer.attn.q_dim * len(icl.layers)
+        return workspace, cache
 
     @classmethod
     def default_recipe(cls) -> Recipe:
