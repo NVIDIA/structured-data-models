@@ -221,6 +221,9 @@ class PowerTransform(Processor, InvertibleMixin):
     NaN and infinite values are left out of the fitted statistics. NaN values
     are preserved during the transform.
 
+    Float16 and bfloat16 inputs use float32 working precision while retaining
+    their dtype in transformed and inverse-transformed outputs.
+
     Args:
         standardize: If ``True``, zero-mean and unit-variance the transformed
             features using statistics fitted after the power transform.
@@ -256,8 +259,11 @@ class PowerTransform(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        finite = _isfinite(table.numerical)
-        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
+        numerical = table.numerical
+        if numerical.dtype in {torch.float16, torch.bfloat16}:
+            numerical = numerical.float()
+        finite = _isfinite(numerical)
+        finite_or_nan = numerical.masked_fill(~finite, torch.nan)
         count = finite.sum(dim=-2, keepdim=True).clamp_(min=1)
 
         mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
@@ -272,7 +278,7 @@ class PowerTransform(Processor, InvertibleMixin):
 
         # ``mean`` never exceeds the column maximum, and is zero for an
         # entirely missing column, whose max must be zero.
-        self.max = torch.where(finite, table.numerical, mean).amax(
+        self.max = torch.where(finite, numerical, mean).amax(
             dim=-2,
             keepdim=True,
         )
@@ -300,26 +306,36 @@ class PowerTransform(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
-        transformed = _yeojohnson_transform(table.numerical, self.lambdas)
+        numerical = table.numerical
+        low_precision = numerical.dtype in {torch.float16, torch.bfloat16}
+        if low_precision:
+            numerical = numerical.float()
+        transformed = _yeojohnson_transform(numerical, self.lambdas)
         numerical = transformed.sub_(self.mean).div_(self.scale)
         # The fitted lambdas only keep the fitted range representable, so a
         # query far outside it can overflow.
-        bound = torch.finfo(numerical.dtype).max
-        return table.replace_blocks(
-            numerical=numerical.clamp_(min=-bound, max=bound)
-        )
+        dtype = table.numerical.dtype if low_precision else numerical.dtype
+        bound = torch.finfo(dtype).max
+        numerical = numerical.clamp_(min=-bound, max=bound)
+        return table.replace_blocks(numerical=numerical.to(dtype))
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        unscaled = table.numerical * self.scale + self.mean
+        numerical = table.numerical
+        low_precision = numerical.dtype in {torch.float16, torch.bfloat16}
+        if low_precision and self.scale.dtype in {
+            torch.float16,
+            torch.bfloat16,
+        }:
+            numerical = numerical.float()
+        unscaled = numerical * self.scale + self.mean
         inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)
 
         # Above the fitted upper bound the inverse diverges, either to
         # infinity or, past the asymptote, to NaN.
         diverged = ~_isfinite(inverse) & ~unscaled.isnan()
-        return table.replace_blocks(
-            numerical=torch.where(
-                diverged,
-                torch.fmin(inverse, self.max),
-                inverse,
-            )
-        )
+        inverse = torch.where(diverged, torch.fmin(inverse, self.max), inverse)
+        if low_precision:
+            bound = torch.finfo(table.numerical.dtype).max
+            inverse = inverse.clamp_(min=-bound, max=bound)
+            inverse = inverse.to(table.numerical.dtype)
+        return table.replace_blocks(numerical=inverse)

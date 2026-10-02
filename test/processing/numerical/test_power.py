@@ -424,3 +424,51 @@ def test_power_transform_inverse_beyond_the_fitted_bound_falls_back_to_max(
 
     assert restored.isfinite().all()
     assert (restored[1:] == inp.max()).all()
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_power_transform_low_precision_matches_float32_work(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    positive = torch.linspace(0, 3, 1024, device=device).expm1()
+    inp = torch.stack((positive, positive * 0 + 3), dim=-1).to(dtype)
+    table = TableTensor.from_tensor(inp)
+    processor = PowerTransform(standardize=False).fit(table)
+    reference_table = TableTensor.from_tensor(inp.float())
+    reference = PowerTransform(standardize=False).fit(reference_table)
+
+    actual = processor.transform(table).numerical
+    expected = reference.transform(reference_table).numerical.to(dtype)
+
+    assert actual.dtype == dtype
+    assert actual.isfinite().all()
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    assert not torch.allclose(actual[:, 0], inp[:, 0])
+    torch.testing.assert_close(actual[:, 1], inp[:, 1])
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    "state_dtype", [None, torch.float16, torch.bfloat16, torch.float64]
+)
+def test_power_transform_half_inverse_stays_representable(
+    device: torch.device,
+    state_dtype: torch.dtype | None,
+) -> None:
+    values = torch.linspace(-20000, 20000, 1024, device=device).half()[:, None]
+    processor = PowerTransform().fit(TableTensor.from_tensor(values))
+    if state_dtype is not None:
+        processor.to(state_dtype)
+        restored = PowerTransform().to(device)
+        restored.load_state_dict(processor.state_dict())
+        processor = restored
+    query = TableTensor.from_tensor(
+        tensor=values.new_tensor([[8], [-8], [torch.nan]])
+    )
+    actual = processor.inverse_transform(query).numerical
+    torch.testing.assert_close(
+        actual=actual[:2], expected=values.new_tensor([[65504], [-65504]])
+    )
+    assert actual[2].isnan().all()
