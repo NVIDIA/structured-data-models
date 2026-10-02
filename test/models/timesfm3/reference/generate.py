@@ -59,6 +59,33 @@ FORWARD_INPUTS: dict[str, Any] = {
     "patch_is_target": [[[True, True, True]]],
     "patch_cpm_masks": [None, [[False, True, True]]],
 }
+NO_STITCHING_INPUTS: dict[str, Any] = {
+    "target": [[[1.0, 2.0, 5.0, 3.0, 8.0]]],
+    "past_only_covariates": [[[3.0, 1.0, 4.0, 1.0, 5.0]]],
+    "past_future_covariates": [
+        [[5.0, 6.0, 4.0, 9.0, 7.0, 8.0, 6.0, 10.0, 12.0, 7.0, 15.0]]
+    ],
+    "mask": [[False, False, False, True, False]],
+    "past_only_mask": [[[False, True, False, False, False]]],
+    "past_future_mask": [
+        [
+            [
+                False,
+                False,
+                False,
+                False,
+                False,
+                False,
+                True,
+                False,
+                False,
+                True,
+                False,
+            ]
+        ]
+    ],
+    "horizon": 99,
+}
 
 
 def _fill_state(model: torch.nn.Module) -> list[dict[str, Any]]:
@@ -114,12 +141,42 @@ def _internal_fixture(upstream: Any) -> dict[str, Any]:
             )["logits"]
             forward_outputs.append(logits.tolist())
 
+    no_stitching_overrides = {
+        "use_stitching": False,
+        "use_linear_detrending": False,
+        "use_frozen_running_stats": True,
+    }
+    no_stitching_config = {**INTERNAL_CONFIG, **no_stitching_overrides}
+    no_stitching_model = upstream.TimesFM3Torch(**no_stitching_config).eval()
+    _fill_state(no_stitching_model)
+    with torch.inference_mode():
+        no_stitching = no_stitching_model.decode(
+            torch.tensor(NO_STITCHING_INPUTS["target"]),
+            horizon=NO_STITCHING_INPUTS["horizon"],
+            past_only_covariates=torch.tensor(
+                NO_STITCHING_INPUTS["past_only_covariates"]
+            ),
+            past_future_covariates=torch.tensor(
+                NO_STITCHING_INPUTS["past_future_covariates"]
+            ),
+            mask=torch.tensor(NO_STITCHING_INPUTS["mask"]),
+            past_only_mask=torch.tensor(NO_STITCHING_INPUTS["past_only_mask"]),
+            past_future_mask=torch.tensor(
+                NO_STITCHING_INPUTS["past_future_mask"]
+            ),
+        )
+
     return {
         "config": INTERNAL_CONFIG,
         "state": state,
         "forward": {
             "inputs": FORWARD_INPUTS,
             "outputs": forward_outputs,
+        },
+        "decode_without_stitching": {
+            "config_overrides": no_stitching_overrides,
+            "inputs": NO_STITCHING_INPUTS,
+            "output": no_stitching.tolist(),
         },
     }
 
