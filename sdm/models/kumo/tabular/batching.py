@@ -22,37 +22,26 @@ def estimate_batch_size(
     estimator_batch_size: int = 1,
     dtype: torch.dtype = torch.float16,
 ) -> int:
-    """Estimate a batch size for Kumo Tabular's default recipe.
+    """Estimate an ensemble batch for fitting or query rows for prediction.
 
-    For ``mode="fit"``, return the number of ensemble members to run together
-    as ``fit(..., estimator_batch_size=...)``. For ``mode="predict"``, return
-    the number of query rows to pass to each ``predict`` call. Read context
-    dimensions and target classes from table metadata without processing data.
-
-    This inference heuristic uses half the supplied budget and returns at
-    least one item, even when it may not fit. Custom recipes and autograd
-    execution require their own estimates; this is not an OOM guarantee.
+    For default-recipe inference. Uses half the budget and returns at least
+    one item; the estimate does not guarantee that it fits in memory.
 
     Args:
-        model: Kumo Tabular model with the context's target task initialized.
-        x: Unprocessed context features of shape ``[R, C]``, with ``R`` rows
-            and ``C`` feature columns.
-        y: Context targets of shape ``[R, 1]``. A categorical target's category
-            vector defines all classes, including those absent from its rows.
-            A numerical target selects regression with 999 output quantiles.
-        memory_budget: Available device bytes after weights and input tables.
-            For prediction, also subtract resident or staged context caches,
-            including overlapping transfers. The caller determines this budget.
-        num_estimators: Total number of ensemble members used for fitting.
-        mode: Whether to estimate an ensemble batch for ``"fit"`` or a query
-            row batch for ``"predict"``.
-        estimator_batch_size: Maximum number of ensemble members run together
-            during prediction, as selected during fitting. Ignored for fitting.
-        dtype: Neural execution dtype, including any autocast setting.
+        model: Kumo Tabular model with the target task initialized.
+        x: Unprocessed context features of shape ``[R, C]``.
+        y: Context targets of shape ``[R, 1]``. Categorical metadata defines
+            all classes; numerical targets select regression.
+        memory_budget: Available bytes excluding weights, inputs, and context
+            caches, including overlapping transfers during prediction.
+        num_estimators: Total number of ensemble members.
+        mode: ``"fit"`` estimates ensemble members; ``"predict"`` query rows.
+        estimator_batch_size: Ensemble members run together during prediction.
+            Ignored for fitting.
+        dtype: Neural execution or autocast dtype.
 
     Returns:
-        For fitting, a batch size between one and ``num_estimators``. For
-        prediction, at least one query row; cap it to the query table's size.
+        At least one item, capped at ``num_estimators`` for fitting.
     """
     num_rows, num_columns = x.shape[-2:]
     num_classes = (
