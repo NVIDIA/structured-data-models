@@ -38,3 +38,37 @@ class ResidualBlockConfig:
     activation: Literal["relu", "swish", "none"]
     identity_skip: bool = False
     prenorm: Literal["rms", "none"] = "none"
+
+
+@dataclass(frozen=True)
+class TransformerConfig:
+    """Configure a TimesFM-3 mixing transformer.
+
+    Args:
+        model_dims: Input and output width.
+        hidden_dims: Feed-forward hidden width.
+        num_heads: Number of attention heads.
+        qk_norm: Query and key normalization.
+        use_bias: Whether linear layers use bias parameters.
+        use_rope_seq: Whether temporal attention uses rotary embeddings.
+        use_rope_var: Whether variate attention uses rotary embeddings.
+        ff_activation: Feed-forward activation.
+        v_norm: Value normalization.
+        causal_attention: Whether temporal attention is causal.
+        use_memory_efficient_attention: Whether to retain TimesFM's
+            square-root head-dimension logit scaling.
+        use_sdpa: Whether to use PyTorch scaled dot-product attention.
+    """
+
+    model_dims: int
+    hidden_dims: int
+    num_heads: int
+    qk_norm: Literal["rms", "none"]
+    use_bias: bool
+    use_rope_seq: bool
+    use_rope_var: bool
+    ff_activation: Literal["relu", "swish", "none"]
+    v_norm: Literal["rms", "none"] = "none"
+    causal_attention: bool = True
+    use_memory_efficient_attention: bool = True
+    use_sdpa: bool = True
