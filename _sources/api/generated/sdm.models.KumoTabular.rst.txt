@@ -84,7 +84,7 @@ Default Recipe
            FlipSign(probability=0.5),
          ),
          categorical=Sequential(
-           AlignCategories(),
+           AlignCategories(sort_by='value'),
            ShuffleCategories(method='shift'),
          ),
        ),
