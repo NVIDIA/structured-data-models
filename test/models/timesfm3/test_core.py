@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import json
+from pathlib import Path
+from typing import Any, cast
+
 import pytest
 import torch
 
@@ -436,3 +440,89 @@ def test_internal_model_applies_cpm_revin_refinement(
 
     torch.testing.assert_close(refined[:, :, 0], frozen[:, :, 0])
     assert not torch.equal(refined[:, :, 1:], frozen[:, :, 1:])
+
+
+def _reference_fixture() -> dict[str, Any]:
+    path = Path(__file__).with_name("reference") / "golden.json"
+    return cast(dict[str, Any], json.loads(path.read_text()))
+
+
+def _model_config(config: dict[str, Any]) -> dict[str, Any]:
+    model_config = dict(config)
+    stack_config = dict(model_config["transformer_config"])
+    transformer_config = dict(stack_config["transformer"])
+    for name in ("attention_norm", "feedforward_norm", "deterministic"):
+        transformer_config.pop(name)
+    stack_config["transformer"] = transformer_config
+    model_config["transformer_config"] = stack_config
+    return model_config
+
+
+def _load_reference_weights(
+    model: _TimesFM3Model,
+    model_fixture: dict[str, Any],
+    recipe: dict[str, int],
+) -> None:
+    state = model.state_dict()
+    actual_state = [
+        {"key": key, "shape": list(tensor.shape)}
+        for key, tensor in sorted(state.items())
+    ]
+    assert actual_state == model_fixture["state"]
+
+    for index, key in enumerate(sorted(state)):
+        tensor = state[key]
+        values = (
+            (
+                torch.arange(tensor.numel(), device=tensor.device).reshape(
+                    tensor.shape
+                )
+                + recipe["offset_step"] * index
+            )
+            % recipe["modulus"]
+            - recipe["center"]
+        ) / recipe["divisor"]
+        state[key] = values.to(dtype=tensor.dtype)
+    model.load_state_dict(state, strict=True)
+
+
+def _golden_model(device: torch.device) -> _TimesFM3Model:
+    fixture = _reference_fixture()
+    model_fixture = fixture["internal"]
+    model = _TimesFM3Model(
+        **_model_config(model_fixture["config"]),
+        device=device,
+    ).eval()
+    _load_reference_weights(model, model_fixture, fixture["weight_recipe"])
+    return model
+
+
+@pytest.mark.parametrize("case_index", [0, 1])
+@withCUDA
+def test_internal_model_matches_pinned_upstream(
+    device: torch.device,
+    case_index: int,
+) -> None:
+    fixture = _reference_fixture()["internal"]["forward"]
+    inputs = fixture["inputs"]
+    model = _golden_model(device)
+    values = torch.tensor(inputs["values"], device=device)
+    masks = torch.tensor(inputs["masks"], device=device)
+    patch_is_target = torch.tensor(inputs["patch_is_target"], device=device)
+    patch_cpm_mask = inputs["patch_cpm_masks"][case_index]
+    cpm_mask = (
+        None
+        if patch_cpm_mask is None
+        else torch.tensor(patch_cpm_mask, device=device)
+    )
+
+    with torch.inference_mode():
+        actual = model(
+            values,
+            masks,
+            patch_is_target,
+            patch_cpm_mask=cpm_mask,
+        )["logits"]
+
+    expected = actual.new_tensor(fixture["outputs"][case_index])
+    torch.testing.assert_close(actual, expected)

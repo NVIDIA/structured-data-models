@@ -1,0 +1,324 @@
+{
+  "upstream": {
+    "repository": "https://github.com/google-research/timesfm",
+    "revision": "e31dadd84cb26bd5153fde6687502b8312e918fb"
+  },
+  "weight_recipe": {
+    "offset_step": 3,
+    "modulus": 19,
+    "center": 9,
+    "divisor": 32
+  },
+  "internal": {
+    "config": {
+      "input_patch_len": 2,
+      "output_patch_len": 4,
+      "quantiles": [
+        0.5
+      ],
+      "residual_block_config": {
+        "hidden_dims": 4,
+        "output_dims": 4,
+        "use_bias": false,
+        "activation": "relu"
+      },
+      "transformer_config": {
+        "num_layers": 1,
+        "transformer": {
+          "model_dims": 4,
+          "hidden_dims": 6,
+          "num_heads": 2,
+          "attention_norm": "rms",
+          "feedforward_norm": "rms",
+          "qk_norm": "rms",
+          "use_rope_seq": true,
+          "use_rope_var": false,
+          "use_bias": false,
+          "ff_activation": "relu",
+          "deterministic": true
+        }
+      },
+      "use_variate_attention": false,
+      "use_stitching": true,
+      "use_linear_detrending": true,
+      "use_frozen_running_stats": false
+    },
+    "state": [
+      {
+        "key": "output_head.bias",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "output_head.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "pre_transformer_resblock.hidden_layer.weight",
+        "shape": [
+          4,
+          12
+        ]
+      },
+      {
+        "key": "pre_transformer_resblock.output_layer.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "pre_transformer_resblock.residual_layer.weight",
+        "shape": [
+          4,
+          12
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.ff0.weight",
+        "shape": [
+          6,
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.ff1.weight",
+        "shape": [
+          4,
+          6
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.post_ff_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.post_seq_attn_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.pre_ff_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.pre_seq_attn_ln.weight",
+        "shape": [
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.key_ln.weight",
+        "shape": [
+          2
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.key_proj.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.out_proj.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.per_dim_scale.per_dim_scale",
+        "shape": [
+          2
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.query_ln.weight",
+        "shape": [
+          2
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.query_proj.weight",
+        "shape": [
+          4,
+          4
+        ]
+      },
+      {
+        "key": "transformer_stack.layers.0.seq_attn.value_proj.weight",
+        "shape": [
+          4,
+          4
+        ]
+      }
+    ],
+    "forward": {
+      "inputs": {
+        "values": [
+          [
+            [
+              [
+                1,
+                3
+              ],
+              [
+                0,
+                0
+              ],
+              [
+                0,
+                0
+              ]
+            ]
+          ]
+        ],
+        "masks": [
+          [
+            [
+              [
+                false,
+                false
+              ],
+              [
+                true,
+                true
+              ],
+              [
+                true,
+                true
+              ]
+            ]
+          ]
+        ],
+        "patch_is_target": [
+          [
+            [
+              true,
+              true,
+              true
+            ]
+          ]
+        ],
+        "patch_cpm_masks": [
+          null,
+          [
+            [
+              false,
+              true,
+              true
+            ]
+          ]
+        ]
+      },
+      "outputs": [
+        [
+          [
+            [
+              [
+                [
+                  1.7138645648956299
+                ],
+                [
+                  1.7143478393554688
+                ],
+                [
+                  1.7148311138153076
+                ],
+                [
+                  1.715314269065857
+                ]
+              ],
+              [
+                [
+                  1.692699670791626
+                ],
+                [
+                  1.7234890460968018
+                ],
+                [
+                  1.754278302192688
+                ],
+                [
+                  1.7850675582885742
+                ]
+              ],
+              [
+                [
+                  1.6920182704925537
+                ],
+                [
+                  1.7233555316925049
+                ],
+                [
+                  1.754692792892456
+                ],
+                [
+                  1.7860300540924072
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              [
+                [
+                  1.7138645648956299
+                ],
+                [
+                  1.7143478393554688
+                ],
+                [
+                  1.7148311138153076
+                ],
+                [
+                  1.715314269065857
+                ]
+              ],
+              [
+                [
+                  1.635363221168518
+                ],
+                [
+                  1.657575011253357
+                ],
+                [
+                  1.6797866821289062
+                ],
+                [
+                  1.7019984722137451
+                ]
+              ],
+              [
+                [
+                  1.6271485090255737
+                ],
+                [
+                  1.6457258462905884
+                ],
+                [
+                  1.6643033027648926
+                ],
+                [
+                  1.6828805208206177
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    }
+  }
+}
