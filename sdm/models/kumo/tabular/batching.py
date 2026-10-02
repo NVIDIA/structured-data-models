@@ -9,6 +9,7 @@ import torch
 from sdm import TableTensor, Task
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.model import KumoTabular, _KumoTabular
+from sdm.nn import InducedTransformerBlock
 
 
 def estimate_fit_batch_size(
@@ -42,13 +43,15 @@ def estimate_fit_batch_size(
     num_classes = (
         len(y.categorical.categories[0]) if y.categorical.size(-1) else 0
     )
-    workspace, cache = _row_bytes(
+    workspace, cache, member = _row_bytes(
         model=model,
         num_columns=num_columns,
         num_classes=num_classes,
         dtype=dtype,
     )
-    capacity = (memory_budget // 2) // max(num_rows * (workspace + cache), 1)
+    capacity = (memory_budget // 2) // max(
+        num_rows * (workspace + cache) + member, 1
+    )
     return max(1, min(num_estimators, capacity))
 
 
@@ -85,7 +88,7 @@ def estimate_predict_batch_size(
     num_classes = (
         len(y.categorical.categories[0]) if y.categorical.size(-1) else 0
     )
-    workspace, _ = _row_bytes(
+    workspace, _, _ = _row_bytes(
         model=model,
         num_columns=num_columns,
         num_classes=num_classes,
@@ -104,7 +107,7 @@ def _row_bytes(
     num_columns: int,
     num_classes: int,
     dtype: torch.dtype,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     task = Task.classification if num_classes else Task.regression
     network = cast(_KumoTabular, model.models[task])
     row = network.row_embedding
@@ -127,4 +130,11 @@ def _row_bytes(
     )
     # Fit projects all heads before retaining the smaller query KV heads.
     cache = tasks * element_size * 2 * layer.attn.q_dim * len(icl.layers)
-    return workspace, cache
+    # Fit also records each column block's key/value projections of its
+    # inducing points, per estimator rather than per row.
+    inducing = sum(
+        cast(InducedTransformerBlock, block).inducing_points.size(0)
+        for block in row.col_blocks
+    )
+    member = tasks * element_size * 2 * columns * inducing * row.channels
+    return workspace, cache, member

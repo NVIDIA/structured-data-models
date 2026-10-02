@@ -33,9 +33,9 @@ def _context(
 @pytest.mark.parametrize(
     ("size", "num_classes", "num_columns", "fit_size", "query_size"),
     [
-        ("small", 0, 30, 5, 620),
-        ("medium", 3, 30, 2, 868),
-        ("large", 10, 30, 2, 786),
+        ("small", 0, 30, 4, 620),
+        ("medium", 3, 30, 1, 868),
+        ("large", 10, 30, 1, 786),
         ("small", 11, 30, 1, 204),
         ("medium", 100, 30, 1, 75),
         ("large", 0, 500, 1, 101),
