@@ -35,6 +35,8 @@ class SDPA(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
+        dropout: Attention dropout probability during training. Disabled in
+            evaluation mode.
     """
 
     def __init__(
@@ -43,6 +45,8 @@ class SDPA(torch.nn.Module):
         num_key_value_heads: int | None = None,
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
+        *,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -57,6 +61,7 @@ class SDPA(torch.nn.Module):
         self.num_key_value_heads = num_key_value_heads
         self.query_scaling = query_scaling
         self.scale = scale
+        self.dropout = torch.nn.Dropout(dropout)
 
     def forward(
         self,
@@ -65,6 +70,8 @@ class SDPA(torch.nn.Module):
         value: Tensor,  # [..., KV, Hkv, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
+        *,
+        attn_bias: Tensor | None = None,  # [..., Hq, Q, KV]
     ) -> Tensor:  # [..., Q, Hq, C]
         r"""The forward pass.
 
@@ -81,6 +88,11 @@ class SDPA(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
+            attn_bias: Floating-point additive attention bias with shape
+                ``[..., Hq, Q, KV]`` and dtype matching ``query``. Batch,
+                head, and sequence dimensions may be broadcast.
+                May be combined with a boolean mask or valid key/value
+                lengths. Query scaling uses the mask or lengths, not the bias.
 
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
@@ -100,12 +112,16 @@ class SDPA(torch.nn.Module):
             raise ValueError("`seqused_key_value` must have dtype torch.int32")
         if attn_mask is not None and attn_mask.dtype != torch.bool:
             raise ValueError("`attn_mask` must have dtype torch.bool")
+        if attn_bias is not None and not attn_bias.is_floating_point():
+            raise ValueError("`attn_bias` must have a floating-point dtype")
 
         batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
         if seqused_key_value is not None:
             batch_shapes.append(seqused_key_value.size())
         if attn_mask is not None:
             batch_shapes.append(attn_mask.size()[:-2])
+        if attn_bias is not None:
+            batch_shapes.append(attn_bias.size()[:-3])
         batch_shape = torch.broadcast_shapes(*batch_shapes)
 
         if self.query_scaling is not None:
@@ -144,13 +160,21 @@ class SDPA(torch.nn.Module):
         if query.size(-2) != key.size(-2):
             enable_gqa = True
 
+        if attn_mask is not None:
+            attn_mask = attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
+        if attn_bias is not None:
+            attn_bias = attn_bias.expand(batch_shape + attn_bias.size()[-3:])
+            attn_bias = attn_bias.reshape(-1, *attn_bias.size()[-3:])
+            if attn_mask is not None:
+                attn_bias = attn_bias.masked_fill(~attn_mask, -torch.inf)
+            attn_mask = attn_bias
+
         out = F.scaled_dot_product_attention(
             query=query.transpose(-3, -2),  # [B, Hq, Q, C],
             key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
             value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
-            attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
-            if attn_mask is not None
-            else None,
+            attn_mask=attn_mask,
+            dropout_p=self.dropout.p if self.training else 0.0,
             enable_gqa=enable_gqa,
             scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
