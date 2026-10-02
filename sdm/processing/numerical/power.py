@@ -322,7 +322,10 @@ class PowerTransform(Processor, InvertibleMixin):
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
         low_precision = numerical.dtype in {torch.float16, torch.bfloat16}
-        if low_precision:
+        if low_precision and self.scale.dtype in {
+            torch.float16,
+            torch.bfloat16,
+        }:
             numerical = numerical.float()
         unscaled = numerical * self.scale + self.mean
         inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)

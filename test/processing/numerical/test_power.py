@@ -450,11 +450,20 @@ def test_power_transform_low_precision_matches_float32_work(
 
 
 @withCUDA
+@pytest.mark.parametrize(
+    "state_dtype", [None, torch.float16, torch.bfloat16, torch.float64]
+)
 def test_power_transform_half_inverse_stays_representable(
     device: torch.device,
+    state_dtype: torch.dtype | None,
 ) -> None:
     values = torch.linspace(-20000, 20000, 1024, device=device).half()[:, None]
     processor = PowerTransform().fit(TableTensor.from_tensor(values))
+    if state_dtype is not None:
+        processor.to(state_dtype)
+        restored = PowerTransform().to(device)
+        restored.load_state_dict(processor.state_dict())
+        processor = restored
     query = TableTensor.from_tensor(
         tensor=values.new_tensor([[8], [-8], [torch.nan]])
     )
