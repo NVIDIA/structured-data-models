@@ -13,7 +13,7 @@ from sdm import (
     NullableTensor,
     StringTensor,
 )
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, onlyMPS
 
 
 def test_init() -> None:
@@ -211,10 +211,7 @@ def test_empty_resolves_mps_device_index() -> None:
     assert tensor.device == torch.device("mps", 0)
 
 
-@pytest.mark.skipif(
-    not torch.backends.mps.is_available(),
-    reason="MPS not available",
-)
+@onlyMPS
 def test_empty_to_mps_in_inference_mode() -> None:
     tensor = ColumnarTensor((), size=(2, 3))
 
