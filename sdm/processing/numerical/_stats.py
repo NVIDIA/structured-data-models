@@ -7,6 +7,13 @@ import torch
 from torch import Tensor
 
 
+def _ndtri(x: Tensor) -> Tensor:
+    # MPS does not implement 'torch.special.ndtri', so use 'erfinv' instead.
+    if x.device.type == "mps":
+        return x.mul(2.0).sub_(1.0).erfinv_().mul_(math.sqrt(2.0))
+    return torch.special.ndtri(x)
+
+
 def _isfinite(x: Tensor) -> Tensor:
     # Equal to 'x.isfinite()', which allocates 'x.abs()' on the way.
     return x.gt(-math.inf).logical_and_(x.lt(math.inf))

@@ -40,6 +40,17 @@ def withCUDA(func: Callable) -> Callable:
     return pytest.mark.parametrize("device", devices)(func)
 
 
+def onlyMPS(func: Callable) -> Callable:
+    """Skip the test if MPS is not available."""
+    import pytest
+
+    func = pytest.mark.cuda(func)
+    return pytest.mark.skipif(
+        not torch.backends.mps.is_available(),
+        reason="MPS not available",
+    )(func)
+
+
 def onlyFullTest(func: Callable) -> Callable:
     r"""Skip the test if it is not a full test run."""
     import pytest

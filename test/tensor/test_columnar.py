@@ -13,7 +13,7 @@ from sdm import (
     NullableTensor,
     StringTensor,
 )
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, onlyMPS
 
 
 def test_init() -> None:
@@ -203,6 +203,22 @@ def test_empty_clone_preserves_device() -> None:
     assert type(out) is ColumnarTensor
     assert out.size() == tensor.size()
     assert out.device == tensor.device
+
+
+def test_empty_resolves_mps_device_index() -> None:
+    tensor = ColumnarTensor((), size=(2, 3), device="mps")
+
+    assert tensor.device == torch.device("mps", 0)
+
+
+@onlyMPS
+def test_empty_to_mps_in_inference_mode() -> None:
+    tensor = ColumnarTensor((), size=(2, 3))
+
+    with torch.inference_mode():
+        out = tensor.to(torch.device("mps"))
+
+    assert out.device == torch.empty(0, device="mps").device
 
 
 @onlyCUDA

@@ -10,8 +10,7 @@ import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import KumoTabular
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
-from sdm.testing import onlyCUDA
-
+from sdm.testing import onlyCUDA, onlyMPS
 
 def _build(
     task: Literal["classification", "regression"],
@@ -350,3 +349,33 @@ def test_estimator_batching_many_classes(
     actual = model.predict(x_query)
     assert actual.columns == expected.columns
     torch.testing.assert_close(actual.numerical, expected.numerical)
+
+
+@onlyMPS
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_default_recipe_on_mps(
+    task: Literal["classification", "regression"],
+) -> None:
+    model = _build(task, "small").to("mps")
+    if task == "classification":
+        x_context, x_query = _features()
+        target = _cls_target()
+    else:
+        x_context, x_query = _features(Stype.numerical)
+        target = _reg_target()
+
+    x_context, x_query, target = (
+        x_context.to("mps"),
+        x_query.to("mps"),
+        target.to("mps"),
+    )
+
+    out1 = model(x_context, target, x_query, num_estimators=4)
+    assert out1.device == torch.device("mps", 0)
+    assert out1.numerical.isfinite().all()
+
+    model.fit(x_context, target, num_estimators=4)
+    out2 = model.predict(x_query)
+    assert out2.device == torch.device("mps", 0)
+    assert out2.size() == out1.size()
+    assert out2.numerical.isfinite().all()

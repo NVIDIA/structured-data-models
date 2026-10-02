@@ -19,7 +19,6 @@ def test_standardize_fit_transform_and_inverse_round_trip(
                 [3.0, 2.0, 7.0],
                 [5.0, 2.0, 9.0],
             ],
-            dtype=torch.float64,
             device=device,
         )
     )
@@ -31,7 +30,6 @@ def test_standardize_fit_transform_and_inverse_round_trip(
             [0.0, 0.0, 0.0],
             [(3.0 / 2.0) ** 0.5, 0.0, (3.0 / 2.0) ** 0.5],
         ],
-        dtype=torch.float64,
         device=device,
     )
 
@@ -80,7 +78,7 @@ def test_standardize(device: torch.device) -> None:
 def test_standardize_ignores_non_finite_values_in_many_rows(
     device: torch.device,
 ) -> None:
-    inp = torch.randn(2, 600, 3, dtype=torch.float64, device=device)
+    inp = torch.randn(2, 600, 3, device=device)
     inp[inp > 1.0] = float("nan")
     inp[inp < -1.5] = float("inf")
 
@@ -130,19 +128,3 @@ def test_standardize_fits_leading_batches_independently(
         processor.inverse_transform(out).numerical,
         query,
     )
-
-
-def test_standardize_computes_in_float64() -> None:
-    inp = torch.tensor(
-        [[1e8], [1e8 + 8], [1e8 + 8]],
-        dtype=torch.float32,
-    )
-
-    output = Standardize().fit_transform(TableTensor.from_tensor(inp))
-
-    expected = torch.tensor(
-        [[-(2**0.5)], [2**-0.5], [2**-0.5]],
-        dtype=torch.float32,
-    )
-    assert output.numerical.dtype == inp.dtype
-    torch.testing.assert_close(output.numerical, expected)
