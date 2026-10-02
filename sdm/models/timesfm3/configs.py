@@ -72,3 +72,16 @@ class TransformerConfig:
     causal_attention: bool = True
     use_memory_efficient_attention: bool = True
     use_sdpa: bool = True
+
+
+@dataclass(frozen=True)
+class StackedTransformersConfig:
+    """Configure a stack of TimesFM-3 mixing transformers.
+
+    Args:
+        num_layers: Number of transformer layers.
+        transformer: Configuration shared by every layer.
+    """
+
+    num_layers: int
+    transformer: TransformerConfig
