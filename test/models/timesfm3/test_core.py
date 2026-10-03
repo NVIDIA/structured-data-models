@@ -44,6 +44,7 @@ def _internal_model(
     *,
     use_iterative_cpm_revin: bool = True,
     use_linear_detrending: bool = True,
+    use_stitching: bool = True,
 ) -> _TimesFM3Model:
     return _TimesFM3Model(
         input_patch_len=2,
@@ -53,6 +54,7 @@ def _internal_model(
         transformer_config=_transformer_config(),
         use_iterative_cpm_revin=use_iterative_cpm_revin,
         use_linear_detrending=use_linear_detrending,
+        use_stitching=use_stitching,
         device=device,
         dtype=dtype,
     )
@@ -526,3 +528,89 @@ def test_internal_model_matches_pinned_upstream(
 
     expected = actual.new_tensor(fixture["outputs"][case_index])
     torch.testing.assert_close(actual, expected)
+
+
+@withCUDA
+def test_internal_model_decode_without_stitching_matches_pinned_upstream(
+    device: torch.device,
+) -> None:
+    reference = _reference_fixture()
+    fixture = reference["internal"]["decode_without_stitching"]
+    inputs = fixture["inputs"]
+    config = {
+        **reference["internal"]["config"],
+        **fixture["config_overrides"],
+    }
+    model = _TimesFM3Model(**_model_config(config), device=device).eval()
+    _load_reference_weights(
+        model, reference["internal"], reference["weight_recipe"]
+    )
+    result = model.decode(
+        torch.tensor(inputs["target"], device=device),
+        horizon=inputs["horizon"],
+        past_only_covariates=torch.tensor(
+            inputs["past_only_covariates"], device=device
+        ),
+        past_future_covariates=torch.tensor(
+            inputs["past_future_covariates"], device=device
+        ),
+        past_only_mask=torch.tensor(inputs["past_only_mask"], device=device),
+        past_future_mask=torch.tensor(
+            inputs["past_future_mask"], device=device
+        ),
+        mask=torch.tensor(inputs["mask"], device=device),
+        return_aux_outputs=True,
+    )
+
+    assert isinstance(result, tuple)
+    actual, auxiliary = result
+    expected = actual.new_tensor(fixture["output"])
+    torch.testing.assert_close(actual, expected)
+    assert actual.shape == (1, 3, 6, 1)  # Covariates override horizon=99.
+    assert auxiliary["logits"].shape == (1, 3, 7, 4, 1)
+    assert auxiliary["__call__:resblock_input"].shape == (1, 3, 7, 12)
+
+
+@withCUDA
+def test_internal_model_decode_pads_target_only_horizon(
+    device: torch.device,
+) -> None:
+    model = _internal_model(
+        device, use_stitching=False, use_linear_detrending=False
+    ).eval()
+    forecast = model.decode(torch.ones(1, 1, 4, device=device), horizon=5)
+
+    assert isinstance(forecast, torch.Tensor)
+    assert forecast.shape == (1, 1, 5, 3)
+    assert torch.isfinite(forecast).all()
+
+
+def test_internal_model_decode_rejects_nonpositive_horizon() -> None:
+    model = _golden_model(torch.device("cpu"))
+
+    with pytest.raises(ValueError, match="horizon > 0"):
+        model.decode(torch.zeros(1, 1, 2))
+
+
+@withCUDA
+def test_internal_decode_supports_autograd(device: torch.device) -> None:
+    model = _internal_model(
+        device,
+        use_linear_detrending=False,
+        use_stitching=False,
+    ).train()
+    target = torch.arange(
+        1,
+        9,
+        dtype=torch.float32,
+        device=device,
+    ).reshape(1, 1, 8)
+    target.requires_grad_()
+
+    forecast = model.decode(target, horizon=3)
+    assert isinstance(forecast, torch.Tensor)
+    forecast.sum().backward()
+
+    assert target.grad is not None
+    assert torch.isfinite(target.grad).all()
+    assert any(parameter.grad is not None for parameter in model.parameters())
