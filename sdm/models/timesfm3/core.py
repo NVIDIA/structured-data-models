@@ -22,10 +22,16 @@ from collections.abc import Sequence
 from typing import Any
 
 import torch
+from torch import Tensor
 from torch.nn import Linear
 
 from sdm.models.timesfm3.dense import ResidualBlock
 from sdm.models.timesfm3.transformer import StackedMixingTransformer
+from sdm.models.timesfm3.util import (
+    get_output_patch_via_roll,
+    get_running_stats,
+    revin,
+)
 
 
 class _TimesFM3Model(torch.nn.Module):
@@ -149,4 +155,100 @@ class _TimesFM3Model(torch.nn.Module):
             bias=True,
             device=device,
             dtype=dtype,
+        )
+
+    def _preprocess(
+        self,
+        values: Tensor,
+        masks: Tensor,
+        patch_is_target: Tensor,
+        freeze_after: int | None = None,
+        patch_cpm_mask: Tensor | None = None,
+    ) -> tuple[
+        Tensor,
+        Tensor,
+        Tensor,
+        tuple[Tensor, Tensor],
+        Tensor,
+    ]:
+        """Normalize patches and build transformer inputs.
+
+        Running statistics use the supplied masks before CPM hides targets.
+        Forecast decoding masks unknown future targets before this step.
+
+        Args:
+            values: Input patches with shape ``[B, V, N, P]``.
+            masks: Invalid-value mask with shape ``[B, V, N, P]``.
+            patch_is_target: Target indicator with shape ``[B, V, N]``.
+            freeze_after: Last patch whose mean and standard deviation can
+                update, or ``None`` to keep updating. Counts remain cumulative.
+            patch_cpm_mask: CPM mask with shape ``[B, N]``, or ``None``. Only
+                target values are hidden at masked positions.
+
+        Returns:
+            Residual input ``[B, V, N, 2 * (P + O)]``, transformer embeddings
+            ``[B, V, N, D]``, patch mask ``[B, V, N]``, running mean and
+            standard deviation, and counts (each ``[B, V, N]``). Here ``O``
+            is the output patch length and ``D`` is the transformer width.
+        """
+        running_n, running_mean, running_std = get_running_stats(
+            values,
+            masks,
+        )
+        if freeze_after is not None:
+            num_patches = values.shape[2]
+            if 0 <= freeze_after < num_patches - 1:
+                running_mean[:, :, freeze_after + 1 :] = running_mean[
+                    :, :, freeze_after : freeze_after + 1
+                ]
+                running_std[:, :, freeze_after + 1 :] = running_std[
+                    :, :, freeze_after : freeze_after + 1
+                ]
+
+        if patch_cpm_mask is not None:
+            cpm_mask = patch_cpm_mask[:, None, :, None]
+            masks = masks | (cpm_mask & patch_is_target.unsqueeze(-1))
+
+        normalized_values = revin(
+            values,
+            running_mean,
+            running_std,
+        )
+        normalized_values = torch.where(masks, 0.0, normalized_values)
+
+        future_values, wrap_mask = get_output_patch_via_roll(
+            values,
+            self.rolls,
+        )
+        future_values = revin(
+            future_values,
+            running_mean,
+            running_std,
+        )
+        future_masks, _ = get_output_patch_via_roll(masks, self.rolls)
+        future_masks = future_masks | patch_is_target.unsqueeze(-1) | wrap_mask
+        future_values = torch.where(future_masks, 0.0, future_values)
+
+        values_with_future = torch.cat(
+            [normalized_values, future_values],
+            dim=-1,
+        )
+        masks_with_future = torch.cat([masks, future_masks], dim=-1)
+        input_dtype = self.pre_transformer_resblock.hidden_layer.weight.dtype
+        residual_input = torch.cat(
+            [
+                values_with_future.to(input_dtype),
+                masks_with_future.to(input_dtype),
+            ],
+            dim=-1,
+        )
+        transformer_input = self.pre_transformer_resblock(residual_input)
+        patch_mask = masks_with_future.all(dim=-1)
+
+        return (
+            residual_input,
+            transformer_input,
+            patch_mask,
+            (running_mean, running_std),
+            running_n,
         )
