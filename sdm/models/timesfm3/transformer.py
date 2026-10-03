@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 import torch
 from torch import Tensor
-from torch.nn import Identity, Linear, ReLU, RMSNorm, Sequential
+from torch.nn import Identity, Linear, ModuleList, ReLU, RMSNorm, Sequential
 
 from sdm.nn import Attention, RotaryEmbedding, SoftplusScale
 
@@ -250,3 +250,85 @@ class MixingTransformer(torch.nn.Module):
 
         ff_output = self.ff1(self.activation(self.ff0(self.pre_ff_ln(hidden))))
         return self.post_ff_ln(ff_output) + hidden, seq_attn_mask
+
+
+class StackedMixingTransformer(torch.nn.Module):
+    """Apply a stack of TimesFM-3 mixing transformer layers.
+
+    Args:
+        num_layers: Number of mixing transformer layers.
+        model_dims: Input and output width.
+        hidden_dims: Feed-forward hidden width.
+        num_heads: Number of attention heads.
+        qk_norm: Query and key normalization.
+        use_bias: Whether linear layers have biases.
+        use_rope_seq: Whether temporal attention uses rotary embeddings.
+        use_rope_var: Whether variate attention uses rotary embeddings.
+        use_variate_attention: Whether to attend across variates.
+        causal_attention: Whether temporal attention is causal.
+        use_memory_efficient_attention: Whether to retain TimesFM's
+            square-root head-dimension logit scaling.
+        device: Device on which to create parameters and buffers.
+        dtype: Data type of parameters.
+    """
+
+    def __init__(
+        self,
+        num_layers: int,
+        model_dims: int,
+        hidden_dims: int,
+        num_heads: int,
+        qk_norm: Literal["rms", "none"],
+        use_bias: bool,
+        use_rope_seq: bool,
+        use_rope_var: bool,
+        use_variate_attention: bool = True,
+        causal_attention: bool = True,
+        use_memory_efficient_attention: bool = True,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.layers = ModuleList(
+            [
+                MixingTransformer(
+                    model_dims=model_dims,
+                    hidden_dims=hidden_dims,
+                    num_heads=num_heads,
+                    qk_norm=qk_norm,
+                    use_bias=use_bias,
+                    use_rope_seq=use_rope_seq,
+                    use_rope_var=use_rope_var,
+                    use_variate_attention=use_variate_attention,
+                    causal_attention=causal_attention,
+                    use_memory_efficient_attention=(
+                        use_memory_efficient_attention
+                    ),
+                    device=device,
+                    dtype=dtype,
+                )
+                for _ in range(num_layers)
+            ]
+        )
+
+    def forward(
+        self,
+        input_embeddings: Tensor,
+        patch_mask: Tensor,
+    ) -> tuple[Tensor, list[Tensor]]:
+        """Mix embeddings and return every layer's temporal attention mask.
+
+        Args:
+            input_embeddings: Patch embeddings with shape
+                ``[B, V, N, D]``.
+            patch_mask: Masked patches with shape ``[B, V, N]``.
+
+        Returns:
+            Mixed embeddings and temporal attention masks from every layer.
+        """
+        output = input_embeddings
+        attn_masks = []
+        for layer in self.layers:
+            output, layer_mask = layer(output, patch_mask)
+            attn_masks.append(layer_mask)
+        return output, attn_masks
