@@ -12,6 +12,122 @@ from sdm.processing import AlignCategories
 from sdm.testing import withCUDA
 
 
+@withCUDA
+@pytest.mark.parametrize("sort_by", ["code", "frequency", "value"])
+def test_align_categories_batched_shape_frequency_and_state(
+    device: torch.device,
+    sort_by: Literal["code", "frequency", "value"],
+) -> None:
+    context = _batched_table(
+        torch.tensor(
+            [[0, 0, 1, 1], [1, 1, 2, -1]],
+            dtype=torch.int32,
+            device=device,
+        ).unsqueeze(-1),
+        categories=("red", "blue", "rare"),
+    )
+    query = _batched_table(
+        torch.tensor(
+            [[[0], [1], [2]]], dtype=torch.int32, device=device
+        ).expand(2, -1, -1),
+        categories=("blue", "red", "rare"),
+    )
+    processor = AlignCategories(sort_by=sort_by, min_frequency=2)
+    fitted = processor.fit_transform(context)
+    output = processor.transform(query)
+    categories = ["red", "blue"] if sort_by == "code" else ["blue", "red"]
+    red, blue = categories.index("red"), categories.index("blue")
+    assert fitted.shape == context.shape
+    assert output.shape == query.shape
+    assert output.categorical.categories[0].tolist() == categories
+    assert fitted.categorical.code.squeeze(-1).tolist() == [
+        [red, red, blue, blue],
+        [blue, blue, -1, -1],
+    ]
+    assert output.categorical.code.tolist() == [
+        [[blue], [red], [-1]],
+        [[blue], [-1], [-1]],
+    ]
+    restored = AlignCategories(sort_by=sort_by, min_frequency=2)
+    restored.load_state_dict(processor.state_dict())
+    assert restored.transform(query).equal(output)
+    processor.fit(query[0])
+    assert (
+        processor.transform(query[0]).categorical.code.tolist() == [[-1]] * 3
+    )
+
+
+@pytest.mark.parametrize("shape", [(0, 3, 1), (2, 0, 1)])
+def test_align_categories_empty_batches(shape: tuple[int, int, int]) -> None:
+    table = _batched_table(
+        torch.empty(shape, dtype=torch.int32),
+        categories=("red", "blue"),
+    )
+    assert AlignCategories().fit_transform(table).shape == table.shape
+
+
+def test_align_categories_unbatched_fit_broadcasts_to_query_batches() -> None:
+    context = _table([[0], [1]], categories=(("red", "blue"),))
+    query = _batched_table(
+        torch.tensor([[[0], [1], [2]]]).expand(3, -1, -1),
+        categories=("blue", "red", "unseen"),
+    )
+    output = AlignCategories().fit(context).transform(query)
+    assert output.shape == query.shape
+    assert output.categorical.code.tolist() == [[[1], [0], [-1]]] * 3
+
+
+def _batched_table(
+    codes: torch.Tensor,
+    *,
+    categories: tuple[str, ...],
+) -> TableTensor:
+    return TableTensor(
+        categorical=CategoricalTensor(
+            code=codes,
+            categories=(
+                StringTensor.from_list(categories, device=codes.device),
+            ),
+        ),
+    )
+
+
+@withCUDA
+def test_align_categories_broadcasts_multiple_batch_dimensions(
+    device: torch.device,
+) -> None:
+    context = _batched_table(
+        torch.tensor([0, 0, 1, 1], device=device).view(1, 2, 2, 1),
+        categories=("red", "blue", "green"),
+    )
+    query = _batched_table(
+        torch.arange(3, device=device).view(1, 1, 3, 1).expand(3, 2, -1, -1),
+        categories=("red", "blue", "green"),
+    )
+    processor = AlignCategories().fit(context)
+    assert processor.transform(context).shape == context.shape
+    output = processor.transform(query)
+    assert output.shape == query.shape
+    assert (
+        output.categorical.code.squeeze(-1).tolist()
+        == [[[0, -1, -1], [-1, 1, -1]]] * 3
+    )
+
+
+def test_align_categories_rejects_incompatible_batch_shape() -> None:
+    context = _batched_table(
+        torch.tensor([[[0]], [[1]]], dtype=torch.int32),
+        categories=("red", "blue"),
+    )
+    query = _batched_table(
+        torch.tensor([[[0]], [[1]], [[0]]], dtype=torch.int32),
+        categories=("red", "blue"),
+    )
+
+    with pytest.raises(ValueError, match="fitted batch shape must broadcast"):
+        AlignCategories().fit(context).transform(query)
+
+
 def _table(
     values: list[list[int]],
     *,
