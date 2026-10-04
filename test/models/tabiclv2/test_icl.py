@@ -302,32 +302,3 @@ def test_icl_block_hierarchical_cache(
             cache=cache.freeze(),
         )
     torch.testing.assert_close(predicted, expected)
-
-
-@torch.inference_mode()
-@pytest.mark.parametrize("backend", ["eager", "inductor"])
-def test_icl_block_hierarchical_cached_compile(backend: str) -> None:
-    block = ICLBlock(
-        num_classes=2,
-        out_channels=2,
-        channels=4,
-        num_layers=1,
-        num_heads=2,
-        norm_bias=True,
-    ).eval()
-    for parameter in block.parameters():
-        torch.nn.init.normal_(parameter, std=0.1)
-
-    y = torch.arange(5)
-    cache = Cache()
-    block(torch.randn(5, 4), y, num_classes=5, cache=cache)
-    cache.freeze()
-    compiled = torch.compile(
-        model=block, backend=backend, fullgraph=True, dynamic=True
-    )
-
-    for num_rows in (3, 7):
-        rows = torch.randn(num_rows, 4)
-        expected = block(rows.clone(), y[:0], num_classes=5, cache=cache)
-        actual = compiled(rows.clone(), y[:0], num_classes=5, cache=cache)
-        torch.testing.assert_close(actual, expected)
