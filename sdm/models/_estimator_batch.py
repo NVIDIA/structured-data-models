@@ -72,9 +72,7 @@ def plan_estimator_batches(
                 and i - start == estimator_batch_size
             )
         ):
-            batches.append(
-                EstimatorBatch(member_ids=tuple(range(start, i)))
-            )
+            batches.append(EstimatorBatch(member_ids=tuple(range(start, i))))
             start = i
         key = member_key
 
