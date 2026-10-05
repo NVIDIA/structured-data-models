@@ -20,33 +20,9 @@ from collections import OrderedDict
 from typing import Any, Literal
 
 import torch
-from torch import Tensor
 from torch.nn import Identity, RMSNorm, Sequential
 
 from sdm.nn import Attention, RotaryEmbedding, SoftplusScale
-
-
-def make_attn_mask(patch_mask: Tensor, causal: bool = True) -> Tensor:
-    """Create an attention mask in which ``True`` permits attention.
-
-    Args:
-        patch_mask: Masked patches with shape ``[B, N]``.
-        causal: Whether queries may attend only to preceding positions.
-
-    Returns:
-        Boolean mask with shape ``[B, 1, N, N]`` when causal and broadcastable
-        shape ``[B, 1, 1, N]`` otherwise.
-    """
-    mask = ~patch_mask[:, None, None, :]
-    if not causal:
-        return mask
-    causal_mask = torch.ones(
-        patch_mask.size(1),
-        patch_mask.size(1),
-        dtype=torch.bool,
-        device=patch_mask.device,
-    ).tril()
-    return causal_mask[None, None] & mask
 
 
 class TimesFM3Attention(Attention):

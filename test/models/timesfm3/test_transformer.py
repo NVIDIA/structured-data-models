@@ -7,30 +7,9 @@ import pytest
 import torch
 from torch.nn import Sequential
 
-from sdm.models.timesfm3.transformer import (
-    TimesFM3Attention,
-    make_attn_mask,
-)
+from sdm.models.timesfm3.transformer import TimesFM3Attention
 from sdm.nn import RotaryEmbedding
 from sdm.testing import withCUDA
-
-
-@withCUDA
-def test_make_attn_mask(device: torch.device) -> None:
-    patch_mask = torch.tensor(
-        [[True, False, False], [False, True, False]], device=device
-    )
-    mask = make_attn_mask(patch_mask)
-    causal = torch.ones(3, 3, dtype=torch.bool, device=device).tril()
-    expected = causal[None, None] & ~patch_mask[:, None, None, :]
-    torch.testing.assert_close(mask, expected)
-
-
-@withCUDA
-def test_make_attn_mask_noncausal(device: torch.device) -> None:
-    patch_mask = torch.tensor([[True, False, False]], device=device)
-    mask = make_attn_mask(patch_mask, causal=False)
-    torch.testing.assert_close(mask, ~patch_mask[:, None, None, :])
 
 
 def _set_identity_projections(attention: TimesFM3Attention) -> None:
@@ -109,7 +88,9 @@ def test_attention_sdpa_fully_masked(device: torch.device) -> None:
     inputs = torch.ones(2, 3, 8, device=device, dtype=torch.float16)
     patch_mask = torch.tensor([[True, False, False]] * 2, device=device)
 
-    output = attention(inputs, attn_mask=make_attn_mask(patch_mask).squeeze(1))
+    causal_mask = torch.ones(3, 3, dtype=torch.bool, device=device).tril()
+    attn_mask = causal_mask[None] & ~patch_mask[:, None, :]
+    output = attention(inputs, attn_mask=attn_mask)
 
     torch.testing.assert_close(output[:, 0], torch.zeros_like(output[:, 0]))
     assert output[:, 1:].abs().sum() > 0
@@ -136,7 +117,9 @@ def test_attention_matches_google_reference(
     )
     patch_mask = torch.tensor([[False, True, False]], device=device)
 
-    output = attention(inputs, attn_mask=make_attn_mask(patch_mask).squeeze(1))
+    causal_mask = torch.ones(3, 3, dtype=torch.bool, device=device).tril()
+    attn_mask = causal_mask[None] & ~patch_mask[:, None, :]
+    output = attention(inputs, attn_mask=attn_mask)
 
     # Generated with google-research/timesfm at e31dadd84cb26bd5.
     expected_last = {
