@@ -122,8 +122,9 @@ def revin(
         std = std.unsqueeze(-1)
 
     if reverse:
-        return x * sigma + mu
-    return (x - mu) / _make_safe_for_division(sigma)
+        return x * std + mean
+
+    return (x - mean) / torch.where(std < 1e-6, 1.0, std)
 
 
 def get_output_patch_via_roll(
@@ -200,6 +201,3 @@ def stitch_patches(
     )
     tail = patch_preds[:, :, -1, patch_len:, :]
     return torch.cat((first, middle, tail), dim=2)
-        return x * std + mean
-
-    return (x - mean) / torch.where(std < 1e-6, 1.0, std)

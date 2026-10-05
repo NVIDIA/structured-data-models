@@ -3,6 +3,7 @@
 
 import math
 
+import pytest
 import torch
 
 from sdm.models.timesfm3.util import (
@@ -82,6 +83,9 @@ def test_revin_near_zero_std(device: torch.device) -> None:
     x = torch.tensor([[[2.0, 3.0]]], device=device)
     mean = torch.tensor([[2.0]], device=device)
     std = torch.tensor([[1e-7]], device=device)
+
+    out = revin(x, mean, std)
+    torch.testing.assert_close(out, out.new_tensor([[[0.0, 1.0]]]))
 
 
 @withCUDA
