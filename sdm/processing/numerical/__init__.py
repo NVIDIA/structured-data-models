@@ -11,6 +11,7 @@ from sdm.processing.numerical.clip_soft import ClipSoft
 from sdm.processing.numerical.impute import ImputeMean
 from sdm.processing.numerical.power import PowerTransform
 from sdm.processing.numerical.quantile import QuantileTransform
+from sdm.processing.numerical.rank_gaussian import RankGaussian
 from sdm.processing.numerical.standardize import Standardize
 from sdm.processing.numerical.robust_scale import RobustScale
 from sdm.processing.numerical.flip_sign import FlipSign
@@ -27,6 +28,7 @@ __all__ = [
     "ImputeMean",
     "PowerTransform",
     "QuantileTransform",
+    "RankGaussian",
     "Standardize",
     "RobustScale",
     "FlipSign",

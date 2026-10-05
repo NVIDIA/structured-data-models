@@ -158,7 +158,8 @@ class KumoTabular(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Tabular",
                 filename=filename,
-                revision="v1.0.0",
+                revision="v1.0.1",
+                config_filename="config.json",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
             model.load_state_dict(ckpt, assign=True)
@@ -223,6 +224,7 @@ class KumoTabular(ICLModel):
             x=x,
             y=y,
             num_classes=len(classes),
+            num_members=x.size(0) if x.dim() > 2 else 1,
             cache=cache,
             generator=generator,
             categorical_mask=categorical_mask,

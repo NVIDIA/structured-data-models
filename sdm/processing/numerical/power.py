@@ -8,7 +8,10 @@ from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
-from sdm.processing.numerical._stats import _constant_feature_mask
+from sdm.processing.numerical._stats import (
+    _constant_feature_mask,
+    _isfinite,
+)
 
 # Keep GPU execution batched; adaptive per-column stopping would resynchronize.
 # For float32 overflow-safe bounds, 44 golden steps reaches ~1.48e-8.
@@ -68,7 +71,7 @@ def _yeojohnson_inverse_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
 
 def _yeojohnson_bounds(inp: Tensor) -> tuple[Tensor, Tensor]:
     missing = inp.isnan()
-    max_abs = inp.abs().nan_to_num(nan=0.0).amax(dim=-2, keepdim=True)
+    max_abs = inp.abs().nan_to_num_(nan=0.0).amax(dim=-2, keepdim=True)
     log1p_max_x = (20 * max_abs).log1p()
     log1p_max_x = torch.where(
         max_abs == 0,
@@ -124,8 +127,9 @@ def _yeojohnson_log_likelihood(
         exponents=exponents,
         out=transformed,
     )
-    mean = transformed.nanmean(dim=-2, keepdim=True)
-    variance = transformed.sub_(mean).square_().nanmean(dim=-2, keepdim=True)
+    mean = transformed.nansum(dim=-2, keepdim=True).div_(count)
+    variance = transformed.sub_(mean).square_().nansum(dim=-2, keepdim=True)
+    variance /= count
     tiny = torch.finfo(inp.dtype).tiny
     valid = variance.isfinite() & (variance >= tiny)
     loglike = variance.log_().mul_(-count / 2)
@@ -139,16 +143,16 @@ def _optimize_lambdas(
     *,
     count: Tensor,
 ) -> Tensor:
+    left, right = _yeojohnson_bounds(inp)
+    left = left.masked_fill(constant_features, 1.0)
+    right = right.masked_fill(constant_features, 1.0)
+
     # Reuse full-table workspaces throughout the golden-section search.
     magnitude_log = inp.abs().log1p_()
     positive = inp >= 0
     log_jacobian = magnitude_log.copysign(inp).nansum(dim=-2, keepdim=True)
     exponents = torch.empty_like(inp)
     transformed = torch.empty_like(inp)
-
-    left, right = _yeojohnson_bounds(inp)
-    left = left.masked_fill(constant_features, 1.0)
-    right = right.masked_fill(constant_features, 1.0)
 
     invphi = (math.sqrt(5) - 1) / 2
     span = (right - left).mul_(invphi)
@@ -252,14 +256,13 @@ class PowerTransform(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        finite = table.numerical.isfinite()
+        finite = _isfinite(table.numerical)
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
-        count = finite.sum(dim=-2, keepdim=True)
+        count = finite.sum(dim=-2, keepdim=True).clamp_(min=1)
 
-        mean = finite_or_nan.nanmean(-2, keepdim=True)
-        mean.masked_fill_(mean.isnan(), 0.0)
-        var = (finite_or_nan - mean).square().nanmean(-2, keepdim=True)
-        var.masked_fill_(var.isnan(), 0.0)
+        mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
+        var = finite_or_nan.sub(mean).square_().nansum(-2, keepdim=True)
+        var /= count
         constant_features = _constant_feature_mask(
             var,
             mean,
@@ -283,10 +286,10 @@ class PowerTransform(Processor, InvertibleMixin):
 
         if self.standardize:
             transformed = _yeojohnson_transform(finite_or_nan, self.lambdas)
-            mean = transformed.nanmean(dim=-2, keepdim=True)
-            mean.masked_fill_(mean.isnan(), 0.0)
-            var = (transformed - mean).square().nanmean(dim=-2, keepdim=True)
-            var.masked_fill_(var.isnan(), 0.0)
+            del finite_or_nan
+            mean = transformed.nansum(dim=-2, keepdim=True).div_(count)
+            var = transformed.sub_(mean).square_().nansum(-2, keepdim=True)
+            var /= count
             scale = var.sqrt()
             scale[_constant_feature_mask(var, mean, count)] = 1.0
             self.mean = mean
@@ -312,7 +315,7 @@ class PowerTransform(Processor, InvertibleMixin):
 
         # Above the fitted upper bound the inverse diverges, either to
         # infinity or, past the asymptote, to NaN.
-        diverged = ~inverse.isfinite() & ~unscaled.isnan()
+        diverged = ~_isfinite(inverse) & ~unscaled.isnan()
         return table.replace_blocks(
             numerical=torch.where(
                 diverged,

@@ -180,21 +180,6 @@ class DropConstantColumns(EnsembleProcessor):
                 "ensemble members before transform."
             )
 
-        if sum(
-            group.size(0) for group in ensemble_table._iter_groups()
-        ) == len(ensemble_table):
-            tables = [
-                self._select_columns(
-                    ensemble_table[member_id],
-                    kept_indices,
-                )
-                for member_id, kept_indices in enumerate(self._kept_indices)
-            ]
-            return ensemble_table.replace_tables(
-                tables=tables,
-                member_table_ids=range(len(ensemble_table)),
-            )
-
         member_ids_by_kept_indices: dict[tuple[int, ...], list[int]] = {}
         for member_id, kept_indices in enumerate(self._kept_indices):
             member_ids_by_kept_indices.setdefault(kept_indices, []).append(
@@ -208,6 +193,21 @@ class DropConstantColumns(EnsembleProcessor):
                     self._select_columns(group, kept_indices)
                     for group in ensemble_table._iter_groups()
                 ]
+            )
+
+        if sum(
+            group.size(0) for group in ensemble_table._iter_groups()
+        ) == len(ensemble_table):
+            tables = [
+                self._select_columns(
+                    ensemble_table[member_id],
+                    kept_indices,
+                )
+                for member_id, kept_indices in enumerate(self._kept_indices)
+            ]
+            return ensemble_table.replace_tables(
+                tables=tables,
+                member_table_ids=range(len(ensemble_table)),
             )
 
         outputs: dict[tuple[int, ...], EnsembleTable] = {}
