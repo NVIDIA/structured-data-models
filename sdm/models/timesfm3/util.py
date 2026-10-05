@@ -96,54 +96,32 @@ def get_running_stats(
         torch.stack(means, dim=-1),
         torch.stack(stds, dim=-1),
     )
-  
+
+
 def revin(
     x: Tensor,
-    mu: Tensor,
-    sigma: Tensor,
+    mean: Tensor,
+    std: Tensor,
     reverse: bool = False,
 ) -> Tensor:
-    r"""Apply the statistical transform described by the `RevIN paper`_.
-
-    This helper uses supplied statistics and omits RevIN's learnable affine
-    transformation.
+    r"""Apply the reversible instance normalization from the
+    `"Reversible Instance Normalization for Accurate Time-Series Forecasting
+    against Distribution Shift" <https://openreview.net/forum?id=cGDAkQo1C0p>`_
+    paper.
 
     Args:
-        x: Input values with shape ``[..., D]`` or ``[..., D, Q]``, where
-            ``D`` is the number of values and ``Q`` is the optional number of
-            prediction channels.
-        mu: Means with one or two fewer dimensions than ``x``.
-        sigma: Standard deviations with the same shape as ``mu``.
-        reverse: Whether to denormalize instead of normalize.
-
-    Returns:
-        Transformed values with the same shape as ``x``.
-
-    .. _RevIN paper: https://openreview.net/forum?id=cGDAkQo1C0p
-    """
-    if mu.shape != sigma.shape:
-        raise ValueError(
-            "mu and sigma must have the same shape, got "
-            f"{mu.shape} and {sigma.shape}."
-        )
-
-    if mu.dim() not in (x.dim() - 1, x.dim() - 2):
-        raise ValueError(
-            f"Unsupported shapes for x and mu: {x.shape}, {mu.shape}."
-        )
-    if mu.shape != x.shape[: mu.dim()]:
-        raise ValueError(
-            "mu and sigma must match the leading dimensions of x, got "
-            f"x.shape={x.shape} and stats shape={mu.shape}."
-        )
-
-    if mu.dim() == x.dim() - 1:
-        mu = mu.unsqueeze(-1)
-        sigma = sigma.unsqueeze(-1)
-    else:
-        mu = mu.unsqueeze(-1).unsqueeze(-1)
-        sigma = sigma.unsqueeze(-1).unsqueeze(-1)
+        x: Input values with shape ``[..., C]`` or ``[..., C_1, C_2]``.
+        mean: Means with shape ``[...]``.
+        std: Standard deviation with shape ``[...]``.
+        reverse: Whether to denormalize rather than normalize.
+    """  # noqa: D205
+    assert mean.dim() == std.dim()
+    assert mean.dim() + 2 >= x.dim()
+    for _ in range(x.dim() - mean.dim()):
+        mean = mean.unsqueeze(-1)
+        std = std.unsqueeze(-1)
 
     if reverse:
-        return x * sigma + mu
-    return (x - mu) / _make_safe_for_division(sigma)
+        return x * std + mean
+
+    return (x - mean) / torch.where(std < 1e-6, 1.0, std)
