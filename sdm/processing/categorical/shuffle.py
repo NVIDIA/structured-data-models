@@ -12,7 +12,7 @@ from sdm.processing import EnsembleProcessor
 
 
 class ShuffleCategories(EnsembleProcessor):
-    """Independently permute the integer codes of categorical columns.
+    """Permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn when the processor is
     fitted. Codes and their corresponding category vectors are permuted
@@ -22,9 +22,9 @@ class ShuffleCategories(EnsembleProcessor):
     processor to the categorical block of a mixed feature table.
 
     Args:
-        method: Permutation strategy. ``"shift"`` cyclically shifts the
-            codes by a drawn offset, and ``"random"`` remaps the codes with
-            a drawn permutation.
+        method: Permutation strategy. ``"random"`` remaps codes
+            with an independent permutation. ``"shift"`` uses a cyclic
+            offset, cycling through every offset in random order.
     """
 
     handles_stypes = frozenset({Stype.categorical})
@@ -51,21 +51,27 @@ class ShuffleCategories(EnsembleProcessor):
         self,
         table: TableTensor,
         *,
+        unused_offsets: dict[tuple[str, int], Tensor],
         generator: torch.Generator | None = None,
     ) -> list[Tensor]:
         device = table.categorical.device
         permutations: list[Tensor] = []
-        for category in table.categorical.categories:
+        for column_index, category in enumerate(table.categorical.categories):
             n_classes = category.numel()
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
             elif self.method == "shift":
-                offset = torch.randint(
-                    n_classes,
-                    (1,),
-                    generator=generator,
-                    device=device,
-                )
+                column_name = table.columns[Stype.categorical][column_index]
+                key = (column_name, n_classes)
+                offsets = unused_offsets.get(key)
+                if offsets is None or offsets.numel() == 0:
+                    offsets = torch.randperm(
+                        n_classes,
+                        generator=generator,
+                        device=device,
+                    )
+                offset = offsets[:1]
+                unused_offsets[key] = offsets[1:]
                 permutation = (
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes
@@ -88,20 +94,18 @@ class ShuffleCategories(EnsembleProcessor):
 
         permutations_by_id = []
         permutation_ids = []
-        permutation_id_by_key: dict[
-            tuple[torch.device, tuple[tuple[int, ...], ...]], int
-        ] = {}
+        permutation_id_by_key: dict[tuple[tuple[int, ...], ...], int] = {}
 
+        # (column name, n_classes) -> unused cyclic offsets for that column.
+        unused_offsets: dict[tuple[str, int], Tensor] = {}
         for member_id in range(len(ensemble_table)):
             permutations = self._draw_permutations(
                 ensemble_table[member_id],
+                unused_offsets=unused_offsets,
                 generator=generator,
             )
-            key = (
-                ensemble_table[member_id].categorical.device,
-                tuple(
-                    tuple(permutation.tolist()) for permutation in permutations
-                ),
+            key = tuple(
+                tuple(permutation.tolist()) for permutation in permutations
             )
             permutation_id = permutation_id_by_key.get(key)
             if permutation_id is None:

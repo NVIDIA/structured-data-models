@@ -212,15 +212,20 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
             group = self._groups[group_id]
             selected_positions = tuple(positions)
             group_ids[group_id] = new_group_id
+            start = selected_positions[0]
+            step = (
+                selected_positions[1] - start
+                if len(selected_positions) > 1
+                else 1
+            )
+            stop = start + step * len(selected_positions)
             if selected_positions == tuple(range(group.size(0))):
                 groups.append(group)
-            elif len(selected_positions) == 1:
-                groups.append(
-                    cast(
-                        TableTensor,
-                        group.narrow(0, selected_positions[0], 1),
-                    )
-                )
+            elif step > 0 and selected_positions == tuple(
+                range(start, stop, step)
+            ):
+                # Evenly spaced members are selected as a view, not a copy.
+                groups.append(group[start:stop:step])
             else:
                 groups.append(
                     cast(

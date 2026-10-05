@@ -220,3 +220,6 @@ ScoringBench/
 scoringbench_out/
 evals/
 datasets.json
+
+# Checkpoint files
+*.pt

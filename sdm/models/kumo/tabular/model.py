@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# ruff: noqa: D205
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -12,13 +13,11 @@ from torch.nn import Identity, Linear, ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
-from sdm.models import ICLModel
+from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.tabular.ckpt import remap_ckpt
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
-from sdm.tensor.table import TableSchema
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
     "small": {
@@ -34,7 +33,7 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
         "num_icl_heads": 8,
         "num_icl_key_value_heads_for_query": None,
     },
-    "large": {
+    "medium": {
         "cell_channels": 256,
         "num_embedding_layers": 6,
         "num_embedding_heads": 4,
@@ -47,16 +46,57 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
         "num_icl_heads": 8,
         "num_icl_key_value_heads_for_query": 2,
     },
+    "large": {
+        "cell_channels": 256,
+        "num_embedding_layers": 6,
+        "num_embedding_heads": 4,
+        "num_inducing_points": 256,
+        "group_size": 3,
+        "num_frequencies": 32,
+        "num_readout_tokens": 4,
+        "icl_channels": 1024,
+        "num_icl_layers": 24,
+        "num_icl_heads": 16,
+        "num_icl_key_value_heads_for_query": 2,
+    },
 }
 
 
 class KumoTabular(ICLModel):
-    """Kumo Tabular, a foundation model for classification and regression.
+    r"""The tabular foundation model from `"NVIDIA Kumo Tabular Sets a New
+    Accuracy-Efficiency Frontier for Tabular Prediction"
+    <https://huggingface.co/blog/nvidia/kumo-tabular>`__.
+
+    .. figure:: /images/kumo_tabular.svg
+        :width: 100%
+
+    :class:`KumoTabular` processes a table in two stages. First, an interleaved
+    row/column encoder transforms raw table cells into fixed-size row
+    representations. Numerical and categorical cells use separate learned
+    Fourier frequencies and projections, together with a learned missingness
+    projection. Each encoder stage consists of:
+
+    * **Column-wise:** Each feature group is processed across rows using
+      induced set attention. Both context and query cells attend only to
+      context-row keys and values.
+    * **Row-wise:** Each row's feature groups and learnable readout tokens
+      attend to one another, combining feature interactions into a fixed-size
+      row representation.
+
+    Second, a dataset-wise in-context learning transformer processes the row
+    representations and predicts each query target from the labeled context
+    rows. The ``"large"`` model widens this transformer to 1024 channels and
+    16 attention heads. Its four 256-channel readout tokens concatenate
+    directly to that width without a projection layer.
+
+    For regression tasks, :class:`KumoTabular` predicts 999 quantiles named
+    ``"q001"`` through ``"q999"``.
 
     Args:
-        task: The tasks to initialize. If ``None``, both classification and
-            regression are initialized.
-        size: The model size, either ``"small"`` or ``"large"`` (default).
+        task: The tasks to initialize. If ``None``, all tasks supported by this
+            model are initialized.
+        size: The model size, one of ``"small"``, ``"medium"``, or
+            ``"large"``. Defaults to ``"large"``.
         pretrained: Whether to load pretrained checkpoints.
         device: The device for model parameters. If ``None``, uses PyTorch's
             default device.
@@ -74,11 +114,13 @@ class KumoTabular(ICLModel):
     def __init__(
         self,
         task: TaskLike | Iterable[TaskLike] | None = None,
-        size: Literal["small", "large"] = "large",
+        size: Literal["small", "medium", "large"] = "large",
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=task)
+        if Task.classification in self.tasks:
+            self.ecoc = ECOC(max_classes=10)
 
         self.models: ModuleDict[TaskLike, torch.nn.Module] = ModuleDict()
         for task in self.tasks:
@@ -101,7 +143,7 @@ class KumoTabular(ICLModel):
 
     def _load_from_pretrained(
         self,
-        size: Literal["small", "large"],
+        size: Literal["small", "medium", "large"],
         device: torch.device | str | None,
     ) -> _KumoTabular:
         device = torch.get_default_device() if device is None else device
@@ -116,33 +158,12 @@ class KumoTabular(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Tabular",
                 filename=filename,
-                revision="v1.0.3",
+                revision="v1.0.0",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(
-                ckpt=ckpt["model"],
-                is_classifier=task == Task.classification,
-                num_layers=MODEL_KWARGS[size]["num_embedding_layers"],
-            )
             model.load_state_dict(ckpt, assign=True)
 
         return model
-
-    def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
-        x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
-        if not isinstance(x_context, TableTensor):
-            x_context = TableTensor.from_tensor(x_context)
-        kwargs["_schema"] = x_context.schema
-        return super().forward(*args, **kwargs)
-
-    def fit(self, *args: Any, **kwargs: Any) -> None:
-        r""":meta private:"""  # noqa: D415
-        x = kwargs["x"] if "x" in kwargs else args[0]
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        kwargs["_schema"] = x.schema
-        return super().fit(*args, **kwargs)
 
     def _forward(
         self,
@@ -153,6 +174,8 @@ class KumoTabular(ICLModel):
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
+        *,
+        categorical_mask: Tensor,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -179,43 +202,35 @@ class KumoTabular(ICLModel):
                 dtype=torch.int64 if classes is not None else x.dtype,
             )
 
-        if classes is not None and len(classes) > 10:
-            raise ValueError(
-                f"{self.__class__.__name__!r} only supports up to 10 classes "
-                f"(got {len(classes)})"
-            )
-
-        if cache is None or cache.is_recording:
-            assert x_context is not None
-            schema: TableSchema = kwargs["_schema"]
-            categorical_columns = set(schema.columns[Stype.categorical])
-            categorical_mask = torch.tensor(
-                [
-                    column in categorical_columns
-                    for column in x_context.columns[Stype.numerical]
-                ],
-                device=x.device,
-                dtype=torch.bool,
-            )
-            if cache is not None:
-                cache["categorical_mask"] = categorical_mask
-        else:
-            categorical_mask = cast(Tensor, cache["categorical_mask"])
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
-        task = Task.classification if classes is not None else Task.regression
-        out = self.models[task](x, y, categorical_mask, cache=cache)
-
         if classes is None:
+            out = self.models[Task.regression](
+                x=x,
+                y=y,
+                categorical_mask=categorical_mask,
+                cache=cache,
+            )
             return TableTensor(
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
                 numerical=out,
             )
+
+        out = self.ecoc(
+            model=self.models[Task.classification],
+            x=x,
+            y=y,
+            num_classes=len(classes),
+            num_members=x.size(0) if x.dim() > 2 else 1,
+            cache=cache,
+            generator=generator,
+            categorical_mask=categorical_mask,
+        )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=out[..., : len(classes)],
+            numerical=out,
         )
 
 

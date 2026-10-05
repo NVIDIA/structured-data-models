@@ -9,7 +9,7 @@ ScoringBench owns the evaluation protocol, including five-fold cross-validation 
 Run the commands below from the repository root:
 
 ```bash
-pip install structured-data-models
+pip install .
 
 git clone https://github.com/jonaslandsgesell/ScoringBench.git
 git -C ScoringBench checkout cc0f4bbcafb1df80797324c00956950bf1ac1d66
@@ -32,7 +32,15 @@ pip install -r ScoringBench/requirements.txt
   ```bash
   python -m benchmark.tabular.scoringbench.main \
     --scoringbench-path /path/to/ScoringBench \
-    --model kumo-tabular
+    --model kumo-tabular-large
+
+  python -m benchmark.tabular.scoringbench.main \
+    --scoringbench-path /path/to/ScoringBench \
+    --model kumo-tabular-medium
+
+  python -m benchmark.tabular.scoringbench.main \
+    --scoringbench-path /path/to/ScoringBench \
+    --model kumo-tabular-small
   ```
 
 Pass `--dataset cpu_act` to run one dataset, `--dataset-index 0` to select by validated index, or `--lite` to use two folds.

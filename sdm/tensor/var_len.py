@@ -1391,20 +1391,24 @@ def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
 def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
     count = end - start
 
-    offset = count.new_empty(count.numel() + 1)
+    offset = count.new_empty(count.numel() + 1, dtype=torch.int64)
     offset[0] = 0
-    offset[1:] = count.cumsum(dim=0, dtype=count.dtype)
+    offset[1:] = count.cumsum(dim=0, dtype=torch.int64)
 
-    local = torch.arange(  # type: ignore
-        end=offset[-1],
-        dtype=count.dtype,
-        device=count.device,
+    total = int(offset[-1])
+    if start.dtype == torch.int32 and total <= torch.iinfo(torch.int32).max:
+        offset = offset.to(torch.int32)
+
+    local = torch.arange(
+        end=total,
+        dtype=offset.dtype,
+        device=offset.device,
     )
     local -= offset[:-1].repeat_interleave(
         count,
-        output_size=local.numel(),
+        output_size=total,
     )
-    index = start.repeat_interleave(count, output_size=local.numel())
+    index = start.repeat_interleave(count, output_size=total)
     index += local
 
     return offset, index

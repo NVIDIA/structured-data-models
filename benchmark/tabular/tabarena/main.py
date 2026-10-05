@@ -4,17 +4,16 @@
 r"""Run an SDM tabular model on TabArena."""
 
 import argparse
+import gc
+import os
 from pathlib import Path
 
+import torch
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import (
-    MODEL_CONFIGS,
-    SDMExperimentRunner,
-    SDMModelWrapper,
-)
+from benchmark.tabular.model import MODEL_CONFIGS
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -47,7 +46,15 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+parser.add_argument(
+    "--enable-kv-cache",
+    action="store_true",
+    help="Cache context key/value projections at fit and reuse them "
+    "across prediction batches.",
+)
 args = parser.parse_args()
+
+os.environ["SDM_ENABLE_CATEGORY_CHECKS"] = "0"
 
 model_config = MODEL_CONFIGS[args.model]
 result_dir = (
@@ -61,6 +68,7 @@ result_dir.mkdir(parents=True, exist_ok=True)
 config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
+    "kv_cache": args.enable_kv_cache,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
@@ -74,17 +82,18 @@ experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
     outer_experiments=True,
 ).build_experiments()
-for experiment in experiments:
-    experiment.method_cls = SDMModelWrapper
-    experiment.experiment_cls = SDMExperimentRunner
-
 context = TabArenaContext()
-context.build_and_run_jobs(
-    experiments,
-    expname=result_dir,
+jobs = context.build_jobs(
+    experiments=experiments,
     subset=args.subset,
-    register=False,
-    build_kwargs=(
-        {"dataset_names": [args.dataset]} if args.dataset is not None else None
-    ),
+    dataset_names=[args.dataset] if args.dataset is not None else None,
 )
+for job in jobs:
+    try:
+        context.run_jobs(jobs=[job], expname=result_dir, register=False)
+    finally:
+        gc.collect()
+        if torch.cuda.is_initialized():
+            torch.cuda.synchronize()
+            torch._C._host_emptyCache()
+            torch.cuda.empty_cache()

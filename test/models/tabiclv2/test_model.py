@@ -82,8 +82,61 @@ def test_autocast_output_is_float32(
     assert out.numerical.dtype == torch.float32
 
 
+@withCUDA
+@pytest.mark.parametrize(
+    "y_context",
+    [
+        torch.arange(2)[:, None],  # classification
+        torch.tensor([[0.0], [1.0]]),  # regression
+    ],
+)
+def test_autocast_preserves_gradients_in_forward(
+    device: torch.device,
+    y_context: torch.Tensor,
+) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    model.train()
+    x_context = torch.eye(2, device=device)
+    y_context = y_context.to(device)
+    x_query = torch.ones(1, 2, device=device)
+    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
+
+    with torch.autocast(device_type=device.type, dtype=dtype):
+        out = model(x_context, y_context, x_query)
+
+    assert not torch.is_inference(out.numerical)
+    out.numerical.sum().backward()
+    assert any(p.grad is not None for p in model.parameters())
+
+
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_train_mode_preserves_gradients_with_ensembling(
+    estimator_batch_size: int | None,
+) -> None:
+    model = TabICLv2(pretrained=False)
+    model.train()
+    x_context = torch.eye(2)
+    y_context = torch.tensor([[0.0], [1.0]])
+    x_query = torch.ones(1, 2)
+
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=3,
+        estimator_batch_size=estimator_batch_size,
+    )
+
+    assert not torch.is_inference(out.numerical)
+    out.numerical.sum().backward()
+    assert any(p.grad is not None for p in model.parameters())
+
+
 @pytest.mark.parametrize("batch_shape", [(), (2,)])
-def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+def test_num_estimators(
+    batch_shape: tuple[int, ...], estimator_batch_size: int | None
+) -> None:
     model = TabICLv2(pretrained=False)
 
     R_context, R_query, C = 5, 3, 6
@@ -92,7 +145,13 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     x_query = torch.randn(*batch_shape, R_query, C)
     y_context = torch.randn(*batch_shape, R_context, 1)
 
-    out = model(x_context, y_context, x_query, num_estimators=2)
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        num_estimators=3,
+        estimator_batch_size=estimator_batch_size,
+    )
     assert out.size() == (*batch_shape, R_query, 999)
 
     model.fit(x_context, y_context, num_estimators=3)
@@ -196,8 +255,10 @@ def test_tabiclv2_hierarchical_log_probs(
 
 
 @withCUDA
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
 def test_tabiclv2_many_classes_forward_and_cache(
     device: torch.device,
+    estimator_batch_size: int | None,
 ) -> None:
     torch.manual_seed(1)
     model = TabICLv2(pretrained=False, device=device)
@@ -211,7 +272,7 @@ def test_tabiclv2_many_classes_forward_and_cache(
     ).unsqueeze(-1)
 
     torch.manual_seed(1)
-    out = model(x_context, y_context, x_query)
+    out = model(x_context, y_context, x_query, num_estimators=3)
 
     assert out.size() == (test_size, num_classes)
     probabilities = out.numerical
@@ -221,7 +282,12 @@ def test_tabiclv2_many_classes_forward_and_cache(
     )
 
     torch.manual_seed(1)
-    model.fit(x_context, y_context)
+    model.fit(
+        x=x_context,
+        y=y_context,
+        num_estimators=3,
+        estimator_batch_size=estimator_batch_size,
+    )
     assert model.predict(x_query).allclose(out)
 
 

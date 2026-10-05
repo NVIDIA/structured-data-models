@@ -109,6 +109,8 @@ class InvariantGNN(torch.nn.Module):
                 stats.flatten(1),
                 self.aggregation_lin.weight.T,
             )
+            # Release before allocating the next hop's statistics.
+            del stats
 
             if i == num_hops - 1:
                 start = graph.start_node_offsets[readout_table]

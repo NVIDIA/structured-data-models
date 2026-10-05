@@ -3,6 +3,7 @@
 
 """Numerical preprocessing transforms."""
 
+from sdm.processing.numerical.cast import Cast
 from sdm.processing.numerical.clip import Clip
 from sdm.processing.numerical.quantile_clip import ClipQuantiles
 from sdm.processing.numerical.sigma_clip import ClipSigma
@@ -10,6 +11,7 @@ from sdm.processing.numerical.clip_soft import ClipSoft
 from sdm.processing.numerical.impute import ImputeMean
 from sdm.processing.numerical.power import PowerTransform
 from sdm.processing.numerical.quantile import QuantileTransform
+from sdm.processing.numerical.rank_gaussian import RankGaussian
 from sdm.processing.numerical.standardize import Standardize
 from sdm.processing.numerical.robust_scale import RobustScale
 from sdm.processing.numerical.flip_sign import FlipSign
@@ -18,6 +20,7 @@ from sdm.processing.numerical.pca import PCA
 from sdm.processing.numerical.random_projection import RandomProjection
 
 __all__ = [
+    "Cast",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
@@ -25,6 +28,7 @@ __all__ = [
     "ImputeMean",
     "PowerTransform",
     "QuantileTransform",
+    "RankGaussian",
     "Standardize",
     "RobustScale",
     "FlipSign",

@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from sdm._kernels.segment_multi_reduce import segment_multi_reduce
+from sdm._kernels.rmsnorm_cast import rmsnorm_cast
 
 __all__ = [
     "segment_multi_reduce",
+    "rmsnorm_cast",
 ]
