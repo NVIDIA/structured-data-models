@@ -5,10 +5,7 @@ import math
 
 import torch
 
-from sdm.models.timesfm3.util import (
-    get_running_stats,
-    update_running_stats,
-)
+from sdm.models.timesfm3.util import get_running_stats, update_running_stats
 from sdm.testing import withCUDA
 
 
