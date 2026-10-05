@@ -6,8 +6,8 @@ import torch
 from torch import Tensor
 from torch.nn import ModuleDict, ModuleList
 
+from sdm.models.timesfm3.block import TimesFM3TransformerBlock
 from sdm.models.timesfm3.ckpt import remap_ckpt
-from sdm.models.timesfm3.transformer import TimesFM3TransformerBlock
 from sdm.testing import withCUDA
 
 
@@ -21,10 +21,24 @@ def test_remap_ckpt_strict_meta_load(
     model = ModuleDict({"layers": ModuleList([block])})
     prefix = "layers.0."
     source: dict[str, Tensor] = {
-        name: torch.ones(value.shape, device=device, dtype=value.dtype)
-        for name, value in model.state_dict().items()
-        if not name.startswith((prefix + "seq_attn.", prefix + "var_attn."))
+        prefix + name + ".weight": torch.full(
+            (8,), index + 1, device=device, dtype=dtype
+        )
+        for index, name in enumerate(
+            (
+                "pre_seq_attn_ln",
+                "post_seq_attn_ln",
+                "pre_var_attn_ln",
+                "post_var_attn_ln",
+                "pre_ff_ln",
+                "post_ff_ln",
+            )
+        )
     }
+    for index, name in enumerate(("ff0", "ff1")):
+        source[prefix + name + ".weight"] = torch.full(
+            (8, 8), index + 1, device=device, dtype=dtype
+        )
     for axis, offset in (("seq", 0), ("var", 4)):
         attn_prefix = f"{prefix}{axis}_attn."
         for index, part in enumerate(("query", "key", "value", "out")):
@@ -49,24 +63,42 @@ def test_remap_ckpt_strict_meta_load(
 
     assert set(source) == source_keys
     assert set(mapped) == set(model.state_dict())
-    for axis in ("seq", "var"):
-        attn_prefix = f"{prefix}{axis}_attn."
+    for source_name, target_name in (
+        ("pre_seq_attn_ln", "pre_time_attn"),
+        ("post_seq_attn_ln", "post_time_attn"),
+        ("pre_var_attn_ln", "pre_var_attn"),
+        ("post_var_attn_ln", "post_var_attn"),
+        ("pre_ff_ln", "ff_block.pre_ff"),
+        ("post_ff_ln", "ff_block.post_ff"),
+    ):
         torch.testing.assert_close(
-            mapped[attn_prefix + "qkv_lin.weight"],
+            mapped[prefix + target_name + ".weight"],
+            source[prefix + source_name + ".weight"],
+        )
+    for layer in ("ff0", "ff1"):
+        torch.testing.assert_close(
+            mapped[prefix + f"ff_block.{layer}.weight"],
+            source[prefix + f"{layer}.weight"],
+        )
+    for source_axis, target_axis in (("seq", "time"), ("var", "var")):
+        source_prefix = f"{prefix}{source_axis}_attn."
+        target_prefix = f"{prefix}{target_axis}_attn."
+        torch.testing.assert_close(
+            mapped[target_prefix + "qkv_lin.weight"],
             torch.cat(
                 [
-                    source[attn_prefix + f"{part}_proj.weight"]
+                    source[source_prefix + f"{part}_proj.weight"]
                     for part in ("query", "key", "value")
                 ]
             ),
         )
         torch.testing.assert_close(
-            mapped[attn_prefix + "query_transform.scale.weight"],
-            source[attn_prefix + "per_dim_scale.per_dim_scale"],
+            mapped[target_prefix + "query_transform.scale.weight"],
+            source[source_prefix + "per_dim_scale.per_dim_scale"],
         )
     for branch in ("query", "key"):
         torch.testing.assert_close(
-            mapped[prefix + f"seq_attn.{branch}_transform.rope.inv_freq"],
+            mapped[prefix + f"time_attn.{branch}_transform.rope.inv_freq"],
             torch.tensor([1.0, 0.01], device=device),
         )
 
@@ -74,6 +106,6 @@ def test_remap_ckpt_strict_meta_load(
     assert all(parameter.device == device for parameter in model.parameters())
     x = torch.arange(48, device=device, dtype=dtype).reshape(1, 2, 3, 8) / 10
     patch_mask = torch.zeros(1, 2, 3, device=device, dtype=torch.bool)
-    output, mask = block(x, patch_mask)
+    output = block(x, patch_mask)
     assert output.isfinite().all()
-    assert mask.shape == (2, 1, 3, 3)
+    assert output.shape == x.shape
