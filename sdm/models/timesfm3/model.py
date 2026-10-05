@@ -30,6 +30,9 @@ from sdm import Recipe, RelatedTables, Stype, StypeLike, TableTensor, Task
 from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
+from sdm.models.timesfm3.ckpt import remap_ckpt
+from sdm.models.timesfm3.dense import ResidualBlock
+from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
 from sdm.tensor.table import TableSchema
 
@@ -136,7 +139,8 @@ class TimesFM3(ICLModel):
             filename="model.safetensors",
             license_prompt=None if accept_license else TIMESFM_LICENSE_PROMPT,
         )
-        ckpt = load_file(path, device=str(device))  # noqa: F841
+        ckpt = load_file(path, device=str(device))
+        self.model.load_state_dict(remap_ckpt(ckpt, self.model), assign=True)
 
         return self
 
@@ -233,15 +237,41 @@ class TimesFM3(ICLModel):
 
 
 class _TimesFM3(torch.nn.Module):
+    """Assemble the TimesFM-3 patch embedding and prediction layers."""
+
     def __init__(
         self,
+        input_patch_len: int = 32,
+        output_patch_len: int = 64,
+        quantiles: Sequence[float] | None = None,
+        channels: int = 1280,
+        num_layers: int = 20,
+        num_heads: int = 16,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.input_patch_len = input_patch_len
+        self.output_patch_len = output_patch_len
+        if quantiles is None:
+            quantiles = tuple(i / 10 for i in range(1, 10))
+        self.quantiles = tuple(quantiles)
 
-        self.lin = torch.nn.Linear(1, 1, **factory_kwargs)  # Dummy.
+        self.pre_transformer_resblock = ResidualBlock(
+            in_channels=2 * (input_patch_len + output_patch_len),
+            out_channels=channels,
+            bias=False,
+            device=device,
+            dtype=dtype,
+        )
+        self.icl_block = ICLBlock(
+            channels=channels,
+            out_channels=output_patch_len * len(self.quantiles),
+            num_layers=num_layers,
+            num_heads=num_heads,
+            device=device,
+            dtype=dtype,
+        )
 
 
 def expand_query(x_context: TableSchema, x_query: TableTensor) -> TableTensor:
