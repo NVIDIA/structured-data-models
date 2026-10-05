@@ -189,7 +189,8 @@ class KumoRelational(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Relational",
                 filename=filename,
-                revision="v1.0.0",
+                revision="v1.0.1",
+                config_filename="config.json",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
             model.load_state_dict(ckpt, assign=True)
