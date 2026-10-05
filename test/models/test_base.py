@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pickle
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -859,6 +860,36 @@ def test_estimator_batching_requires_matching_query_schema(
     )
     with pytest.raises(ValueError, match="share the same schema"):
         model(x, y, query, estimator_batch_size=estimator_batch_size)
+
+
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+@pytest.mark.parametrize("legacy_cache", [False, True])
+def test_fitted_model_pickle_preserves_prediction(
+    estimator_batch_size: int | None,
+    legacy_cache: bool,
+) -> None:
+    model = _RecordingModel()
+    x = torch.arange(24, dtype=torch.float32).reshape(4, 3, 2)
+    y = torch.zeros(4, 3, 1)
+    query = x[:, :2]
+    model.fit(x, y, estimator_batch_size=estimator_batch_size)
+    expected = model.predict(query)
+
+    if legacy_cache:
+        assert model._cache is not None
+        cache = Cache(model._cache)
+        for i in range(cast(int, cache["num_batches"])):
+            batch_cache = cast(Cache, cache[i])
+            cache[i] = Cache(
+                {k: v for k, v in batch_cache.items() if k != "member_ids"}
+            )
+        model._cache = cache.freeze()
+
+    restored = pickle.loads(pickle.dumps(model))
+    torch.testing.assert_close(
+        restored.predict(query).numerical,
+        expected.numerical,
+    )
 
 
 @pytest.mark.parametrize("change", ["category_counts", "dtype"])
