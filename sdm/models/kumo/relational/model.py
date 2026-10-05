@@ -23,7 +23,6 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.relational.ckpt import remap_ckpt
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.recipe import default_recipe
 from sdm.models.kumo.relational.task import TaskGraph
@@ -37,11 +36,11 @@ class KumoRelational(ICLModel):
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
-    .. figure:: /images/rfm_light.svg
+    .. figure:: /images/kumo_relational_light.svg
         :figclass: light-only
         :width: 100%
 
-    .. figure:: /images/rfm_dark.svg
+    .. figure:: /images/kumo_relational_dark.svg
         :figclass: dark-only
         :width: 100%
 
@@ -190,10 +189,9 @@ class KumoRelational(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Relational",
                 filename=filename,
-                revision="v2.1.2",
+                revision="v1.0.0",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(ckpt)
             model.load_state_dict(ckpt, assign=True)
 
         return self

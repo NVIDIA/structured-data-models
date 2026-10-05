@@ -7,11 +7,11 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Embedding, Linear, ModuleList, RMSNorm, Sequential
+from torch.nn import GELU, Embedding, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.nn import LogScale
+from sdm.nn import LogScale, RMSNorm
 
 
 class ICLBlock(torch.nn.Module):
@@ -74,6 +74,7 @@ class ICLBlock(torch.nn.Module):
                 y_emb = self.y_lin(y.unsqueeze(-1))  # [..., R_train, D]
 
             x[..., :R_train, :] += y_emb.to(x.dtype)
+            del y_emb
 
         for i, layer in enumerate(self.layers):
             cache_key = f"icl_block.layer{i}"
@@ -117,12 +118,14 @@ class ICLBlock(torch.nn.Module):
                 if last_layer
                 else x[..., :R_train, :],
             )
+            key_value = KVCacheEntry(
+                key=key[..., : self.kv_heads, :].contiguous(),
+                value=value[..., : self.kv_heads, :].contiguous(),
+            )
+            del key, value
             x_query = layer(
                 query=x[..., R_train:, :],
-                key_value=KVCacheEntry(
-                    key=key[..., : self.kv_heads, :].contiguous(),
-                    value=value[..., : self.kv_heads, :].contiguous(),
-                ),
+                key_value=key_value,
                 out=None if torch.is_grad_enabled() else x[..., R_train:, :],
             )
             if last_layer:

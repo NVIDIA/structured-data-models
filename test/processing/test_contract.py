@@ -115,6 +115,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ShuffleColumns()),
     ProcessorCase(sp.SelectColumns(2)),
     ProcessorCase(sp.TFIDF(ngram_range=(2, 2))),
+    ProcessorCase(sp.Cast(torch.float64)),
     ProcessorCase(sp.Clip(-2.0, 6.0)),
     ProcessorCase(sp.ClipQuantiles()),
     ProcessorCase(sp.ClipSigma()),
@@ -125,6 +126,7 @@ PROCESSOR_CASES = (
         sp.QuantileTransform(n_quantiles=4, subsample=None),
     ),
     ProcessorCase(sp.Standardize()),
+    ProcessorCase(sp.RankGaussian()),
     ProcessorCase(sp.RobustScale()),
     ProcessorCase(sp.FlipSign()),
     ProcessorCase(sp.DropConstantColumns()),
@@ -137,12 +139,11 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
-    ProcessorCase(sp.ReduceEstimators(), _make_reduction_table),
+    ProcessorCase(sp.AverageEstimators(), _make_reduction_table),
     ProcessorCase(
-        sp.ReduceEstimators(method="trimmed_mean", proportion=0.25),
+        sp.AverageEstimators(trim_fraction=0.25),
         _make_reduction_table,
     ),
-    ProcessorCase(sp.ReduceQuantiles()),
     ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(
         sp.Sequential(

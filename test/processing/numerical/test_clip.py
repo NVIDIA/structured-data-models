@@ -20,7 +20,7 @@ def test_clip_clamps_fixed_bounds(
         ),
     )
 
-    actual = Clip(min_value=-100.0, max_value=100.0).transform(table)
+    actual = Clip(-100.0, 100.0).transform(table)
 
     torch.testing.assert_close(
         actual.numerical,
@@ -29,11 +29,9 @@ def test_clip_clamps_fixed_bounds(
             device=device,
         ),
     )
-    assert repr(Clip(min_value=-100.0, max_value=100.0)) == (
-        "Clip(-100.0, 100.0)"
-    )
+    assert repr(Clip(-100.0, 100.0)) == "Clip(-100.0, 100.0)"
 
 
 def test_clip_rejects_invalid_configuration() -> None:
     with pytest.raises(ValueError, match="min_value"):
-        Clip(min_value=1.0, max_value=-1.0)
+        Clip(1.0, -1.0)

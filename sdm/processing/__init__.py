@@ -24,6 +24,7 @@ from sdm.processing.common import (
 )
 from sdm.processing.text import TFIDF, SentenceTransformer
 from sdm.processing.numerical import (
+    Cast,
     Clip,
     ClipQuantiles,
     ClipSigma,
@@ -31,6 +32,7 @@ from sdm.processing.numerical import (
     ImputeMean,
     PowerTransform,
     QuantileTransform,
+    RankGaussian,
     Standardize,
     RobustScale,
     FlipSign,
@@ -45,12 +47,7 @@ from sdm.processing.categorical import (
     AddCategoryCounts,
 )
 from sdm.processing.datetime import AddCalendarFields
-from sdm.processing.output import (
-    ReduceEstimators,
-    ReduceQuantiles,
-    Softmax,
-    SortQuantiles,
-)
+from sdm.processing.output import AverageEstimators, Softmax, SortQuantiles
 from sdm.processing.recipe import Recipe
 
 __all__ = [
@@ -72,6 +69,7 @@ __all__ = [
     "SelectColumns",
     "TFIDF",
     "SentenceTransformer",
+    "Cast",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
@@ -79,6 +77,7 @@ __all__ = [
     "ImputeMean",
     "PowerTransform",
     "QuantileTransform",
+    "RankGaussian",
     "Standardize",
     "RobustScale",
     "FlipSign",
@@ -90,8 +89,7 @@ __all__ = [
     "ImputeMode",
     "AddCategoryCounts",
     "AddCalendarFields",
-    "ReduceEstimators",
-    "ReduceQuantiles",
+    "AverageEstimators",
     "Softmax",
     "SortQuantiles",
     "Recipe",

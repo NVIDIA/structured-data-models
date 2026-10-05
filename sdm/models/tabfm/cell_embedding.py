@@ -18,12 +18,13 @@
 # ruff: noqa: D101, D102
 
 import math
-import os
 from typing import Any, Literal
 
 import torch
 from torch import Tensor
 from torch.nn import Linear
+
+from sdm._memory import chunk_memory_limit
 
 
 class CellEmbedding(torch.nn.Module):
@@ -132,12 +133,7 @@ class CellEmbedding(torch.nn.Module):
                     + bias.numel() * bias.element_size()
                 )
 
-                memory_limit = int(
-                    torch.cuda.get_device_properties(x.device).total_memory
-                    * torch.cuda.get_per_process_memory_fraction(x.device)
-                    * float(os.getenv("SDM_CHUNK_MEMORY_FRACTION", "0.05"))
-                )
-                memory_limit -= fixed_bytes
+                memory_limit = chunk_memory_limit(x.device) - fixed_bytes
                 batch_size_limit = memory_limit // max(bytes_per_example, 1)
                 batch_size_limit = max(batch_size_limit, 1)
 

@@ -1,6 +1,6 @@
 # In-Context Learning
 
-In-Context Learning (ICL) treats predictions on structured data (*e.g.*, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights through in-context adaptation.
+In-Context Learning (ICL) treats predictions on structured data (*e.g.*, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights.
 The `structured-data-models` package groups and unifies such foundation models behind a single interface:
 
 1. Convert dataframe-like data into a {py:class}`~sdm.tensor.TableTensor` (see [here](tensor) for the accompanying tutorial).
@@ -30,9 +30,7 @@ Specifically, an in-context learning task has three core inputs, as defined in t
 - `x_query` ({py:class}`~sdm.tensor.TableTensor` | {py:class}`torch.Tensor`): feature rows whose targets should be predicted.
 
 The context rows are not used to update model weights.
-They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context.
-
-This is distinct from calling {py:meth}`~sdm.models.ICLModel.forward` while the model is in train mode (`model.train()`), which enables gradient tracking through the full call — including post-processing — so the returned predictions can be used in an ordinary training loop (`loss.backward()`, an optimizer step) to fine-tune the model's parameters. Context rows still don't update weights *through in-context adaptation itself*; this is a conventional, separate training step around the model.
+They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context:
 
 ```python
 from sklearn.datasets import load_breast_cancer
@@ -43,7 +41,7 @@ df = load_breast_cancer(as_frame=True).frame
 
 table = sdm.TableTensor.from_pandas(
     df=df,
-    stypes=sdm.infer_stypes(df),
+    stypes=sdm.infer_stypes(df, overrides={"target": "categorical"}),
     device="cuda",
 )
 
@@ -55,7 +53,8 @@ out = model(
 )
 ```
 
-This one-shot {py:meth}`~sdm.models.ICLModel.forward` call is the most direct form of the interface.
+This one-shot {py:meth}`~sdm.models.ICLModel.forward` call is the most direct form of the interface. Calling {py:meth}`~sdm.models.ICLModel.forward` while the model is in train mode (`model.train()`) enables gradient tracking so the returned predictions can be used in an ordinary training loop (`loss.backward()`) to fine-tune the model's parameters.
+
 When the same context is reused for many query batches, call {py:meth}`~sdm.models.ICLModel.fit` once and then call {py:meth}`~sdm.models.ICLModel.predict` for each query batch.
 This records reusable model state, including key/value projections, and avoids recomputing the context side of the model for every prediction:
 
@@ -71,6 +70,8 @@ model.clear()
 
 The cached interface has the same prediction contract as the one-shot call.
 Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls when tasks change frequently, and use the {py:meth}`~sdm.models.ICLModel.fit`+{py:meth}`~sdm.models.ICLModel.predict` flow for large batch predictions over a single fixed task.
+
+Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.predict` does not support gradient-based fine-tuning and raises if the model is in train mode.
 
 ## Model Concepts
 
@@ -268,4 +269,7 @@ For example, {py:class}`~sdm.models.KumoRelational` consumes the `x_context` and
 
 To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we provide heterogeneous, temporally aware subgraph samplers with CPU and CUDA backends, based on [`pyg-lib`](https://github.com/pyg-team/pyg-lib) and [`cugraph`](https://docs.rapids.ai/api/cugraph), respectively.
 Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
-The full relational sampling and prediction flow is shown in [`examples/kumo/relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/rel_bench.py).
+
+```{note}
+The full relational sampling and prediction flow, including temporal sampling, is shown in [`examples/kumo/relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/rel_bench.py).
+```

@@ -18,128 +18,85 @@
 import torch
 from torch import Tensor
 
-_TOLERANCE = 1e-6
-
-
-def _make_safe_for_division(values: Tensor) -> Tensor:
-    return torch.where(values < _TOLERANCE, 1.0, values)
-
-
-def _make_safe_for_sqrt(values: Tensor) -> Tensor:
-    is_zero = values == 0
-    safe_values = torch.where(is_zero, 1.0, values)
-    return torch.where(is_zero, 0.0, safe_values.sqrt())
-
 
 def update_running_stats(
-    n: Tensor,
-    mu: Tensor,
-    sigma: Tensor,
-    x: Tensor,
-    mask: Tensor,
-) -> tuple[Tensor, Tensor, Tensor]:
-    """Update running statistics with a new patch.
+    count: Tensor,  # [..., C]
+    mean: Tensor,  # [..., C]
+    std: Tensor,  # [..., C]
+    x: Tensor,  # [..., C, P]
+    mask: Tensor,  # [..., C, P]
+) -> tuple[Tensor, Tensor, Tensor]:  # [..., C]
+    """Update running statistics for a new patch.
 
     Args:
-        n: Counts of valid values with shape ``[..., V]``, where ``V`` is
-            the number of variates.
-        mu: Running means with shape ``[..., V]``.
-        sigma: Running population standard deviations with shape
-            ``[..., V]``.
-        x: New values with shape ``[..., V, P]``, where ``P`` is the patch
-            length.
-        mask: Invalid-value mask with shape ``[..., V, P]``.
+        count: Count of valid values with shape ``[..., C]``, where ``C`` is
+            the number of channels.
+        mean: Running mean with shape ``[..., C]``.
+        std: Running standard deviation with shape ``[..., C]``.
+        x: New input with shape ``[..., C, P]``, where ``P`` is the patch size.
+        mask: Invalid-value mask with shape ``[..., C, P]``.
 
     Returns:
-        Updated counts, means, and population standard deviations, each with
-        shape ``[..., V]``.
+        Updated count, mean, and standard deviation.
     """
-    is_valid = ~mask
-    valid = is_valid.float()
-    inc_n = valid.sum(dim=-1)
-    safe_inc_n = _make_safe_for_division(inc_n)
+    valid = ~mask
 
-    inc_sum = torch.where(is_valid, x, 0.0).sum(dim=-1)
-    inc_mu = torch.where(inc_n == 0, 0.0, inc_sum / safe_inc_n)
-    inc_var = torch.where(
-        inc_n == 0,
-        0.0,
-        torch.where(is_valid, (x - inc_mu.unsqueeze(-1)).square(), 0.0).sum(
-            dim=-1
-        )
-        / safe_inc_n,
-    )
-    inc_sigma = _make_safe_for_sqrt(inc_var)
+    inc_count = valid.sum(dim=-1)
+    inc_sum = torch.where(valid, x, 0.0).sum(dim=-1)
+    inc_mean = inc_sum / inc_count.clamp(min=1)
+    tmp = (x - inc_mean.unsqueeze(-1)).square()
+    inc_var = torch.where(valid, tmp, 0.0).sum(dim=-1) / inc_count.clamp(min=1)
+    inc_std = inc_var.sqrt()
 
-    new_n = n + inc_n
-    safe_new_n = _make_safe_for_division(new_n)
-    new_mu = torch.where(
-        new_n == 0,
-        0.0,
-        (n * mu + inc_n * inc_mu) / safe_new_n,
-    )
-    new_var = torch.where(
-        new_n == 0,
-        0.0,
-        (
-            n * sigma * sigma
-            + inc_n * inc_sigma * inc_sigma
-            + n * (mu - new_mu) * (mu - new_mu)
-            + inc_n * (inc_mu - new_mu) * (inc_mu - new_mu)
-        )
-        / safe_new_n,
-    )
-    new_sigma = _make_safe_for_sqrt(new_var)
-    return new_n, new_mu, new_sigma
+    out_count = count + inc_count
+    out_mean = (count * mean + inc_count * inc_mean) / out_count.clamp(min=1)
+    out_var = (
+        count * std.square()
+        + inc_count * inc_std.square()
+        + count * (mean - out_mean).square()
+        + inc_count * (inc_mean - out_mean).square()
+    ) / out_count.clamp(min=1)
+    out_std = out_var.sqrt()
+
+    return out_count, out_mean, out_std
 
 
 def get_running_stats(
-    values: Tensor,
-    masks: Tensor,
-) -> tuple[Tensor, Tensor, Tensor]:
+    x: Tensor,  # [..., C, N, P]
+    mask: Tensor,  # [..., C, N, P]
+) -> tuple[Tensor, Tensor, Tensor]:  # [..., C, N]
     """Compute cumulative statistics patch by patch.
 
     Args:
-        values: Input values with shape ``[B, V, N, P]``, where ``B`` is
-            the batch size, ``V`` is the number of variates, ``N`` is the
-            number of patches, and ``P`` is the patch length.
-        masks: Invalid-value mask with shape ``[B, V, N, P]``.
+        x: Input with shape ``[..., C, N, P]``, where ``C`` is the number of
+            channels, ``N`` is the number of patches, and ``P`` is the patch
+            size.
+        mask: Invalid-value mask with shape ``[..., C, N, P]``.
 
     Returns:
-        Cumulative counts, means, and population standard deviations, each
-        with shape ``[B, V, N]``.
+        Cumulative count, mean, and standard deviation.
     """
-    batch_size, num_variates, num_patches, _ = values.size()
-    current_n = torch.zeros(
-        (batch_size, num_variates),
-        dtype=torch.float32,
-        device=values.device,
-    )
-    current_mu = torch.zeros_like(current_n)
-    current_sigma = torch.zeros_like(current_n)
+    *B, C, N, _ = x.size()
 
-    all_n = []
-    all_mu = []
-    all_sigma = []
-    for index in range(num_patches):
-        current_n, current_mu, current_sigma = update_running_stats(
-            current_n,
-            current_mu,
-            current_sigma,
-            values[:, :, index, :],
-            masks[:, :, index, :],
+    count = torch.zeros((*B, C), dtype=torch.int64, device=x.device)
+    mean = torch.zeros((*B, C), dtype=torch.float32, device=x.device)
+    std = torch.zeros((*B, C), dtype=torch.float32, device=x.device)
+
+    counts, means, stds = [], [], []
+    for i in range(N):
+        count, mean, std = update_running_stats(
+            count, mean, std, x[..., i, :], mask[..., i, :]
         )
-        all_n.append(current_n)
-        all_mu.append(current_mu)
-        all_sigma.append(current_sigma)
+        counts.append(count)
+        means.append(mean)
+        stds.append(std)
 
     return (
-        torch.stack(all_n, dim=2),
-        torch.stack(all_mu, dim=2),
-        torch.stack(all_sigma, dim=2),
+        torch.stack(counts, dim=-1),
+        torch.stack(means, dim=-1),
+        torch.stack(stds, dim=-1),
     )
-
-
+  
 def revin(
     x: Tensor,
     mu: Tensor,

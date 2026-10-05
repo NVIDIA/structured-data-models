@@ -4,24 +4,27 @@
 """SDM model adapters for TabArena and BeyondArena."""
 
 import abc
+import copy
 import math
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 import numpy as np
 import pandas as pd
 import torch
 from autogluon.core.constants import BINARY, MULTICLASS, REGRESSION
+from autogluon.core.models.abstract.shared_weights import SharedWeights
 from autogluon.tabular.models.abstract.abstract_torch_model import (
     AbstractTorchModel,
 )
-from tabarena.benchmark.exec_models import AGModelWrapper
-from tabarena.benchmark.experiment import OOFExperimentRunner
+from tabarena.models.warmup import warmup_torch
 
 import sdm
 import sdm.processing as sp
+from sdm.processing.execution import RecipeExecution
 
 Task = Literal["classification", "regression"]
+KumoTabularSize = Literal["small", "medium", "large"]
 
 
 class SDMModel(AbstractTorchModel, abc.ABC):
@@ -40,6 +43,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
 
     default_num_estimators: ClassVar[int]
     autocast_dtype: ClassVar[torch.dtype]
+    low_cardinality: ClassVar[Literal["off", "infer"]] = "off"
 
     @staticmethod
     @abc.abstractmethod
@@ -56,6 +60,8 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
+        self._set_default_param_value("kv_cache", False)
+        self._set_default_param_value("estimator_batch_size", "auto")
 
     def _fit(
         self,
@@ -83,7 +89,10 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             )
 
         X = self.preprocess(X, y=y)
-        self.stypes = sdm.infer_stypes(X)
+        self.stypes = sdm.infer_stypes(
+            X,
+            _low_cardinality=self.low_cardinality,
+        )
         x_context = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
@@ -121,6 +130,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             y_context = y_context[perm].unflatten(0, shape)
             num_estimators = None
         self._expand_query = num_estimators is None
+        self._context_shape = x_context.shape[-2:]
 
         recipe = self.model.default_recipe()
         if params["max_columns"] is not None:
@@ -128,18 +138,49 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 if isinstance(processor, sp.SelectColumns):
                     processor.max_columns = params["max_columns"]
 
-        with torch.amp.autocast(
-            self._device.type,
-            self.autocast_dtype,
-            enabled=x_context.is_cuda,
+        self._recipe_execution: RecipeExecution | None = None
+        if params["kv_cache"]:
+            with torch.amp.autocast(
+                self._device.type,
+                self.autocast_dtype,
+                enabled=x_context.is_cuda,
+            ):
+                self.model.fit(
+                    x=x_context,
+                    y=y_context,
+                    recipe=recipe,
+                    num_estimators=num_estimators,
+                    estimator_batch_size=self._estimator_batch_size(x_context),
+                    generator=generator,
+                )
+            return
+
+        self._recipe_execution = RecipeExecution(recipe)
+        with (
+            torch.inference_mode(),
+            torch.amp.autocast(self._device.type, enabled=False),
         ):
-            self.model.fit(
+            contexts = self._recipe_execution.fit_transform(
                 x=x_context,
                 y=y_context,
-                recipe=recipe,
-                num_estimators=num_estimators,
+                related_tables=None,
+                num_members=num_estimators,
                 generator=generator,
             )
+        self._contexts = tuple(
+            context._replace(
+                x=cast(sdm.TableTensor, context.x.cpu()),
+                y=cast(sdm.TableTensor, context.y.cpu()),
+            )
+            for context in contexts
+        )
+        # Replay the same model-side randomness as the cached fit path.
+        if generator is not None:
+            self._rng_state = generator.get_state()
+        elif self._device.type == "cuda":
+            self._rng_state = torch.cuda.get_rng_state(self._device)
+        else:
+            self._rng_state = torch.get_rng_state()
 
     def _predict_proba(
         self,
@@ -158,12 +199,59 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 *x_query.size(),
             )
 
-        with torch.amp.autocast(
-            self._device.type,
-            self.autocast_dtype,
-            enabled=x_query.is_cuda,
-        ):
-            out = self.model.predict(x_query)
+        if self._recipe_execution is None:
+            with torch.amp.autocast(
+                self._device.type,
+                self.autocast_dtype,
+                enabled=x_query.is_cuda,
+            ):
+                out = self.model.predict(x_query)
+        else:
+            with (
+                torch.inference_mode(),
+                torch.amp.autocast(self._device.type, enabled=False),
+            ):
+                queries = self._recipe_execution.transform(
+                    x=x_query,
+                    related_tables=None,
+                )
+                generator = torch.Generator(self._device).set_state(
+                    self._rng_state
+                )
+                outputs: list[sdm.TableTensor] = []
+                size = self._estimator_batch_size(x_query)
+                size = len(self._contexts) if size is None else size
+                for start in range(0, len(self._contexts), size):
+                    batch = [
+                        context._replace(
+                            x=cast(
+                                sdm.TableTensor, context.x.to(self._device)
+                            ),
+                            y=cast(
+                                sdm.TableTensor, context.y.to(self._device)
+                            ),
+                        )
+                        for context in self._contexts[start : start + size]
+                    ]
+                    with torch.amp.autocast(
+                        self._device.type,
+                        self.autocast_dtype,
+                        enabled=x_query.is_cuda,
+                    ):
+                        outputs += self.model._forward_members(
+                            contexts=batch,
+                            queries=queries[start : start + size],
+                            estimator_batch_size=None,
+                            generator=generator,
+                        )
+
+                if self.problem_type == REGRESSION:
+                    outputs = list(
+                        self._recipe_execution.inverse_transform_target(
+                            outputs
+                        )
+                    )
+                out = self._recipe_execution.transform_output(outputs)
 
         if self.problem_type == REGRESSION:
             return out.numerical.float().mean(dim=-1).cpu().numpy()
@@ -174,39 +262,41 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         probabilities = out.numerical[..., indices].float().cpu().numpy()
         return self._convert_proba_to_unified_form(probabilities)
 
+    def _estimator_batch_size(self, x: torch.Tensor) -> int | None:
+        params = self._get_model_params()
+        estimator_batch_size = params["estimator_batch_size"]
+        if estimator_batch_size != "auto":
+            return estimator_batch_size
+        # Subsampled contexts can produce different cache shapes per estimator.
+        if not x.is_cuda or self._expand_query:
+            return 1
+
+        num_rows, num_cols = self._context_shape
+        if not params["kv_cache"]:
+            # Uncached inference processes context and query rows together.
+            num_rows += x.size(-2)
+            if num_rows > 3_000 or num_rows * num_cols > 50_000:
+                return 1
+            return self._num_estimators
+
+        num_rows = max(num_rows, x.size(-2))
+        if num_rows > 2_000 or num_rows * num_cols >= 50_000:
+            return 1
+        return self._num_estimators
+
     def get_device(self) -> str:
         return str(next(self.model.parameters()).device)
 
     def _set_device(self, device: str) -> None:
         self.model.to(device)
+        if self._recipe_execution is not None:
+            recipe = self._recipe_execution.recipe
+            for processor in (recipe.features, recipe.target, recipe.output):
+                processor.to(device)
         self._device = torch.device(device)
-
-    def cleanup(self) -> None:
-        self.model.clear()
-        if self._device.type == "cuda":
-            torch.cuda.synchronize(self._device)
-            torch._C._host_emptyCache()
-            torch.cuda.empty_cache()
 
     def _more_tags(self) -> dict[str, bool]:
         return {"can_refit_full": True}
-
-
-class SDMModelWrapper(AGModelWrapper):
-    def cleanup(self) -> None:
-        model = getattr(self, "model", None)
-        cleanup = getattr(model, "cleanup", None)
-        if callable(cleanup):
-            cleanup()
-
-
-class SDMExperimentRunner(OOFExperimentRunner):
-    def run(self) -> dict:
-        try:
-            return self._run()
-        finally:
-            if self.cleanup and getattr(self, "model", None) is not None:
-                self._cleanup()
 
 
 class SDMTabICLv2Model(SDMModel):
@@ -223,18 +313,111 @@ class SDMTabICLv2Model(SDMModel):
         return sdm.models.TabICLv2(task=task, device=device)
 
 
-class SDMKumoTabularModel(SDMModel):
-    ag_key = "SDM-KUMO-TABULAR"
-    ag_name = "SDMKumoTabular"
-    default_num_estimators = 8
-    autocast_dtype = torch.float16
+def _load_kumo_network(
+    *,
+    task: str,
+    size: KumoTabularSize,
+    device: torch.device,
+) -> torch.nn.Module:
+    return sdm.models.KumoTabular(
+        task=task,
+        size=size,
+        device=device,
+    ).models[task]
 
-    @staticmethod
+
+class SDMKumoTabularModel(SDMModel):
+    size: ClassVar[KumoTabularSize]
+    default_num_estimators = 16
+    autocast_dtype = torch.float16
+    # AutoGluon's feature generator hands binary columns over as integers.
+    low_cardinality = "infer"
+    # Bagged children are fit one at a time in this process, so they share the
+    # pretrained network of their task through AutoGluon's registry.
+    _default_ag_args_ensemble_extra: ClassVar[dict[str, Any]] = {
+        "fold_fitting_strategy": "sequential_local",
+    }
+    shared_weights: ClassVar[SharedWeights] = SharedWeights(
+        loader="benchmark.tabular.model:_load_kumo_network",
+        key=("task", "size"),
+    )
+
+    @classmethod
+    def warmup(
+        cls,
+        *,
+        problem_type: str | None = None,
+        num_cpus: int | None = None,
+        num_gpus: float | None = None,
+        hyperparameters: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        warmup_torch(cuda=None if num_gpus is None else num_gpus > 0)
+
+    @classmethod
     def _create_model(
+        cls,
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
-        return sdm.models.KumoTabular(task=task, device=device)
+        model = sdm.models.KumoTabular(
+            task=task,
+            size=cls.size,
+            pretrained=False,
+            device="meta",
+        )
+        model.models[task] = _load_kumo_network(
+            task=task,
+            size=cls.size,
+            device=device,
+        )
+        return model
+
+    # AutoGluon does not look inside the served model for the shared network,
+    # so the pickle holds a placeholder and the load restores the network on
+    # the fit device.
+    def __getstate__(self) -> dict[str, Any]:
+        if self.model is None or self._shared_state is None:
+            return super().__getstate__()
+        served = cast(sdm.models.KumoTabular, self.model)
+        model = copy.copy(served)
+        model._modules = dict(served._modules)
+        model._modules["models"] = torch.nn.ModuleDict(
+            modules={task: torch.nn.Identity() for task in served.models},
+        )
+        return {**self.__dict__, "model": model}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        super().__setstate__(state)
+        if self.model is None or self._shared_state is None:
+            return
+        served = cast(sdm.models.KumoTabular, self.model)
+        for task in served.models:
+            served.models[task] = _load_kumo_network(
+                task=task,
+                size=self.size,
+                device=self._device,
+            )
+
+
+class SDMKumoTabularSmallModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-SMALL"
+    ag_name = "SDMKumoTabularSmall"
+    size = "small"
+    default_num_estimators = 8
+
+
+class SDMKumoTabularMediumModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-MEDIUM"
+    ag_name = "SDMKumoTabularMedium"
+    size = "medium"
+    default_num_estimators = 8
+
+
+class SDMKumoTabularLargeModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-LARGE"
+    ag_name = "SDMKumoTabularLarge"
+    size = "large"
 
 
 class SDMTabFMModel(SDMModel):
@@ -274,9 +457,17 @@ MODEL_CONFIGS = {
         name="TabICLv2",
         model_cls=SDMTabICLv2Model,
     ),
-    "kumo-tabular": ModelConfig(
-        name="KumoTabular",
-        model_cls=SDMKumoTabularModel,
+    "kumo-tabular-small": ModelConfig(
+        name="KumoTabular-Small",
+        model_cls=SDMKumoTabularSmallModel,
+    ),
+    "kumo-tabular-medium": ModelConfig(
+        name="KumoTabular-Medium",
+        model_cls=SDMKumoTabularMediumModel,
+    ),
+    "kumo-tabular-large": ModelConfig(
+        name="KumoTabular-Large",
+        model_cls=SDMKumoTabularLargeModel,
     ),
     "tabfm": ModelConfig(
         name="TabFM",

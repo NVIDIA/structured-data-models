@@ -182,6 +182,21 @@ def test_getitem_preserves_groups_and_order() -> None:
     assert output[1].equal(tables[2])
 
 
+@pytest.mark.parametrize("member_ids", [(0, 2, 4), (4, 2, 0), (0, 3, 4)])
+def test_getitem_strided_members(member_ids: tuple[int, ...]) -> None:
+    values = torch.arange(30).float().reshape(5, 3, 2)
+    table = EnsembleTable(
+        groups=(TableTensor.from_tensor(values),),
+        locations=tuple((0, index) for index in range(5)),
+    )
+
+    selected = table[member_ids]
+
+    assert len(selected) == len(member_ids)
+    for position, index in enumerate(member_ids):
+        torch.testing.assert_close(selected[position].numerical, values[index])
+
+
 def test_concatenate_columns_preserves_member_order() -> None:
     left = EnsembleTable.from_tables(
         tables=(

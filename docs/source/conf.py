@@ -36,6 +36,7 @@ templates_path = ["_templates"]
 html_theme = "shibuya"
 html_title = project
 html_logo = "images/nvidia.svg"
+html_favicon = "images/nvidia.svg"
 html_theme_options = {
     "accent_color": "green",
     "github_url": "https://github.com/NVIDIA/structured-data-models",

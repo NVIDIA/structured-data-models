@@ -8,11 +8,15 @@ import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
-from sdm.models.kumo.tabular import KumoTabular
+from sdm.models import KumoTabular
+from sdm.testing import onlyMPS
 
 
-def _build(task: Literal["classification", "regression"]) -> KumoTabular:
-    model = KumoTabular(task=task, pretrained=False)
+def _build(
+    task: Literal["classification", "regression"],
+    size: Literal["small", "medium", "large"],
+) -> KumoTabular:
+    model = KumoTabular(task=task, size=size, pretrained=False)
     # Residual branches are zero-initialized, so an untrained model maps every
     # row onto the same constant. Randomize them to make the prediction depend
     # on the features it is given.
@@ -23,13 +27,20 @@ def _build(task: Literal["classification", "regression"]) -> KumoTabular:
 
 
 @pytest.fixture
-def cls_model() -> KumoTabular:
-    return _build("classification")
+def cls_model(size: Literal["small", "medium", "large"]) -> KumoTabular:
+    return _build("classification", size)
 
 
 @pytest.fixture
-def reg_model() -> KumoTabular:
-    return _build("regression")
+def reg_model(size: Literal["small", "medium", "large"]) -> KumoTabular:
+    return _build("regression", size)
+
+
+@pytest.fixture(params=["small", "medium", "large"])
+def size(
+    request: pytest.FixtureRequest,
+) -> Literal["small", "medium", "large"]:
+    return request.param
 
 
 def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
@@ -57,12 +68,12 @@ def _features(stype: Stype = Stype.categorical) -> tuple[TableTensor, ...]:
     return x.split(3, dim=0)
 
 
-def _cls_target() -> TableTensor:
+def _cls_target(num_classes: int = 3) -> TableTensor:
     return TableTensor(
         columns={Stype.categorical: ("target",)},
         categorical=CategoricalTensor(
-            code=torch.tensor([[0], [2], [0]]),
-            categories=(torch.arange(3).mul(10),),
+            code=torch.tensor([[0], [num_classes - 1], [0]]),
+            categories=(torch.arange(num_classes).mul(10),),
         ),
     )
 
@@ -76,7 +87,7 @@ def _recipe() -> sp.Recipe:
     return sp.Recipe(
         features=[sp.ToNumerical()],
         target=sp.StypeDispatch(numerical=sp.Standardize()),
-        output=[sp.ReduceEstimators(method="mean")],
+        output=[sp.AverageEstimators()],
     )
 
 
@@ -120,19 +131,85 @@ def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:
     assert not categorical.allclose(numerical)
 
 
+@pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("estimator_batch_size", [2, None])
+def test_estimator_batching(
+    task: Literal["classification", "regression"],
+    size: Literal["small", "medium", "large"],
+    estimator_batch_size: int | None,
+) -> None:
+    model = _build(task, size)
+    x_context, x_query = _features()
+    target = _cls_target() if task == "classification" else _reg_target()
+    # Match the shuffled features and target categories in both executions.
+    expected = model(
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        num_estimators=5,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    actual = model(
+        x_context=x_context,
+        y_context=target,
+        x_query=x_query,
+        num_estimators=5,
+        estimator_batch_size=estimator_batch_size,
+        generator=torch.Generator().manual_seed(0),
+    )
+    assert actual.columns == expected.columns
+    assert actual.dtype == expected.dtype
+    assert torch.is_inference(actual)
+    torch.testing.assert_close(
+        actual=actual.numerical,
+        expected=expected.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
+
+    model.fit(
+        x=x_context,
+        y=target,
+        num_estimators=5,
+        estimator_batch_size=estimator_batch_size,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = model.predict(x_query)
+    assert actual.columns == expected.columns
+    torch.testing.assert_close(
+        actual=actual.numerical,
+        expected=expected.numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
+
+
 def test_fit_predict(
     cls_model: KumoTabular,
     reg_model: KumoTabular,
 ) -> None:
     x_context, x_query = _features()
-    target = _cls_target()
+    for num_classes in (3, 11):
+        target = _cls_target(num_classes)
+        expected = cls_model(
+            x_context=x_context,
+            y_context=target,
+            x_query=x_query,
+            recipe=_recipe(),
+            generator=torch.Generator().manual_seed(0),
+        )
+        cls_model.fit(
+            x=x_context,
+            y=target,
+            recipe=_recipe(),
+            generator=torch.Generator().manual_seed(0),
+        )
+        actual = cls_model.predict(x_query)
 
-    expected = cls_model(x_context, target, x_query, recipe=_recipe())
-    cls_model.fit(x_context, target, recipe=_recipe())
-    actual = cls_model.predict(x_query)
-
-    assert actual.allclose(expected, atol=1e-5)
-    assert actual.columns == expected.columns
+        assert actual.size() == (2, num_classes)
+        assert actual.allclose(expected, atol=1e-5)
+        assert actual.columns == expected.columns
 
     x_context, x_query = _features(Stype.numerical)
     target = _reg_target()
@@ -149,8 +226,10 @@ def test_fit_predict(
     )
 
 
-def test_missing_values_pass_through_fit_predict() -> None:
-    model = _build("regression")
+def test_missing_values_pass_through_fit_predict(
+    size: Literal["small", "medium", "large"],
+) -> None:
+    model = _build("regression", size)
     x_context = TableTensor.from_tensor(
         torch.tensor(
             [
@@ -180,3 +259,77 @@ def test_missing_values_pass_through_fit_predict() -> None:
     assert cached.shape == direct.shape
     assert (direct.numerical.diff(dim=-1) >= 0).all()
     assert (cached.numerical.diff(dim=-1) >= 0).all()
+
+
+@pytest.mark.parametrize("estimator_batch_size", [2, None])
+def test_estimator_batching_many_classes(
+    estimator_batch_size: int | None,
+) -> None:
+    # More than 10 classes run through ECOC codebooks drawn per estimator.
+    model = _build("classification", "small")
+    x_context, x_query = TableTensor.from_tensor(torch.randn(28, 4)).split(
+        24, dim=0
+    )
+    target = TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor(
+            code=torch.arange(24).remainder(12).unsqueeze(-1),
+            categories=(torch.arange(12),),
+        ),
+    )
+
+    def forward(size: int | None) -> TableTensor:
+        return model(
+            x_context=x_context,
+            y_context=target,
+            x_query=x_query,
+            num_estimators=4,
+            estimator_batch_size=size,
+            generator=torch.Generator().manual_seed(0),
+        )
+
+    expected = forward(1)
+    actual = forward(estimator_batch_size)
+    assert actual.columns == expected.columns
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+
+    model.fit(
+        x=x_context,
+        y=target,
+        num_estimators=4,
+        estimator_batch_size=estimator_batch_size,
+        generator=torch.Generator().manual_seed(0),
+    )
+    actual = model.predict(x_query)
+    assert actual.columns == expected.columns
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+
+
+@onlyMPS
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_default_recipe_on_mps(
+    task: Literal["classification", "regression"],
+) -> None:
+    model = _build(task, "small").to("mps")
+    if task == "classification":
+        x_context, x_query = _features()
+        target = _cls_target()
+    else:
+        x_context, x_query = _features(Stype.numerical)
+        target = _reg_target()
+
+    x_context, x_query, target = (
+        x_context.to("mps"),
+        x_query.to("mps"),
+        target.to("mps"),
+    )
+
+    out1 = model(x_context, target, x_query, num_estimators=4)
+    assert out1.device == torch.device("mps", 0)
+    assert out1.numerical.isfinite().all()
+
+    model.fit(x_context, target, num_estimators=4)
+    out2 = model.predict(x_query)
+    assert out2.device == torch.device("mps", 0)
+    assert out2.size() == out1.size()
+    assert out2.numerical.isfinite().all()
