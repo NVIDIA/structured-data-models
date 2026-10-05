@@ -129,9 +129,9 @@ def test_gather_future_patches_varied_sizes(
     num_future_patches: int,
 ) -> None:
     patch_len = 2
-    x = torch.arange(
-        num_patches * patch_len, device=device
-    ).reshape(1, 1, num_patches, patch_len)
+    x = torch.arange(num_patches * patch_len, device=device).reshape(
+        1, 1, num_patches, patch_len
+    )
 
     output, wrap_mask = gather_future_patches(x, num_future_patches)
 
