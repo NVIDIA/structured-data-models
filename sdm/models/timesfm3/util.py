@@ -127,77 +127,74 @@ def revin(
     return (x - mean) / torch.where(std < 1e-6, 1.0, std)
 
 
-def get_output_patch_via_roll(
-    x: Tensor,
-    rolls: int,
-) -> tuple[Tensor, Tensor]:
-    """Create output patches by rolling patched inputs.
+def gather_future_patches(
+    x: Tensor,  # [..., C, N, P]
+    num_future_patches: int,
+) -> tuple[Tensor, Tensor]:  # [..., C, N, K * P], [1, 1, N, K * P]
+    """Concatenate next patches to each patch, wrapping around past the end.
 
     Args:
-        x: Patched inputs with shape ``[B, V, N, P]``.
-        rolls: Number of future patches in each output patch.
+        x: Input patches with shape ``[..., C, N, P]``, where ``C`` is the
+            number of channels, ``N`` is the number of patches, and ``P`` is
+            the patch size.
+        num_future_patches: Number ``K`` of subsequent patches to concatenate.
 
     Returns:
-        Rolled values with shape ``[B, V, N, P * rolls]`` and a wrap-around
-        mask with shape ``[1, 1, N, P * rolls]``.
+        Concatenated patches with shape ``[..., C, N, K * P]``, and a
+        wrap-around mask with shape ``[1, 1, N, K * P]`` marking values taken
+        from the beginning of the sequence.
     """
-    batch_size, num_variates, num_patches, patch_len = x.size()
-    patch_indices = torch.arange(num_patches, device=x.device)
-    roll_indices = torch.arange(1, rolls + 1, device=x.device)
-    source_indices = patch_indices[:, None] + roll_indices[None, :]
-    wrap_mask = (source_indices >= num_patches).repeat_interleave(
-        patch_len,
-        dim=-1,
-    )
-    source_indices = source_indices % num_patches
-    result = x.index_select(2, source_indices.flatten()).reshape(
-        batch_size,
-        num_variates,
-        num_patches,
-        rolls * patch_len,
-    )
+    *B, C, N, P = x.size()
+    K = num_future_patches
 
-    return result, wrap_mask.unsqueeze(0).unsqueeze(0)
+    offsets = torch.arange(1, K + 1, device=x.device)
+    indices = torch.arange(N, device=x.device).unsqueeze(-1) + offsets
+
+    future = x.index_select(-2, (indices % N).flatten())
+    future = future.reshape(*B, C, N, K * P)
+    mask = (indices >= N).repeat_interleave(P, dim=-1)
+
+    return future, mask.unsqueeze(0).unsqueeze(0)
 
 
-def stitch_patches(
-    patch_preds: Tensor,
-    patch_len: int,
-) -> Tensor:
-    """Stitch overlapping patch predictions.
+def crossfade_patches(
+    patches: Tensor,  # [..., N, S + O, D]
+    step: int,
+) -> Tensor:  # [..., N * S + O, D]
+    """Merge overlapping patches into a sequence, crossfading the overlaps.
+
+    Patch ``i`` starts at position ``i * S``. Where consecutive patches
+    overlap, values are linearly interpolated from the earlier patch to the
+    later one.
 
     Args:
-        patch_preds: Predictions with shape ``[B, V, N, P + O, Q]``, where
-            ``O`` is the overlap and ``Q`` is the number of quantiles.
-        patch_len: Non-overlapping patch length ``P``.
+        patches: Patches with shape ``[..., N, S + O, D]``, where ``N`` is the
+            number of patches, ``O`` is the overlap between consecutive
+            patches, and ``D`` is the feature dimension.
+        step: Distance ``S`` between patch starts, at least ``O``.
 
     Returns:
-        Stitched predictions with shape ``[B, V, N * P + O, Q]``.
+        Merged sequence with shape ``[..., N * S + O, D]``.
     """
-    batch_size, num_variates, num_patches, total_len, num_quantiles = (
-        patch_preds.size()
-    )
-    overlap = total_len - patch_len
-    if num_patches == 1:
-        return patch_preds[:, :, 0, :, :]
+    *B, N, T, D = patches.size()
+    if N == 1:
+        return patches[..., 0, :, :]
 
-    stitch_weights = torch.linspace(
-        1.0,
-        0.0,
-        overlap,
-        device=patch_preds.device,
-        dtype=patch_preds.dtype,
-    )[None, None, None, :, None]
-    first = patch_preds[:, :, 0, :patch_len, :]
-    previous = patch_preds[:, :, :-1, patch_len:, :]
-    following = patch_preds[:, :, 1:, :overlap, :]
-    stitched = stitch_weights * previous + (1.0 - stitch_weights) * following
-    middles = patch_preds[:, :, 1:, overlap:patch_len, :]
-    middle = torch.cat((stitched, middles), dim=3).reshape(
-        batch_size,
-        num_variates,
-        (num_patches - 1) * patch_len,
-        num_quantiles,
-    )
-    tail = patch_preds[:, :, -1, patch_len:, :]
-    return torch.cat((first, middle, tail), dim=2)
+    overlap = T - step
+    assert 0 <= overlap <= step
+
+    weights = torch.linspace(
+        1.0, 0.0, overlap, device=patches.device, dtype=patches.dtype
+    ).unsqueeze(-1)
+
+    tails = patches[..., :-1, step:, :]
+    heads = patches[..., 1:, :overlap, :]
+    blended = weights * tails + (1.0 - weights) * heads
+    bodies = patches[..., 1:, overlap:step, :]
+
+    first = patches[..., 0, :step, :]
+    middle = torch.cat((blended, bodies), dim=-2)
+    middle = middle.reshape(*B, (N - 1) * step, D)
+    last = patches[..., -1, step:, :]
+
+    return torch.cat((first, middle, last), dim=-2)
