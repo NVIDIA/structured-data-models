@@ -92,7 +92,7 @@ def get_running_stats(
         stds.append(std)
 
     return (
-        torch.stack(counts, -1),
-        torch.stack(means, -1),
-        torch.stack(stds, -1),
+        torch.stack(counts, dim=-1),
+        torch.stack(means, dim=-1),
+        torch.stack(stds, dim=-1),
     )
