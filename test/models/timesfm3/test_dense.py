@@ -12,10 +12,9 @@ from sdm.testing import withCUDA
 @withCUDA
 def test_residual_block_loads_checkpoint_weights(device: torch.device) -> None:
     block = ResidualBlock(
-        input_dims=3,
-        hidden_dims=2,
-        output_dims=2,
-        use_bias=False,
+        in_channels=3,
+        out_channels=2,
+        bias=False,
         device=device,
     )
     block.load_state_dict(
@@ -45,11 +44,10 @@ def test_residual_block_loads_checkpoint_weights(device: torch.device) -> None:
 @withCUDA
 def test_residual_block_uses_relu(device: torch.device) -> None:
     block = ResidualBlock(
-        input_dims=1,
-        hidden_dims=1,
-        output_dims=1,
-        use_bias=False,
-        identity_skip=True,
+        in_channels=1,
+        out_channels=1,
+        bias=False,
+        identity_residual=True,
         device=device,
     )
     with torch.no_grad():
@@ -67,10 +65,9 @@ def test_residual_block_explicitly_sets_input_dimension(
     device: torch.device,
 ) -> None:
     block = ResidualBlock(
-        input_dims=5,
-        hidden_dims=3,
-        output_dims=4,
-        use_bias=True,
+        in_channels=5,
+        out_channels=4,
+        bias=True,
     ).to(
         device=device,
         dtype=torch.float64,
@@ -88,11 +85,10 @@ def test_residual_block_explicitly_sets_input_dimension(
 
 def test_residual_block_meta_device() -> None:
     block = ResidualBlock(
-        input_dims=5,
-        hidden_dims=3,
-        output_dims=4,
-        use_bias=True,
-        prenorm="rms",
+        in_channels=5,
+        out_channels=4,
+        bias=True,
+        prenorm=True,
         device="meta",
     )
     assert all(
@@ -101,13 +97,12 @@ def test_residual_block_meta_device() -> None:
 
 
 @withCUDA
-def test_residual_block_identity_skip(device: torch.device) -> None:
+def test_residual_block_identity_residual(device: torch.device) -> None:
     block = ResidualBlock(
-        input_dims=2,
-        hidden_dims=3,
-        output_dims=2,
-        use_bias=False,
-        identity_skip=True,
+        in_channels=2,
+        out_channels=2,
+        bias=False,
+        identity_residual=True,
         device=device,
     )
     with torch.no_grad():
@@ -120,26 +115,24 @@ def test_residual_block_identity_skip(device: torch.device) -> None:
     torch.testing.assert_close(output, x)
 
 
-def test_residual_block_identity_skip_requires_matching_dimensions() -> None:
-    with pytest.raises(ValueError, match="identity_skip requires"):
+def test_residual_block_identity_residual_requires_equal_channels() -> None:
+    with pytest.raises(ValueError, match="identity_residual requires"):
         ResidualBlock(
-            input_dims=4,
-            hidden_dims=3,
-            output_dims=1,
-            use_bias=False,
-            identity_skip=True,
+            in_channels=4,
+            out_channels=1,
+            bias=False,
+            identity_residual=True,
         )
 
 
 @withCUDA
 def test_residual_block_rms_prenorm(device: torch.device) -> None:
     block = ResidualBlock(
-        input_dims=2,
-        hidden_dims=2,
-        output_dims=2,
-        use_bias=False,
-        identity_skip=True,
-        prenorm="rms",
+        in_channels=2,
+        out_channels=2,
+        bias=False,
+        identity_residual=True,
+        prenorm=True,
         device=device,
     )
     with torch.no_grad():

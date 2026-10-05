@@ -15,93 +15,71 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any, Literal
+from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import Linear, ReLU, RMSNorm
+from torch.nn import Identity, Linear, ReLU, RMSNorm
 
 
 class ResidualBlock(torch.nn.Module):
     """Apply the TimesFM-3 two-layer residual block.
 
     Args:
-        input_dims: Size of the last input dimension.
-        hidden_dims: Hidden-layer width.
-        output_dims: Output width.
-        use_bias: Whether linear layers use bias parameters.
-        identity_skip: Whether to use an identity residual connection.
-        prenorm: Normalization applied before the hidden layer.
+        in_channels: Size of the last input dimension.
+        out_channels: Output width and hidden-layer width.
+        bias: Whether linear layers have bias parameters.
+        identity_residual: Add the input directly to the output. Requires
+            ``in_channels == out_channels``. Otherwise, project the input.
+        prenorm: Apply RMS normalization before the hidden layer.
         device: Device on which to create parameters.
         dtype: Data type of the parameters.
     """
 
     def __init__(
         self,
-        input_dims: int,
-        hidden_dims: int,
-        output_dims: int,
-        use_bias: bool,
-        identity_skip: bool = False,
-        prenorm: Literal["rms", "none"] = "none",
+        in_channels: int,
+        out_channels: int,
+        bias: bool = True,
+        identity_residual: bool = False,
+        prenorm: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        if identity_skip and output_dims != input_dims:
+        if identity_residual and out_channels != in_channels:
             raise ValueError(
-                "identity_skip requires output_dims to match input_dims, got "
-                f"{output_dims} and {input_dims}"
+                "identity_residual requires matching channels, got "
+                f"{out_channels} and {in_channels}"
             )
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.hidden_layer = Linear(
-            in_features=input_dims,
-            out_features=hidden_dims,
-            bias=use_bias,
-            **factory_kwargs,
+            in_channels, out_channels, bias=bias, **factory_kwargs
         )
         self.output_layer = Linear(
-            in_features=hidden_dims,
-            out_features=output_dims,
-            bias=use_bias,
-            **factory_kwargs,
+            out_channels, out_channels, bias=bias, **factory_kwargs
         )
-        if identity_skip:
-            self.residual_layer: Linear | None = None
-        else:
-            self.residual_layer = Linear(
-                in_features=input_dims,
-                out_features=output_dims,
-                bias=use_bias,
-                **factory_kwargs,
-            )
-
+        self.residual_layer = (
+            Linear(in_channels, out_channels, bias=bias, **factory_kwargs)
+            if not identity_residual
+            else Identity()
+        )
         self.activation = ReLU()
-        if prenorm == "rms":
-            self.pre_norm: RMSNorm | None = RMSNorm(
-                input_dims,
-                **factory_kwargs,
-            )
-        elif prenorm == "none":
-            self.pre_norm = None
-        else:
-            raise AssertionError(f"Unhandled pre-normalization: {prenorm}")
+        self.pre_norm = (
+            RMSNorm(in_channels, **factory_kwargs) if prenorm else Identity()
+        )
 
     def forward(self, x: Tensor) -> Tensor:
-        """Transform input values and add the residual connection.
+        """The forward pass.
 
         Args:
-            x: Input values with shape ``[..., D]``, where ``D`` is the input
-                dimension.
+            x: Input tensor with shape ``[..., Ci]``, where ``Ci`` is the
+                number of input channels.
 
         Returns:
-            Transformed values with shape ``[..., O]``, where ``O`` is the
-            configured output dimension.
+            Tensor with shape ``[..., Co]``, where ``Co`` is the
+                number of output channels.
         """
-        hidden_input = self.pre_norm(x) if self.pre_norm is not None else x
-        hidden_output = self.activation(self.hidden_layer(hidden_input))
-        output = self.output_layer(hidden_output)
-        if self.residual_layer is not None:
-            return output + self.residual_layer(x)
-        return output + x
+        hidden = self.activation(self.hidden_layer(self.pre_norm(x)))
+        return self.output_layer(hidden) + self.residual_layer(x)
