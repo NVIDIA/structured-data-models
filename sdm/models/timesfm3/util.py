@@ -96,3 +96,32 @@ def get_running_stats(
         torch.stack(means, dim=-1),
         torch.stack(stds, dim=-1),
     )
+
+
+def revin(
+    x: Tensor,
+    mean: Tensor,
+    std: Tensor,
+    reverse: bool = False,
+) -> Tensor:
+    r"""Apply the reversible instance normalization from the
+    `"Reversible Instance Normalization for Accurate Time-Series Forecasting
+    against Distribution Shift" <https://openreview.net/forum?id=cGDAkQo1C0p>`_
+    paper.
+
+    Args:
+        x: Input values with shape ``[..., C]`` or ``[..., C_1, C_2]``.
+        mean: Means with shape ``[...]``.
+        std: Standard deviation with shape ``[...]``.
+        reverse: Whether to denormalize rather than normalize.
+    """  # noqa: D205
+    assert mean.dim() == std.dim()
+    assert mean.dim() + 2 >= x.dim()
+    for _ in range(x.dim() - mean.dim()):
+        mean = mean.unsqueeze(-1)
+        std = std.unsqueeze(-1)
+
+    if reverse:
+        return x * std + mean
+
+    return (x - mean) / torch.where(std < 1e-6, 1.0, std)
