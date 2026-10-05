@@ -22,11 +22,6 @@ def download_checkpoint(
     Authentication is delegated to :mod:`huggingface_hub`, which uses its
     configured login or the ``HF_TOKEN`` environment variable for private
     repositories.
-
-    If ``config_filename`` is provided, fetch that configuration at the same
-    revision before downloading uncached checkpoints. Requests to root-level
-    ``config.json`` are counted by the Hub's model download statistics. Cached
-    checkpoint loads remain local and do not fetch configuration metadata.
     """
     try:
         return hf_hub_download(
