@@ -179,6 +179,9 @@ class CellEmbedding(torch.nn.Module):
 
         if torch.is_grad_enabled():
             x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., R, C, G, F]
+        elif torch.compiler.is_compiling():
+            # Match eager inference's multiply, then float32 buffer cast.
+            x = (x.unsqueeze(-1) * freq).to(torch.float32)
         else:
             tmp = x.new_empty((*B, C, R, G, F), dtype=torch.float32)
             torch.mul(x.unsqueeze(-1), freq, out=tmp.transpose(-4, -3))
@@ -188,7 +191,7 @@ class CellEmbedding(torch.nn.Module):
         # Store rows within each column so the projection uses views.
         fourier = x.new_empty((*B, C, R, G, 2 * F), dtype=weight.dtype)
         fourier = fourier.transpose(-4, -3)  # [..., R, C, G, 2F]
-        if torch.is_grad_enabled():
+        if torch.is_grad_enabled() or torch.compiler.is_compiling():
             fourier[..., : x.size(-1)] = x.sin()
             fourier[..., x.size(-1) :] = x.cos()
         else:
@@ -200,7 +203,11 @@ class CellEmbedding(torch.nn.Module):
         weight = weight.transpose(-3, -2).flatten(-2).squeeze(-4).mT
         # fourier: [..., C, R, G*2F]
         fourier = fourier.transpose(-4, -3).flatten(-2)
-        if out is None or out.dtype != weight.dtype:
+        if (
+            out is None
+            or out.dtype != weight.dtype
+            or torch.compiler.is_compiling()
+        ):
             # projected: [..., R, C, D]
             projected = torch.matmul(fourier, weight).transpose(-3, -2)
             if out is None:

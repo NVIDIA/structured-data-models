@@ -80,20 +80,6 @@ class CellEmbedding(TabFMCellEmbedding):
         out: Tensor | None = None,
     ) -> Tensor:
 
-        if torch.compiler.is_compiling() and not torch.is_grad_enabled():
-            # Keep eager multiplication and intermediate rounding order.
-            phase = (x.unsqueeze(-1) * freq).to(torch.float32)
-            phase = phase.transpose(-4, -3)
-            fourier = torch.cat([phase.sin(), phase.cos()], dim=-1)
-            fourier = fourier.to(weight.dtype).flatten(-2)
-            weight = weight.transpose(-3, -2).flatten(-2).squeeze(-4).mT
-            projected = torch.matmul(fourier, weight).transpose(-3, -2)
-            if out is None:
-                out = projected
-            else:
-                out.copy_(projected)
-            out += bias.to(out.dtype)
-        else:
-            out = super()._forward(x, freq, weight, bias, out=out)
+        out = super()._forward(x, freq, weight, bias, out=out)
         out += self.nan_lin(missing.to(out.dtype))
         return out
