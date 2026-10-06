@@ -115,7 +115,7 @@ if args.text:
         sp.StypeDispatch(
             text=[
                 sp.SentenceTransformer(
-                    "sentence-transformers/all-MiniLM-L6-v2",
+                    model_name="sentence-transformers/all-MiniLM-L6-v2",
                 ),
                 sp.PCA(args.text_dim),
             ],
