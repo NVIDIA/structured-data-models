@@ -13,11 +13,11 @@ from sdm.testing import withCUDA
 @pytest.mark.skipif(os.getenv("FULL_TEST", "0") != "1", reason="Fast test run")
 @withCUDA
 @pytest.mark.parametrize("fullgraph", [False, True])
-@pytest.mark.parametrize("strided", [False, True])
+@pytest.mark.parametrize("layout", ["contiguous", "strided", "alias"])
 def test_transformer_compile_output_buffer(
     device: torch.device,
     fullgraph: bool,
-    strided: bool,
+    layout: str,
 ) -> None:
     module = TabICLv2TransformerBlock(
         channels=8,
@@ -32,8 +32,13 @@ def test_transformer_compile_output_buffer(
         module.mlp[-1].weight.fill_(0.05)
         module.mlp[-1].bias.fill_(0.1)
 
-    storage = torch.full((2, 3, 16 if strided else 8), -123.0, device=device)
-    out = storage[..., ::2] if strided else storage
+    storage = torch.full(
+        (2, 3, 16 if layout == "strided" else 8), -123.0, device=device
+    )
+    out = storage[..., ::2] if layout == "strided" else storage
+    if layout == "alias":
+        out.copy_(query)
+        query = out
     expected = torch.empty_like(out)
     torch._dynamo.reset()
     try:
@@ -47,7 +52,7 @@ def test_transformer_compile_output_buffer(
         assert result.data_ptr() == out.data_ptr()
         assert result.stride() == out.stride()
         torch.testing.assert_close(out, expected)
-        if strided:
+        if layout == "strided":
             assert (storage[..., 1::2] == -123.0).all()
     finally:
         torch._dynamo.reset()
