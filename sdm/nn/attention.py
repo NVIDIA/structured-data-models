@@ -696,13 +696,10 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             attn_out = self.post_attn_norm(attn_out)
 
-        if (
-            out is not None
-            and torch.compiler.is_compiling()
-            and not out.is_contiguous()
-        ):
-            tmp = attn_out + query
-            out.copy_(tmp + self.mlp(tmp))
+        if out is not None and torch.compiler.is_compiling():
+            # Match both eager out= rounding boundaries with functional ops.
+            tmp = (attn_out + query).to(out.dtype)
+            out.copy_((tmp + self.mlp(tmp)).to(out.dtype))
         else:
             tmp = torch.add(attn_out, query, out=out)
             out = torch.add(tmp, self.mlp(tmp), out=out)
