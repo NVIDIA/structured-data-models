@@ -450,7 +450,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
-                outs += self._forward_batch(
+                outs += self._run_estimators(
                     contexts=None,
                     queries=batch_queries,
                     cache=cache,
@@ -628,7 +628,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             class_values=class_values,
             estimator_batch_size=estimator_batch_size,
         ):
-            outs += self._forward_batch(
+            outs += self._run_estimators(
                 contexts=contexts[batch],
                 queries=queries[batch],
                 cache=None,
@@ -680,7 +680,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         )
         return query
 
-    def _forward_batch(
+    def _run_estimators(
         self,
         contexts: Sequence[MemberContext] | None,
         queries: Sequence[MemberQuery],
@@ -696,11 +696,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
         # Stacking inside the autograd region keeps callback-captured leaves
         # attached to the graph.
         with inference_mode("grad" if requires_grad else "inference"):
-            context = None if contexts is None else _stack_context(contexts)
+            if len(queries) == 1:
+                context = None if contexts is None else contexts[0]
+                query = queries[0]
+            else:
+                context = (
+                    None if contexts is None else _stack_context(contexts)
+                )
+                query = _stack_query(queries)
+
             if categorical_mask is None:
                 assert contexts is not None
                 categorical_mask = _categorical_mask(contexts)
-            query = _stack_query(queries)
             out = self._forward(
                 x_context=None if context is None else context.x,
                 y_context=None if context is None else context.y,
