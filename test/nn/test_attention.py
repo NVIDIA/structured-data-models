@@ -231,6 +231,20 @@ def test_sdpa_scale(device: torch.device) -> None:
     torch.testing.assert_close(out, expected)
 
 
+@withCUDA
+def test_sdpa_empty_batch(device: torch.device) -> None:
+    # Non-empty queries broadcast against an empty key/value batch yield an
+    # empty result. Half precision selects FlashAttention on sm80+ GPUs,
+    # which rejects empty batches before PyTorch 2.10:
+    module = SDPA(num_query_heads=2)
+    query = torch.randn(3, 2, 8, dtype=torch.bfloat16, device=device)
+    key = torch.randn(0, 5, 2, 8, dtype=torch.bfloat16, device=device)
+    value = torch.randn(0, 5, 2, 8, dtype=torch.bfloat16, device=device)
+
+    out = module(query=query, key=key, value=value)
+    assert out.size() == (0, 3, 2, 8)
+
+
 def test_sdpa_errors() -> None:
     channels = 3
     num_heads = 2

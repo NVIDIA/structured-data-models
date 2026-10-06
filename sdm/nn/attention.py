@@ -122,7 +122,9 @@ class SDPA(torch.nn.Module):
         key_size = key.size()[-3:]
         value_size = value.size()[-3:]
 
-        if key_size[0] == 0:  # No key/value pairs - abort early:
+        # No key/value pairs or an empty batch, which FlashAttention rejects
+        # before PyTorch 2.10 - abort early:
+        if key_size[0] == 0 or 0 in batch_shape:
             return query.new_zeros(batch_shape + query_size)
 
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
