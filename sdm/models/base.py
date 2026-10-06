@@ -503,21 +503,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
     def __setstate__(self, state: dict[str, object]) -> None:
         super().__setstate__(state)
         self._transfer_streams = {}
-        if self._cache is not None:
-            cache = Cache(self._cache)
-            start = 0
-            for i in range(cast(int, cache["num_batches"])):
-                batch_cache = cast(Cache, cache[i])
-                size = len(
-                    cast(tuple[TableSchema, ...], batch_cache["x_schemas"])
-                )
-                if "member_ids" not in batch_cache:
-                    cache[i] = Cache(
-                        batch_cache,
-                        member_ids=tuple(range(start, start + size)),
-                    )
-                start += size
-            self._cache = cache.freeze()
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
