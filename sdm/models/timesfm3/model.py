@@ -34,6 +34,11 @@ from sdm.models.timesfm3.ckpt import remap_ckpt
 from sdm.models.timesfm3.dense import ResidualBlock
 from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
+from sdm.models.timesfm3.util import (
+    gather_future_patches,
+    get_running_stats,
+    revin,
+)
 from sdm.tensor.table import TableSchema
 
 
@@ -253,6 +258,8 @@ class _TimesFM3(torch.nn.Module):
         super().__init__()
         self.input_patch_len = input_patch_len
         self.output_patch_len = output_patch_len
+        self.num_future_patches = output_patch_len // input_patch_len
+
         if quantiles is None:
             quantiles = tuple(i / 10 for i in range(1, 10))
         self.quantiles = tuple(quantiles)
@@ -264,6 +271,7 @@ class _TimesFM3(torch.nn.Module):
             device=device,
             dtype=dtype,
         )
+
         self.icl_block = ICLBlock(
             channels=channels,
             out_channels=output_patch_len * len(self.quantiles),
@@ -272,6 +280,102 @@ class _TimesFM3(torch.nn.Module):
             device=device,
             dtype=dtype,
         )
+
+    def _prepare_patch_inputs(
+        self,
+        x: Tensor,  # [B, V, N, P]
+        mask: Tensor,  # [B, V, N, P]
+        patch_is_target: Tensor,  # [B, V, N]
+        freeze_after: int | None = None,
+        cpm_mask: Tensor | None = None,  # [B, N]
+    ) -> tuple[Tensor, Tensor, tuple[Tensor, Tensor, Tensor]]:
+        """Prepare masked patch features for the input residual block.
+
+        Running statistics use the original mask, before CPM hides target
+        values. Future values use the statistics of the current patch.
+
+        Args:
+            x: Input patches with shape ``[B, V, N, P]``.
+            mask: Invalid-value mask with shape ``[B, V, N, P]``.
+            patch_is_target: Target indicator with shape ``[B, V, N]``.
+            freeze_after: Last patch allowed to update the running mean and
+                standard deviation. Counts continue accumulating.
+            cpm_mask: Patch positions selected to hide target values under
+                CPM, with shape ``[B, N]``.
+
+        Returns:
+            The residual-block input with shape ``[B, V, N, 2 * (P + F)]``,
+            the fully masked patch indicator with shape ``[B, V, N]``, and
+            ``(count, mean, std)``. Here ``F = num_future_patches * P``.
+        """
+        count, mean, std = get_running_stats(x, mask)
+
+        if freeze_after is not None and 0 <= freeze_after < x.size(2) - 1:
+            mean[:, :, freeze_after + 1 :] = mean[
+                :, :, freeze_after : freeze_after + 1
+            ]
+            std[:, :, freeze_after + 1 :] = std[
+                :, :, freeze_after : freeze_after + 1
+            ]
+
+        current_mask = mask
+        if cpm_mask is not None:
+            current_mask = current_mask | (
+                cpm_mask[:, None, :, None] & patch_is_target[..., None]
+            )
+
+        future_x, past_end_mask = gather_future_patches(
+            x, self.num_future_patches
+        )
+        future_mask, _ = gather_future_patches(
+            current_mask, self.num_future_patches
+        )
+        future_mask |= patch_is_target[..., None]
+        future_mask |= past_end_mask
+
+        patch_mask = current_mask.all(dim=-1) & future_mask.all(dim=-1)
+
+        P, F = x.size(-1), future_x.size(-1)
+        residual_input = x.new_empty(
+            (*x.shape[:-1], 2 * (P + F)),  # (B, V, N, 2 * (P + F))
+            dtype=self.pre_transformer_resblock.hidden_layer.weight.dtype,
+        )
+
+        (
+            current_values,
+            future_values,
+            current_mask_values,
+            future_mask_values,
+        ) = residual_input.split(
+            (P, F, P, F),
+            dim=-1,
+        )
+        current_values.copy_(
+            revin(x, mean, std).masked_fill_(current_mask, 0.0)
+        )
+        future_values.copy_(
+            revin(future_x, mean, std).masked_fill_(future_mask, 0.0)
+        )
+        current_mask_values.copy_(current_mask)
+        future_mask_values.copy_(future_mask)
+
+        return residual_input, patch_mask, (count, mean, std)
+
+    def _preprocess(
+        self,
+        x: Tensor,
+        mask: Tensor,
+        patch_is_target: Tensor,
+        freeze_after: int | None = None,
+        cpm_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor, tuple[Tensor, Tensor, Tensor]]:
+        """Embed prepared patches and retain statistics for decoding."""
+        residual_input, patch_mask, stats = self._prepare_patch_inputs(
+            x, mask, patch_is_target, freeze_after, cpm_mask
+        )
+        out = self.pre_transformer_resblock(residual_input)
+
+        return out, residual_input, patch_mask, stats
 
 
 def expand_query(x_context: TableSchema, x_query: TableTensor) -> TableTensor:
