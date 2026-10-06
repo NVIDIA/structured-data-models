@@ -45,3 +45,16 @@ def test_cache_size() -> None:
     )
 
     assert cache.size() == 3 * 4 + 2 * 8 + 5 * 1 + 4 * 2
+
+
+def test_compile_freeze_cache() -> None:
+    def forward(x: torch.Tensor, cache: Cache) -> torch.Tensor:
+        cache.freeze()
+        assert cache.is_replaying
+        return cast(torch.Tensor, cache["value"]) + x
+
+    compiled = torch.compile(forward, backend="eager", fullgraph=True)
+    cache = Cache(value=torch.ones(2))
+    torch.testing.assert_close(
+        compiled(torch.ones(2), cache), torch.full((2,), 2.0)
+    )
