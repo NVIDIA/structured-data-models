@@ -58,6 +58,7 @@ class CellEmbedding(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C],
         *,
         batch_size_limit: int | Literal["auto"] | None = None,
+        chunk_memory_bytes: int | None = None,
         out: Tensor | None = None,
         **kwargs: Tensor,  # [..., R, C],
     ) -> Tensor:  # [..., R, C, D]
@@ -108,7 +109,12 @@ class CellEmbedding(torch.nn.Module):
         ).sum(dim=-2)  # [..., 1, C, D]
         bias = bias.to(dtype)
 
-        if torch.is_grad_enabled() or torch.compiler.is_compiling():
+        # Preserve legacy capture for callers without eager preflight.
+        if torch.is_grad_enabled() or (
+            torch.compiler.is_compiling()
+            and batch_size_limit == "auto"
+            and chunk_memory_bytes is None
+        ):
             return self._forward(x, freq, weight, bias, out=out, **kwargs)
 
         if batch_size_limit == "auto":
@@ -133,7 +139,11 @@ class CellEmbedding(torch.nn.Module):
                     + bias.numel() * bias.element_size()
                 )
 
-                memory_limit = chunk_memory_limit(x.device) - fixed_bytes
+                memory_limit = (
+                    chunk_memory_limit(x.device)
+                    if chunk_memory_bytes is None
+                    else chunk_memory_bytes
+                ) - fixed_bytes
                 batch_size_limit = memory_limit // max(bytes_per_example, 1)
                 batch_size_limit = max(batch_size_limit, 1)
 

@@ -113,6 +113,7 @@ class RowEmbedding(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
+        chunk_memory_bytes: int | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
         *B, R, C = x.size()
@@ -127,6 +128,7 @@ class RowEmbedding(torch.nn.Module):
                 categorical_mask=categorical_mask,
                 train_size=R_train,
                 cache=cache,
+                chunk_memory_bytes=chunk_memory_bytes,
             )  # [..., R, C, D]
         else:
             buffer = torch.empty(
@@ -142,6 +144,7 @@ class RowEmbedding(torch.nn.Module):
                 categorical_mask=categorical_mask,
                 train_size=R_train,
                 cache=cache,
+                chunk_memory_bytes=chunk_memory_bytes,
                 batch_size_limit="auto",
                 out=buffer[..., K:, :],
             )
@@ -178,6 +181,7 @@ class RowEmbedding(torch.nn.Module):
                 else x[..., :R_train, :],
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit="auto",
+                chunk_memory_bytes=chunk_memory_bytes,
                 out=None if buffer is None else x,
             )
 
@@ -198,6 +202,7 @@ class RowEmbedding(torch.nn.Module):
                     else x,
                     key_value=x,
                     batch_size_limit="auto",
+                    chunk_memory_bytes=chunk_memory_bytes,
                 )
             else:
                 buffer = row_block(
@@ -206,6 +211,7 @@ class RowEmbedding(torch.nn.Module):
                     else buffer,
                     key_value=buffer,
                     batch_size_limit="auto",
+                    chunk_memory_bytes=chunk_memory_bytes,
                     out=buffer[..., :K, :]
                     if i == len(self.row_blocks) - 1
                     else buffer,
