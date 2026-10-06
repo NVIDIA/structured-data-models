@@ -4,7 +4,19 @@
 from collections.abc import Hashable, Sequence
 from typing import Any
 
+from sdm import TableTensor
 from sdm.processing.execution import MemberContext, MemberQuery
+
+
+def _table_layout(table: TableTensor) -> Hashable:
+    r"""Describe tensor shapes, dtypes, and categorical vocabulary sizes."""
+    return (
+        tuple(
+            (stype, block.size(), block.dtype)
+            for stype, block in table.items()
+        ),
+        tuple(c.numel() for c in table.categorical.categories),
+    )
 
 
 def _batch_slices(
@@ -14,6 +26,9 @@ def _batch_slices(
     estimator_batch_size: int | None,
 ) -> list[slice]:
     r"""Group consecutive compatible estimators into model calls."""
+    if estimator_batch_size == 1:
+        return [slice(i, i + 1) for i in range(len(contexts))]
+
     related = any(context.related_tables is not None for context in contexts)
     if queries is not None:
         related = related or any(
@@ -34,16 +49,7 @@ def _batch_slices(
         )
         classes = class_values[i]
         member_key = (
-            tuple(
-                (
-                    tuple(
-                        (stype, block.size(), block.dtype)
-                        for stype, block in table.items()
-                    ),
-                    tuple(c.numel() for c in table.categorical.categories),
-                )
-                for table in tables
-            ),
+            tuple(_table_layout(table) for table in tables),
             None if classes is None else frozenset(classes),
         )
         if i > start and (
