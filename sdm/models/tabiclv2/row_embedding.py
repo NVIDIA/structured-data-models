@@ -104,6 +104,8 @@ class RowEmbedding(torch.nn.Module):
         num_classes: int | None = None,
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
+        key_indices: tuple[Tensor | None, ...] | None = None,
+        chunk_memory_bytes: int | None = None,
     ) -> Tensor:  # [..., R, K * D]
         *B, R, C = x.size()
         R_train = y.size(-1)
@@ -170,11 +172,15 @@ class RowEmbedding(torch.nn.Module):
             else:
                 key_value = x[..., train_mask, :]
                 if max_keys is not None and key_value.size(-2) > max_keys:
-                    index = torch.randperm(
-                        key_value.size(-2),
-                        device=key_value.device,
-                        generator=generator,
-                    )[:max_keys]
+                    index = (
+                        key_indices[i]
+                        if key_indices is not None
+                        else torch.randperm(
+                            key_value.size(-2),
+                            device=key_value.device,
+                            generator=generator,
+                        )[:max_keys]
+                    )
                     key_value = key_value[..., index, :]
 
             result = col_layer(
@@ -182,6 +188,7 @@ class RowEmbedding(torch.nn.Module):
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit="auto",
+                chunk_memory_bytes=chunk_memory_bytes,
                 out=None if torch.is_grad_enabled() else x,
             )  # [..., C, R, D]
             del key_value
@@ -217,6 +224,7 @@ class RowEmbedding(torch.nn.Module):
                 query=x[..., :K, :] if i == len(self.row_layers) - 1 else x,
                 key_value=x,  # [..., R, K + C, D]
                 batch_size_limit="auto",
+                chunk_memory_bytes=chunk_memory_bytes,
                 out=None
                 if torch.is_grad_enabled()
                 else x[..., :K, :]

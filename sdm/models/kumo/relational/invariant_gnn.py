@@ -75,6 +75,7 @@ class InvariantGNN(torch.nn.Module):
         num_hops: int,
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
+        edge_noise: Tensor | None = None,
     ) -> Tensor:
 
         if num_hops == 0:
@@ -83,11 +84,15 @@ class InvariantGNN(torch.nn.Module):
             return x[start:end][readout_index]
 
         if cache is None or cache.is_recording:
-            edge_type_emb = torch.randn(
-                (graph.num_edge_types, self.edge_type_lin.weight.size(-1)),
-                dtype=x.dtype,
-                device=x.device,
-                generator=generator,
+            edge_type_emb = (
+                edge_noise
+                if edge_noise is not None
+                else torch.randn(
+                    (graph.num_edge_types, self.edge_type_lin.weight.size(-1)),
+                    dtype=x.dtype,
+                    device=x.device,
+                    generator=generator,
+                )
             )
             edge_type_emb = F.normalize(edge_type_emb, dim=-1)
             edge_type_emb = self.edge_type_lin(edge_type_emb)

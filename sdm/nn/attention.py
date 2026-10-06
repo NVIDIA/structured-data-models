@@ -445,6 +445,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | Literal["auto"] | None = None,
+        chunk_memory_bytes: int | None = None,
         out: Tensor | None = None,
     ) -> Tensor: ...
 
@@ -458,6 +459,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         return_key_value: Literal[True],
         batch_size_limit: int | Literal["auto"] | None = None,
+        chunk_memory_bytes: int | None = None,
         out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
@@ -471,6 +473,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         return_key_value: bool,
         batch_size_limit: int | Literal["auto"] | None = None,
+        chunk_memory_bytes: int | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
@@ -483,6 +486,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         return_key_value: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
+        chunk_memory_bytes: int | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -504,6 +508,8 @@ class TransformerBlock(torch.nn.Module):
                 projections alongside the block output.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
+            chunk_memory_bytes: Pre-resolved memory budget for automatic
+                chunking. If omitted, the budget is read from the device.
             out: The output tensor.
 
         Returns:
@@ -522,7 +528,12 @@ class TransformerBlock(torch.nn.Module):
                 "already cached"
             )
 
-        if torch.is_grad_enabled() or torch.compiler.is_compiling():
+        # Preserve legacy capture for callers without eager preflight.
+        if torch.is_grad_enabled() or (
+            torch.compiler.is_compiling()
+            and batch_size_limit == "auto"
+            and chunk_memory_bytes is None
+        ):
             return self._forward(
                 query=query,
                 key_value=key_value,
@@ -548,6 +559,7 @@ class TransformerBlock(torch.nn.Module):
                 else query.element_size(),
                 query_length=query.size(-2),
                 key_value_length=key_value_length,
+                chunk_memory_bytes=chunk_memory_bytes,
             )
 
         batch_size_limit = min(batch_size_limit or 65_535, 65_535)
@@ -721,6 +733,7 @@ class TransformerBlock(torch.nn.Module):
         element_size: int,
         query_length: int,
         key_value_length: int | None = None,
+        chunk_memory_bytes: int | None = None,
     ) -> int:
         r""":meta private:"""  # noqa: D415
         if device.type != "cuda":
@@ -730,7 +743,12 @@ class TransformerBlock(torch.nn.Module):
             query_length=query_length,
             key_value_length=key_value_length,
         )
-        limit = chunk_memory_limit(device) // max(bytes_per_example, 1)
+        memory_limit = (
+            chunk_memory_limit(device)
+            if chunk_memory_bytes is None
+            else chunk_memory_bytes
+        )
+        limit = memory_limit // max(bytes_per_example, 1)
         return min(max(limit, 1), 65_535)
 
 

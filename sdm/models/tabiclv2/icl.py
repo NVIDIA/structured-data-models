@@ -7,7 +7,7 @@
 # ruff: noqa: D101, D102
 
 import math
-from typing import Any, TypeAlias, cast
+from typing import Any, NamedTuple, TypeAlias, cast
 
 import torch
 from torch import Tensor
@@ -17,6 +17,13 @@ from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
+
+
+class _HierarchyNode(NamedTuple):
+    class_ids: Tensor
+    row_indices: Tensor
+    labels: Tensor
+    children: tuple["_HierarchyNode", ...]
 
 
 class ICLBlock(torch.nn.Module):
@@ -70,6 +77,8 @@ class ICLBlock(torch.nn.Module):
         *,
         num_classes: int | None = None,
         cache: Cache | None = None,
+        chunk_memory_bytes: int | None = None,
+        hierarchy: tuple[_HierarchyNode, ...] | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if num_classes is None or num_classes <= self.num_classes:
             return self._forward(
@@ -77,6 +86,7 @@ class ICLBlock(torch.nn.Module):
                 y=y,
                 cache=cache,
                 cache_prefix="icl_block",
+                chunk_memory_bytes=chunk_memory_bytes,
             )
 
         if self.num_classes < 2:
@@ -90,6 +100,8 @@ class ICLBlock(torch.nn.Module):
             y=y,
             num_classes=num_classes,
             cache=cache,
+            chunk_memory_bytes=chunk_memory_bytes,
+            hierarchy=hierarchy,
         )
 
     def _forward(
@@ -99,6 +111,7 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache | None,
         cache_prefix: str,
+        chunk_memory_bytes: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
 
@@ -121,6 +134,7 @@ class ICLBlock(torch.nn.Module):
                     else x[..., :R_train, :]
                 ),
                 return_key_value=cache is not None and cache.is_recording,
+                chunk_memory_bytes=chunk_memory_bytes,
                 # `x` is still the caller's tensor at i == 0; don't mutate.
                 out=None
                 if torch.is_grad_enabled() or i == 0
@@ -144,6 +158,8 @@ class ICLBlock(torch.nn.Module):
         *,
         num_classes: int,
         cache: Cache | None,
+        chunk_memory_bytes: int | None = None,
+        hierarchy: tuple[_HierarchyNode, ...] | None = None,
     ) -> Tensor:  # [..., R_test, C]
         *batch_shape, num_rows, channels = x.size()
         train_size = y.size(-1)
@@ -171,9 +187,38 @@ class ICLBlock(torch.nn.Module):
                     num_classes=num_classes,
                     cache=cache,
                     cache_prefix=f"icl_block.table{table_idx}.node",
+                    chunk_memory_bytes=chunk_memory_bytes,
                 )
                 for table_idx, (rows, tree) in enumerate(zip(flat_rows, trees))
             ]
+        elif hierarchy is not None:
+            if len(hierarchy) != num_tables:
+                raise RuntimeError(
+                    "Prepared hierarchy does not match table count"
+                )
+            table_outputs = []
+            for table_idx, (rows, node) in enumerate(
+                zip(flat_rows, hierarchy)
+            ):
+                class_ids, local_log_probs = self._process_prepared_node(
+                    train_rows=rows[:train_size],
+                    test_rows=rows[train_size:],
+                    node=node,
+                    cache=cache,
+                    cache_prefix=f"icl_block.table{table_idx}.node",
+                    chunk_memory_bytes=chunk_memory_bytes,
+                )
+                table_outputs.append(
+                    self._expand_log_probs(
+                        class_ids=class_ids,
+                        local_log_probs=local_log_probs,
+                        num_classes=num_classes,
+                    )
+                )
+            if cache is not None and cache.is_recording:
+                cache["icl_block.trees"] = [
+                    self._hierarchy_tree(node) for node in hierarchy
+                ]
         else:
             flat_y = y.reshape(num_tables, train_size)
             trees = []
@@ -185,6 +230,7 @@ class ICLBlock(torch.nn.Module):
                     test_rows=rows[train_size:],
                     cache=cache,
                     cache_prefix=f"icl_block.table{table_idx}.node",
+                    chunk_memory_bytes=chunk_memory_bytes,
                 )
                 trees.append(tree)
                 table_outputs.append(
@@ -213,12 +259,14 @@ class ICLBlock(torch.nn.Module):
         num_classes: int,
         cache: Cache,
         cache_prefix: str,
+        chunk_memory_bytes: int | None = None,
     ) -> Tensor:  # [R_test, C]
         class_ids, local_log_probs = self._replay_node(
             test_rows=test_rows,
             node=node,
             cache=cache,
             cache_prefix=cache_prefix,
+            chunk_memory_bytes=chunk_memory_bytes,
         )
         return self._expand_log_probs(
             class_ids=class_ids,
@@ -226,81 +274,127 @@ class ICLBlock(torch.nn.Module):
             num_classes=num_classes,
         )
 
-    def _process_node(
+    def _prepare_hierarchy(
         self,
-        train_rows: Tensor,  # [R_node, D]
-        train_labels: Tensor,  # [R_node]
-        test_rows: Tensor,  # [R_test, D]
+        y: Tensor,
+        num_classes: int | None,
+        cache: Cache | None = None,
+    ) -> tuple[_HierarchyNode, ...] | None:
+        """Prepare label-dependent topology outside the neural graph."""
+        if num_classes is None or num_classes <= self.num_classes:
+            return None
+        if self.num_classes < 2:
+            raise ValueError(
+                "Hierarchical classification requires 'num_classes' to be "
+                "at least two"
+            )
+        if cache is not None and cache.is_replaying:
+            return None
+        train_size = y.size(-1)
+        num_tables = math.prod(y.shape[:-1])
+        return tuple(
+            self._prepare_hierarchy_node(
+                labels,
+                torch.arange(train_size, device=y.device),
+            )
+            for labels in y.reshape(num_tables, train_size)
+        )
+
+    def _prepare_hierarchy_node(
+        self,
+        labels: Tensor,
+        row_indices: Tensor,
+    ) -> _HierarchyNode:
+        class_ids, local_labels = labels.unique(
+            sorted=True, return_inverse=True
+        )
+        if class_ids.numel() <= self.num_classes:
+            return _HierarchyNode(class_ids, row_indices, local_labels, ())
+        assignments, num_groups = self._grouping(
+            class_ids.numel(), labels.device
+        )
+        group_labels = assignments[local_labels]
+        children = tuple(
+            self._prepare_hierarchy_node(labels[mask], row_indices[mask])
+            for group_idx in range(num_groups)
+            for mask in (group_labels == group_idx,)
+        )
+        return _HierarchyNode(class_ids, row_indices, group_labels, children)
+
+    @staticmethod
+    def _hierarchy_tree(node: _HierarchyNode) -> _Node:
+        return {
+            "class_ids": node.class_ids,
+            "children": [ICLBlock._hierarchy_tree(c) for c in node.children],
+        }
+
+    def _process_prepared_node(
+        self,
+        train_rows: Tensor,
+        test_rows: Tensor,
+        node: _HierarchyNode,
         *,
         cache: Cache | None,
         cache_prefix: str,
-    ) -> tuple[Tensor, Tensor, _Node]:  # [C_node], [R_test, C_node]
-        class_ids, local_labels = train_labels.unique(
-            sorted=True,
-            return_inverse=True,
-        )
-        node_num_classes = class_ids.numel()
-        node: _Node = {"class_ids": class_ids, "children": []}
-
-        if node_num_classes <= self.num_classes:
-            if node_num_classes == 1:
-                local_log_probs = test_rows.sum(
-                    dim=-1,
-                    keepdim=True,
-                ).mul(0)
-            else:
-                local_log_probs = self._predict_log_probs(
-                    x=torch.cat((train_rows, test_rows), dim=0),
-                    y=local_labels,
-                    num_classes=node_num_classes,
-                    cache=cache,
-                    cache_prefix=cache_prefix,
-                )
-
-            return class_ids, local_log_probs, node
-
-        class_groups, num_groups = self._grouping(
-            num_classes=node_num_classes,
-            device=train_labels.device,
-        )
-        group_labels = class_groups[local_labels]
-        group_masks = group_labels == torch.arange(
-            num_groups,
-            device=group_labels.device,
-        ).unsqueeze(-1)  # [G, R_node]
-        group_log_probs = self._predict_log_probs(
-            x=torch.cat((train_rows, test_rows), dim=0),
-            y=group_labels,
-            num_classes=num_groups,
+        chunk_memory_bytes: int | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        node_num_classes = node.class_ids.numel()
+        if node_num_classes == 1:
+            return node.class_ids, test_rows.sum(dim=-1, keepdim=True).mul(0)
+        local_log_probs = self._predict_log_probs(
+            x=torch.cat(
+                (train_rows.index_select(0, node.row_indices), test_rows)
+            ),
+            y=node.labels,
+            num_classes=len(node.children)
+            if node.children
+            else node_num_classes,
             cache=cache,
             cache_prefix=cache_prefix,
+            chunk_memory_bytes=chunk_memory_bytes,
         )
-
-        child_class_ids: list[Tensor] = []
-        children_log_probs: list[Tensor] = []
-        children = cast("list[_Node]", node["children"])
-        for group_idx in range(num_groups):
-            mask = group_masks[group_idx]
-            child_ids, child_log_probs, child = self._process_node(
-                train_rows=train_rows[mask],
-                train_labels=train_labels[mask],
+        if not node.children:
+            return node.class_ids, local_log_probs
+        child_ids = []
+        child_outputs = []
+        for group_idx, child in enumerate(node.children):
+            ids, output = self._process_prepared_node(
+                train_rows=train_rows,
                 test_rows=test_rows,
+                node=child,
                 cache=cache,
                 cache_prefix=f"{cache_prefix}.child{group_idx}",
+                chunk_memory_bytes=chunk_memory_bytes,
             )
-            child_class_ids.append(child_ids)
-            children_log_probs.append(
-                child_log_probs + group_log_probs[:, group_idx : group_idx + 1]
+            child_ids.append(ids)
+            child_outputs.append(
+                output + local_log_probs[:, group_idx : group_idx + 1]
             )
-            children.append(child)
+        return torch.cat(child_ids), torch.cat(child_outputs, dim=-1)
 
-        # Balanced groups are contiguous in sorted class order, so concatenated
-        # child outputs retain the node's sorted class order.
-        return (
-            torch.cat(child_class_ids),
-            torch.cat(children_log_probs, dim=-1),
-            node,
+    def _process_node(
+        self,
+        train_rows: Tensor,
+        train_labels: Tensor,
+        test_rows: Tensor,
+        *,
+        cache: Cache | None,
+        cache_prefix: str,
+        chunk_memory_bytes: int | None = None,
+    ) -> tuple[Tensor, Tensor, _Node]:
+        node = self._prepare_hierarchy_node(
+            train_labels,
+            torch.arange(train_labels.numel(), device=train_labels.device),
         )
+        class_ids, log_probs = self._process_prepared_node(
+            train_rows=train_rows,
+            test_rows=test_rows,
+            node=node,
+            cache=cache,
+            cache_prefix=cache_prefix,
+            chunk_memory_bytes=chunk_memory_bytes,
+        )
+        return class_ids, log_probs, self._hierarchy_tree(node)
 
     def _replay_node(
         self,
@@ -309,6 +403,7 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache,
         cache_prefix: str,
+        chunk_memory_bytes: int | None = None,
     ) -> tuple[Tensor, Tensor]:  # [C_node], [R_test, C_node]
         class_ids = cast(Tensor, node["class_ids"])
         children = cast("list[_Node]", node["children"])
@@ -326,6 +421,7 @@ class ICLBlock(torch.nn.Module):
                     num_classes=class_ids.numel(),
                     cache=cache,
                     cache_prefix=cache_prefix,
+                    chunk_memory_bytes=chunk_memory_bytes,
                 )
             return class_ids, local_log_probs
 
@@ -335,6 +431,7 @@ class ICLBlock(torch.nn.Module):
             num_classes=len(children),
             cache=cache,
             cache_prefix=cache_prefix,
+            chunk_memory_bytes=chunk_memory_bytes,
         )
         child_class_ids: list[Tensor] = []
         children_log_probs: list[Tensor] = []
@@ -344,6 +441,7 @@ class ICLBlock(torch.nn.Module):
                 node=child,
                 cache=cache,
                 cache_prefix=f"{cache_prefix}.child{group_idx}",
+                chunk_memory_bytes=chunk_memory_bytes,
             )
             child_class_ids.append(child_ids)
             children_log_probs.append(
@@ -363,12 +461,14 @@ class ICLBlock(torch.nn.Module):
         num_classes: int,
         cache: Cache | None,
         cache_prefix: str,
+        chunk_memory_bytes: int | None = None,
     ) -> Tensor:  # [R_test, C_node]
         logits = self._forward(
             x=x,
             y=y,
             cache=cache,
             cache_prefix=cache_prefix,
+            chunk_memory_bytes=chunk_memory_bytes,
         )
         return (logits[:, :num_classes] / self.temperature).log_softmax(dim=-1)
 

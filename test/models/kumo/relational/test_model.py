@@ -260,9 +260,11 @@ def test_forward(
 
 
 @withCUDA
+@pytest.mark.parametrize("fullgraph", [None, False, True])
 def test_many_classes_forward_and_cache(
     relational_data: RelationalData,
     device: torch.device,
+    fullgraph: bool | None,
 ) -> None:
     num_classes = 3
     ids = torch.arange(4, device=device)
@@ -303,13 +305,18 @@ def test_many_classes_forward_and_cache(
         device=device,
     )
 
+    if fullgraph is not None:
+        model.compile(backend="eager", fullgraph=fullgraph, dynamic=True)
+
     expected = model(
-        x_context=task,
-        y_context=target,
-        x_query=task[:2],
-        related_context_tables=related_tables,
-        related_query_tables=related_tables,
-        num_hops=0,
+        model._prepare(
+            x_context=task,
+            y_context=target,
+            x_query=task[:2],
+            related_context_tables=related_tables,
+            related_query_tables=related_tables,
+            num_hops=0,
+        )
     )
     assert expected.size() == (2, num_classes)
     probabilities = expected.div(0.9).exp()
@@ -320,22 +327,26 @@ def test_many_classes_forward_and_cache(
 
     cache = Cache(classes=classes)
     recorded = model(
-        x_context=task,
-        y_context=target,
-        x_query=None,
-        related_context_tables=related_tables,
-        related_query_tables=None,
-        cache=cache,
-        num_hops=0,
+        model._prepare(
+            x_context=task,
+            y_context=target,
+            x_query=None,
+            related_context_tables=related_tables,
+            related_query_tables=None,
+            cache=cache,
+            num_hops=0,
+        )
     )
     assert recorded.size() == (0, num_classes)
 
     predicted = model(
-        x_context=None,
-        y_context=None,
-        x_query=task[:2],
-        related_context_tables=None,
-        related_query_tables=related_tables,
-        cache=cache.freeze(),
+        model._prepare(
+            x_context=None,
+            y_context=None,
+            x_query=task[:2],
+            related_context_tables=None,
+            related_query_tables=related_tables,
+            cache=cache.freeze(),
+        )
     )
     torch.testing.assert_close(predicted, expected)

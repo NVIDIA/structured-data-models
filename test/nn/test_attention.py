@@ -499,7 +499,7 @@ def test_attention_batch_size_limit_propagation() -> None:
         pytest.param(False, True, id="compiling"),
     ],
 )
-def test_transformer_block_batch_size_limit_bypass(
+def test_transformer_block_batch_size_limit_execution_modes(
     requires_grad: bool,
     compiling: bool,
 ) -> None:
@@ -527,7 +527,7 @@ def test_transformer_block_batch_size_limit_bypass(
         module(query=query, batch_size_limit=2)
     handle.remove()
 
-    assert batch_sizes == [5]
+    assert batch_sizes == ([5] if requires_grad else [2, 2, 1])
 
 
 def test_return_key_value_positional_compatibility() -> None:

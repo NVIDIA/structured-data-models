@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, NamedTuple, cast
 
 import torch
 from torch import Tensor
@@ -20,13 +20,15 @@ from sdm import (
     Task,
     TaskLike,
 )
+from sdm._memory import chunk_memory_limit
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.recipe import default_recipe
 from sdm.models.kumo.relational.task import TaskGraph
-from sdm.models.tabiclv2.icl import ICLBlock
+from sdm.models.tabiclv2.icl import ICLBlock, _HierarchyNode
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
 
@@ -216,7 +218,8 @@ class KumoRelational(ICLModel):
             classes = cast(Tensor | None, cache["classes"])
 
         task = Task.classification if classes is not None else Task.regression
-        out = self.models[task](
+        core = cast(_KumoRelational, self.models[task])
+        prepared = core._prepare(
             x_context=x_context,
             y_context=y_context,
             x_query=x_query,
@@ -226,6 +229,7 @@ class KumoRelational(ICLModel):
             generator=generator,
             num_hops=kwargs.get("num_hops"),
         )
+        out = core(prepared)
 
         if classes is None:
             return TableTensor(
@@ -295,7 +299,7 @@ class _KumoRelational(torch.nn.Module):
             **factory_kwargs,
         )
 
-    def forward(
+    def _prepare(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
@@ -306,7 +310,7 @@ class _KumoRelational(torch.nn.Module):
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
         num_hops: int | None = None,
-    ) -> Tensor:  # [..., R_query, *]
+    ) -> _PreparedInput:
 
         num_classes: int | None = None  # Extract `y` as tensor:
         if y_context is not None and y_context.categorical.size(-1) > 0:
@@ -376,8 +380,7 @@ class _KumoRelational(torch.nn.Module):
             table_names = list(query.related_tables.tables)
             readout_table = query.readout_table
 
-        xs_context: dict[str, Tensor] = {}
-        xs_query: dict[str, Tensor] = {}
+        tables: list[_TableInput] = []
         for name in table_names:
             standardizer = Standardize()  # Relative time standardization.
             x_context_i = context_task_row_i = None
@@ -428,68 +431,145 @@ class _KumoRelational(torch.nn.Module):
                     rel_time_i = rel_time_i.to(x_query_i.dtype)
                     x_query_i = torch.cat([x_query_i, rel_time_i], dim=-1)
 
-            xs_context[name], xs_query[name] = self._embed_table(
-                x_context=x_context_i,
-                x_query=x_query_i,
-                y=y,
-                task_row=context_task_row_i,
-                num_classes=num_classes,
-                cache_key=f"table_{name}",
-                cache=cache,
-                generator=generator,
+            tables.append(
+                self._prepare_table(
+                    x_context=x_context_i,
+                    x_query=x_query_i,
+                    y=y,
+                    task_row=context_task_row_i,
+                    num_classes=num_classes,
+                    cache_key=f"table_{name}",
+                    name=name,
+                    cache=cache,
+                    generator=generator,
+                )
             )
 
-        # Inter-Message Passing ###############################################
         gnn_cache = cache or Cache()
-        if context is not None:
-            x_context: Tensor = torch.cat(
-                [xs_context[name] for name in context.related_tables.tables],
+        edge_noise = None
+        graph = context if context is not None else query
+        assert graph is not None
+        dtype = (
+            torch.get_autocast_dtype(y.device.type)
+            if torch.is_autocast_enabled(y.device.type)
+            else self.row_embedding.lin.weight.dtype
+        )
+        if graph.num_hops > 0 and gnn_cache.is_recording:
+            edge_noise = torch.randn(
+                (
+                    graph.graph.num_edge_types,
+                    self.gnn.edge_type_lin.weight.size(-1),
+                ),
+                dtype=dtype,
+                device=y.device,
+                generator=generator,
+            )
+        query_edge_noise = edge_noise
+        if (
+            context is not None
+            and query is not None
+            and cache is not None
+            and cache.is_recording
+            and query.num_hops > 0
+        ):
+            query_edge_noise = torch.randn(
+                (
+                    query.graph.num_edge_types,
+                    self.gnn.edge_type_lin.weight.size(-1),
+                ),
+                dtype=dtype,
+                device=y.device,
+                generator=generator,
+            )
+        return _PreparedInput(
+            tables=tuple(tables),
+            context=_GraphInput.from_task(context),
+            query=_GraphInput.from_task(query),
+            y=y,
+            num_classes=num_classes,
+            cache=cache,
+            gnn_cache=gnn_cache,
+            edge_noise=edge_noise,
+            query_edge_noise=query_edge_noise,
+            chunk_memory_bytes=chunk_memory_limit(y.device)
+            if y.is_cuda
+            else None,
+            hierarchy=self.icl_block._prepare_hierarchy(y, num_classes, cache),
+        )
+
+    def forward(self, prepared: _PreparedInput) -> Tensor:
+        xs_context: dict[str, Tensor] = {}
+        xs_query: dict[str, Tensor] = {}
+        for table in prepared.tables:
+            x = self.row_embedding(
+                x=table.x,
+                y=table.y,
+                train_mask=table.train_index,
+                max_keys=self.max_train_size,
+                num_classes=prepared.num_classes,
+                cache=table.cache,
+                key_indices=table.key_indices,
+                chunk_memory_bytes=prepared.chunk_memory_bytes,
+            )
+            context_x, query_x = x.split(table.sections, dim=-2)
+            if prepared.context is not None:
+                xs_context[table.name] = context_x
+            if table.has_query:
+                xs_query[table.name] = query_x
+        del x, context_x, query_x
+        x_context = x_query = None
+        if prepared.context is not None:
+            graph = prepared.context
+            x_context = torch.cat(
+                [xs_context[name] for name in graph.graph.start_node_offsets],
                 dim=-2,
             )
             del xs_context
             x_context = self.gnn(
                 x=x_context,
-                graph=context.graph,
-                readout_table=context.readout_table,
-                readout_index=context.readout_index,
-                num_hops=context.num_hops,
-                cache=gnn_cache,
-                generator=generator,
+                graph=graph.graph,
+                readout_table=graph.readout_table,
+                readout_index=graph.readout_index,
+                num_hops=graph.num_hops,
+                cache=prepared.gnn_cache,
+                edge_noise=prepared.edge_noise,
             )
-
-        if query is not None:
-            x_query: Tensor = torch.cat(
-                [xs_query[name] for name in query.related_tables.tables],
+        if prepared.query is not None:
+            graph = prepared.query
+            x_query = torch.cat(
+                [xs_query[name] for name in graph.graph.start_node_offsets],
                 dim=-2,
             )
             del xs_query
             x_query = self.gnn(
                 x=x_query,
-                graph=query.graph,
-                readout_table=query.readout_table,
-                readout_index=query.readout_index,
-                num_hops=query.num_hops,
-                cache=gnn_cache.freeze() if cache is None else cache,
+                graph=graph.graph,
+                readout_table=graph.readout_table,
+                readout_index=graph.readout_index,
+                num_hops=graph.num_hops,
+                cache=prepared.gnn_cache.freeze()
+                if prepared.cache is None
+                else prepared.cache,
+                edge_noise=prepared.query_edge_noise,
             )
-
-        # Reason across Tables ################################################
-        if x_query is None and x_context is not None:
+        if x_query is None:
+            assert x_context is not None
             x = x_context
-        elif x_context is None and x_query is not None:
+        elif x_context is None:
             x = x_query
         else:
-            assert x_context is not None
-            assert x_query is not None
             x = torch.cat([x_context, x_query], dim=-2)
-            del x_context, x_query
+        del x_context, x_query
         return self.icl_block(
             x=x,
-            y=y,
-            num_classes=num_classes,
-            cache=cache,
+            y=prepared.y,
+            num_classes=prepared.num_classes,
+            cache=prepared.cache,
+            chunk_memory_bytes=prepared.chunk_memory_bytes,
+            hierarchy=prepared.hierarchy,
         )
 
-    def _embed_table(
+    def _prepare_table(
         self,
         x_context: Tensor | None,
         x_query: Tensor | None,
@@ -497,9 +577,10 @@ class _KumoRelational(torch.nn.Module):
         task_row: Tensor | None,
         num_classes: int | None,
         cache_key: str,
+        name: str,
         cache: Cache | None,
         generator: torch.Generator | None,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> _TableInput:
         # Embed context and query rows jointly per table. Targets are injected
         # by distributing them to related tables via task-row assignment:
         _cache: Cache | None = None
@@ -526,24 +607,34 @@ class _KumoRelational(torch.nn.Module):
             assert x_query is not None
             x = x_query
 
-        x = self.row_embedding(
-            x=x,
-            y=y,
-            train_mask=train_mask,
-            max_keys=self.max_train_size,
-            num_classes=num_classes,
-            cache=_cache,
-            generator=generator,
-        )
-
+        train_index = None
+        if train_mask is not None:
+            train_index = train_mask.nonzero().flatten()
+        key_indices: list[Tensor | None] = []
+        for _ in self.row_embedding.col_layers:
+            index = None
+            if (_cache is None or _cache.is_recording) and y.size(
+                -1
+            ) > self.max_train_size:
+                index = torch.randperm(
+                    y.size(-1), device=x.device, generator=generator
+                )[: self.max_train_size]
+            key_indices.append(index)
         if cache is not None and cache.is_recording:
             cache[cache_key] = cast(Cache, _cache)
-
-        sections = [
-            x_context.size(-2) if x_context is not None else 0,
-            x_query.size(-2) if x_query is not None else 0,
-        ]
-        return x.split(sections, dim=-2)
+        return _TableInput(
+            name=name,
+            x=x,
+            y=y,
+            train_index=train_index,
+            cache=_cache,
+            key_indices=tuple(key_indices),
+            sections=(
+                x_context.size(-2) if x_context is not None else 0,
+                x_query.size(-2) if x_query is not None else 0,
+            ),
+            has_query=x_query is not None,
+        )
 
     def _inject_task(
         self,
@@ -600,3 +691,43 @@ class _KumoRelational(torch.nn.Module):
             rel_time[na_mask] = 0.0
 
         return rel_time
+
+
+class _GraphInput(NamedTuple):
+    graph: HomogeneousGraph
+    readout_table: str
+    readout_index: Tensor
+    num_hops: int
+
+    @classmethod
+    def from_task(cls, task: TaskGraph | None) -> _GraphInput | None:
+        if task is None:
+            return None
+        return cls(
+            task.graph, task.readout_table, task.readout_index, task.num_hops
+        )
+
+
+class _TableInput(NamedTuple):
+    name: str
+    x: Tensor
+    y: Tensor
+    train_index: Tensor | None
+    cache: Cache | None
+    key_indices: tuple[Tensor | None, ...]
+    sections: tuple[int, int]
+    has_query: bool
+
+
+class _PreparedInput(NamedTuple):
+    tables: tuple[_TableInput, ...]
+    context: _GraphInput | None
+    query: _GraphInput | None
+    y: Tensor
+    num_classes: int | None
+    cache: Cache | None
+    gnn_cache: Cache
+    edge_noise: Tensor | None
+    query_edge_noise: Tensor | None
+    chunk_memory_bytes: int | None
+    hierarchy: tuple[_HierarchyNode, ...] | None
