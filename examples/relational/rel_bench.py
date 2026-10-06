@@ -5,13 +5,78 @@ import argparse
 import math
 from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 import relbench
 import torch
 import torchmetrics
+from relbench.base import EntityTask
 from tqdm import tqdm
 
 import sdm
+
+
+def get_task_table(
+    df: pd.DataFrame,
+    history: pd.DataFrame,
+    task: EntityTask,
+    num_lags: int,
+) -> sdm.TableTensor:
+    """Add target lags from strictly earlier observations per entity."""
+    target_stype = (
+        "numerical"
+        if task.task_type == relbench.base.TaskType.REGRESSION
+        else "categorical"
+    )
+    stypes = {
+        task.entity_col: "id",
+        task.time_col: "datetime",
+        task.target_col: target_stype,
+    }
+    history_time_col = "__history_time__"
+    lookup_time_col = "__lookup_time__"
+    row_col = "__row__"
+
+    out = df.copy()
+    right = history[[task.entity_col, task.time_col, task.target_col]]
+    right = right.rename(columns={task.time_col: history_time_col})
+    right = right.sort_values([history_time_col, task.entity_col])
+    left = pd.DataFrame(
+        {
+            task.entity_col: out[task.entity_col].to_numpy(),
+            lookup_time_col: out[task.time_col].to_numpy(),
+            row_col: np.arange(len(out)),
+        }
+    )
+
+    for lag in range(1, num_lags + 1):
+        lag_col = f"{task.target_col}_lag_{lag}"
+        stypes[lag_col] = target_stype
+        if target_stype == "numerical":
+            out[lag_col] = np.nan
+        else:
+            out[lag_col] = pd.Series(pd.NA, index=out.index, dtype="object")
+
+        left = left.sort_values([lookup_time_col, task.entity_col])
+        merged = pd.merge_asof(
+            left,
+            right,
+            by=task.entity_col,
+            left_on=lookup_time_col,
+            right_on=history_time_col,
+            direction="backward",
+            allow_exact_matches=False,
+        )
+        mask = merged[history_time_col].notna()
+        rows = merged.loc[mask, row_col].to_numpy()
+        out.loc[out.index[rows], lag_col] = merged.loc[
+            mask, task.target_col
+        ].to_numpy()
+        left = merged.loc[mask, [task.entity_col, row_col, history_time_col]]
+        left = left.rename(columns={history_time_col: lookup_time_col})
+
+    return sdm.TableTensor.from_pandas(df=out, stypes=stypes)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
@@ -19,8 +84,9 @@ parser.add_argument("--task", type=str, required=True)
 parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument("--batch_size", type=int, default=1000)
 parser.add_argument("--max_test_steps", type=int, default=None)
-parser.add_argument("--num_neighbors", type=int, nargs="*", default=[16, 16])
+parser.add_argument("--num_neighbors", type=int, nargs="*", default=[4, 4])
 parser.add_argument("--num_estimators", type=int, default=1)
+parser.add_argument("--num_lags", type=int, default=20)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 
@@ -78,15 +144,12 @@ dfs = [
     task.get_table(split, mask_input_cols=False).df
     for split in ["train", "val", "test"]
 ]
-task_table = sdm.TableTensor.from_pandas(
+task_table = get_task_table(
     df=pd.concat(dfs, ignore_index=True),
-    stypes={
-        task.entity_col: "id",
-        task.time_col: "datetime",
-        task.target_col: "numerical"
-        if task.task_type == relbench.base.TaskType.REGRESSION
-        else "categorical",
-    },
+    # Use the full context history before subsampling; never use test targets.
+    history=pd.concat(dfs, ignore_index=True),
+    task=task,
+    num_lags=args.num_lags,
 )
 context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
 
