@@ -22,7 +22,7 @@ from sdm import (
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.models._estimator_batch import plan_estimator_batches
+from sdm.models._batching import plan_estimator_batches
 from sdm.models.callback import Callback
 from sdm.processing.execution import (
     MemberContext,
