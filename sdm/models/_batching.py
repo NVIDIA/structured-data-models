@@ -2,46 +2,27 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from collections.abc import Hashable, Sequence
-from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any
 
 from sdm.processing.execution import MemberContext, MemberQuery
 
-T = TypeVar("T")
 
-
-@dataclass(frozen=True)
-class EstimatorBatch:
-    r"""Logical ensemble members evaluated in one model call."""
-
-    member_ids: tuple[int, ...]
-
-    def select(self, members: Sequence[T]) -> tuple[T, ...]:
-        r"""Select this batch's members from an ensemble-ordered sequence."""
-        return tuple(members[i] for i in self.member_ids)
-
-
-def plan_estimator_batches(
+def _batch_slices(
     contexts: Sequence[MemberContext],
     queries: Sequence[MemberQuery] | None,
     class_values: Sequence[tuple[Any, ...] | None],
     estimator_batch_size: int | None,
-) -> tuple[EstimatorBatch, ...]:
-    r"""Plan consecutive compatible members into model calls."""
-    if len(contexts) == 0:
-        return ()
-
+) -> list[slice]:
+    r"""Group consecutive compatible estimators into model calls."""
     related = any(context.related_tables is not None for context in contexts)
     if queries is not None:
         related = related or any(
             query.related_tables is not None for query in queries
         )
     if related:
-        return tuple(
-            EstimatorBatch(member_ids=(i,)) for i in range(len(contexts))
-        )
+        return [slice(i, i + 1) for i in range(len(contexts))]
 
-    batches: list[EstimatorBatch] = []
+    batches: list[slice] = []
     start = 0
     key: Hashable = None
     for i, context in enumerate(contexts):
@@ -72,11 +53,9 @@ def plan_estimator_batches(
                 and i - start == estimator_batch_size
             )
         ):
-            batches.append(EstimatorBatch(member_ids=tuple(range(start, i))))
+            batches.append(slice(start, i))
             start = i
         key = member_key
 
-    batches.append(
-        EstimatorBatch(member_ids=tuple(range(start, len(contexts))))
-    )
-    return tuple(batches)
+    batches.append(slice(start, len(contexts)))
+    return batches
