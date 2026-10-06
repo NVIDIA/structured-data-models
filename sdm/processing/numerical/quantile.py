@@ -77,6 +77,21 @@ def _batched_interp(
     return torch.where(values >= upper_boundary, upper, result)
 
 
+def _quantile_columns(
+    quantiles: Tensor,
+    references: Tensor,
+    numerical: Tensor,
+) -> Tensor:
+    quantiles = quantiles.expand(
+        *numerical.shape[:-2],
+        references.numel(),
+        numerical.size(-1),
+    )
+    return (
+        quantiles.movedim(-1, -2).reshape(-1, references.numel()).contiguous()
+    )
+
+
 class QuantileTransform(Processor, InvertibleMixin):
     """Map numerical columns through their empirical quantiles.
 
@@ -196,10 +211,10 @@ class QuantileTransform(Processor, InvertibleMixin):
         input_columns = (
             numerical.movedim(-1, -2).reshape(-1, n_samples).contiguous()
         )
-        quantile_columns = (
-            self._quantiles.movedim(-1, -2)
-            .reshape(-1, self._references.numel())
-            .contiguous()
+        quantile_columns = _quantile_columns(
+            self._quantiles,
+            self._references,
+            numerical,
         )
         transformed_columns = torch.empty_like(input_columns)
 
@@ -261,10 +276,10 @@ class QuantileTransform(Processor, InvertibleMixin):
         input_columns = (
             numerical.movedim(-1, -2).reshape(-1, n_samples).contiguous()
         )
-        quantile_columns = (
-            self._quantiles.movedim(-1, -2)
-            .reshape(-1, self._references.numel())
-            .contiguous()
+        quantile_columns = _quantile_columns(
+            self._quantiles,
+            self._references,
+            numerical,
         )
         inverse_columns = torch.empty_like(input_columns)
 
