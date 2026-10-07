@@ -24,7 +24,7 @@ The CSR fix is a separate commit. A `searchsorted` formulation confirmed the dia
 
 | Check | PyTorch 2.7.1 | PyTorch 2.14 |
 |---|---|---|
-| Focused eager/compile regression suite | 49 passed, 5 skipped | 49 passed, 5 skipped |
+| Focused eager/compile regression suite | 49 passed, 9 skipped | 49 passed, 9 skipped |
 | Forced-dynamic table input, nine distinct row counts, noncontiguous numerical columns, both graph policies | Passed | Passed |
 | Independent ensemble grouping, eight shape/schema/dtype/member-count cases, both graph policies, actual CPU Inductor | Passed | Passed |
 | Real ten-neighborhood prediction stream, fullgraph frontend capture | Not claimed | Two graphs; all ten queries execute |
@@ -34,7 +34,7 @@ The frontend stream uses `backend="eager"` only to measure capture and guards. I
 
 CPU `opcheck` passed four dtype/empty-input combinations on each runtime; another 48 actual-Inductor calls per runtime matched an independent histogram/prefix-sum reference exactly, including empty edges with nonzero node counts. The portable probe is `experiments/compile_table_shapes/check_csr.py --device cpu` (use `--device cuda` for a GPU).
 
-The focused regression tests cover eager ensemble grouping order, columnar size queries, table construction/views, changing dimensions, and exact CSR correctness against an independent reference for int32/int64 indices, empty inputs, and strided indices. Each compiler test resets Dynamo so independent parameterizations do not consume one another's recompilation limit.
+The focused regression tests cover eager ensemble grouping order, columnar size queries, table construction/views, changing dimensions, and exact CSR correctness against an independent reference for int32/int64 indices, empty inputs, and strided indices. The CSR regression uses the repository's `withCUDA` fixture so the same independent-reference checks also run when CUDA is available. Each compiler test resets Dynamo so independent parameterizations do not consume one another's recompilation limit.
 
 Run the focused checks:
 
