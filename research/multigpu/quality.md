@@ -68,7 +68,7 @@ Rel-hm's 3,832,692 stored TRAIN indices are unique and its 76,556 validation ind
 
 The first four-L40S host execution of `test/models/test_ensemble_parallel.py` completed with eight passing CPU tests and two failing CUDA tests in 33.82 seconds. Both CUDA failures occurred at the newly added `output._tensors()` call: `TableTensor` does not expose the `Cache` tensor iterator. This was an implementation failure, not numerical disagreement or an unsupported hardware result. The independent auditor read the raw `results/executor-tests.log` and immediately notified the implementation owner and coordinator.
 
-Fix `c4ddd7f15` replaces that call with `output.record_stream(stream)`, the existing public operation dispatched by `sdm/tensor/table.py`. The failed run remains evidence; a separate GPU rerun is required before claiming the stream tests pass.
+Fix `c4ddd7f15` replaces that call with `output.record_stream(stream)`, the existing public operation dispatched by `sdm/tensor/table.py`. A separate rerun saved as `ensemble-cuda-fixed.log` independently confirms both previously failing CUDA tests pass (two passed, eleven deselected, 0.80 seconds). The original failed log remains evidence.
 
 The coordinator also executed the existing base/KumoTabular/KumoRelational/TabICLv2 CPU regression suite: 88 passed, 19 CUDA-only skipped, 27.82 seconds. The integrated new research suites returned 43 passed and 22 CUDA-only skipped in approximately 10 seconds. These support CPU API and model regression coverage; skipped tests are not counted as GPU evidence.
 
