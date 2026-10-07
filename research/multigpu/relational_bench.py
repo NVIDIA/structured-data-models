@@ -236,6 +236,7 @@ def run(args: argparse.Namespace) -> None:
         raise ValueError("Native baseline uses exactly one GPU")
     args.output.mkdir(parents=True, exist_ok=False)
     devices = [f"cuda:{i}" for i in range(args.gpus)]
+    ensemble_mode = args.mode in {"ensemble", "stage", "layers"}
     dtype = {
         "bf16": torch.bfloat16,
         "fp16": torch.float16,
@@ -274,14 +275,21 @@ def run(args: argparse.Namespace) -> None:
         start = time.perf_counter()
         replicas = [
             sdm.models.KumoRelational(task=task, device=device)
-            for device in devices
+            for device in (
+                devices[:1] if args.mode in {"stage", "layers"} else devices
+            )
         ]
         synchronize(devices)
         stats["load_s"] = time.perf_counter() - start
         stats["memory_after_load"] = memory(devices)
         for device in devices:
             torch.cuda.reset_peak_memory_stats(device)
-        if args.mode == "ensemble":
+        if args.mode in {"stage", "layers"}:
+            from research.multigpu.icl_placement import factory
+
+            args.placement = args.mode
+            model = factory(args, replicas)
+        elif args.mode == "ensemble":
             from sdm.models.ensemble_parallel import EnsembleParallel
 
             model = EnsembleParallel(replicas)
@@ -297,7 +305,7 @@ def run(args: argparse.Namespace) -> None:
                 "cuda", dtype=dtype, enabled=dtype != torch.float32
             ),
         ):
-            if args.mode == "ensemble":
+            if ensemble_mode:
                 model.fit(
                     x,
                     y,
@@ -326,7 +334,7 @@ def run(args: argparse.Namespace) -> None:
             replica._cache.size() if replica._cache is not None else 0
             for replica in replicas
         ]
-        if args.mode == "ensemble":
+        if ensemble_mode:
             stats["ensemble_cache_bytes_per_gpu"] = model.cache_bytes
             stats["member_seeds"] = model.member_seeds
         query_executor, query_batches = None, None
@@ -368,7 +376,7 @@ def run(args: argparse.Namespace) -> None:
                         "cuda", dtype=dtype, enabled=dtype != torch.float32
                     ),
                 ):
-                    if args.mode == "ensemble":
+                    if ensemble_mode:
                         pred = model.predict(
                             batch.task_table, batch.related_tables
                         )
@@ -462,7 +470,7 @@ def run(args: argparse.Namespace) -> None:
         stats["quality"] = score(pred.cpu(), labels, task)
         if query_executor is not None:
             query_executor.close()
-        if args.mode == "ensemble":
+        if ensemble_mode:
             model.close()
         write_json(args.output / "result.json", stats)
         print(
@@ -503,7 +511,9 @@ def main() -> None:
     bench = sub.add_parser("run")
     bench.add_argument("--workload", type=Path, required=True)
     bench.add_argument(
-        "--mode", choices=["native", "ensemble", "data"], default="native"
+        "--mode",
+        choices=["native", "ensemble", "data", "stage", "layers"],
+        default="native",
     )
     bench.add_argument("--gpus", type=int, default=1)
     bench.add_argument("--estimators", type=int, default=4)
