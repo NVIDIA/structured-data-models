@@ -349,7 +349,7 @@ class CategoricalTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["_code"]
+        attrs = ["code"]
         attrs.extend(f"_category_{i}" for i in range(len(self._categories)))
         return attrs, (self.__class__, len(self._categories))
 
@@ -362,7 +362,7 @@ class CategoricalTensor(Tensor):
     ) -> CategoricalTensor:
         cls, num_categories = ctx
         return cls(
-            code=inner_tensors["_code"],
+            code=inner_tensors["code"],
             categories=tuple(
                 inner_tensors[f"_category_{i}"] for i in range(num_categories)
             ),
