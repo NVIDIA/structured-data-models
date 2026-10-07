@@ -18,6 +18,7 @@ p.add_argument("--data", required=True)
 p.add_argument("--checkpoint", required=True)
 p.add_argument("--entry", choices=["fit", "predict", "forward"], required=True)
 p.add_argument("--fullgraph", action="store_true")
+p.add_argument("--dynamic", choices=["true", "false"], default="true")
 p.add_argument("--backend", default="inductor")
 p.add_argument(
     "--task",
@@ -100,6 +101,7 @@ result = {
     "model": a.model,
     "entry": a.entry,
     "fullgraph": a.fullgraph,
+    "dynamic": a.dynamic == "true",
     "backend": a.backend,
     "device": "cpu",
     "task": a.task,
@@ -126,7 +128,7 @@ try:
         kwargs = {
             "backend": a.backend,
             "fullgraph": a.fullgraph,
-            "dynamic": True,
+            "dynamic": a.dynamic == "true",
         }
         if a.entry == "fit":
             fit(model, torch.compile(model.fit, **kwargs))
