@@ -1,137 +1,93 @@
 # Preprocessing compilation investigation
 
-Baseline: `842c408fe2a8711bdf2e7cff4bfbe54266d6b940` (2026-10-08).
+**Status: active.** Experimental branches now compile useful public prediction and fitting paths. They are not merged support, and GPU validation is pending AWS authentication.
 
-This investigation targets the computations before KumoTabular and KumoRelational internal model calls. It separates compiler compatibility from speed claims and preserves preprocessing statistics, missing-value behavior, categorical mappings, and context-only fitting.
+Baseline main: `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`. All results below use actual CPU Inductor, not the eager tracing backend. Eager and compiled comparisons use the same data, weights and datatype. Prediction tolerances remain atol=1e-5, rtol=1e-4.
 
-## Continued investigation: new evidence
+## What is being compiled
 
-Work remains active. The initial results below describe the first integration snapshot; the following findings extend them.
+- `torch.compile(model.predict)` after eager `fit`: fitted preprocessing, relational graph preparation, internal model computation and output processing.
+- `torch.compile(model.fit)`: recipe setup, learning preprocessing state and context/model cache preparation. Prediction afterward checks the fitted result.
+- `torch.compile(model)`: the outer `forward` call, including fresh preprocessing fitting and uncached context/query computation. It does not automatically compile the separate fit/predict methods.
 
-- Public KumoRelational prediction on the real RelBench driver-dnf one-hop case now passes CPU 2.14 Inductor with graph breaks allowed. Queries of 4, 1, 8, and 4 rows have maximum absolute error 4.828e-6 against eager prediction. Cumulative graph counts are 27, 38, 43, and 43. The default recompilation limit causes some processor routing to fall back to eager execution; this is not fullgraph support. A separate two-hop case still fails and is under investigation.
-- A fixed-output custom operator lets compiled string-category alignment call the existing Arrow/cuDF implementation. The external join remains opaque to Inductor. The original eager path is retained because routing it through the custom operator measured 4–16% extra lookup overhead on CPU. Missing values remain negative category codes; dictionary tensors themselves cannot be nullable.
-- On integration snapshot `ddb25ab3b`, an independent actual-Inductor test of `torch.compile(model)` for KumoTabular regression passes with graph breaks allowed on CPU 2.14 (32 context rows, one estimator, maximum output difference 0.000366211 at atol=1e-5, rtol=1e-4). It hits the default processor recompilation limit. Classification fails while resuming a partially initialized CategoricalTensor constructor. Fullgraph regression fails during Python signature inspection; fullgraph classification fails on data-dependent vocabulary selection. These are fitting/preparation failures before a claim of complete outer-forward support.
-- Preserving native reductions fixes the tested 2.14 PowerTransform fitting discrepancy without changing input dtype. Missing-value data also requires preserving the imputation mean reduction. PyTorch 2.7 additionally differs in expm1 during fitting. A focused source prototype is being validated; no universal numerical-parity or GPU performance claim is made.
-- Existing categorical, string, variable-length tensor, and join regression suites independently passed 105 tests on each runtime at integration snapshot `09e934174`; 45 CUDA tests were skipped per runtime.
+## Current public-call results
 
-Additional branches:
-
-| Branch | Scope |
-|---|---|
-| [compile/categorical-recipe-support](https://github.com/NVIDIA/structured-data-models/tree/compile/categorical-recipe-support) | String lookup custom operator, traceable dictionary access and numeric shuffle; stacked on the initial public integration. |
-| [compile/varlen-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/varlen-preprocessing) | Logical offset metadata and dispatch-compatible scalar writes; stacked on the initial public integration. |
-| [compile/table-schema-guards](https://github.com/NVIDIA/structured-data-models/tree/compile/table-schema-guards) | Immutable internal schema items without changing the public columns dictionary API; callers must explicitly use this metadata. |
-
-The rejected read-only replacement for the public columns dictionary is not part of the accepted schema change. It broke an already passing 2.14 prediction path.
-
-No Spot instances have been launched during this continuation. AWS authentication expired; CPU work continues independently.
-
-## Scope
-
-- CPU PyTorch 2.7.1 and 2.14.0; same input dtype for eager/compiled comparisons.
-- Actual Inductor execution with `fullgraph=False` and `fullgraph=True`. Capture-only diagnostics are labeled separately.
-- Public processor fitting and fitted transformation, tensor container inputs/outputs, and public model fit/predict/forward calls.
-- Changing row counts, empty/missing values, and noncontiguous tensors where supported by eager execution.
-- No GPU performance claims from CPU checks. No cloud resources are required for reproducing the initial tracing failures.
-
-## Independent compilation boundaries
-
-1. Recipe construction: build processor/module trees and validate configuration.
-2. Fitting: learn statistics and categorical mappings from context rows; some steps also choose output columns.
-3. Fitted transformation: apply the learned state to query rows.
-4. Relational graph preparation: table joins and task-row/edge mappings.
-5. Internal model computation.
-6. Output transformation and formatting.
-
-Compiling `model.predict` traces the called preprocessing and internal model code, subject to graph breaks. Compiling the outer module traces its `forward`, not arbitrary sibling methods such as `fit` or `predict`.
-
-## Acceptance criteria
-
-A successful no-op wrapper is not evidence of compiled preprocessing. Passing results must execute tensor computation through the reported backend. Graph-break-allowed and fullgraph results are reported independently. A failure after an earlier fix is a remaining blocker, not a passing end-to-end result.
-
-Data-dependent fitting and schema changes must retain eager behavior. Fixed schemas can be specialized by the compiler; a different schema may require recompilation. Returning a view must preserve its relationship to its source. A workaround that drops a missing-value mask, changes category identities, or alters learned statistics is not acceptable.
-
-## Results and branch map
-
-The branches below separate container support, recipe orchestration, numerical/categorical processors, and public model integration. Their reports contain exact commands and remaining errors; this document summarizes the combined evidence.
-
-## Confirmed progress
-
-| Boundary | PyTorch 2.7.1 CPU | PyTorch 2.14 CPU |
+| Call / workload | PyTorch 2.14 CPU | PyTorch 2.7.1 CPU |
 |---|---|---|
-| Numerical TableTensor construction, replacement, slicing, numeric stacking | Inductor passes both graph policies | Inductor passes both graph policies |
-| Standardize, ImputeMean, RobustScale, RankGaussian, ClipSigma public fit/transform | Graph-break-allowed matrix passes; fullgraph blocked by metadata | Both policies pass FP32/FP64 matrix |
-| Default fitted feature recipe, real numerical data | Fullgraph still blocked | Fullgraph passes, including four tabular / two relational task-table members |
-| PowerTransform fitting in FP32 | Not established as parity-safe | Fitted parameter drift exceeds default tolerance in one reproduction |
-| PowerTransform transform with the same eager-fitted parameters | See component report | Exact in isolated reproduction |
-| Entire public KumoTabular predict after eager fit | Further validation in integration report | Classification passes both policies, rows 4→7→3→4; 1/4 estimators; max differences 8.94e-7 / 3.28e-7 |
-| Entire public KumoRelational predict | Still fails enum/context-manager tracing | Still fails categorical string metadata / variable-length concatenation |
+| Tabular predict, numerical classification, 1/4 estimators | Both graph policies pass | Public metadata/setup compatibility still under investigation |
+| Tabular predict, numerical regression | Both policies pass the initial small-query cases; larger query sets expose a few strict-tolerance misses already present with internal-only compilation | Not established |
+| Relational predict, one-hop real RelBench | Both policies pass query rows 4→1→8→4; max error 4.83e-6 | Schema guard fixes are advancing the call; no complete pass claimed |
+| Relational predict, two-hop real RelBench | Both policies execute; one of eight probabilities narrowly exceeds tolerance in one query; internal-only compilation reproduces it | Not established |
+| Tabular fit, classification | Partial compilation passes, including 4 estimators and 31 query rows; max prediction difference 5.36e-7 | Prebuilt recipe plus narrow fixes advances past preprocessing; further metadata guards remain |
+| Tabular fit, regression | Partial compilation passes the tested case | Still under investigation |
+| Tabular outer forward, classification/regression | Partial compilation passes; fullgraph still encounters learned vocabulary decisions / explicit random generators | Default calls fail in recipe setup, before neural computation |
+| Relational fit / outer forward | String vocabulary fitting still being integrated and validated | Not established |
 
-A changed input row count being accepted does not imply one reusable graph: some categorical processors recompile at each tested size despite dynamic=True.
+Relational **fullgraph requires** experimental external-join operations, a finite specified hop count and scoped dynamic-output capture:
 
-## Branches
+```python
+model.fit(context, target, related_context, num_hops=1)
+with torch._dynamo.config.patch(capture_dynamic_output_shape_ops=True):
+    predict = torch.compile(model.predict, fullgraph=True, dynamic=True)
+    result = predict(query, related_query)
+```
 
-| Branch | Purpose / dependencies |
+Arrow/cuDF joins are opaque operations inside the graph. Their existing algorithms execute at runtime; Inductor does not optimize Arrow. Small runtime validation operations preserve invalid-input errors. This distinction matters when assessing performance.
+
+Across relational query sizes 4→1→8→4, fullgraph counts are 1→2→3→3. The repeated query reuses its graph; `dynamic=True` does not establish universal reuse across new sizes. Partial compilation can hit the default recompilation limit and fall back to eager execution for affected functions.
+
+## Numerical quality
+
+The two-hop relational example changes one probability from 0.0907173976 eager to 0.0906983167 with only the internal model compiled. Compiling public prediction gives 0.0906982943. Predicted classes are unchanged. Fitted preprocessing independently returns bitwise-equal values for all 12 checked numerical/datetime blocks. Scalar CPU code generation passes the original tolerance in this experiment, but is not a recommended speed fix.
+
+On the larger Tabular regression checks, whole-prediction and internal-only compiled outputs are bitwise identical. Strict eager tolerance failures affect 1/110,889 quantile values with one estimator and 3/110,889 with four estimators. Four-estimator median-prediction RMSE changes from 64.8680573 to 64.8680649, and MAE from 53.9904861 to 53.9904900. These are small measured differences, not a claim of exact parity. No tolerance was relaxed.
+
+Compiled preprocessing fitting has a separate issue: reduction rounding can change the PowerTransform search result. A focused experimental patch preserves native nansum/nanmean during fitting and native expm1 where needed. It retains datatype, optimizer and random-generator behavior. Real numerical data with missing values passes the existing tolerance on both runtimes; fitted lambda/mean/scale are exact in tested cases. Cached transformation is unchanged. GPU cost remains unmeasured, and CPU 2.7 can be slower with this precision-preserving path.
+
+## Measured CPU benefit
+
+These shared-host FP32 measurements compare the same eagerly fitted state, using nine rotating-order warm repetitions. Compilation time is excluded and recorded separately in the experiment. They are not GPU estimates.
+
+| Classification workload | Eager | Internal model compiled | Public predict compiled |
+|---|---:|---:|---:|
+| 1 estimator, 32 query rows | 17.52 ms | 15.90 ms | 14.77 ms |
+| 1 estimator, 128 rows | 57.33 ms | 56.45 ms | 55.18 ms |
+| 4 estimators, 32 rows | 68.55 ms | 63.01 ms | 58.54 ms |
+| 4 estimators, 128 rows | 221.11 ms | 218.56 ms | 213.68 ms |
+
+All classification comparisons pass. Public compilation adds about 7% over internal-only compilation at 32 rows and about 2% at 128 rows in these cases. First calls cost tens of seconds, and new shapes can trigger more compilation. Regression timings and every failed numerical comparison are preserved in the experiment report; noisy runs are identified explicitly.
+
+## Branches and implementation scope
+
+These branches overlap. Integration branches contain their prerequisites; they are not independent patches to merge blindly. Each component report identifies source commits and tested dependencies. No PRs were opened.
+
+| Branch | Purpose |
 |---|---|
-| [compile/nested-tensor-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/nested-tensor-preprocessing) | Categorical tracing, fake-safe representations, empty string payloads; based on main. |
-| [compile/tabletensor-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/tabletensor-preprocessing) | Table/columnar flatten-unflatten support; includes nested tensor prerequisites. |
-| [compile/numerical-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/numerical-preprocessing) | Public processor metadata checks; includes container prerequisites and numeric validation. |
-| [compile/categorical-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/categorical-preprocessing) | Focused numeric category lookup and tracing fixes, based on main; whole-processor validation also uses the container/processor integration. |
-| [compile/recipe-preparation](https://github.com/NVIDIA/structured-data-models/tree/compile/recipe-preparation) | Focused recipe validation and ensemble packing changes; validated with container/applicability prerequisites. |
-| [compile/public-preprocessing-investigation](https://github.com/NVIDIA/structured-data-models/tree/compile/public-preprocessing-investigation) | Combined experimental stack, public entry-point reproducer, schema validation and cached class-label metadata. |
+| [compile/public-preprocessing-investigation](https://github.com/NVIDIA/structured-data-models/tree/compile/public-preprocessing-investigation) | Combined prediction implementation, real-data probes and current public-call results |
+| [compile/fitted-recipe-boundaries](https://github.com/NVIDIA/structured-data-models/tree/compile/fitted-recipe-boundaries) | Combined fitting experiments, buffer registration and preserved random-state checks |
+| [compile/outer-forward-investigation](https://github.com/NVIDIA/structured-data-models/tree/compile/outer-forward-investigation) | Combined outer-forward validation with exact errors on both runtimes |
+| [compile/numerical-fit-parity](https://github.com/NVIDIA/structured-data-models/tree/compile/numerical-fit-parity) | Native fitting arithmetic where compiled differences affect learned parameters |
+| [relational-dynamic-join-compile](https://github.com/NVIDIA/structured-data-models/tree/relational-dynamic-join-compile) | Variable-output identifier joins, runtime readout validation and bounded task propagation |
+| [compile/categorical-recipe-support](https://github.com/NVIDIA/structured-data-models/tree/compile/categorical-recipe-support) | Traceable category dictionaries and fixed-output string lookup |
+| [compile/categorical-fit-support](https://github.com/NVIDIA/structured-data-models/tree/compile/categorical-fit-support) | Vocabulary fitting and opaque external string sorting; remaining limits documented |
+| [compile/atomic-tensor-construction](https://github.com/NVIDIA/structured-data-models/tree/compile/atomic-tensor-construction) | Finish tensor-wrapper construction before tracing resumes after graph breaks |
+| [compile/table-input-mutation](https://github.com/NVIDIA/structured-data-models/tree/compile/table-input-mutation) | Compiler writeback for matching encoded storage; rejects unsafe overlap before writes |
+| [compile/table-schema-guards](https://github.com/NVIDIA/structured-data-models/tree/compile/table-schema-guards) | Internal immutable schema metadata, preserving the public columns dictionary API |
+| [compile/varlen-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/varlen-preprocessing) | Variable-length tensor metadata and dispatch-compatible writes |
+| [compile/tabletensor-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/tabletensor-preprocessing) | Table/columnar flatten-unflatten and view support |
+| [compile/nested-tensor-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/nested-tensor-preprocessing) | Categorical/string tensor tracing foundations |
+| [compile/recipe-preparation](https://github.com/NVIDIA/structured-data-models/tree/compile/recipe-preparation) | Recipe construction and packing foundations |
+| [experiment/kumotabular-predict-compile-cpu](https://github.com/NVIDIA/structured-data-models/tree/experiment/kumotabular-predict-compile-cpu) | Timing, graph counts, cold-call costs and exact prediction-quality evidence |
 
-These are investigation branches, not a set of independent patches to merge blindly. The component reports identify source commits and prerequisite changes. Public integration results require the full tested combination.
+## Remaining work and rejected shortcuts
 
-## Remaining work
+- Complete relational string-vocabulary fitting, including int32 offset promotion without assuming small data or changing category selection.
+- Complete 2.7 public routing checks. A plain-PyTorch reproduction confirms an inference-context bytecode bug; moving metadata updates outside that context avoids it. Frozenset/enum metadata and further schema guards remain distinct issues.
+- Preserve explicit generator state in compiled fitting. Removing the generator, retaining unobserved categories or bypassing all fitting would change behavior and is not accepted.
+- Validate custom operations on CUDA/cuDF, memory use and warm/cold latency. AWS login is pending; no Spot instance is currently running.
+- Reconcile zero-copy string-layout metadata with mutation writeback; both require preserving aliasing rather than copying all payloads or permitting ambiguous overlapping writes.
+- Keep numerical precision limits separate from preprocessing compatibility. A successful graph capture alone does not establish speed or prediction parity.
 
-- Preserve TableTensor mutation semantics during AOT functionalization: current wrappers lack aten.copy_ support for compiled input mutation.
-- Handle nonempty string/ragged storage operations without tensor-value-driven Python slicing; preserve view offsets and aliasing rather than forcing contiguous layouts.
-- Resolve older-runtime metadata guards (including frozenset of Stype values) and symbolic string-wrapper layout limitations.
-- Separate fitting steps that select a schema/vocabulary from fitted tensor transformations. DropConstantColumns currently turns a learned tensor mask into Python column metadata.
-- Isolate or implement graph-compatible alternatives for external Arrow joins. Wrapping Arrow in a graph break does not make the join itself compiled.
-- Preserve numerical fitting parity for PowerTransform; compiled transformation using fixed learned state is a separate, better-supported case.
-- Validate GPU execution, autocast dtypes, memory chunking, and performance only after the CPU execution boundary is stable. No speed or memory improvement is asserted here.
+Rejected approaches include a read-only replacement for the public columns dictionary (broke a passing 2.14 path), unchecked cached applicability metadata (could become stale), and sequential overlapping table copies (could overwrite source values).
 
-## Independent regression review
-
-At container snapshot 14d16c583, the existing TableTensor, ColumnarTensor, and CategoricalTensor test suites passed 95 CPU tests on PyTorch 2.14; 27 CUDA tests were skipped. Later component branches ran their own updated checks. This does not constitute GPU validation.
-
-
-## Practical support boundaries
-
-The fitted numerical default recipe is substantially closer to support than compiling all fitting. On PyTorch 2.14, the default four-member tabular recipe and two-member relational task-table recipe transform real numerical query data with exact eager parity and unchanged fitted buffers. These checks do not include string alignment or related tables.
-
-Public KumoTabular prediction passes the tested numerical classification cases after the combined patches. Query sizes 4→7→3→4 create three graphs and reuse the first graph on the final call. Broader validation exposed a sliced-table/FakeTensor-mode failure; commit 15917f89e fixes empty identifier view-leaf propagation, and the full public one/four-estimator classification and one-estimator regression checks subsequently pass with sliced inputs too. Mixed categorical/text inputs retain separate blockers. Regression fresh-input checks pass at atol=1e-5, rtol=1e-4 with maximum absolute difference 1.83e-4; this is numerical prediction parity within tolerance, not a task-metric or GPU claim.
-
-Public fitting is harder for concrete reasons: processors learn data-dependent column sets and vocabulary sizes, some fitting uses Python lists/random permutation metadata, and compiled FP32 PowerTransform optimization can select different parameters. Keep fitting parity separate from applying existing fitted statistics.
-
-For PyTorch 2.7, changing handles_stypes to a tuple or primitive-string frozenset gets past one error but then fails enum-key dictionary guarding. Those exploratory metadata changes were not retained. A separate dynamic-stride issue is reproduced with a small raw PyTorch wrapper, without importing SDM; the nested-container branch contains it.
-
-## Suggested implementation order
-
-1. Review the independent numerical category lookup fix and the tensor flatten/unflatten foundations, with explicit alias and mutation coverage.
-2. Integrate recipe/applicability changes and target compiled fitted preprocessing on PyTorch 2.14 first. Retain the documented 2.7 limitations rather than claiming equivalent support.
-3. Review sliced-table integration and cached output metadata, then extend full public prediction to mixed categorical/text data and GPU execution.
-4. Address fitting separately: data-dependent schemas/vocabularies, numerical optimizer parity, and external joins require distinct decisions. Do not disable all preprocessing merely to obtain a successful compiler call.
-
-No PRs were opened. No EC2 instances were launched: the decisive failures and initial passing paths were reproducible on CPU. Performance and GPU correctness remain explicit follow-up validation, not inferred from these results.
-
-
-## Relational public prediction after integration
-
-On the combined branch, including graph preparation and #1068, compiled public predict still fails before the internal model. On 2.14 fullgraph, AlignCategories accesses a tuple of StringTensor category dictionaries that Dynamo cannot source; with breaks allowed, variable-length concatenation raises a data-dependent scalar error. On 2.7 the first reported failures remain a generic-context graph-break restriction and enum dictionary guards. These are public preprocessing failures, distinct from previously passing internal-model cached prediction checks.
-
-
-## Final public prediction validation
-
-The combined branch is published at commit `8950a466ccbd501f7b1431b5b4e63a8e37d9de09`. Its [README](https://github.com/NVIDIA/structured-data-models/blob/compile/public-preprocessing-investigation/experiments/compile_public_paths/README.md) and [compact final records](https://github.com/NVIDIA/structured-data-models/blob/compile/public-preprocessing-investigation/experiments/compile_public_paths/prediction-final.json) preserve exact cases and errors.
-
-| KumoTabular, CPU 2.14, eager fit then compiled public predict | Graph breaks allowed | Fullgraph | Maximum absolute difference |
-|---|---|---|---|
-| Classification, one estimator | Pass | Pass | 8.94e-7 |
-| Classification, four estimators | Pass | Pass | 3.28e-7 |
-| Regression, one estimator | Pass | Pass | 1.8311e-4 |
-
-Fresh tables and sliced views passed row counts 4→7→3→4. Tolerance is atol=1e-5 and rtol=1e-4, comparing the same dtype. Three graphs were compiled for the three row counts; the repeated size reused its graph. This establishes the tested numerical workloads, not arbitrary schemas or all model sizes. Model/standardizer regression tests passed 49 cases on each runtime, with 14 CUDA skips.
-
-The integration branch also includes the existing Fourier embedding fix (#1054), relational graph preparation, and relative-time fix (#1068). Component branches overlap; consult their dependency descriptions before extracting changes. No passing compiled public fit or outer-forward case is established.
+Independent regression checks at integration snapshot `09e934174` passed 105 categorical/string/variable-length/join tests on each runtime, with 45 CUDA skips each. Component branches record subsequent focused and broader tests. These CPU checks do not substitute for GPU validation.
