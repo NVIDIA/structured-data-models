@@ -37,6 +37,23 @@ For tabular-only data, omit `related_tables_cpu`. For spawned workers, supply an
 
 The actual runner factories live in `process_factories.py`: `TabularProcessFactory(data, context, task, size, estimators, seed, precision)` reads only the prepared TRAIN arrays, while `RelationalProcessFactory(graphs, target, task, estimators, seed, precision, num_hops)` fits the exact prepared context graph. Both load pretrained weights within each spawned process. Call `executor.memory(reset_peak=True)` after fit/warmup and `executor.memory()` after a prediction pass to obtain each child's allocator statistics. The parent's `torch.cuda.memory_allocated()` does not measure child allocations. External host/process RAM and device utilization sampling remains necessary.
 
+The standalone runners use the same prepared artifacts as the single-process runners:
+
+```bash
+python -m research.multigpu.tabular_process_bench \
+  --data /path/to/prepared-tabular --task classification --size large \
+  --gpus 4 --context 1024 --queries 2048 --batch-size 256 --estimators 4 \
+  --seed 1729 --precision bfloat16 --threads 1 --warmups 1 --repeats 3 \
+  --output /path/to/new-result --source-commit REVISION
+
+python -m research.multigpu.relational_process_bench \
+  --workload /path/to/prepared-relational --gpus 4 --estimators 4 \
+  --dtype bf16 --seed 1729 --threads 1 --warmups 1 --repeats 3 \
+  --output /path/to/new-result --source-commit REVISION
+```
+
+Both scripts record startup/import/checkpoint/fit together as `spawn_load_fit_s`, then warmup separately, then repeated full-pass wall times, CPU predictions, worker service times, child allocator peaks and `nvidia-smi` telemetry. They terminate worker models before opening validation labels. Worker `max_rss_bytes` is a lifetime host-memory peak; summing worker peaks is not necessarily the simultaneous node peak and can double count shared pages. Compare process 1/2/4 at identical `--threads`, then consider an additional matched node-wide CPU-thread budget; a process-versus-thread speed difference alone does not prove a GIL cause.
+
 ## Hybrid 2 DP × 2 EP on four GPUs
 
 Create and fit two independent `EnsembleParallel` groups, one on GPUs `[0,1]`, the other on `[2,3]`. Both groups must represent the same full ensemble member plan. Pass the two group executors to `QueryParallel`, with input devices `cuda:0` and `cuda:2`. Whole query batches alternate between groups, while members within a batch execute concurrently on the group's two GPUs. Construct/finalize the groups before creating the outer executor and close the outer executor before closing the groups.
@@ -44,6 +61,8 @@ Create and fit two independent `EnsembleParallel` groups, one on GPUs `[0,1]`, t
 This composition has two copies of the full ensemble cache across the node, rather than four copies for pure 4-way DP. Each GPU still has its own complete model parameters. The expected advantage is lower per-GPU member-cache pressure than pure DP and higher batch throughput than single-group EP. It introduces extra CPU recipe work and two independent group coordinators; GPU measurements, parity checks and cold-start costs must establish whether it is actually better.
 
 The runnable adapter is `data_parallel_adapter.py:hybrid_factory(args, replicas)`. It accepts the same benchmark factory interface as native DP, creates two equal contiguous replica groups, fits identical recipes with the same cloned generator and `member_seed`, and exposes `predict_batches`. Four supplied replicas produce the intended 2 × 2 layout; two replicas produce two singleton resident ensemble groups, a useful resident-cache DP control. Closing the adapter drains outer work before closing both inner executors. CPU tests verify exact output parity for the actual KumoTabular model with a reduced random-weight architecture; they exercise the nested scheduler, not GPU scaling.
+
+Set `args.recipe_device="cpu"` and pass a CPU fit generator when comparing against a CPU-preprocessed resident EP reference. The adapter then preserves CPU recipe execution while explicitly propagating CUDA autocast into both nested worker levels. The default keeps preprocessing on the group's first GPU and requires a CUDA generator. Changing CPU/CUDA recipe backends can change sampling or preprocessing numerics, so those configurations are separate references, not pure placement comparisons.
 
 ## Memory and timing expectations
 
