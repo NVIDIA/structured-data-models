@@ -2,16 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import contextlib
-from collections.abc import Iterator
 from typing import Literal
 
 import torch
 
 
-@contextlib.contextmanager
 def inference_mode(
     mode: Literal["inference", "no_grad", "grad", "none"] = "inference",
-) -> Iterator[None]:
+) -> contextlib.AbstractContextManager[None]:
     r"""Context manager to adjust PyTorch inference and autograd states.
 
     Args:
@@ -25,18 +23,15 @@ def inference_mode(
     if mode == "inference":
         # `torch.inference_mode` is not supported inside a compiled region:
         # https://github.com/pytorch/pytorch/issues/180823
-        context = (
+        return (
             torch.no_grad()
             if torch.compiler.is_compiling()
             else torch.inference_mode()
         )
     elif mode == "no_grad":
-        context = torch.no_grad()
+        return torch.no_grad()
     elif mode == "grad":
-        context = torch.enable_grad()
+        return torch.enable_grad()
     else:
         assert mode == "none"
-        context = contextlib.nullcontext()
-
-    with context:
-        yield
+        return contextlib.nullcontext()
