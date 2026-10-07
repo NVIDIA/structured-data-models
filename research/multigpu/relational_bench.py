@@ -293,6 +293,11 @@ def run(args: argparse.Namespace) -> None:
             from sdm.models.ensemble_parallel import EnsembleParallel
 
             model = EnsembleParallel(replicas)
+        elif args.mode == "hybrid":
+            from research.multigpu.data_parallel_adapter import hybrid_factory
+
+            args.precision, args.recipe_device = args.dtype, "cpu"
+            model = hybrid_factory(args, replicas)
         else:
             model = replicas[0]
         x = context.task_table.drop_columns(workload["target"])
@@ -305,7 +310,16 @@ def run(args: argparse.Namespace) -> None:
                 "cuda", dtype=dtype, enabled=dtype != torch.float32
             ),
         ):
-            if ensemble_mode:
+            if args.mode == "hybrid":
+                model.fit(
+                    x,
+                    y,
+                    context.related_tables,
+                    num_estimators=args.estimators,
+                    generator=torch.Generator().manual_seed(args.seed),
+                    num_hops=2,
+                )
+            elif ensemble_mode:
                 model.fit(
                     x,
                     y,
@@ -337,16 +351,24 @@ def run(args: argparse.Namespace) -> None:
         if ensemble_mode:
             stats["ensemble_cache_bytes_per_gpu"] = model.cache_bytes
             stats["member_seeds"] = model.member_seeds
+        if args.mode == "hybrid":
+            stats["ensemble_cache_bytes_per_group"] = [
+                group.cache_bytes for group in model.replicas
+            ]
+            stats["member_seeds_per_group"] = [
+                group.member_seeds for group in model.replicas
+            ]
         query_executor, query_batches = None, None
-        if args.mode == "data":
+        if args.mode in {"data", "hybrid"}:
             from research.multigpu.query_parallel import (
                 QueryBatch,
                 QueryParallel,
             )
 
-            query_executor = QueryParallel(
-                replicas, devices=devices, dtype=dtype
-            )
+            if args.mode == "data":
+                query_executor = QueryParallel(
+                    replicas, devices=devices, dtype=dtype
+                )
             offset = 0
             query_batches = []
             for batch in batches:
@@ -361,6 +383,8 @@ def run(args: argparse.Namespace) -> None:
                 offset += rows
 
         def predict() -> tuple[list[sdm.TableTensor], list[float]]:
+            if args.mode == "hybrid":
+                return model.predict_batches(query_batches), []
             if query_executor is not None:
                 results = query_executor.predict(query_batches)
                 return [result.prediction for result in results], [
@@ -470,7 +494,7 @@ def run(args: argparse.Namespace) -> None:
         stats["quality"] = score(pred.cpu(), labels, task)
         if query_executor is not None:
             query_executor.close()
-        if ensemble_mode:
+        if ensemble_mode or args.mode == "hybrid":
             model.close()
         write_json(args.output / "result.json", stats)
         print(
@@ -512,7 +536,7 @@ def main() -> None:
     bench.add_argument("--workload", type=Path, required=True)
     bench.add_argument(
         "--mode",
-        choices=["native", "ensemble", "data", "stage", "layers"],
+        choices=["native", "ensemble", "data", "stage", "layers", "hybrid"],
         default="native",
     )
     bench.add_argument("--gpus", type=int, default=1)
