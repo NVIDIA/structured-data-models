@@ -1,0 +1,13 @@
+{
+  "torch": "2.14.0",
+  "model": "tabular",
+  "entry": "predict",
+  "fullgraph": true,
+  "backend": "inductor",
+  "device": "cpu",
+  "eager_succeeded": true,
+  "status": "pass",
+  "max_abs_error": 5.960464477539063e-08,
+  "parity": true,
+  "source_commit": "8aa9630ac"
+}

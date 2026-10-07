@@ -18,6 +18,13 @@ p.add_argument("--checkpoint", required=True)
 p.add_argument("--entry", choices=["fit", "predict", "forward"], required=True)
 p.add_argument("--fullgraph", action="store_true")
 p.add_argument("--backend", default="inductor")
+p.add_argument(
+    "--task",
+    choices=["classification", "regression"],
+    default="classification",
+)
+p.add_argument("--estimators", type=int, default=1)
+p.add_argument("--query-rows", type=int, nargs="+")
 a = p.parse_args()
 torch.set_num_threads(1)
 torch.manual_seed(123)
@@ -26,13 +33,16 @@ if a.model == "tabular":
     cx = TableTensor.from_tensor(
         torch.tensor(data["x"][data["train_ids"][:32]])
     )
+    target = torch.tensor(data["y"][data["train_ids"][:32]]).view(-1, 1)
     cy = TableTensor.from_tensor(
-        CategoricalTensor.from_tensor(
-            torch.tensor(data["y"][data["train_ids"][:32]]).long().view(-1, 1)
-        )
+        CategoricalTensor.from_tensor(target.long())
+        if a.task == "classification"
+        else target
     )
     qx = TableTensor.from_tensor(
-        torch.tensor(data["x"][data["validation_ids"][:4]])
+        torch.tensor(
+            data["x"][data["validation_ids"][: max(a.query_rows or [4])]]
+        )
     )
     cr = qr = None
 else:
@@ -44,23 +54,20 @@ ckpt = torch.load(a.checkpoint, weights_only=True, map_location="cpu")
 
 
 def new_model():
+    torch.manual_seed(123)
     model = (
-        KumoTabular(
-            task="classification", size="small", pretrained=False, device="cpu"
-        )
+        KumoTabular(task=a.task, size="small", pretrained=False, device="cpu")
         if a.model == "tabular"
-        else KumoRelational(
-            task="classification", pretrained=False, device="cpu"
-        )
+        else KumoRelational(task=a.task, pretrained=False, device="cpu")
     )
-    model.models["classification"].load_state_dict(ckpt, strict=True)
+    model.models[a.task].load_state_dict(ckpt, strict=True)
     return model
 
 
 def fit(model, function=None):
     kwargs = {
         "generator": torch.Generator().manual_seed(123),
-        "num_estimators": 1,
+        "num_estimators": a.estimators,
     }
     if a.model == "relational":
         kwargs["num_hops"] = arm["num_hops"]
@@ -74,7 +81,7 @@ def predict(model, function=None):
 def forward(model, function=None):
     kwargs = {
         "generator": torch.Generator().manual_seed(123),
-        "num_estimators": 1,
+        "num_estimators": a.estimators,
     }
     if a.model == "relational":
         kwargs["num_hops"] = arm["num_hops"]
@@ -90,6 +97,8 @@ result = {
     "fullgraph": a.fullgraph,
     "backend": a.backend,
     "device": "cpu",
+    "task": a.task,
+    "estimators": a.estimators,
 }
 try:
     with torch.inference_mode():
@@ -111,9 +120,38 @@ try:
             actual = predict(model).numerical
         elif a.entry == "predict":
             fit(model)
-            actual = predict(
-                model, torch.compile(model.predict, **kwargs)
-            ).numerical
+            torch._dynamo.utils.counters.clear()
+            compiled_predict = torch.compile(model.predict, **kwargs)
+            all_queries = qx
+            samples = []
+            for rows in a.query_rows or [qx.size(-2)]:
+                qx = all_queries[..., :rows, :]
+                expected = predict(oracle).numerical.clone()
+                actual = predict(model, compiled_predict).numerical
+                samples.append(
+                    {
+                        "rows": rows,
+                        "max_abs_error": (actual - expected)
+                        .abs()
+                        .max()
+                        .item(),
+                        "parity": bool(
+                            torch.allclose(
+                                actual, expected, atol=1e-5, rtol=1e-4
+                            )
+                        ),
+                        "graphs_captured": torch._dynamo.utils.counters[
+                            "stats"
+                        ]["unique_graphs"],
+                        "calls_captured": torch._dynamo.utils.counters[
+                            "stats"
+                        ]["calls_captured"],
+                    }
+                )
+                result["samples"] = samples
+            result["all_samples_parity"] = all(
+                sample["parity"] for sample in samples
+            )
         else:
             actual = forward(model, torch.compile(model, **kwargs)).numerical
         result.update(

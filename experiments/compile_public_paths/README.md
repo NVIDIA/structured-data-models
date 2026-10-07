@@ -42,6 +42,15 @@ The recipe failures precede the internal model. Table flatten/unflatten support 
 4. Compile processor arithmetic and validate fitted state against eager.
 5. Integrate the internal-model fixes and validate the actual public paths again before claiming model support.
 
-## Container integration (in progress)
+## Container integration
 
 The first table/categorical/columnar flatten hooks are integrated on this branch. `containers-initial.json` records a second full matrix at source `5fe85d13f`. No public entry passed yet. In particular, recognizing table inputs exposed symbolic empty-column allocation, semantic-type metadata (`frozenset`), and partially reconstructed categorical containers. This is progress through tracing, not end-to-end support. Follow-up container patches are present but must be evaluated independently from these recorded results.
+
+## First successful public prediction
+
+With table/recipe prerequisites, PR #1054's Fourier-buffer fix, and the following two wrapper fixes, **public** `torch.compile(model.predict, fullgraph=True, dynamic=True)` passed CPU Inductor on PyTorch 2.14 for pretrained KumoTabular classification (32 context rows, four query rows, one estimator). Maximum prediction difference from eager was `5.960464477539063e-08`. Fit was eager. This is not a claim that compiled fit works.
+
+- Compare cached schema columns directly instead of constructing a `TableSchema` inside tracing. Validation still checks exactly the same column names and semantic types.
+- Cache class column names during fitting. Previously the outer model called `classes.tolist()` and converted every value to a Python string for every prediction. Tracing cannot format data-dependent integers into output column names. Cached prediction now reuses those immutable names; class ordering and neural calculations are unchanged.
+
+The wrapper cache change applies to both Kumo models. The one-shot forward path without a cache retains its existing label conversion. Existing base-model tests passed (35 cases on each runtime; the 2.14 run preceded the class-column cache change). Further changing-row and multiple-estimator checks are in progress. No GPU speed or memory claims are established here.
