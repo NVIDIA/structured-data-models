@@ -395,6 +395,9 @@ def main() -> None:
                 else:
                     timed(lambda: predict_batch(batches[0]), devices)
             report["warmup_s"] = time.perf_counter() - warmup_start
+            report["memory_after_warmup"] = memory(devices)
+            if callable(getattr(model, "memory", None)):
+                report["worker_memory_after_warmup"] = model.memory()
             if hasattr(model, "graph_count"):
                 report["graph_count_after_warmup"] = model.graph_count
             for device in devices:
