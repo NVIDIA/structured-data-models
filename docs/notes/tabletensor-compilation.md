@@ -72,3 +72,27 @@ Both tested versions fail with and without graph breaks. General copy support mu
 **Pre-sliced mixed inputs.** Numeric input-table views now compile after preserving the empty identifier leaf. Passing a pre-sliced table with nonempty text into a compiled replacement-and-slice function still exposes symbolic-shape failures: PyTorch 2.7 reports an undefined symbolic variable and 2.14 reports missing symbolic metadata. Fresh mixed tables pass the same operation. This needs additional nested-container/view work; mixed slicing in the table above means slicing inside compilation from a fresh table, not arbitrary pre-sliced mixed inputs.
 
 **Compilation cache.** PyTorch 2.14 warns that these subclasses lack `_stable_hash_for_caching`; dynamic subclass metadata may prevent persistent AOT cache serialization. The tested computations still execute, but cross-process compilation cache behavior is not established.
+
+## PyTorch 2.7 inference-context bytecode failure
+
+Public relational prediction and tabular fitting reached a PyTorch 2.7 internal exception-table `KeyError` when empty-column view metadata was updated inside `torch.inference_mode`. The failure reproduces without SDM:
+
+```python
+import torch
+
+def view(*args):
+    with torch.inference_mode(args[0].is_inference()):
+        out = args[0].unsqueeze(0)
+        if not args[0]._columns:
+            for tensor in out if isinstance(out, tuple) else (out,):
+                if isinstance(tensor, torch.Tensor):
+                    tensor._empty = args[0]._empty.reshape(tensor.shape)
+        return out
+
+x = torch.empty(5, 0)
+x._columns = ()
+x._empty = torch.empty(5, 0)
+torch.compile(view)(x)
+```
+
+2.7.1 raises `InternalTorchDynamoError: KeyError: Instruction(... LOAD_FAST ... args ...)`; 2.14 succeeds. Moving the metadata loop and return outside the context passes on both versions. The actual tensor view remains inside inference mode. This narrow reordering also removes the failure from the real 2.7 relational prediction trace; subsequent schema guards remain separate blockers. Container/compile regression checks: 25 passed, 5 CUDA skips on each runtime.
