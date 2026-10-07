@@ -356,7 +356,7 @@ class TableTensor(Tensor):
         return out
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        return ["_numerical", "_categorical", "_datetime", "_text", "_id"], (
+        return ["numerical", "categorical", "datetime", "text", "id"], (
             tuple(self._columns.items()),
         )
 
@@ -370,11 +370,11 @@ class TableTensor(Tensor):
     ) -> Self:
         return cls(
             columns=dict(ctx[0]),
-            numerical=inner_tensors["_numerical"],
-            categorical=inner_tensors["_categorical"],
-            datetime=inner_tensors["_datetime"],
-            text=inner_tensors["_text"],
-            id=inner_tensors["_id"],
+            numerical=inner_tensors["numerical"],
+            categorical=inner_tensors["categorical"],
+            datetime=inner_tensors["datetime"],
+            text=inner_tensors["text"],
+            id=inner_tensors["id"],
         )
 
     @classmethod
