@@ -4,6 +4,8 @@ Status: investigation in progress, 2026-10-08. Implementation baseline: `842c408
 
 The goal is practical multi-GPU inference for both `KumoTabular` and `KumoRelational`, including throughput, latency, capacity, prediction quality, and a lightweight integration into SDM. The implementation recommendations are in [integration.md](integration.md).
 
+The [foundation-model literature synthesis](literature.md) ranks five next experiments, distinguishing current-checkpoint execution changes from approximate context selection and new-model approaches. These paper-inspired proposals are not additional measurements.
+
 The strongest current throughput result is persistent process query DP with local estimator batching: including final CPU output gathering, KumoTabular reaches 13,822 rows/s on four L40S GPUs, 3.777× its matched one-process control and approximately 3.45× the best native one-GPU result for that workload. Native relational H&M reaches 3,859 rows/s, 3.254× its process control and 2.981× public native; that earlier relational timer excludes final concatenation. Predictions remain byte-identical to the matching native batching policy. Larger Covertype ensemble parallelism also helps: after tuning the native baseline and fixing local estimator batch width, EP2 scales 1.446× with exact predictions. California Housing EP and the initial threaded hybrid do not speed up. Sequential layer placement improves capacity; cached context parallelism saves KV memory but its current BF16 relational regression fails the declared full-quantile numerical gate. Input residency and output-gather boundaries are explicit below.
 
 ## Approach matrix
