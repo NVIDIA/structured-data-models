@@ -1,0 +1,11 @@
+{
+  "torch": "2.7.1",
+  "backend": "actual Inductor delegated by graph-auditing wrapper",
+  "source_commit": "f47b96742",
+  "graph_files": 131,
+  "total_captured_calls": 7240,
+  "relational_source_calls": 6547,
+  "linear_calls": 627,
+  "attention_calls": 108,
+  "note": "Counts include recompilation over query rows 4,1,8,4; these are not runtime operation counts or a claim that every region compiled."
+}

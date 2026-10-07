@@ -13,7 +13,8 @@ Real cached data, pretrained weights, CPU Inductor, and the same FP32 weights/in
 | KumoTabular, numerical regression | 2.14 | Pass | Pass | Max `1.84e-4`; initial snapshot |
 | KumoRelational, one-hop RelBench / four related tables | 2.14 | Pass | Pass* | All query sizes pass; max `4.83e-6` |
 | KumoRelational, two-hop RelBench / six related tables | 2.14 | Runs | Runs* | One of eight probabilities narrowly misses tolerance on the four-row sample; reproduced by compiling only the inner model |
-| KumoRelational public prediction | 2.7.1 | Blocked in dispatch/resume tracing | Still blocked | No end-to-end support claim |
+| KumoTabular, numerical classification | 2.7.1 | Pass; partial capture | Blocked | All query sizes pass; max `1.13e-6` |
+| KumoRelational, one-hop RelBench | 2.7.1 | Pass; partial capture | Blocked | All query sizes pass; max `4.83e-6` |
 | Public `fit()` / outer `model(...)` | Both | Separate investigation | Separate investigation | Not covered by the successful prediction cases |
 
 *Relational fullgraph needs scoped `capture_dynamic_output_shape_ops=True` and an explicit finite `num_hops`. Arrow/cuDF joins remain opaque external operations inside the captured graph; their algorithms are not compiled.
@@ -49,7 +50,11 @@ The two-hop probability miss also occurs with entirely eager preprocessing and *
 
 A CPU diagnostic using scalar code generation (`cpp.simdlen=1`) passes the original tolerance across all four two-hop query sizes. FP32 is unchanged. This points to vector/reduction arithmetic in the inner compiler, but scalar code generation is not recommended as a performance fix without further measurement. No precision flags were changed in the library.
 
-PyTorch 2.7 has additional dictionary-source and graph-break-resume limitations. After the observed schema guards are fixed, public prediction still fails in tensor dispatch: the default limit sends a tensor list into a view wrapper; a scoped limit of 64 instead sends a dtype to `unsqueeze`. A tracing-only backend also fails in generated resume code (`NameError: Stype is not defined`), so this is not only an Inductor kernel issue. These are failed diagnostics, not supported configurations. Changing the inference context alone does not fix fullgraph: a diagnostic exposes an earlier recipe-applicability failure.
+PyTorch 2.7 public prediction now passes with graph breaks after traceable schema lookups, atomic wrapper construction, and atomic table dispatch. The dispatch boundary leaves tensor handlers eligible for compilation (`recursive=False`). It prevents Dynamo from incorrectly resuming an operator through another operator's wrapper. One-hop relational queries capture **71 → 118 → 131 → 131** graphs; tabular captures **24 → 45 → 65 → 66**. Default recompilation limits still cause eager fallbacks, and the repeated tabular query adds a graph. This is partial compilation with substantial fragmentation, not a speed recommendation.
+
+An auditing backend delegates to real Inductor and saves every graph. The relational run includes **627 linear and 108 attention calls across recompilations**, confirming that neural computation is captured as well as preprocessing ([capture summary](relational-27-capture.json)). These are compile-time counts, not runtime operation counts. Reproduce with `audit_inductor.py --backend audited_inductor` and `SDM_GRAPH_DIRECTORY` set to a new output directory.
+
+Fullgraph remains blocked for both models on 2.7: the reported generic-context error masks unsupported recipe-applicability tracing. A direct-context diagnostic exposes the earlier failure; changing the inference context alone is insufficient. The successful graph-break paths are not fullgraph support.
 
 Unbounded graph traversal, arbitrary schemas, input mutation, nonempty variable-length operations outside the tested paths, CUDA/cuDF, and full dataset metrics still need separate validation. Opaque external operations may add overhead; no speedup is inferred from capturing fewer graphs.
 
@@ -69,4 +74,4 @@ PYTHONPATH=. OMP_NUM_THREADS=1 TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS=0 \
 
 For tabular classification, use `--model tabular --entry predict --fullgraph --query-rows 4 7 3 4`, its `.npz` data, and `small/classifier.pt`; omit relational options. `--estimators 4` checks ensembling. Regression uses `--task regression` and `regressor.pt`. The PCH setting is specific to the local macOS 2.14 compiler setup. `--inner-only` is a diagnostic that compiles internal modules while keeping public preprocessing eager.
 
-Existing checks include 70 passing categorical/conversion/join/relational cases (39 CUDA skips) and 43 passing relational/base cases (31 CUDA skips) on the recorded 2.14 snapshots. Component branches provide focused two-version checks. [HISTORY.md](HISTORY.md) and [baseline.json](baseline.json) retain earlier failures and the original 24-case current-main baseline.
+Latest focused existing suites pass on both runtimes: **118 passed, 69 skipped** (categorical/conversion/constant/calendar, relational, base-model, and relational-model checks). Component branches provide additional focused two-version checks. [HISTORY.md](HISTORY.md) and [baseline.json](baseline.json) retain earlier failures and the original 24-case current-main baseline.
