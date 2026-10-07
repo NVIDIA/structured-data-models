@@ -64,7 +64,7 @@ python research/multigpu/relational_bench.py run \
   --profile --output /results/hm-ensemble4-e4
 ```
 
-No result is claimed in this protocol. Successful measurements, failures, OOM boundaries, exact hardware, and scaling tables belong in the result report after execution.
+No GPU inference result is claimed in this protocol. Successful GPU measurements, failures, OOM boundaries, exact hardware, and scaling tables belong in the result report after execution.
 
 ## Completed native input preparation
 
