@@ -75,3 +75,28 @@ The real-data reproduction requires scikit-learn for its bundled dataset, or `--
 ## Deferred metadata prototype
 
 A private primitive-string mirror of `handles_stypes` enabled 2.7 fullgraph Standardize fitting while preserving the public frozenset of Stype enums. It required class-construction caching, interception of instance assignments, and live properties for Sequential, TaskDispatch, TableDispatch and adapters. Thirty existing eager tests passed, but later class-level metadata mutation could leave the cache stale, and arbitrary custom processor properties needed additional handling. This prototype was rejected from the source branch rather than introducing those compatibility holes or a larger metaclass mechanism. The 2.7 public metadata blocker remains separate from the fitting arithmetic fixed here.
+
+## Autocast operator contracts
+
+The native fitting `expm1` helper disables autocast only within its operation.
+The original fitting code uses `expm1_`, which preserves its input dtype under
+autocast. CUDA registers the out-of-place `expm1` for FP32 promotion, so using
+it without this guard could disagree with the fake operator's input-dtype
+output and with the original fitting calculation. The guard adds no cast.
+
+Installed PyTorch 2.7.1 and 2.14.0 dispatch registrations confirm that
+`expm1` has an AutocastCUDA kernel, while `expm1_`, `nansum`, and `nanmean`
+have fallthrough registrations. This is source/registration evidence, not a
+CUDA execution result.
+
+CPU validation on both versions passed all 18 combinations of three helpers,
+FP32/BF16/FP16 inputs, and BF16/FP16 autocast. Eager custom operators and actual
+Inductor with either full-graph setting match the original native operation
+exactly (including NaNs), and schema/fake checks pass. This does not establish
+full low-precision PowerTransform fitting parity or GPU performance.
+
+```bash
+PYTHONPATH=. python experiments/numerical-fit-parity/autocast.py --device cpu
+# Run separately on a CUDA host; not validated by the CPU results above:
+PYTHONPATH=. python experiments/numerical-fit-parity/autocast.py --device cuda
+```
