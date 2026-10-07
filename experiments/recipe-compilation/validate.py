@@ -6,7 +6,7 @@ import traceback
 
 import torch
 
-from sdm import TableTensor
+from sdm import CategoricalTensor, TableTensor
 from sdm.models.kumo.relational.recipe import default_recipe as relational
 from sdm.models.kumo.tabular.recipe import default_recipe as tabular
 from sdm.processing.execution import RecipeExecution
@@ -14,6 +14,7 @@ from sdm.processing.execution import RecipeExecution
 p = argparse.ArgumentParser()
 p.add_argument("--model", choices=["tabular", "relational"], required=True)
 p.add_argument("--data", default=None)
+p.add_argument("--categorical", action="store_true")
 p.add_argument("--rows", type=int, nargs="+", default=[31, 47, 31])
 p.add_argument("--members", type=int, default=1)
 p.add_argument("--fullgraph", action="store_true")
@@ -25,6 +26,7 @@ result = dict(
     members=a.members,
     fullgraph=a.fullgraph,
     dynamic=a.dynamic,
+    categorical=a.categorical,
     backend="inductor",
     data="sklearn breast_cancer; 300 context rows; constant column appended",
 )
@@ -38,12 +40,24 @@ try:
         x = torch.tensor(data.data, dtype=torch.float32)
         y = torch.tensor(data.target, dtype=torch.float32).unsqueeze(-1)
     x = torch.cat((x, x.new_ones((len(x), 1))), dim=-1)
+
+    def make_table(tensor):
+        if not a.categorical:
+            return TableTensor.from_tensor(tensor)
+        return TableTensor(
+            numerical=tensor[:, 3:],
+            categorical=CategoricalTensor(
+                code=tensor[:, :3].round().long() % 3,
+                categories=(torch.arange(3),) * 3,
+            ),
+        )
+
     execution = RecipeExecution(
         {"tabular": tabular, "relational": relational}[a.model]()
     )
     with torch.inference_mode():
         execution.fit_transform(
-            x=TableTensor.from_tensor(x[:300]),
+            x=make_table(x[:300]),
             y=TableTensor.from_tensor(y[:300]),
             related_tables=None,
             num_members=a.members,
@@ -63,7 +77,7 @@ try:
         errors = []
         shapes = []
         for n in a.rows:
-            table = TableTensor.from_tensor(x[300 : 300 + n])
+            table = make_table(x[300 : 300 + n])
             expected = execution.transform(table, None)
             actual = compiled(table, None)
             for ref_member, out_member in zip(expected, actual, strict=True):

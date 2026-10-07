@@ -47,7 +47,7 @@ CPU macOS; PyTorch 2.7.1/Python 3.12 and PyTorch 2.14.0/Python 3.13. The success
 | KumoRelational task-table recipe, two members, `fullgraph=True`, `dynamic=True` | Pass; exact eager output |
 | Existing recipe, ensemble processor, and semantic-type routing tests | 26 passed, one CUDA case skipped on **each** runtime |
 
-The final dynamic runs each captured two graphs across 31 → 47 → 31 query rows; the second row count triggered a shape guard. Dynamic mode preserves correctness here but does not yet prove graph reuse across all row counts.
+The final dynamic runs each captured two graphs across 31 → 47 → 31 query rows; the second row count triggered a shape guard. The same happened for 38 → 47 → 38. Forcing dynamic rows with `mark_dynamic` exposes specialization during table reconstruction/shape consistency checks. Dynamic mode preserves correctness here but does not yet provide graph reuse across changing row counts. An alternative ensemble shape-grouping implementation did not fix this and was discarded.
 
 The Relational fixture uses task-table numerical features. It does not exercise related-table datetime features, Arrow joins, categorical dictionaries, the internal neural model, or CUDA. No inference-speed or memory claim is made.
 
@@ -81,4 +81,5 @@ The precompiled-header environment setting works around a local macOS compiler i
 
 - **PyTorch 2.7.1:** Default full-graph recipe construction still rejects `frozenset(generator)`. Preconstructed recipes also encounter unsupported `frozenset` module attributes; allowing graph breaks can instead reach an assertion in Dynamo's `DictGetItemSource` for semantic-type enum keys. A tuple-materialization workaround only moved the first failure and was discarded. These results do not establish 2.7 preprocessing compilation support.
 - **Compiled fitting:** The actual default recipe reaches `DropConstantColumns._keep_mask(...).tolist()`, which determines a Python column schema from training values. Casting the mask to integers merely moves the blocker to data-dependent Python decisions. Supporting this requires an explicit schema-learning boundary or a larger tensorized schema design; silently retaining constant columns would change behavior.
-- **Other inputs:** Mixed categorical/text/date columns, actual related tables, and CUDA need their own validation. Working numerical recipe transforms are useful progress, not complete public `fit`/`predict` support.
+- **Categorical transform:** The `validate.py --categorical` fixture turns the first three real features into three-valued category codes and keeps the remaining numerical features. Full-graph 2.14 tracing currently fails when `AlignCategories` reads `table.categorical.categories`: the compiler cannot wrap its returned tuple of fake tensors. This is separate from numerical recipe support.
+- **Other inputs:** Text/date columns, actual related tables, and CUDA need their own validation. Working numerical recipe transforms are useful progress, not complete public `fit`/`predict` support.
