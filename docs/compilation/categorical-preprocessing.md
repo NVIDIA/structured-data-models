@@ -12,7 +12,7 @@ right_index = perm[position[left_index]]
 lookup[left_index] = right_index.to(codes.dtype)
 ```
 
-Actual Inductor with `fullgraph=True` rejects `aten.nonzero.default` because its output size depends on the tensor values. With graph breaks allowed, execution can continue in separate regions.
+PyTorch 2.7.1 Inductor with `fullgraph=True` rejects `aten.nonzero.default` because its output size depends on the tensor values. With graph breaks allowed, execution can continue in separate regions. The original lookup already passes both modes on 2.14; this specific blocker is version-dependent.
 
 The branch uses the same sorted vocabulary and search positions, then returns one entry per input category:
 
@@ -24,6 +24,7 @@ Matching categories retain the same fitted code; unmatched categories retain `-1
 
 | Validation | 2.7.1 | 2.14.0 |
 |---|---|---|
+| Original lookup, fullgraph | Fails at `nonzero` | Passes |
 | Existing alignment tests, CPU | 23 passed | 23 passed |
 | Actual Inductor, both graph-break settings, varying category counts | 2 passed | 2 passed |
 | Special-value lookup parity, each graph-break setting | 16 passed | 16 passed |
