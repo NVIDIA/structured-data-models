@@ -123,7 +123,7 @@ Fixed batch-two EP2 is 1.495× tuned public native and 1.446× its resident cont
 
 ### Process query DP on L40S
 
-One persistent process per GPU changes the result for the original small Covertype workload (large model, E4, context 1,024, queries 2,048, batch 256). Each worker uses one CPU thread and the native unbatched estimator path. The timer is parent wall time including input IPC, transfers, inference, and CPU prediction return; final CPU concatenation/scoring are excluded consistently.
+One persistent process per GPU changes the result for the original small Covertype workload (large model, E4, context 1,024, queries 2,048, batch 256). Each worker uses one CPU thread and the native unbatched estimator path. The timer is parent wall time including input IPC, transfers, inference, and CPU prediction return; final CPU concatenation/scoring are excluded consistently. Process DP starts with prepared CPU query batches, whereas the original tabular native/EP runner has GPU-resident query inputs. Consequently the native-versus-process ratios have a different input boundary as well as the final-concatenation caveat; each process-DP GPU-count ladder remains boundary-matched.
 
 | Processes / GPUs | Median rows/s | Speedup vs DP1 | Scaling efficiency | Spawn + load + fit | Peak prediction allocation per GPU |
 |---:|---:|---:|---:|---:|---:|
