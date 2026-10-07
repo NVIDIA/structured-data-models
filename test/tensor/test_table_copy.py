@@ -84,8 +84,27 @@ def test_copy_columnar_rejects_overlapping_storage(views: bool) -> None:
     destination = ColumnarTensor(columns)
     source = ColumnarTensor(tuple(reversed(columns)))
     before = tuple(column.clone() for column in columns)
-    with pytest.raises(ValueError, match="cross-leaf storage overlap"):
+    with pytest.raises(
+        ValueError,
+        match=r"storage overlap|destination leaves sharing storage",
+    ):
         destination.copy_(source)
     assert all(
         torch.equal(column, old) for column, old in zip(columns, before)
     )
+
+
+@pytest.mark.parametrize("unchanged_second", [False, True])
+def test_copy_columnar_rejects_aliased_destinations(
+    unchanged_second: bool,
+) -> None:
+    data = torch.arange(4)
+    alias = data.view_as(data)
+    destination = ColumnarTensor((data, alias))
+    source = ColumnarTensor(
+        (data + 10, alias if unchanged_second else data + 20)
+    )
+    before = data.clone()
+    with pytest.raises(ValueError, match="destination leaves sharing storage"):
+        destination.copy_(source)
+    assert torch.equal(data, before)

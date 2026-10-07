@@ -157,6 +157,13 @@ def _copy_wrapper_(
 
     collect(destination, source)
     copies = [(dst, src) for dst, src in leaves.values() if dst is not src]
+    for dst, _ in copies:
+        for other_dst, _ in leaves.values():
+            if dst is not other_dst and torch._C._is_alias_of(dst, other_dst):
+                raise ValueError(
+                    "Copy does not support distinct destination leaves "
+                    "sharing storage"
+                )
     for i, (dst, _) in enumerate(copies):
         for j, (_, src) in enumerate(copies):
             if i != j and torch._C._is_alias_of(dst, src):
