@@ -63,7 +63,6 @@ class ICLBlock(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         cache: Cache | None = None,
-        chunk_memory_bytes: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
 
@@ -83,7 +82,6 @@ class ICLBlock(torch.nn.Module):
 
             if self.kv_heads is None or cache is not None:
                 result = layer(
-                    chunk_memory_bytes=chunk_memory_bytes,
                     query=x[..., R_train:, :] if last_layer else x,
                     key_value=(
                         cast(KVCacheEntry, cache[cache_key])
@@ -111,7 +109,6 @@ class ICLBlock(torch.nn.Module):
                 continue
 
             x_context, (key, value) = layer(
-                chunk_memory_bytes=chunk_memory_bytes,
                 query=x[..., :0, :] if last_layer else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
@@ -127,7 +124,6 @@ class ICLBlock(torch.nn.Module):
             )
             del key, value
             x_query = layer(
-                chunk_memory_bytes=chunk_memory_bytes,
                 query=x[..., R_train:, :],
                 key_value=key_value,
                 out=None if torch.is_grad_enabled() else x[..., R_train:, :],
