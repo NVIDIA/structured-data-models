@@ -142,4 +142,40 @@ The relational executor reported 1,636,581,408 logical cache bytes in every arm.
 
 Independent audits passed input/graph identities, member seeds, prediction columns, prediction hashes, numerical equality, and recomputed performance/quality for both tables. Evidence directories are `placement-large-e4-c16384-q2048-v1-*` and `placement-hm-e4-c16384-q4096-v2-*` beneath the same local evidence root. Each contains an independent quality-audit sidecar.
 
-An actual OOM frontier and transfer profiling remain in progress. No cloud instances were launched by this workstream.
+## Capacity stress and allocator sensitivity
+
+The next native H&M workload used 65,536 TRAIN context rows and the same 4,096 validation queries, eight batches of 512, E=4, precision, and two-hop sampling. Its context graph contained 1,279,607 nodes (571,241 article, 65,536 customer, 642,830 transaction). The per-table row-encoder 20,000-key cap remained unchanged; the final ICL still saw all 65,536 context rows. Library source was `4e1c5c33d`, with versioned runner `b9026ea3f` recording both logical cache bytes and deduplicated backing storage.
+
+Each attempt used a fresh process with a hard timeout and retained stdout, child exit status, and an attempt receipt, including failed attempts. No same-process `empty_cache` retry was used. The L4 exposed 22.04 GiB usable memory, rather than the nominal product capacity.
+
+| Native H&M C=65,536, E=4 | Resident 1 GPU, default allocator | Layers 4 GPUs, default | Stage 2 GPUs, default | Resident 1 GPU, expandable segments | Layers 4 GPUs, expandable segments |
+|---|---:|---:|---:|---:|---:|
+| Outcome | OOM | OOM | success | success | success |
+| Median throughput (rows/s) | — | — | 955.32 | 921.47 | 944.61 |
+| Maximum per-GPU fit allocation (GiB) | — | — | 16.105 | 20.732 | 17.259 |
+| Maximum per-GPU prediction allocation (GiB) | — | — | 6.150 | 6.607 | 2.010 |
+| Fit time (s), single cold observation | — | — | 53.286 | 54.025 | 54.171 |
+
+Both default-allocator failures occurred when `segment_multi_reduce` allocated a 6.10 GiB GNN statistics tensor, before any remedy from sharding later ICL layers. The baseline reported 10.40 GiB allocated and 5.86 GiB reserved but unused; four-device layer placement reported 9.18 GiB allocated and 9.31 GiB reserved but unused. These are **allocator-sensitive OOMs, not demonstrated fundamental capacity limits**: a fresh baseline with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` succeeded. Stage placement also succeeded without that allocator change because it moved all retained ICL state off the GNN device. This is a useful operational result, but it does not establish that multi-GPU was necessary at E=4.
+
+All successful arms retained 6,468,419,616 cache bytes, with logical bytes equal to unique backing bytes. Stage placement split these as `[25968672, 6442450944]`; layer placement split them as `[1636581408, 1610612736, 1610612736, 1610612736]`. The dominant 6 GiB ICL cache was therefore actually distributed, not merely attributed to nominal executor owners.
+
+The expandable single-GPU and default stage predictions were byte-identical, with positive-class AUROC 0.666514263969927 and runner log loss 0.4616449475288391. The expandable four-device layer arm was **not** byte-identical: maximum absolute prediction difference was 0.010411202907562256, AUROC was 0.6668017727143439, and log loss was 0.4615814983844757. Accuracy was 0.80810546875 in all three. Independent audit measured mean absolute difference 0.001082822, p99 0.006126165, relative L2 error 0.0031663, and no predicted-class flips. The log-loss delta was -0.000063467 with an entity-bootstrap interval [-0.000206287, +0.0000774024], which does not establish a quality improvement. Inputs, graph, member seeds, columns, and artifact hashes matched.
+
+The placement algorithm preserves attention and model dependencies, but this long-context BF16 observation prevents a blanket claim of bitwise equality. Changed layout or kernel execution is a hypothesis, not an isolated cause; tolerances and task-quality checks must gate deployment. SDM's chunk memory limit uses total device capacity and a fixed fraction, not currently free memory, so the observed drift cannot simply be attributed to memory-pressure-driven chunk sizing.
+
+The 6.10 GiB statistics allocation suggests a different optimization boundary: destination-node blocks can compute the existing total/mean/std/min/max statistics and immediately apply their projection, avoiding the full dense intermediate. Such a fused or chunked GNN path was not implemented here and would require dedicated parity tests for variance, empty segments, and graph identity. ICL placement alone cannot remove this allocation.
+
+Evidence is retained under `capacity-hm-c65536-e4-v1-{ep1,layers4,stage2}` and `capacity-hm-c65536-e4-expandable-v1-{ep1,layers4}`. All five attempts are downloaded locally; all three successful arms have independent audit sidecars.
+
+### Pending remote evidence at the access interruption
+
+An E=8, C=65,536 follow-up launched two fresh expandable-allocator attempts, resident EP1 then stage2, with a 150-second deadline per child. An observed remote EP1 stderr tail reported an OOM requesting 1.22 GiB at a linear projection: 21.02 GiB was allocated, only 198.42 MiB reserved but unused, and 585.12 MiB free. This is stronger evidence of live capacity pressure than the fragmented E=4 failures, but its receipt has not yet been downloaded.
+
+The enclosing SSH session (local process handle `90036`) subsequently completed with exit code zero and printed both arm-completion markers. **The stage2 outcome remains unverified:** the wrapper deliberately returns normally even if a child fails or times out, so the shell exit code is not a benchmark success signal. Both attempts are remote at `/home/ubuntu/kumo-multigpu/results/capacity-hm-c65536-e8-expandable-v1-{ep1,stage2}` on the four-L4 host `98.93.170.140`. Source was `4e1c5c33d`; the runner was `relational_bench-b9026ea3f.py`, wrapper `capacity_attempt-2361cb51c.py`, and input was `workload-hm-c65536-b512`.
+
+A public native single-GPU E=8 control with CPU-offloaded caches was authorized but **not launched** before remote access was restricted. Therefore the experiment does not establish that two GPUs are required: CPU-offload may fit where the resident single-GPU executor fails, at a different transfer/performance cost. Native and resident paths also need their preprocessing/member-randomness equivalence checked before any quality comparison.
+
+Separate Nsight captures of the Covertype C=1,024 E=4 resident EP1 and four-device layer arms completed remotely before the interruption. Reports are `/home/ubuntu/kumo-multigpu/results/nsys-placement-c1024-v1-{ep1,layers4}.nsys-rep`; corresponding child results are `profile-placement-c1024-v1-{ep1,layers4}`. No report or SQLite export was downloaded. The attempted export SSH call was aborted, so no export completion is claimed. Transfer/kernel/synchronization attribution is therefore pending; the unprofiled throughput tables above do not depend on these captures. When recovered, analyze CUDA activity within the main-thread `prediction_pass` NVTX time span, including worker-thread launches, and distinguish summed kernel durations from wall time.
+
+Remote state and final artifact recovery require restored authorized network access. No cloud instances were launched by this workstream.
