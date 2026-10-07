@@ -1,0 +1,42 @@
+[
+  {
+    "torch": "2.7.1",
+    "model": "tabular",
+    "entry": "forward",
+    "fullgraph": false,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "prepared_recipe": true,
+    "query_input": "view",
+    "arm_index": null,
+    "recompile_limit": null,
+    "inner_only": false,
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "ValueError",
+    "error": "too many values to unpack (expected 13)"
+  },
+  {
+    "torch": "2.7.1",
+    "model": "tabular",
+    "entry": "forward",
+    "fullgraph": false,
+    "dynamic": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "prepared_recipe": true,
+    "query_input": "view",
+    "arm_index": null,
+    "recompile_limit": null,
+    "inner_only": false,
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "ValueError",
+    "error": "too many values to unpack (expected 13)"
+  }
+]

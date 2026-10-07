@@ -26,6 +26,7 @@ p.add_argument(
     default="classification",
 )
 p.add_argument("--estimators", type=int, default=1)
+p.add_argument("--prepared-recipe", action="store_true")
 p.add_argument("--query-rows", type=int, nargs="+")
 p.add_argument("--query-input", choices=["view", "fresh"], default="view")
 p.add_argument("--arm-index", type=int, default=0)
@@ -79,6 +80,8 @@ def fit(model, function=None):
     }
     if a.model == "relational":
         kwargs["num_hops"] = arm["num_hops"]
+    if a.prepared_recipe:
+        kwargs["recipe"] = model.default_recipe()
     return (model.fit if function is None else function)(cx, cy, cr, **kwargs)
 
 
@@ -93,6 +96,8 @@ def forward(model, function=None):
     }
     if a.model == "relational":
         kwargs["num_hops"] = arm["num_hops"]
+    if a.prepared_recipe:
+        kwargs["recipe"] = model.default_recipe()
     return (model if function is None else function)(
         cx, cy, qx, cr, qr, **kwargs
     )
@@ -108,6 +113,7 @@ result = {
     "device": "cpu",
     "task": a.task,
     "estimators": a.estimators,
+    "prepared_recipe": a.prepared_recipe,
     "query_input": a.query_input,
     "arm_index": a.arm_index if a.model == "relational" else None,
     "recompile_limit": a.recompile_limit,
