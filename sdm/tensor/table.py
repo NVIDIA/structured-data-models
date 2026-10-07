@@ -356,9 +356,20 @@ class TableTensor(Tensor):
         return out
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        return ["_numerical", "_categorical", "_datetime", "_text", "_id", "numerical", "categorical", "datetime", "text", "id"], (
-            tuple(self._columns.items()),
-        )
+        # Public names support construction in a graph; private aliases avoid
+        # recursive property guards in PyTorch 2.7. No tensor data is copied.
+        return [
+            "_numerical",
+            "_categorical",
+            "_datetime",
+            "_text",
+            "_id",
+            "numerical",
+            "categorical",
+            "datetime",
+            "text",
+            "id",
+        ], (tuple(self._columns.items()),)
 
     @classmethod
     def __tensor_unflatten__(
@@ -371,10 +382,10 @@ class TableTensor(Tensor):
         return cls(
             columns=dict(ctx[0]),
             numerical=inner_tensors["numerical"],
-            categorical=inner_tensors["categorical"],
+            categorical=cast(CategoricalTensor, inner_tensors["categorical"]),
             datetime=inner_tensors["datetime"],
-            text=inner_tensors["text"],
-            id=inner_tensors["id"],
+            text=cast(StringTensor, inner_tensors["text"]),
+            id=cast(ColumnarTensor, inner_tensors["id"]),
         )
 
     @classmethod
@@ -1204,7 +1215,8 @@ class TableTensor(Tensor):
 
         stype_repr = [
             (
-                f"{' ' * (indent + 4)}{stype} ({len(self._columns[stype]):,}): "
+                f"{' ' * (indent + 4)}{stype} "
+                f"({len(self._columns[stype]):,}): "
                 f"{_columns_repr(self._columns[stype])},"
             )
             for stype, tensor in self.items()
