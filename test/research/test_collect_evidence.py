@@ -44,3 +44,16 @@ def test_detects_modified_records_and_index(tmp_path: Path) -> None:
     index_path.write_text("{}\n")
     with pytest.raises(ValueError, match="index checksum"):
         verify(index_path)
+
+
+def test_retains_failures_and_additive_audits(tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    run.mkdir()
+    for name in ("failure.json", "quality-full-cohort-audit.json"):
+        (run / name).write_text("{}\n")
+    index_path = collect([f"attempt={run}"], tmp_path / "evidence")
+    assert verify(index_path, external=True) == {
+        "archived_files": 2,
+        "external_files": 2,
+        "external_unchecked": 0,
+    }

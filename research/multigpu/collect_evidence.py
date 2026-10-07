@@ -34,12 +34,15 @@ def artifact_role(name: str) -> str | None:
         "workload.json",
         "config.json",
         "parity.json",
+        "failure.json",
         "quality-independent-audit.json",
     }:
         return "record"
     if re.fullmatch(r"(?:rank|error-rank)\d+\.json", name):
         return "record"
-    if name.endswith("-analysis.json"):
+    if name.endswith("-analysis.json") or re.fullmatch(
+        r"quality-[A-Za-z0-9_-]+-audit\.json", name
+    ):
         return "record"
     if name == "command.txt":
         return "command"

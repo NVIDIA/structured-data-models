@@ -288,7 +288,7 @@ Default verification checks repository-retained records and reports how many ext
 
 ## Reproduction and failure log
 
-The CP prototype (`8e22f29c8`) has three passing CPU tests exercising real 2/4-rank Gloo groups, both model ICL blocks, MHA/GQA, broadcast batches, empty/uneven shards, cache backing-storage release, and invalid topology. This establishes distributed CPU correctness within those tests. It does not establish CUDA kernel compatibility, model quality, or GPU speedup. See the implementation's `research/multigpu/context-parallel.md` for its exact scope.
+The initial CP prototype (`8e22f29c8`) had three passing CPU tests exercising real 2/4-rank Gloo groups, both model ICL blocks, MHA/GQA, broadcast batches, empty/uneven shards, cache backing-storage release, and invalid topology. Those initial tests established CPU correctness only; later CUDA/NCCL tests and pretrained measurements are reported above. See the implementation's `research/multigpu/context-parallel.md` for its current exact scope.
 
 The EP implementation's CPU tests include reduced real KumoTabular modules with 12-class ECOC, class shuffling, exact member codebooks/predictions across 1/2/4 replicas, and refit. The first CUDA run failed both tests because output stream bookkeeping called an unavailable `TableTensor._tensors()` method. `c4ddd7f15` switched to the public `TableTensor.record_stream` method; the runner then reported both CUDA tests passed in 0.80 seconds on integrated `6c3f1e22e`. Independent review also fixed replica-initialization stream dependencies and output tensor stream lifetime. Its public documentation is `research/multigpu/ensemble.md` and the independent comparison checklist is `research/multigpu/quality.md` (`bf3a602e8`).
 
@@ -319,7 +319,28 @@ python research/multigpu/relational_bench.py run \
   --source-commit "$(git rev-parse HEAD)"
 ```
 
-Expected harness artifacts are `result.json`, predictions, utilization samples, and a profiler trace. Native complete graph batches are prepared once, with sampling time recorded separately. The independent CP probe uses random weights and is a kernel/scaling diagnostic, not a quality benchmark:
+Expected harness artifacts are `result.json`, predictions, utilization samples, and a profiler trace. Native complete graph batches are prepared once, with sampling time recorded separately.
+
+The process-DP throughput findings use the following explicit worker settings. Repeat each command with one GPU and a fresh output directory for the matched executor reference. Relational inputs remain the same previously prepared complete batches.
+
+```sh
+python research/multigpu/tabular_process_bench.py \
+  --data /path/to/covertype --output /path/to/tabular-dp4-result \
+  --task classification --size large --gpus 4 --threads 1 \
+  --context 1024 --queries 2048 --batch-size 256 \
+  --estimators 4 --estimator-batch-size 4 --precision bfloat16 \
+  --warmups 1 --repeats 3 --seed 1729 \
+  --source-commit "$(git rev-parse HEAD)"
+python research/multigpu/relational_process_bench.py \
+  --workload /path/to/fixed-workload --output /path/to/relational-dp4-result \
+  --gpus 4 --threads 8 --estimators 4 --estimator-batch-size 1 \
+  --dtype bf16 --warmups 1 --repeats 3 --seed 1729 \
+  --source-commit "$(git rev-parse HEAD)"
+```
+
+These example commands describe the current interface; the archived source/runner hashes identify the exact measured implementation. Later versions add separately timed CPU gather fields and must not retroactively change the original timer definition.
+
+The independent CP probe uses random weights and is a kernel/scaling diagnostic, not a quality benchmark:
 
 ```sh
 torchrun --standalone --nproc-per-node=4 research/multigpu/context_probe.py \
