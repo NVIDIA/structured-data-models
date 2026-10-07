@@ -8,7 +8,7 @@ The fix adds a tensor leaf representing the logical layout:
 out._layout = offset.as_strided(size, stride, storage_offset)
 ```
 
-This view shares the existing offset storage. Flattening includes `_layout`; reconstruction reads its shape, strides and offset. It allocates tensor metadata, not another payload or offset buffer. Existing logical storage offsets and views are preserved.
+This view shares the existing offset storage. Flattening includes `_layout`; reconstruction reads its shape, strides and offset. It allocates tensor metadata, not another payload or offset buffer. Existing logical storage offsets and views are preserved. Unflattening retains the supplied layout leaf itself: rebuilding an equivalent view lost Dynamo source tracking in a partial-graph string-fitting case. Its values are unused; mutation handling must treat it as layout metadata rather than another payload to copy.
 
 ## Validation
 
