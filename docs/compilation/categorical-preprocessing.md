@@ -26,6 +26,7 @@ Matching categories retain the same fitted code; unmatched categories retain `-1
 |---|---|---|
 | Existing alignment tests, CPU | 23 passed | 23 passed |
 | Actual Inductor, both graph-break settings, varying category counts | 2 passed | 2 passed |
+| Special-value lookup parity, each graph-break setting | 16 passed | 16 passed |
 | CUDA cases | 12 skipped | 12 skipped |
 
 Run the existing tests plus the small compilation regression:
@@ -34,6 +35,10 @@ Run the existing tests plus the small compilation regression:
 OMP_NUM_THREADS=1 TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS=0 PYTHONPATH=. \
   python -m pytest test/processing/categorical/test_align.py -q
 ```
+
+The transform also materializes `tuple(batch_categories)` before constructing its result, rather than passing a `BufferList` module into a traced tensor constructor. With the separately developed container/applicability patches, public numeric `AlignCategories.transform` passed actual 2.14 Inductor in both modes with missing/unseen categories and changing row counts. That integrated result does not mean this standalone branch fixes the container blockers.
+
+Special-value parity includes NaN/infinities, duplicates, fitted category order, Boolean and unsigned integer vocabularies, empty inputs/fitted vocabularies, and int32/int64 output codes.
 
 ## Remaining work
 

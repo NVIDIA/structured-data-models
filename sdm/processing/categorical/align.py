@@ -518,7 +518,7 @@ class AlignCategories(EnsembleProcessor):
             (table if single_table else table[batch_index]).replace_blocks(
                 categorical=CategoricalTensor(
                     aligned_codes[batch_index],
-                    categories=batch_categories,
+                    categories=tuple(batch_categories),
                 ),
             )
             for batch_index, batch_categories in enumerate(fitted_categories)
