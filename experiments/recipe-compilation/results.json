@@ -1,0 +1,183 @@
+{
+  "scope": "CPU; integrated container+processor dependencies listed in README",
+  "results": [
+    {
+      "torch": "2.14.0",
+      "model": "tabular",
+      "members": 4,
+      "fullgraph": true,
+      "dynamic": true,
+      "backend": "inductor",
+      "data": "sklearn breast_cancer; 300 context rows; constant column appended",
+      "status": "PASS",
+      "max_abs": 0.0,
+      "shapes": [
+        [
+          31,
+          30
+        ],
+        [
+          31,
+          30
+        ],
+        [
+          31,
+          30
+        ],
+        [
+          31,
+          30
+        ],
+        [
+          47,
+          30
+        ],
+        [
+          47,
+          30
+        ],
+        [
+          47,
+          30
+        ],
+        [
+          47,
+          30
+        ],
+        [
+          31,
+          30
+        ],
+        [
+          31,
+          30
+        ],
+        [
+          31,
+          30
+        ],
+        [
+          31,
+          30
+        ]
+      ],
+      "fitted_buffers_unchanged": true,
+      "compile_stats": {
+        "calls_captured": 576,
+        "unique_graphs": 2
+      }
+    },
+    {
+      "torch": "2.14.0",
+      "model": "relational",
+      "members": 2,
+      "fullgraph": true,
+      "dynamic": true,
+      "backend": "inductor",
+      "data": "sklearn breast_cancer; 300 context rows; constant column appended",
+      "status": "PASS",
+      "max_abs": 0.0,
+      "shapes": [
+        [
+          31,
+          30
+        ],
+        [
+          31,
+          30
+        ],
+        [
+          47,
+          30
+        ],
+        [
+          47,
+          30
+        ],
+        [
+          31,
+          30
+        ],
+        [
+          31,
+          30
+        ]
+      ],
+      "fitted_buffers_unchanged": true,
+      "compile_stats": {
+        "calls_captured": 246,
+        "unique_graphs": 2
+      }
+    },
+    {
+      "torch": "2.14.0",
+      "model": "tabular",
+      "members": 1,
+      "fullgraph": false,
+      "dynamic": false,
+      "backend": "inductor",
+      "data": "sklearn breast_cancer; 300 context rows; constant column appended",
+      "status": "PASS",
+      "max_abs": 0.0,
+      "shapes": [
+        [
+          31,
+          30
+        ],
+        [
+          47,
+          30
+        ],
+        [
+          31,
+          30
+        ]
+      ],
+      "fitted_buffers_unchanged": true
+    },
+    {
+      "torch": "2.7.1",
+      "model": "tabular",
+      "members": 1,
+      "fullgraph": false,
+      "dynamic": false,
+      "backend": "inductor",
+      "data": "sklearn breast_cancer; 300 context rows; constant column appended",
+      "status": "FAIL",
+      "error": ""
+    },
+    {
+      "torch": "2.14.0",
+      "model": "tabular",
+      "mode": "fit_transform",
+      "fullgraph": true,
+      "backend": "eager",
+      "result": "FAIL",
+      "error": "Tensor.tolist() with non-integer tensor"
+    },
+    {
+      "torch": "2.14.0",
+      "model": "relational",
+      "mode": "construct",
+      "fullgraph": true,
+      "backend": "inductor",
+      "result": "PASS",
+      "shape": [
+        20,
+        3
+      ]
+    },
+    {
+      "torch": "2.14.0",
+      "model": "tabular",
+      "mode": "construct",
+      "fullgraph": true,
+      "backend": "inductor",
+      "result": "PASS",
+      "shape": [
+        20,
+        3
+      ]
+    }
+  ]
+}
