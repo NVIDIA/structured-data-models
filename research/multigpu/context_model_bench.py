@@ -233,7 +233,9 @@ def main() -> None:
         if rank == 0:
             # Validation targets are read only after predictions complete.
             if args.family == "tabular":
-                from research.multigpu.tabular_bench import quality  # noqa: PLC0415
+                from research.multigpu.tabular_bench import (
+                    quality,
+                )
 
                 target = np.load(args.data / "y_val.npy")[:rows]
                 columns = list(combined.columns[Stype.numerical])
@@ -244,7 +246,9 @@ def main() -> None:
                     columns,
                 )
             else:
-                from research.multigpu.relational_bench import score  # noqa: PLC0415
+                from research.multigpu.relational_bench import (
+                    score,
+                )
 
                 target = torch.load(
                     args.data / "validation-labels.pt", weights_only=False
