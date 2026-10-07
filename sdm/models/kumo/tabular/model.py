@@ -302,9 +302,9 @@ class _KumoTabular(torch.nn.Module):
         chunk_memory_bytes: int | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
         x = self.row_embedding(
-            x,
-            y,
-            categorical_mask,
+            x=x,
+            y=y,
+            categorical_mask=categorical_mask,
             cache=cache,
             chunk_memory_bytes=chunk_memory_bytes,
         )
