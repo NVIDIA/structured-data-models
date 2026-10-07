@@ -60,3 +60,17 @@ A CPU PyTorch 2.14 fullgraph Inductor check separates compiled fitting from comp
 The FP32 optimizer selects slightly different lambdas after compiled arithmetic changes its comparisons. Eager transformation with those compiled statistics reproduces the discrepancy, locating it in fitting rather than cached transformation. This is not an FP32-versus-BF16 comparison. The FP32 result fails the default same-dtype tolerance and is reported as a failure. No prediction-quality conclusion follows from this small processor reproduction. Reusing eager fitted statistics while compiling transformation is the validated narrower option.
 
 Existing Standardize, ImputeMean and Recipe tests pass on both CPU runtimes: 15 passed, 10 CUDA cases skipped per version.
+
+## Additional PyTorch 2.7 metadata attempts
+
+A second focused investigation tried three alternatives on actual public `Standardize.fit_transform`, with fullgraph capture:
+
+| Attempt | Result |
+|---|---|
+| `torch._dynamo.mark_static(Standardize)` | Still fails while reading the frozenset containing `Stype` enum values. |
+| Replace a processor instance's `handles_stypes` with `tuple(processor.handles_stypes)` before tracing | Passes that check, then fails creating a dictionary-key guard for `table.columns`: `DictGetItemSource.__post_init__: AssertionError`. |
+| Replace it with `frozenset(stype.value for stype in processor.handles_stypes)` before tracing | Same later dictionary-key guard failure. |
+
+The installed 2.7 Dynamo code accepts frozensets of primitive literals but not general enum-valued frozensets. After avoiding that limitation, its guard construction also rejects the enum keys in the column mapping. This is more than a missing tensor operation.
+
+These attempts were not applied to production code. Replacing the public metadata changes its element/container types. Caching a second tuple at base-class construction is also unsafe: `TaskDispatch.handles_stypes` depends on the resolved task, `Sequential.handles_stypes` depends on its current children, and other subclasses assign their handled types after base construction. A complete representation change must preserve those live updates and schema guards, rather than assuming metadata never changes. No constant-result annotation or unconditional graph disabling was added.
