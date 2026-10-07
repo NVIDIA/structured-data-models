@@ -10,6 +10,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.explain import GradientExplainer
 from sdm.models import ICLModel
+from sdm.processing import Softmax
 
 
 class _LinearModel(ICLModel):
@@ -71,9 +72,7 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
             {"task_column": "0", "table": "related", "table_column": "0"},
         ),
     )
-    explainer = GradientExplainer(
-        output=lambda prediction: prediction.numerical
-    )
+    explainer = GradientExplainer()
 
     if fitted:
         model.fit(x_context, y_context, related_tables)
@@ -91,16 +90,16 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
         )
 
     torch.testing.assert_close(
-        x_attributions.numerical, torch.full_like(x_query, 2.0)
+        x_attributions.numerical, (2.0 * torch.eye(2)).unsqueeze(1)
     )
     assert related_attributions is not None
     torch.testing.assert_close(
         related_attributions.tables["related"].numerical,
-        torch.full_like(x_query, 3.0),
+        (3.0 * torch.eye(2)).unsqueeze(1),
     )
     torch.testing.assert_close(
         related_attributions.tables["unused"].numerical,
-        torch.zeros_like(x_query),
+        torch.zeros(2, 1, 2),
     )
     assert related_attributions.relationships == related_tables.relationships
     assert related_attributions.task_links == related_tables.task_links
@@ -109,22 +108,15 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
 
 
 @pytest.mark.parametrize("fitted", [False, True])
-def test_gradients_with_estimator_batching(fitted: bool) -> None:
+def test_differentiates_final_prediction(fitted: bool) -> None:
     model = _LinearModel()
     x_context = torch.zeros(1, 2)
     y_context = torch.zeros(1, 1)
-    x_query = torch.ones(1, 2)
-    explainer = GradientExplainer(
-        output=lambda prediction: prediction.numerical
-    )
-
+    x_query = torch.tensor([[0.0, 1.0]])
+    recipe = Recipe(output=Softmax())
+    explainer = GradientExplainer()
     if fitted:
-        model.fit(
-            x=x_context,
-            y=y_context,
-            num_estimators=3,
-            estimator_batch_size=None,
-        )
+        model.fit(x_context, y_context, recipe=recipe)
         x_attributions, related_attributions = explainer.explain(
             model, x_query
         )
@@ -134,11 +126,12 @@ def test_gradients_with_estimator_batching(fitted: bool) -> None:
             x_query,
             x_context=x_context,
             y_context=y_context,
-            num_estimators=3,
-            estimator_batch_size=None,
+            recipe=recipe,
         )
 
-    torch.testing.assert_close(
-        x_attributions.numerical, torch.full_like(x_query, 2.0)
+    probabilities = (2.0 * x_query[0]).softmax(dim=-1)
+    expected = 2.0 * (
+        probabilities.diag() - probabilities.outer(probabilities)
     )
+    torch.testing.assert_close(x_attributions.numerical, expected.unsqueeze(1))
     assert related_attributions is None
