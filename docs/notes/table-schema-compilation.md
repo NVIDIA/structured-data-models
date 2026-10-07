@@ -57,3 +57,14 @@ The calendar tensor computation passes actual Inductor with both graph policies 
 The next public relational trace reached `DropConstantColumns._transform_ensemble` and failed guarding `ensemble_table._groups[0].columns`. Its `_select_columns` helper now reads the immutable schema tuple for numerical names and column ordering. Public ensemble transform passes actual Inductor with changing row counts and noncontiguous numerical inputs on 2.7 with graph breaks, and on 2.14 with both graph policies. Existing constant-column tests: 7 passed, 4 CUDA skips. On 2.7, fullgraph remains blocked by `copy.copy` in ensemble replacement and by processor applicability metadata; these are separate from column selection.
 
 A later trace in both public relational prediction and public tabular fitting reached `TableTensor.replace_blocks`, then failed guarding `self.columns` after a constructor boundary. Block replacement now reconstructs that dictionary from `_column_items` as well. Both-version actual compile regression tests pass; the complete table suite reports 62 passed / 8 skipped on 2.14, and 60 passed / 8 skipped on 2.7 with its two known default-device failures excluded.
+
+The following public prediction stage, `ToNumerical._transform`, had the same two enum-keyed lookups when naming converted columns. Those now use the tuple-backed schema; four existing eager tests pass. This branch alone still encounters earlier generator/constructor compilation issues already addressed by the integration dependencies.
+
+## Independent PyTorch reproduction
+
+`experiments/table_compilation/schema_guard_repro.py` imports only PyTorch and Python's `enum` module. A minimal tensor wrapper exposes an enum-keyed schema property; compiling a multiplication that reads that property raises `ConstDictKeySource can only work on DictGuardManager` on 2.7.1 with either graph policy. Both policies pass on 2.14. A regular Python object exposing the same property passes on both versions: the problematic case is tensor-subclass metadata handling.
+
+```bash
+OMP_NUM_THREADS=1 TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS=0 \
+  python experiments/table_compilation/schema_guard_repro.py
+```
