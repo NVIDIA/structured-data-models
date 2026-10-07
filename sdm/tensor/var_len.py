@@ -576,7 +576,6 @@ class VarLenTensor(Tensor):
             stride=layout.stride(),
             storage_offset=layout.storage_offset(),
         )
-        out._layout = layout
         return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
