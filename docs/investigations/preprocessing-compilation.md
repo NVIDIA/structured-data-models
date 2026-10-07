@@ -32,3 +32,65 @@ Data-dependent fitting and schema changes must retain eager behavior. Fixed sche
 ## Results and branch map
 
 Results are being collected in focused branches for tensor containers, recipe orchestration, numerical/categorical processors, and public model integration. Each implementation branch records its own exact tested scope and remaining errors. This document will consolidate the final evidence.
+
+## Confirmed progress
+
+| Boundary | PyTorch 2.7.1 CPU | PyTorch 2.14 CPU |
+|---|---|---|
+| Numerical TableTensor construction, replacement, slicing, numeric stacking | Inductor passes both graph policies | Inductor passes both graph policies |
+| Standardize, ImputeMean, RobustScale, RankGaussian, ClipSigma public fit/transform | Graph-break-allowed matrix passes; fullgraph blocked by metadata | Both policies pass FP32/FP64 matrix |
+| Default fitted feature recipe, real numerical data | Fullgraph still blocked | Fullgraph passes, including four tabular ensemble members |
+| PowerTransform fitting in FP32 | Not established as parity-safe | Fitted parameter drift exceeds default tolerance in one reproduction |
+| PowerTransform transform with the same eager-fitted parameters | See component report | Exact in isolated reproduction |
+| Entire public KumoTabular predict after eager fit | Further validation in integration report | Initial fullgraph Inductor pass, max probability difference 5.96e-8 |
+| Entire public KumoRelational predict | Not established | Not established |
+
+A changed input row count being accepted does not imply one reusable graph: some categorical processors recompile at each tested size despite dynamic=True.
+
+## Branches
+
+| Branch | Purpose / dependencies |
+|---|---|
+| [compile/nested-tensor-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/nested-tensor-preprocessing) | Categorical tracing, fake-safe representations, empty string payloads; based on main. |
+| [compile/tabletensor-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/tabletensor-preprocessing) | Table/columnar flatten-unflatten support; includes nested tensor prerequisites. |
+| [compile/numerical-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/numerical-preprocessing) | Public processor metadata checks; includes container prerequisites and numeric validation. |
+| [compile/categorical-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/categorical-preprocessing) | Focused numeric category lookup and tracing fixes, based on main; whole-processor validation also uses the container/processor integration. |
+
+| [compile/recipe-preparation](https://github.com/NVIDIA/structured-data-models/tree/compile/recipe-preparation) | Focused recipe validation and ensemble packing changes; validated with container/applicability prerequisites. |
+| [compile/public-preprocessing-investigation](https://github.com/NVIDIA/structured-data-models/tree/compile/public-preprocessing-investigation) | Combined experimental stack, public entry-point reproducer, schema validation and cached class-label metadata. |
+
+These are investigation branches, not a set of independent patches to merge blindly. The component reports identify source commits and prerequisite changes. Public integration results require the full tested combination.
+
+## Remaining work
+
+- Preserve TableTensor mutation semantics during AOT functionalization: current wrappers lack aten.copy_ support for compiled input mutation.
+- Handle nonempty string/ragged storage operations without tensor-value-driven Python slicing; preserve view offsets and aliasing rather than forcing contiguous layouts.
+- Resolve older-runtime metadata guards (including frozenset of Stype values) and symbolic string-wrapper layout limitations.
+- Separate fitting steps that select a schema/vocabulary from fitted tensor transformations. DropConstantColumns currently turns a learned tensor mask into Python column metadata.
+- Isolate or implement graph-compatible alternatives for external Arrow joins. Wrapping Arrow in a graph break does not make the join itself compiled.
+- Preserve numerical fitting parity for PowerTransform; compiled transformation using fixed learned state is a separate, better-supported case.
+- Validate GPU execution, autocast dtypes, memory chunking, and performance only after the CPU execution boundary is stable. No speed or memory improvement is asserted here.
+
+## Independent regression review
+
+At container snapshot 14d16c583, the existing TableTensor, ColumnarTensor, and CategoricalTensor test suites passed 95 CPU tests on PyTorch 2.14; 27 CUDA tests were skipped. Later component branches ran their own updated checks. This does not constitute GPU validation.
+
+
+## Practical support boundaries
+
+The fitted numerical default recipe is substantially closer to support than compiling all fitting. On PyTorch 2.14, the default four-member tabular recipe and two-member relational task-table recipe transform real numerical query data with exact eager parity and unchanged fitted buffers. These checks do not include string alignment or related tables.
+
+Public KumoTabular prediction passed an initial fresh-table case after the combined patches. Broader validation exposed a sliced-table/FakeTensor-mode failure; the integration branch records this separately. Do not infer general public prediction support from the first pass.
+
+Public fitting is harder for concrete reasons: processors learn data-dependent column sets and vocabulary sizes, some fitting uses Python lists/random permutation metadata, and compiled FP32 PowerTransform optimization can select different parameters. Keep fitting parity separate from applying existing fitted statistics.
+
+For PyTorch 2.7, changing handles_stypes to a tuple or primitive-string frozenset gets past one error but then fails enum-key dictionary guarding. Those exploratory metadata changes were not retained. A separate dynamic-stride issue is reproduced with a small raw PyTorch wrapper, without importing SDM; the nested-container branch contains it.
+
+## Suggested implementation order
+
+1. Review the independent numerical category lookup fix and the tensor flatten/unflatten foundations, with explicit alias and mutation coverage.
+2. Integrate recipe/applicability changes and target compiled fitted preprocessing on PyTorch 2.14 first. Retain the documented 2.7 limitations rather than claiming equivalent support.
+3. Resolve sliced-table integration and output metadata, then validate full public prediction on realistic mixed data, ensemble counts, and GPU execution.
+4. Address fitting separately: data-dependent schemas/vocabularies, numerical optimizer parity, and external joins require distinct decisions. Do not disable all preprocessing merely to obtain a successful compiler call.
+
+No PRs were opened. No EC2 instances were launched: the decisive failures and initial passing paths were reproducible on CPU. Performance and GPU correctness remain explicit follow-up validation, not inferred from these results.
