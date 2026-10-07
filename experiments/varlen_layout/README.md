@@ -8,7 +8,7 @@ The fix adds a tensor leaf representing the logical layout:
 out._layout = offset.as_strided(size, stride, storage_offset)
 ```
 
-This view shares the existing offset storage. Flattening includes `_layout`; reconstruction reads its shape, strides and offset. It allocates tensor metadata, not another payload or offset buffer. Existing logical storage offsets and views are preserved.
+This view shares the existing offset storage. Flattening includes `_layout`; reconstruction reads its shape, strides and offset. It allocates tensor metadata, not another payload or offset buffer. Reconstruction regenerates the layout view from the supplied offset storage, so the alias remains true even if a compiler independently materializes the input leaves. Existing logical storage offsets and views are preserved.
 
 ## Validation
 
