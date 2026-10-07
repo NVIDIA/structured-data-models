@@ -20,7 +20,7 @@ from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.model import (
     _KumoRelational,
 )
-from sdm.models.kumo.relational.task import TaskGraph
+from sdm.models.kumo.relational.task import TaskGraph, _validated_readout
 from sdm.testing import withCUDA
 
 
@@ -342,3 +342,9 @@ def test_many_classes_forward_and_cache(
         cache=cache.freeze(),
     )
     torch.testing.assert_close(predicted, expected)
+
+
+@pytest.mark.parametrize("readout", [torch.arange(4), torch.arange(3).view(1, 3)])
+def test_validated_readout_rejects_invalid_shape(readout: torch.Tensor) -> None:
+    with pytest.raises(ValueError, match="Invalid readout"):
+        _validated_readout(torch.arange(3), readout, 3, "Invalid readout")
