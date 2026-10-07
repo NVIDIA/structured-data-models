@@ -65,3 +65,16 @@ python research/multigpu/relational_bench.py run \
 ```
 
 No result is claimed in this protocol. Successful measurements, failures, OOM boundaries, exact hardware, and scaling tables belong in the result report after execution.
+
+## Completed native input preparation
+
+These are actual CPU preparation measurements from the four-L40S host, prior to timed GPU inference. They are not inference speedups.
+
+| Workload | Context / VAL rows | Related context / query rows | DB tensorization | Sampler build | Context sampling | All query sampling | Host peak RSS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| F1, batch 125 | 1,024 / 499 | 42,939 / 29,477 | 2.187 s | 0.248 s | 0.404 s | 0.0345 s | 0.839 GiB |
+| HM, batch 250 | 1,024 / 2,000 | 19,891 / 50,307 | 0.768 s | 2.308 s | 0.0413 s | 0.2834 s | 5.151 GiB |
+
+Raw reports are under the external results directory, `relational/workload-f1-c1024-b125.json` and `relational/workload-hm-c1024-b250.json`. The reported sampler costs are important when interpreting small-query inference: prepared-graph model throughput omits 0.283 seconds of HM sampling work for this query prefix.
+
+KumoRelational's `max_train_size=20_000` applies to per-table row-embedding column-attention training keys. It does not cap the final ICL context or cache. Large related tables may trigger upstream key sampling even when the task context has fewer than 20,000 rows. Every placement must preserve the corresponding member generator and upstream full-graph sampling semantics; context-parallel experiments that shard only the fitted final ICL cache preserve that distinction.
