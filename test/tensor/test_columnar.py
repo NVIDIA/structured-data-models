@@ -463,3 +463,16 @@ def test_share_memory() -> None:
         assert tensor.is_shared()
     except RuntimeError:
         pass
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_symbolic_size(empty: bool) -> None:
+    tensor = (
+        ColumnarTensor((), size=(5, 3))
+        if empty
+        else ColumnarTensor((torch.arange(15).view(5, 3).T,))
+    )
+    for dim in range(-tensor.ndim, tensor.ndim):
+        assert torch.ops.aten.sym_size.int(tensor, dim) == tensor.size(dim)
+    with pytest.raises(IndexError):
+        torch.ops.aten.sym_size.int(tensor, tensor.ndim)
