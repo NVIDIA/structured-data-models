@@ -30,7 +30,8 @@ tolerance, not a claim of bitwise equality or changed model precision.
 | Tabular regression `torch.compile(model.fit, fullgraph=True)` | 2.14 / no breaks | Buffer registration fix advances tracing to explicit-generator `FlipSign.bernoulli_`, which Dynamo cannot proxy. |
 | Tabular classification `torch.compile(model.fit)` | 2.7.1 / breaks allowed | Default recipe construction can resume with an uninitialized `TaskDispatch` module. Passing a prebuilt recipe avoids that failure. |
 | Same, with `recipe=model.default_recipe()` prepared before the compiled call | 2.7.1 / breaks allowed | Pass after schema/view/mask patches, four estimators / 31 query rows: max prediction difference `4.77e-7`; 88 graphs / 8,614 calls; generator state exact. |
-| Relational classification public fit; actual RelBench driver-DNF bundle with related tables | 2.14 / breaks allowed | Pass with string-sort support and a narrow eager boundary for external Arrow/cuDF joins: max prediction difference `1.14e-5`; 129 graphs / 6,654 calls; generator and all fitted recipe buffers exact. |
+| Relational classification public fit; actual RelBench driver-DNF bundle with related tables | 2.14 / breaks allowed | Pass with string-sort support and a narrow eager boundary for external Arrow/cuDF joins: two estimators: max prediction difference `1.41e-5`; 139 graphs / 15,055 calls; generator and all fitted recipe buffers exact. |
+| Same relational public fit, with a prebuilt recipe | 2.7.1 / breaks allowed | Atomic dispatch fixes a wrong-handler resume failure; dynamic tracing then fails a compiler symbol-to-source guard assertion. Still unsupported. |
 
 Tabular classification's fitted mean, scale, power-transform parameters and
 random state match eager exactly. Only clipping bounds differ, by `8.88e-16` on 2.14 and up to `4.44e-15` on 2.7.

@@ -18,6 +18,7 @@ p.add_argument("--checkpoint", required=True)
 p.add_argument("--entry", choices=["fit", "predict", "forward"], required=True)
 p.add_argument("--fullgraph", action="store_true")
 p.add_argument("--capture-dynamic", action="store_true")
+p.add_argument("--dynamic", choices=["true", "false", "auto"], default="true")
 p.add_argument("--backend", default="inductor")
 p.add_argument("--cache-limit", type=int, default=64)
 p.add_argument("--native-sum", action="store_true")
@@ -137,6 +138,7 @@ result = {
     "query_input": a.query_input,
     "cache_limit": a.cache_limit,
     "capture_dynamic": a.capture_dynamic,
+    "dynamic": a.dynamic,
     "prepared_recipe": a.prepared_recipe,
     "atomic_recipe": a.atomic_recipe,
 }
@@ -153,7 +155,7 @@ try:
         kwargs = {
             "backend": a.backend,
             "fullgraph": a.fullgraph,
-            "dynamic": True,
+            "dynamic": {"true": True, "false": False, "auto": None}[a.dynamic],
         }
         if a.native_sum:
             from native_sum_backend import backend
