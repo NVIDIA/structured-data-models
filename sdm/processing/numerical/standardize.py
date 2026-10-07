@@ -9,6 +9,7 @@ from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
     _isfinite,
+    _nansum_rows,
 )
 
 
@@ -48,10 +49,10 @@ class Standardize(Processor, InvertibleMixin):
         count = finite.sum(dim=-2, keepdim=True)
         finite_or_nan = numerical.masked_fill(~finite, torch.nan)
 
-        self.mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
+        self.mean = _nansum_rows(finite_or_nan).div_(count)
         self.mean.masked_fill_(self.mean.isnan(), 0.0)
 
-        var = finite_or_nan.sub_(self.mean).square_().nansum(-2, keepdim=True)
+        var = _nansum_rows(finite_or_nan.sub_(self.mean).square_())
         var /= count
         var.masked_fill_(var.isnan(), 0.0)
 

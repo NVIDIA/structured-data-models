@@ -11,11 +11,22 @@ from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
     _isfinite,
+    _nansum_rows,
 )
 
 # Keep GPU execution batched; adaptive per-column stopping would resynchronize.
 # For float32 overflow-safe bounds, 44 golden steps reaches ~1.48e-8.
 _YEOJOHNSON_OPTIMIZATION_STEPS = 44
+
+
+@torch.library.custom_op("sdm::fitting_expm1", mutates_args=())
+def _fitting_expm1(inp: Tensor) -> Tensor:
+    return inp.expm1()
+
+
+@_fitting_expm1.register_fake
+def _fitting_expm1_fake(inp: Tensor) -> Tensor:
+    return torch.empty_like(inp)
 
 
 def _yeojohnson_transform(
@@ -26,6 +37,7 @@ def _yeojohnson_transform(
     positive: Tensor | None = None,
     exponents: Tensor | None = None,
     out: Tensor | None = None,
+    fitting: bool = False,
 ) -> Tensor:
     eps = torch.finfo(inp.dtype).eps
     two_minus_lambda = 2 - lambdas
@@ -35,7 +47,15 @@ def _yeojohnson_transform(
         positive = inp >= 0
     exponents = torch.where(positive, lambdas, two_minus_lambda, out=exponents)
     out = torch.mul(exponents, magnitude_log, out=out)
-    out.expm1_().div_(exponents)
+    if (
+        fitting
+        and torch.compiler.is_compiling()
+        and not torch.is_grad_enabled()
+    ):
+        out.copy_(_fitting_expm1(out))
+    else:
+        out.expm1_()
+    out.div_(exponents)
     zero_exponent = torch.where(
         positive, lambdas.abs() < eps, two_minus_lambda.abs() < eps
     )
@@ -126,9 +146,10 @@ def _yeojohnson_log_likelihood(
         positive=positive,
         exponents=exponents,
         out=transformed,
+        fitting=True,
     )
-    mean = transformed.nansum(dim=-2, keepdim=True).div_(count)
-    variance = transformed.sub_(mean).square_().nansum(dim=-2, keepdim=True)
+    mean = _nansum_rows(transformed).div_(count)
+    variance = _nansum_rows(transformed.sub_(mean).square_())
     variance /= count
     tiny = torch.finfo(inp.dtype).tiny
     valid = variance.isfinite() & (variance >= tiny)
@@ -150,7 +171,7 @@ def _optimize_lambdas(
     # Reuse full-table workspaces throughout the golden-section search.
     magnitude_log = inp.abs().log1p_()
     positive = inp >= 0
-    log_jacobian = magnitude_log.copysign(inp).nansum(dim=-2, keepdim=True)
+    log_jacobian = _nansum_rows(magnitude_log.copysign(inp))
     exponents = torch.empty_like(inp)
     transformed = torch.empty_like(inp)
 
@@ -260,8 +281,8 @@ class PowerTransform(Processor, InvertibleMixin):
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
         count = finite.sum(dim=-2, keepdim=True).clamp_(min=1)
 
-        mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
-        var = finite_or_nan.sub(mean).square_().nansum(-2, keepdim=True)
+        mean = _nansum_rows(finite_or_nan).div_(count)
+        var = _nansum_rows(finite_or_nan.sub(mean).square_())
         var /= count
         constant_features = _constant_feature_mask(
             var,
@@ -285,9 +306,11 @@ class PowerTransform(Processor, InvertibleMixin):
         )
 
         if self.standardize:
-            transformed = _yeojohnson_transform(finite_or_nan, self.lambdas)
+            transformed = _yeojohnson_transform(
+                inp=finite_or_nan, lambdas=self.lambdas, fitting=True
+            )
             del finite_or_nan
-            mean = transformed.nansum(dim=-2, keepdim=True).div_(count)
+            mean = _nansum_rows(transformed).div_(count)
             var = transformed.sub_(mean).square_().nansum(-2, keepdim=True)
             var /= count
             scale = var.sqrt()
