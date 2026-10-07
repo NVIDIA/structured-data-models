@@ -26,7 +26,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
-        "--kernel", choices=["efficient", "flash"], default="efficient"
+        "--kernel",
+        choices=["efficient", "flash", "efficient_fp32"],
+        default="efficient",
     )
     parser.add_argument(
         "--family", choices=["tabular", "relational"], default="tabular"

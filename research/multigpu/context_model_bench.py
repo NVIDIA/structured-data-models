@@ -87,7 +87,9 @@ def main() -> None:
         "--cache-residency", choices=["default", "resident"], default="default"
     )
     parser.add_argument(
-        "--kernel", choices=["efficient", "flash"], default="efficient"
+        "--kernel",
+        choices=["efficient", "flash", "efficient_fp32"],
+        default="efficient",
     )
     parser.add_argument(
         "--source-commit", help="Revision for archive deployments"

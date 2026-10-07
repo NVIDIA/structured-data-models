@@ -11,7 +11,7 @@ model parameters, row embedding, and relational message passing are replicated.
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Literal, cast
+from typing import Literal, TypeAlias, cast
 
 import torch
 import torch.distributed as dist
@@ -25,7 +25,8 @@ _group: ContextVar[dist.ProcessGroup | None] = ContextVar(
 _attention: ContextVar[tuple[dist.ProcessGroup, int] | None] = ContextVar(
     "context_attention", default=None
 )
-_kernel: ContextVar[Literal["efficient", "flash"]] = ContextVar(
+_Kernel: TypeAlias = Literal["efficient", "flash", "efficient_fp32"]
+_kernel: ContextVar[_Kernel] = ContextVar(
     "context_kernel", default="efficient"
 )
 
@@ -34,7 +35,7 @@ _kernel: ContextVar[Literal["efficient", "flash"]] = ContextVar(
 def context_parallel(
     group: dist.ProcessGroup,
     *,
-    kernel: Literal["efficient", "flash"] = "efficient",
+    kernel: _Kernel = "efficient",
 ) -> Iterator[None]:
     """Shard fitted ICL caches and combine predictions across ``group``.
 
@@ -43,6 +44,8 @@ def context_parallel(
     supported. Keep this scope active during both fit and predict.
     ``kernel="flash"`` uses native GQA without expanding KV heads and requires
     CUDA FP16/BF16. The default efficient kernel also supports FP32.
+    ``kernel="efficient_fp32"`` preserves autocast's Q/K/V quantization but
+    computes local outputs and their distributed merge in FP32.
     """
     if torch.is_grad_enabled():
         raise RuntimeError(
@@ -115,7 +118,7 @@ def partial_attention(
     value: Tensor,
     *,
     scale: float | None = None,
-    kernel: Literal["efficient", "flash"] | None = None,
+    kernel: _Kernel | None = None,
 ) -> tuple[Tensor, Tensor]:
     """Return local attention and natural-log normalizer in [..., Q, H, C].
 
@@ -132,6 +135,8 @@ def partial_attention(
             for tensor in (query, key, value)
         )
     kernel = _kernel.get() if kernel is None else kernel
+    if kernel == "efficient_fp32":
+        query, key, value = (tensor.float() for tensor in (query, key, value))
     if kernel == "flash" and (
         not query.is_cuda or query.dtype not in (torch.float16, torch.bfloat16)
     ):
@@ -198,7 +203,7 @@ def context_parallel_attention(
     *,
     group: dist.ProcessGroup,
     scale: float | None = None,
-    kernel: Literal["efficient", "flash"] | None = None,
+    kernel: _Kernel | None = None,
 ) -> Tensor:
     """Combine local KV attention using stable FP32 all-reductions.
 

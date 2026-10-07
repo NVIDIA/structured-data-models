@@ -30,7 +30,7 @@ def _worker(
     rendezvous: str,
     device_type: str = "cpu",
     dtype: torch.dtype = torch.float32,
-    kernel: Literal["efficient", "flash"] = "efficient",
+    kernel: Literal["efficient", "flash", "efficient_fp32"] = "efficient",
 ) -> None:
     torch.set_num_threads(1)
     if device_type == "cuda":
@@ -155,6 +155,7 @@ def test_requires_inference() -> None:
         ("efficient", torch.float32),
         ("efficient", torch.bfloat16),
         ("flash", torch.bfloat16),
+        ("efficient_fp32", torch.bfloat16),
     ],
 )
 def test_cuda_distributed_context_attention(
