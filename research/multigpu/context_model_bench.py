@@ -13,6 +13,7 @@ import os
 import statistics
 import subprocess
 import time
+import traceback
 from collections.abc import Mapping
 from contextlib import nullcontext
 from pathlib import Path
@@ -39,6 +40,18 @@ def icl_bytes(value: object) -> int:
     if isinstance(value, (list, tuple)):
         return sum(icl_bytes(item) for item in value)
     return 0
+
+
+def cache_storage(cache: Cache) -> dict[str, int]:
+    """Count unique cache backing storage by actual device residency."""
+    seen, result = set(), {}
+    for tensor in cache._tensors():
+        storage = tensor.untyped_storage()
+        key = (str(tensor.device), storage.data_ptr())
+        if key not in seen:
+            seen.add(key)
+            result[key[0]] = result.get(key[0], 0) + storage.nbytes()
+    return result
 
 
 def main() -> None:
@@ -103,6 +116,23 @@ def main() -> None:
                     : args.queries
                 ].copy()
             ).float()
+            if len(x) != args.context or len(query) != args.queries:
+                raise ValueError(
+                    "Requested rows exceed the fixed TRAIN/VAL split"
+                )
+            input_identity = {
+                "x_context_sha256": hashlib.sha256(
+                    x.numpy().tobytes()
+                ).hexdigest(),
+                "y_context_sha256": hashlib.sha256(
+                    y.numpy().tobytes()
+                ).hexdigest(),
+                "x_query_sha256": hashlib.sha256(
+                    query.numpy().tobytes()
+                ).hexdigest(),
+                "context_rows": len(x),
+                "query_rows": len(query),
+            }
             x = TableTensor.from_tensor(x.to(device))
             y = (
                 TableTensor(
@@ -138,6 +168,16 @@ def main() -> None:
             rows = sum(len(batch[0]) for batch in batches)
             query_ids = np.arange(rows)
             args.task = manifest["problem"]
+            input_identity = {
+                "workload": manifest,
+                "workload_sha256": hashlib.sha256(
+                    (args.data / "workload.json").read_bytes()
+                ).hexdigest(),
+            }
+        input_identity["actual_batch_rows"] = [
+            len(batch[0]) for batch in batches
+        ]
+        input_allocated = torch.cuda.memory_allocated()
         torch.cuda.synchronize()
         started = time.perf_counter()
         model = (
@@ -176,10 +216,14 @@ def main() -> None:
             cache = model._cache
             cache_bytes = cache.size() if isinstance(cache, Cache) else None
             cache_icl_bytes = icl_bytes(cache)
+            cache_by_device = (
+                cache_storage(cache) if isinstance(cache, Cache) else {}
+            )
+            fit_reserved = torch.cuda.max_memory_reserved()
             model.predict(*batches[0])
             torch.cuda.synchronize()
             torch.cuda.reset_peak_memory_stats()
-            pass_times, batch_times = [], []
+            pass_times, batch_times, repeat_hashes = [], [], []
             for repeat in range(args.repeats):
                 dist.barrier()
                 torch.cuda.synchronize()
@@ -194,12 +238,18 @@ def main() -> None:
                 pass_times.append(time.perf_counter() - started)
                 batch_times.append(durations)
                 combined = torch.cat(predictions, dim=0)
+                repeat_hashes.append(
+                    hashlib.sha256(
+                        combined.numerical.float().numpy().tobytes()
+                    ).hexdigest()
+                )
                 if rank == 0:
                     np.save(
                         args.output / f"predictions-{repeat}.npy",
                         combined.numerical.float().numpy(),
                     )
             prediction_peak = torch.cuda.max_memory_allocated()
+            prediction_reserved = torch.cuda.max_memory_reserved()
             if args.profile:
                 with torch.profiler.profile(
                     activities=[
@@ -218,8 +268,15 @@ def main() -> None:
             "fit_seconds": fit_seconds,
             "fit_peak_bytes": fit_peak,
             "cache_bytes": cache_bytes,
+            "input_allocated_bytes": input_allocated,
+            "cache_storage_bytes_by_device": cache_by_device,
+            "fit_peak_reserved_bytes": fit_reserved,
             "icl_cache_bytes": cache_icl_bytes,
             "prediction_peak_bytes": prediction_peak,
+            "prediction_peak_reserved_bytes": prediction_reserved,
+            "current_allocated_bytes": torch.cuda.memory_allocated(),
+            "current_reserved_bytes": torch.cuda.memory_reserved(),
+            "repeat_prediction_sha256": repeat_hashes,
             "pass_seconds": pass_times,
             "batch_seconds": batch_times,
             "prediction_sha256": hashlib.sha256(
@@ -266,6 +323,8 @@ def main() -> None:
                 for i in range(args.repeats)
             ]
             result = {
+                "status": "complete",
+                "input_identity": input_identity,
                 "config": {
                     k: str(v) if isinstance(v, Path) else v
                     for k, v in vars(args).items()
@@ -297,6 +356,24 @@ def main() -> None:
             (args.output / "results.json").write_text(
                 json.dumps(result, indent=2) + "\n"
             )
+    except Exception as error:
+        (args.output / f"error-rank{rank}.json").write_text(
+            json.dumps(
+                {
+                    "status": "failed",
+                    "rank": rank,
+                    "error": str(error),
+                    "traceback": traceback.format_exc(),
+                    "config": {
+                        k: str(v) if isinstance(v, Path) else v
+                        for k, v in vars(args).items()
+                    },
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        raise
     finally:
         dist.destroy_process_group()
 
