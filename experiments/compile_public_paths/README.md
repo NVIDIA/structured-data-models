@@ -1,21 +1,28 @@
-# Public Kumo compilation investigation
+# Compiling public model prediction
 
-This branch is an integration prototype, based on main `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`. It includes table/recipe tracing work, PR #1054's Fourier-buffer fix, relational graph preparation, and PR #1068's relative-time fix. No PR, GPU validation, speed claim, or memory claim is attached to these results.
+This experimental branch supports compiling tensor preprocessing and prediction together. It is based on main `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`; these are branch results, not current-main guarantees. The successful cases **fit eagerly, then compile and call `model.predict`**. No GPU speed or memory claim is made here.
 
-## Latest public-prediction results
+## Current results
 
-All entries below compile and call **`model.predict` after eager `model.fit`**, with real cached data, pretrained weights, CPU Inductor, and unchanged FP32 comparisons. No GPU speed or memory claim is made.
+Real cached data, pretrained weights, CPU Inductor, and the same FP32 weights/inputs for eager and compiled comparisons:
 
-| Model / data | PyTorch | Graph breaks allowed | Fullgraph | Same-dtype prediction comparison |
+| Model / data | PyTorch | Graph breaks allowed | Fullgraph | Prediction parity |
 |---|---|---|---|---|
-| KumoTabular, numerical classification | 2.14 | Pass | Pass | Pass; latest fullgraph max `8.94e-7` |
+| KumoTabular, numerical classification | 2.14 | Pass | Pass | Max absolute difference `8.94e-7` |
+| KumoTabular, four estimators / numerical classification | 2.14 | Pass | Pass | Max `3.28e-7`; initial snapshot |
+| KumoTabular, numerical regression | 2.14 | Pass | Pass | Max `1.84e-4`; initial snapshot |
 | KumoRelational, one-hop RelBench / four related tables | 2.14 | Pass | Pass* | All query sizes pass; max `4.83e-6` |
-| KumoRelational, two-hop RelBench / six related tables | 2.14 | Runs | Runs* | One of eight probabilities narrowly misses unchanged tolerance on the four-row sample; reproduced by compiling only the inner model |
-| KumoRelational | 2.7.1 | Still iterating schema guard failures | Still blocked | No end-to-end support claim yet |
+| KumoRelational, two-hop RelBench / six related tables | 2.14 | Runs | Runs* | One of eight probabilities narrowly misses tolerance on the four-row sample; reproduced by compiling only the inner model |
+| KumoRelational public prediction | 2.7.1 | Still iterating schema guards | Still blocked | No end-to-end support claim |
+| Public `fit()` / outer `model(...)` | Both | Separate investigation | Separate investigation | Not covered by the successful prediction cases |
 
-*Relational fullgraph uses scoped `capture_dynamic_output_shape_ops=True`. Arrow/cuDF joins remain **opaque external custom operations** inside the captured graph; their algorithms are not compiled. Runtime task-row validation is preserved by a small custom operation. Explicit finite `num_hops` permits bounded tensor propagation without a data-dependent early-exit condition. Unbounded traversal remains outside this guarantee.
+*Relational fullgraph needs scoped `capture_dynamic_output_shape_ops=True` and an explicit finite `num_hops`. Arrow/cuDF joins remain opaque external operations inside the captured graph; their algorithms are not compiled.
 
-The relational fullgraph checks run **4 → 1 → 8 → 4 query rows with matching related neighborhoods** through one callable. Graph counts are **1 → 2 → 3 → 3**; first graphs capture 5,714 calls for one hop and 8,076 for two hops. Different row counts still recompile, while the repeated query reuses its graph. Source: `d8cbc7383`. Tabular fullgraph remains passing after atomic wrapper constructors (`aa3876c33`). Detailed results, including failures, are in `relational-prediction-progress.json`.
+The relational fullgraph checks run **4 → 1 → 8 → 4 query rows with their matching related neighborhoods** through one compiled callable. Captured graph counts are **1 → 2 → 3 → 3**; first graphs contain 5,714 calls for one hop and 8,076 for two hops. New sizes recompile despite `dynamic=True`; repeating the query reuses its graph. Tabular checks use **4 → 7 → 3 → 4**, with fresh tables and sliced views.
+
+Relational fullgraph source: `d8cbc7383`. The latest tabular classifier repeat passes after atomic wrapper construction (`aa3876c33`). Initial tabular regression/four-estimator source: `284f612cf`. Exact comparisons use `atol=1e-5, rtol=1e-4`; they are not bitwise or dataset-wide quality guarantees. [Prediction results](relational-prediction-progress.json) preserve source commits, failures, graph counts, and exact probability values; [initial results](prediction-final.json) preserve the earlier tabular matrix.
+
+## Usage
 
 ```python
 model.fit(context, target, related_context, num_hops=1)
@@ -24,91 +31,42 @@ with torch._dynamo.config.patch(capture_dynamic_output_shape_ops=True):
     result = predict(query, related_query)
 ```
 
-This is experimental branch behavior, not current-main support. Fitting, arbitrary schemas, CUDA, and preprocessing mutation still have separate validation requirements. The following sections retain earlier snapshots and explain the progression.
+For KumoTabular numerical prediction, the dynamic-output setting and related-table arguments are unnecessary. Omitting `fullgraph=True` allows graph breaks; it does not guarantee that every region gets compiled.
 
-## What works
+## What changed
 
-Actual CPU Inductor, PyTorch 2.14, **public** `torch.compile(model.predict, fullgraph=..., dynamic=True)` after eager `fit()`:
+- Tensor subclasses expose their tensor leaves and preserve layout during reconstruction and view replay. Wrapper construction stays atomic when execution resumes after a graph break.
+- Recipe dispatch, column selection, ensemble packing, and query validation use traceable schema metadata. Fitting caches class output names so prediction avoids tensor-to-Python string conversion.
+- String category lookup and identifier joins use custom operations that call the existing Arrow/cuDF implementation. Join outputs have a data-dependent length; this is why the scoped compiler setting is needed.
+- Task graph validation remains active at runtime. With finite `num_hops`, propagation executes a bounded number of tensor updates; updates after an empty frontier are no-ops.
+- Internal-model prerequisites are included: Fourier-buffer compilation, relational graph preparation, and relative-time processing. Chunk-size preservation is separate; compilation success alone does not establish memory parity.
 
-| Pretrained KumoTabular workload | Estimators | `fullgraph=True` | `fullgraph=False` | Largest absolute prediction difference |
-|---|---:|---|---|---:|
-| Classification, numerical input features | 1 | Pass | Pass | 8.94e-7 |
-| Classification, numerical input features | 4 | Pass | Pass | 3.28e-7 |
-| Regression, numerical input features | 1 | Pass | Pass | 1.84e-4 |
+The join prototype preserves tested duplicate, empty, missing, nullable, string, multikey, dtype, and validation-error behavior. Details and standalone commands are in [DYNAMIC_JOIN.md](DYNAMIC_JOIN.md).
 
-Each case runs query row counts **4 → 7 → 3 → 4** through the same compiled callable. Freshly constructed tables and sliced `TableTensor` views both pass. All comparisons use the same weights, data, and dtype in eager and compiled execution (`atol=1e-5`, `rtol=1e-4`); regression targets are explicitly FP32 to match the pretrained model. This is tolerance-based parity, not bitwise equality or a dataset-wide quality evaluation.
+## Precision and limitations
 
-The one-estimator classifier captured 2,234 tensor calls in its first graph; four estimators captured 8,610. This covers tensor preprocessing, internal model computation, and output processing. Graph counts were **1 → 2 → 3 → 3**: new row counts still caused recompilation despite `dynamic=True`; the repeated four-row input reused a graph. These are genuine compiled calls, not an eager tracing backend or merely constructing an unused wrapper.
+The two-hop probability miss also occurs with entirely eager preprocessing and **only the inner model compiled**: eager `0.0907173976`, inner-compiled `0.0906983167`, public-compiled `0.0906982943`. Predicted classes are unchanged. The public-versus-inner difference for that value is `2.24e-8`; the tolerance was not relaxed. Direct compiled preprocessing gives bitwise-equal values in all 12 nonempty numerical/datetime blocks across the task and six related tables ([results](relational-preprocessing-parity.json)).
 
-Final model/processor source for these checks: `284f612cf`. `prediction-final.json` contains exact outcomes and counters. Existing base-model, relational-model, and Standardize tests pass on both runtimes: **49 passed, 14 CUDA-only skips** each.
+A CPU diagnostic using scalar code generation (`cpp.simdlen=1`) passes the original tolerance across all four two-hop query sizes. FP32 is unchanged. This points to vector/reduction arithmetic in the inner compiler, but scalar code generation is not recommended as a performance fix without further measurement. No precision flags were changed in the library.
 
-## Changes needed outside the inner model
+PyTorch 2.7 has additional dictionary-source and graph-break-resume limitations. Individual schema and wrapper fixes make progress, but public prediction has not passed end to end. Changing the inference context alone does not fix its fullgraph failure: a diagnostic exposes an earlier recipe-applicability failure.
 
-1. Table and nested-container flatten/unflatten expose tensor leaves and preserve metadata. Empty columnar leaves must also survive view replay: the first sliced-input check failed because an empty ID block allocated a real tensor among fake tensors; the corrected view handler preserves the existing leaf.
-2. Recipe applicability and packing read traceable column metadata rather than unsupported container-returned objects. Recipe setup validation traverses registered children without the module mutation failure.
-3. Query validation compares cached schema columns directly, preserving the same validation without constructing a `TableSchema` inside tracing.
-4. Fit caches class column names once. Previously both Kumo wrappers converted class tensors into Python strings on every prediction; prediction now reuses those names. Class order and numerical calculations are unchanged. The shared fit cache adds this small metadata item for other models too; only the two Kumo wrappers consume it here.
-5. Internal-model prerequisites remain necessary. This branch includes them to test the public path rather than stop at a known inner-model error. Chunk-size preservation (#1055) is separate and is not included; passing compilation does not establish memory-efficiency parity.
-
-## Blockers at the first snapshot (`284f612cf`)
-
-| Path | Current evidence |
-|---|---|
-| KumoTabular public prediction, PyTorch 2.7.1 | Fails with and without graph breaks. Fullgraph reports a break under the generic context manager. A fresh Inductor cache confirms a dictionary-source guard failure in recipe schema metadata with breaks allowed (`ConstDictKeySource can only work on DictGuardManager`). |
-| KumoRelational public prediction, PyTorch 2.14 | Fullgraph fails reading string category metadata in `AlignCategories` for related-table features. Allowing breaks reaches a data-dependent scalar extraction in nonempty variable-length string concatenation. Both failures precede the inner model. |
-| KumoRelational public prediction, PyTorch 2.7.1 | Generic-context and dictionary-source guard failures remain. |
-| Compile public `fit()` or outer model | No passing end-to-end case. Baseline and intermediate results identify recipe construction, category alignment, and data-dependent preprocessing blockers. The successful prediction cases fit eagerly. |
-| Relational Arrow joins | Moving joins before the inner model does not move them outside a compiled public `predict()`. Even after categorical preprocessing is fixed, fullgraph needs a supported representation for joins or a narrower compiled boundary; graph-break mode needs an explicit boundary around external table work. |
-| General container support | Nonempty variable-length strings, mixed-table input views, input mutation, categorical fitting, and schema-changing processors still require work; see the component branch documentation. |
-
-The relational checks use a real RelBench driver-dnf bundle with related tables and pretrained weights. They include graph preparation and relative-time fixes, but still fail in preceding categorical processing. The integration does not include later experimental categorical-processor changes from the separate investigation branch.
+Unbounded graph traversal, arbitrary schemas, input mutation, nonempty variable-length operations outside the tested paths, CUDA/cuDF, and full dataset metrics still need separate validation. Opaque external operations may add overhead; no speedup is inferred from capturing fewer graphs.
 
 ## Reproduce
 
-`probe.py` invokes the selected compiled callable:
-
-- `fit`: compile and call `model.fit`, then eager prediction to check fitted state.
-- `predict`: eager fit, then compile and call `model.predict`.
-- `forward`: compile and invoke the outer model with context and query data.
-
-Use trusted external data and checkpoint files; they are not committed. Tabular data is an `.npz` containing `x`, `y`, `train_ids`, and `validation_ids`. This probe uses 32 context rows. The relational bundle contains pickled SDM objects, with the first arm and second query selected. Both models use seeded generators for the eager and compiled comparison.
+`probe.py` actually invokes the selected compiled entry. `predict` fits eagerly first; `fit` compiles and calls fitting, then checks eager prediction; `forward` compiles and invokes the outer model. Use trusted external data/checkpoint files, which are not committed.
 
 ```sh
 PYTHONPATH=. OMP_NUM_THREADS=1 TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS=0 \
   python experiments/compile_public_paths/probe.py \
-  --model tabular --task classification --entry predict --fullgraph \
-  --estimators 4 --query-input view --query-rows 4 7 3 4 \
-  --data /path/to/data_train_validation.npz \
-  --checkpoint /path/to/Kumo-Tabular/small/classifier.pt \
-  --output /tmp/tabular-predict.json
+  --model relational --entry predict --fullgraph --capture-dynamic-outputs \
+  --arm-index 0 --relational-query-indices 1 0 2 1 \
+  --data /path/to/driver-dnf_bundle.pt \
+  --checkpoint /path/to/Kumo-Relational/classifier.pt \
+  --output /tmp/relational-predict.json
 ```
 
-Omit `--fullgraph` to allow breaks. Select `--query-input fresh` to construct fresh numeric tables instead of slicing a table. For regression use `--task regression` and `regressor.pt`. For relational use `--model relational --entry predict`, its driver-dnf bundle and classifier checkpoint, and omit the tabular query-row options. Run each configuration in a fresh process. The PCH setting above is a workaround for the local macOS PyTorch 2.14 compiler setup.
+For tabular classification, use `--model tabular --entry predict --fullgraph --query-rows 4 7 3 4`, its `.npz` data, and `small/classifier.pt`; omit relational options. `--estimators 4` checks ensembling. Regression uses `--task regression` and `regressor.pt`. The PCH setting is specific to the local macOS 2.14 compiler setup. `--inner-only` is a diagnostic that compiles internal modules while keeping public preprocessing eager.
 
-## Baseline evidence
-
-`baseline.json` records all 24 current-main combinations (two models × public fit/predict/outer forward × two graph-break settings × two runtimes). All eager reference calls succeeded and all compiled entries failed before the fixes. `containers-initial.json` and `recipe-integration.json` preserve intermediate first errors and source commits. Local ignored `results/` retains full tracebacks. No failure or pure eager fallback is counted as successful compilation.
-
-## Follow-up: external join boundary and real relational prediction
-
-The continuing integration adds individual category access during alignment and an explicit compiler boundary around `join_index`. Arrow/cuDF joins remain eager; surrounding tensor arithmetic can compile. Before this boundary, even `fullgraph=False` attempted `TableTensor.to_arrow()` with fake tensors and raised `.numpy() is not supported for tensor subclasses`. With the boundary, actual Inductor passes a duplicate-key join followed by tensor arithmetic on 2.7.1 and 2.14, including inside SDM's inference context. Fullgraph correctly rejects this explicit graph break; it is not fullgraph support for Arrow. Existing join checks pass (6 CPU cases, 5 CUDA skips on 2.14).
-
-String alignment now exposes fixed-size dictionary lookup as a custom compiler operation with the same Arrow/cuDF implementation. The compiler sees the lookup result shape; it does not optimize Arrow. Eager alignment retains its direct helper to avoid dispatcher overhead.
-
-At `ddb25ab3b`, real pretrained **KumoRelational public prediction passes on PyTorch 2.14 CPU Inductor with `fullgraph=False`** for the one-hop RelBench arm. The same compiled callable handles query rows **4 → 1 → 8 → 4** with their corresponding related tables. Maximum absolute prediction difference is **4.83e-6**; all samples satisfy the unchanged `atol=1e-5, rtol=1e-4`. Cumulative captured graphs are **27 → 38 → 43 → 43** and tensor calls **4,976 → 9,419 → 13,912 → 13,912**. The default recompilation limit is reached in schema dispatch, so some regions fall back to eager; this is partial compilation, not every operation compiled.
-
-Broader checks are still incomplete. A two-hop arm with six related tables and a scoped recompilation limit of 64 fails inside Dynamo's symbolic shape guards (`IndexError: list index out of range`). Fullgraph still stops in categorical ensemble packing before reaching the explicit external join boundary. `relational-prediction-progress.json` preserves these passes and failures. The limit override exists only in the experiment, not the library. Existing categorical, numerical-conversion, join, and relational-model suites pass: **70 passed, 39 CUDA skips** on 2.14.
-
-Use `--arm-index 0 --relational-query-indices 1 0 2 1` to reproduce the passing neighborhood sweep. `--dynamic false` allows a diagnostic without symbolic shape handling; default is true. No speed, memory, CUDA, general-schema, or 2.7 relational success claim follows from this CPU partial-compilation milestone.
-
-
-### Two-hop precision follow-up
-
-The two-hop arm completes public prediction with default limits (`dynamic=True`) and with a scoped limit of 64 (`dynamic=False`). Both reproduce the same small probability discrepancy: one of eight four-row class probabilities narrowly exceeds the unchanged tolerance. Eager is `0.0907173976`; compiling **only the inner model** gives `0.0906983167`; compiling public prediction gives `0.0906982943`. The inner-only run already reproduces the miss, while the public-vs-inner difference is `2.24e-8` for that value. Predicted classes are unchanged. This is a precision limit in compiled neural computation, not evidence that the new preprocessing changes class semantics. We keep these runs marked `parity_fail`; we have not loosened tolerance.
-
-A separate direct comparison of eager and compiled `recipe_execution.transform` gives bitwise equal outputs for all 12 nonempty numerical/datetime blocks across the task and six related tables (`relational-preprocessing-parity.json`). Prediction source snapshot: `ebd902af6`. The broader CPU result still does not establish CUDA quality or speed.
-
-Explicit schema construction (`acc37828a`) moves 2.14 fullgraph past recipe preparation and validation to the intentional external `join_index` boundary. Existing relational and base-model checks pass: 43 passed, 31 CUDA skips. PyTorch 2.7 still needs further schema guard fixes; its current failure is preserved in the progress artifact.
-
-
-A CPU-only diagnostic sets `torch._inductor.config.cpp.simdlen = 1` before compiling the inner model, leaving FP32 inputs/weights unchanged. All four two-hop query sizes then pass the original tolerance, with maximum difference `2.01e-5`. The default C++ contraction setting was already `off`. This supports generated vector/reduction arithmetic as the source of the marginal miss; scalar code generation is not a recommended performance fix, and no library precision flag has been changed.
+Existing checks include 70 passing categorical/conversion/join/relational cases (39 CUDA skips) and 43 passing relational/base cases (31 CUDA skips) on the recorded 2.14 snapshots. Component branches provide focused two-version checks. [HISTORY.md](HISTORY.md) and [baseline.json](baseline.json) retain earlier failures and the original 24-case current-main baseline.
