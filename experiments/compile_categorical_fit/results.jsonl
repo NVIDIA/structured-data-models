@@ -1,0 +1,33 @@
+{"check": "alignment_public", "version": "2.14.0", "string": false, "fullgraph": false, "sort_by": "code", "status": "fail", "error": "AttributeError: 'CategoricalTensor' object has no attribute '_categories'"}
+{"check": "alignment_public", "version": "2.14.0", "string": false, "fullgraph": false, "sort_by": "frequency", "status": "fail", "error": "AttributeError: 'CategoricalTensor' object has no attribute '_categories'"}
+{"check": "alignment_public", "version": "2.14.0", "string": false, "fullgraph": false, "sort_by": "value", "status": "fail", "error": "AttributeError: 'CategoricalTensor' object has no attribute '_categories'"}
+{"check": "alignment_public", "version": "2.14.0", "string": false, "fullgraph": true, "sort_by": "code", "status": "pass"}
+{"check": "alignment_public", "version": "2.14.0", "string": false, "fullgraph": true, "sort_by": "frequency", "status": "pass"}
+{"check": "alignment_public", "version": "2.14.0", "string": false, "fullgraph": true, "sort_by": "value", "status": "pass"}
+{"check": "alignment_public", "version": "2.14.0", "string": true, "fullgraph": false, "sort_by": "code", "status": "fail", "error": "AttributeError: 'CategoricalTensor' object has no attribute '_categories'"}
+{"check": "alignment_public", "version": "2.14.0", "string": true, "fullgraph": false, "sort_by": "frequency", "status": "fail", "error": "AttributeError: 'CategoricalTensor' object has no attribute '_categories'"}
+{"check": "alignment_public", "version": "2.14.0", "string": true, "fullgraph": false, "sort_by": "value", "status": "fail", "error": "RuntimeError when making fake tensor call"}
+{"check": "alignment_public", "version": "2.14.0", "string": true, "fullgraph": true, "sort_by": "code", "status": "fail", "error": "Could not guard on data-dependent expression Eq(u0, 0) (unhinted: Eq(u0, 0)).  (Size-like symbols: u0)"}
+{"check": "alignment_public", "version": "2.14.0", "string": true, "fullgraph": true, "sort_by": "frequency", "status": "fail", "error": "Could not guard on data-dependent expression Eq(u0, 0) (unhinted: Eq(u0, 0)).  (Size-like symbols: u0)"}
+{"check": "alignment_public", "version": "2.14.0", "string": true, "fullgraph": true, "sort_by": "value", "status": "fail", "error": "RuntimeError when making fake tensor call"}
+{"check": "alignment_dynamic_capture", "version": "2.14.0", "string": false, "fullgraph": false, "sort_by": "code", "status": "pass"}
+{"check": "alignment_dynamic_capture", "version": "2.14.0", "string": false, "fullgraph": false, "sort_by": "frequency", "status": "pass"}
+{"check": "alignment_dynamic_capture", "version": "2.14.0", "string": false, "fullgraph": false, "sort_by": "value", "status": "pass"}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": false, "method": "random", "cardinality": 0, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": false, "method": "random", "cardinality": 1, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": false, "method": "random", "cardinality": 3, "status": "pass", "eager_unique_permutations": 3, "compiled_unique_permutations": 3}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": false, "method": "shift", "cardinality": 0, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": false, "method": "shift", "cardinality": 1, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": false, "method": "shift", "cardinality": 3, "status": "pass", "eager_unique_permutations": 3, "compiled_unique_permutations": 3}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": true, "method": "random", "cardinality": 0, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": true, "method": "random", "cardinality": 1, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": true, "method": "random", "cardinality": 3, "status": "fail", "error": "Failed to convert args/kwargs to proxy"}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": true, "method": "shift", "cardinality": 0, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": true, "method": "shift", "cardinality": 1, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_explicit_generator", "version": "2.14.0", "fullgraph": true, "method": "shift", "cardinality": 3, "status": "fail", "error": "Failed to convert args/kwargs to proxy"}
+{"check": "shuffle_global_rng", "version": "2.14.0", "fullgraph": true, "method": "random", "cardinality": 0, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_global_rng", "version": "2.14.0", "fullgraph": true, "method": "random", "cardinality": 1, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_global_rng", "version": "2.14.0", "fullgraph": true, "method": "random", "cardinality": 3, "status": "pass", "eager_unique_permutations": 3, "compiled_unique_permutations": 4}
+{"check": "shuffle_global_rng", "version": "2.14.0", "fullgraph": true, "method": "shift", "cardinality": 0, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_global_rng", "version": "2.14.0", "fullgraph": true, "method": "shift", "cardinality": 1, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
+{"check": "shuffle_global_rng", "version": "2.14.0", "fullgraph": true, "method": "shift", "cardinality": 3, "status": "pass", "eager_unique_permutations": 3, "compiled_unique_permutations": 4}
