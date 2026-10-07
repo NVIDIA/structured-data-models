@@ -154,8 +154,8 @@ def _copy_wrapper_(
                     or dst.storage_offset() != src.storage_offset()
                 ):
                     raise ValueError("Copy requires matching ragged layouts")
-                # Layout only carries view metadata; copying the canonical
-                # offset buffer also updates this alias.
+                # Layout carries only view metadata. Values live in the
+                # canonical data and offset buffers.
                 dst_names = [name for name in dst_names if name != "_layout"]
             for name in dst_names:
                 collect(getattr(dst, name), getattr(src, name))
