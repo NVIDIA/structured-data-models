@@ -1,6 +1,6 @@
 # Independent correctness and measurement audit
 
-Audit scope: current SDM `842c408fe`; KumoTabular and KumoRelational multi-GPU research. This report distinguishes implemented checks from executed GPU evidence. No GPU result has been independently validated yet.
+Audit scope: SDM research branching from `842c408fe`; KumoTabular and KumoRelational multi-GPU implementations and measurements. This report distinguishes source review, executed GPU tests and independently verified raw benchmark evidence. Per-run source revisions and numerical audit sidecars accompany the measurements below.
 
 ## Fair comparisons
 
@@ -41,7 +41,9 @@ Strong scaling holds total context/member/query work fixed. Weak scaling grows t
 
 Record per-device allocated/reserved peaks, model/cache bytes, CPU RSS/pinned-cache implications, and aggregate memory. Reset peaks at phase boundaries. Retaining every output on GPU through a pass inflates apparent inference memory; document output retention or measure it separately. GPU utilization samples are phase-sensitive and whole-process averages must not be described as kernel occupancy. Failed/OOM/timeout arms remain rows in the result table with workload and failure stage.
 
-## Implementation review status
+## Initial implementation review checklist
+
+This table records the initial evidence requirements; subsequent sections document completed tests, observed failures and real-model measurements rather than treating these items as still pending.
 
 | Area | Source review finding | Remaining evidence |
 |---|---|---|
@@ -49,11 +51,11 @@ Record per-device allocated/reserved peaks, model/cache bytes, CPU RSS/pinned-ca
 | Query parallel executor | Schedules whole CPU-prepared graph microbatches, returns results in submission order, serializes each replica with one persistent worker, includes CPU output completion. | Real multi-GPU quality/throughput, exact fitted-plan equality across replicas, graph identity evidence. |
 | Context parallel | Source uses global-length query scaling, stable MAX then weighted numerator/denominator SUM, cloned KV shards, rejects unsupported masks/valid lengths and topology changes. Full fit remains replicated. | Real distributed runs, uneven/empty shards, current CUDA efficient-attention backend, full-model quality and memory. |
 
-Review alone is not a GPU correctness claim. Implementation owners are adding real distributed tests; runner results will be independently checked here when available.
+Review alone is not a GPU correctness claim. Completed distributed tests and independently checked runner results are recorded below.
 
 ## Findings resolved before cloud execution
 
-- Ensemble source initially waited only for input readiness. Parameters initialized on another GPU's nondefault caller stream could race its worker. Follow-up `f74f2cc30` adds per-replica construction stream dependencies and records returned CUDA tensors on the consumer stream; two CUDA tests exercise initialization, different fit/predict streams and CPU outputs. Actual execution on multiple GPUs remains pending.
+- Ensemble source initially waited only for input readiness. Parameters initialized on another GPU's nondefault caller stream could race its worker. Follow-up `f74f2cc30` adds per-replica construction stream dependencies and records returned CUDA tensors on the consumer stream; two CUDA tests exercise initialization, different fit/predict streams and CPU outputs. Their initial cloud failure and corrected GPU rerun are documented below.
 - The relational runner initially imported the former ensemble module name and omitted the preprocessing generator for the resident executor. Owner follow-ups fix both and retain fixed CPU preprocessing for resident scaling. Native GPU preprocessing remains a separately disclosed baseline.
 - The query adapter now propagates estimator batch size, invalidates its executor before refitting, and drains sibling futures before propagating a worker failure. These avoid an unequal batching baseline and stale state after failed fits.
 - The ensemble tests now exercise actual reduced-size KumoTabular ECOC with twelve classes, shuffled class vocabularies, exact cached codebooks and predictions across one/two/four CPU replicas and repeated fits. CPU coverage cannot validate CUDA stream behavior.
@@ -71,6 +73,8 @@ The first four-L40S host execution of `test/models/test_ensemble_parallel.py` co
 Fix `c4ddd7f15` replaces that call with `output.record_stream(stream)`, the existing public operation dispatched by `sdm/tensor/table.py`. A separate rerun saved as `ensemble-cuda-fixed.log` independently confirms both previously failing CUDA tests pass (two passed, eleven deselected, 0.80 seconds). The original failed log remains evidence.
 
 The coordinator also executed the existing base/KumoTabular/KumoRelational/TabICLv2 CPU regression suite: 88 passed, 19 CUDA-only skipped, 27.82 seconds. The integrated new research suites returned 43 passed and 22 CUDA-only skipped in approximately 10 seconds. These support CPU API and model regression coverage; skipped tests are not counted as GPU evidence.
+
+Later raw logs on source `4e1c5c33d` independently confirm process-ensemble member-plan CUDA tests pass on one/two GPUs (two passed, 5.30 seconds), and CUDA-graph replay shape/output-lifetime tests pass on one/two GPUs using a reduced Kumo model (two passed, 2.52 seconds). These establish those tested mechanisms, not pretrained-model throughput or memory scaling for process ensemble or graph replay.
 
 ## First measured strong-scaling audit: Covertype
 
