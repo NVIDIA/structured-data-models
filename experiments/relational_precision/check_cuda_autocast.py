@@ -21,6 +21,8 @@ with torch.inference_mode():
         for autocast in [False, True]:
             torch._dynamo.reset()
             model = torch.nn.LayerNorm(128, device="cuda", dtype=weight_dtype)
+            model.weight.uniform_(0.5, 1.5)
+            model.bias.normal_()
             x = torch.randn(
                 3, 17, 128, device="cuda", dtype=input_dtype
             ).transpose(0, 1)
