@@ -77,9 +77,11 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
 
     if fitted:
         model.fit(x_context, y_context, related_tables)
-        result = explainer.explain(model, x_query, related_tables)
+        x_attributions, related_attributions = explainer.explain(
+            model, x_query, related_tables
+        )
     else:
-        result = explainer.explain(
+        x_attributions, related_attributions = explainer.explain(
             model,
             x_query,
             related_tables,
@@ -89,19 +91,19 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
         )
 
     torch.testing.assert_close(
-        result.x.numerical, torch.full_like(x_query, 2.0)
+        x_attributions.numerical, torch.full_like(x_query, 2.0)
     )
-    assert result.related_tables is not None
+    assert related_attributions is not None
     torch.testing.assert_close(
-        result.related_tables.tables["related"].numerical,
+        related_attributions.tables["related"].numerical,
         torch.full_like(x_query, 3.0),
     )
     torch.testing.assert_close(
-        result.related_tables.tables["unused"].numerical,
+        related_attributions.tables["unused"].numerical,
         torch.zeros_like(x_query),
     )
-    assert result.related_tables.relationships == related_tables.relationships
-    assert result.related_tables.task_links == related_tables.task_links
+    assert related_attributions.relationships == related_tables.relationships
+    assert related_attributions.task_links == related_tables.task_links
 
 
 @pytest.mark.parametrize("fitted", [False, True])
@@ -121,9 +123,11 @@ def test_gradients_with_estimator_batching(fitted: bool) -> None:
             num_estimators=3,
             estimator_batch_size=None,
         )
-        result = explainer.explain(model, x_query)
+        x_attributions, related_attributions = explainer.explain(
+            model, x_query
+        )
     else:
-        result = explainer.explain(
+        x_attributions, related_attributions = explainer.explain(
             model,
             x_query,
             x_context=x_context,
@@ -133,6 +137,6 @@ def test_gradients_with_estimator_batching(fitted: bool) -> None:
         )
 
     torch.testing.assert_close(
-        result.x.numerical, torch.full_like(x_query, 2.0)
+        x_attributions.numerical, torch.full_like(x_query, 2.0)
     )
-    assert result.related_tables is None
+    assert related_attributions is None
