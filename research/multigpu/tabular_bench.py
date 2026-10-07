@@ -284,6 +284,10 @@ def main() -> None:
             )
 
         model, report["load_s"] = timed(load, devices)
+        print(  # noqa: T201
+            json.dumps({"phase": "loaded", "seconds": report["load_s"]}),
+            flush=True,
+        )
         report["memory_after_load"] = memory(devices)
 
         def dtype_context() -> torch.autocast:
@@ -311,6 +315,10 @@ def main() -> None:
             _, report["fit_s"] = timed(
                 lambda: model.fit(context, labels, **fit_kwargs), devices
             )
+        print(  # noqa: T201
+            json.dumps({"phase": "fitted", "seconds": report["fit_s"]}),
+            flush=True,
+        )
         report["memory_after_fit"] = memory(devices)
         report["cache_storage_bytes_after_fit"] = cache_memory(model)
         if hasattr(model, "cache_bytes"):
@@ -357,6 +365,12 @@ def main() -> None:
                     predict_pass, devices
                 )
                 repeats.append(elapsed)
+                print(  # noqa: T201
+                    json.dumps(
+                        {"phase": "prediction_pass", "seconds": elapsed}
+                    ),
+                    flush=True,
+                )
                 batches_s.append(batch_times)
                 predictions.append(prediction.detach().float().cpu().numpy())
             report["memory_after_prediction"] = memory(devices)
