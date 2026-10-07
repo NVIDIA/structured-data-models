@@ -262,6 +262,8 @@ def main() -> None:
                     )
             prediction_peak = torch.cuda.max_memory_allocated()
             prediction_reserved = torch.cuda.max_memory_reserved()
+            prediction_current = torch.cuda.memory_allocated()
+            prediction_current_reserved = torch.cuda.memory_reserved()
             if args.profile:
                 with torch.profiler.profile(
                     activities=[
@@ -288,8 +290,8 @@ def main() -> None:
             "icl_cache_bytes": cache_icl_bytes,
             "prediction_peak_bytes": prediction_peak,
             "prediction_peak_reserved_bytes": prediction_reserved,
-            "current_allocated_bytes": torch.cuda.memory_allocated(),
-            "current_reserved_bytes": torch.cuda.memory_reserved(),
+            "current_allocated_bytes": prediction_current,
+            "current_reserved_bytes": prediction_current_reserved,
             "repeat_prediction_sha256": repeat_hashes,
             "pass_seconds": pass_times,
             "batch_seconds": batch_times,
