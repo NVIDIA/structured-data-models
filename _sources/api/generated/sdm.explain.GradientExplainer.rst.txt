@@ -1,0 +1,8 @@
+﻿GradientExplainer
+=================
+
+.. currentmodule:: sdm.explain
+
+.. autoclass:: GradientExplainer
+   :members:
+   :show-inheritance:
