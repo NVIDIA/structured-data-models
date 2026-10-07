@@ -177,6 +177,13 @@ except Exception as error:  # noqa: BLE001 - record compiler failures for the ma
         error=str(error),
         traceback=traceback.format_exc(),
     )
+if result.get("samples"):
+    result["max_abs_error"] = max(
+        sample["max_abs_error"] for sample in result["samples"]
+    )
+    result["parity"] = all(sample["parity"] for sample in result["samples"])
+if result["status"] == "pass" and not result["parity"]:
+    result["status"] = "parity_fail"
 Path(a.output).write_text(json.dumps(result, indent=2) + "\n")
 print(
     json.dumps(

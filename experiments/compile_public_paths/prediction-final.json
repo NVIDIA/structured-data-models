@@ -1,0 +1,409 @@
+[
+  {
+    "torch": "2.14.0",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "max_abs_error": 5.960464477539063e-08,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 2234
+      },
+      {
+        "rows": 7,
+        "max_abs_error": 8.940696716308594e-07,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 4472
+      },
+      {
+        "rows": 3,
+        "max_abs_error": 5.960464477539063e-08,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6710
+      },
+      {
+        "rows": 4,
+        "max_abs_error": 5.960464477539063e-08,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6710
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 8.940696716308594e-07,
+    "parity": true,
+    "source_commit": "284f612cf",
+    "case": "prediction-views-final-2.14-classification-e1-breaks"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "max_abs_error": 5.960464477539063e-08,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 2234
+      },
+      {
+        "rows": 7,
+        "max_abs_error": 8.940696716308594e-07,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 4472
+      },
+      {
+        "rows": 3,
+        "max_abs_error": 5.960464477539063e-08,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6710
+      },
+      {
+        "rows": 4,
+        "max_abs_error": 5.960464477539063e-08,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6710
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 8.940696716308594e-07,
+    "parity": true,
+    "source_commit": "284f612cf",
+    "case": "prediction-views-final-2.14-classification-e1-full"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 4,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "max_abs_error": 2.682209014892578e-07,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 8610
+      },
+      {
+        "rows": 7,
+        "max_abs_error": 3.2782554626464844e-07,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 17224
+      },
+      {
+        "rows": 3,
+        "max_abs_error": 2.682209014892578e-07,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 25838
+      },
+      {
+        "rows": 4,
+        "max_abs_error": 2.682209014892578e-07,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 25838
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 3.2782554626464844e-07,
+    "parity": true,
+    "source_commit": "284f612cf",
+    "case": "prediction-views-final-2.14-classification-e4-breaks"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 4,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "max_abs_error": 2.682209014892578e-07,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 8610
+      },
+      {
+        "rows": 7,
+        "max_abs_error": 3.2782554626464844e-07,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 17224
+      },
+      {
+        "rows": 3,
+        "max_abs_error": 2.682209014892578e-07,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 25838
+      },
+      {
+        "rows": 4,
+        "max_abs_error": 2.682209014892578e-07,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 25838
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 3.2782554626464844e-07,
+    "parity": true,
+    "source_commit": "284f612cf",
+    "case": "prediction-views-final-2.14-classification-e4-full"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "regression",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "max_abs_error": 0.00018310546875,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 2260
+      },
+      {
+        "rows": 7,
+        "max_abs_error": 0.00018310546875,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 4524
+      },
+      {
+        "rows": 3,
+        "max_abs_error": 0.0001220703125,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6788
+      },
+      {
+        "rows": 4,
+        "max_abs_error": 0.00018310546875,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6788
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 0.00018310546875,
+    "parity": true,
+    "source_commit": "284f612cf",
+    "case": "prediction-views-final-2.14-regression-e1-breaks"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "regression",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "max_abs_error": 0.00018310546875,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 2260
+      },
+      {
+        "rows": 7,
+        "max_abs_error": 0.00018310546875,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 4524
+      },
+      {
+        "rows": 3,
+        "max_abs_error": 0.0001220703125,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6788
+      },
+      {
+        "rows": 4,
+        "max_abs_error": 0.00018310546875,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6788
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 0.00018310546875,
+    "parity": true,
+    "source_commit": "284f612cf",
+    "case": "prediction-views-final-2.14-regression-e1-full"
+  },
+  {
+    "torch": "2.7.1",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "ValueError",
+    "error": "too many values to unpack (expected 13)",
+    "source_commit": "284f612cf",
+    "case": "prediction-views-final-2.7.1-classification-e1-breaks"
+  },
+  {
+    "torch": "2.7.1",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "Unsupported",
+    "error": "Graph break under GenericContextWrappingVariable\n  Explanation: Attempted to graph break in an active context manager(s) that doesn't support graph breaking.\n  Hint: Move the offending context manager(s) to outside the compiled region.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: Active generic context managers: [GenericContextWrappingVariable(_GeneratorContextManager)]\n\n\nfrom user code:\n   File \"sdm/models/base.py\", line 417, in predict\n    queries = recipe_execution.transform(x, related_tables)\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
+    "source_commit": "284f612cf",
+    "case": "prediction-views-final-2.7.1-classification-e1-full"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "InternalTorchDynamoError",
+    "error": "DataDependentOutputException: aten._local_scalar_dense.default\n\nfrom user code:\n   File \"sdm/tensor/var_len.py\", line 1324, in _cat\n    data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))\n                         ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
+    "source_commit": "284f612cf",
+    "case": "relational-final-2.14-relational-predict-breaks"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "Unsupported",
+    "error": "Unexpected type in sourceless builder\n  Explanation: SourcelessBuilder.create does not know how to wrap <class 'sdm.tensor.string.StringTensor'>\n  Hint: This is likely to be a Dynamo bug. Please report an issue to PyTorch.\n\n  Developer debug context: sdm.tensor.string.StringTensor\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0116.html\n\nfrom user code:\n   File \"sdm/models/base.py\", line 417, in predict\n    queries = recipe_execution.transform(x, related_tables)\n  File \"sdm/processing/execution.py\", line 188, in transform\n    related_ensembles[name] = processor.transform_ensemble(\n    \n  File \"sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"sdm/processing/common/sequential.py\", line 123, in _transform_ensemble\n    out = child.transform_ensemble(out)\n  File \"sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"sdm/processing/common/stype.py\", line 139, in _transform_ensemble\n    self.processors[stype].transform_ensemble(\n    ^\n  File \"sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"sdm/processing/common/sequential.py\", line 123, in _transform_ensemble\n    out = child.transform_ensemble(out)\n  File \"sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"sdm/processing/categorical/align.py\", line 318, in _transform_ensemble\n    self._align_to_categories(\n    ^\n  File \"sdm/processing/categorical/align.py\", line 435, in _align_to_categories\n    {} for _ in table.categorical.categories\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
+    "source_commit": "284f612cf",
+    "case": "relational-final-2.14-relational-predict-full"
+  },
+  {
+    "torch": "2.7.1",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "AssertionError",
+    "error": "ConstDictKeySource can only work on DictGuardManager\n",
+    "source_commit": "284f612cf",
+    "case": "relational-final-2.7.1-relational-predict-breaks"
+  },
+  {
+    "torch": "2.7.1",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "Unsupported",
+    "error": "Graph break under GenericContextWrappingVariable\n  Explanation: Attempted to graph break in an active context manager(s) that doesn't support graph breaking.\n  Hint: Move the offending context manager(s) to outside the compiled region.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: Active generic context managers: [GenericContextWrappingVariable(_GeneratorContextManager)]\n\n\nfrom user code:\n   File \"sdm/models/base.py\", line 417, in predict\n    queries = recipe_execution.transform(x, related_tables)\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
+    "source_commit": "284f612cf",
+    "case": "relational-final-2.7.1-relational-predict-full"
+  },
+  {
+    "torch": "2.7.1",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "AssertionError",
+    "error": "ConstDictKeySource can only work on DictGuardManager\n",
+    "source_commit": "284f612cf",
+    "case": "prediction-2.7-fresh-cache-breaks"
+  }
+]
