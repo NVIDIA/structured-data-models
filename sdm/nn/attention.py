@@ -122,14 +122,13 @@ class SDPA(torch.nn.Module):
         key_size = key.size()[-3:]
         value_size = value.size()[-3:]
 
-        # No key/value pairs or an empty batch, which FlashAttention rejects
-        # before PyTorch 2.10 - abort early:
+        # FlashAttention rejects empty batches before PyTorch 2.10.
         if key_size[0] == 0 or 0 in batch_shape:
             out = query.new_zeros(
                 batch_shape + query_size[:-1] + value_size[-1:]
             )
             if torch.is_grad_enabled():
-                # Empty slices preserve zero gradients without reading inputs.
+                # Summing an empty slice gives zero and keeps backward working.
                 for tensor in (query, key, value):
                     if tensor.requires_grad:
                         out = out + tensor[..., :0, :, :].sum()
