@@ -357,6 +357,9 @@ def main() -> None:
             report["executor_cache_bytes"] = list(model.cache_bytes)
         if hasattr(model, "member_seeds"):
             report["member_seeds"] = list(model.member_seeds)
+        if hasattr(model, "compaction_s"):
+            report["compaction_s"] = model.compaction_s
+            report["compaction_storage_bytes"] = model.compaction_storage_bytes
         batches = list(query.split(args.batch_size))
 
         def predict_batch(batch: TableTensor) -> TableTensor:
