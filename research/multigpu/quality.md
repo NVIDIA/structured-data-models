@@ -132,3 +132,20 @@ The rel-f1 E4 arms share 1,024 context rows and all 499 validation rows, in four
 F1 EP median RMSE/MAE are 4.09476157/3.32554260, mean pinball loss is 1.17491292 and q050-q950 coverage is 0.95991984. Native E4 RMSE/MAE are 4.21103292/3.41042852. Native-to-EP full-quantile max/mean differences are 4.275915/0.353979 and fail the numerical screen because of the changed stochastic execution; matched EP placement differences remain exactly zero. The paired MAE difference is -0.0848859, with a 47-driver cluster bootstrap interval [-0.139039, -0.0375763]. This is a comparison of one particular pair of random-member plans, not evidence that using more GPUs improves prediction quality.
 
 An additional F1 native E1 control independently validated `[499,999]` outputs with no crossings, RMSE 4.38872041, MAE 3.56287834, pinball loss 1.24091992 and coverage 0.96192385. Its throughput is 1,123.93 rows/s (median of three passes); E1 and E4 have different amounts of model work and should not be called parallel scaling.
+
+F1 query DP1/2/4 additionally produces full-quantile predictions bitwise identical to native E4. Median throughput is 357.41/377.07/296.78 rows/s, giving 1.055x and 0.830x matched speedup at two and four GPUs. All fourteen E4 relational arm directories contain an independent `quality-independent-audit.json` sidecar preserving the original logged quality, corrected positive-class scoring, raw prediction hash, graph/workload checks, matched/native numerical differences and recomputed throughput. The original `result.json` files are unchanged.
+
+## Sequential model placement: capacity rather than throughput
+
+The four-arm placement study runs on the second host's L4 GPUs, source `55dba6bb5`, with the same Covertype context 1,024/query 2,048/member E4/microbatch 256 settings. It compares a local EP1 baseline with placing all ICL layers on a second GPU, two contiguous layer partitions, or four contiguous partitions. This executes one pipeline serially, so it does not demonstrate overlapped pipeline throughput.
+
+| Placement | Recomputed rows/s | Speedup over same-host EP1 | Largest fit peak GiB | Largest prediction peak GiB |
+|---|---:|---:|---:|---:|
+| EP1 | 1,855.27 | 1.000x | 1.769 | 1.598 |
+| Entire ICL on GPU2 | 1,763.91 | 0.951x | 1.074 | 1.060 |
+| Two layer partitions | 1,830.08 | 0.986x | 1.248 | 1.071 |
+| Four layer partitions | 1,787.74 | 0.964x | 0.994 | 0.813 |
+
+All four raw arrays, input hashes, query IDs, targets, class order, member seeds (1729 through 1732) and recorded output hashes pass independent checks. Predictions are bitwise identical on this host, with zero max/mean error and class changes. Accuracy is 0.76416015625, FP64 logloss 0.5758563016 and macro AUROC 0.9474312942. The L4 baseline differs slightly from the L40S baseline, so it must remain a same-host comparison. Four partitions cut the largest prediction allocation by about 49%, while reducing throughput by about 3.6%. The single cold-fit timing per arm is insufficient for a fit-speedup claim.
+
+The raw placement test log independently confirms 36 passing tests in 5.88 seconds, including 22 tests that required GPUs and had been skipped locally. Four per-arm `quality-independent-audit.json` sidecars store the recomputed results.
