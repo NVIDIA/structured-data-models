@@ -12,6 +12,7 @@ from sdm import CategoricalTensor, ColumnarTensor, StringTensor, TableTensor
 @pytest.mark.parametrize("fullgraph", [False, True])
 @pytest.mark.parametrize("mixed", [False, True])
 def test_compile_table(fullgraph: bool, mixed: bool) -> None:
+    torch.compiler.reset()
     def transform(table: TableTensor) -> TableTensor:
         return table.replace_blocks(numerical=table.numerical.square())[1::2]
 
@@ -39,6 +40,7 @@ def test_compile_table(fullgraph: bool, mixed: bool) -> None:
 
 @pytest.mark.parametrize("fullgraph", [False, True])
 def test_compile_table_construction(fullgraph: bool) -> None:
+    torch.compiler.reset()
     def transform(x: torch.Tensor) -> TableTensor:
         return TableTensor.from_tensor(x.sin())
 
@@ -50,6 +52,7 @@ def test_compile_table_construction(fullgraph: bool) -> None:
 
 @pytest.mark.parametrize("fullgraph", [False, True])
 def test_compile_table_view_alias(fullgraph: bool) -> None:
+    torch.compiler.reset()
     def transform(table: TableTensor) -> TableTensor:
         return table[1::2]
 
