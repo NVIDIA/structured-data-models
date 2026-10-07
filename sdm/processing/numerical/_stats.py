@@ -51,12 +51,16 @@ def _fitting_nanmean_fake(inp: Tensor) -> Tensor:
 
 def _nansum_rows(inp: Tensor) -> Tensor:
     # Native reductions keep fitted power-search comparisons consistent.
-    if torch.compiler.is_compiling() and not torch.is_grad_enabled():
+    if torch.compiler.is_compiling() and not (
+        torch.is_grad_enabled() and inp.requires_grad
+    ):
         return _fitting_nansum(inp)
     return inp.nansum(dim=-2, keepdim=True)
 
 
 def _nanmean_rows(inp: Tensor) -> Tensor:
-    if torch.compiler.is_compiling() and not torch.is_grad_enabled():
+    if torch.compiler.is_compiling() and not (
+        torch.is_grad_enabled() and inp.requires_grad
+    ):
         return _fitting_nanmean(inp)
     return inp.nanmean(dim=-2, keepdim=True)

@@ -424,3 +424,30 @@ def test_power_transform_inverse_beyond_the_fitted_bound_falls_back_to_max(
 
     assert restored.isfinite().all()
     assert (restored[1:] == inp.max()).all()
+
+
+@pytest.mark.parametrize("fullgraph", [False, True])
+def test_compiled_fitting_preserves_parameters(fullgraph: bool) -> None:
+    numerical = torch.arange(44, dtype=torch.float32).reshape(11, 4)
+    numerical[:, 0] = (numerical[:, 0] - 5).sin() * 4
+    numerical[:, 1] = 3
+    numerical[:, 2] = torch.nan
+    numerical[0, 3] = torch.nan
+    table = TableTensor.from_tensor(numerical)
+    reference = PowerTransform()
+    candidate = PowerTransform()
+    # Test fitting arithmetic independently of table-schema tracing support.
+    compiled = torch.compile(candidate._fit_transform, fullgraph=fullgraph)
+    with torch.inference_mode():
+        expected = reference.fit_transform(table)
+        actual = compiled(table)
+    for name in ("lambdas", "mean", "scale"):
+        torch.testing.assert_close(
+            getattr(candidate, name),
+            getattr(reference, name),
+            rtol=0,
+            atol=0,
+        )
+    torch.testing.assert_close(
+        actual.numerical, expected.numerical, equal_nan=True
+    )
