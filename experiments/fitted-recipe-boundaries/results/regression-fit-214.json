@@ -1,0 +1,25 @@
+{
+  "torch": "2.14.0",
+  "model": "tabular",
+  "entry": "fit",
+  "fullgraph": false,
+  "backend": "inductor",
+  "device": "cpu",
+  "task": "regression",
+  "estimators": 1,
+  "query_input": "view",
+  "eager_succeeded": true,
+  "compile_stats": {
+    "calls_captured": 3430,
+    "unique_graphs": 36
+  },
+  "graph_breaks": {
+    "Failed to convert args/kwargs to proxy": 1,
+    "Uninitialized nn.Module": 1,
+    "Tensor.tolist() with non-integer tensor": 7,
+    "torch.* op returned non-Tensor": 2
+  },
+  "status": "pass",
+  "max_abs_error": 0.000274658203125,
+  "parity": true
+}

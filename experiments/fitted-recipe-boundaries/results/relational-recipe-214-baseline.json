@@ -1,0 +1,118 @@
+{
+  "torch": "2.14.0",
+  "fullgraph": false,
+  "members": 2,
+  "fallback_random": false,
+  "cache_limit": 64,
+  "source": "default Kumorelational features.fit_transform_ensemble",
+  "status": "PARITY_FAIL",
+  "parity_errors": [
+    "Tensor-likes are not close!\n\nMismatched elements: 3636 / 4800 (75.8%)\nGreatest absolute difference: 0.002248525619506836 at index (152, 0) (up to 1e-05 allowed)\nGreatest relative difference: 1.2710306644439697 at index (148, 12) (up to 1.3e-06 allowed)"
+  ],
+  "member_max_abs": [
+    2.0265579223632812e-06,
+    0.002248525619506836
+  ],
+  "max_abs": 0.002248525619506836,
+  "buffer_mismatches": [
+    {
+      "name": "2.processors.numerical.4.options.1.processor.lambdas",
+      "shape": [
+        1,
+        1,
+        30
+      ],
+      "expected_shape": [
+        1,
+        1,
+        30
+      ],
+      "max_abs": 0.001266777515411377
+    },
+    {
+      "name": "2.processors.numerical.4.options.1.processor.mean",
+      "shape": [
+        1,
+        1,
+        30
+      ],
+      "expected_shape": [
+        1,
+        1,
+        30
+      ],
+      "max_abs": 0.0003171563148498535
+    },
+    {
+      "name": "2.processors.numerical.4.options.1.processor.scale",
+      "shape": [
+        1,
+        1,
+        30
+      ],
+      "expected_shape": [
+        1,
+        1,
+        30
+      ],
+      "max_abs": 5.447864532470703e-05
+    }
+  ],
+  "exact_buffer_mismatches": [
+    {
+      "name": "2.processors.numerical.0.processor._mean",
+      "max_abs": 6.103515625e-05
+    },
+    {
+      "name": "2.processors.numerical.2.processor.mean",
+      "max_abs": 6.103515625e-05
+    },
+    {
+      "name": "2.processors.numerical.2.processor.scale",
+      "max_abs": 3.814697265625e-06
+    },
+    {
+      "name": "2.processors.numerical.4.options.1.processor.lambdas",
+      "max_abs": 0.001266777515411377
+    },
+    {
+      "name": "2.processors.numerical.4.options.1.processor.max",
+      "max_abs": 1.9073486328125e-06
+    },
+    {
+      "name": "2.processors.numerical.4.options.1.processor.mean",
+      "max_abs": 0.0003171563148498535
+    },
+    {
+      "name": "2.processors.numerical.4.options.1.processor.scale",
+      "max_abs": 5.447864532470703e-05
+    },
+    {
+      "name": "2.processors.numerical.5.processor.lower_bound",
+      "max_abs": 2.384185791015625e-06
+    },
+    {
+      "name": "2.processors.numerical.5.processor.upper_bound",
+      "max_abs": 2.1457672119140625e-06
+    }
+  ],
+  "data": "breast_cancer160",
+  "shapes": [
+    [
+      160,
+      30
+    ],
+    [
+      160,
+      30
+    ]
+  ],
+  "stats": {
+    "calls_captured": 2198,
+    "unique_graphs": 23
+  },
+  "graph_breaks": {
+    "Tensor.tolist() with non-integer tensor\n  Explanation: Dynamo currently does not support tracing `tolist()` on non-integer tensors.\n  Hint: Ensure the input tensor to `tolist()` is an integer type (e.g., int8, int16, int32, int64).\n\n  Developer debug context: call_method TensorVariable() to_list\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0109.html": 3,
+    "Data dependent operator\n  Explanation: Operator `aten._local_scalar_dense.default` has a non-Tensor output whose value is dependent on the data of Tensor inputs.\n  Hint: Enable tracing of data-dependent output operators with `torch._dynamo.config.capture_scalar_outputs = True`\n\n  Developer debug context: aten._local_scalar_dense.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0033.html": 1
+  }
+}

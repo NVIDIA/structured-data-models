@@ -1,0 +1,47 @@
+{
+  "torch": "2.14.0",
+  "fullgraph": false,
+  "members": 2,
+  "fallback_random": false,
+  "native_sum": false,
+  "missing": true,
+  "cache_limit": 64,
+  "source": "default Kumorelational features.fit_transform_ensemble",
+  "status": "PASS",
+  "parity_errors": [],
+  "member_max_abs": [
+    9.5367431640625e-07,
+    0.0
+  ],
+  "max_abs": 9.5367431640625e-07,
+  "buffer_mismatches": [],
+  "exact_buffer_mismatches": [
+    {
+      "name": "2.processors.numerical.5.processor.lower_bound",
+      "max_abs": 9.5367431640625e-07
+    },
+    {
+      "name": "2.processors.numerical.5.processor.upper_bound",
+      "max_abs": 9.5367431640625e-07
+    }
+  ],
+  "data": "breast_cancer160",
+  "shapes": [
+    [
+      160,
+      30
+    ],
+    [
+      160,
+      30
+    ]
+  ],
+  "stats": {
+    "calls_captured": 2245,
+    "unique_graphs": 23
+  },
+  "graph_breaks": {
+    "Tensor.tolist() with non-integer tensor\n  Explanation: Dynamo currently does not support tracing `tolist()` on non-integer tensors.\n  Hint: Ensure the input tensor to `tolist()` is an integer type (e.g., int8, int16, int32, int64).\n\n  Developer debug context: call_method TensorVariable() to_list\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0109.html": 3,
+    "Data dependent operator\n  Explanation: Operator `aten._local_scalar_dense.default` has a non-Tensor output whose value is dependent on the data of Tensor inputs.\n  Hint: Enable tracing of data-dependent output operators with `torch._dynamo.config.capture_scalar_outputs = True`\n\n  Developer debug context: aten._local_scalar_dense.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0033.html": 1
+  }
+}

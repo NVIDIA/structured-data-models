@@ -1,0 +1,16 @@
+{
+  "torch": "2.7.1",
+  "model": "tabular",
+  "entry": "fit",
+  "fullgraph": false,
+  "backend": "inductor",
+  "device": "cpu",
+  "task": "classification",
+  "estimators": 1,
+  "query_input": "view",
+  "eager_succeeded": true,
+  "status": "fail",
+  "error_type": "AttributeError",
+  "error": "'TaskDispatch' object has no attribute '_modules'",
+  "traceback": "Traceback (most recent call last):\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/experiments/fitted-recipe-boundaries/public_probe.py\", line 134, in <module>\n    fit(model, torch.compile(model.fit, **kwargs))\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/experiments/fitted-recipe-boundaries/public_probe.py\", line 84, in fit\n    return (model.fit if function is None else function)(cx, cy, cr, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-main-audit-20261001/evidence/runtime27/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 655, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/models/base.py\", line 253, in fit\n    self.default_recipe() if recipe is None else copy.deepcopy(recipe)\n    ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/models/kumo/tabular/model.py\", line 142, in default_recipe\n    return default_recipe()\n           ^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/models/kumo/tabular/recipe.py\", line 35, in default_recipe\n    numerical_processor(),\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/models/kumo/tabular/recipe.py\", line 42, in torch_dynamo_resume_in_default_recipe_at_35\n    numerical_processor(),\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/models/kumo/tabular/recipe.py\", line 33, in torch_dynamo_resume_in_default_recipe_at_42\n    sp.StypeDispatch(\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/models/kumo/tabular/recipe.py\", line 50, in torch_dynamo_resume_in_default_recipe_at_33\n    sp.StypeDispatch(\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/models/kumo/tabular/recipe.py\", line 50, in torch_dynamo_resume_in_default_recipe_at_50\n    sp.StypeDispatch(\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/recipe.py\", line 127, in output\n    if _contains_processor(self.output, sp.TableDispatch):\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/recipe.py\", line 27, in _contains_processor\n    pending.extend(m for m in child._modules.values() if m is not None)\n                              ^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-main-audit-20261001/evidence/runtime27/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1940, in __getattr__\n    raise AttributeError(\nAttributeError: 'TaskDispatch' object has no attribute '_modules'\n"
+}

@@ -1,0 +1,43 @@
+{
+  "torch": "2.14.0",
+  "model": "tabular",
+  "entry": "fit",
+  "fullgraph": false,
+  "backend": "inductor",
+  "device": "cpu",
+  "task": "classification",
+  "estimators": 4,
+  "query_input": "view",
+  "cache_limit": 64,
+  "prepared_recipe": false,
+  "atomic_recipe": false,
+  "eager_succeeded": true,
+  "fit_generator_state_exact": true,
+  "fitted_buffer_differences": [
+    {
+      "role": "features",
+      "name": "0.processors.numerical.5.processor.lower_bound",
+      "max_abs": 8.881784197001252e-16
+    },
+    {
+      "role": "features",
+      "name": "0.processors.numerical.5.processor.upper_bound",
+      "max_abs": 8.881784197001252e-16
+    }
+  ],
+  "compile_stats": {
+    "calls_captured": 10086,
+    "unique_graphs": 51
+  },
+  "graph_breaks": {
+    "Dynamic shape operator": 6,
+    "Uninitialized nn.Module": 1,
+    "Failed to convert args/kwargs to proxy": 1,
+    "Unexpected type in sourceless builder": 2,
+    "Tensor.tolist() with non-integer tensor": 7,
+    "torch.* op returned non-Tensor": 5
+  },
+  "status": "pass",
+  "max_abs_error": 5.364418029785156e-07,
+  "parity": true
+}
