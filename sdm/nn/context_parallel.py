@@ -147,7 +147,9 @@ def partial_attention(
             out_shape[:-1],
             -torch.inf,
             device=query.device,
-            dtype=torch.float32,
+            dtype=torch.float64
+            if query.dtype == torch.float64
+            else torch.float32,
         )
     q = (
         query.expand(*batch, *query.shape[-3:])
