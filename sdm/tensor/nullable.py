@@ -460,6 +460,11 @@ class NullableTensor(Tensor):
         return out
 
 
+@NullableTensor.implements(aten.sym_size.int)
+def _sym_size(inp: NullableTensor, dim: int) -> int:
+    return inp._data.size(dim)
+
+
 @NullableTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
 def _alias(inp: NullableTensor) -> NullableTensor:

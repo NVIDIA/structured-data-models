@@ -700,6 +700,11 @@ class VarLenTensor(Tensor):
         return out
 
 
+@VarLenTensor.implements(aten.sym_size.int)
+def _sym_size(inp: VarLenTensor, dim: int) -> int:
+    return inp._layout.size(dim)
+
+
 @VarLenTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
 def _alias(inp: VarLenTensor) -> VarLenTensor:
