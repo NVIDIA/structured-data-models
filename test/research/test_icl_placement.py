@@ -99,7 +99,12 @@ def test_hierarchical_relational_parity(mode, gpu):
 
 
 @pytest.mark.parametrize("mode", ["stage", "layers"])
-def test_full_recipe_resident_executor(mode):
+@pytest.mark.parametrize("input_device", ["cpu", "cuda:0"])
+@pytest.mark.parametrize("gpu", [False, True])
+def test_full_recipe_resident_executor(mode, input_device, gpu):
+    if (gpu or input_device != "cpu") and torch.cuda.device_count() < 2:
+        pytest.skip("requires two CUDA devices")
+    devices = ["cuda:0", "cuda:1"] if gpu else ["cpu", "cpu"]
     model = KumoTabular(task="classification", pretrained=False, device="meta")
     model.models["classification"] = _KumoTabular(
         num_classes=3,
@@ -114,37 +119,37 @@ def test_full_recipe_resident_executor(mode):
         num_icl_layers=2,
         num_icl_heads=2,
     )
-    model.eval()
+    model.eval().to(devices[0])
     placed = copy.deepcopy(model)
-    install_icl_placement(
-        placed.models["classification"], ["cpu", "cpu"], mode
-    )
+    install_icl_placement(placed.models["classification"], devices, mode)
     a, b = EnsembleParallel([model]), EnsembleParallel([placed])
     x = TableTensor.from_columns(
         {"a": torch.randn(32), "b": torch.randn(32)},
         stypes={"a": "numerical", "b": "numerical"},
-    )
+    ).to(input_device)
     y = TableTensor.from_columns(
         {"target": torch.arange(32) % 3},
         stypes={"target": "categorical"},
-    )
+    ).to(input_device)
     a.fit(
         x[:24],
         y[:24],
         num_estimators=2,
-        generator=torch.Generator().manual_seed(75),
+        generator=torch.Generator(device=input_device).manual_seed(75),
         member_seed=90,
     )
     b.fit(
         x[:24],
         y[:24],
         num_estimators=2,
-        generator=torch.Generator().manual_seed(75),
+        generator=torch.Generator(device=input_device).manual_seed(75),
         member_seed=90,
     )
     torch.testing.assert_close(
         a.predict(x[24:]).numerical, b.predict(x[24:]).numerical
     )
+    if gpu:
+        assert all("cuda:1" in cache_bytes_by_device(c) for c in b._caches)
     a.close()
     b.close()
 
