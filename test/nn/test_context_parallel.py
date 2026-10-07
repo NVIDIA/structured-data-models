@@ -3,13 +3,15 @@
 
 """Real process-group parity, including nonzero trained-like residuals."""
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Literal
 
 import pytest
 import torch
 import torch.distributed as dist
-import torch.multiprocessing as mp
 
 from sdm.cache import Cache
 from sdm.models.kumo.tabular.icl import ICLBlock as KumoICL
@@ -135,12 +137,7 @@ def _worker(
 
 @pytest.mark.parametrize("world", [2, 4])
 def test_distributed_context_attention(tmp_path: Path, world: int) -> None:
-    mp.spawn(
-        _worker,
-        args=(world, f"file://{tmp_path / 'rendezvous'}"),
-        nprocs=world,
-        join=True,
-    )
+    _run_workers(tmp_path, world, "cpu", torch.float32, "efficient")
 
 
 def test_requires_inference() -> None:
@@ -165,15 +162,43 @@ def test_cuda_distributed_context_attention(
 ) -> None:
     if torch.cuda.device_count() < world:
         pytest.skip(f"Requires {world} CUDA devices")
-    mp.spawn(
-        _worker,
-        args=(
-            world,
+    _run_workers(tmp_path, world, "cuda", dtype, kernel)
+
+
+def _run_workers(
+    tmp_path: Path, world: int, device: str, dtype: torch.dtype, kernel: str
+) -> None:
+    # Pytest importlib names can collide with Linux's stdlib `test` package.
+    # Launch this file directly instead of pickling a pytest-module function.
+    root = str(Path(__file__).resolve().parents[2])
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "torch.distributed.run",
+            "--standalone",
+            "--local-addr=127.0.0.1",
+            f"--nproc-per-node={world}",
+            __file__,
             f"file://{tmp_path / 'rendezvous'}",
-            "cuda",
-            dtype,
+            device,
+            str(dtype).removeprefix("torch."),
             kernel,
-        ),
-        nprocs=world,
-        join=True,
+        ],
+        env={
+            **os.environ,
+            "PYTHONPATH": root + os.pathsep + os.environ.get("PYTHONPATH", ""),
+        },
+        check=True,
+    )
+
+
+if __name__ == "__main__":
+    _worker(
+        int(os.environ["LOCAL_RANK"]),
+        int(os.environ["WORLD_SIZE"]),
+        sys.argv[1],
+        sys.argv[2],
+        getattr(torch, sys.argv[3]),
+        sys.argv[4],
     )
