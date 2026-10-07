@@ -9,10 +9,11 @@ Warm wall time is the median of five measured calls after warmup. Memory is peak
 | Workload | Eager | Internal model compiled | Public `predict` compiled | Eager / compiled peak allocated | Maximum score error |
 |---|---:|---:|---:|---:|---:|
 | Tabular, 256 context rows, 128 queries, 1 estimator, FP32 | 17.28 ms | 10.42 ms | 4.54 ms | 182.59 / 174.14 MiB | 1.38e-6 |
+| Tabular, same 256/128 workload, PyTorch 2.7.1, FP32 | 18.77 ms | 9.07 ms | 204.62 ms (partial capture; slower) | 182.58 / 189.82 MiB (internal) | 1.11e-6 |
 | Relational, real driver-DNF one-hop graph, 8 queries, FP32, final integration | 74.15 ms | Not measured | 39.85 ms | 142.07 / 141.74 MiB | 2.33e-6 |
 | Tabular, 256 context rows, 128 queries, 2 estimators, FP32, **current-stream source fix** | 33.41 ms | 16.60 ms | 12.02 ms | 195.85 / 169.78 MiB | 2.00e-6 |
 
-For Tabular, compiling public prediction improves this workload beyond compiling only the internal network. The first row uses the same dataset, checkpoint, context/query sizes, source, and dtype across the independent internal/public runs. An additional seven-pair alternating eager/compiled control confirms the public speed benefit without creating new graphs. Reserved allocator memory increased (approximately 244 to 292 MiB), despite lower live tensor peaks.
+For Tabular, compiling public prediction improves this workload beyond compiling only the internal network. The first row uses the same dataset, checkpoint, context/query sizes, source, and dtype across the independent internal/public runs. The 2.7 public and internal figures come from independent matched-workload runs; their own eager baselines were 18.40 and 18.77 ms respectively. An additional seven-pair alternating eager/compiled control confirms the public speed benefit without creating new graphs. Reserved allocator memory increased (approximately 244 to 292 MiB), despite lower live tensor peaks.
 
 Both graph-break policies passed the smaller 32-context Tabular FP32 workload. The public fullgraph path was also exercised with query rows 32→128→32, and relational queries 4→1→8→4. These are limited workload validations, not claims that every model configuration or arbitrary table schema compiles.
 
@@ -25,6 +26,7 @@ Both graph-break policies passed the smaller 32-context Tabular FP32 workload. T
 | Same two-cache case, transfers on the current stream | Pass, including source replay `f0a5db1e4` | Eager keeps asynchronous transfers; compiled prediction uses the compute stream to prevent unsafe concurrent buffer reuse. This trades away compiled transfer/compute overlap but still improves this workload over eager and internal-only compilation. |
 | PyTorch 2.14 BF16 public prediction | Compiles after empty-container fix, but **fails score parity** | Maximum error 0.03309 at 128 queries; no speedup claim accepted for this failing case. |
 | PyTorch 2.14 BF16 internal-only compilation | **Fails score parity** | Maximum error 0.01554 at 128 queries, so preprocessing is not the sole cause. Frontend-only `backend="eager"` is bitwise exact on the matched 32-row case; it is a diagnostic, not an Inductor performance result. `emulate_precision_casts=True` reduces error but still fails 17/64 values (max 0.00194186). |
+| PyTorch 2.7.1 internal-only fullgraph prediction | Pass, one graph, no breaks | 18.77→9.07 ms on the 256-context/128-query FP32 workload, but allocated peak increases from 182.58 to 189.82 MiB. |
 | PyTorch 2.7.1 public fullgraph prediction | Fails | Generic generator context around preprocessing remains unsupported; independent stream repro also rejects `record_stream` in strict mode. |
 | PyTorch 2.7.1 public prediction allowing graph breaks | Pass on the tested FP32 workload | Partial capture works, but is slower: 204.62 ms versus 18.40 ms eager, with 36 graphs. Do not recommend this configuration as an optimization. |
 
