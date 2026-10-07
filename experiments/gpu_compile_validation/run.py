@@ -48,7 +48,12 @@ def main() -> None:
     )
     parser.add_argument("--warmups", type=int, default=2)
     parser.add_argument("--repeats", type=int, default=5)
+    parser.add_argument("--alternating-pairs", type=int, default=0)
     args = parser.parse_args()
+    if args.alternating_pairs < 0:
+        parser.error("--alternating-pairs must be non-negative")
+    if args.alternating_pairs and args.entry != "predict":
+        parser.error("--alternating-pairs requires --entry predict")
     device = torch.device(args.device)
     cuda = device.type == "cuda"
     result = {
@@ -267,12 +272,73 @@ def main() -> None:
                             )
                         result["samples"].append(sample)
                         save()
+            if args.alternating_pairs:
+                # Both callables are warm and share the same fitted model.
+                compiled_predict = predict
+                case, query, related = max(
+                    queries, key=lambda item: item[1].size(-2)
+                )
+                expected = references[case]
+                graphs_before = dict(torch._dynamo.utils.counters["stats"])
+                alternating = []
+                for pair in range(args.alternating_pairs):
+                    arms = [
+                        ("eager", model.predict),
+                        ("compiled", compiled_predict),
+                    ]
+                    if pair % 2:
+                        arms.reverse()
+                    for position, (phase, function) in enumerate(arms):
+                        actual, metrics = measure(function, query, related)
+                        close = torch.isclose(
+                            actual, expected, atol=1e-5, rtol=1e-4
+                        )
+                        sample = {
+                            "phase": phase,
+                            "case": case,
+                            "rows": query.size(-2),
+                            "pair": pair,
+                            "position": position,
+                            "kind": "alternating_warm",
+                            "output_dtype": str(actual.dtype),
+                            "max_abs_error": (actual - expected)
+                            .abs()
+                            .max()
+                            .item(),
+                            "parity": bool(close.all()),
+                            "failed_values": int((~close).sum()),
+                            "total_values": actual.numel(),
+                            **metrics,
+                        }
+                        if args.task == "classification":
+                            sample["class_agreement"] = float(
+                                (actual.argmax(-1) == expected.argmax(-1))
+                                .float()
+                                .mean()
+                            )
+                        alternating.append(sample)
+                        result["alternating_samples"] = alternating
+                        save()
+                graphs_after = dict(torch._dynamo.utils.counters["stats"])
+                result["alternating_control"] = {
+                    "case": case,
+                    "rows": query.size(-2),
+                    "pairs": args.alternating_pairs,
+                    "graphs_before": graphs_before,
+                    "graphs_after": graphs_after,
+                    "no_new_graphs": graphs_before.get("unique_graphs", 0)
+                    == graphs_after.get("unique_graphs", 0),
+                    "all_parity": all(row["parity"] for row in alternating),
+                }
             result["graph_breaks"] = dict(
                 torch._dynamo.utils.counters["graph_break"]
             )
             result["status"] = (
                 "pass"
                 if all(v["parity"] for v in result["samples"])
+                and all(
+                    v["parity"] for v in result.get("alternating_samples", [])
+                )
                 else "parity_fail"
             )
     except Exception as error:
