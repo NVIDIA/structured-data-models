@@ -39,6 +39,8 @@ def artifact_role(name: str) -> str | None:
         return "record"
     if re.fullmatch(r"(?:rank|error-rank)\d+\.json", name):
         return "record"
+    if name.endswith("-analysis.json"):
+        return "record"
     if name == "command.txt":
         return "command"
     if name.startswith("predictions") and Path(name).suffix in {".npy", ".pt"}:

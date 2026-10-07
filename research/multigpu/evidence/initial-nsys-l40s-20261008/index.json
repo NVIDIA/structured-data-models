@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-07T15:58:49.506283+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "traces",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles",
+      "artifacts": [
+        {
+          "name": "tabular-nsys-ep4-analysis.json",
+          "role": "record",
+          "bytes": 50015,
+          "sha256": "d9b15ca7efc6ebee4e4aeee5b65961d1c27516c79aed17a3045814bfafb90d39",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles/tabular-nsys-ep4-analysis.json",
+          "archived_path": "traces/tabular-nsys-ep4-analysis.json"
+        },
+        {
+          "name": "tabular-nsys-ep4.sqlite",
+          "role": "profile",
+          "bytes": 37408768,
+          "sha256": "e38f22c274029a0fac8fbb0af29c3ed2d1dc632ce8b17530291c394a6936c296",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles/tabular-nsys-ep4.sqlite"
+        },
+        {
+          "name": "tabular-nsys-native-analysis.json",
+          "role": "record",
+          "bytes": 41254,
+          "sha256": "89e493c3d645544e60bc29305673bc6bfcd86933acb766897bb2a23e7a2f9754",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles/tabular-nsys-native-analysis.json",
+          "archived_path": "traces/tabular-nsys-native-analysis.json"
+        },
+        {
+          "name": "tabular-nsys-native.sqlite",
+          "role": "profile",
+          "bytes": 14966784,
+          "sha256": "4c844934ad008e55940a4db7ae96de1435ae5565295eac34631d46169b4e370f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles/tabular-nsys-native.sqlite"
+        }
+      ]
+    }
+  ]
+}

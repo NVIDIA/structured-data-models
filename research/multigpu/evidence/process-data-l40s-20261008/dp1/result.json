@@ -1,0 +1,119 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/process-tabular-covertype-e4-c1024-q2048-b256-g1-t1",
+    "source_commit": "1686803e4",
+    "task": "classification",
+    "size": "large",
+    "gpus": 1,
+    "context": 1024,
+    "queries": 2048,
+    "batch_size": 256,
+    "estimators": 4,
+    "estimator_batch_size": 1,
+    "seed": 1729,
+    "threads": 1,
+    "warmups": 1,
+    "repeats": 3,
+    "precision": "bfloat16"
+  },
+  "runtime": {
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "git_revision": "1686803e4",
+    "runner_sha256": "d6974021be3a09820bde93c5abba71f419d1b6d8b84c96a09e51c144f2c46f6c"
+  },
+  "mode": "process-data",
+  "input_residency": "prepared_CPU_batches",
+  "timing": "parent_wall_including_input_IPC_H2D_predict_D2H_output_IPC",
+  "batch_times_kind": "worker_service_time_excluding_queue_and_ipc",
+  "query_ids_sha256": "65201799a6662acb7187fbd7cc55d75c578a985e1e3a8668f837ecf9d6cba580",
+  "query_values_sha256": "a7a892a42bf3a6636d895433e667e64979b2e6264500dcdee9d4b4d3d35f84b2",
+  "spawn_load_fit_s": 5.09226486200032,
+  "memory_after_fit": [
+    {
+      "worker": 0,
+      "pid": 20110,
+      "device": "cuda:0",
+      "max_rss_bytes": 2179194880,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 1692401664,
+      "peak_allocated_bytes": 1511702016,
+      "peak_reserved_bytes": 1692401664
+    }
+  ],
+  "warmup_s": 1.2078676330002054,
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 20110,
+      "device": "cuda:0",
+      "max_rss_bytes": 2229796864,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 1887436800,
+      "peak_allocated_bytes": 1378496000,
+      "peak_reserved_bytes": 1887436800
+    }
+  ],
+  "predict_repeats_s": [
+    1.1502413849998447,
+    1.1478686149998794,
+    1.152980610999748
+  ],
+  "rows_per_s": [
+    1780.495839140996,
+    1784.1763188204386,
+    1776.2657762511565
+  ],
+  "batch_times_s": [
+    [
+      0.1427982560003329,
+      0.14219602200000736,
+      0.1421264179998616,
+      0.14303012600021248,
+      0.1413806470000054,
+      0.1414606299999832,
+      0.14271076300019558,
+      0.1418618970001262
+    ],
+    [
+      0.1414243279996299,
+      0.14180404499984434,
+      0.14206437599978017,
+      0.14115691799997876,
+      0.14122724100025152,
+      0.14240307999989454,
+      0.1420661359998121,
+      0.1422679639999842
+    ],
+    [
+      0.14240878100008558,
+      0.14243409199980306,
+      0.14253429500013226,
+      0.14242951100004575,
+      0.14256824699987192,
+      0.1424574930001654,
+      0.14251536500023576,
+      0.14245299200001682
+    ]
+  ],
+  "repeat_max_abs_difference": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "prediction_sha256": "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+  "quality": {
+    "log_loss": 0.5760445594787598,
+    "accuracy": 0.76416015625
+  }
+}

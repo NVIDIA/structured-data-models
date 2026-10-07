@@ -1,0 +1,133 @@
+{
+  "status": "complete",
+  "input_identity": {
+    "x_context_sha256": "acc677ea97c82d18251effe9d3d4ca391ac1475f83be445030529f6689a35ac3",
+    "y_context_sha256": "98c4b96fdc4d768f6c620d4aaaa2130dca392581bddc7de78d3966e22376d117",
+    "x_query_sha256": "a7a892a42bf3a6636d895433e667e64979b2e6264500dcdee9d4b4d3d35f84b2",
+    "context_rows": 16384,
+    "query_rows": 2048,
+    "actual_batch_rows": [
+      256,
+      256,
+      256,
+      256,
+      256,
+      256,
+      256,
+      256
+    ]
+  },
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/cp-covertype-large-c16384-e4-resident-flash-native1",
+    "family": "tabular",
+    "task": "classification",
+    "size": "large",
+    "mode": "native",
+    "context": 16384,
+    "queries": 2048,
+    "batch_size": 256,
+    "estimators": 4,
+    "repeats": 3,
+    "seed": 1729,
+    "precision": "bfloat16",
+    "profile": false,
+    "cache_residency": "resident",
+    "kernel": "flash",
+    "source_commit": "1686803e4"
+  },
+  "world": 1,
+  "gpu": "NVIDIA L4",
+  "torch": "2.9.1+cu130",
+  "revision": "1686803e4",
+  "ranks": [
+    {
+      "rank": 0,
+      "load_seconds": 0.9309244370001579,
+      "fit_seconds": 9.358833903000004,
+      "fit_peak_bytes": 2424103424,
+      "residency_seconds": 0.08902261299999736,
+      "fit_and_residency_peak_bytes": 2424103424,
+      "cache_bytes": 1132463344,
+      "input_allocated_bytes": 4245504,
+      "cache_storage_bytes_by_device": {
+        "cuda:0": 1132463344
+      },
+      "fit_peak_reserved_bytes": 2977955840,
+      "icl_cache_bytes": 805306368,
+      "prediction_peak_bytes": 2350941184,
+      "prediction_peak_reserved_bytes": 2977955840,
+      "current_allocated_bytes": 2009006592,
+      "current_reserved_bytes": 2977955840,
+      "repeat_prediction_sha256": [
+        "7302870c1f5ab79cb8b6476a925e9aacca88ee66da8f2a145c764788de952a89",
+        "7302870c1f5ab79cb8b6476a925e9aacca88ee66da8f2a145c764788de952a89",
+        "7302870c1f5ab79cb8b6476a925e9aacca88ee66da8f2a145c764788de952a89"
+      ],
+      "pass_seconds": [
+        1.0774068349999197,
+        1.0851773069998671,
+        1.0855869879999318
+      ],
+      "batch_seconds": [
+        [
+          0.13618888100018012,
+          0.13480985000001056,
+          0.13461895000000368,
+          0.13472313499983102,
+          0.13413814599994112,
+          0.13440409899999395,
+          0.13373244400008844,
+          0.13478531900000235
+        ],
+        [
+          0.13534807799987902,
+          0.13510973500001455,
+          0.1360194330000013,
+          0.13581930300006206,
+          0.13583990299980542,
+          0.13547757500009538,
+          0.13579425100010667,
+          0.13574160799998936
+        ],
+        [
+          0.13588449500002753,
+          0.13563437299990255,
+          0.1355831200000921,
+          0.13530379600001652,
+          0.13619567099999585,
+          0.13569560600012665,
+          0.1357181569999284,
+          0.13554403800003456
+        ]
+      ],
+      "prediction_sha256": "7302870c1f5ab79cb8b6476a925e9aacca88ee66da8f2a145c764788de952a89"
+    }
+  ],
+  "slowest_rank_pass_seconds": [
+    1.0774068349999197,
+    1.0851773069998671,
+    1.0855869879999318
+  ],
+  "unique_rows_per_second": [
+    1900.8604117498035,
+    1887.2491958590604,
+    1886.536981963281
+  ],
+  "median_unique_rows_per_second": 1887.2491958590604,
+  "quality": {
+    "log_loss": 0.22567126154899597,
+    "accuracy": 0.91455078125,
+    "auroc_ovr": 0.9925490711478547
+  },
+  "columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "query_ids_sha256": "65201799a6662acb7187fbd7cc55d75c578a985e1e3a8668f837ecf9d6cba580"
+}

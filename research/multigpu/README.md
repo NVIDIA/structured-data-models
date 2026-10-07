@@ -4,15 +4,15 @@ Status: investigation in progress, 2026-10-08. Implementation baseline: `842c408
 
 The goal is practical multi-GPU inference for both `KumoTabular` and `KumoRelational`, including throughput, latency, capacity, prediction quality, and a lightweight integration into SDM. The implementation recommendations are in [integration.md](integration.md).
 
-Strongest completed throughput finding: batching estimators within each GPU makes KumoTabular E8 scale 1.836× from one to two L40S GPUs with byte-identical predictions. Initial unbatched small workloads scale poorly; four-GPU cases still need improvement. Sequential layer placement nearly halves peak memory per GPU at a small throughput cost. Cached context parallelism saves KV storage, but its current BF16 relational regression results fail the declared full-quantile numerical gate. The tables retain these successes and failures separately.
+Two throughput findings are now established: process-based query DP scales 3.735× across four L40S GPUs, and locally batched KumoTabular E8 scales 1.836× across two GPUs; both preserve prediction bytes in those comparisons. Initial thread-based small workloads scale poorly, and batched EP4 still needs improvement. Sequential layer placement nearly halves peak memory per GPU at a small throughput cost. Cached context parallelism saves KV storage, but its current BF16 relational regression results fail the declared full-quantile numerical gate. The tables retain these successes and failures separately.
 
 ## Approach matrix
 
 | Approach | Work placement | Expected benefit | Main limitation / correctness requirement | Current owner and evidence |
 |---|---|---|---|---|
-| Query data parallelism (DP) | Complete, fixed query batches across persistent replicas | High aggregate throughput; no attention collectives | Full model and fitted context replicated; preserve batch boundaries and complete relational neighborhoods | Threaded DP measured on both native relational tasks below; process and hybrid follow-ups pending |
+| Query data parallelism (DP) | Complete, fixed query batches across persistent replicas | High aggregate throughput; no attention collectives | Full model and fitted context replicated; preserve batch boundaries and complete relational neighborhoods | Process tabular DP achieves 3.735× at four GPUs; threaded relational results mixed; hybrid follow-ups pending |
 | Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | Tested: initial unbatched scaling poor; batched E8 gives 1.836× on two GPUs with exact predictions; four-GPU numerical gate fails |
-| Cached context parallelism (CP) | ICL KV rows across ranks; queries replicated | Larger retained context and faster long-context attention | Full fit still replicated; stable softmax reduction, global length scaling, uneven shards; collectives every layer | Real 2/4-rank NCCL tests passed; small-context pretrained run below is slower; resident/long-context follow-ups pending |
+| Cached context parallelism (CP) | ICL KV rows across ranks; queries replicated | Larger retained context; possible attention acceleration | Full context compute still replicated at fit; stable softmax reduction, global length scaling, uneven shards; collectives every layer | Real NCCL tests passed; 1k and resident 16k tabular runs slower; BF16 F1 all-quantile gate fails |
 | Layer/stage placement | Row encoder, GNN, and/or ICL layers on different devices | Parameter/cache capacity; potential pipeline overlap across query batches | Single-query latency can worsen; cache ownership and transferred activations must follow stages | Source `55dba6bb5`: 36 CPU/CUDA tests passed on L4; real model memory decreases with small throughput cost; sequential placement, not overlapped pipelining |
 | Table embedding parallelism | Independent related-table encoders across devices, then gather row embeddings | Parallel relational table encoding before GNN | Tables may be imbalanced; shared preprocessing/target propagation and per-table RNG must remain fixed | Design inspected; no measurement |
 | Tensor parallelism (TP) | Projection/MLP widths or attention heads across ranks | Parameter and compute sharding for a single member | Many collectives, packed projections/custom kernels, small widths and GQA limit useful partitions | Design inspected; implementation not yet established |
@@ -109,6 +109,32 @@ The two-GPU result is 91.8% scaling efficiency relative to resident EP1. Its 2.2
 
 The four-GPU result is slower than two GPUs and differs in one of 57,344 probability entries beyond the predeclared BF16 tolerance; maximum difference is 0.032253, with six changed labels. Accuracy is 0.841919 and log loss 0.413924, with a paired log-loss change interval spanning zero. Similar aggregate quality does not turn a failed numerical gate into a pass. Local estimator groups shrink from eight to four to two across placements; a one-GPU batch-two control is queued to distinguish batching arithmetic from placement effects. Keep the original failure visible.
 
+### Process query DP on L40S
+
+One persistent process per GPU changes the result for the original small Covertype workload (large model, E4, context 1,024, queries 2,048, batch 256). Each worker uses one CPU thread and the native unbatched estimator path. The timer is parent wall time including input IPC, transfers, inference, and CPU prediction return; final CPU concatenation/scoring are excluded consistently.
+
+| Processes / GPUs | Median rows/s | Speedup vs DP1 | Scaling efficiency | Spawn + load + fit | Peak prediction allocation per GPU |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 1,780.50 | 1.000× | 100% | 5.092 s | 1.284 GiB |
+| 2 | 3,418.27 | 1.920× | 96.0% | 5.231 s | 1.284 GiB |
+| 4 | 6,650.11 | **3.735×** | **93.4%** | 5.521 s | 1.284 GiB |
+
+All predictions are byte-identical to native, and the independent audit verified full input/row identities. Model/cache storage and roughly 2.07 GiB of host RSS per worker are replicated. The four-GPU throughput is 1.66× the best measured one-GPU estimator-batched baseline (4,007 rows/s), not 3.735× that stronger baseline. Combining process DP with local estimator batching is a separate follow-up. The contrast with weak threaded scheduling supports process isolation as practical, but CPU thread-count differences and profiler coverage prevent attributing the entire effect to the Python GIL alone.
+
+### What the initial Nsight trace explains
+
+The explicit `prediction_pass` ranges show many short kernels and little overlap in unbatched EP4. Unlike the main-thread PyTorch trace, Nsight captured all worker GPUs. Instrumented durations are diagnostic and are not clean benchmark throughput.
+
+| Trace finding | Native unbatched 1 GPU | Unbatched EP4 |
+|---|---:|---:|
+| Kernel launches | 40,664 | 48,552 |
+| Per-device compute-kernel active fraction | 12.26% | 3.82–4.09% |
+| At least two GPUs computing concurrently | — | 1.085% of inference range |
+| All four GPUs computing concurrently | — | 0.00148% |
+| H2D bytes in range | 2.869 GB | 1.377 MB |
+
+Residency removes almost all cache H2D traffic, but does not fix short-kernel launch scheduling. Of 7,888 additional EP kernels, 7,840 are float-to-BF16 conversions and 48 integer additions; kernel-name accounting does not support calling them cache-view packing. Worker autocast-context lifetime is a specific hypothesis being tested. No-compute intervals can still contain copy-engine work, and these traces do not measure GIL waiting. See [ensemble-profile.md](ensemble-profile.md) for interval-union methodology, API timings, trace limitations, and reproduction.
+
 ### Native relational EP and DP on L40S
 
 Both tasks use 1,024 TRAIN observations, E4, BF16 autocast, and fixed native `[16,16]` temporal two-hop graphs. HM queries contain 2,000 rows in batches of 250; F1 uses all 499 validation rows in batches of 125/125/125/124. Throughput includes prepared CPU graph inputs through CPU-complete predictions; sampling is separate. Detailed fit, memory, and profiling findings are in [relational_results.md](relational_results.md).
@@ -140,6 +166,17 @@ This initial pretrained comparison uses **KumoTabular small**, Covertype, E4, co
 Fit peak remains 327.63 MiB per GPU in every arm: this implementation shards retained KV, not fit computation. Two/four GPUs are approximately 14.1%/16.4% slower than native on this short-context case. There are four/five changed predicted labels out of 2,048 for CP2/CP4; mathematical attention equivalence does not imply identical BF16 predictions. Accuracy changes are reported explicitly, not hidden behind a tolerance.
 
 A FlashAttention LSE variant now preserves native GQA head counts instead of repeating KV heads. Its four-layer random-weight probe at context 1,024 measured native 3.117 ms, Flash LSE1 3.271 ms, and CP4 4.568 ms; the efficient backend's corresponding times were 3.021, 3.296, and 4.681 ms. This is a microbenchmark, not pretrained model quality. Larger contexts and resident-cache full-model comparisons are pending before broader CP recommendations.
+
+The resident-cache follow-up increases context to **16,384** and uses **KumoTabular large with two KV heads**, retaining E4, 2,048 queries, batch 256, and L4 hardware:
+
+| Arm | GPUs | Rows/s | Resident cache per rank | ICL portion per rank | Peak prediction allocation per GPU |
+|---|---:|---:|---:|---:|---:|
+| Native | 1 | 1,887.25 | 1,080 MiB | 768 MiB | 2.189 GiB |
+| Flash LSE1 | 1 | 1,824.62 | 1,080 MiB | 768 MiB | 2.189 GiB |
+| CP2 | 2 | 1,525.92 | 696 MiB | 384 MiB | 1.816 GiB |
+| CP4 | 4 | 1,492.31 | 504 MiB | 192 MiB | 1.628 GiB |
+
+Thus CP also fails to accelerate this longer, resident GQA workload on PCIe. Native/LSE1 predictions are identical; CP2/CP4 maximum probability differences are 0.009093/0.008519, with accuracy 0.914551 in all arms. Independent checks matched actual input hashes, row IDs, and recomputed metrics. Fit peaks are about 2.258 GiB. In general, sharding saved KV after each layer can lower accumulated fit-cache memory; it still replicates full context computation and does not shard the large row/GNN activations. Do not generalize the unchanged fit peak in these cases into a claim that CP can never reduce any fit-memory component.
 
 Native KumoRelational regression on F1 also tested the Flash LSE path, with E4, context 1,024, all 499 validation rows, and fixed two-hop graphs:
 
@@ -176,6 +213,9 @@ Additional checked snapshots retain the new measurements:
 - [Initial placement L4 evidence](evidence/initial-placement-l4-20261008/index.json): four archived records, 20 external artifacts verified.
 - [Batched ensemble L40S evidence](evidence/batched-ensemble-l40s-20261008/index.json): eight archived result/audit records, 24 external artifacts verified; includes the passing EP2 and failing EP4 comparisons.
 - [Context F1 L4 evidence](evidence/context-f1-l4-20261008/index.json): 16 archived result/rank/audit records, 32 external artifacts verified; preserves full-quantile failures and paired quality analysis.
+- [Process DP L40S evidence](evidence/process-data-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified.
+- [Resident 16k context L4 evidence](evidence/context-large16k-l4-20261008/index.json): 12 archived records, 28 external artifacts verified.
+- [Initial Nsight evidence](evidence/initial-nsys-l40s-20261008/index.json): two archived analysis records, four external analysis/SQLite artifacts verified.
 
 Collect each later completed group into a fresh directory; never overwrite an earlier collection. The collector preserves failed-run records too, and does not reconstruct a command that was never recorded. Source revisions, runner hashes, and exact parameters are preserved from raw result JSON. If the runner emits `command.txt`, that file is archived verbatim.
 
@@ -262,7 +302,7 @@ git diff origin/prototype/kumotabular-row-partition^ origin/prototype/kumotabula
 |---|---|---|---|
 | Treat context-subset ensemble as exact CP | Rejected by code inspection | Row-partition branch gives each estimator a different subset and fitted transform | Measure its quality/performance separately if pursued |
 | Claim EP speedup against public offloaded baseline alone | Insufficient comparison | `sdm/models/base.py` CUDA multi-estimator fit offload and predict prefetch | Add EP1 with matching residency and estimator batching |
-| Assume cached CP solves fit OOM | Rejected by code inspection | Aki branch computes full fit then shards cached ICL KV | Measure fit peak separately; investigate full-fit sharding |
+| Assume cached CP distributes fit computation or guarantees fit capacity | Rejected by code inspection | Each rank computes the full context, then shards each layer's saved KV | Accumulated cache memory can shrink, but full-row activation/compute remains; measure fit peak separately |
 | Slice relational neighbors by query row indices | Invalid graph transformation | Related-table row spaces differ and shared neighbors cross task rows | Freeze complete sampled graph per batch |
 | Suspected singular relationship metadata keys | Valid supported alias; no defect | Quality reviewer inspected `sdm/relational/data.py` and `task.py` | No change needed |
 | Initial EP CUDA stream tests | Failed: unavailable `TableTensor._tensors()` | Initial host test log: two failed, eight passed | Fixed by `c4ddd7f15`; both CUDA tests passed on `6c3f1e22e` |
