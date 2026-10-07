@@ -1,0 +1,64 @@
+{
+  "config": {
+    "model": "tabular",
+    "task": "classification",
+    "entry": "predict",
+    "data": "/home/ubuntu/validation/data/classification.npz",
+    "checkpoint": "/home/ubuntu/validation/data/tabular-classifier.pt",
+    "output": "/home/ubuntu/validation/results/offload2-single-stream-control.json",
+    "source_commit": "c75ba3af6+18a4d151a",
+    "device": "cuda",
+    "autocast": "off",
+    "backend": "inductor",
+    "save_predictions": true,
+    "fullgraph": true,
+    "single_stream": true,
+    "capture_dynamic_outputs": false,
+    "recompile_limit": null,
+    "estimators": 2,
+    "context_rows": 256,
+    "query_rows": [
+      128
+    ],
+    "arm_index": 0,
+    "query_indices": [
+      1,
+      0,
+      2,
+      1
+    ],
+    "warmups": 2,
+    "repeats": 5
+  },
+  "status": "pass",
+  "torch": "2.14.0+cu130",
+  "gpu": "NVIDIA L4",
+  "weight_dtype": "float32",
+  "autocast_dtype": null,
+  "cache_num_batches": 2,
+  "cache_devices": {
+    "cpu": 70
+  },
+  "plain_cpu_cache_tensors": 70,
+  "pinned_plain_cpu_cache_tensors": 70,
+  "graph_breaks": {},
+  "files": {
+    "offload2-single-stream-control.json": "5745cb00938004eb9e785b7751d0ea43b2ac6698e4c72cf09d20451052012a41",
+    "offload2-single-stream-control.predictions.pt": "22701e4e5038868576d4ec56c92cb787d18d91c3530d2c3f1b6dba38e753d2ca",
+    "offload2-generated-code.tar.gz": "acadf0c9024fe0519c001a65e0112d5cd879a478e0716319c6111acdf1a69f34",
+    "tabular-context256-estimators2-predict-fp32-full-events18.json": "658bc11788c942af426fff4ab34ae1580f32de85147a7c3a60dcacd5ccb370bd"
+  },
+  "generated_wrapper": "t5/ct5zahxwvwhvus3gmne73wcnndywflt4bmupqbs3v227vb25cp53.py",
+  "example_lines": {
+    "record_stream": 8895,
+    "reuse_copy": 8972
+  },
+  "independent_saved_prediction_check": {
+    "eager_calls": 8,
+    "compiled_calls": 8,
+    "within_phase_max_difference": 0.0,
+    "compiled_vs_first_eager_max_difference": 1.996755599975586e-06,
+    "rtol": 0.0001,
+    "atol": 1e-05
+  }
+}
