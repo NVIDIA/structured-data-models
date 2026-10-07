@@ -1548,6 +1548,18 @@ def _flatten(
     )
 
 
+@TableTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: TableTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
+    )
+
+
 @TableTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: TableTensor) -> TableTensor:
