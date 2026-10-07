@@ -8,6 +8,8 @@ from typing import Any, Self, cast
 import torch
 from torch import Tensor
 
+from sdm.tensor.var_len import VarLenTensor
+
 
 class DeviceMixin(abc.ABC):
     r"""Add :class:`torch.Tensor`-like device capabilities to an object."""
@@ -146,6 +148,15 @@ def _copy_wrapper_(
                 raise ValueError(
                     "Copy requires matching tensor container metadata"
                 )
+            if isinstance(dst, VarLenTensor):
+                if (
+                    dst.stride() != src.stride()
+                    or dst.storage_offset() != src.storage_offset()
+                ):
+                    raise ValueError("Copy requires matching ragged layouts")
+                # Layout only carries view metadata; copying the canonical
+                # offset buffer also updates this alias.
+                dst_names = [name for name in dst_names if name != "_layout"]
             for name in dst_names:
                 collect(getattr(dst, name), getattr(src, name))
         else:

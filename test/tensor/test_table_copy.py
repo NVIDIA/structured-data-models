@@ -108,3 +108,12 @@ def test_copy_columnar_rejects_aliased_destinations(
     with pytest.raises(ValueError, match="destination leaves sharing storage"):
         destination.copy_(source)
     assert torch.equal(data, before)
+
+
+def test_copy_table_rejects_different_ragged_layout() -> None:
+    text = StringTensor.from_list([["a", "b"], ["c", "d"]])
+    destination = TableTensor(text=text)
+    source = TableTensor(text=text.T)
+    with pytest.raises(ValueError, match="matching ragged layouts"):
+        destination.copy_(source)
+    assert destination.text.tolist() == [["a", "b"], ["c", "d"]]
