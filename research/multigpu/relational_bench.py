@@ -286,6 +286,23 @@ def score(
     return result
 
 
+def archive_prediction_repeats(
+    predictions: list[sdm.TableTensor], output: Path
+) -> sdm.TableTensor:
+    """Archive all repeats and return the same first repeat for scoring."""
+    if not predictions:
+        raise ValueError("At least one prediction repeat is required")
+    reference = predictions[0].cpu()
+    np.save(output / "predictions.npy", reference.numerical.numpy())
+    torch.save(reference, output / "predictions.pt")
+    for repetition, table in enumerate(predictions):
+        np.save(
+            output / f"predictions-repeat-{repetition}.npy",
+            table.cpu().numerical.numpy(),
+        )
+    return reference
+
+
 def run(args: argparse.Namespace) -> None:
     if args.mode == "native" and args.gpus != 1:
         raise ValueError("Native baseline uses exactly one GPU")
@@ -500,7 +517,7 @@ def run(args: argparse.Namespace) -> None:
             pred = torch.cat(predictions, dim=0)
             prediction_tables.append(pred)
             arrays.append(pred.numerical.numpy().copy())
-        pred = prediction_tables[0]
+        pred = archive_prediction_repeats(prediction_tables, args.output)
         stats["predict_repeats_s"] = elapsed
         stats["prediction_unix_windows"] = windows
         stats["batch_times_s"] = batch_times
@@ -521,10 +538,6 @@ def run(args: argparse.Namespace) -> None:
         ).hexdigest()
         stats["prediction_columns"] = list(pred.columns[sdm.Stype.numerical])
         stats["max_rss_kib"] = max_rss_kib()
-        np.save(args.output / "predictions.npy", arrays[0])
-        for repetition, array in enumerate(arrays):
-            np.save(args.output / f"predictions-repeat-{repetition}.npy", array)
-        torch.save(pred, args.output / "predictions.pt")
         if args.profile or args.phase_profile:
             phase_times: dict[str, list[float]] = {}
             phase_lock = threading.Lock()
