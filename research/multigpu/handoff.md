@@ -38,6 +38,8 @@ The ensemble owner's integrated local suite reported 110 passes and 17 hardware 
 
 After the repeat-provenance fix, the coordinator reran evidence-collector, relational-scoring/archive, and query-sharding tests: **32 passed**. Ruff passed on these changed files and the graph diagnostic. A separate multihost protocol run exposed a stale integer-column test fixture incompatible with SDM's string prediction-column contract; its correction is tracked separately rather than hidden as an environment failure.
 
+The fixture correction is integrated as `a886c2223`. The coordinator reran protocol and relational scoring tests: **11 passed**, including binary/seven-class cases across 1/2/4 fake workers and reordered semantic classes. Ruff passed. These overlap four tests in the preceding count; counts must not be summed as unique tests. Fake-worker timings are not GPU benchmark results. The generic scoring helper still assumes these prepared cohorts contain the intended class set; arbitrary cohorts missing classes require explicit full-class-support handling before wider reuse.
+
 ## Remaining remote evidence and unrun work
 
 | Item | Last known state | Required interpretation |
