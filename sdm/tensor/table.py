@@ -975,7 +975,9 @@ class TableTensor(Tensor):
             id: Replacement identifier block with shape ``[..., C_id]``.
         """
         return self.__class__(
-            columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
+            columns=cast(
+                Mapping[StypeLike, Sequence[str]], dict(self._column_items)
+            ),
             numerical=self.numerical if numerical is None else numerical,
             categorical=(
                 self.categorical if categorical is None else categorical
