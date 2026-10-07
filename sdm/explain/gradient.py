@@ -11,47 +11,22 @@ from torch import Tensor
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.explain.base import ICLExplainer
 from sdm.models import ICLModel
-from sdm.models.callback import Callback
+from sdm.models.callback import Callback, CaptureInputs, EnableInputGradients
 
 
 class _GradientCallback(Callback):
     requires_grad = True
 
-    def __init__(self, output: Callable[[TableTensor], Tensor]) -> None:
+    def __init__(
+        self,
+        output: Callable[[TableTensor], Tensor],
+        inputs: CaptureInputs,
+    ) -> None:
         self._output = output
-        self._inputs: list[tuple[str | None, tuple[str, ...], Tensor]] = []
-        self._related_tables: RelatedTables[TableTensor] | None = None
+        self._inputs = inputs
         self.result: (
             tuple[TableTensor, RelatedTables[TableTensor] | None] | None
         ) = None
-
-    def on_query_preprocessing_end(
-        self,
-        model: torch.nn.Module,
-        x: TableTensor,
-        related_tables: RelatedTables | None,
-    ) -> tuple[TableTensor, RelatedTables | None]:
-        x = self._capture(None, x)
-        if related_tables is not None:
-            related_tables = related_tables.replace_tables(
-                {
-                    name: self._capture(name, table)
-                    for name, table in related_tables.tables.items()
-                }
-            )
-        self._related_tables = related_tables
-        return x, related_tables
-
-    def _capture(
-        self,
-        table_name: str | None,
-        table: TableTensor,
-    ) -> TableTensor:
-        numerical = table.numerical.detach().requires_grad_(True)
-        self._inputs.append(
-            (table_name, table.columns[Stype.numerical], numerical)
-        )
-        return table.replace_blocks(numerical=numerical)
 
     def on_model_forward_end(
         self,
@@ -60,34 +35,36 @@ class _GradientCallback(Callback):
     ) -> TableTensor:
         # TODO: Support AMP when TableTensor dtype casts preserve autograd.
         objective = self._output(out).sum()
+        inputs: list[tuple[str | None, TableTensor]] = []
+        for x, related_tables in self._inputs.inputs:
+            inputs.append((None, x))
+            if related_tables is not None:
+                inputs.extend(related_tables.tables.items())
         grads = torch.autograd.grad(
             objective,
-            [numerical for _, _, numerical in self._inputs],
+            [table.numerical for _, table in inputs],
             allow_unused=True,
             retain_graph=True,
         )
         grad_tables: dict[str | None, TableTensor] = {}
-        for (table_name, columns, numerical), grad in zip(
-            self._inputs,
+        for (table_name, table), grad in zip(
+            inputs,
             grads,
         ):
             grad_tables[table_name] = TableTensor(
-                columns={Stype.numerical: columns},
+                columns={Stype.numerical: table.columns[Stype.numerical]},
                 numerical=(
-                    torch.zeros_like(numerical) if grad is None else grad
+                    torch.zeros_like(table.numerical) if grad is None else grad
                 ),
             )
 
         self.result = (
             grad_tables[None],
             (
-                self._related_tables.replace_tables(
-                    {
-                        name: grad_tables[name]
-                        for name in self._related_tables.tables
-                    }
+                related_tables.replace_tables(
+                    {name: grad_tables[name] for name in related_tables.tables}
                 )
-                if self._related_tables is not None
+                if related_tables is not None
                 else None
             ),
         )
@@ -118,11 +95,12 @@ class GradientExplainer(
         *,
         generator: torch.Generator | None = None,
     ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
-        callback = _GradientCallback(self._output)
+        inputs = CaptureInputs()
+        callback = _GradientCallback(self._output, inputs)
         model.predict(
             x=x_query,
             related_tables=related_query_tables,
-            callbacks=(callback,),
+            callbacks=(EnableInputGradients(), inputs, callback),
         )
         assert callback.result is not None
         return callback.result
