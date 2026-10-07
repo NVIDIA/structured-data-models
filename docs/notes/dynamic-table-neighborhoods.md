@@ -70,3 +70,11 @@ The compiled wrapper now calls `indices.contiguous()` before the native kernel. 
 The native implementation reads raw contiguous offsets rather than tensor strides: [PyTorch CUDA CSR kernel](https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/sparse/cuda/SparseCsrTensorMath.cu#L48-L75). `experiments/compile_table_shapes/isolate_csr.py` runs each native/wrapper, dtype, and layout combination in a fresh process.
 
 CUDA evidence is in `experiments/compile_table_shapes/results/csr-cuda214.json` and `csr-isolation-cuda214.jsonl`. The isolated source was integration base `c75ba3af6` plus CSR commit `c61daad9d` and the normalization from `4a77261ce`; the independent-reference probes were taken from that corrected branch. FX/AOT caches were disabled and the run used a dedicated Inductor cache.
+
+## Columnar view reconstruction review
+
+`ColumnarTensor.__new__` creates the outer wrapper without explicit strides or storage offset. Its supported transpose, permute, expand, and slice handlers rebuild through that constructor. Outer metadata therefore stays canonical; each column tensor carries its real strides and offset. `ColumnarTensor.is_contiguous()` checks those columns, so canonical wrapper metadata does not imply contiguous column data.
+
+An additional actual-Inductor check passed 12 populated cases on each CPU runtime: both graph policies, rows 5 and 9, sliced inputs with nonzero offsets, transposed inputs, and zero-stride expanded columns. Outputs retained wrapper metadata, column strides/offsets, shared storage, and visibility of subsequent mutations to the backing tensor. Thus reconstructing the wrapper from leaf sizes without copying `outer_stride` preserves these supported views.
+
+`experiments/compile_table_shapes/check_columnar_views.py` reproduces the check. Add `--include-empty` to expose a separate existing limitation: transposed zero-column inputs can allocate `torch.empty` with symbolic sizes during view replay outside FakeTensor mode, raising `SymIntArrayRef expected to contain only concrete integers`. Restoring the old reconstruction with `--restore-outer-strides --include-empty` reproduces the same failure on 2.14. This branch does not claim that empty-view case is fixed, and it does not loosen stride or alias checks to hide it.
