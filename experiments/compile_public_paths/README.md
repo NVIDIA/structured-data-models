@@ -1,5 +1,7 @@
 # Compiling public model prediction
 
+**This branch adds an isolated numerical diagnostic.** See [NATIVE_NORMALIZATION.md](NATIVE_NORMALIZATION.md) for the passing ten-neighborhood comparison and exact activation command. The report below retains the integration branch baseline.
+
 This experimental branch supports compiling tensor preprocessing and prediction together. It is based on main `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`; these are branch results, not current-main guarantees. The successful cases **fit eagerly, then compile and call `model.predict`**. No GPU speed or memory claim is made here.
 
 ## Current results
