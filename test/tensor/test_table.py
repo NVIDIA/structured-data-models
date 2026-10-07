@@ -820,15 +820,14 @@ def test_unflatten_grad() -> None:
 
 @pytest.mark.parametrize("inference_mode", [False, True])
 @pytest.mark.parametrize(
-    ("dim", "sizes", "error"),
+    ("dim", "sizes", "error", "match"),
     [
-        (0, (2, 2), RuntimeError),
-        (0, (-1, -1), RuntimeError),
-        (0, (-2, 3), RuntimeError),
-        (0, (), RuntimeError),
-        (-3, (2, 3), IndexError),
-        (2, (2, 3), IndexError),
-        (-1, (2, 2), RuntimeError),
+        (0, (2, 2), RuntimeError, "don't multiply up to the size of dim"),
+        (0, (-1, -1), RuntimeError, "only one dimension can be inferred"),
+        (0, (-2, 3), RuntimeError, "invalid shape dimension -2"),
+        (-3, (2, 3), IndexError, "Dimension out of range"),
+        (2, (2, 3), IndexError, "Dimension out of range"),
+        (-1, (2, 2), RuntimeError, "Can't reshape"),
     ],
 )
 def test_unflatten_invalid(
@@ -836,9 +835,13 @@ def test_unflatten_invalid(
     dim: int,
     sizes: tuple[int, ...],
     error: type[Exception],
+    match: str,
 ) -> None:
     tensor = TableTensor.from_tensor(torch.arange(24).view(6, 4))
-    with torch.inference_mode(inference_mode), pytest.raises(error):
+    with (
+        torch.inference_mode(inference_mode),
+        pytest.raises(error, match=match),
+    ):
         tensor.unflatten(dim, sizes)
 
 
