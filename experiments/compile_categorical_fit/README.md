@@ -1,6 +1,6 @@
 # Categorical fitting compilation experiments
 
-This branch is stacked on `compile/categorical-recipe-support` at `c04de44fc`. The two commits below have different readiness levels. Do not treat the entire branch as a production-ready fix.
+This branch is stacked on `compile/categorical-recipe-support` at `c04de44fc`. The changes below have different readiness levels. Do not treat the entire branch as a production-ready fix.
 
 ## Minimal alignment fix: `ff08a40e8`
 
@@ -15,9 +15,26 @@ The retained count depends on training values. A full graph cannot choose that P
 
 Actual CPU 2.14 Inductor public `AlignCategories.fit_transform` passed `fullgraph=True` for numeric dictionaries with all three sort orders (`code`, `frequency`, `value`), `min_frequency=2`, changing row counts, and retained vocabulary sizes including zero. Fitted-state query transformation also matched eager.
 
-With `fullgraph=False` and default settings, a graph break at the dynamic selection still reaches the existing partial-container construction failure. Explicitly enabling `torch._dynamo.config.capture_dynamic_output_shape_ops=True` in the diagnostic allows the same public numeric tests to pass. The patch does not silently change that global configuration.
+With `ff08a40e8` alone, `fullgraph=False` and default settings still reached a partial-container construction failure. Explicitly enabling `torch._dynamo.config.capture_dynamic_output_shape_ops=True` in the diagnostic avoided it. Subsequent container-construction fixes on this branch also address that failure; no library code changes this global setting.
 
-String fitting has additional issues: data-dependent string selection reaches `VarLenTensor` shape/materialization code, while value sorting invokes the external Arrow/cuDF backend. Those are separate from the reused-vocabulary check.
+## String vocabulary ordering and selection
+
+`39a0e1a5d` exposes the existing Arrow/cuDF string-sort permutation as a fixed-output custom operator. The compiler knows the permutation's shape and dtype; the existing external sorter runs unchanged at execution time. Arrow sorting itself is **not** compiled or optimized. The helper returns the original backend ordering, including duplicate values, rather than replacing it with hashes or an approximate ordering.
+
+After a graph break, tracing could re-enter the ordinary `StringTensor.sort()` call and fail with `TypeError: cannot unpack non-iterable int object`. `9f673e44a` uses the existing permutation helper directly in that fallback and keeps only the external sorter outside tracing. This avoids tracing Arrow conversion after resumption. The fullgraph path continues to use the custom operator.
+
+| Validation | Result |
+|---|---|
+| CPU 2.7.1 and 2.14, string-order operator, actual Inductor, both `fullgraph` settings, `dynamic=True` | Exact permutation parity for contiguous/strided dictionaries, Unicode, embedded NUL, duplicates, empty inputs and changed vocabulary sizes |
+| `torch.library.opcheck` on both versions | Schema, fake tensor, autograd registration and dynamic AOT checks pass |
+| CPU 2.14, real RelBench driver table, public `AlignCategories(sort_by="value").fit_transform`, `fullgraph=False`, `dynamic=True` | Exact codes and dictionaries for 5 string columns and 32 → 16 → 8 rows |
+| Same real-data test with `fullgraph=True` | Still fails in int32-offset string packing, described below |
+
+Native variable-length layout/selection changes are included from the container investigation (`766c99636`, `d10cc007c`, `ed1cedee5`, `25b548f27`). They preserve symbolic row counts, empty selections and wrapper construction across graph breaks. The final public numeric/string matrix passes all 12 combinations of dictionary type, `fullgraph` setting and sort order on CPU 2.14 with default settings. String dictionaries in this matrix use int64 offsets from `StringTensor.from_list`; contexts change row counts and retained vocabulary sizes, including zero. Fitted-state transformation of missing and unseen query codes also matches eager.
+
+**Remaining real-data blocker:** Arrow-derived dictionaries use int32 byte offsets. Packing the selected strings checks `total_bytes <= 2147483647` to decide whether the result still uses int32 or promotes to int64. The total depends on selected string values, so fullgraph tracing cannot choose the output dtype. Int64-offset toy inputs do not exercise this branch. The current code keeps the existing dtype behavior; it does not assume all strings fit within 2 GB.
+
+Direct numeric `_fit_column` checks on 2.7.1 pass all sort modes with graph breaks. Fullgraph numeric selection needs `capture_dynamic_output_shape_ops=True` on that version. This is a helper result, not evidence that every 2.7 public processor/schema path compiles.
 
 ## Experimental shuffle change: `4d092d8e2`
 

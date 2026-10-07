@@ -31,3 +31,27 @@
 {"check": "shuffle_global_rng", "version": "2.14.0", "fullgraph": true, "method": "shift", "cardinality": 0, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
 {"check": "shuffle_global_rng", "version": "2.14.0", "fullgraph": true, "method": "shift", "cardinality": 1, "status": "pass", "eager_unique_permutations": 1, "compiled_unique_permutations": 4}
 {"check": "shuffle_global_rng", "version": "2.14.0", "fullgraph": true, "method": "shift", "cardinality": 3, "status": "pass", "eager_unique_permutations": 3, "compiled_unique_permutations": 4}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": false, "fullgraph": false, "sort_by": "code", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": false, "fullgraph": false, "sort_by": "frequency", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": false, "fullgraph": false, "sort_by": "value", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": false, "fullgraph": true, "sort_by": "code", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": false, "fullgraph": true, "sort_by": "frequency", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": false, "fullgraph": true, "sort_by": "value", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": true, "fullgraph": false, "sort_by": "code", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": true, "fullgraph": false, "sort_by": "frequency", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": true, "fullgraph": false, "sort_by": "value", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": true, "fullgraph": true, "sort_by": "code", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": true, "fullgraph": true, "sort_by": "frequency", "status": "pass"}
+{"check": "alignment_public_after_string_boundary", "source": "9f673e44a", "version": "2.14.0", "string": true, "fullgraph": true, "sort_by": "value", "status": "pass"}
+{"check": "string_order_operator_27", "source": "9f673e44a", "version": "2.7.1", "fullgraph": false, "strided": false, "status": "pass"}
+{"check": "string_order_operator_27", "source": "9f673e44a", "version": "2.7.1", "fullgraph": false, "strided": true, "status": "pass"}
+{"check": "string_order_operator_27", "source": "9f673e44a", "version": "2.7.1", "fullgraph": true, "strided": false, "status": "pass"}
+{"check": "string_order_operator_27", "source": "9f673e44a", "version": "2.7.1", "fullgraph": true, "strided": true, "status": "pass"}
+{"check": "string_order_operator_27", "source": "9f673e44a", "opcheck": {"test_schema": "SUCCESS", "test_autograd_registration": "SUCCESS", "test_faketensor": "SUCCESS", "test_aot_dispatch_dynamic": "SUCCESS"}}
+{"check": "string_order_operator_214", "source": "9f673e44a", "version": "2.14.0", "fullgraph": false, "strided": false, "status": "pass"}
+{"check": "string_order_operator_214", "source": "9f673e44a", "version": "2.14.0", "fullgraph": false, "strided": true, "status": "pass"}
+{"check": "string_order_operator_214", "source": "9f673e44a", "version": "2.14.0", "fullgraph": true, "strided": false, "status": "pass"}
+{"check": "string_order_operator_214", "source": "9f673e44a", "version": "2.14.0", "fullgraph": true, "strided": true, "status": "pass"}
+{"check": "string_order_operator_214", "source": "9f673e44a", "opcheck": {"test_schema": "SUCCESS", "test_autograd_registration": "SUCCESS", "test_faketensor": "SUCCESS", "test_aot_dispatch_dynamic": "SUCCESS"}}
+{"check": "relbench_driver_alignment", "source": "9f673e44a", "version": "2.14.0", "fullgraph": false, "status": "pass"}
+{"check": "relbench_driver_alignment", "source": "9f673e44a", "version": "2.14.0", "fullgraph": true, "status": "fail", "error": "Could not guard on data-dependent expression u1 <= 2147483647 (unhinted: u1 <= 2147483647).  (Size-like symbols: u1)"}
