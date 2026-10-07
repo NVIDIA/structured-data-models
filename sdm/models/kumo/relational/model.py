@@ -189,7 +189,8 @@ class KumoRelational(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Relational",
                 filename=filename,
-                revision="v1.0.0",
+                revision="v1.0.1",
+                config_filename="config.json",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
             model.load_state_dict(ckpt, assign=True)
@@ -356,7 +357,7 @@ class _KumoRelational(torch.nn.Module):
                 num_hops = cast(int, cache["num_hops"])
             query = TaskGraph.from_input(
                 x=x_query,
-                related_tables=RelatedTables[TableTensor](
+                related_tables=RelatedTables(
                     tables=related_query_tables.tables,
                     relationships=relationships,
                     task_links=related_query_tables.task_links,
