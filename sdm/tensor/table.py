@@ -207,6 +207,7 @@ class TableTensor(Tensor):
     _text: StringTensor
     _id: ColumnarTensor
     _columns: dict[Stype, tuple[str, ...]]
+    _column_items: tuple[tuple[Stype, tuple[str, ...]], ...]
     _column_to_loc: dict[str, tuple[Stype, int]]
 
     # Route tensor operations through `__torch_dispatch__` only.
@@ -351,6 +352,7 @@ class TableTensor(Tensor):
         out._text = text
         out._id = id
         out._columns = columns
+        out._column_items = tuple(columns.items())
         out._column_to_loc = column_to_loc
 
         return out
