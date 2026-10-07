@@ -34,6 +34,7 @@ from sklearn.metrics import (
 )
 
 import sdm
+from sdm.cache import Cache
 from sdm.models.kumo.relational.graph import HomogeneousGraph
 from sdm.models.kumo.relational.task import TaskGraph
 from sdm.processing.execution import RecipeExecution
@@ -217,6 +218,40 @@ def memory(devices: list[str]) -> dict[str, Any]:
     }
 
 
+def cache_sizes(models: list[Any]) -> dict[str, dict[str, int]]:
+    """Report logical tensor bytes and unique backing storage per device."""
+    logical: dict[str, int] = {}
+    physical: dict[str, int] = {}
+    seen_models, seen_caches, seen_storage = set(), set(), set()
+    pending = list(models)
+    while pending:
+        model = pending.pop()
+        if id(model) in seen_models:
+            continue
+        seen_models.add(id(model))
+        pending.extend(getattr(model, "replicas", []))
+        caches = [getattr(model, "_cache", None)]
+        caches.extend(getattr(model, "_caches", []))
+        for cache in caches:
+            if not isinstance(cache, Cache) or id(cache) in seen_caches:
+                continue
+            seen_caches.add(id(cache))
+            for tensor in cache._tensors():
+                device = str(tensor.device)
+                logical[device] = (
+                    logical.get(device, 0)
+                    + tensor.numel() * tensor.element_size()
+                )
+                storage = tensor.untyped_storage()
+                key = (device, storage.data_ptr())
+                if key not in seen_storage:
+                    seen_storage.add(key)
+                    physical[device] = (
+                        physical.get(device, 0) + storage.nbytes()
+                    )
+    return {"logical_bytes": logical, "storage_bytes": physical}
+
+
 def score(
     pred: sdm.TableTensor, labels: sdm.TableTensor, problem: str
 ) -> dict[str, float]:
@@ -368,6 +403,13 @@ def run(args: argparse.Namespace) -> None:
         synchronize(devices)
         stats["fit_s"] = time.perf_counter() - start
         stats["memory_after_fit"] = memory(devices)
+        cache_measurement = cache_sizes([model, *replicas])
+        stats["cache_logical_bytes_after_fit"] = cache_measurement[
+            "logical_bytes"
+        ]
+        stats["cache_storage_bytes_after_fit"] = cache_measurement[
+            "storage_bytes"
+        ]
         stats["native_cache_bytes"] = [
             replica._cache.size() if replica._cache is not None else 0
             for replica in replicas
