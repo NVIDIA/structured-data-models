@@ -326,6 +326,10 @@ class CategoricalTensor(Tensor):
         r"""Return category vector for each categorical column."""
         return self._categories
 
+    def category(self, index: int) -> Tensor:
+        r"""Return the category vector for one categorical column."""
+        return getattr(self, f"_category_{index}")
+
     # Decorators ##############################################################
 
     @classmethod
