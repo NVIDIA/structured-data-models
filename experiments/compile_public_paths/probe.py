@@ -1,6 +1,7 @@
 # ruff: noqa: D103, T201
 import argparse
 import json
+import os
 import traceback
 from pathlib import Path
 
@@ -100,6 +101,15 @@ def forward(model, function=None):
 
 result = {
     "torch": torch.__version__,
+    "compiler_cache_environment": {
+        key: os.environ.get(key)
+        for key in (
+            "TORCHINDUCTOR_CACHE_DIR",
+            "TORCHINDUCTOR_FORCE_DISABLE_CACHES",
+            "TORCHINDUCTOR_FX_GRAPH_CACHE",
+            "TORCHINDUCTOR_AUTOGRAD_CACHE",
+        )
+    },
     "model": a.model,
     "entry": a.entry,
     "fullgraph": a.fullgraph,
