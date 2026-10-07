@@ -31,7 +31,7 @@ Data-dependent fitting and schema changes must retain eager behavior. Fixed sche
 
 ## Results and branch map
 
-Results are being collected in focused branches for tensor containers, recipe orchestration, numerical/categorical processors, and public model integration. Each implementation branch records its own exact tested scope and remaining errors. This document will consolidate the final evidence.
+The branches below separate container support, recipe orchestration, numerical/categorical processors, and public model integration. Their reports contain exact commands and remaining errors; this document summarizes the combined evidence.
 
 ## Confirmed progress
 
@@ -39,11 +39,11 @@ Results are being collected in focused branches for tensor containers, recipe or
 |---|---|---|
 | Numerical TableTensor construction, replacement, slicing, numeric stacking | Inductor passes both graph policies | Inductor passes both graph policies |
 | Standardize, ImputeMean, RobustScale, RankGaussian, ClipSigma public fit/transform | Graph-break-allowed matrix passes; fullgraph blocked by metadata | Both policies pass FP32/FP64 matrix |
-| Default fitted feature recipe, real numerical data | Fullgraph still blocked | Fullgraph passes, including four tabular ensemble members |
+| Default fitted feature recipe, real numerical data | Fullgraph still blocked | Fullgraph passes, including four tabular / two relational task-table members |
 | PowerTransform fitting in FP32 | Not established as parity-safe | Fitted parameter drift exceeds default tolerance in one reproduction |
 | PowerTransform transform with the same eager-fitted parameters | See component report | Exact in isolated reproduction |
-| Entire public KumoTabular predict after eager fit | Further validation in integration report | Initial fullgraph Inductor pass, max probability difference 5.96e-8 |
-| Entire public KumoRelational predict | Not established | Not established |
+| Entire public KumoTabular predict after eager fit | Further validation in integration report | Classification passes both policies, rows 4→7→3→4; 1/4 estimators; max differences 8.94e-7 / 3.28e-7 |
+| Entire public KumoRelational predict | Still fails enum/context-manager tracing | Still fails categorical string metadata / variable-length concatenation |
 
 A changed input row count being accepted does not imply one reusable graph: some categorical processors recompile at each tested size despite dynamic=True.
 
@@ -55,7 +55,6 @@ A changed input row count being accepted does not imply one reusable graph: some
 | [compile/tabletensor-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/tabletensor-preprocessing) | Table/columnar flatten-unflatten support; includes nested tensor prerequisites. |
 | [compile/numerical-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/numerical-preprocessing) | Public processor metadata checks; includes container prerequisites and numeric validation. |
 | [compile/categorical-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/categorical-preprocessing) | Focused numeric category lookup and tracing fixes, based on main; whole-processor validation also uses the container/processor integration. |
-
 | [compile/recipe-preparation](https://github.com/NVIDIA/structured-data-models/tree/compile/recipe-preparation) | Focused recipe validation and ensemble packing changes; validated with container/applicability prerequisites. |
 | [compile/public-preprocessing-investigation](https://github.com/NVIDIA/structured-data-models/tree/compile/public-preprocessing-investigation) | Combined experimental stack, public entry-point reproducer, schema validation and cached class-label metadata. |
 
@@ -80,7 +79,7 @@ At container snapshot 14d16c583, the existing TableTensor, ColumnarTensor, and C
 
 The fitted numerical default recipe is substantially closer to support than compiling all fitting. On PyTorch 2.14, the default four-member tabular recipe and two-member relational task-table recipe transform real numerical query data with exact eager parity and unchanged fitted buffers. These checks do not include string alignment or related tables.
 
-Public KumoTabular prediction passed an initial fresh-table case after the combined patches. Broader validation exposed a sliced-table/FakeTensor-mode failure; the integration branch records this separately. Do not infer general public prediction support from the first pass.
+Public KumoTabular prediction passes the tested numerical classification cases after the combined patches. Query sizes 4→7→3→4 create three graphs and reuse the first graph on the final call. Broader validation exposed a sliced-table/FakeTensor-mode failure; commit 15917f89e fixes empty identifier view-leaf propagation, and the full public one/four-estimator classification and one-estimator regression checks subsequently pass with sliced inputs too. Mixed categorical/text inputs retain separate blockers. Regression fresh-input checks pass at atol=1e-5, rtol=1e-4 with maximum absolute difference 1.83e-4; this is numerical prediction parity within tolerance, not a task-metric or GPU claim.
 
 Public fitting is harder for concrete reasons: processors learn data-dependent column sets and vocabulary sizes, some fitting uses Python lists/random permutation metadata, and compiled FP32 PowerTransform optimization can select different parameters. Keep fitting parity separate from applying existing fitted statistics.
 
@@ -90,7 +89,27 @@ For PyTorch 2.7, changing handles_stypes to a tuple or primitive-string frozense
 
 1. Review the independent numerical category lookup fix and the tensor flatten/unflatten foundations, with explicit alias and mutation coverage.
 2. Integrate recipe/applicability changes and target compiled fitted preprocessing on PyTorch 2.14 first. Retain the documented 2.7 limitations rather than claiming equivalent support.
-3. Resolve sliced-table integration and output metadata, then validate full public prediction on realistic mixed data, ensemble counts, and GPU execution.
+3. Review sliced-table integration and cached output metadata, then extend full public prediction to mixed categorical/text data and GPU execution.
 4. Address fitting separately: data-dependent schemas/vocabularies, numerical optimizer parity, and external joins require distinct decisions. Do not disable all preprocessing merely to obtain a successful compiler call.
 
 No PRs were opened. No EC2 instances were launched: the decisive failures and initial passing paths were reproducible on CPU. Performance and GPU correctness remain explicit follow-up validation, not inferred from these results.
+
+
+## Relational public prediction after integration
+
+On the combined branch, including graph preparation and #1068, compiled public predict still fails before the internal model. On 2.14 fullgraph, AlignCategories accesses a tuple of StringTensor category dictionaries that Dynamo cannot source; with breaks allowed, variable-length concatenation raises a data-dependent scalar error. On 2.7 the first reported failures remain a generic-context graph-break restriction and enum dictionary guards. These are public preprocessing failures, distinct from previously passing internal-model cached prediction checks.
+
+
+## Final public prediction validation
+
+The combined branch is published at commit `8950a466ccbd501f7b1431b5b4e63a8e37d9de09`. Its [README](https://github.com/NVIDIA/structured-data-models/blob/compile/public-preprocessing-investigation/experiments/compile_public_paths/README.md) and [compact final records](https://github.com/NVIDIA/structured-data-models/blob/compile/public-preprocessing-investigation/experiments/compile_public_paths/prediction-final.json) preserve exact cases and errors.
+
+| KumoTabular, CPU 2.14, eager fit then compiled public predict | Graph breaks allowed | Fullgraph | Maximum absolute difference |
+|---|---|---|---|
+| Classification, one estimator | Pass | Pass | 8.94e-7 |
+| Classification, four estimators | Pass | Pass | 3.28e-7 |
+| Regression, one estimator | Pass | Pass | 1.8311e-4 |
+
+Fresh tables and sliced views passed row counts 4→7→3→4. Tolerance is atol=1e-5 and rtol=1e-4, comparing the same dtype. Three graphs were compiled for the three row counts; the repeated size reused its graph. This establishes the tested numerical workloads, not arbitrary schemas or all model sizes. Model/standardizer regression tests passed 49 cases on each runtime, with 14 CUDA skips.
+
+The integration branch also includes the existing Fourier embedding fix (#1054), relational graph preparation, and relative-time fix (#1068). Component branches overlap; consult their dependency descriptions before extracting changes. No passing compiled public fit or outer-forward case is established.
