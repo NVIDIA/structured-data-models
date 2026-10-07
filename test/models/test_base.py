@@ -695,6 +695,7 @@ def test_estimator_batching_aligns_shuffled_class_columns(
         target=sp.StypeDispatch(
             categorical=sp.ShuffleCategories(method="shift")
         ),
+        output=sp.InvertTarget(),
     )
 
     def _check(out: TableTensor) -> None:
@@ -726,6 +727,82 @@ def test_estimator_batching_aligns_shuffled_class_columns(
         generator=torch.Generator().manual_seed(0),
     )
     _check(model.predict(x))
+
+
+@pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        (None, 11.0),
+        ([sp.Clip(-1.0, 1.0)], 0.5),
+        ([sp.InvertTarget(), sp.Clip(-1.0, 1.0)], 1.0),
+        ([sp.Clip(-1.0, 1.0), sp.InvertTarget()], 11.0),
+    ],
+)
+def test_target_inversion_follows_output_order(
+    fitted: bool,
+    output: list[Processor] | None,
+    expected: float,
+) -> None:
+    model = _RecordingModel()
+    recipe = sp.Recipe(target=sp.Standardize(), output=output)
+    x_context = torch.zeros(2, 1)
+    y_context = torch.tensor([[8.0], [12.0]])
+    x_query = torch.tensor([[0.5]])
+
+    if fitted:
+        model.fit(x_context, y_context, recipe=recipe)
+        prediction = model.predict(x_query)
+    else:
+        prediction = model(
+            x_context,
+            y_context,
+            x_query,
+            recipe=recipe,
+        )
+
+    torch.testing.assert_close(
+        prediction.numerical,
+        torch.tensor([[[expected]]]),
+    )
+
+
+@pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        ([sp.InvertTarget(), sp.AverageEstimators()], 20.0),
+        ([sp.InvertTarget(member=0), sp.AverageEstimators()], 12.0),
+        ([sp.InvertTarget(member=1), sp.AverageEstimators()], 28.0),
+        ([sp.AverageEstimators(), sp.InvertTarget(member=0)], 12.0),
+        ([sp.AverageEstimators(), sp.InvertTarget(member=1)], 28.0),
+    ],
+)
+def test_target_inversion_before_or_after_estimator_reduction(
+    fitted: bool,
+    output: list[Processor],
+    expected: float,
+) -> None:
+    model = _RecordingModel()
+    recipe = sp.Recipe(target=sp.Standardize(), output=output)
+    x_context = torch.zeros(2, 2, 1)
+    y_context = torch.tensor([[[8.0], [12.0]], [[20.0], [28.0]]])
+    x_query = torch.ones(2, 1, 1)
+
+    if fitted:
+        model.fit(x_context, y_context, recipe=recipe)
+        prediction = model.predict(x_query)
+    else:
+        prediction = model(
+            x_context,
+            y_context,
+            x_query,
+            recipe=recipe,
+        )
+
+    torch.testing.assert_close(
+        prediction.numerical, torch.tensor([[expected]])
+    )
 
 
 def test_estimator_batching_does_not_stack_related_tables() -> None:

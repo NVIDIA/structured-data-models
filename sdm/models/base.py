@@ -189,14 +189,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             **kwargs,
         )
 
-        # Regression: invert target before stacking estimator outputs.
-        if contexts[0].y.numerical.size(-1) > 0:
-            with (
-                torch.amp.autocast(x_query.device.type, enabled=False),
-                inference_mode("grad" if requires_grad else "inference"),
-            ):
-                outs = list(recipe_execution.inverse_transform_target(outs))
-
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
@@ -472,14 +464,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             if transfer_stream is not None:
                 transfer_stream.synchronize()
             raise
-
-        # Regression: invert target before stacking estimator outputs.
-        if cast(Cache, self._cache[0])["classes"] is None:
-            with (
-                torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode("grad" if requires_grad else "inference"),
-            ):
-                outs = list(recipe_execution.inverse_transform_target(outs))
 
         with (
             torch.amp.autocast(x.device.type, enabled=False),

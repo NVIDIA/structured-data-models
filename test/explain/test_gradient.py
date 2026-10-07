@@ -6,11 +6,11 @@ from typing import Any
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.explain import GradientExplainer
 from sdm.models import ICLModel
-from sdm.processing import Softmax
 
 
 class _LinearModel(ICLModel):
@@ -113,7 +113,7 @@ def test_differentiates_final_prediction(fitted: bool) -> None:
     x_context = torch.zeros(1, 2)
     y_context = torch.zeros(1, 1)
     x_query = torch.tensor([[0.0, 1.0]])
-    recipe = Recipe(output=Softmax())
+    recipe = Recipe(output=sp.Softmax())
     explainer = GradientExplainer()
     if fitted:
         model.fit(x_context, y_context, recipe=recipe)
@@ -135,3 +135,35 @@ def test_differentiates_final_prediction(fitted: bool) -> None:
     )
     torch.testing.assert_close(x_attributions.numerical, expected.unsqueeze(1))
     assert related_attributions is None
+
+
+@pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize("invert", [False, True])
+def test_target_inversion_scales_preprocessed_input_gradients(
+    fitted: bool,
+    invert: bool,
+) -> None:
+    model = _LinearModel()
+    x_context = torch.tensor([[-2.0, -4.0], [2.0, 4.0]])
+    y_context = torch.tensor([[8.0], [12.0]])
+    x_query = torch.tensor([[2.0, 4.0]])
+    recipe = Recipe(
+        features=sp.Standardize(),
+        target=sp.Standardize(),
+        output=[sp.InvertTarget()] if invert else [],
+    )
+    explainer = GradientExplainer()
+    if fitted:
+        model.fit(x_context, y_context, recipe=recipe)
+        attributions, _ = explainer.explain(model, x_query)
+    else:
+        attributions, _ = explainer.explain(
+            model,
+            x_query,
+            x_context=x_context,
+            y_context=y_context,
+            recipe=recipe,
+        )
+
+    expected = (4.0 if invert else 2.0) * torch.eye(2)
+    torch.testing.assert_close(attributions.numerical, expected.unsqueeze(1))

@@ -44,6 +44,8 @@ class RecipeExecution:
         ) = None
         self._num_estimators: int | None = None
         self._y_locations: tuple[tuple[int, int], ...] | None = None
+        self._output_ndim = 0
+        self._regression = False
 
     @property
     def num_members(self) -> int:
@@ -68,6 +70,11 @@ class RecipeExecution:
 
         self._num_estimators = num_members
         self._y_locations = y._locations
+        self._output_ndim = y[0].dim()
+        self._regression = y[0].numerical.size(-1) > 0
+        for module in self.recipe.output.modules():
+            if isinstance(module, sp.InvertTarget):
+                module._inverse = self._invert_target
 
         task_dispatchers = tuple(
             module
@@ -271,6 +278,49 @@ class RecipeExecution:
             out = torch.stack(list(outputs), dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
+
+    def _invert_target(
+        self,
+        table: TableTensor,
+        member: int | None,
+    ) -> TableTensor:
+        if not self._regression:
+            return table
+        reduced = table.dim() == self._output_ndim
+        if member is not None:
+            inputs = (
+                (table,)
+                if reduced
+                else cast(tuple[TableTensor, ...], table.unbind(0))
+            )
+            outputs = tuple(
+                self.inverse_transform_target([output] * self.num_members)[
+                    member
+                ]
+                for output in inputs
+            )
+            if reduced:
+                return outputs[0]
+            return cast(TableTensor, torch.stack(outputs, dim=0))
+
+        if reduced:
+            if self.num_members != 1:
+                raise RuntimeError(
+                    "Select a target state with 'InvertTarget(member=...)' "
+                    "when applying it to reduced estimator outputs"
+                )
+            outputs = self.inverse_transform_target((table,))
+            return outputs[0]
+
+        if table.size(0) != self.num_members:
+            raise RuntimeError(
+                f"Expected {self.num_members} estimator outputs for target "
+                f"inversion (got {table.size(0)})"
+            )
+        outputs = self.inverse_transform_target(
+            cast(tuple[TableTensor, ...], table.unbind(0))
+        )
+        return cast(TableTensor, torch.stack(outputs, dim=0))
 
 
 def _align_to_fitted_groups(

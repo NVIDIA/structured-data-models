@@ -64,6 +64,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 sp.Softmax(),
             ],
             regression=[
+                sp.InvertTarget(),
                 sp.SortQuantiles(),
                 sp.AverageEstimators(trim_fraction=0.2),
             ],

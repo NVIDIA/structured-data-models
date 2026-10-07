@@ -19,11 +19,11 @@ class Recipe:
     relative to the model:
 
     - ``features``: model inputs, transformed before the model.
-    - ``target``: labels transformed forward before the model. Regression
-      predictions are inverted through this pipeline; classification outputs
-      are reconstructed from the fitted target categories instead.
-    - ``output``: transforms member outputs after they have been mapped to a
-      common class or target space and stacked as ``[E, ..., R, O]``. An
+    - ``target``: labels transformed forward before the model. Classification
+      outputs are reconstructed from the fitted target categories.
+    - ``output``: transforms member outputs stacked as ``[E, ..., R, O]``.
+      Include :class:`~sdm.processing.InvertTarget` to restore regression
+      predictions to the original target space at the chosen position. An
       explicit dimension-changing step such as
       :class:`~sdm.processing.AverageEstimators` removes ``E``; without one,
       the output remains stacked. Steps before the reducer must support
@@ -39,7 +39,9 @@ class Recipe:
     Args:
         features: Steps applied to model inputs before model execution.
         target: Steps applied to labels before model execution.
-        output: Steps applied to stacked model outputs.
+        output: Steps applied to stacked model outputs. If ``None``, use
+            :class:`~sdm.processing.InvertTarget`. An explicit pipeline only
+            performs target inversion when it includes that step.
     """
 
     _features: EnsembleProcessor
@@ -104,7 +106,7 @@ class Recipe:
         processor: Processor | Iterable[Processor] | None,
     ) -> None:
         if processor is None:
-            processor = sp.Identity()
+            processor = sp.InvertTarget()
         self._output = EnsembleProcessor.as_processor(processor)
 
         if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):

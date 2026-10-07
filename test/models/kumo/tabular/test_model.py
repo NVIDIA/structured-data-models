@@ -87,7 +87,7 @@ def _recipe() -> sp.Recipe:
     return sp.Recipe(
         features=[sp.ToNumerical()],
         target=sp.StypeDispatch(numerical=sp.Standardize()),
-        output=[sp.AverageEstimators()],
+        output=[sp.InvertTarget(), sp.AverageEstimators()],
     )
 
 
