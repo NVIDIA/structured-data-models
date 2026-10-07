@@ -134,9 +134,7 @@ class ColumnarTensor(Tensor):
         return out
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        return [f"_column_{i}" for i in range(len(self._columns))] or ["_empty"], (
-            self.device,
-        )
+        return [f"_column_{i}" for i in range(len(self._columns))] or ["_empty"], ()
 
     @classmethod
     def __tensor_unflatten__(
@@ -146,15 +144,19 @@ class ColumnarTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> Self:
-        out = cls(
-            columns=tuple(
-                value for name, value in inner_tensors.items() if name != "_empty"
-            ),
-            size=outer_size[:-1],
-            device=ctx[0],
+        out = Tensor._make_wrapper_subclass(
+            cls,
+            size=outer_size,
+            strides=outer_stride,
+            dtype=torch.uint8,
+            device=next(iter(inner_tensors.values())).device,
+            requires_grad=False,
         )
-        if "_empty" in inner_tensors:
-            out._empty = inner_tensors["_empty"]
+        out._columns = tuple(
+            value for name, value in inner_tensors.items() if name != "_empty"
+        )
+        for name, value in inner_tensors.items():
+            setattr(out, name, value)
         return out
 
     @classmethod
