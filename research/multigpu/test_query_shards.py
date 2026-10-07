@@ -1,9 +1,15 @@
 # ruff: noqa: D103, TID253
 """Observation and class identity checks for whole-batch sharding."""
 
+from itertools import pairwise
+
 import numpy as np
 import pytest
-from research.multigpu.query_shards import gather_batches, plan_batches
+from research.multigpu.query_shards import (
+    gather_batches,
+    plan_batches,
+    weighted_plan_batches,
+)
 
 
 def _results() -> list[dict]:
@@ -115,3 +121,34 @@ def test_optional_nonfinite_passthrough_for_failure_reporting() -> None:
         results, [[7, 12], [19]], ["1", "0"], reject_nonfinite=False
     )
     assert np.isnan(out[-1, 0])
+
+
+def test_weighted_plan_uses_capacity_without_splitting_batches() -> None:
+    lengths = [7, 2, 9, 4, 8, 6, 3, 5, 1]
+    offsets = np.cumsum([0, *lengths])
+    batches = [list(range(a, b)) for a, b in pairwise(offsets)]
+    plan = weighted_plan_batches(batches, [2.0, 1.0])
+    assert plan == weighted_plan_batches(batches, [2.0, 1.0])
+    assert sorted(index for worker in plan for index in worker) == list(
+        range(9)
+    )
+    assert all(worker == sorted(worker) for worker in plan)
+    assigned_rows = [
+        sum(len(batches[index]) for index in worker) for worker in plan
+    ]
+    assert assigned_rows == [30, 15]
+
+
+@pytest.mark.parametrize(
+    "weights", [[], [0], [-1, 2], [float("inf")], [float("nan")]]
+)
+def test_weighted_plan_rejects_invalid_capacities(
+    weights: list[float],
+) -> None:
+    with pytest.raises(ValueError, match="positive and finite"):
+        weighted_plan_batches([[1]], weights)
+
+
+def test_weighted_plan_rejects_repeated_observations() -> None:
+    with pytest.raises(ValueError, match="globally unique"):
+        weighted_plan_batches([[7], [7]], [2, 1])

@@ -1,5 +1,6 @@
 """Assign complete query batches and validate ordered multi-host gathering."""
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -28,6 +29,27 @@ def plan_batches(
         list(range(worker, len(batch_row_ids), workers))
         for worker in range(workers)
     ]
+
+
+def weighted_plan_batches(
+    batch_row_ids: Sequence[Sequence[int]], weights: Sequence[float]
+) -> list[list[int]]:
+    """Assign whole batches by accumulated row count per measured capacity.
+
+    Weights should come from comparable observed worker throughputs. At each
+    step, choose the smallest accumulated rows/weight; ties choose the lower
+    worker index. Original batch order and within-batch row order are intact.
+    """
+    if not weights or any(not math.isfinite(w) or w <= 0 for w in weights):
+        raise ValueError("Worker weights must be positive and finite")
+    _validate_ids(batch_row_ids)
+    assigned: list[list[int]] = [[] for _ in weights]
+    rows = [0] * len(weights)
+    for index, batch in enumerate(batch_row_ids):
+        worker = min(range(len(weights)), key=lambda i: rows[i] / weights[i])
+        assigned[worker].append(index)
+        rows[worker] += len(batch)
+    return assigned
 
 
 def gather_batches(
