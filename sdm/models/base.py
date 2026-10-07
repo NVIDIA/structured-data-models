@@ -405,8 +405,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
         compute_stream: torch.cuda.Stream | None = None
         transfer_stream: torch.cuda.Stream | None = None
         try:
-            if needs_cache_transfer:
+            if x.is_cuda:
                 compute_stream = torch.cuda.current_stream(x.device)
+            if needs_cache_transfer:
                 if x.device not in self._transfer_streams:
                     transfer_stream = torch.cuda.Stream(x.device)
                     self._transfer_streams[x.device] = transfer_stream
@@ -473,7 +474,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     **cast(dict[str, Any], self._cache["kwargs"]),
                 )
 
-                if needs_cache_transfer:
+                if x.is_cuda:
                     assert compute_stream is not None
                     for tensor in cache._tensors():
                         tensor.record_stream(compute_stream)
