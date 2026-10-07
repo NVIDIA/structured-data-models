@@ -126,10 +126,10 @@ task_table = sdm.TableTensor.from_pandas(
         task.entity_col: "id",
         task.time_col: "datetime",
         task.target_col: target_stype,
-    }
-    | {
-        f"{task.target_col}_lag_{lag}": target_stype
-        for lag in range(1, args.num_lags + 1)
+        **{
+            f"{task.target_col}_lag_{lag}": target_stype
+            for lag in range(1, args.num_lags + 1)
+        },
     },
 )
 context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
