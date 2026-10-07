@@ -108,3 +108,27 @@ The tuned single GPU is 2.13 times faster than the best initial two-GPU ensemble
 Batch sizes two and four change floating-point computation and are not bitwise identical, although both meet the predeclared BF16 screening tolerance. All 2,048 predicted classes and accuracy remain unchanged. Batch four's FP64 logloss is 0.5759778337511707, a paired change of -0.0000667682; its paired-row bootstrap 95% interval is [-0.000186384, +0.0000527502]. Macro AUROC changes by -0.00000277055. Batch two's logloss delta is -0.0000488099 with interval [-0.000176049, +0.0000781554]. These bootstrap intervals describe numerical loss differences on the available cohort, not independence of spatial forest observations or performance on another dataset.
 
 The repeated native fit is 1.3268 seconds. This confirms that the earlier 122.75-second first fit contains a large cold-start effect; it is unsuitable as a placement speedup claim.
+
+## Native relational ladder audit
+
+All seven rel-hm arms reuse the exact stored `[16,16]` temporal-last graphs, context 1,024, four members and first 2,000 ordered validation rows in microbatches of 250. Each stored workload object, graph hash, class-column sequence and prediction content hash passed independent comparison. Targets were reconstructed for scoring from the original ordered validation parquet.
+
+| Arm | Recomputed median rows/s | Matched one-GPU speedup | Largest per-device prediction peak GiB |
+|---|---:|---:|---:|
+| Native | 1,294.66 | Separate baseline | 0.459 |
+| EP1 | 1,361.95 | 1.000x | 0.496 |
+| EP2 | 1,465.28 | 1.076x | 0.435 |
+| EP4 | 1,577.98 | 1.159x | 0.371 |
+| Query DP1 | 1,350.21 | 1.000x | 0.468 |
+| Query DP2 | 1,465.94 | 1.086x | 0.468 |
+| Query DP4 | 1,211.90 | 0.898x | 0.468 |
+
+EP1/2/4 predictions are bitwise identical to each other; query DP1/2/4 predictions are bitwise identical to native. However, EP versus native is not the same stochastic execution: the resident path preprocesses on CPU and uses separate model-member seeds, including sampled GNN edge-type embeddings. Native-to-EP max probability difference is 0.0795122 and mean difference 0.00943745, failing the predeclared BF16 numerical screen. One of 2,000 predicted classes changes. This cannot be described as native-parity or a GPU-placement accuracy benefit.
+
+Native/query-DP accuracy is 0.808, logloss 0.4668492853 and churn-class-1 AUROC 0.6619477129. EP accuracy is 0.8085, logloss 0.4653579016 and churn-class-1 AUROC 0.6635244651. The model's output columns are `['1','0']`; the original harness index-positive AUROC selects class 0 and reports 0.6635422268 for EP. Complementary FP32 probability ties account for the small AUROC difference; always name the positive class. The class-aligned paired logloss delta is -0.00149138, with entity-bootstrap 95% interval [-0.00302336, +0.0000309842]. GPU placement within either execution policy has zero quality delta.
+
+The rel-f1 E4 arms share 1,024 context rows and all 499 validation rows, in four graph microbatches (125/125/125/124). EP1/2/4 arrays `[499,999]` are bitwise identical in all quantiles, finite, correctly ordered `q001` through `q999`, and have zero crossings. EP1/2/4 achieve 384.04/379.23/356.47 rows/s: two and four GPUs are slower than the matched one-GPU executor (0.987x/0.928x). Largest per-GPU peak allocations fall from 0.388 to 0.326 to 0.259 GiB. Native E4 achieves 371.72 rows/s.
+
+F1 EP median RMSE/MAE are 4.09476157/3.32554260, mean pinball loss is 1.17491292 and q050-q950 coverage is 0.95991984. Native E4 RMSE/MAE are 4.21103292/3.41042852. Native-to-EP full-quantile max/mean differences are 4.275915/0.353979 and fail the numerical screen because of the changed stochastic execution; matched EP placement differences remain exactly zero. The paired MAE difference is -0.0848859, with a 47-driver cluster bootstrap interval [-0.139039, -0.0375763]. This is a comparison of one particular pair of random-member plans, not evidence that using more GPUs improves prediction quality.
+
+An additional F1 native E1 control independently validated `[499,999]` outputs with no crossings, RMSE 4.38872041, MAE 3.56287834, pinball loss 1.24091992 and coverage 0.96192385. Its throughput is 1,123.93 rows/s (median of three passes); E1 and E4 have different amounts of model work and should not be called parallel scaling.
