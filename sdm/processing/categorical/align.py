@@ -18,6 +18,7 @@ from sdm import (
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
+from sdm.tensor.string import _sort_indices
 from sdm.tensor.var_len import _clone
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
@@ -107,7 +108,18 @@ class AlignCategories(EnsembleProcessor):
             order = counts.argsort(dim=1, descending=True, stable=True)
             ordered_categories = input_categories
         elif self.sort_by == "value":
-            if (
+            if torch.compiler.is_compiling() and isinstance(
+                input_categories, StringTensor
+            ):
+                perm = _string_category_order(
+                    data=input_categories._data,
+                    offset=input_categories._offset,
+                    size=input_categories.numel(),
+                    stride=input_categories.stride(0),
+                    storage_offset=input_categories._storage_offset,
+                )
+                ordered_categories = input_categories
+            elif (
                 input_categories.is_cuda
                 and input_categories.dtype in _UNSIGNED_DTYPES
             ):
@@ -622,3 +634,39 @@ def _string_category_lookup_fake(
     codes: Tensor,
 ) -> Tensor:
     return codes.new_empty(sum(sizes[: len(sizes) // 2]))
+
+
+@torch.library.custom_op("sdm::_string_category_order", mutates_args=())
+def _string_category_order(
+    data: Tensor,
+    offset: Tensor,
+    size: int,
+    stride: int,
+    storage_offset: int,
+) -> Tensor:
+    """Keep the existing external string sort opaque inside compiled graphs."""
+    categories = StringTensor(
+        data=data,
+        offset=offset,
+        valid=None,
+        size=(size,),
+        stride=(stride,),
+        storage_offset=storage_offset,
+    )
+    if not categories.is_contiguous():
+        categories = cast(
+            StringTensor,
+            _clone(categories, memory_format=torch.contiguous_format),
+        )
+    return _sort_indices(categories)
+
+
+@_string_category_order.register_fake
+def _string_category_order_fake(
+    data: Tensor,
+    offset: Tensor,
+    size: int,
+    stride: int,
+    storage_offset: int,
+) -> Tensor:
+    return data.new_empty(size, dtype=torch.long)
