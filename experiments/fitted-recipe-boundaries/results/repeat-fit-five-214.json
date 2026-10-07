@@ -1,0 +1,128 @@
+{
+  "torch": "2.14.0",
+  "backend": "inductor",
+  "device": "cpu",
+  "dynamic": true,
+  "fullgraph": false,
+  "cache_limit": 64,
+  "prepared_recipe": false,
+  "same_compiled_callable": true,
+  "query_rows": 31,
+  "estimators": 1,
+  "samples": [
+    {
+      "rows": 32,
+      "context_start": 0,
+      "eager_fit_seconds": 0.06148700008634478,
+      "compiled_fit_seconds": 162.4079506250564,
+      "new_graphs": 37,
+      "new_captured_calls": 3388,
+      "max_prediction_error": 1.3113021850585938e-06,
+      "parity": true,
+      "labels_equal": true,
+      "generator_state_exact": true,
+      "stats": {
+        "calls_captured": 3388,
+        "unique_graphs": 37
+      }
+    },
+    {
+      "rows": 48,
+      "context_start": 0,
+      "eager_fit_seconds": 0.049798374995589256,
+      "compiled_fit_seconds": 156.46448708407115,
+      "new_graphs": 35,
+      "new_captured_calls": 3119,
+      "max_prediction_error": 5.617737770080566e-06,
+      "parity": true,
+      "labels_equal": true,
+      "generator_state_exact": true,
+      "stats": {
+        "calls_captured": 6507,
+        "unique_graphs": 72
+      }
+    },
+    {
+      "rows": 32,
+      "context_start": 0,
+      "eager_fit_seconds": 0.17534029204398394,
+      "compiled_fit_seconds": 11.64921045792289,
+      "new_graphs": 7,
+      "new_captured_calls": 134,
+      "max_prediction_error": 1.3113021850585938e-06,
+      "parity": true,
+      "labels_equal": true,
+      "generator_state_exact": true,
+      "stats": {
+        "calls_captured": 6641,
+        "unique_graphs": 79
+      }
+    },
+    {
+      "rows": 32,
+      "context_start": 32,
+      "eager_fit_seconds": 0.05982933402992785,
+      "compiled_fit_seconds": 0.1759068330284208,
+      "new_graphs": 1,
+      "new_captured_calls": 1,
+      "max_prediction_error": 4.827976226806641e-06,
+      "parity": true,
+      "labels_equal": true,
+      "generator_state_exact": true,
+      "stats": {
+        "calls_captured": 6642,
+        "unique_graphs": 80
+      }
+    },
+    {
+      "rows": 32,
+      "context_start": 0,
+      "eager_fit_seconds": 0.03724108403548598,
+      "compiled_fit_seconds": 0.10578412504401058,
+      "new_graphs": 1,
+      "new_captured_calls": 1,
+      "max_prediction_error": 1.3113021850585938e-06,
+      "parity": true,
+      "labels_equal": true,
+      "generator_state_exact": true,
+      "stats": {
+        "calls_captured": 6643,
+        "unique_graphs": 81
+      }
+    }
+  ],
+  "status": "pass",
+  "unimplemented": {
+    "Dynamic shape operator\n  Explanation: Operator `aten.nonzero.default`'s output shape depends on input Tensor data.\n  Hint: Enable tracing of dynamic shape operators with `torch._dynamo.config.capture_dynamic_output_shape_ops = True`\n\n  Developer debug context: aten.nonzero.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0036.html\n\n*** While handling this graph break, another graph break occurred: ***\n\nGraph break under GenericContextWrappingVariable\n  Explanation: Attempted to graph break in an active context manager(s) that doesn't support graph breaking.\n  Hint: Move the offending context manager(s) to outside the compiled region.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: Active generic context managers: [GenericContextWrappingVariable(_GeneratorContextManager)]\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0066.html": 1,
+    "Attempt to trace generator\n  Explanation: Generators cannot be compiled directly with `torch.compile`.\n  Hint: Call a generator from inside of a non-generator Python function and compile that function instead.\n  Hint: This graph break is fundamental - it is unlikely that Dynamo will ever be able to trace through your code. Consider finding a workaround.\n\n  Developer debug context: \n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0003.html": 20,
+    "Dynamic shape operator\n  Explanation: Operator `aten.nonzero.default`'s output shape depends on input Tensor data.\n  Hint: Enable tracing of dynamic shape operators with `torch._dynamo.config.capture_dynamic_output_shape_ops = True`\n\n  Developer debug context: aten.nonzero.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0036.html": 6,
+    "Dynamic shape operator\n  Explanation: Operator `aten.nonzero.default`'s output shape depends on input Tensor data.\n  Hint: Enable tracing of dynamic shape operators with `torch._dynamo.config.capture_dynamic_output_shape_ops = True`\n\n  Developer debug context: aten.nonzero.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0036.html\n\n*** While handling this graph break, another graph break occurred: ***\n\ngraph break in loop\n  Explanation: torch.compile detected a graph break in a for/while loop. Skipping the frame and falling back to eager, as graph breaks in loops are not supported.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: frame skipped: _fit_transform_ensemble (/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/common/sequential.py line 106)\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb7000.html": 1,
+    "Dynamic shape operator\n  Explanation: Operator `aten.nonzero.default`'s output shape depends on input Tensor data.\n  Hint: Enable tracing of dynamic shape operators with `torch._dynamo.config.capture_dynamic_output_shape_ops = True`\n\n  Developer debug context: aten.nonzero.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0036.html\n\n*** While handling this graph break, another graph break occurred: ***\n\ngraph break in loop\n  Explanation: torch.compile detected a graph break in a for/while loop. Skipping the frame and falling back to eager, as graph breaks in loops are not supported.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: frame skipped: _fit_transform_ensemble (/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/categorical/align.py line 301)\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb7000.html": 1,
+    "Dynamic shape operator\n  Explanation: Operator `aten.nonzero.default`'s output shape depends on input Tensor data.\n  Hint: Enable tracing of dynamic shape operators with `torch._dynamo.config.capture_dynamic_output_shape_ops = True`\n\n  Developer debug context: aten.nonzero.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0036.html\n\n*** While handling this graph break, another graph break occurred: ***\n\ngraph break in loop\n  Explanation: torch.compile detected a graph break in a for/while loop. Skipping the frame and falling back to eager, as graph breaks in loops are not supported.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: frame skipped: _fit_columns (/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/categorical/align.py line 177)\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb7000.html": 1,
+    "Dynamic shape operator\n  Explanation: Operator `aten.nonzero.default`'s output shape depends on input Tensor data.\n  Hint: Enable tracing of dynamic shape operators with `torch._dynamo.config.capture_dynamic_output_shape_ops = True`\n\n  Developer debug context: aten.nonzero.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0036.html\n\n*** While handling this graph break, another graph break occurred: ***\n\ngraph break in loop\n  Explanation: torch.compile detected a graph break in a for/while loop. Skipping the frame and falling back to eager, as graph breaks in loops are not supported.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: frame skipped: _fit_column (/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/categorical/align.py line 89)\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb7000.html": 1,
+    "Attempted to read undefined local variable\n  Explanation: Could not find a local variable with name `table`\n  Hint: Your code may result in an error when running in eager. Please double check that your code doesn't contain a similar error when actually running eager/uncompiled. You can do this by removing the `torch.compile` call, or by using `torch.compiler.set_stance(\"force_eager\")`. \n\n  Developer debug context: LOAD_FAST table\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0011.html": 1,
+    "Failed to convert args/kwargs to proxy\n  Explanation: Missing `as_proxy()` implementation for some arg/kwarg.\n\n\n  Developer debug context: call_function args: SymNodeVariable() LazyVariableTracker(realized: UserDefinedObjectVariable(Generator)) ConstantVariable(device: device(type='cpu'))\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0055.html": 2,
+    "Failed to convert args/kwargs to proxy\n  Explanation: Missing `as_proxy()` implementation for some arg/kwarg.\n\n\n  Developer debug context: call_function args: SymNodeVariable() LazyVariableTracker(realized: UserDefinedObjectVariable(Generator)) ConstantVariable(device: device(type='cpu'))\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0055.html\n\n*** While handling this graph break, another graph break occurred: ***\n\ngraph break in loop\n  Explanation: torch.compile detected a graph break in a for/while loop. Skipping the frame and falling back to eager, as graph breaks in loops are not supported.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: frame skipped: _fit_ensemble (/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/categorical/shuffle.py line 89)\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb7000.html": 1,
+    "Failed to convert args/kwargs to proxy\n  Explanation: Missing `as_proxy()` implementation for some arg/kwarg.\n\n\n  Developer debug context: call_function args: SymNodeVariable() LazyVariableTracker(realized: UserDefinedObjectVariable(Generator)) ConstantVariable(device: device(type='cpu'))\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0055.html\n\n*** While handling this graph break, another graph break occurred: ***\n\ngraph break in loop\n  Explanation: torch.compile detected a graph break in a for/while loop. Skipping the frame and falling back to eager, as graph breaks in loops are not supported.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: frame skipped: _draw_permutations (/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/categorical/shuffle.py line 50)\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb7000.html": 1,
+    "Tensor.tolist() with non-integer tensor\n  Explanation: Dynamo currently does not support tracing `tolist()` on non-integer tensors.\n  Hint: Ensure the input tensor to `tolist()` is an integer type (e.g., int8, int16, int32, int64).\n\n  Developer debug context: call_method TensorVariable() to_list\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0109.html": 2,
+    "Failed to convert args/kwargs to proxy\n  Explanation: Missing `as_proxy()` implementation for some arg/kwarg.\n\n\n  Developer debug context: call_function args: TensorVariable() LazyVariableTracker(realized: SymNodeVariable()) LazyVariableTracker(realized: UserDefinedObjectVariable(Generator))\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0055.html": 1,
+    "Failed to convert args/kwargs to proxy\n  Explanation: Missing `as_proxy()` implementation for some arg/kwarg.\n\n\n  Developer debug context: call_function args: TensorVariable() LazyVariableTracker(realized: SymNodeVariable()) LazyVariableTracker(realized: UserDefinedObjectVariable(Generator))\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0055.html\n\n*** While handling this graph break, another graph break occurred: ***\n\ngraph break in loop\n  Explanation: torch.compile detected a graph break in a for/while loop. Skipping the frame and falling back to eager, as graph breaks in loops are not supported.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: frame skipped: _fit_ensemble (/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/numerical/flip_sign.py line 30)\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb7000.html": 1,
+    "Data dependent operator\n  Explanation: Operator `aten._local_scalar_dense.default` has a non-Tensor output whose value is dependent on the data of Tensor inputs.\n  Hint: Enable tracing of data-dependent output operators with `torch._dynamo.config.capture_scalar_outputs = True`\n\n  Developer debug context: aten._local_scalar_dense.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0033.html": 1,
+    "Data dependent operator\n  Explanation: Operator `aten._local_scalar_dense.default` has a non-Tensor output whose value is dependent on the data of Tensor inputs.\n  Hint: Enable tracing of data-dependent output operators with `torch._dynamo.config.capture_scalar_outputs = True`\n\n  Developer debug context: aten._local_scalar_dense.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0033.html\n\n*** While handling this graph break, another graph break occurred: ***\n\ngraph break in loop\n  Explanation: torch.compile detected a graph break in a for/while loop. Skipping the frame and falling back to eager, as graph breaks in loops are not supported.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: frame skipped: torch_dynamo_resume_in__fit_ensemble_at_65 (/Users/ardrianw/repositories/sdm-fitted-recipe-boundaries-20261008/sdm/processing/common/shuffle.py line 65)\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb7000.html": 1,
+    "Uninitialized nn.Module\n  Explanation: Attempted to trace an uninitialized nn.Module of type BufferList.\n  Hint: Your code may result in an error when running in eager. Please double check that your code doesn't contain a similar error when actually running eager/uncompiled. You can do this by removing the `torch.compile` call, or by using `torch.compiler.set_stance(\"force_eager\")`. \n  Hint: Ensure your nn.Module instance has called `super().__init__()`.\n\n  Developer debug context: BufferList\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0119.html": 1,
+    "torch.* op returned non-Tensor\n  Explanation: torch.* ops that return a non-Tensor cannot be traced into the Dynamo FX graph output\n\n\n  Developer debug context: example_value type: generator; op: call_method; target: items\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0208.html": 1
+  },
+  "graph_breaks": {
+    "Dynamic shape operator\n  Explanation: Operator `aten.nonzero.default`'s output shape depends on input Tensor data.\n  Hint: Enable tracing of dynamic shape operators with `torch._dynamo.config.capture_dynamic_output_shape_ops = True`\n\n  Developer debug context: aten.nonzero.default\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0036.html": 8,
+    "Failed to convert args/kwargs to proxy\n  Explanation: Missing `as_proxy()` implementation for some arg/kwarg.\n\n\n  Developer debug context: call_function args: SymNodeVariable() LazyVariableTracker(realized: UserDefinedObjectVariable(Generator)) ConstantVariable(device: device(type='cpu'))\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0055.html": 2,
+    "Tensor.tolist() with non-integer tensor\n  Explanation: Dynamo currently does not support tracing `tolist()` on non-integer tensors.\n  Hint: Ensure the input tensor to `tolist()` is an integer type (e.g., int8, int16, int32, int64).\n\n  Developer debug context: call_method TensorVariable() to_list\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0109.html": 9,
+    "Failed to convert args/kwargs to proxy\n  Explanation: Missing `as_proxy()` implementation for some arg/kwarg.\n\n\n  Developer debug context: call_function args: TensorVariable() LazyVariableTracker(realized: SymNodeVariable()) LazyVariableTracker(realized: UserDefinedObjectVariable(Generator))\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0055.html": 2,
+    "Failed to convert args/kwargs to proxy\n  Explanation: Missing `as_proxy()` implementation for some arg/kwarg.\n\n\n  Developer debug context: call_function args: ConstantVariable(int: 30) LazyVariableTracker(realized: UserDefinedObjectVariable(Generator)) ConstantVariable(device: device(type='cpu'))\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0055.html": 4,
+    "Failed to convert args/kwargs to proxy\n  Explanation: Missing `as_proxy()` implementation for some arg/kwarg.\n\n\n  Developer debug context: call_function args: LazyVariableTracker(realized: SymNodeVariable()) LazyVariableTracker(realized: UserDefinedObjectVariable(Generator)) LazyVariableTracker(unrealized: <class 'torch.device'>)\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0055.html": 1,
+    "Uninitialized nn.Module\n  Explanation: Attempted to trace an uninitialized nn.Module of type BufferList.\n  Hint: Your code may result in an error when running in eager. Please double check that your code doesn't contain a similar error when actually running eager/uncompiled. You can do this by removing the `torch.compile` call, or by using `torch.compiler.set_stance(\"force_eager\")`. \n  Hint: Ensure your nn.Module instance has called `super().__init__()`.\n\n  Developer debug context: BufferList\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0119.html": 1,
+    "torch.* op returned non-Tensor\n  Explanation: torch.* ops that return a non-Tensor cannot be traced into the Dynamo FX graph output\n\n\n  Developer debug context: example_value type: generator; op: call_method; target: items\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0208.html": 4
+  },
+  "production_source_revision": "60801e348",
+  "cache_directory": "/tmp/sdm-repeat-more214-1791396251429",
+  "recompile_limit_events": false
+}

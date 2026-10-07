@@ -1,6 +1,7 @@
 # ruff: noqa: D103, T201
 import argparse
 import json
+import os
 import traceback
 from pathlib import Path
 
@@ -26,6 +27,7 @@ p.add_argument("--atomic-categorical", action="store_true")
 p.add_argument("--atomic-table", action="store_true")
 p.add_argument("--prepared-recipe", action="store_true")
 p.add_argument("--atomic-recipe", action="store_true")
+p.add_argument("--atomic-mode-wrapper", action="store_true")
 p.add_argument(
     "--task",
     choices=["classification", "regression"],
@@ -50,6 +52,15 @@ if a.atomic_recipe:
     KumoRelational.default_recipe = classmethod(
         torch.compiler.disable(KumoRelational.default_recipe.__func__)
     )
+if a.atomic_mode_wrapper:
+    from sdm.tensor.table import preserve_autograd_state
+
+    wrapper_code = preserve_autograd_state(lambda: None).__code__
+    for operation, handler in tuple(TableTensor.HANDLED_FUNCTIONS.items()):
+        if getattr(handler, "__code__", None) is wrapper_code:
+            TableTensor.HANDLED_FUNCTIONS[operation] = torch.compiler.disable(
+                handler, recursive=False
+            )
 torch._dynamo.config.cache_size_limit = a.cache_limit
 if a.capture_dynamic:
     torch._dynamo.config.capture_dynamic_output_shape_ops = True
@@ -128,6 +139,10 @@ def forward(model, function=None):
 
 result = {
     "torch": torch.__version__,
+    "cache_dir": os.environ.get("TORCHINDUCTOR_CACHE_DIR"),
+    "force_disable_caches": os.environ.get(
+        "TORCHINDUCTOR_FORCE_DISABLE_CACHES"
+    ),
     "model": a.model,
     "entry": a.entry,
     "fullgraph": a.fullgraph,
@@ -141,6 +156,7 @@ result = {
     "dynamic": a.dynamic,
     "prepared_recipe": a.prepared_recipe,
     "atomic_recipe": a.atomic_recipe,
+    "atomic_mode_wrapper": a.atomic_mode_wrapper,
 }
 try:
     with torch.inference_mode():

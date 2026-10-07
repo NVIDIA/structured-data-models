@@ -17,6 +17,7 @@ parser.add_argument("--data", required=True)
 parser.add_argument("--checkpoint", required=True)
 parser.add_argument("--output", required=True)
 parser.add_argument("--prepared-recipe", action="store_true")
+parser.add_argument("--extra-repeats", action="store_true")
 args = parser.parse_args()
 torch.set_num_threads(1)
 torch._dynamo.config.cache_size_limit = 64
@@ -55,13 +56,26 @@ result = {
 }
 try:
     with torch.inference_mode():
-        for rows in (32, 48, 32):
+        contexts = [(32, 0), (48, 0), (32, 0)]
+        if args.extra_repeats:
+            contexts.extend([(32, 32), (32, 0)])
+        for rows, context_start in contexts:
             context = TableTensor.from_tensor(
-                torch.tensor(data["x"][data["train_ids"][:rows]])
+                torch.tensor(
+                    data["x"][
+                        data["train_ids"][context_start : context_start + rows]
+                    ]
+                )
             )
             target = TableTensor.from_tensor(
                 CategoricalTensor.from_tensor(
-                    torch.tensor(data["y"][data["train_ids"][:rows]])
+                    torch.tensor(
+                        data["y"][
+                            data["train_ids"][
+                                context_start : context_start + rows
+                            ]
+                        ]
+                    )
                     .long()
                     .reshape(-1, 1)
                 )
@@ -93,6 +107,7 @@ try:
             stats = dict(torch._dynamo.utils.counters["stats"])
             sample = {
                 "rows": rows,
+                "context_start": context_start,
                 "eager_fit_seconds": eager_seconds,
                 "compiled_fit_seconds": fit_seconds,
                 "new_graphs": stats.get("unique_graphs", 0)
@@ -118,6 +133,10 @@ try:
             assert sample["parity"]
             assert sample["generator_state_exact"]
     result["status"] = "pass"
+    result["unimplemented"] = dict(
+        torch._dynamo.utils.counters["unimplemented"]
+    )
+    result["graph_breaks"] = dict(torch._dynamo.utils.counters["graph_break"])
 except Exception as error:  # noqa: BLE001
     result.update(
         status="fail",
