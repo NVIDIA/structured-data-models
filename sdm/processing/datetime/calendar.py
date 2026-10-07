@@ -138,7 +138,7 @@ class AddCalendarFields(Processor):
 
             columns = tuple(
                 f"{column}__{field}__{fn}"
-                for column in table.columns[Stype.datetime]
+                for column in dict(table._column_items)[Stype.datetime]
                 for field in self.fields
                 for fn in ("sin", "cos")
             )
@@ -146,7 +146,7 @@ class AddCalendarFields(Processor):
             assert self.encoding == "raw"
             columns = tuple(
                 f"{column}__{field}"
-                for column in table.columns[Stype.datetime]
+                for column in dict(table._column_items)[Stype.datetime]
                 for field in self.fields
             )
 
