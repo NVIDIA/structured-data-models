@@ -83,6 +83,7 @@ class CategoricalTensor(Tensor):
     ) -> None:
         pass
 
+    @torch.compiler.disable
     def __new__(
         cls,
         code: Tensor,

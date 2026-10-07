@@ -227,6 +227,7 @@ class TableTensor(Tensor):
     ) -> None:
         pass
 
+    @torch.compiler.disable
     def __new__(
         cls,
         size: Sequence[int] | None = None,
