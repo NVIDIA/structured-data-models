@@ -1,0 +1,130 @@
+[
+  {
+    "version": "2.7.1",
+    "kind": "full",
+    "fullgraph": false,
+    "dynamic": false,
+    "exit_code": 0,
+    "output": "full False False PASS"
+  },
+  {
+    "version": "2.7.1",
+    "kind": "full",
+    "fullgraph": false,
+    "dynamic": true,
+    "exit_code": 0,
+    "output": "full False True PASS"
+  },
+  {
+    "version": "2.7.1",
+    "kind": "full",
+    "fullgraph": true,
+    "dynamic": false,
+    "exit_code": 0,
+    "output": "full True False PASS"
+  },
+  {
+    "version": "2.7.1",
+    "kind": "full",
+    "fullgraph": true,
+    "dynamic": true,
+    "exit_code": 0,
+    "output": "full True True PASS"
+  },
+  {
+    "version": "2.7.1",
+    "kind": "construct",
+    "fullgraph": false,
+    "dynamic": false,
+    "exit_code": 0,
+    "output": "construct False False PASS"
+  },
+  {
+    "version": "2.7.1",
+    "kind": "construct",
+    "fullgraph": false,
+    "dynamic": true,
+    "exit_code": 0,
+    "output": "construct False True PASS"
+  },
+  {
+    "version": "2.7.1",
+    "kind": "construct",
+    "fullgraph": true,
+    "dynamic": false,
+    "exit_code": 0,
+    "output": "construct True False PASS"
+  },
+  {
+    "version": "2.7.1",
+    "kind": "construct",
+    "fullgraph": true,
+    "dynamic": true,
+    "exit_code": 0,
+    "output": "construct True True PASS"
+  },
+  {
+    "version": "2.14.0",
+    "kind": "full",
+    "fullgraph": false,
+    "dynamic": false,
+    "exit_code": 0,
+    "output": "full False False PASS"
+  },
+  {
+    "version": "2.14.0",
+    "kind": "full",
+    "fullgraph": false,
+    "dynamic": true,
+    "exit_code": 0,
+    "output": "full False True PASS"
+  },
+  {
+    "version": "2.14.0",
+    "kind": "full",
+    "fullgraph": true,
+    "dynamic": false,
+    "exit_code": 0,
+    "output": "full True False PASS"
+  },
+  {
+    "version": "2.14.0",
+    "kind": "full",
+    "fullgraph": true,
+    "dynamic": true,
+    "exit_code": 0,
+    "output": "full True True PASS"
+  },
+  {
+    "version": "2.14.0",
+    "kind": "construct",
+    "fullgraph": false,
+    "dynamic": false,
+    "exit_code": 0,
+    "output": "construct False False PASS"
+  },
+  {
+    "version": "2.14.0",
+    "kind": "construct",
+    "fullgraph": false,
+    "dynamic": true,
+    "exit_code": 0,
+    "output": "construct False True PASS"
+  },
+  {
+    "version": "2.14.0",
+    "kind": "construct",
+    "fullgraph": true,
+    "dynamic": false,
+    "exit_code": 0,
+    "output": "construct True False PASS"
+  },
+  {
+    "version": "2.14.0",
+    "kind": "construct",
+    "fullgraph": true,
+    "dynamic": true,
+    "exit_code": 0,
+    "output": "construct True True PASS"
+  }
+]

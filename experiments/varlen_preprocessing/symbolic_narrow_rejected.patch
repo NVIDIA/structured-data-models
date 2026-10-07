@@ -1,0 +1,62 @@
+diff --git a/sdm/tensor/var_len.py b/sdm/tensor/var_len.py
+index 324757346..6d4fd934f 100644
+--- a/sdm/tensor/var_len.py
++++ b/sdm/tensor/var_len.py
+@@ -203,7 +203,9 @@ class VarLenTensor(Tensor):
+                 f"{valid.numel()} entries, but expected at least "
+                 f"{storage_offset + _span_len(size, stride)} entries)"
+             )
+-        if data.numel() > torch.iinfo(offset.dtype).max:
++        if is_fake(data):
++            torch._check(data.numel() <= torch.iinfo(offset.dtype).max)
++        elif data.numel() > torch.iinfo(offset.dtype).max:
+             raise ValueError(
+                 f"Expected 'offset' in {cls.__name__!r} to represent "
+                 f"{data.numel()} elements, but '{offset.dtype}' can only "
+@@ -789,7 +791,7 @@ def _to_dtype_layout(
+     storage_offset = int(inp.storage_offset())
+     span_len = _span_len(inp.size(), inp.stride())
+     offset = inp._offset[storage_offset : storage_offset + span_len + 1]
+-    data = inp._data[offset[0] : offset[-1]].to(
++    data = _slice_data(inp._data, offset).to(
+         device=device,
+         dtype=dtype,
+         non_blocking=non_blocking,
+@@ -1321,7 +1323,19 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
+             size=size,
+         )
+ 
+-    data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
++    offsets = tuple(
++        tensor._offset[
++            int(tensor.storage_offset()) : int(tensor.storage_offset())
++            + tensor.numel()
++            + 1
++        ]
++        for tensor in tensors
++    )
++    data_list = tuple(
++        _slice_data(tensor._data, offset)
++        for tensor, offset in zip(tensors, offsets)
++    )
++    offsets = tuple(offset - offset[0] for offset in offsets)
+     offset_dtype: torch.dtype = torch.int32
+     if (
+         any(offset.dtype == torch.int64 for offset in offsets)
+@@ -1406,6 +1420,16 @@ def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
+     )
+ 
+ 
++def _slice_data(data: Tensor, offset: Tensor) -> Tensor:
++    start = offset[0].item()
++    end = offset[-1].item()
++    length = end - start
++    torch._check(start >= 0)
++    torch._check(length >= 0)
++    torch._check(start + length <= data.numel())
++    return data.narrow(0, start, length)
++
++
+ def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
+     count = end - start
+ 
