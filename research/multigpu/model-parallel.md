@@ -32,7 +32,7 @@ Parameter counts from meta-device construction at the baseline revision, classif
 | KumoTabular large | 9,964,560 | 0 | — | 203,703,690 | 815.08 MiB |
 | KumoRelational | 1,275,768 | — | 2,363,392 | 26,275,850 | 114.12 MiB |
 
-These weight sizes are modest relative to common GPU memory. Context cache and feature/graph activations can dominate. Splitting weights alone therefore does not guarantee a useful capacity improvement. For cached KumoTabular-large ICL, approximate KV storage per member is `2 × 24 × R × 2 × 64 × element_size`; BF16 at 32,768 context rows is 384 MiB. Relational full-head ICL is `2 × 12 × R × 512 × element_size`; BF16 at the model's 20,000-row cap is about 468.75 MiB. Both formulas exclude encoder caches, ensembles, graph state, and workspaces.
+These weight sizes are modest relative to common GPU memory. Context cache and feature/graph activations can dominate. Splitting weights alone therefore does not guarantee a useful capacity improvement. For cached KumoTabular-large ICL, approximate KV storage per member is `2 × 24 × R × 2 × 64 × element_size`; BF16 at 32,768 context rows is 384 MiB. Relational full-head ICL is `2 × 12 × R × 512 × element_size`; BF16 at 20,000 task context rows is about 468.75 MiB. Both formulas exclude encoder caches, ensembles, graph state, and workspaces. Relational `max_train_size=20_000` is the per-table row encoder's `max_keys` sampling budget, not an absolute task-context/ICL limit; preserve that budget across arms and report sampled key counts separately.
 
 The cell/row encoder alternates attention across context rows and across columns. Rows are not independent during fit. A naive row split with independent local column attention changes the model. During prediction, fitted induced column state makes query rows independent; query partition then belongs to the data-parallel approach.
 
@@ -75,7 +75,7 @@ Run `pytest test/research/test_icl_placement.py`. The runner adapter depends on 
 | Models | KumoTabular large; KumoRelational |
 | Modes | One-replica resident baseline; stage N=2; layers N=2 and N=4 |
 | Estimators | E=1 to isolate model placement; E=8 for cache pressure |
-| Context | 1,024; 8,192; largest common successful context; relational respects 20,000-row architecture cap |
+| Context | 1,024; 8,192; largest common successful context; preserve relational per-table 20,000-key sampling policy |
 | Queries | Batch 256 and 1,024, with multiple batches for steady state |
 | Precision | Same baseline/candidate parameter and autocast dtype, initially BF16 autocast |
 | Evidence | Three or more timed repeats after warmup; synchronized fit/predict latency; per-GPU peak allocation/reservation; actual per-device cache storage; prediction max/mean error and task quality |
