@@ -4,12 +4,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 import torch
 from torch import Tensor
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.explain.base import ICLExplainer
 from sdm.models import ICLModel
 from sdm.models.callback import Callback
@@ -110,34 +109,6 @@ class GradientExplainer(
         output: Callable[[TableTensor], Tensor],
     ) -> None:
         self._output = output
-
-    def _explain_forward(
-        self,
-        model: ICLModel,
-        x_context: Tensor | TableTensor,
-        y_context: Tensor | TableTensor,
-        x_query: Tensor | TableTensor,
-        related_context_tables: RelatedTables | None = None,
-        related_query_tables: RelatedTables | None = None,
-        *,
-        recipe: Recipe | None = None,
-        generator: torch.Generator | None = None,
-        **kwargs: Any,
-    ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
-        callback = _GradientCallback(self._output)
-        model(
-            x_context=x_context,
-            y_context=y_context,
-            x_query=x_query,
-            related_context_tables=related_context_tables,
-            related_query_tables=related_query_tables,
-            recipe=recipe,
-            generator=generator,
-            callbacks=(callback,),
-            **kwargs,
-        )
-        assert callback.result is not None
-        return callback.result
 
     def _explain_predict(
         self,
