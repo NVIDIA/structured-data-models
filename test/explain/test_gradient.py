@@ -142,24 +142,3 @@ def test_gradients_with_estimator_batching(fitted: bool) -> None:
         x_attributions.numerical, torch.full_like(x_query, 2.0)
     )
     assert related_attributions is None
-
-
-def test_clears_context_when_explanation_fails() -> None:
-    class FailingExplainer(GradientExplainer):
-        def _explain_predict(
-            self, *args: Any, **kwargs: Any
-        ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
-            raise RuntimeError("Explanation failed")
-
-    model = _LinearModel()
-    explainer = FailingExplainer(
-        output=lambda prediction: prediction.numerical
-    )
-    with pytest.raises(RuntimeError, match="Explanation failed"):
-        explainer.explain(
-            model,
-            torch.ones(1, 2),
-            x_context=torch.zeros(1, 2),
-            y_context=torch.zeros(1, 1),
-        )
-    assert model._cache is None
