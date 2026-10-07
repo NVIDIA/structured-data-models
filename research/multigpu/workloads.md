@@ -46,3 +46,16 @@ The preexisting local KumoTabular `v1.0.1` reference pointed to `f794cb1e62482d6
 - Kumo weights: [Kumo-Tabular](https://huggingface.co/nvidia/Kumo-Tabular) and [Kumo-Relational](https://huggingface.co/nvidia/Kumo-Relational), OpenMDW 1.1 according to the current model cards and bundled licenses. Preserve upstream third-party notices.
 
 This preparation establishes comparable data and checkpoint inputs. Performance and quality claims require completed runner measurements and independent comparison of saved predictions.
+
+## Preparation validation
+
+All eight exact checkpoints loaded successfully through the unmodified SDM public constructors on CPU at `842c408fe`, with `HF_HUB_OFFLINE=1` and the portable cache. This confirms checkpoint key/shape compatibility; it is not an inference or GPU performance test.
+
+| Model | Classification parameters | Regression parameters |
+|---|---:|---:|
+| KumoTabular small | 27,458,266 | 28,466,231 |
+| KumoTabular medium | 61,485,274 | 62,492,087 |
+| KumoTabular large | 213,668,250 | 215,683,191 |
+| KumoRelational | 29,915,010 | 30,908,383 |
+
+Independent workload inspection confirmed zero overlapping tabular TRAIN/VAL source IDs, no duplicate TRAIN IDs, exact relational VAL ordering, and finite tabular features. All seven Covertype classes occur in the first 1,024 context rows, with counts `[367,506,59,11,22,22,37]` for classes 1–7. Covertype's raw total is 581,012 rows and California's is 20,640. Data generation scripts passed Ruff and formatting checks.
