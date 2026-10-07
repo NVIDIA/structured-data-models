@@ -208,6 +208,9 @@ try:
                     samples[-1]["expected"] = expected.tolist()
                     samples[-1]["actual"] = actual.tolist()
                 result["samples"] = samples
+                print(
+                    json.dumps({"completed_sample": samples[-1]}), flush=True
+                )
             result["all_samples_parity"] = all(
                 sample["parity"] for sample in samples
             )
