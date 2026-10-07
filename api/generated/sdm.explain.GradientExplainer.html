@@ -225,14 +225,13 @@ data-aria-dark="Switch to auto color mode">
 <h1>GradientExplainer<a class="headerlink" href="#gradientexplainer" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.explain.GradientExplainer">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.explain.</span></span><span class="sig-name descname"><span class="pre">GradientExplainer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Callable" title="(in Python v3.14)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.explain.GradientExplainer" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.explain.</span></span><span class="sig-name descname"><span class="pre">GradientExplainer</span></span><a class="headerlink" href="#sdm.explain.GradientExplainer" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.explain.ICLExplainer.html#sdm.explain.ICLExplainer" title="sdm.explain.base.ICLExplainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLExplainer</span></code></a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>[<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>, <a class="reference internal" href="sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.task.RelatedTables"><code class="xref py py-class docutils literal notranslate"><span class="pre">RelatedTables</span></code></a>[<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>] | <a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>]]</p>
-<p>Return gradients of selected outputs with respect to query inputs.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.common.Callable.html#sdm.processing.common.Callable" title="sdm.processing.common.Callable"><em>Callable</em></a><em>[</em><em>[</em><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><em>TableTensor</em></a><em>]</em><em>, </em><em>Tensor</em><em>]</em>) – Map a model output to the tensor values to differentiate.</p>
-</dd>
-</dl>
+<p>Return per-output gradients for preprocessed query inputs.</p>
+<p>Explain the final prediction of one estimator, including target inversion
+and output processing. Attribution tables have shape <code class="docutils literal notranslate"><span class="pre">[C,</span> <span class="pre">...,</span> <span class="pre">R,</span> <span class="pre">D]</span></code>,
+where <code class="docutils literal notranslate"><span class="pre">C</span></code> is the output count, <code class="docutils literal notranslate"><span class="pre">R</span></code> the input rows, and <code class="docutils literal notranslate"><span class="pre">D</span></code> the
+preprocessed input columns.</p>
 </dd></dl>
 
 </section>
@@ -261,7 +260,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=5cac7350"></script>
+      <script src="../../_static/documentation_options.js?v=e2be035f"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
