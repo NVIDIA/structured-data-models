@@ -1,0 +1,76 @@
+# SDM multi-GPU integration design
+
+Inspection baseline: `842c408fe`, 2026-10-08. Recommendations below are architectural inferences from the source, not measured performance claims.
+
+## Model boundaries that matter
+
+`KumoTabular` performs cell embedding, alternating induced column attention and row attention, then a dataset-level ICL transformer. Its medium and large variants cache only two KV heads for query ICL attention, across 24 ICL layers. A cached-context implementation therefore has less KV memory to save than full multi-head attention would suggest. Query rows are independent after the context-derived state is fitted. During fit, context rows interact through induced column attention and ICL context attention; naive row splitting and averaging is not equivalent.
+
+`KumoRelational` constructs context/query task graphs, derives per-table features and relative time, embeds every related table, runs GNN message passing, and feeds task readouts to the shared TabICLv2 ICL block. Table encoders are separable only after deterministic target ownership and preprocessing are established. The GNN draws and caches random edge-type embeddings; all equivalent executions must use the same values. Query graph preparation and GNN cost are unaffected by ICL-only CP.
+
+The current public fitted path offloads multi-estimator CUDA caches to pinned CPU and overlaps their reload with compute. A device-resident executor must document that policy change. Model parameters, fit recipes, fitted caches, and logical estimator identities have distinct lifecycles; treating a fitted model as an ordinary movable module loses this distinction.
+
+## Minimal public surface
+
+Keep inference placement independent of model construction and preprocessing recipes. Use the existing `ICLModel.fit` / `predict` contracts and explicit replicas or process groups. Avoid introducing a cluster manager, service scheduler, mandatory configuration schema, or cloud dependency into SDM.
+
+| Boundary | Proposed responsibility | Must remain independent |
+|---|---|---|
+| Generic ensemble executor | Assign logical members; retain their fitted state; preserve ordered finalization; forward thread-local autocast/inference state | Kumo-specific layers and cloud launch |
+| DP example/runner | One persistent model per process; identical fit; fixed whole-batch assignment; indexed result gathering | Gradient DDP machinery and model internals |
+| Attention context scope | Explicit group and global KV length; stable partial-attention reduction; shard metadata | Sampling, recipes, estimator scheduling |
+| Model-specific stage plan | Move complete modules and associated caches; transfer activations at defined boundaries | Distributed dataset APIs |
+| Experiment harness | Hardware setup, immutable input choices, timings, profiler, targets/metrics, failures | Public core model API |
+
+A reusable core abstraction is warranted only once it has at least two real users. Query DP can remain a short `torchrun` example because it requires no model-internal synchronization. Use NCCL for GPU tensor collectives; CPU control or small output metadata can use a CPU-capable process group. Do not wrap inference in DDP just to replicate parameters: DDP is primarily a gradient synchronization mechanism, as described by [PyTorch distributed documentation](https://docs.pytorch.org/docs/stable/distributed.html).
+
+## Recommended progression
+
+1. Establish fixed-input one-GPU public, batched-estimator, and executor baselines, including cache residency and model-core RNG parity.
+2. Measure EP and DP on 1/2/4 GPUs. EP is useful when E is large enough to fill devices; DP is useful when independent batches or requests are plentiful. Include E1 and E8 so empty EP workers and independent query scaling are visible.
+3. Add cached ICL CP on the same contexts, then longer contexts. Compare single-batch latency and memory, not only aggregate rows/s. Communicate global context length once and cache it, instead of `.item()` and all-reduce in every layer.
+4. Profile phase shares. If relational table embedding dominates, prototype per-table placement before graph partitioning. If row encoder fit dominates, cached ICL CP will not solve the bottleneck.
+5. Test EP × DP (for example two E4 groups across four devices) and EP × CP (two groups, each with two context shards) only after each component is independently correct.
+6. Pursue tensor, full-fit context, graph, or pipeline parallelism where measured memory/latency limits justify their communication and maintenance costs.
+
+## Attention recombination and pitfalls
+
+For shard `s`, let `L_s` be its attention log-sum-exp and `O_s` its normalized output. With `m = max_s L_s`, the global result is `sum_s exp(L_s-m) O_s / sum_s exp(L_s-m)`. This preserves full softmax attention mathematically. Floating-point reduction order still changes, so bitwise parity is not a universal requirement. Aki's branch implements a maximum reduction and two sum reductions; its use of a private efficient-attention operator needs an explicit version/kernel compatibility test.
+
+The communication is proportional to query output state, not KV length: approximately one maximum and two sums over query/head statistics/output each attention call. At 24 layers, collective latency can outweigh local work for short contexts, especially on PCIe hosts. GQA must preserve head mapping without permanently expanding the stored KV cache. Global-length-dependent query scaling must use the original context length. Empty shards need a neutral contribution (`L=-inf`, zero numerator); no-rank-data cases need a defined output or explicit rejection. Preserve query-self/diagonal contributions exactly once when an attention variant includes them.
+
+[Ring Attention](https://arxiv.org/abs/2310.01889) describes another exact route: circulate KV blocks while processing distributed sequence blocks. It is a useful reference for distributed fit, but is more invasive than replicated-query reduction for cached inference. [FlashAttention](https://arxiv.org/abs/2205.14135) supplies the tiled exact-attention/normalizer foundation; neither paper proves performance for SDM's specific small-width tabular layers.
+
+## Other viable approaches
+
+| Approach | Concrete SDM implementation path | Decision criterion |
+|---|---|---|
+| Tensor parallel MLP/projections | Apply row/column sharding to Linear projections, preserve packed QKV/head layouts, all-reduce output projections | Single-member parameter/compute bottleneck and fast interconnect; first verify DTensor coverage of custom tensor boundaries |
+| ICL layer placement | Contiguous layer groups with layer-local KV caches; query activations move between groups | Capacity benefit immediately; throughput benefit requires overlapping multiple microbatches |
+| Encoder → ICL pipeline | Put row encoder (and relational GNN) on one device, ICL on another; retain each stage's fitted caches locally | Measured stage balance and enough queued queries; avoid claiming a serial stage split is pipeline speedup |
+| Table encoder fan-out | Prepare task/table inputs once; dispatch independent table encodings; gather in original table order before GNN | Several similarly expensive tables and transfer cheaper than saved encoding |
+| Graph partition | Assign node owners, exchange source/halo states per hop, combine exact segment sufficient statistics, gather task readouts | Graph state exceeds a device or GNN dominates; preserve min/max/moment aggregation and duplicate-edge semantics |
+| CPU cache/offload/prefetch | Existing baseline path, improve residency scheduling separately | Memory fit and transfer/computation overlap; not multi-GPU by itself |
+| Parameter sharding/offload | Load/gather layer parameters when needed | Parameter capacity problem; usually poor first choice when inference caches/activations dominate |
+| Quantized/mixed-precision replicas | Same distributed method with smaller weights/cache where supported | New quality/numerical arm; do not attribute precision savings to parallelism |
+
+PyTorch offers [DTensor tensor parallel styles](https://docs.pytorch.org/docs/stable/distributed.tensor.parallel) and [pipeline stage/microbatch support](https://docs.pytorch.org/docs/2.14/distributed.pipelining.html). These are reference APIs, not mandatory new dependencies or evidence of compatibility with SDM custom kernels. Pin the deployed PyTorch version before implementation; latest documentation may describe a newer version than the EC2 environment.
+
+## High-value correctness and scale tests
+
+| Test | Bug it can detect |
+|---|---|
+| E=1, E=5 over 2/4 GPUs; G>E | Dropped/duplicated members and empty workers |
+| Different preprocessing groups and per-member class order | Wrong member routing or class-column reduction |
+| Classification >10 classes and regression quantiles | ECOC/tree branch cache/RNG changes and output shape truncation |
+| Independent fit, repeated predict, clear, refit with another context | Stale caches, rank lifetime and mutation bugs |
+| Nontrivial untrained weights or pretrained weights | Zero-initialized residual branches can make an incorrect implementation appear equal |
+| CPU/Gloo process tests plus real CUDA/NCCL tests | Distributed API correctness versus actual stream/device/kernel behavior |
+| CP uneven context, fewer rows than ranks, varying lengths, GQA, FP32/BF16 | Empty-shard NaNs, local-length scaling and head alignment |
+| Relational shared neighbors, disconnected nodes, duplicate edges, temporal cutoff, varying hops | Graph boundary/target ownership changes hidden by disconnected toy graphs |
+| Fixed graph/hash and batches at 1/2/4 GPUs | Speedup caused by changing sampled work |
+| Public CPU-offloaded versus resident serial versus parallel | Residency gains misreported as multi-GPU scaling |
+| Tiny/medium/large query batches and short/long context | Collective launch overhead, pipeline bubbles, and saturation boundaries |
+| Worker exception or Spot interruption | Hangs, partial outputs treated as complete, stale distributed process groups |
+
+Per-rank random seeding alone is insufficient for EP: logical members must retain their seeds when they change ranks. DP replicas should match full fit state. CP participants must agree on input ordering, query tensors, model state, ensemble branch, and collective order. Hierarchical classification can introduce variable control flow; all ranks in a context group must traverse the same branches.
