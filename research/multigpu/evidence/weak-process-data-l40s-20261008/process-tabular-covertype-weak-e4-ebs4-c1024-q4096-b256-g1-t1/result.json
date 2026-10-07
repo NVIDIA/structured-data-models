@@ -1,0 +1,143 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/process-tabular-covertype-weak-e4-ebs4-c1024-q4096-b256-g1-t1",
+    "source_commit": "1686803e4",
+    "task": "classification",
+    "size": "large",
+    "gpus": 1,
+    "context": 1024,
+    "queries": 4096,
+    "batch_size": 256,
+    "estimators": 4,
+    "estimator_batch_size": 4,
+    "seed": 1729,
+    "threads": 1,
+    "warmups": 1,
+    "repeats": 3,
+    "precision": "bfloat16"
+  },
+  "runtime": {
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "git_revision": "1686803e4",
+    "runner_sha256": "d6974021be3a09820bde93c5abba71f419d1b6d8b84c96a09e51c144f2c46f6c"
+  },
+  "mode": "process-data",
+  "input_residency": "prepared_CPU_batches",
+  "timing": "parent_wall_including_input_IPC_H2D_predict_D2H_output_IPC",
+  "batch_times_kind": "worker_service_time_excluding_queue_and_ipc",
+  "query_ids_sha256": "2506e404c507c2c1bed4a3965f5ac5537130100c7b037428d8fb1b4795231bf0",
+  "query_values_sha256": "6e01b3044f6c73978e4c0f8a9de934c804baf9457ef29016cc18231ce29d8e02",
+  "spawn_load_fit_s": 5.002919805000147,
+  "memory_after_fit": [
+    {
+      "worker": 0,
+      "pid": 24916,
+      "device": "cuda:0",
+      "max_rss_bytes": 2176905216,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 2942304256,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 2942304256
+    }
+  ],
+  "warmup_s": 1.1367681540000376,
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 24916,
+      "device": "cuda:0",
+      "max_rss_bytes": 2219044864,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    }
+  ],
+  "predict_repeats_s": [
+    1.084132856999986,
+    1.0829113279996818,
+    1.0783553180003764
+  ],
+  "rows_per_s": [
+    3778.134730953969,
+    3782.396484452699,
+    3798.376965020513
+  ],
+  "batch_times_s": [
+    [
+      0.06751791499982573,
+      0.06617890200004695,
+      0.06607797900005608,
+      0.06593070199960493,
+      0.06594860299992433,
+      0.0656036390000736,
+      0.06582122800000434,
+      0.0655144659999678,
+      0.0673739599997134,
+      0.06618371299964565,
+      0.0662216239998088,
+      0.06613191099995674,
+      0.06596478400024353,
+      0.06608836899977177,
+      0.06603805600025225,
+      0.066118539999934
+    ],
+    [
+      0.0666587509999772,
+      0.06588396999995894,
+      0.06569401299975652,
+      0.0656454909999411,
+      0.06552756600012799,
+      0.06558699900006104,
+      0.06548867500032429,
+      0.0658476389999123,
+      0.06584781899982772,
+      0.06696274300020377,
+      0.06622077500014711,
+      0.06662402999972983,
+      0.06510926000009931,
+      0.06544297300024482,
+      0.06698879500027033,
+      0.06578357699982007
+    ],
+    [
+      0.0656275999999707,
+      0.06565039099996284,
+      0.06567374199994447,
+      0.06566400199972122,
+      0.06560407000006307,
+      0.06638477099977536,
+      0.06520385399971929,
+      0.06526658599977964,
+      0.06526765600028739,
+      0.06505985800004055,
+      0.06680211699995198,
+      0.0662086930001351,
+      0.06597735500008639,
+      0.06572791400003553,
+      0.06596999399971537,
+      0.06568101299990303
+    ]
+  ],
+  "repeat_max_abs_difference": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "prediction_sha256": "8c22243303fe2837ead773acb90b0b85891c30a50c662e038612c6a03a7da204",
+  "quality": {
+    "log_loss": 0.5894669890403748,
+    "accuracy": 0.75439453125
+  }
+}

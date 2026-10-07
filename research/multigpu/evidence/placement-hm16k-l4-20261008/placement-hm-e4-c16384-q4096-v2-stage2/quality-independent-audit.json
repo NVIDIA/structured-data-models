@@ -1,0 +1,51 @@
+{
+  "run": "placement-hm-e4-c16384-q4096-v2-stage2",
+  "prediction_sha256": "3e3a4f1b09bb8ceb387b0171c5af8e16f37a20eb28e20862e8618b6bef611104",
+  "matches_recorded_sha": true,
+  "workload_matches": true,
+  "class_columns_match": true,
+  "member_seeds_match": true,
+  "numerical": {
+    "shape": [
+      4096,
+      2
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "quality": {
+    "rows": 4096,
+    "accuracy": 0.80810546875,
+    "log_loss": 0.4613127915282623,
+    "brier_multiclass": 0.29271152161016895,
+    "auroc_by_class": [
+      0.670048930298348,
+      0.6700450865985563
+    ],
+    "auroc_macro_present_classes": 0.6700470084484522,
+    "max_probability_sum_error": 8.940696716308594e-8,
+    "positive_class": 1,
+    "auroc_positive1": 0.670048930298348
+  },
+  "median_rows_s": 1066.0611203525748,
+  "speedup": 1.0145889368588672,
+  "fit_peak_gib": [
+    4.061144828796387,
+    1.828512191772461
+  ],
+  "prediction_peak_gib": [
+    0.47873592376708984,
+    1.6503982543945312
+  ]
+}

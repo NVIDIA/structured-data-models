@@ -1,0 +1,97 @@
+{
+  "run": "process-tabular-covertype-weak-e4-ebs4-c1024-q8192-b256-g2-t1",
+  "gpus": 2,
+  "rows": 8192,
+  "rows_per_gpu": 4096,
+  "prediction_sha256": "336b4714fdd02280fccad532a388d0fe829bca0bce4a68c2d199192178dcca19",
+  "matches_recorded_sha": true,
+  "query_ids_match": true,
+  "targets_match": true,
+  "class_columns_match": true,
+  "query_values_hash_match": true,
+  "prefix4096_comparison": {
+    "shape": [
+      4096,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "prefix2048_tuned_comparison": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "quality": {
+    "rows": 8192,
+    "accuracy": 0.7532958984375,
+    "log_loss": 0.5902259115348532,
+    "brier_multiclass": 0.3470000169605487,
+    "auroc_by_class": [
+      0.8904803840463416,
+      0.8806255862015216,
+      0.9852501590861837,
+      0.9942305596425263,
+      0.9419918105583167,
+      0.9624112479858621,
+      0.982356177561657
+    ],
+    "auroc_macro_present_classes": 0.9481922750117727,
+    "max_probability_sum_error": 1.7284037312492728e-7
+  },
+  "recomputed_rows_s": [
+    7344.945003392974,
+    7305.417100991767,
+    7395.845146550305
+  ],
+  "median_rows_s": 7344.945003392974,
+  "per_gpu_rows_s": 3672.472501696487,
+  "weak_efficiency": 0.9709380063121232,
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 25180,
+      "device": "cuda:0",
+      "max_rss_bytes": 2218790912,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    },
+    {
+      "worker": 1,
+      "pid": 25183,
+      "device": "cuda:1",
+      "max_rss_bytes": 2219536384,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    }
+  ]
+}

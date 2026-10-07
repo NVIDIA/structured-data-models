@@ -130,6 +130,16 @@ The follow-up combines the same process topology with **local estimator batch si
 
 Four-GPU scaling efficiency is 95.4%, and throughput is 3.492× tuned public native. Both process arms are byte-identical to the **estimator-batch-four** native reference (not the unbatched native reference); accuracy is 0.764160 and log loss 0.575978. The measured process boundary includes input/output IPC and GPU transfers but ends before final CPU concatenation. It must not be silently equated with later runners that time the final gather; that missing duration has not yet been measured for these attempts.
 
+Weak scaling keeps 4,096 query rows per GPU while context 1,024, E4, estimator batch four, and query batch 256 stay fixed:
+
+| GPUs | Total queries | Median rows/s | Rows/s per GPU | Weak efficiency vs DP1 |
+|---:|---:|---:|---:|---:|
+| 1 | 4,096 | 3,782.40 | 3,782.40 | 100% |
+| 2 | 8,192 | 7,344.95 | 3,672.47 | 97.1% |
+| 4 | 16,384 | 14,682.72 | 3,670.68 | 97.0% |
+
+Prediction peak stays 1.404 GiB per GPU. Independent checks found exact outputs on the shared 4,096-row prefix and exact agreement with tuned native on its 2,048-row prefix. These arms score different full validation cohorts; their whole-cohort accuracy differences are not evidence of GPU-induced quality change. A one-GPU 16,384-row reference is still needed for full-cohort placement equivalence. This is weak scaling, not a fixed-workload 3.882× speedup.
+
 ### What the initial Nsight trace explains
 
 The explicit `prediction_pass` ranges show many short kernels and little overlap in unbatched EP4. Unlike the main-thread PyTorch trace, Nsight captured all worker GPUs. Instrumented durations are diagnostic and are not clean benchmark throughput.
@@ -219,7 +229,18 @@ This separate comparison uses **KumoTabular large**, E4, context 1,024, queries 
 | Contiguous ICL layers | 2 | 1,830.08 | 1.248 GiB | 1.071 GiB | 1.614 GiB |
 | Contiguous ICL layers | 4 | 1,787.74 | 0.994 GiB | 0.813 GiB | 1.645 GiB |
 
-The four-way layer split lowers the busiest device's fit peak by about 44% and prediction peak by 49%, at a 3.6% warm throughput penalty. This is a capacity tradeoff; the implementation does not overlap pipeline microbatches. Sum of device peaks is not necessarily simultaneous aggregate usage. At this short context, 462.4 MB of the 512.8 MB retained cache belongs to the row encoder on GPU0, so distributing ICL layers alone cannot balance all cache memory. Larger-context stress tests remain necessary.
+The four-way layer split lowers the busiest device's fit peak by about 44% and prediction peak by 49%, at a 3.6% warm throughput penalty. This is a capacity tradeoff; the implementation does not overlap pipeline microbatches. Sum of device peaks is not necessarily simultaneous aggregate usage. At this short context, 462.4 MB of the 512.8 MB retained cache belongs to the row encoder on GPU0, so distributing ICL layers alone cannot balance all cache memory.
+
+Native H&M relational placement extends context to **16,384**, E4, 4,096 queries, batch 512, fixed `[16,16]` two-hop neighborhoods, BF16, and eight CPU threads on the same L4 host:
+
+| Placement | GPUs | Median rows/s | Max fit peak per GPU | Max prediction peak per GPU |
+|---|---:|---:|---:|---:|
+| Resident reference | 1 | 1,050.73 | 5.322 GiB | 2.111 GiB |
+| Encoder/GNN → ICL stages | 2 | 1,066.06 | **4.061 GiB** | 1.650 GiB |
+| Contiguous ICL layers | 2 | 1,060.83 | 4.687 GiB | 1.293 GiB |
+| Contiguous ICL layers | 4 | 1,057.60 | 4.374 GiB | **0.886 GiB** |
+
+All four outputs are byte-identical; the audit verified complete workload hashes, columns, and member seeds. Churn-positive AUC is 0.670049, accuracy 0.808105, and log loss 0.461313. Stage placement reduces maximum fit allocation by 23.7%, while four-layer placement reduces maximum prediction allocation by 58.0%; the best split depends on the constrained phase. Throughput differs by only 0.7–1.5%, insufficient here to establish a robust speed advantage. The runtime uses CPU joins because cuDF is absent, which can mask GPU stage-latency changes. The GNN remains on one device; these results do not establish distributed GNN computation or a maximum feasible context frontier.
 
 ## Retained evidence
 
@@ -234,6 +255,8 @@ Additional checked snapshots retain the new measurements:
 - [Context F1 L4 evidence](evidence/context-f1-l4-20261008/index.json): 16 archived result/rank/audit records, 32 external artifacts verified; preserves full-quantile failures and paired quality analysis.
 - [Process DP L40S evidence](evidence/process-data-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified.
 - [Tuned and relational process DP evidence](evidence/tuned-process-data-l40s-20261008/index.json): ten archived result/audit records, 27 external artifacts verified; includes matched estimator-batch-four quality references.
+- [Weak process DP evidence](evidence/weak-process-data-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified; current equivalence audit covers common prefixes.
+- [H&M 16k placement evidence](evidence/placement-hm16k-l4-20261008/index.json): 12 archived result/audit/command records, 24 external artifacts verified.
 - [Resident 16k context L4 evidence](evidence/context-large16k-l4-20261008/index.json): 12 archived records, 28 external artifacts verified.
 - [Initial Nsight evidence](evidence/initial-nsys-l40s-20261008/index.json): two archived analysis records, four external analysis/SQLite artifacts verified.
 

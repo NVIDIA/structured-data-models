@@ -1,0 +1,1 @@
+/home/ubuntu/kumo-multigpu/relational_bench-36b4f6fe5.py run --workload /home/ubuntu/kumo-multigpu/results/workload-hm-c16384-b512 --estimators 4 --repeats 3 --source-commit 1686803e4 --output /home/ubuntu/kumo-multigpu/results/placement-hm-e4-c16384-q4096-v2-ep1 --mode ensemble --gpus 1
