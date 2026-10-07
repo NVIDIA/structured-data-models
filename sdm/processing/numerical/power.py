@@ -311,7 +311,7 @@ class PowerTransform(Processor, InvertibleMixin):
             )
             del finite_or_nan
             mean = _nansum_rows(transformed).div_(count)
-            var = transformed.sub_(mean).square_().nansum(-2, keepdim=True)
+            var = _nansum_rows(transformed.sub_(mean).square_())
             var /= count
             scale = var.sqrt()
             scale[_constant_feature_mask(var, mean, count)] = 1.0
