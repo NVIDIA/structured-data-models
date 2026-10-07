@@ -186,6 +186,8 @@ def main() -> None:
             for key, value in vars(args).items()
         },
         "runtime": {
+            "pid": os.getpid(),
+            "timezone": list(time.tzname),
             "torch": torch.__version__,
             "cuda": torch.version.cuda,
             "python": platform.python_version(),
@@ -304,8 +306,10 @@ def main() -> None:
                 args, replicas
             )
 
+        report["load_start_unix_s"] = time.time()
         with phase("model_load"):
             model, report["load_s"] = timed(load, devices)
+        report["load_end_unix_s"] = time.time()
         print(  # noqa: T201
             json.dumps({"phase": "loaded", "seconds": report["load_s"]}),
             flush=True,
@@ -335,10 +339,12 @@ def main() -> None:
             fit_kwargs["member_seed"] = args.seed
         for device in devices:
             torch.cuda.reset_peak_memory_stats(device)
+        report["fit_start_unix_s"] = time.time()
         with phase("context_fit"), torch.inference_mode(), dtype_context():
             _, report["fit_s"] = timed(
                 lambda: model.fit(context, labels, **fit_kwargs), devices
             )
+        report["fit_end_unix_s"] = time.time()
         print(  # noqa: T201
             json.dumps({"phase": "fitted", "seconds": report["fit_s"]}),
             flush=True,
@@ -391,11 +397,16 @@ def main() -> None:
             if callable(getattr(model, "memory", None)):
                 model.memory(reset_peak=True)
             repeats, batches_s, predictions = [], [], []
+            report["prediction_windows_unix_s"] = []
             for _ in range(args.repeats):
+                pass_start = time.time()
                 with phase("prediction_pass"):
                     (prediction, batch_times), elapsed = timed(
                         predict_pass, devices
                     )
+                report["prediction_windows_unix_s"].append(
+                    [pass_start, time.time()]
+                )
                 repeats.append(elapsed)
                 print(  # noqa: T201
                     json.dumps(
