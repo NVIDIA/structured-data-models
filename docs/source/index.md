@@ -43,6 +43,5 @@ api/relational
 api/processing
 api/nn
 api/models
-api/explain
 api/evaluation
 ```
