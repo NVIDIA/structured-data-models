@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-07T16:26:50.513394+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "cp-large16k",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles/cp-large16k",
+      "artifacts": [
+        {
+          "name": "cp-large16k-nsys-analysis.json",
+          "role": "record",
+          "bytes": 421185,
+          "sha256": "0f3fb54485ce3cde6a5025ee92324dd14133b4f898616d6643cd43d823fc8a2a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles/cp-large16k/cp-large16k-nsys-analysis.json",
+          "archived_path": "cp-large16k/cp-large16k-nsys-analysis.json"
+        },
+        {
+          "name": "cp-large16k-nsys.log",
+          "role": "log",
+          "bytes": 36014,
+          "sha256": "c2c32e5274bbc94f891795111b8fe2573f2c5cce37c70c657378b502471ad205",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles/cp-large16k/cp-large16k-nsys.log"
+        },
+        {
+          "name": "cp-large16k-nsys.nsys-rep",
+          "role": "profile",
+          "bytes": 24173421,
+          "sha256": "9364c47dd3e7c2a2f802c5c70e96d82cdc460c772849080bbae21abaa693d823",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles/cp-large16k/cp-large16k-nsys.nsys-rep"
+        },
+        {
+          "name": "cp-large16k-nsys.sqlite",
+          "role": "profile",
+          "bytes": 64618496,
+          "sha256": "60e4dab950ad6f8ba3edce5808f96975b4193e08f712a6dbda25dc72b0178f51",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/profiles/cp-large16k/cp-large16k-nsys.sqlite"
+        }
+      ]
+    }
+  ]
+}

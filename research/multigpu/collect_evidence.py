@@ -36,6 +36,11 @@ def artifact_role(name: str) -> str | None:
         "parity.json",
         "failure.json",
         "quality-independent-audit.json",
+        "runtime.txt",
+        "pip-freeze.txt",
+        "topology.txt",
+        "gpu.csv",
+        "model-verification.json",
     }:
         return "record"
     if re.fullmatch(r"(?:rank|error-rank)\d+\.json", name):
@@ -64,7 +69,9 @@ def artifact_role(name: str) -> str | None:
     return None
 
 
-def collect(runs: list[str], output: Path) -> Path:
+def collect(
+    runs: list[str], output: Path, *, only_names: set[str] | None = None
+) -> Path:
     """Copy small records and index all recognized outputs in explicit runs."""
     selected: dict[str, Path] = {}
     for item in runs:
@@ -84,6 +91,8 @@ def collect(runs: list[str], output: Path) -> Path:
     for label, directory in sorted(selected.items()):
         artifacts = []
         for path in sorted(directory.iterdir()):
+            if only_names is not None and path.name not in only_names:
+                continue
             role = artifact_role(path.name)
             if not path.is_file() or role is None:
                 continue
@@ -181,12 +190,27 @@ def main() -> None:
     collect_parser = commands.add_parser("collect")
     collect_parser.add_argument("--run", action="append", required=True)
     collect_parser.add_argument("--output", type=Path, required=True)
+    collect_parser.add_argument(
+        "--include-name",
+        action="append",
+        help="Restrict collection to these exact recognized file names",
+    )
     verify_parser = commands.add_parser("verify")
     verify_parser.add_argument("--index", type=Path, required=True)
     verify_parser.add_argument("--external", action="store_true")
     args = parser.parse_args()
     if args.command == "collect":
-        result = {"index": str(collect(args.run, args.output))}
+        result = {
+            "index": str(
+                collect(
+                    args.run,
+                    args.output,
+                    only_names=set(args.include_name)
+                    if args.include_name
+                    else None,
+                )
+            )
+        }
     else:
         result = verify(args.index, external=args.external)
     print(json.dumps(result, indent=2))  # noqa: T201

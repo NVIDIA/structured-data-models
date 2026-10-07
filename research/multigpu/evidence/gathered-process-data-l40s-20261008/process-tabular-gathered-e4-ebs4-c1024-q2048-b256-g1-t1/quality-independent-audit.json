@@ -1,0 +1,72 @@
+{
+  "run": "process-tabular-gathered-e4-ebs4-c1024-q2048-b256-g1-t1",
+  "reference": "process-tabular-gathered-e4-ebs4-c1024-q2048-b256-g1-t1",
+  "checks": {
+    "query_values_sha": true,
+    "query_ids_sha": true,
+    "query_ids": true,
+    "query_ids_original_val": true,
+    "targets_original_val": true,
+    "prediction_sha": true,
+    "columns": true,
+    "config": true
+  },
+  "raw_prediction_sha256": "5f3830f7af05b2c742f5058071f7849d2efd4a5997f8daa0b7d33f91b2dea163",
+  "comparison": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "quality": {
+    "rows": 2048,
+    "accuracy": 0.76416015625,
+    "log_loss": 0.5759778337511707,
+    "brier_multiclass": 0.3375688362469243,
+    "auroc_by_class": [
+      0.893344191597138,
+      0.8868205524269036,
+      0.98820942696166,
+      0.9947141845131056,
+      0.9262703777870361,
+      0.9682170314294972,
+      0.9743097728295097
+    ],
+    "auroc_macro_present_classes": 0.9474122196492643,
+    "max_probability_sum_error": 1.610278559383005e-7
+  },
+  "recomputed_pred_only_rows_s": 3661.8944070849507,
+  "recomputed_gathered_rows_s": 3659.3950906626314,
+  "gather_overhead_ms": [
+    0.6661470001745329,
+    0.3724150001289672,
+    0.3819760004262207
+  ],
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 31790,
+      "device": "cuda:0",
+      "max_rss_bytes": 2219880448,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    }
+  ],
+  "comparison_scope": "Full identical query cohort and entire output array; not prefix-only.",
+  "matched_gathered_speedup": 1
+}

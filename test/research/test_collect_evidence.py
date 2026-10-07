@@ -57,3 +57,20 @@ def test_retains_failures_and_additive_audits(tmp_path: Path) -> None:
         "external_files": 2,
         "external_unchecked": 0,
     }
+
+
+def test_metadata_collection_has_explicit_allowlist(tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "runtime.txt").write_text("runtime\n")
+    (run / "install.log").write_text("unselected log\n")
+    index_path = collect(
+        [f"host={run}"],
+        tmp_path / "evidence",
+        only_names={"runtime.txt"},
+    )
+    index = json.loads(index_path.read_text())
+    assert [item["name"] for item in index["runs"][0]["artifacts"]] == [
+        "runtime.txt"
+    ]
+    assert verify(index_path, external=True)["archived_files"] == 1

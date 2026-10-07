@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-07T16:26:50.711276+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "tabular-cpuquery-ep1-large-e4-c1024-q2048",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-ep1-large-e4-c1024-q2048",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 7504,
+          "sha256": "9d9d69819bd9bc2d024ab095b75d1fe86ab9b10ebf93acb261940d2d9ac02bed",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-ep1-large-e4-c1024-q2048/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "3e531d2d060cadb70e09bcbf839d41f322423d35dadaf83ff8816bd09e9afc21",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-ep1-large-e4-c1024-q2048/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1563,
+          "sha256": "939108ee507a30860966dfe09188c171240b8508ae4ded1e9b8a0c410251c42e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-ep1-large-e4-c1024-q2048/quality-independent-audit.json",
+          "archived_path": "tabular-cpuquery-ep1-large-e4-c1024-q2048/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-ep1-large-e4-c1024-q2048/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 4238,
+          "sha256": "aa0eac06cd04986b10fe3ef8edd66c5380dfa5822a6b8a15b7b318bcf202e4e9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-ep1-large-e4-c1024-q2048/result.json",
+          "archived_path": "tabular-cpuquery-ep1-large-e4-c1024-q2048/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "fb9208b947dfc0e6b2c4cd68c90074d59cf9ec88c7cf4b6eefd7f04030800dcc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-ep1-large-e4-c1024-q2048/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "tabular-cpuquery-hybrid4-large-e4-c1024-q2048",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-hybrid4-large-e4-c1024-q2048",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 10793,
+          "sha256": "bdd0bbe52689c18fd7b94c8cfb1af08d768e8420789f30b0bd3c16668211f9ad",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-hybrid4-large-e4-c1024-q2048/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "3e531d2d060cadb70e09bcbf839d41f322423d35dadaf83ff8816bd09e9afc21",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-hybrid4-large-e4-c1024-q2048/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1585,
+          "sha256": "6eb6489ff49346ca0f1e92944d0490653470ffd62fa40da51e3b932ccc021d93",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-hybrid4-large-e4-c1024-q2048/quality-independent-audit.json",
+          "archived_path": "tabular-cpuquery-hybrid4-large-e4-c1024-q2048/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-hybrid4-large-e4-c1024-q2048/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 5267,
+          "sha256": "7dc93104ab3528d9a7f06acb6f6f6c8ccf934086f11f6b3dae024b84219f6327",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-hybrid4-large-e4-c1024-q2048/result.json",
+          "archived_path": "tabular-cpuquery-hybrid4-large-e4-c1024-q2048/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "fb9208b947dfc0e6b2c4cd68c90074d59cf9ec88c7cf4b6eefd7f04030800dcc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-cpuquery-hybrid4-large-e4-c1024-q2048/targets.npy"
+        }
+      ]
+    }
+  ]
+}

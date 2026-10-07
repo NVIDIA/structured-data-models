@@ -1,0 +1,73 @@
+{
+  "run": "process-tabular-fullcohort-e4-ebs4-c1024-q16384-b256-g1-t1",
+  "reference": "process-tabular-covertype-weak-e4-ebs4-c1024-q16384-b256-g4-t1",
+  "checks": {
+    "query_values_sha": true,
+    "query_ids_sha": true,
+    "query_ids": true,
+    "query_ids_original_val": true,
+    "targets_original_val": true,
+    "prediction_sha": true,
+    "columns": true,
+    "config": true
+  },
+  "raw_prediction_sha256": "d55bd75d66c86be7115f90138254bf824fa39fe6cac57232776e04a0c78345c1",
+  "comparison": {
+    "shape": [
+      16384,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "quality": {
+    "rows": 16384,
+    "accuracy": 0.75860595703125,
+    "log_loss": 0.5799539858254281,
+    "brier_multiclass": 0.3428331304571318,
+    "auroc_by_class": [
+      0.8904283478345909,
+      0.8809655059162506,
+      0.9867401470701873,
+      0.995675271515071,
+      0.9475283617758623,
+      0.9657436281955065,
+      0.9833924358514522
+    ],
+    "auroc_macro_present_classes": 0.95006767116556,
+    "max_probability_sum_error": 1.837788659031503e-7
+  },
+  "recomputed_pred_only_rows_s": 3733.5864768164556,
+  "recomputed_gathered_rows_s": 3732.3586440325107,
+  "gather_overhead_ms": [
+    1.7719319998832361,
+    1.4436090000344848,
+    1.5349509999396105
+  ],
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 32757,
+      "device": "cuda:0",
+      "max_rss_bytes": 2221244416,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    }
+  ],
+  "comparison_scope": "Full identical query cohort and entire output array; not prefix-only.",
+  "old_four_gpu_predict_only_speedup_over_new_one_gpu_predict_only": 3.932603653080598,
+  "note": "Original four-GPU timing excludes final CPU concat; same-boundary predict_repeats_s are available on both runs. Different run dates/source revisions, unchanged semantic workload. Preserve earlier prefix-only audit."
+}

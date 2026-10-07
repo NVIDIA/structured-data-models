@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-07T16:26:50.644674+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 9011,
+          "sha256": "86fb83575ff83de062b87fe8d8a52dc126aad7de1b4e3029e41baf234b53ba03",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16367744,
+          "sha256": "33bbe89d7dacfe8c94314ced687754579fdc93736c815f73081a36af49d6bbda",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1571,
+          "sha256": "c21dbc34a765219caf49c700a29199896233cf454aecc969595b60ea919f7917",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512/quality-independent-audit.json",
+          "archived_path": "tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 32896,
+          "sha256": "3c8c77f7a8d22a530f8567ef2e74dfb362fe180f2922b7d059a0ef0775dfd5a1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 16214,
+          "sha256": "b7dbc611c1389d4b57364a6a998e4a03492ab20ed07c152f7e7226e34e759d77",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512/result.json",
+          "archived_path": "tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "70cde3823e8b9a5b763d7a0d51169823ac2d1a4ad00c1c3a879c3c6555dcb071",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 9613,
+          "sha256": "8a97c4ea9340b11ac0b3797e562d3186deedbc3c4e43d9158b183b689a259a7e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16367744,
+          "sha256": "33bbe89d7dacfe8c94314ced687754579fdc93736c815f73081a36af49d6bbda",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1588,
+          "sha256": "e9a2959048fd8af3470e8b1e86a5ce45e2ab73e5fa2e61eecce5245c72539895",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512/quality-independent-audit.json",
+          "archived_path": "tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 32896,
+          "sha256": "3c8c77f7a8d22a530f8567ef2e74dfb362fe180f2922b7d059a0ef0775dfd5a1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 16855,
+          "sha256": "4cbd95d385a5ba78f189bb2f6171bb5fa48880d3bd9b2b3968d6cd5dd19cae4d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512/result.json",
+          "archived_path": "tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "70cde3823e8b9a5b763d7a0d51169823ac2d1a4ad00c1c3a879c3c6555dcb071",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep2-large-e8-eb2-c4096-q4096-b512/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 12079,
+          "sha256": "1b8817680ad9d7f04eaa0595ac9bbe7bd80336c9691b021f93b78e1104a4eae5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16367744,
+          "sha256": "33bbe89d7dacfe8c94314ced687754579fdc93736c815f73081a36af49d6bbda",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1589,
+          "sha256": "cb29c97daec9337fe9abfcb18b5388689f02120a88d8c591169460a48762d37b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512/quality-independent-audit.json",
+          "archived_path": "tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 32896,
+          "sha256": "3c8c77f7a8d22a530f8567ef2e74dfb362fe180f2922b7d059a0ef0775dfd5a1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 18130,
+          "sha256": "ead4840c6bc7d1a20f6267c77a4d13fbc750004fdbbd641a684e6c71a1267911",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512/result.json",
+          "archived_path": "tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "70cde3823e8b9a5b763d7a0d51169823ac2d1a4ad00c1c3a879c3c6555dcb071",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-ep4-large-e8-eb2-c4096-q4096-b512/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "tabular-regression-native-large-e8-eb2-c4096-q4096-b512",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-native-large-e8-eb2-c4096-q4096-b512",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 9266,
+          "sha256": "567d6bce21256cb42a01aabf72e7d8f9ed3f8d85156b54dab2c344ea49837d1b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-native-large-e8-eb2-c4096-q4096-b512/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16367744,
+          "sha256": "33bbe89d7dacfe8c94314ced687754579fdc93736c815f73081a36af49d6bbda",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-native-large-e8-eb2-c4096-q4096-b512/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1498,
+          "sha256": "de43c92c1eec091342270b3afac932bf92da2fdc25ec001bbbdde3e4cd59dde5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-native-large-e8-eb2-c4096-q4096-b512/quality-independent-audit.json",
+          "archived_path": "tabular-regression-native-large-e8-eb2-c4096-q4096-b512/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 32896,
+          "sha256": "3c8c77f7a8d22a530f8567ef2e74dfb362fe180f2922b7d059a0ef0775dfd5a1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-native-large-e8-eb2-c4096-q4096-b512/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 16059,
+          "sha256": "9bb24715dc4bb3dbed80531db30475818f22df528534c56610777b530ea65d3c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-native-large-e8-eb2-c4096-q4096-b512/result.json",
+          "archived_path": "tabular-regression-native-large-e8-eb2-c4096-q4096-b512/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "70cde3823e8b9a5b763d7a0d51169823ac2d1a4ad00c1c3a879c3c6555dcb071",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-regression-native-large-e8-eb2-c4096-q4096-b512/targets.npy"
+        }
+      ]
+    }
+  ]
+}

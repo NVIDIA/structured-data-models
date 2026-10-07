@@ -1,0 +1,60 @@
+{
+  "run": "tabular-regression-ep1-large-e8-eb2-c4096-q4096-b512",
+  "reference": "tabular-regression-native-large-e8-eb2-c4096-q4096-b512",
+  "checks": {
+    "input_hashes": true,
+    "quantile_columns": true,
+    "query_ids_original_val": true,
+    "targets_original_val": true,
+    "prediction_sha": true,
+    "workload_config": true
+  },
+  "raw_prediction_sha256": "47da066aaf926e1f9d85085507fd43a3b1ee509dc920a94acf35a192465bca92",
+  "comparison": {
+    "shape": [
+      4096,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "quality": {
+    "rmse": 0.4168958971505043,
+    "mae": 0.24490845032778452,
+    "crossing_pairs": 0,
+    "rows_with_crossings": 0,
+    "max_crossing": 0,
+    "mean_pinball_loss": 0.08843338970958851,
+    "coverage_q050_q950": 0.91064453125
+  },
+  "recomputed_median_rows_s": 2661.9962946858786,
+  "matched_resident_speedup": 1,
+  "predict_repeats_s": [
+    1.4685195470001418,
+    1.538694853999914,
+    1.540823107000051
+  ],
+  "peak_prediction_gib": 1.6531352996826172,
+  "member_seeds": [
+    1729,
+    1730,
+    1731,
+    1732,
+    1733,
+    1734,
+    1735,
+    1736
+  ],
+  "note": "Full 4096x999 predictive distribution compared; 4096 of 4128 custom validation rows, same TRAIN context and query microbatches; native residency policy remains distinct."
+}

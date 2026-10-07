@@ -1,0 +1,54 @@
+{
+  "run": "tabular-cpuquery-ep1-large-e4-c1024-q2048",
+  "reference": "tabular-cpuquery-ep1-large-e4-c1024-q2048",
+  "checks": {
+    "input_hashes": true,
+    "columns": true,
+    "query_ids": true,
+    "targets": true,
+    "prediction_sha": true,
+    "both_cpu_query_input": true,
+    "config": true
+  },
+  "raw_prediction_sha256": "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+  "comparison": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "quality": {
+    "rows": 2048,
+    "accuracy": 0.76416015625,
+    "log_loss": 0.5760446019729857,
+    "brier_multiclass": 0.3375792160360528,
+    "auroc_by_class": [
+      0.8933421428681182,
+      0.8867785471323272,
+      0.988213353226408,
+      0.9946596915699417,
+      0.9262972569785101,
+      0.9682268500790401,
+      0.9743870895186685
+    ],
+    "auroc_macro_present_classes": 0.9474149901961447,
+    "max_probability_sum_error": 1.6590638551861048e-7
+  },
+  "recomputed_median_rows_s": 1763.703088780301,
+  "matched_speedup": 1,
+  "peak_prediction_gib": 1.5979676246643066,
+  "note": "Hybrid uses two query-parallel groups, each with two ensemble GPUs. Both arms start queries on CPU and include transfers in timed pass; throughput includes ordered CPU output concatenation."
+}
