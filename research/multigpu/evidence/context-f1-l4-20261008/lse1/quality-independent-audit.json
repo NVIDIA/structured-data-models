@@ -1,0 +1,90 @@
+{
+  "run": "cp-f1-c1024-e4-flash-lse1",
+  "prediction_sha256": "9928fe210328d5242e0bd12b1409c6d8a6c84c9471cd8754c17eb3e2456a9867",
+  "rank_hashes_equal": true,
+  "repeat_hashes_equal": true,
+  "repeat_arrays_equal": true,
+  "input_identity_equal": true,
+  "query_ids_equal": true,
+  "quantile_columns_correct": true,
+  "numerical_vs_native": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "metrics": {
+    "rmse": 4.214992795342967,
+    "mae": 3.414711076510932,
+    "crossing_pairs": 0,
+    "rows_with_crossings": 0,
+    "max_crossing": 0,
+    "mean_pinball_loss": 1.1934352839202111,
+    "coverage_q050_q950": 0.9539078156312625
+  },
+  "median_prediction_comparison": {
+    "shape": [
+      499
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "paired_mae_delta": {
+    "candidate_minus_reference": 0,
+    "ci95": [
+      0,
+      0
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "paired_mse_delta": {
+    "candidate_minus_reference": 0,
+    "ci95": [
+      0,
+      0
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_slowest_rank_seconds": [
+    1.3771056110000472,
+    1.4596567720000166,
+    1.364885460000096
+  ],
+  "slowest_rank_matches_record": true,
+  "median_unique_rows_s": 362.3541985553517,
+  "speedup_native": 0.9948483784079812,
+  "prediction_peak_gib": [
+    0.33047008514404297
+  ],
+  "icl_cache_bytes": [
+    100663296
+  ]
+}

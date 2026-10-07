@@ -1,0 +1,66 @@
+{
+  "run": "tabular-batchedep1-large-e8-c4096-q8192-b1024",
+  "prediction_sha256": "1df05ac608d7ba4f96dcb80eb5271b038baf83d0ca100f8ae759b6d34abfcf48",
+  "matches_recorded_sha": true,
+  "input_hashes_match": true,
+  "query_ids_match": true,
+  "targets_match": true,
+  "class_columns_match": true,
+  "numerical_vs_native": {
+    "shape": [
+      8192,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "tolerance_failed_entries": 0,
+  "tolerance_failed_rows": 0,
+  "class_changes": 0,
+  "quality": {
+    "rows": 8192,
+    "accuracy": 0.841796875,
+    "log_loss": 0.4138842210493865,
+    "brier_multiclass": 0.23713827927002354,
+    "auroc_by_class": [
+      0.9430343001159507,
+      0.938895532879392,
+      0.9932171951688203,
+      0.9969654242275625,
+      0.974721823709245,
+      0.9839393939393939,
+      0.9937667608900486
+    ],
+    "auroc_macro_present_classes": 0.9749343472757734,
+    "max_probability_sum_error": 1.7870115698315203e-7
+  },
+  "paired_logloss_delta": {
+    "candidate_minus_reference": 0,
+    "ci95": [
+      0,
+      0
+    ],
+    "groups": 8192,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_rows_s": [
+    4010.337153136957,
+    4013.810386777284,
+    4014.477747469956
+  ],
+  "median_rows_s": 4013.810386777284,
+  "speedup_vs_native": 1.2467416915476561,
+  "speedup_vs_resident_ep1": 1
+}

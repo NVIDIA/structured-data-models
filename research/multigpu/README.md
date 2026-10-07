@@ -4,12 +4,14 @@ Status: investigation in progress, 2026-10-08. Implementation baseline: `842c408
 
 The goal is practical multi-GPU inference for both `KumoTabular` and `KumoRelational`, including throughput, latency, capacity, prediction quality, and a lightweight integration into SDM. The implementation recommendations are in [integration.md](integration.md).
 
+Strongest completed throughput finding: batching estimators within each GPU makes KumoTabular E8 scale 1.836× from one to two L40S GPUs with byte-identical predictions. Initial unbatched small workloads scale poorly; four-GPU cases still need improvement. Sequential layer placement nearly halves peak memory per GPU at a small throughput cost. Cached context parallelism saves KV storage, but its current BF16 relational regression results fail the declared full-quantile numerical gate. The tables retain these successes and failures separately.
+
 ## Approach matrix
 
 | Approach | Work placement | Expected benefit | Main limitation / correctness requirement | Current owner and evidence |
 |---|---|---|---|---|
 | Query data parallelism (DP) | Complete, fixed query batches across persistent replicas | High aggregate throughput; no attention collectives | Full model and fitted context replicated; preserve batch boundaries and complete relational neighborhoods | Threaded DP measured on both native relational tasks below; process and hybrid follow-ups pending |
-| Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | Initial two CUDA failures fixed by `c4ddd7f15`; both CUDA tests then passed on integrated `6c3f1e22e`; scaling measurements pending |
+| Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | Tested: initial unbatched scaling poor; batched E8 gives 1.836× on two GPUs with exact predictions; four-GPU numerical gate fails |
 | Cached context parallelism (CP) | ICL KV rows across ranks; queries replicated | Larger retained context and faster long-context attention | Full fit still replicated; stable softmax reduction, global length scaling, uneven shards; collectives every layer | Real 2/4-rank NCCL tests passed; small-context pretrained run below is slower; resident/long-context follow-ups pending |
 | Layer/stage placement | Row encoder, GNN, and/or ICL layers on different devices | Parameter/cache capacity; potential pipeline overlap across query batches | Single-query latency can worsen; cache ownership and transferred activations must follow stages | Source `55dba6bb5`: 36 CPU/CUDA tests passed on L4; real model memory decreases with small throughput cost; sequential placement, not overlapped pipelining |
 | Table embedding parallelism | Independent related-table encoders across devices, then gather row embeddings | Parallel relational table encoding before GNN | Tables may be imbalanced; shared preprocessing/target propagation and per-table RNG must remain fixed | Design inspected; no measurement |
@@ -80,7 +82,7 @@ The first native fit took 122.751 seconds; a repeated native E4 fit with estimat
 
 EP batch p50 was 147.96 / 135.90 / 155.55 ms at 1/2/4 GPUs. Scaling efficiency was 54.4% at two GPUs and 23.8% at four. All four saved prediction arrays, including native, are byte-identical (`92cb62ec…`). EP resident cache storage distributes as 489.00 / 244.50 / 122.25 MiB per GPU, while replicated parameters make aggregate device memory increase. Summed per-rank peaks are an upper bound on simultaneous aggregate use, not a synchronized aggregate trace.
 
-The EP cache's 489 MiB unique backing storage exceeds the public CPU cache's 342 MiB, despite identical predictions; retained view backing allocations versus compact CPU copies are under investigation. CPU dispatch/launch overhead and short member work are candidate explanations for poor scaling, pending profiles. The next experiments compare native estimator batching, larger contexts/batches/E8, batched EP, and process-based execution. The historical TabFM 1.876× result does not predict these Kumo results.
+The EP cache's 489 MiB unique backing storage exceeds the public CPU cache's 342 MiB, despite identical predictions. Source inspection identified row-encoder value views retaining fused KV backing buffers; a compact-cache clone prototype passed reduced real-model CPU parity, with GPU measurements pending. CPU dispatch/launch overhead and short member work remain candidate explanations for poor initial scaling, pending profiles. The historical TabFM 1.876× result does not predict these Kumo results.
 
 The tuned one-GPU comparison uses the same large model, Covertype rows, E4, context 1,024, query 2,048, query batch 256, and BF16 autocast. Only estimator batching changes:
 
@@ -91,6 +93,21 @@ The tuned one-GPU comparison uses the same large model, Covertype rows, E4, cont
 | 4 | 4,007.14 | 63.82 ms | 1.255 | 0.764160 | 0.575978 | 0.005607 |
 
 Predicted class labels are unchanged for all 2,048 rows. Estimator-batched BF16 outputs are not byte-identical; mean absolute probability differences are about 0.000263 and 0.000259. These quality changes must remain visible when comparing speed against the sequential member path. Best measured native batching is 2.28× the repeated unbatched native run and 2.13× the initial two-GPU EP. Multi-GPU follow-ups must include local estimator batching before claiming a useful advantage.
+
+### Batched ensemble follow-up on L40S
+
+The larger workload uses KumoTabular large, Covertype, **E8, context 4,096, query 8,192, batch 1,024**, BF16 autocast, three measured passes, and source `1686803e4`. The native reference already uses estimator batch size eight. The resident batched executor distributes the same members and batches compatible local members.
+
+| Arm | GPUs | Median rows/s | Speedup vs resident EP1 | Fit seconds | Max prediction peak per GPU | Prediction status |
+|---|---:|---:|---:|---:|---:|---|
+| Native, estimator batch 8 | 1 | 3,219.44 | — | 2.749 | 3.743 GiB | Reference |
+| Resident batched EP | 1 | 4,013.81 | 1.000× | 2.077 | 3.503 GiB | Byte-identical to native |
+| Resident batched EP | 2 | 7,368.45 | **1.836×** | 1.648 | 2.405 GiB | Byte-identical to native and EP1 |
+| Resident batched EP | 4 | 5,981.13 | 1.490× | 1.477 | 1.612 GiB | Fails declared numerical gate; see below |
+
+The two-GPU result is 91.8% scaling efficiency relative to resident EP1. Its 2.289× speedup over public native combines 1.247× from residency/scheduling with the separate 1.836× multi-GPU gain. Native/EP1/EP2 accuracy is 0.841797, log loss 0.413884, and multiclass AUC 0.974934. These are validation-prefix results, not a full dataset ranking.
+
+The four-GPU result is slower than two GPUs and differs in one of 57,344 probability entries beyond the predeclared BF16 tolerance; maximum difference is 0.032253, with six changed labels. Accuracy is 0.841919 and log loss 0.413924, with a paired log-loss change interval spanning zero. Similar aggregate quality does not turn a failed numerical gate into a pass. Local estimator groups shrink from eight to four to two across placements; a one-GPU batch-two control is queued to distinguish batching arithmetic from placement effects. Keep the original failure visible.
 
 ### Native relational EP and DP on L40S
 
@@ -124,6 +141,17 @@ Fit peak remains 327.63 MiB per GPU in every arm: this implementation shards ret
 
 A FlashAttention LSE variant now preserves native GQA head counts instead of repeating KV heads. Its four-layer random-weight probe at context 1,024 measured native 3.117 ms, Flash LSE1 3.271 ms, and CP4 4.568 ms; the efficient backend's corresponding times were 3.021, 3.296, and 4.681 ms. This is a microbenchmark, not pretrained model quality. Larger contexts and resident-cache full-model comparisons are pending before broader CP recommendations.
 
+Native KumoRelational regression on F1 also tested the Flash LSE path, with E4, context 1,024, all 499 validation rows, and fixed two-hop graphs:
+
+| Arm | GPUs | Rows/s | MAE | RMSE | Full 999-quantile numerical gate |
+|---|---:|---:|---:|---:|---|
+| Native | 1 | 364.23 | 3.414711 | 4.214993 | Reference |
+| Flash LSE1 | 1 | 362.35 | 3.414711 | 4.214993 | Exact native predictions |
+| Context parallel | 2 | 361.15 | 3.418062 | 4.219112 | **Fail** |
+| Context parallel | 4 | 376.00 | 3.416702 | 4.217447 | **Fail** |
+
+Both CP outputs are finite and monotone, and their median predictions pass tolerance, but the complete 499 × 999 arrays fail `atol=0.01, rtol=0.05`: 938 entries fail at two ranks and 915 at four. Maximum absolute error is about 0.20224; mean absolute errors are 0.017043 and 0.014253. The largest relative failures occur in near-zero tail quantiles, not necessarily the largest absolute-error entries. Paired MAE changes are small but consistently positive in the auditor's driver-cluster bootstrap. Consequently the approximately 3.2% CP4 throughput gain is not an accepted equivalent-result win. A higher-precision local-attention/merge arm is being tested with unchanged tolerances.
+
 ### Sequential model placement on L4
 
 This separate comparison uses **KumoTabular large**, E4, context 1,024, queries 2,048, batch 256, and the resident executor. Source `55dba6bb5` passed 36 placement tests on the L4 host, including actual CUDA cases. Each candidate saved exactly the same prediction bytes as its resident one-GPU reference.
@@ -146,6 +174,8 @@ Additional checked snapshots retain the new measurements:
 - [Initial relational L40S evidence](evidence/initial-relational-l40s-20261008/index.json): 29 archived records, 62 external artifacts verified; includes corrected class-aware quality audits and the separately labeled E1 smoke.
 - [Initial context L4 evidence](evidence/initial-context-l4-20261008/index.json): 14 archived records, 36 external artifacts verified; includes native/LSE/CP full-model runs and both kernel probes.
 - [Initial placement L4 evidence](evidence/initial-placement-l4-20261008/index.json): four archived records, 20 external artifacts verified.
+- [Batched ensemble L40S evidence](evidence/batched-ensemble-l40s-20261008/index.json): eight archived result/audit records, 24 external artifacts verified; includes the passing EP2 and failing EP4 comparisons.
+- [Context F1 L4 evidence](evidence/context-f1-l4-20261008/index.json): 16 archived result/rank/audit records, 32 external artifacts verified; preserves full-quantile failures and paired quality analysis.
 
 Collect each later completed group into a fresh directory; never overwrite an earlier collection. The collector preserves failed-run records too, and does not reconstruct a command that was never recorded. Source revisions, runner hashes, and exact parameters are preserved from raw result JSON. If the runner emits `command.txt`, that file is archived verbatim.
 
@@ -179,7 +209,7 @@ python research/multigpu/tabular_bench.py \
   --source-commit "$(git rev-parse HEAD)"
 ```
 
-The native relational harness exposes the following commands (paths must point to the installed runner revision and the actual RelBench cache). Execution evidence is still pending:
+The native relational harness exposes the following commands (paths must point to the installed runner revision and the actual RelBench cache):
 
 ```sh
 python research/multigpu/relational_bench.py prepare \
@@ -216,7 +246,7 @@ torchrun --standalone --nproc-per-node=2 \
   --source-commit "$(git rev-parse HEAD)"
 ```
 
-These commands assume execution from a Git checkout. For an exported source archive, pass its recorded commit explicitly instead of invoking `git rev-parse`. The coordinator's integrated local validation currently reports 43 CPU tests passed and 22 CUDA tests skipped; this is not a GPU validation result.
+These commands assume execution from a Git checkout. For an exported source archive, pass its recorded commit explicitly instead of invoking `git rev-parse`. An early integrated local validation reported 43 CPU tests passed and 22 CUDA tests skipped; subsequent real CUDA test results are reported in the approach matrix and corresponding implementation documents. Local skips alone never establish GPU correctness.
 
 Historical inspection is reproducible with:
 

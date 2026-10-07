@@ -1,0 +1,92 @@
+{
+  "run": "cp-f1-c1024-e4-flash-context2",
+  "prediction_sha256": "5ba34013d0c75fe45c7ab87c319a1d755aa21b1301310407883c9c214b65ddd1",
+  "rank_hashes_equal": true,
+  "repeat_hashes_equal": true,
+  "repeat_arrays_equal": true,
+  "input_identity_equal": true,
+  "query_ids_equal": true,
+  "quantile_columns_correct": true,
+  "numerical_vs_native": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.2022418975830078,
+    "mean_abs": 0.0170424753233459,
+    "rms": 0.022668971501870798,
+    "p99_abs": 0.06139373779296875,
+    "relative_l2": 0.001995465259906214,
+    "within_tolerance": false
+  },
+  "metrics": {
+    "rmse": 4.21911205921071,
+    "mae": 3.418062002720957,
+    "crossing_pairs": 0,
+    "rows_with_crossings": 0,
+    "max_crossing": 0,
+    "mean_pinball_loss": 1.1946335403433093,
+    "coverage_q050_q950": 0.9539078156312625
+  },
+  "median_prediction_comparison": {
+    "shape": [
+      499
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.07222795486450195,
+    "mean_abs": 0.015084588694906904,
+    "rms": 0.01906761565210346,
+    "p99_abs": 0.04333735466003418,
+    "relative_l2": 0.00195207282611084,
+    "within_tolerance": true
+  },
+  "paired_mae_delta": {
+    "candidate_minus_reference": 0.0033509262100250292,
+    "ci95": [
+      0.0013070606210919375,
+      0.005478480669276132
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "paired_mse_delta": {
+    "candidate_minus_reference": 0.03474230338411418,
+    "ci95": [
+      0.014371154936141434,
+      0.05637355246374029
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_slowest_rank_seconds": [
+    1.3805368000000726,
+    1.4700347189999547,
+    1.381692897999983
+  ],
+  "slowest_rank_matches_record": true,
+  "median_unique_rows_s": 361.1511651556641,
+  "speedup_native": 0.9915454338536711,
+  "prediction_peak_gib": [
+    0.30654430389404297,
+    0.30654430389404297
+  ],
+  "icl_cache_bytes": [
+    50331648,
+    50331648
+  ]
+}
