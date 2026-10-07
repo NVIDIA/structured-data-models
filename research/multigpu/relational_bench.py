@@ -13,6 +13,7 @@ import json
 import resource
 import subprocess
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -516,7 +517,18 @@ def main() -> None:
         command.add_argument("--seed", type=int, default=1729)
         command.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    (prepare if args.command == "prepare" else run)(args)
+    try:
+        (prepare if args.command == "prepare" else run)(args)
+    except Exception:
+        if args.output.is_dir():
+            write_json(
+                args.output / "failure.json",
+                {
+                    "args": vars(args),
+                    "traceback": traceback.format_exc(),
+                },
+            )
+        raise
 
 
 if __name__ == "__main__":
