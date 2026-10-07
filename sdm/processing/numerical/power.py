@@ -21,7 +21,9 @@ _YEOJOHNSON_OPTIMIZATION_STEPS = 44
 
 @torch.library.custom_op("sdm::fitting_expm1", mutates_args=())
 def _fitting_expm1(inp: Tensor) -> Tensor:
-    return inp.expm1()
+    # Match the original expm1_ dtype, including under CUDA autocast.
+    with torch.autocast(inp.device.type, enabled=False):
+        return inp.expm1()
 
 
 @_fitting_expm1.register_fake
