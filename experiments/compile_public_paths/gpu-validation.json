@@ -1,0 +1,108 @@
+{
+  "combined_source": "7c65de81fe9526bf469364211e2da4f8af2aaddc",
+  "combined_source_gpu_run": false,
+  "gpu_runs": [
+    {
+      "source": "c75ba3af6+18a4d151a+f0a5db1e4",
+      "torch": "2.14.0+cu130",
+      "gpu": "NVIDIA L4",
+      "weight_dtype": "float32",
+      "autocast_dtype": null,
+      "actual_query_rows": [
+        128
+      ],
+      "cache_num_batches": 2,
+      "cache_devices": {
+        "cpu": 70
+      },
+      "status": "pass",
+      "file": "offload2-currentstream-source.json",
+      "raw_sha256": "96019c0557eff8be7cd66c3699bcb26ea6fe50115aeb77758484519181fcc4b3",
+      "config": {
+        "model": "tabular",
+        "estimators": 2,
+        "context_rows": 256,
+        "fullgraph": true,
+        "warmups": 2,
+        "repeats": 5
+      },
+      "phases": {
+        "eager": {
+          "warm_samples": 5,
+          "wall_median_ms": 33.412760999453894,
+          "peak_allocated_mib": 195.85498046875,
+          "max_abs_error": 0.0,
+          "all_parity": true,
+          "last_graphs": {}
+        },
+        "compiled": {
+          "warm_samples": 5,
+          "wall_median_ms": 12.01653600037389,
+          "peak_allocated_mib": 169.779296875,
+          "max_abs_error": 1.996755599975586e-06,
+          "all_parity": true,
+          "last_graphs": {
+            "calls_captured": 4988,
+            "unique_graphs": 1
+          }
+        }
+      }
+    },
+    {
+      "source": "e2abde1542f15ce605b33739411a52edbc87d564",
+      "torch": "2.14.0+cu130",
+      "gpu": "NVIDIA L4",
+      "weight_dtype": "float32",
+      "autocast_dtype": null,
+      "actual_query_rows": [
+        8
+      ],
+      "cache_num_batches": 1,
+      "cache_devices": {
+        "cuda:0": 51
+      },
+      "status": "pass",
+      "file": "relational-final-e2abde-fp32-full.json",
+      "raw_sha256": "b5717dda911bf325f205dc2756e0e785f11737d7e55a3387c2f512744db814e0",
+      "config": {
+        "model": "relational",
+        "estimators": 1,
+        "context_rows": 32,
+        "fullgraph": true,
+        "warmups": 2,
+        "repeats": 5
+      },
+      "phases": {
+        "eager": {
+          "warm_samples": 5,
+          "wall_median_ms": 74.15271300033055,
+          "peak_allocated_mib": 142.06884765625,
+          "max_abs_error": 0.0,
+          "all_parity": true,
+          "last_graphs": {}
+        },
+        "compiled": {
+          "warm_samples": 5,
+          "wall_median_ms": 39.85421500010489,
+          "peak_allocated_mib": 141.7412109375,
+          "max_abs_error": 2.3245811462402344e-06,
+          "all_parity": true,
+          "last_graphs": {
+            "calls_captured": 6428,
+            "unique_graphs": 1
+          }
+        }
+      }
+    }
+  ],
+  "latest_cpu_base_cache_tests": {
+    "torch2.7.1": {
+      "passed": 37,
+      "skipped": 1
+    },
+    "torch2.14": {
+      "passed": 37,
+      "skipped": 1
+    }
+  }
+}

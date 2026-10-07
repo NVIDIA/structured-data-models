@@ -1,19 +1,26 @@
 # Compiling public model prediction
 
-This experimental branch supports compiling tensor preprocessing and prediction together. It is based on main `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`; these are branch results, not current-main guarantees. The successful cases **fit eagerly, then compile and call `model.predict`**. No GPU speed or memory claim is made here.
+This experimental branch supports compiling tensor preprocessing and prediction together. It is based on main `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`; these are branch results, not current-main guarantees. The successful cases **fit eagerly, then compile and call `model.predict`**. GPU measurements below are qualified to their exact source and workload.
 
-## Current GPU limits
+## GPU validation and remaining limits
 
-**General CUDA compilation support is not established.** The passing resident-cache FP32 case is narrower than the following configurations. Each numerical comparison uses the same precision mode for eager and compiled execution.
+The tested FP32 public-prediction cases now pass after the offloaded-cache ordering fix. This is not a general CUDA guarantee: BF16 parity and PyTorch 2.7 fullgraph remain unresolved. Each numerical comparison uses the same precision mode for eager and compiled execution.
 
-| L4 public prediction case | PyTorch | Observed result |
+| L4 public prediction case | PyTorch | Current result |
 |---|---|---|
-| Relational, one estimator, resident cache, FP32 | 2.14 | Fullgraph passes; max difference `2.30e-6` |
-| Tabular, two estimators, CPU-offloaded caches, FP32 | 2.14 | Fullgraph executes, but probabilities are unstable: max difference `0.372`, all 256 probability values fail tolerance in the worst call. Stream/cache ordering is being investigated. |
-| Tabular, resident cache, BF16 autocast | 2.14 | Empty-payload fix removes the tracing error, but observed predictions miss strict same-mode tolerance: max difference `0.00776`. Inner-versus-public comparison is being investigated. |
+| Relational, one estimator, resident cache, FP32 | 2.14 | Combined checkpoint `e2abde154` passes fullgraph on an eight-row query; max difference `2.32e-6`, one captured graph. |
+| Tabular, two estimators, pinned CPU caches, FP32 | 2.14 | Offload fix `f0a5db1e4` passes fullgraph on 128 rows; max difference `2.00e-6`, one graph. The earlier unstable-probability failure is fixed in this tested case. |
+| Tabular, resident cache, BF16 autocast | 2.14 | Empty-payload fix removes the tracing error, but observed predictions still miss strict same-mode tolerance: max difference `0.00776`. Numerical investigation remains active. |
 | Tabular, resident cache, FP32 | 2.7.1 | Fullgraph fails with `Graph break under GenericContextWrappingVariable` at `recipe_execution.transform(...)`. |
 
-The first, second, and fourth runs use `c75ba3af6` plus event fix `18a4d151a`; the BF16 run additionally uses empty-payload fix `4071789e4`. These are **not GPU validation of the final combined source `e2abde154`**, whose run is queued. [The evidence snapshot](gpu-limit-snapshot.json) records source identifiers, observed samples, and raw-file hashes. The substantial offloaded-cache probability mismatch is unresolved; successful capture or class agreement must not be treated as prediction parity.
+The offload fix makes compiled transfers use the computation stream, preventing transferred buffers from being reused while another stream is still reading them. Eager prefetching remains unchanged. This sacrifices transfer/compute overlap in the compiled path; the measured workload still improves:
+
+| FP32 workload | Eager → compiled warm median | Eager → compiled peak allocated GPU memory |
+|---|---:|---:|
+| Tabular, context 256, two estimators, query 128, offloaded caches | 33.41 → 12.02 ms | 195.85 → 169.78 MiB |
+| Relational, context 32, one estimator, query 8, resident cache | 74.15 → 39.85 ms | 142.07 → 141.74 MiB |
+
+These are five warm repeats on one NVIDIA L4, not general performance guarantees. The offload run uses **`c75ba3af6` + `18a4d151a` + `f0a5db1e4`**; the relational run uses **`e2abde154`**. The latest source **`7c65de81f`** combines the fixes but has not itself had a GPU rerun. [GPU evidence](gpu-validation.json) records exact sources, result hashes, and measurements. [The earlier failure snapshot](gpu-limit-snapshot.json) is retained as history, not the current offload status.
 
 ## Current results
 
@@ -41,7 +48,7 @@ A final independent-cache repeat at `450444af9` confirms both one-hop prediction
 
 ## Latest integration checkpoint
 
-Source `e2abde154` additionally includes three compatibility fixes:
+Source `e2abde154` adds the three compatibility fixes below; latest source `7c65de81f` also includes the validated offloaded-cache ordering fix above:
 
 - Empty ragged payload conversion avoids reading unnecessary tensor-valued slice bounds. This covers empty text blocks during output dtype conversion and actual empty/missing strings.
 - Cache transfer dependencies use explicit CUDA events, which Dynamo can capture, while preserving stream ordering.
@@ -49,7 +56,7 @@ Source `e2abde154` additionally includes three compatibility fixes:
 
 Focused checks on this combined source pass on both CPU runtimes: **98 passed, 13 skipped**, plus all **12 actual-Inductor empty-conversion combinations** (three input kinds × two modes × two versions, each with four row counts). The ten-neighborhood result above remains qualified to source `6df9aeab5`; it was not repeated for these targeted changes. The native-normalization and cache-hashing experiments remain separate ([checkpoint evidence](final-compatibility.json)).
 
-A separate NVIDIA L4 run passed fullgraph FP32 public relational prediction for rows **4 → 1 → 8 → 4**, maximum difference `2.30e-6`. That GPU source was **`c75ba3af6` plus `18a4d151a`**, not this combined checkpoint. [The source receipt and GPU evidence](https://github.com/NVIDIA/structured-data-models/blob/compile/cache-stream-events/experiments/cache_stream_events/gpu_summary.json) retain the exact patch/data/result hashes. GPU validation of the final combined source is pending; these earlier GPU measurements must not be attributed to it.
+A separate NVIDIA L4 run passed fullgraph FP32 public relational prediction for rows **4 → 1 → 8 → 4**, maximum difference `2.30e-6`. That GPU source was **`c75ba3af6` plus `18a4d151a`**, not this combined checkpoint. [The source receipt and GPU evidence](https://github.com/NVIDIA/structured-data-models/blob/compile/cache-stream-events/experiments/cache_stream_events/gpu_summary.json) retain the exact patch/data/result hashes. The later eight-row GPU run validates `e2abde154`, as reported above. The newest combination with the offload fix is `7c65de81f`; its base/cache tests pass on both CPU runtimes (**37 passed, 1 skipped** each), but its full combined GPU run has not been repeated.
 
 ## Usage
 
