@@ -49,14 +49,22 @@ class Standardize(Processor, InvertibleMixin):
         count = finite.sum(dim=-2, keepdim=True)
         finite_or_nan = numerical.masked_fill(~finite, torch.nan)
 
-        self.mean = _nansum_rows(finite_or_nan).div_(count)
+        self.register_buffer(
+            "mean",
+            _nansum_rows(finite_or_nan).div_(count),
+            persistent="mean" not in self._non_persistent_buffers_set,
+        )
         self.mean.masked_fill_(self.mean.isnan(), 0.0)
 
         var = _nansum_rows(finite_or_nan.sub_(self.mean).square_())
         var /= count
         var.masked_fill_(var.isnan(), 0.0)
 
-        self.scale = var.sqrt()
+        self.register_buffer(
+            "scale",
+            var.sqrt(),
+            persistent="scale" not in self._non_persistent_buffers_set,
+        )
         if self.eps == 0:
             mask = _constant_feature_mask(var, self.mean, num_samples=count)
             self.scale[mask] = 1.0
