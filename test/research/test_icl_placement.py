@@ -147,3 +147,47 @@ def test_full_recipe_resident_executor(mode):
     )
     a.close()
     b.close()
+
+
+@pytest.mark.parametrize("mode", ["stage", "layers"])
+@pytest.mark.parametrize("gpu", [False, True])
+def test_reduced_query_heads_cache(mode, gpu):
+    if gpu and torch.cuda.device_count() < 2:
+        pytest.skip("requires two CUDA devices")
+    devices = ["cuda:0", "cuda:1"] if gpu else ["cpu", "cpu"]
+    baseline = make_block("tabular").to(devices[0])
+    baseline.kv_heads = 1
+    placed = ICLPlacement(copy.deepcopy(baseline), devices, mode)
+    x = torch.randn(15, 16, device=devices[0])
+    y = torch.arange(9, device=devices[0]) % 3
+    with torch.inference_mode():
+        a, b = Cache(), Cache()
+        baseline(x[:9].clone(), y, cache=a)
+        placed(x[:9].clone(), y, cache=b)
+        expected = baseline(x[9:].clone(), y[:0], cache=a.freeze())
+        actual = placed(x[9:].clone(), y[:0], cache=b.freeze())
+        torch.testing.assert_close(actual, expected)
+
+
+@pytest.mark.parametrize("family", ["tabular", "relational"])
+@pytest.mark.parametrize("mode", ["stage", "layers"])
+def test_nondefault_stream_empty_fit_and_refit(family, mode):
+    if torch.cuda.device_count() < 2:
+        pytest.skip("requires two CUDA devices")
+    devices = ["cuda:0", "cuda:1"]
+    baseline = make_block(family).to(devices[0])
+    remote_setup = torch.cuda.Stream(device=1)
+    with torch.cuda.stream(remote_setup):
+        placed = ICLPlacement(copy.deepcopy(baseline), devices, mode)
+    caller = torch.cuda.Stream(device=0)
+    for _ in range(3):
+        with torch.cuda.stream(caller), torch.inference_mode():
+            x = torch.randn(15, 16, device=devices[0])
+            y = torch.arange(9, device=devices[0]) % 3
+            a, b = Cache(), Cache()
+            baseline(x[:9].clone(), y, cache=a)
+            placed(x[:9].clone(), y, cache=b)
+            expected = baseline(x[9:].clone(), y[:0], cache=a.freeze())
+            actual = placed(x[9:].clone(), y[:0], cache=b.freeze())
+        caller.synchronize()
+        torch.testing.assert_close(actual, expected)

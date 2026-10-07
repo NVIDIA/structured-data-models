@@ -53,6 +53,7 @@ class ICLPlacement(nn.Module):
         self.handles = []
         if mode == "stage":
             block.to(self.entry)
+            self._finish_placement()
             return
 
         block.to(self.entry)
@@ -81,6 +82,14 @@ class ICLPlacement(nn.Module):
                 lambda module, args, output: output.to(self.entry),
             )
         )
+        self._finish_placement()
+
+    def _finish_placement(self) -> None:
+        # Setup may run on different streams from the inference executor.
+        # Synchronize once after moving weights; never in the forward path.
+        for device in set(self.devices):
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
 
     def forward(
         self,
