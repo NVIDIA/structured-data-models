@@ -82,4 +82,29 @@ Run `pytest test/research/test_icl_placement.py`. The runner adapter depends on 
 
 Report both equal-workload comparison and capacity frontier. If one GPU OOMs and the placed model succeeds, report increased supported workload; do not fabricate a speedup against an unsuccessful baseline. Include all GPUs in dollar- and GPU-second efficiency even when one replica is used. Stage with N > 2 intentionally leaves middle devices idle and should not be marketed as N-way scaling.
 
-GPU performance and quality results are pending the shared tabular/relational runners. No cloud instances were launched by this workstream.
+## First measured placement comparison
+
+All 36 placement tests passed on the GPU host in 5.88 seconds, including real cross-device execution, nondefault streams, empty-output fit, repeated fits, hierarchical classification, reduced KV heads, and resident E2 execution with both CPU and CUDA inputs.
+
+The first pretrained comparison used one AWS Spot `g6.12xlarge` with four 24 GB L4 GPUs, PCIe topology without CUDA peer access, PyTorch 2.9.1/CUDA 13.0, source `55dba6bb5`, and the common tabular runner. All four arms used KumoTabular-large, Covertype, 1,024 TRAIN context rows, 2,048 identical ordered validation queries, batch 256, E=4, seed/member seed 1729, FP32 parameters and BF16 autocast. Predictions were warmed up once; three complete prediction passes were timed with every participating device synchronized. The reference was the resident one-replica executor on this same L4 host.
+
+| Metric | Resident 1 GPU | Stage 2 GPUs | Layers 2 GPUs | Layers 4 GPUs |
+|---|---:|---:|---:|---:|
+| Median prediction pass (s) | 1.1039 | 1.1611 | 1.1191 | 1.1456 |
+| Median throughput (rows/s) | 1,855.27 | 1,763.91 | 1,830.08 | 1,787.74 |
+| Speedup relative to resident baseline | 1.000x | 0.951x | 0.986x | 0.964x |
+| Maximum per-GPU fit allocation (GiB) | 1.769 | 1.074 | 1.248 | 0.994 |
+| Reduction in that fit peak | — | 39.3% | 29.5% | 43.8% |
+| Maximum per-GPU prediction allocation (GiB) | 1.598 | 1.060 | 1.071 | 0.813 |
+| Maximum prediction difference | — | 0 | 0 | 0 |
+| Byte-identical predictions | reference | yes | yes | yes |
+
+Accuracy was 0.76416015625, log loss 0.5758563280105591, and macro OVR AUROC 0.9474312941515698 in every arm. No change in quality was observed because the complete prediction arrays were identical.
+
+The result supports a memory benefit with a small latency penalty, not throughput scaling: warm prediction throughput decreased by 1.4–4.9%. Single cold fit measurements were 1.674/1.222/1.219/1.321 seconds; these are not repeated cold-start estimates and should not be interpreted as established fit speedups. Order-dependent initialization can affect them.
+
+The fitted cache occupied 512,754,868 bytes in every arm. Stage placement moved only 50,331,648 bytes of ICL cache to GPU1; 462,423,220 bytes remained on GPU0. Thus approximately 90% of the cache at this small context belongs outside ICL. Layer placement divided that ICL component equally while retaining the encoder state on GPU0. At longer contexts, ICL cache grows with context length while induced encoder cache follows different scaling, motivating the 16k/32k follow-up.
+
+Each result directory retains configuration, runtime and source identity, three raw prediction times, per-batch latency, per-GPU allocated/reserved memory, cache storage by physical device, query identities, targets, predictions, and sampled utilization/power. Local evidence root: `.kumo-multigpu-20261008/placement/host2/placement-large-e4-c1024-q2048-v1-{ep1,stage2,layers2,layers4}`. The GPU test log is `placement-tests-55dba6bb5.log` in the same root. These results are not compared by ratio with the separate L40S throughput host.
+
+Long-context capacity, relational placement, and transfer profiling remain in progress. An actual OOM frontier has not yet been measured. No cloud instances were launched by this workstream.
