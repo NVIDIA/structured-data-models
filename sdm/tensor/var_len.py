@@ -568,7 +568,7 @@ class VarLenTensor(Tensor):
     ) -> VarLenTensor:
         (cls,) = ctx
         layout = inner_tensors["_layout"]
-        return cls(
+        out = cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
             valid=inner_tensors.get("_valid"),
@@ -576,6 +576,8 @@ class VarLenTensor(Tensor):
             stride=layout.stride(),
             storage_offset=layout.storage_offset(),
         )
+        out._layout = layout
+        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
