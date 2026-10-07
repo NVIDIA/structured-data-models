@@ -1,0 +1,13 @@
+diff --git a/sdm/tensor/var_len.py b/sdm/tensor/var_len.py
+index 52f8a6707..c5b7c54a7 100644
+--- a/sdm/tensor/var_len.py
++++ b/sdm/tensor/var_len.py
+@@ -232,7 +232,7 @@ class VarLenTensor(Tensor):
+         out._data = data
+         out._offset = offset
+         # Carry logical shape and strides as a view of the offset storage.
+-        out._layout = offset.as_strided(size, stride, storage_offset)
++        out._layout = offset.as_strided(size, stride, storage_offset).detach()
+         out._valid = valid
+         out._storage_offset = storage_offset
+ 

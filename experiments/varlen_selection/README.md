@@ -38,3 +38,9 @@ The generic `StringTensor.index_select` method does not assume selections are un
 Further validation: bounded int32 raw-leaf selection passes with graph breaks on 2.7.1 across strides 0/1/2 after opting in to dynamic/scalar capture. Strict fullgraph is still blocked because that version skips `statically_known_true`; 2.14 supports it. Both eager tensor suites remain 48 passed, 15 skipped.
 
 Unflattening must retain the supplied `_layout` leaf for Dynamo source tracking. An attempted cleanup that regenerated an equivalent offset view regressed all-observed string fitting in partial-graph mode; commit `c31f252ed` restores leaf identity. The layout's values are metadata-only and need not be copied during payload mutation.
+
+## Native clone and concatenation
+
+With atomic `VarLenTensor.__new__` (commit `e26592ebf`), PyTorch 2.14 partial-graph compilation passes native `StringTensor.clone()`, `text[1::2].clone()` and `torch.cat([text, text])` across row counts 3/5/0/2, changing byte lengths and missing strings. `materialize.py` reproduces the checks. Strict fullgraph still rejects scalar byte-slice endpoints in `data_offset`.
+
+On 2.7.1, sliced cloning passes with graph breaks; ordinary cloning and concatenation encounter missing `_layout._base` symbolic sources. Detaching only the layout metadata view removes those failures but regresses sliced cloning: unflatten expects stride `(2,)` and receives `(1,)`. That experiment is saved as `detached_layout_rejected.patch` and is not applied. This is separate from preserving the exact supplied leaf identity, which remains required.
