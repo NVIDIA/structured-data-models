@@ -368,12 +368,14 @@ This checklist follows the [study questions and completion evidence](study-plan.
 | Native relational setup and pipeline costs | Fixed complete temporal graphs, sampling/load/fit timing, matched Arrow/cuDF arms audited and slower with cuDF | Whole-pipeline one-shot latency and service-tail latency are not uniformly measured; cuDF first-saved/last-scored repeat mismatch is retained explicitly |
 | Go beyond prior user/Aki work | Native Kumo adaptations, batching/process isolation, explicit CP global-length/GQA handling, placement/capacity work, analyzed TP/table/graph/full-fit options | Analyzed-only options remain unimplemented, with architecture/communication reasons documented; no implied benchmark |
 | Generic SDM integration | Tested candidates and public-API examples; small extraction boundaries in integration.md | Study harness is research, not production API; final integrated tests/source inventory must be recorded before handoff |
-| Reproducibility and failures | Raw small records, exact commands where recorded, hashes for local predictions/profiles, hardware/runtime/checkpoint receipts, failures retained | Final index sweep and complete run/source manifest reconciliation still required; remote-only artifacts are not retained merely because mentioned |
+| Reproducibility and failures | Raw small records, exact commands where recorded, hashes for local predictions/profiles, hardware/runtime/checkpoint receipts, failures retained; all 25 snapshot indexes pass archived and external verification | Complete final run/source manifest reconciliation remains; remote-only artifacts are not retained merely because mentioned |
 | Resource closure | Task-owned Spot hosts and resource/capacity failures documented by the sole operator | Final instance/resource teardown confirmation and actual elapsed-cost receipt are required; shutdown timers alone are not verification |
 
 The CP owner confirms that full-FP32 F1, alternative-collective, and 32k MHA diagnostic scripts were staged but **never launched** before access restrictions; these are unmeasured, not failed experiments. Pretrained graph/process EP and mixed-host performance have no accepted local results. E8 capacity has partial owner-reported remote status but no complete local attempt/result receipt, so no feasibility conclusion is accepted. Any recovery stays within existing scope and permitted access; otherwise close these explicitly as unmeasured/incomplete rather than adding methods or inventing outcomes. Operational cleanup and local evidence verification remain separate obligations.
 
 ## Retained evidence
+
+The final local verification sweep on 2026-10-08 passed **all 25 snapshot indexes: 247 archived-file references and 599 original-artifact references, zero mismatches or missing files**. Counts include references repeated across additive snapshots, not necessarily unique physical files. This verifies the retained local evidence, not remote host state, cloud cleanup, or never-downloaded attempts.
 
 The [initial tabular evidence index](evidence/initial-tabular-20261008/index.json) archives all seven small raw result JSON files in the repository. It binds predictions, row/target identity arrays, and available telemetry to SHA-256 hashes and their original local paths. The index and all 34 original artifacts passed verification at collection; weights and raw datasets are excluded. Large artifacts must remain in the local `.kumo-multigpu-20261008` result store or be copied to a durable user-selected location before that local store is removed. EC2 teardown does not remove these downloaded local files.
 
@@ -418,6 +420,20 @@ python research/multigpu/collect_evidence.py verify \
 ```
 
 Default verification checks repository-retained records and reports how many external files were not checked. `--external` also requires the large local files and verifies their content. Checksums detect changes; they do not themselves certify benchmark methodology.
+
+Verify every snapshot from the repository root, using a Python environment that can import the study scripts:
+
+```sh
+python - <<'PY'
+from pathlib import Path
+from research.multigpu.collect_evidence import verify
+
+indexes = sorted(Path("research/multigpu/evidence").glob("*/index.json"))
+for index in indexes:
+    print(index.parent.name, verify(index, external=True))
+print(f"Verified {len(indexes)} snapshots")
+PY
+```
 
 ## Reproduction and failure log
 
