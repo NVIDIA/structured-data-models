@@ -4,6 +4,7 @@
 """Real process-group parity, including nonzero trained-like residuals."""
 
 from pathlib import Path
+from typing import Literal
 
 import pytest
 import torch
@@ -27,6 +28,7 @@ def _worker(
     rendezvous: str,
     device_type: str = "cpu",
     dtype: torch.dtype = torch.float32,
+    kernel: Literal["efficient", "flash"] = "efficient",
 ) -> None:
     torch.set_num_threads(1)
     if device_type == "cuda":
@@ -59,6 +61,7 @@ def _worker(
                         k.tensor_split(world, -3)[rank],
                         v.tensor_split(world, -3)[rank],
                         group=dist.group.WORLD,
+                        kernel=kernel,
                     )
                     torch.testing.assert_close(
                         actual, native, atol=atol, rtol=rtol, check_dtype=False
@@ -92,7 +95,7 @@ def _worker(
                 native_cache.freeze()
                 expected = model(query.clone(), y[..., :0], cache=native_cache)
                 cache = Cache()
-                with context_parallel(dist.group.WORLD):
+                with context_parallel(dist.group.WORLD, kernel=kernel):
                     model(x.clone(), y, cache=cache)
                     cache.freeze()
                     actual = model(query.clone(), y[..., :0], cache=cache)
@@ -149,15 +152,28 @@ def test_requires_inference() -> None:
 
 
 @pytest.mark.parametrize("world", [2, 4])
-@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize(
+    ("kernel", "dtype"),
+    [
+        ("efficient", torch.float32),
+        ("efficient", torch.bfloat16),
+        ("flash", torch.bfloat16),
+    ],
+)
 def test_cuda_distributed_context_attention(
-    tmp_path: Path, world: int, dtype: torch.dtype
+    tmp_path: Path, world: int, dtype: torch.dtype, kernel: str
 ) -> None:
     if torch.cuda.device_count() < world:
         pytest.skip(f"Requires {world} CUDA devices")
     mp.spawn(
         _worker,
-        args=(world, f"file://{tmp_path / 'rendezvous'}", "cuda", dtype),
+        args=(
+            world,
+            f"file://{tmp_path / 'rendezvous'}",
+            "cuda",
+            dtype,
+            kernel,
+        ),
         nprocs=world,
         join=True,
     )

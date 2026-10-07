@@ -84,6 +84,9 @@ def main() -> None:
     )
     parser.add_argument("--profile", action="store_true")
     parser.add_argument(
+        "--kernel", choices=["efficient", "flash"], default="efficient"
+    )
+    parser.add_argument(
         "--source-commit", help="Revision for archive deployments"
     )
     args = parser.parse_args()
@@ -190,7 +193,7 @@ def main() -> None:
         scope = (
             nullcontext()
             if args.mode == "native"
-            else context_parallel(dist.group.WORLD)
+            else context_parallel(dist.group.WORLD, kernel=args.kernel)
         )
         dtype = getattr(torch, args.precision)
         with (
