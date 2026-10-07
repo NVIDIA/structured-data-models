@@ -1,0 +1,54 @@
+{
+  "run": "placement-large-e4-c16384-q2048-v1-ep1",
+  "prediction_sha256": "7302870c1f5ab79cb8b6476a925e9aacca88ee66da8f2a145c764788de952a89",
+  "matches_recorded_sha": true,
+  "input_hashes_match": true,
+  "query_ids_match": true,
+  "targets_match": true,
+  "class_columns_match": true,
+  "member_seeds_match": true,
+  "numerical": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "quality": {
+    "rows": 2048,
+    "accuracy": 0.91455078125,
+    "log_loss": 0.22567125667837307,
+    "brier_multiclass": 0.12680323005044455,
+    "auroc_by_class": [
+      0.980986770332355,
+      0.9808551323309979,
+      0.9981860656864092,
+      0.9985831834777397,
+      0.9928770142594111,
+      0.9972409594784334,
+      0.9991143724696356
+    ],
+    "auroc_macro_present_classes": 0.9925490711478547,
+    "max_probability_sum_error": 1.7940692487172782e-7
+  },
+  "median_rows_s": 1865.1067923720268,
+  "speedup": 1,
+  "fit_peak_gib": [
+    3.048884391784668
+  ],
+  "prediction_peak_gib": [
+    2.1872754096984863
+  ]
+}

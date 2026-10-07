@@ -1,0 +1,62 @@
+{
+  "run": "capacity-hm-c65536-e4-v1-stage2",
+  "reference": "capacity-hm-c65536-e4-expandable-v1-ep1",
+  "checks": {
+    "workload_graphs": true,
+    "class_columns": true,
+    "member_seeds": true,
+    "prediction_sha": true,
+    "config": true
+  },
+  "raw_prediction_sha256": "3c77756023cff1523bf6ec2be51c1738083c5f810890a18bed06601d47e1e133",
+  "comparison": {
+    "shape": [
+      4096,
+      2
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true,
+    "failing_entries": 0
+  },
+  "class_changes": 0,
+  "quality": {
+    "rows": 4096,
+    "accuracy": 0.80810546875,
+    "log_loss": 0.4616449621808759,
+    "brier_multiclass": 0.2928491687771917,
+    "auroc_by_class": [
+      0.6665142639699269,
+      0.6665081140502602
+    ],
+    "auroc_macro_present_classes": 0.6665111890100935,
+    "max_probability_sum_error": 8.940696716308594e-8
+  },
+  "positive_class": 1,
+  "positive_class_auroc": 0.6665142639699269,
+  "paired_logloss_delta": {
+    "candidate_minus_reference": 0,
+    "ci95": [
+      0,
+      0
+    ],
+    "groups": 4096,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_median_rows_s": 955.3188550646817,
+  "matched_speedup": 1.036735098670523,
+  "peak_fit_gib": 16.105474948883057,
+  "peak_prediction_gib": 6.150398254394531,
+  "note": "Default allocator EP1 and layers4 OOM; expandable-segment retry succeeded. Stage2 uses default allocator while EP1/layers4 here use expandable segments, so allocator differs for stage comparison. Same full graph and member seeds; numerical differences cannot be called exact parity."
+}

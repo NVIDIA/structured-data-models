@@ -1,0 +1,420 @@
+{
+  "args": {
+    "command": "run",
+    "workload": "/home/ubuntu/kumo-multigpu/results/workload-hm-c65536-b512",
+    "mode": "layers",
+    "gpus": 4,
+    "estimators": 4,
+    "repeats": 3,
+    "warmups": 1,
+    "threads": 8,
+    "dtype": "bf16",
+    "profile": false,
+    "source_commit": "4e1c5c33d",
+    "seed": 1729,
+    "output": "/home/ubuntu/kumo-multigpu/results/capacity-hm-c65536-e4-expandable-v1-layers4/benchmark",
+    "placement": "layers"
+  },
+  "workload": {
+    "dataset": "rel-hm",
+    "task": "user-churn",
+    "problem": "classification",
+    "target": "churn",
+    "context": 65536,
+    "queries": 4096,
+    "batch_size": 512,
+    "neighbors": [
+      16,
+      16
+    ],
+    "temporal_strategy": "last",
+    "seed": 1729,
+    "lag_features": 0,
+    "context_row_indices_sha256": "481b9c91ffa42ae1b79348bb041a4c2333f92dea9c040af07efc3a6d554036c5",
+    "query_row_indices_sha256": "b83e23eb1db808bf694ae4894d62b50c9840bcd869ba7ac2456f40ddf0530bf3",
+    "context_graph": {
+      "task": "0d78bc157a7b87984cf37e806b335fa2b3e0706baca8589a7612631929f0a45e",
+      "tables": {
+        "article": {
+          "rows": 571241,
+          "sha256": "8e416237ee191b18ddeee11f51bfbd1f0399d495c8137e1425aa7e2cb180eb36"
+        },
+        "customer": {
+          "rows": 65536,
+          "sha256": "18733fe82952bd91bc4770f51e4f6c3bec50fcd9c7309ca712373dd32fbb1530"
+        },
+        "transactions": {
+          "rows": 642830,
+          "sha256": "9e7bcb11d73477cdf7673e5b8a4e2b2ae692ea98af24e785bdb9f93fd3d4d3ac"
+        }
+      },
+      "relationships": "(transactions.[customer_id,__example__] <> customer.[customer_id,__example__], transactions.[article_id,__example__] <> article.[article_id,__example__])",
+      "task_links": "([customer_id,__example__] > customer.[customer_id,__example__],)"
+    },
+    "query_graphs": [
+      {
+        "task": "dda023ecc4b01451358897b640db2a3f7be3120c5882c8186634cfcaea8fcc09",
+        "tables": {
+          "article": {
+            "rows": 6036,
+            "sha256": "34efc844f2d6edab2d205c5959b5f4f5c189013a9f01e850954b678b4fb185cb"
+          },
+          "customer": {
+            "rows": 512,
+            "sha256": "0ea16d441572a5223731db64218531fb0cc887a3e66c19a138515846befd28e3"
+          },
+          "transactions": {
+            "rows": 6713,
+            "sha256": "7eeb17dcfd51c2f5eeb3188980dc5bf07b8d366164235f3e333e80ac13f7bcdb"
+          }
+        },
+        "relationships": "(transactions.[customer_id,__example__] <> customer.[customer_id,__example__], transactions.[article_id,__example__] <> article.[article_id,__example__])",
+        "task_links": "([customer_id,__example__] > customer.[customer_id,__example__],)"
+      },
+      {
+        "task": "205c3c180a79a36caa190172057aa0a41c33941f73f0c363b54b7ce6a75e12da",
+        "tables": {
+          "article": {
+            "rows": 5647,
+            "sha256": "7fc43418a2d8331eca2a6a626977bab09ecdf5b5748a0a39dd3f2eee8bc12819"
+          },
+          "customer": {
+            "rows": 512,
+            "sha256": "59140714b518eaee2b1be6e382f99335f99217aa74b54369361bb6136a621645"
+          },
+          "transactions": {
+            "rows": 6294,
+            "sha256": "5f00062fe21a4c04270f375893ba0f886f6ccd83abbd8c5e1dc21a5aacea74e6"
+          }
+        },
+        "relationships": "(transactions.[customer_id,__example__] <> customer.[customer_id,__example__], transactions.[article_id,__example__] <> article.[article_id,__example__])",
+        "task_links": "([customer_id,__example__] > customer.[customer_id,__example__],)"
+      },
+      {
+        "task": "1f693fd5283c7889ca33a1b977a71b805c60464529d9f795a6bc957d3e0f9cf1",
+        "tables": {
+          "article": {
+            "rows": 5868,
+            "sha256": "4676e8c6255529c695e42429a6e4f77812a024278cfb35c6e7c7dfc171fe5cee"
+          },
+          "customer": {
+            "rows": 512,
+            "sha256": "f61cd4183b7f3b88f69aea1b960bebd238c4bd5f1e90ed1ae26e6dee71deda88"
+          },
+          "transactions": {
+            "rows": 6468,
+            "sha256": "b81b223cce695b5fbd6608785aababbafec9d7937e998c53a483aed4abc08c38"
+          }
+        },
+        "relationships": "(transactions.[customer_id,__example__] <> customer.[customer_id,__example__], transactions.[article_id,__example__] <> article.[article_id,__example__])",
+        "task_links": "([customer_id,__example__] > customer.[customer_id,__example__],)"
+      },
+      {
+        "task": "8c1a2a6306d806c251a060773da200126af860e8b975cdaafe6964e89cceab1e",
+        "tables": {
+          "article": {
+            "rows": 5939,
+            "sha256": "0ba19db79847a7980df333c11aa4afb2fbd06df85bd303f850176719d5bf7ddb"
+          },
+          "customer": {
+            "rows": 512,
+            "sha256": "58b5c305f26c6f01ceb08b46a06cb646a29da382c9cf7120dfeaddb9399184f2"
+          },
+          "transactions": {
+            "rows": 6563,
+            "sha256": "032f232e529633ed6368c3514a9f0f608bafa66e259d926929a07c333deb8bfc"
+          }
+        },
+        "relationships": "(transactions.[customer_id,__example__] <> customer.[customer_id,__example__], transactions.[article_id,__example__] <> article.[article_id,__example__])",
+        "task_links": "([customer_id,__example__] > customer.[customer_id,__example__],)"
+      },
+      {
+        "task": "489aa3234c8628b5047bb2d3769ea9001aa9ca6696168962839d132be5df3d56",
+        "tables": {
+          "article": {
+            "rows": 5898,
+            "sha256": "960c2578d7fe9f79a142096d5efb82c1e291ac92b4c9229e774b916e99ab193c"
+          },
+          "customer": {
+            "rows": 512,
+            "sha256": "9157188d21156cbcd1fdffe6a567bda6ef4cfdcf71c0d265fd65553b3828797b"
+          },
+          "transactions": {
+            "rows": 6555,
+            "sha256": "926d830ba3dd5aaf91a9540987f71b23cde8f459df4449c02f4bdeaf539b2651"
+          }
+        },
+        "relationships": "(transactions.[customer_id,__example__] <> customer.[customer_id,__example__], transactions.[article_id,__example__] <> article.[article_id,__example__])",
+        "task_links": "([customer_id,__example__] > customer.[customer_id,__example__],)"
+      },
+      {
+        "task": "9af306027277c9ba25aaca3c69a0a2952e83aee284b267f1e945aac4833aeca6",
+        "tables": {
+          "article": {
+            "rows": 5868,
+            "sha256": "399641cd4d57b70e49f909db3722453810bd346107956a50e28aafbc46839d75"
+          },
+          "customer": {
+            "rows": 512,
+            "sha256": "c71f770869c7b6db65e0d0fbd31524eb2f0ace7f56af2f79ad89b16e7a387171"
+          },
+          "transactions": {
+            "rows": 6502,
+            "sha256": "fe97ed3038326a64487699ba9eee0d11663420be7b9ff99d9a77351c3dee0e58"
+          }
+        },
+        "relationships": "(transactions.[customer_id,__example__] <> customer.[customer_id,__example__], transactions.[article_id,__example__] <> article.[article_id,__example__])",
+        "task_links": "([customer_id,__example__] > customer.[customer_id,__example__],)"
+      },
+      {
+        "task": "dd58dc170031dcf345ad0583733f6e6610b869bafbd365d73da26ede0edcf1d5",
+        "tables": {
+          "article": {
+            "rows": 5963,
+            "sha256": "c0d3a1d496898b4760cb668c436e5f280a1edd03bcbb0995268cee82d51ba41f"
+          },
+          "customer": {
+            "rows": 512,
+            "sha256": "2a5a4ccd8a607605814c3a6ba84ecee5463c71e2026eddd074ab85e72344fe15"
+          },
+          "transactions": {
+            "rows": 6619,
+            "sha256": "d2df39e0990bc793a6ad67311fd9dae3db504bc2921df4a41083a1809a2f3758"
+          }
+        },
+        "relationships": "(transactions.[customer_id,__example__] <> customer.[customer_id,__example__], transactions.[article_id,__example__] <> article.[article_id,__example__])",
+        "task_links": "([customer_id,__example__] > customer.[customer_id,__example__],)"
+      },
+      {
+        "task": "391168c61b441c70cf95ab81661076f486621dc0f8ba62fb16bcc83f2fa0866f",
+        "tables": {
+          "article": {
+            "rows": 5869,
+            "sha256": "c8f2dafa11bfb39b105c6c2589437c0ccfa779605fc13268d3f9a008535b44dc"
+          },
+          "customer": {
+            "rows": 512,
+            "sha256": "18a78177f66bb65aa51c239cd8770901d0c49e96cccd40814393b135826b29fa"
+          },
+          "transactions": {
+            "rows": 6555,
+            "sha256": "19e0796c6982e5f4a11995103a3c7ee374fc7365e4882e093db646175a1f4596"
+          }
+        },
+        "relationships": "(transactions.[customer_id,__example__] <> customer.[customer_id,__example__], transactions.[article_id,__example__] <> article.[article_id,__example__])",
+        "task_links": "([customer_id,__example__] > customer.[customer_id,__example__],)"
+      }
+    ],
+    "db_load_s": 0.7029626249568537,
+    "sampler_build_s": 2.06706116697751,
+    "context_sample_s": 0.24776099994778633,
+    "query_sample_s": [
+      0.021416667033918202,
+      0.021363708074204624,
+      0.018905916018411517,
+      0.02107104193419218,
+      0.019647124921903014,
+      0.01826658402569592,
+      0.022287667030468583,
+      0.017692458000965416
+    ],
+    "db_rows": {
+      "article": 105542,
+      "customer": 1371980,
+      "transactions": 14921684
+    },
+    "max_rss_kib": 4587296.0,
+    "preparation_platform": "darwin"
+  },
+  "torch": "2.9.1+cu130",
+  "cuda": "13.0",
+  "gpus": [
+    "NVIDIA L4",
+    "NVIDIA L4",
+    "NVIDIA L4",
+    "NVIDIA L4"
+  ],
+  "commit": "4e1c5c33d",
+  "runner_sha256": "e5ac7db1b13de025256f4575b778a3e263f1fb9794ee1ec3d8fad103cff4b1b2",
+  "replica_load_s": 0.7726490310001282,
+  "load_s": 0.7902428860002146,
+  "placement_setup_s": 0.017593855000086478,
+  "memory_after_load": {
+    "cuda:0": {
+      "allocated": 40318464,
+      "reserved": 130023424,
+      "peak_allocated": 119735296,
+      "peak_reserved": 130023424
+    },
+    "cuda:1": {
+      "allocated": 25737216,
+      "reserved": 46137344,
+      "peak_allocated": 25737216,
+      "peak_reserved": 46137344
+    },
+    "cuda:2": {
+      "allocated": 25737216,
+      "reserved": 46137344,
+      "peak_allocated": 25737216,
+      "peak_reserved": 46137344
+    },
+    "cuda:3": {
+      "allocated": 27884032,
+      "reserved": 46137344,
+      "peak_allocated": 27884032,
+      "peak_reserved": 46137344
+    }
+  },
+  "fit_s": 54.17063550000012,
+  "memory_after_fit": {
+    "cuda:0": {
+      "allocated": 1686476288,
+      "reserved": 21002977280,
+      "peak_allocated": 18532131328,
+      "peak_reserved": 21002977280
+    },
+    "cuda:1": {
+      "allocated": 1645918208,
+      "reserved": 2342518784,
+      "peak_allocated": 2325140480,
+      "peak_reserved": 2342518784
+    },
+    "cuda:2": {
+      "allocated": 1645918208,
+      "reserved": 2342518784,
+      "peak_allocated": 2325140480,
+      "peak_reserved": 2342518784
+    },
+    "cuda:3": {
+      "allocated": 1648065024,
+      "reserved": 2281701376,
+      "peak_allocated": 2194056192,
+      "peak_reserved": 2281701376
+    }
+  },
+  "cache_logical_bytes_after_fit": {
+    "cuda:0": 1636581408,
+    "cuda:1": 1610612736,
+    "cuda:2": 1610612736,
+    "cuda:3": 1610612736
+  },
+  "cache_storage_bytes_after_fit": {
+    "cuda:0": 1636581408,
+    "cuda:1": 1610612736,
+    "cuda:2": 1610612736,
+    "cuda:3": 1610612736
+  },
+  "native_cache_bytes": [
+    0
+  ],
+  "ensemble_cache_bytes_per_gpu": [
+    6468419616
+  ],
+  "member_seeds": [
+    1729,
+    1730,
+    1731,
+    1732
+  ],
+  "warmup_s": 4.505973542999982,
+  "predict_repeats_s": [
+    4.344082073000209,
+    4.33616638400008,
+    4.335118384999987
+  ],
+  "prediction_unix_windows": [
+    [
+      1791389989.436821,
+      1791389993.780905
+    ],
+    [
+      1791389993.7812097,
+      1791389998.1173775
+    ],
+    [
+      1791389998.1177185,
+      1791390002.452838
+    ]
+  ],
+  "batch_times_s": [
+    [
+      0.5529923740000413,
+      0.5299613150000368,
+      0.5330275619999156,
+      0.5480794200002492,
+      0.5488875410001128,
+      0.5412967490001392,
+      0.5448174409998501,
+      0.5448283810001158
+    ],
+    [
+      0.553873448000104,
+      0.523165643000084,
+      0.5417330629998105,
+      0.5371310939999603,
+      0.5450319719998333,
+      0.5460630060001677,
+      0.5439954680000483,
+      0.5449180070004331
+    ],
+    [
+      0.5496823419998691,
+      0.5248579809999683,
+      0.5394259730001068,
+      0.5437041329996646,
+      0.5451857509997353,
+      0.5378603110002587,
+      0.5481862090000504,
+      0.5459630619998279
+    ]
+  ],
+  "batch_times_kind": "synchronized_end_to_end_batch_latency",
+  "rows_per_s": [
+    942.8919461392974,
+    944.6131991414665,
+    944.8415559244323
+  ],
+  "memory_prediction": {
+    "cuda:0": {
+      "allocated": 1686476288,
+      "reserved": 21002977280,
+      "peak_allocated": 2158003200,
+      "peak_reserved": 21002977280
+    },
+    "cuda:1": {
+      "allocated": 1645918208,
+      "reserved": 2348810240,
+      "peak_allocated": 1663062016,
+      "peak_reserved": 2348810240
+    },
+    "cuda:2": {
+      "allocated": 1645918208,
+      "reserved": 2348810240,
+      "peak_allocated": 1663062016,
+      "peak_reserved": 2348810240
+    },
+    "cuda:3": {
+      "allocated": 1648065024,
+      "reserved": 2285895680,
+      "peak_allocated": 1666280448,
+      "peak_reserved": 2285895680
+    }
+  },
+  "repeat_max_abs_difference": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "prediction_sha256": "8952325b2fc5b5573bcb68c65ddb9594ad9e1ec50062d592e6e8a4f36c0aec11",
+  "prediction_columns": [
+    "1",
+    "0"
+  ],
+  "max_rss_kib": 3771000,
+  "quality": {
+    "log_loss": 0.4615814983844757,
+    "accuracy": 0.80810546875,
+    "auroc": 0.6668017727143439,
+    "positive_class": 1
+  }
+}

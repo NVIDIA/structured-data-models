@@ -35,6 +35,7 @@ def artifact_role(name: str) -> str | None:
         "config.json",
         "parity.json",
         "failure.json",
+        "attempt.json",
         "quality-independent-audit.json",
         "runtime.txt",
         "pip-freeze.txt",

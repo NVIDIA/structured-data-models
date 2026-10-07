@@ -1,0 +1,30 @@
+{
+  "command": [
+    "/opt/pytorch/bin/python",
+    "/home/ubuntu/kumo-multigpu/relational_bench-b9026ea3f.py",
+    "run",
+    "--workload",
+    "/home/ubuntu/kumo-multigpu/results/workload-hm-c65536-b512",
+    "--estimators",
+    "4",
+    "--repeats",
+    "3",
+    "--source-commit",
+    "4e1c5c33d",
+    "--output",
+    "/home/ubuntu/kumo-multigpu/results/capacity-hm-c65536-e4-v1-ep1/benchmark",
+    "--mode",
+    "ensemble",
+    "--gpus",
+    "1"
+  ],
+  "timeout_s": 220.0,
+  "started_utc": "2026-10-07T16:11:07.199628+00:00",
+  "wrapper_sha256": "86334fef3b9c87b245be1912d79273edeb4ed366b37d94324d2df3334f797d34",
+  "finished_utc": "2026-10-07T16:11:40.626294+00:00",
+  "elapsed_s": 33.4266299410001,
+  "returncode": 1,
+  "status": "error",
+  "oom_reported": true,
+  "output_tail": "/opt/pytorch/lib/python3.12/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.\n  import pynvml  # type: ignore[import]\n/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/relational/join.py:73: RuntimeWarning: Falling back to a CPU-based join because cuDF is not installed. Install cuDF to enable faster CUDA-based joins without device synchronization. This warning will be suppressed for the remainder of this process.\n  warn_once(\nTraceback (most recent call last):\n  File \"/home/ubuntu/kumo-multigpu/relational_bench-b9026ea3f.py\", line 690, in <module>\n    main()\n  File \"/home/ubuntu/kumo-multigpu/relational_bench-b9026ea3f.py\", line 676, in main\n    (prepare if args.command == \"prepare\" else run)(args)\n  File \"/home/ubuntu/kumo-multigpu/relational_bench-b9026ea3f.py\", line 382, in run\n    model.fit(\n  File \"/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/models/ensemble_parallel.py\", line 229, in fit\n    caches = self._dispatch(fit_member, len(contexts), x.device)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/models/ensemble_parallel.py\", line 143, in _dispatch\n    outputs = [item for future in futures for item in future.result()]\n                                                      ^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 449, in result\n    return self.__get_result()\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 401, in __get_result\n    raise self._exception\n  File \"/usr/lib/python3.12/concurrent/futures/thread.py\", line 58, in run\n    result = self.fn(*self.args, **self.kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/models/ensemble_parallel.py\", line 128, in run\n    operation(\n  File \"/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/models/ensemble_parallel.py\", line 216, in fit_member\n    model._forward(\n  File \"/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/models/kumo/relational/model.py\", line 219, in _forward\n    out = self.models[task](\n          ^^^^^^^^^^^^^^^^^^\n  File \"/opt/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1775, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1786, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/models/kumo/relational/model.py\", line 450, in forward\n    x_context = self.gnn(\n                ^^^^^^^^^\n  File \"/opt/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1775, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1786, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/models/kumo/relational/invariant_gnn.py\", line 100, in forward\n    stats = segment_multi_reduce(\n            ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/_kernels/segment_multi_reduce.py\", line 128, in segment_multi_reduce\n    return _triton_segment_multi_reduce(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-4e1c5c33d/sdm/_kernels/triton/segment_multi_reduce.py\", line 139, in segment_multi_reduce\n    output = src.new_empty(shape)\n             ^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.10 GiB. GPU 0 has a total capacity of 22.04 GiB of which 5.52 GiB is free. Including non-PyTorch memory, this process has 16.51 GiB memory in use. Of the allocated memory 10.40 GiB is allocated by PyTorch, and 5.86 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n"
+}

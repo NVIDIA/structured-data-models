@@ -49,12 +49,16 @@ def test_detects_modified_records_and_index(tmp_path: Path) -> None:
 def test_retains_failures_and_additive_audits(tmp_path: Path) -> None:
     run = tmp_path / "run"
     run.mkdir()
-    for name in ("failure.json", "quality-full-cohort-audit.json"):
+    for name in (
+        "failure.json",
+        "attempt.json",
+        "quality-full-cohort-audit.json",
+    ):
         (run / name).write_text("{}\n")
     index_path = collect([f"attempt={run}"], tmp_path / "evidence")
     assert verify(index_path, external=True) == {
-        "archived_files": 2,
-        "external_files": 2,
+        "archived_files": 3,
+        "external_files": 3,
         "external_unchecked": 0,
     }
 

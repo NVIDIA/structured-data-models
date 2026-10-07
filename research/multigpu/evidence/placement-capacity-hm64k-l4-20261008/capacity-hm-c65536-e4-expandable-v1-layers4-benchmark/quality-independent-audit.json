@@ -1,0 +1,62 @@
+{
+  "run": "capacity-hm-c65536-e4-expandable-v1-layers4",
+  "reference": "capacity-hm-c65536-e4-expandable-v1-ep1",
+  "checks": {
+    "workload_graphs": true,
+    "class_columns": true,
+    "member_seeds": true,
+    "prediction_sha": true,
+    "config": true
+  },
+  "raw_prediction_sha256": "8952325b2fc5b5573bcb68c65ddb9594ad9e1ec50062d592e6e8a4f36c0aec11",
+  "comparison": {
+    "shape": [
+      4096,
+      2
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.010411202907562256,
+    "mean_abs": 0.0010828223598764453,
+    "rms": 0.0018771446657844671,
+    "p99_abs": 0.0061261653900146484,
+    "relative_l2": 0.0031662848483898494,
+    "within_tolerance": true,
+    "failing_entries": 0
+  },
+  "class_changes": 0,
+  "quality": {
+    "rows": 4096,
+    "accuracy": 0.80810546875,
+    "log_loss": 0.4615814950891485,
+    "brier_multiclass": 0.2928110476985324,
+    "auroc_by_class": [
+      0.6668017727143439,
+      0.6667937009447814
+    ],
+    "auroc_macro_present_classes": 0.6667977368295627,
+    "max_probability_sum_error": 8.940696716308594e-8
+  },
+  "positive_class": 1,
+  "positive_class_auroc": 0.6668017727143439,
+  "paired_logloss_delta": {
+    "candidate_minus_reference": -0.00006346709172742708,
+    "ci95": [
+      -0.00020628687513582082,
+      0.00007740240768378403
+    ],
+    "groups": 4096,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_median_rows_s": 944.6131991414665,
+  "matched_speedup": 1.0251170622515353,
+  "peak_fit_gib": 17.259392261505127,
+  "peak_prediction_gib": 2.0097970962524414,
+  "note": "Default allocator EP1 and layers4 OOM; expandable-segment retry succeeded. Stage2 uses default allocator while EP1/layers4 here use expandable segments, so allocator differs for stage comparison. Same full graph and member seeds; numerical differences cannot be called exact parity."
+}

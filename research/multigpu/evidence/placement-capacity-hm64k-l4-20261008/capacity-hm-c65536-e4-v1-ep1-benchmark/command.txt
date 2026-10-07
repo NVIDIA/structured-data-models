@@ -1,0 +1,1 @@
+/home/ubuntu/kumo-multigpu/relational_bench-b9026ea3f.py run --workload /home/ubuntu/kumo-multigpu/results/workload-hm-c65536-b512 --estimators 4 --repeats 3 --source-commit 4e1c5c33d --output /home/ubuntu/kumo-multigpu/results/capacity-hm-c65536-e4-v1-ep1/benchmark --mode ensemble --gpus 1

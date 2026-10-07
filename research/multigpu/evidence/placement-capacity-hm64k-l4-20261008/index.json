@@ -1,0 +1,323 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-07T16:33:16.769652+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "capacity-hm-c65536-e4-expandable-v1-ep1-attempt",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1",
+      "artifacts": [
+        {
+          "name": "attempt.json",
+          "role": "record",
+          "bytes": 877,
+          "sha256": "714a9880aafb7c5ab0af0d33b95fbc6e2e31895b03adf54c85230abf7c6243d9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1/attempt.json",
+          "archived_path": "capacity-hm-c65536-e4-expandable-v1-ep1-attempt/attempt.json"
+        },
+        {
+          "name": "stdout.log",
+          "role": "log",
+          "bytes": 1072,
+          "sha256": "00e5f706e8f14b0dc4d1e64ade84a7a985e6b143376d7abf2cb0de4af35f7b91",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1/stdout.log"
+        }
+      ]
+    },
+    {
+      "label": "capacity-hm-c65536-e4-expandable-v1-ep1-benchmark",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1/benchmark",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 303,
+          "sha256": "cb90043e9d5b81f35513ba1994bf4cc5d4f26570681b8c7de3db2aac83729208",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1/benchmark/command.txt",
+          "archived_path": "capacity-hm-c65536-e4-expandable-v1-ep1-benchmark/command.txt"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 79602,
+          "sha256": "515dfe01cb5c4033d6d932b5aee389fa05bbf0fb647559537982ea2b0f39129b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1/benchmark/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "31a3b82a24004a6e4c95fff7bbf1013a73a72aebf5bd8d39172e7695b3254304",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1/benchmark/predictions.npy"
+        },
+        {
+          "name": "predictions.pt",
+          "role": "predictions",
+          "bytes": 35589,
+          "sha256": "62fc7e2f1a68328b837a8ce9220bc7feb785563325dabe99a7c346a2fd3ebabc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1/benchmark/predictions.pt"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1797,
+          "sha256": "be5cc18c2256c876fbfa3de6ab0315da4fc7f379148e7d2f6e80a6bf87e1f7c8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1/benchmark/quality-independent-audit.json",
+          "archived_path": "capacity-hm-c65536-e4-expandable-v1-ep1-benchmark/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 11993,
+          "sha256": "8179e3e2dfe0a44df40ebcba061f12102c7e21faed591ad0639683b167805e59",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-ep1/benchmark/result.json",
+          "archived_path": "capacity-hm-c65536-e4-expandable-v1-ep1-benchmark/result.json"
+        }
+      ]
+    },
+    {
+      "label": "capacity-hm-c65536-e4-expandable-v1-layers4-attempt",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4",
+      "artifacts": [
+        {
+          "name": "attempt.json",
+          "role": "record",
+          "bytes": 878,
+          "sha256": "627065611846adc043fbed9968facd41cb0ef12f8a411c808afe7af3e6dcf464",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4/attempt.json",
+          "archived_path": "capacity-hm-c65536-e4-expandable-v1-layers4-attempt/attempt.json"
+        },
+        {
+          "name": "stdout.log",
+          "role": "log",
+          "bytes": 1078,
+          "sha256": "1cec16465bac66a460dbf5f50cf6f4ca13368a30fcab866ed4a1c8275c0f2ac9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4/stdout.log"
+        }
+      ]
+    },
+    {
+      "label": "capacity-hm-c65536-e4-expandable-v1-layers4-benchmark",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4/benchmark",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 305,
+          "sha256": "ee0e6c4356e0c85125b6860b95ca6bfe543a951c8078bb90f3f2122d27c2e8a6",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4/benchmark/command.txt",
+          "archived_path": "capacity-hm-c65536-e4-expandable-v1-layers4-benchmark/command.txt"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 82580,
+          "sha256": "b1995605f84a7d4b9be1f9a855de155230f7ce37f23da22d28803dbe2d6c7f3e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4/benchmark/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "7ec8db5f53ee04fb7ae874c4a3cfe33b0f94c4fa08f6fb1e3a8c44488851dcb7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4/benchmark/predictions.npy"
+        },
+        {
+          "name": "predictions.pt",
+          "role": "predictions",
+          "bytes": 35589,
+          "sha256": "eb444ef7a7bf5c54cb5cd2b8d31771225af514660177c88f53f4382899e79b79",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4/benchmark/predictions.pt"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1986,
+          "sha256": "f91e8c35b4bf35c259b5e9501557964ded92df4d63176f379b0fca21f14cc095",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4/benchmark/quality-independent-audit.json",
+          "archived_path": "capacity-hm-c65536-e4-expandable-v1-layers4-benchmark/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 13593,
+          "sha256": "947cfa7c79830028b7c5016dd2ee14a6ca59f7f6f0cb28f84ed7df868d9076d4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-expandable-v1-layers4/benchmark/result.json",
+          "archived_path": "capacity-hm-c65536-e4-expandable-v1-layers4-benchmark/result.json"
+        }
+      ]
+    },
+    {
+      "label": "capacity-hm-c65536-e4-v1-ep1-attempt",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-ep1",
+      "artifacts": [
+        {
+          "name": "attempt.json",
+          "role": "record",
+          "bytes": 5312,
+          "sha256": "f5e36990c80e298460ddc82d548bb61386cf1ca9f34eb2643f0b27f3a0c4521d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-ep1/attempt.json",
+          "archived_path": "capacity-hm-c65536-e4-v1-ep1-attempt/attempt.json"
+        },
+        {
+          "name": "stdout.log",
+          "role": "log",
+          "bytes": 4423,
+          "sha256": "a3bb6c5769139a906526f6152455a34cb5477c5f6ca4c8a3745dff7a2670ee3d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-ep1/stdout.log"
+        }
+      ]
+    },
+    {
+      "label": "capacity-hm-c65536-e4-v1-ep1-benchmark",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-ep1/benchmark",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 292,
+          "sha256": "b05dc60a5d826d83528dcc8d8b4c03585e039229ad130c8dcadf19f45cd29ca2",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-ep1/benchmark/command.txt",
+          "archived_path": "capacity-hm-c65536-e4-v1-ep1-benchmark/command.txt"
+        },
+        {
+          "name": "failure.json",
+          "role": "record",
+          "bytes": 4221,
+          "sha256": "fa140da36e35bb33303aa087e1b92f763272cdf8f66fa16fd9037cc5334c15d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-ep1/benchmark/failure.json",
+          "archived_path": "capacity-hm-c65536-e4-v1-ep1-benchmark/failure.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 32330,
+          "sha256": "0f9c12bc2ed58fe9636dbe2cb764f993fb6f800c19811b2d3407c532571e9713",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-ep1/benchmark/nvidia-smi.csv"
+        }
+      ]
+    },
+    {
+      "label": "capacity-hm-c65536-e4-v1-layers4-attempt",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-layers4",
+      "artifacts": [
+        {
+          "name": "attempt.json",
+          "role": "record",
+          "bytes": 5314,
+          "sha256": "6a9cf9983ff031751f315a086c25c418571af9c19924626e4fe66a50a8a503a1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-layers4/attempt.json",
+          "archived_path": "capacity-hm-c65536-e4-v1-layers4-attempt/attempt.json"
+        },
+        {
+          "name": "stdout.log",
+          "role": "log",
+          "bytes": 4422,
+          "sha256": "3850705ffc059d6c7fdef226ed570c99094e1fcbc1dac081721d5327f5c37bd3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-layers4/stdout.log"
+        }
+      ]
+    },
+    {
+      "label": "capacity-hm-c65536-e4-v1-layers4-benchmark",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-layers4/benchmark",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 294,
+          "sha256": "54f0bcecc742ba3cd2135ab66ac0b9caee90a697b6e66a87176b862350290eef",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-layers4/benchmark/command.txt",
+          "archived_path": "capacity-hm-c65536-e4-v1-layers4-benchmark/command.txt"
+        },
+        {
+          "name": "failure.json",
+          "role": "record",
+          "bytes": 4249,
+          "sha256": "89cfeb78da9de0c5f776a7a919cab9b11a19f947f7959f501c4c943658d48e63",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-layers4/benchmark/failure.json",
+          "archived_path": "capacity-hm-c65536-e4-v1-layers4-benchmark/failure.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 32919,
+          "sha256": "860cff01aca0709f812fd5d4d56c5f82f6582b222db3a3419404f51b268c0c3a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-layers4/benchmark/nvidia-smi.csv"
+        }
+      ]
+    },
+    {
+      "label": "capacity-hm-c65536-e4-v1-stage2-attempt",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2",
+      "artifacts": [
+        {
+          "name": "attempt.json",
+          "role": "record",
+          "bytes": 799,
+          "sha256": "e3d30fec6f84e0a5d114253aed161e525d58b25f8c12ae9ce580a4a61a51645f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2/attempt.json",
+          "archived_path": "capacity-hm-c65536-e4-v1-stage2-attempt/attempt.json"
+        },
+        {
+          "name": "stdout.log",
+          "role": "log",
+          "bytes": 912,
+          "sha256": "ca400e58b8b3be224e3f8a6bb0e8de64612c7e39725203f130d002a30fc823a4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2/stdout.log"
+        }
+      ]
+    },
+    {
+      "label": "capacity-hm-c65536-e4-v1-stage2-benchmark",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2/benchmark",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 292,
+          "sha256": "b63a303e99f56c5237eef7919e970e58ade9be6bf61188dea893548333cc7e92",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2/benchmark/command.txt",
+          "archived_path": "capacity-hm-c65536-e4-v1-stage2-benchmark/command.txt"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 79166,
+          "sha256": "f37ab1fe3efe962d70a5d25cd7f91bfb66d5164d4cd6a29058e3de86fde8b8ef",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2/benchmark/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "31a3b82a24004a6e4c95fff7bbf1013a73a72aebf5bd8d39172e7695b3254304",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2/benchmark/predictions.npy"
+        },
+        {
+          "name": "predictions.pt",
+          "role": "predictions",
+          "bytes": 35589,
+          "sha256": "62fc7e2f1a68328b837a8ce9220bc7feb785563325dabe99a7c346a2fd3ebabc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2/benchmark/predictions.pt"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1807,
+          "sha256": "996ad2dd8da5ef53df674f3f8d6f0ac482ffbf280cd0d2b1f753ba61004dcdb4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2/benchmark/quality-independent-audit.json",
+          "archived_path": "capacity-hm-c65536-e4-v1-stage2-benchmark/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 12530,
+          "sha256": "603e9e749e5e950554c6bb91d0e25bb0c3b6261e2afc70cf8d56ae84ada97962",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-stage2/benchmark/result.json",
+          "archived_path": "capacity-hm-c65536-e4-v1-stage2-benchmark/result.json"
+        }
+      ]
+    }
+  ]
+}

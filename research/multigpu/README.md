@@ -201,7 +201,7 @@ Two follow-ups test distinct hypotheses on the original E4/context-1k/query-2k w
 
 All three outputs are byte-identical to their original reference, with full input/seed/column checks. Persistent autocast does not produce a meaningful scaling improvement in this ladder; its EP4 peak allocation is higher than original EP4. Compaction cuts actual retained backing storage from 512,754,868 to 358,614,196 bytes (30.1%) for 3.23 ms of fit-time copying; prediction peak decreases from 1,716,191,744 to 1,560,609,280 bytes, but fit peak and allocator reservation stay unchanged. Freed live storage is reusable by the allocator, not necessarily immediately returned to the driver. Three passes from one fresh fit are not enough to call the small throughput changes robust. This establishes a cache-memory improvement separately from any speed claim.
 
-Separate actual reduced-Kumo CUDA tests now pass for process EP (two tests, 5.30 s) and CUDA-graph EP (two tests, 2.52 s), including changed query values, remainder batches, retained outputs, and refit. These tests establish those exercised behaviors, not pretrained model throughput or broad graph-capture compatibility; full-model measurement is separate.
+Separate process-EP CUDA tests pass using a synthetic stochastic-cache fixture (two tests, 5.30 s), validating cache/member-plan and IPC behavior rather than actual Kumo model execution. CUDA-graph EP tests use actual reduced KumoTabular modules (two tests, 2.52 s), including changed query values, remainder batches, retained outputs, and refit. These tests establish their exercised behaviors, not pretrained model throughput or broad graph-capture compatibility; full-model measurement is separate.
 
 ### Native relational EP and DP on L40S
 
@@ -302,6 +302,17 @@ This separate comparison uses **KumoTabular large**, E4, context 1,024, queries 
 
 The four-way layer split lowers the busiest device's fit peak by about 44% and prediction peak by 49%, at a 3.6% warm throughput penalty. This is a capacity tradeoff; the implementation does not overlap pipeline microbatches. Sum of device peaks is not necessarily simultaneous aggregate usage. At this short context, 462.4 MB of the 512.8 MB retained cache belongs to the row encoder on GPU0, so distributing ICL layers alone cannot balance all cache memory.
 
+The larger **Covertype context-16,384** ladder keeps E4, queries 2,048, and batch 256:
+
+| Placement | GPUs | Median rows/s | Max fit allocation | Max prediction allocation |
+|---|---:|---:|---:|---:|
+| Resident reference | 1 | 1,865.11 | 3.049 GiB | 2.187 GiB |
+| Encoder → ICL stages | 2 | 1,830.66 | 2.085 GiB | 1.764 GiB |
+| ICL layers | 2 | 1,754.70 | 2.264 GiB | 1.309 GiB |
+| ICL layers | 4 | 1,809.19 | 1.876 GiB | 0.876 GiB |
+
+All predictions are byte-identical, with accuracy 0.914551, log loss 0.225671, and macro AUC 0.992549. Four-way placement reduces maximum prediction allocation 59.9% and fit allocation 38.5%, at a 3.0% throughput penalty. The compact-cache control makes no memory reduction here: logical and backing cache bytes both equal 1,132,463,344, so there are no oversized retained views to remove. Its measured 1,799.68 rows/s is not an accepted optimization. Short-context compaction benefits cannot be extrapolated to every cache layout.
+
 Native H&M relational placement extends context to **16,384**, E4, 4,096 queries, batch 512, fixed `[16,16]` two-hop neighborhoods, BF16, and eight CPU threads on the same L4 host:
 
 | Placement | GPUs | Median rows/s | Max fit peak per GPU | Max prediction peak per GPU |
@@ -311,7 +322,42 @@ Native H&M relational placement extends context to **16,384**, E4, 4,096 queries
 | Contiguous ICL layers | 2 | 1,060.83 | 4.687 GiB | 1.293 GiB |
 | Contiguous ICL layers | 4 | 1,057.60 | 4.374 GiB | **0.886 GiB** |
 
-All four outputs are byte-identical; the audit verified complete workload hashes, columns, and member seeds. Churn-positive AUC is 0.670049, accuracy 0.808105, and log loss 0.461313. Stage placement reduces maximum fit allocation by 23.7%, while four-layer placement reduces maximum prediction allocation by 58.0%; the best split depends on the constrained phase. Throughput differs by only 0.7–1.5%, insufficient here to establish a robust speed advantage. The runtime uses CPU joins because cuDF is absent, which can mask GPU stage-latency changes. The GNN remains on one device; these results do not establish distributed GNN computation or a maximum feasible context frontier.
+All four outputs are byte-identical; the audit verified complete workload hashes, columns, and member seeds. Churn-positive AUC is 0.670049, accuracy 0.808105, and log loss 0.461313. Stage placement reduces maximum fit allocation by 23.7%, while four-layer placement reduces maximum prediction allocation by 58.0%; the best split depends on the constrained phase. Throughput differs by only 0.7–1.5%, insufficient here to establish a robust speed advantage. The runtime uses CPU joins because cuDF is absent, which can mask GPU stage-latency changes. The GNN remains on one device; these results do not establish distributed GNN computation.
+
+### Capacity stress: H&M context 65,536 on L4
+
+E4, queries 4,096, batch 512, two-hop `[16,16]`, and the same graph/member policy expose an important allocator control. Both default-allocator resident EP1 and four-way ICL placement fail during fit while requesting a 6.10 GiB GNN statistics tensor on GPU0. Stage2 succeeds. However, repeating EP1 and layers4 with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` makes **both succeed**, so the original OOM does not prove that this E4 workload fundamentally requires multiple GPUs.
+
+| Arm | Allocator | Outcome / rows/s | Max fit allocation | Max prediction allocation | Quality vs successful EP1 |
+|---|---|---:|---:|---:|---|
+| Resident EP1 | Default | Fit OOM | Incomplete | — | No predictions |
+| ICL layers4 | Default | Fit OOM | Incomplete | — | No predictions |
+| Encoder/GNN → ICL stage2 | Default | 955.32 | 16.105 GiB | 6.150 GiB | Byte-identical |
+| Resident EP1 | Expandable segments | 921.47 | 20.732 GiB | 6.607 GiB | Reference |
+| ICL layers4 | Expandable segments | 944.61 | 17.259 GiB | 2.010 GiB | BF16 gate passes; not exact |
+
+Layer placement reduces prediction allocation by 69.6% against its allocator-matched EP1, but full GNN fit remains on one GPU. Its maximum probability difference is 0.010411, mean 0.001083, with no changed labels; paired log-loss change is −0.0000635 with 95% interval [−0.0002063, +0.0000774]. Reference/stage accuracy is 0.808105 and churn-positive AUC 0.666514. No quality improvement is claimed. Stage comparisons also change allocator policy, so their small throughput difference is not isolated placement acceleration. The raw OOM records, retry settings, successful outputs, and independent audits are preserved. No maximum-context frontier or multi-GPU-only feasible workload is established by these E4 results.
+
+## Completion against the original study plan
+
+This checklist follows the [study questions and completion evidence](study-plan.md), rather than treating implemented code as completion by itself. It distinguishes delivered scope from optional diagnostics and required operational closure. No additional parallelism methods are required to close this study.
+
+| Original objective | Evidence delivered | Remaining gap / explicit limit |
+|---|---|---|
+| Support and compare both model families | Real KumoTabular Covertype/California and native KumoRelational H&M/F1, including all regression quantiles | Validation prefixes and one fitted context per arm, not full model-quality rankings |
+| Test viable multi-GPU decompositions | GPU-measured EP, thread/process query DP, cached CP, stages/layers, and threaded 2DP×2EP | Process EP has synthetic CUDA fixture tests; graph EP has reduced-Kumo CUDA tests, but neither has accepted pretrained performance evidence |
+| Proper strong and weak scaling | Fixed-work 1/2/4-GPU ladders; tuned and fully gathered process controls; weak 4k/8k/16k queries with full16k equivalence audit | Homogeneous eight-GPU and NVLink unavailable; mixed-eight results are not locally verified and must not be inferred |
+| Separate native tuning from parallel gains | Native estimator batching, resident-one-GPU controls, fixed local batch-two EP, reverse-order repetitions, explicit input/gather boundaries | Not every method has an identical complete invocation boundary; claim warm execution only where measured |
+| Prediction quality and correctness | Fixed row/graph/member identities, positive-class correction, byte comparisons, unchanged BF16 gates, paired metrics and full999 quantiles | CP BF16 and FP32-partial F1 failures remain; full-model FP32 diagnostic has no accepted local result yet |
+| Memory and feasible workload capacity | Per-device allocator peaks/cache/RSS, compact-cache control, contexts up to64k, retained OOMs and successful allocator retries | No proof yet of multi-GPU-only feasibility; E8 partial remote status is not accepted evidence, and a native CPU-offload capacity control is absent |
+| Profile and explain successes/failures | Separate Nsight EP/CP traces, device overlap, kernel counts, cache traffic, collective waiting, tested autocast/compaction interventions | Full frontend/ICL phase attribution and some pending traces are unavailable; no GIL-only or pure-bandwidth causal claim |
+| Native relational setup and pipeline costs | Fixed complete temporal graphs, sampling/load/fit timing, CPU fallback explicitly recorded | Whole-pipeline one-shot latency and service-tail latency are not uniformly measured; local matched Arrow/cuDF arms await final audit/integration |
+| Go beyond prior user/Aki work | Native Kumo adaptations, batching/process isolation, explicit CP global-length/GQA handling, placement/capacity work, analyzed TP/table/graph/full-fit options | Analyzed-only options remain unimplemented, with architecture/communication reasons documented; no implied benchmark |
+| Generic SDM integration | Tested candidates and public-API examples; small extraction boundaries in integration.md | Study harness is research, not production API; final integrated tests/source inventory must be recorded before handoff |
+| Reproducibility and failures | Raw small records, exact commands where recorded, hashes for local predictions/profiles, hardware/runtime/checkpoint receipts, failures retained | Final index sweep and complete run/source manifest reconciliation still required; remote-only artifacts are not retained merely because mentioned |
+| Resource closure | Task-owned Spot hosts and resource/capacity failures documented by the sole operator | Final instance/resource teardown confirmation and actual elapsed-cost receipt are required; shutdown timers alone are not verification |
+
+Pending full-FP32 CP, alternative-collective, pretrained graph/process EP, E8 capacity, and mixed-host diagnostics may be completed only within existing scope and access. If unavailable, close them explicitly as unmeasured or incomplete attempts rather than extending the study with new methods or fabricating outcomes. Operational cleanup and local evidence verification remain separate obligations.
 
 ## Retained evidence
 
@@ -331,6 +377,8 @@ Additional checked snapshots retain the new measurements:
 - [Tuned and relational process DP evidence](evidence/tuned-process-data-l40s-20261008/index.json): ten archived result/audit records, 27 external artifacts verified; includes matched estimator-batch-four quality references.
 - [Weak process DP evidence](evidence/weak-process-data-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified; current equivalence audit covers common prefixes.
 - [H&M 16k placement evidence](evidence/placement-hm16k-l4-20261008/index.json): 12 archived result/audit/command records, 24 external artifacts verified.
+- [Tabular 16k placement evidence](evidence/placement-tabular16k-l4-20261008/index.json): ten archived records, 30 external artifacts verified, including the no-benefit compact-cache control.
+- [H&M 64k capacity evidence](evidence/placement-capacity-hm64k-l4-20261008/index.json): 18 archived attempt/result/failure/audit/command records, 34 external artifacts verified; original OOMs and allocator retries remain separate.
 - [Resident 16k context L4 evidence](evidence/context-large16k-l4-20261008/index.json): 12 archived records, 28 external artifacts verified.
 - [Native H&M 16k context evidence](evidence/context-hm16k-l4-20261008/index.json): 12 archived records, 24 external artifacts verified; actual input dimensions retained alongside stale CLI defaults.
 - [Initial Nsight evidence](evidence/initial-nsys-l40s-20261008/index.json): two archived analysis records, four external analysis/SQLite artifacts verified.

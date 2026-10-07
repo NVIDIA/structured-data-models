@@ -1,0 +1,32 @@
+{
+  "command": [
+    "env",
+    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True",
+    "/opt/pytorch/bin/python",
+    "/home/ubuntu/kumo-multigpu/relational_bench-b9026ea3f.py",
+    "run",
+    "--workload",
+    "/home/ubuntu/kumo-multigpu/results/workload-hm-c65536-b512",
+    "--estimators",
+    "4",
+    "--repeats",
+    "3",
+    "--source-commit",
+    "4e1c5c33d",
+    "--output",
+    "/home/ubuntu/kumo-multigpu/results/capacity-hm-c65536-e4-expandable-v1-layers4/benchmark",
+    "--mode",
+    "layers",
+    "--gpus",
+    "4"
+  ],
+  "timeout_s": 120.0,
+  "started_utc": "2026-10-07T16:18:47.001444+00:00",
+  "wrapper_sha256": "86334fef3b9c87b245be1912d79273edeb4ed366b37d94324d2df3334f797d34",
+  "finished_utc": "2026-10-07T16:20:03.795909+00:00",
+  "elapsed_s": 76.7944293659998,
+  "returncode": 0,
+  "status": "complete",
+  "oom_reported": false,
+  "output_tail": null
+}
