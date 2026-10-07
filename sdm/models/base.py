@@ -789,7 +789,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         related_query_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if x_context != x_query.schema:
+        if x_context.columns != x_query.columns:
             raise ValueError(
                 "Expected context and query features to share the same schema"
             )
