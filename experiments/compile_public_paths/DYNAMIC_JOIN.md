@@ -6,7 +6,7 @@ Use a scoped `torch._dynamo.config.patch(capture_dynamic_output_shape_ops=True)`
 
 Run `PYTHONPATH=. python experiments/compile_public_paths/dynamic_join.py`. CPU Inductor with `fullgraph=True, dynamic=True` passes 24 comparisons on each of PyTorch 2.7.1 and 2.14: duplicate keys, empty left/right, no matches, NaN and numeric casting, nullable IDs, string/null IDs, and multi-column keys, each with int64/int32/uint8 indices. Pair order and dtype match the existing join exactly in those cases. Existing join tests pass (6 passed, 5 CUDA skipped). No CUDA/cuDF validation was performed.
 
-This does not yet make public relational prediction fullgraph-compatible. Real pretrained RelBench driver-dnf prediction on 2.14 advances through the join and homogeneous graph construction, then fails at `TaskGraph.from_input`'s data-dependent `task_index.equal(arange)` validation. The same method also has data-dependent neighborhood traversal. The 2.7 public wrapper currently fails earlier under its context manager. Do not remove these validations or claim a whole-model fullgraph pass.
+The join operation alone was insufficient for public fullgraph prediction: task-row validation and bounded neighborhood traversal also needed the changes below. Latest complete-path results are in [README.md](README.md).
 
 
 ## Bounded task graph construction
@@ -18,3 +18,8 @@ With these changes, actual CPU Inductor 2.14 public `predict` passes on pretrain
 Direct `TaskGraph.from_input` fullgraph Inductor checks also pass on both runtimes: 12 cases each, using hop counts 0/1/3 and populated, isolated, and multiple readouts. Inputs change between calls to the same compiled function. Readout indices and task assignments match eager exactly. This verifies bounded traversal after the frontier becomes empty; it does not validate unbounded traversal.
 
 Additional compiled/eager contract checks pass on both runtimes: uint8 index overflow raises the same ValueError, floating index dtype raises the same TypeError, unequal join-key counts raise the same ArrowInvalid, and an explicit CPU output-device override preserves dtype and pairs. CUDA output-device overrides remain untested.
+## Non-contiguous string identifiers
+
+The external join operator compacts reconstructed non-contiguous strings through the existing VarLen helper before handing them to Arrow/cuDF. This avoids a PyTorch 2.14 dispatcher assertion when `.contiguous()` is invoked on that subclass inside the compiled custom operator; ordinary contiguous inputs are unchanged. It does not replace the join algorithm.
+
+Actual CPU Inductor fullgraph verification on both 2.7.1 and 2.14: strided string slices with nonzero storage offsets pass with `dynamic=False`; transposed two-dimensional string keys pass with both dynamic settings, matching eager pair order exactly. Compiling the operator directly from ordinary tensor leaves passes both settings on 2.14. Native sliced StringTensor wrapper inputs with `dynamic=True` still encounter an upstream symbolic-source guard failure before execution. Do not claim arbitrary string-view dynamic support. CUDA/cuDF remains untested.

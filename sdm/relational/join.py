@@ -14,6 +14,7 @@ from torch import Tensor
 from sdm import ColumnarTensor, NullableTensor, StringTensor, TableTensor
 from sdm._warnings import warn_once
 from sdm.tensor.io import arrow_as_tensor, to_cudf
+from sdm.tensor.var_len import _clone
 
 PREFIX = "sdm_internal"
 LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
@@ -274,6 +275,8 @@ def _join_indices(
                 stride=stride,
                 storage_offset=storage_offset,
             )
+            if not column.is_contiguous():
+                column = _clone(column, memory_format=torch.contiguous_format)
             tensor_index += 3 if has_valid else 2
             metadata_index += 2 + 2 * ndim
         elif kind == "n":
