@@ -63,3 +63,9 @@ Review alone is not a GPU correctness claim. Implementation owners are adding re
 The raw numeric arrays were opened read-only to verify IDs and first-context coverage. Covertype has 464,809 TRAIN and 116,203 validation observations, zero ID overlap and 581,012 unique total IDs. Its first 1,024 TRAIN rows contain all seven classes (counts: 367, 506, 59, 11, 22, 22, 37 for labels 1 through 7). California housing has 16,512 TRAIN and 4,128 validation observations, zero overlap and 20,640 unique total IDs. These are custom deterministic splits, not published benchmark split reproductions.
 
 Rel-hm's 3,832,692 stored TRAIN indices are unique and its 76,556 validation indices are ordered. Rel-f1's 7,453 TRAIN indices are unique and its 499 validation indices are ordered. TRAIN and validation task indices belong to different parquet files, so numeric equality across split-local indices does not imply observation overlap. Validation inference graph sampling is still subject to the timestamp and target-exclusion checks above.
+
+## Actual GPU test evidence
+
+The first four-L40S host execution of `test/models/test_ensemble_parallel.py` completed with eight passing CPU tests and two failing CUDA tests in 33.82 seconds. Both CUDA failures occurred at the newly added `output._tensors()` call: `TableTensor` does not expose the `Cache` tensor iterator. This was an implementation failure, not numerical disagreement or an unsupported hardware result. The independent auditor read the raw `results/executor-tests.log` and immediately notified the implementation owner and coordinator.
+
+Fix `c4ddd7f15` replaces that call with `output.record_stream(stream)`, the existing public operation dispatched by `sdm/tensor/table.py`. The failed run remains evidence; a separate GPU rerun is required before claiming the stream tests pass.
