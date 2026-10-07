@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import override
 
@@ -679,7 +680,7 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
-        if self.valid is not None:
+        if not is_fake(self) and self.valid is not None:
             out += f", null_count={int((~self.valid).sum())}"
         if not self.is_cpu:
             out += f", device={self.device}"
@@ -1289,7 +1290,6 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     tensors = tuple(
         cast(VarLenTensor, tensor.contiguous()) for tensor in tensors
     )
-    data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
     valid: Tensor | None = None
     if any(tensor._valid is not None for tensor in tensors):
         valid_views = tuple(
@@ -1304,6 +1304,24 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
         )
         valid = torch.cat(valid_views, dim=dim).contiguous().view(-1)
 
+    if all(tensor._data.numel() == 0 for tensor in tensors):
+        size = list(tensors[0].shape)
+        size[dim] = sum(tensor.size(dim) for tensor in tensors)
+        offset_dtype = (
+            torch.int64
+            if any(tensor._offset.dtype == torch.int64 for tensor in tensors)
+            else torch.int32
+        )
+        return tensor_cls(
+            data=tensors[0]._data.new_empty(0),
+            offset=tensors[0]._offset.new_zeros(
+                math.prod(size) + 1, dtype=offset_dtype
+            ),
+            valid=valid,
+            size=size,
+        )
+
+    data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
     offset_dtype: torch.dtype = torch.int32
     if (
         any(offset.dtype == torch.int64 for offset in offsets)
