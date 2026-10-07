@@ -1,5 +1,6 @@
 # ruff: noqa: D103, T201
 import argparse
+import contextlib
 import json
 import traceback
 from pathlib import Path
@@ -26,6 +27,9 @@ p.add_argument(
 p.add_argument("--estimators", type=int, default=1)
 p.add_argument("--query-rows", type=int, nargs="+")
 p.add_argument("--query-input", choices=["view", "fresh"], default="view")
+p.add_argument("--arm-index", type=int, default=0)
+p.add_argument("--relational-query-indices", type=int, nargs="+")
+p.add_argument("--recompile-limit", type=int)
 a = p.parse_args()
 torch.set_num_threads(1)
 torch.manual_seed(123)
@@ -48,7 +52,7 @@ if a.model == "tabular":
     cr = qr = None
 else:
     b = torch.load(a.data, weights_only=False)
-    arm = b["arms"][0]
+    arm = b["arms"][a.arm_index]
     cx, cy, cr = arm["context"], arm["context_target"], arm["related_context"]
     qx, qr = arm["queries"][1]["x"], arm["queries"][1]["related"]
 ckpt = torch.load(a.checkpoint, weights_only=True, map_location="cpu")
@@ -101,9 +105,16 @@ result = {
     "task": a.task,
     "estimators": a.estimators,
     "query_input": a.query_input,
+    "arm_index": a.arm_index if a.model == "relational" else None,
+    "recompile_limit": a.recompile_limit,
 }
+compiler_config = (
+    contextlib.nullcontext()
+    if a.recompile_limit is None
+    else torch._dynamo.config.patch(cache_size_limit=a.recompile_limit)
+)
 try:
-    with torch.inference_mode():
+    with torch.inference_mode(), compiler_config:
         oracle = new_model()
         if a.entry == "forward":
             expected = forward(oracle).numerical.clone()
@@ -126,8 +137,21 @@ try:
             compiled_predict = torch.compile(model.predict, **kwargs)
             all_queries = qx
             samples = []
-            for rows in a.query_rows or [qx.size(-2)]:
-                if a.query_rows is None:
+            cases = (
+                a.relational_query_indices
+                if a.model == "relational"
+                else a.query_rows
+            )
+            for case in cases or [qx.size(-2)]:
+                rows = case
+                if (
+                    a.model == "relational"
+                    and a.relational_query_indices is not None
+                ):
+                    query_case = arm["queries"][case]
+                    qx, qr = query_case["x"], query_case["related"]
+                    rows = qx.size(-2)
+                elif a.query_rows is None:
                     qx = all_queries
                 elif a.query_input == "fresh" and a.model == "tabular":
                     qx = TableTensor.from_tensor(
@@ -140,6 +164,7 @@ try:
                 samples.append(
                     {
                         "rows": rows,
+                        "case": case,
                         "max_abs_error": (actual - expected)
                         .abs()
                         .max()
