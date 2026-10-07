@@ -137,7 +137,7 @@ The follow-up combines the same process topology with **local estimator batch si
 
 | Arm | GPUs | Median rows/s | Speedup vs matched DP1 | Spawn + load + fit | Peak prediction allocation per GPU |
 |---|---:|---:|---:|---:|---:|
-| Tuned native, estimator batch 4 | 1 | 4,007.14 | — | Fit 1.255 s, excluding spawn/load | 1.404 GiB |
+| Tuned native, estimator batch 4 | 1 | 4,007.14 | — | Fit 1.255 s, excluding spawn/load | 1.646 GiB |
 | Process DP, estimator batch 4 | 1 | 3,665.05 | 1.000× | 5.013 s | 1.404 GiB |
 | Process DP, estimator batch 4 | 4 | **13,990.88** | **3.817×** | 5.469 s | 1.404 GiB |
 
