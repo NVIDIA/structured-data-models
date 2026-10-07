@@ -356,7 +356,7 @@ class TableTensor(Tensor):
         return out
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        return ["numerical", "categorical", "datetime", "text", "id"], (
+        return ["_numerical", "_categorical", "_datetime", "_text", "_id", "numerical", "categorical", "datetime", "text", "id"], (
             tuple(self._columns.items()),
         )
 
@@ -1204,7 +1204,7 @@ class TableTensor(Tensor):
 
         stype_repr = [
             (
-                f"{' ' * (indent + 4)}{stype} ({tensor.size(-1):,}): "
+                f"{' ' * (indent + 4)}{stype} ({len(self._columns[stype]):,}): "
                 f"{_columns_repr(self._columns[stype])},"
             )
             for stype, tensor in self.items()
