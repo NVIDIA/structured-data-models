@@ -134,7 +134,9 @@ def _validated_readout(
         rows, dtype=task_index.dtype, device=task_index.device
     )
     if (
-        not task_index.equal(arange)
+        readout_index.ndim != 1
+        or readout_index.numel() != rows
+        or not task_index.equal(arange)
         or readout_index.unique().numel() != readout_index.numel()
     ):
         raise ValueError(message)
