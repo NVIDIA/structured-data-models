@@ -26,3 +26,11 @@ OMP_NUM_THREADS=1 TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS=0 PYTHONPATH=. pyth
 Int32 packing retains its existing promotion to int64 if selected bytes exceed INT32_MAX. A general `index_select` may repeat strings, so input byte size alone is not a valid bound. Fullgraph cannot choose an output dtype from tensor data; a proven selection bound is being investigated for category filtering.
 
 A rejected alternative replacing two value-repeat operations with one group-index repeat compiles int64 fullgraph on 2.7.1, but CPU eager packing was about 25–55% slower for medium/large examples. The patch is retained for reproducibility and is not applied to production code. It should not be used as a blanket optimization.
+
+## Proven bounds for category subsets
+
+Commit `08ae7e201` adds an optional caller-proven bound to the private packing helper. Category fitting selects unique logical entries. Even with a stride-zero dictionary, its selected byte count cannot exceed logical dictionary size multiplied by backing byte size. When that backed metadata bound fits int32, packing can retain int32 offsets without choosing a dtype from tensor data. A runtime assertion checks the supplied bound. Larger bounds retain the original behavior and remain a fullgraph limitation.
+
+The raw-leaf caller prototype is recorded in `bounded_category_caller.patch`; the categorical preprocessing branch owns its production integration. On CPU 2.14 Inductor, both graph modes pass direct helper checks with int32 offsets, strides 0/1/2, nonzero storage offset, missing/empty strings, changing bytes and an empty selection. `bounded_selection.py` reproduces those six cases. The exact int32 `AlignCategories.fit_transform` code-sort probe also passes fullgraph with changing contexts, including no observed categories. Actual model-level validation is separate.
+
+The generic `StringTensor.index_select` method does not assume selections are unique; its int32 fullgraph limitation above remains accurate.

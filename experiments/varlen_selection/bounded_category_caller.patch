@@ -1,0 +1,32 @@
+diff --git a/sdm/processing/categorical/align.py b/sdm/processing/categorical/align.py
+index 0c9182c3d..efce7b15a 100644
+--- a/sdm/processing/categorical/align.py
++++ b/sdm/processing/categorical/align.py
+@@ -18,6 +18,7 @@ from sdm import (
+ from sdm.nn._buffer import BufferList
+ from sdm.processing import EnsembleProcessor
+ from sdm.relational.join import join_index
++from sdm.tensor.var_len import _compact
+ 
+ _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
+ 
+@@ -138,6 +139,19 @@ class AlignCategories(EnsembleProcessor):
+                 and self.sort_by != "frequency"
+             ):
+                 fitted_categories.append(ordered_categories)
++            elif isinstance(input_categories, StringTensor):
++                physical = selected_indices * input_categories.stride(0) + input_categories._storage_offset
++                offset, index = _compact(
++                    input_categories._offset[physical],
++                    input_categories._offset[physical + 1],
++                    max_total=input_categories.numel() * input_categories._data.numel(),
++                )
++                fitted_categories.append(StringTensor(
++                    data=input_categories._data[index],
++                    offset=offset,
++                    valid=input_categories._valid[physical] if input_categories._valid is not None else None,
++                    size=selected_indices.shape,
++                ))
+             elif (
+                 input_categories.dtype in _UNSIGNED_DTYPES
+                 and input_categories.is_cpu
