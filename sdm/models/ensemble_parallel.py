@@ -107,6 +107,9 @@ class EnsembleParallel:
                 else nullcontext(),
                 torch.inference_mode(),
                 torch.autocast(device.type, enabled=enabled, dtype=dtype),
+                torch.profiler.record_function(
+                    f"ensemble/{operation.__name__}/replica_{worker_id}"
+                ),
             ):
                 if ready is not None:
                     if stream is None:
@@ -114,10 +117,20 @@ class EnsembleParallel:
                     else:
                         stream.wait_event(ready)
                 try:
-                    return [
-                        (i, operation(i, self.replicas[worker_id], device))
-                        for i in range(worker_id, count, len(self.replicas))
-                    ]
+                    outputs = []
+                    for i in range(worker_id, count, len(self.replicas)):
+                        with torch.profiler.record_function(
+                            f"ensemble/member_{i}"
+                        ):
+                            outputs.append(
+                                (
+                                    i,
+                                    operation(
+                                        i, self.replicas[worker_id], device
+                                    ),
+                                )
+                            )
+                    return outputs
                 finally:
                     # Synchronous API boundary also drains failed work.
                     if stream is not None:
@@ -161,6 +174,7 @@ class EnsembleParallel:
         with (
             torch.inference_mode(),
             torch.autocast(x.device.type, enabled=False),
+            torch.profiler.record_function("ensemble/preprocess_context"),
         ):
             contexts = execution.fit_transform(
                 x=x,
@@ -235,6 +249,7 @@ class EnsembleParallel:
         with (
             torch.inference_mode(),
             torch.autocast(x.device.type, enabled=False),
+            torch.profiler.record_function("ensemble/preprocess_query"),
         ):
             queries = self._execution.transform(x, related_tables)
 
@@ -281,6 +296,7 @@ class EnsembleParallel:
         with (
             torch.inference_mode(),
             torch.autocast(x.device.type, enabled=False),
+            torch.profiler.record_function("ensemble/finalize"),
         ):
             if self._caches[0]["classes"] is None:
                 outputs = list(
