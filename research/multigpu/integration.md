@@ -85,6 +85,8 @@ The initial small-context measurements favor tuning existing estimator batching 
 
 These rankings concern the measured PCIe L40S/L4 hosts and selected workload sizes. They are not a general rejection of CP on faster fabrics or a proof that process DP always wins single-request latency. The process results exclude final CPU concatenation in their original timer, a documented boundary difference from a fully gathered application response.
 
+Build the process-DP guidance on the existing `examples/kumo/relational/multi_gpu.py` rather than introducing a second orchestration stack. Add explicit fixed-batch identities, the relational complete-neighborhood contract, a tabular local-batching example, failure propagation, and gathered-output timing. Keep the reusable contract at the model/fit/predict boundary: a process factory can remain example-specific without requiring every future SDM model family to implement a serving protocol.
+
 ## Recommended progression
 
 1. Establish fixed-input one-GPU public, batched-estimator, and executor baselines, including cache residency and model-core RNG parity.
