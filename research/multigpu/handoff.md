@@ -57,6 +57,12 @@ A subsequent research-only scorer fix (`f13e29828`) preserves the full predictio
 
 These limitations supplement the objective-by-objective completion checklist in README. No additional parallelism method needs to be invented to resolve the operational interruption.
 
+## Paper-informed follow-up
+
+The user's subsequent literature request is documented in [literature.md](literature.md) and four linked primary-source reviews. Published measurements are kept separate from SDM results. The review prioritizes exact execution/caching, bounded upstream fit allocations, and only then approximate context selection or distillation.
+
+A research-only destination-block GNN statistics/projection prototype is now being investigated in an isolated worktree, with independent review of reduction, cache/RNG, and empty-segment semantics. Its target is the observed 6.10 GiB statistics allocation, not a new distributed-serving framework. This follow-up is not yet integrated or GPU measured. It cannot close the remote-state/teardown gaps above.
+
 ## Access and resource risk
 
 At 16:30:55 UTC the session's network restrictions denied SSH to both hosts and AWS EC2 endpoint access. Approval policy is `never`; no alternative route or bypass was attempted. User authorization to use `al` does not remove this execution restriction. This is not an observed expired-login error.
