@@ -395,6 +395,8 @@ def main() -> None:
                 else:
                     timed(lambda: predict_batch(batches[0]), devices)
             report["warmup_s"] = time.perf_counter() - warmup_start
+            if hasattr(model, "graph_count"):
+                report["graph_count_after_warmup"] = model.graph_count
             for device in devices:
                 torch.cuda.reset_peak_memory_stats(device)
             if callable(getattr(model, "memory", None)):
@@ -420,6 +422,13 @@ def main() -> None:
                 batches_s.append(batch_times)
                 predictions.append(prediction.detach().float().cpu().numpy())
             report["memory_after_prediction"] = memory(devices)
+            if hasattr(model, "graph_count"):
+                report["graph_count_after_prediction"] = model.graph_count
+                report["graph_capture_s"] = model.graph_capture_s
+                report["graph_capture_events"] = list(model.capture_events)
+                report["capture_occurred_during_timing"] = (
+                    model.graph_count != report["graph_count_after_warmup"]
+                )
             if callable(getattr(model, "memory", None)):
                 report["worker_memory_after_prediction"] = model.memory()
             report["predict_repeats_s"] = repeats
