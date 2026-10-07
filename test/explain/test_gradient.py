@@ -117,9 +117,11 @@ def test_differentiates_final_prediction(fitted: bool) -> None:
     explainer = GradientExplainer()
     if fitted:
         model.fit(x_context, y_context, recipe=recipe)
-        attributions, related_attributions = explainer.explain(model, x_query)
+        x_attributions, related_attributions = explainer.explain(
+            model, x_query
+        )
     else:
-        attributions, related_attributions = explainer.explain(
+        x_attributions, related_attributions = explainer.explain(
             model,
             x_query,
             x_context=x_context,
@@ -131,5 +133,5 @@ def test_differentiates_final_prediction(fitted: bool) -> None:
     expected = 2.0 * (
         probabilities.diag() - probabilities.outer(probabilities)
     )
-    torch.testing.assert_close(attributions.numerical, expected.unsqueeze(1))
+    torch.testing.assert_close(x_attributions.numerical, expected.unsqueeze(1))
     assert related_attributions is None
