@@ -19,6 +19,8 @@ class DataParallelAdapter:
     Args:
         replicas: Models already loaded on their individual devices.
         dtype: Explicit worker autocast dtype, or None for FP32.
+        estimator_batch_size: Same within-replica estimator batching as the
+            native reference, unless explicitly overridden by fit.
     """
 
     def __init__(
@@ -26,12 +28,14 @@ class DataParallelAdapter:
         replicas: Sequence[ICLModel],
         *,
         dtype: torch.dtype | None,
+        estimator_batch_size: int | None = 1,
     ) -> None:
         self.replicas = tuple(replicas)
         self.devices = tuple(
             next(model.parameters()).device for model in replicas
         )
         self.dtype = dtype
+        self.estimator_batch_size = estimator_batch_size
         self.executor: QueryParallel | None = None
 
     def fit(
@@ -46,6 +50,8 @@ class DataParallelAdapter:
         """Reproduce identical fitted recipes and model RNG on each replica."""
         if self.executor is not None:
             self.executor.close()
+        self.executor = None
+        kwargs.setdefault("estimator_batch_size", self.estimator_batch_size)
         for model, device in zip(self.replicas, self.devices, strict=True):
             if generator.device.type != device.type:
                 raise ValueError(
@@ -132,4 +138,8 @@ def factory(args: Any, replicas: Sequence[ICLModel]) -> DataParallelAdapter:
         "fp32": None,
         "float32": None,
     }[precision]
-    return DataParallelAdapter(replicas, dtype=dtype)
+    return DataParallelAdapter(
+        replicas,
+        dtype=dtype,
+        estimator_batch_size=getattr(args, "estimator_batch_size", 1),
+    )

@@ -12,7 +12,12 @@ from __future__ import annotations
 import multiprocessing
 import time
 from collections.abc import Callable, Sequence
-from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import (
+    Future,
+    ProcessPoolExecutor,
+    ThreadPoolExecutor,
+    wait,
+)
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -70,6 +75,9 @@ def _validate_batch(batch: QueryBatch) -> None:
 
 
 def _collect(futures: Sequence[Future]) -> list[QueryResult]:
+    # A failed request may be retried/refitted after this call returns. Drain
+    # all sibling work first so the old request cannot touch those caches.
+    wait(futures)
     results: list[QueryResult] = [future.result() for future in futures]
     if results and any(
         result.prediction.columns != results[0].prediction.columns
