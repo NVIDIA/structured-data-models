@@ -1,0 +1,98 @@
+{
+  "scope": "Observed GPU results; some runs/investigations remain active. Sources precede the final combined checkpoint.",
+  "results": [
+    {
+      "file": "relational-onehop-predict-fp32-full-events18.json",
+      "snapshot_sha256": "aab83a26a12bc614b4e38ed5a74f0ac059698f45bce3cc6a7d71fdc09e914dcf",
+      "source": "c75ba3af6+18a4d151a",
+      "torch": "2.14.0+cu130",
+      "gpu": "NVIDIA L4",
+      "weight_dtype": "float32",
+      "autocast_dtype": null,
+      "estimators": 1,
+      "context_rows": 32,
+      "actual_query_rows": [
+        4,
+        1,
+        8,
+        4
+      ],
+      "cache_devices": {
+        "cuda:0": 51
+      },
+      "status": "pass",
+      "compiled_samples_observed": 32,
+      "max_abs_error": 2.294778823852539e-06,
+      "max_failed_values": 0,
+      "error": null
+    },
+    {
+      "file": "tabular-context256-estimators2-predict-fp32-full-events18.json",
+      "snapshot_sha256": "658bc11788c942af426fff4ab34ae1580f32de85147a7c3a60dcacd5ccb370bd",
+      "source": "c75ba3af6+18a4d151a",
+      "torch": "2.14.0+cu130",
+      "gpu": "NVIDIA L4",
+      "weight_dtype": "float32",
+      "autocast_dtype": null,
+      "estimators": 2,
+      "context_rows": 256,
+      "actual_query_rows": [
+        128
+      ],
+      "cache_devices": {
+        "cpu": 70
+      },
+      "status": "parity_fail",
+      "compiled_samples_observed": 8,
+      "max_abs_error": 0.3724477291107178,
+      "max_failed_values": 256,
+      "error": null
+    },
+    {
+      "file": "tabular-context256-predict-bf16-full-empty407.json",
+      "snapshot_sha256": "d9a2c22d55df0800b44ca41600d86416f63d59324c5cb37a2ce6ed8457c6dec0",
+      "source": "c75ba3af6+18a4d151a+4071789e4",
+      "torch": "2.14.0+cu130",
+      "gpu": "NVIDIA L4",
+      "weight_dtype": "float32",
+      "autocast_dtype": "bfloat16",
+      "estimators": 1,
+      "context_rows": 256,
+      "actual_query_rows": [
+        32,
+        128,
+        32
+      ],
+      "cache_devices": {
+        "cuda:0": 35
+      },
+      "status": "run_snapshot",
+      "compiled_samples_observed": 8,
+      "max_abs_error": 0.007760047912597656,
+      "max_failed_values": 38,
+      "error": null
+    },
+    {
+      "file": "tabular27-context256-predict-fp32-full-events18.json",
+      "snapshot_sha256": "53f620bb6888aa9c93fe4904fd70b82e9238f0c0389352f359cdea7ff7217d53",
+      "source": "c75ba3af6+18a4d151a",
+      "torch": "2.7.1+cu126",
+      "gpu": "NVIDIA L4",
+      "weight_dtype": "float32",
+      "autocast_dtype": null,
+      "estimators": 1,
+      "context_rows": 256,
+      "actual_query_rows": [
+        128
+      ],
+      "cache_devices": {
+        "cuda:0": 35
+      },
+      "status": "fail",
+      "compiled_samples_observed": 0,
+      "max_abs_error": null,
+      "max_failed_values": null,
+      "error": "Graph break under GenericContextWrappingVariable\n  Explanation: Attempted to graph break in an active context manager(s) that doesn't support graph breaking.\n  Hint: Move the offending context manager(s) to outside the compiled region.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: Active generic context managers: [GenericContextWrappingVariable(_GeneratorContextManager)]\n\n\nfrom user code:\n   File \"/home/ubuntu/validation/repo-events/sdm/models/base.py\", line 417, in predict\n    queries = recipe_execution.transform(x, related_tables)\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n"
+    }
+  ]
+}

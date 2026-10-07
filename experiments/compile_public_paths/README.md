@@ -2,6 +2,19 @@
 
 This experimental branch supports compiling tensor preprocessing and prediction together. It is based on main `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`; these are branch results, not current-main guarantees. The successful cases **fit eagerly, then compile and call `model.predict`**. No GPU speed or memory claim is made here.
 
+## Current GPU limits
+
+**General CUDA compilation support is not established.** The passing resident-cache FP32 case is narrower than the following configurations. Each numerical comparison uses the same precision mode for eager and compiled execution.
+
+| L4 public prediction case | PyTorch | Observed result |
+|---|---|---|
+| Relational, one estimator, resident cache, FP32 | 2.14 | Fullgraph passes; max difference `2.30e-6` |
+| Tabular, two estimators, CPU-offloaded caches, FP32 | 2.14 | Fullgraph executes, but probabilities are unstable: max difference `0.372`, all 256 probability values fail tolerance in the worst call. Stream/cache ordering is being investigated. |
+| Tabular, resident cache, BF16 autocast | 2.14 | Empty-payload fix removes the tracing error, but observed predictions miss strict same-mode tolerance: max difference `0.00776`. Inner-versus-public comparison is being investigated. |
+| Tabular, resident cache, FP32 | 2.7.1 | Fullgraph fails with `Graph break under GenericContextWrappingVariable` at `recipe_execution.transform(...)`. |
+
+The first, second, and fourth runs use `c75ba3af6` plus event fix `18a4d151a`; the BF16 run additionally uses empty-payload fix `4071789e4`. These are **not GPU validation of the final combined source `e2abde154`**, whose run is queued. [The evidence snapshot](gpu-limit-snapshot.json) records source identifiers, observed samples, and raw-file hashes. The substantial offloaded-cache probability mismatch is unresolved; successful capture or class agreement must not be treated as prediction parity.
+
 ## Current results
 
 Real cached data, pretrained weights, CPU Inductor, and the same FP32 weights/inputs for eager and compiled comparisons:
