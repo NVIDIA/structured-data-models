@@ -9,7 +9,7 @@ The goal is practical multi-GPU inference for both `KumoTabular` and `KumoRelati
 | Approach | Work placement | Expected benefit | Main limitation / correctness requirement | Current owner and evidence |
 |---|---|---|---|---|
 | Query data parallelism (DP) | Complete, fixed query batches across persistent replicas | High aggregate throughput; no attention collectives | Full model and fitted context replicated; preserve batch boundaries and complete relational neighborhoods | `data_parallel_impl`, `cb92ac35d` + `a52ee76db`; ten CPU tests passed including actual model hybrid; GPU measurements pending |
-| Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | `ensemble_impl`, `d1775c0f3` + `f74f2cc30`; eight CPU tests passed, two CUDA tests pending |
+| Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | Initial two CUDA failures fixed by `c4ddd7f15`; both CUDA tests then passed on integrated `6c3f1e22e`; scaling measurements pending |
 | Cached context parallelism (CP) | ICL KV rows across ranks; queries replicated | Larger retained context and faster long-context attention | Full fit still replicated; stable softmax reduction, global length scaling, uneven shards; collectives every layer | `context_parallel_impl`, commit `8e22f29c8`; 2/4-rank CPU tests passed, GPU measurements pending |
 | Layer/stage placement | Row encoder, GNN, and/or ICL layers on different devices | Parameter/cache capacity; potential pipeline overlap across query batches | Single-query latency can worsen; cache ownership and transferred activations must follow stages | `model_parallel_impl`, `70db412fa` + `80587a987` + `8f293c8f4`; 14 CPU tests passed, 16 CUDA tests pending; current implementation is sequential stage placement, not overlapped pipelining |
 | Table embedding parallelism | Independent related-table encoders across devices, then gather row embeddings | Parallel relational table encoding before GNN | Tables may be imbalanced; shared preprocessing/target propagation and per-table RNG must remain fixed | Design inspected; no measurement |
@@ -48,7 +48,14 @@ The previous TabFM diagnostic reported 224.98 to 421.99 rows/s on one versus two
 
 ## Results
 
-No new Kumo GPU measurements have been supplied to this report yet.
+The first native one-GPU baseline has completed. There is no multi-GPU speedup claim yet. Its three repeats reuse one fit, so they characterize warm prediction variability rather than independent fits.
+
+| Hardware ladder | Instance / topology | Runtime | Scope |
+|---|---|---|---|
+| Host 1 | Spot `g6e.12xlarge`, 4× L40S, 46,068 MiB each; all pairwise links reported `NODE` (PCIe host bridges, no NVLink) | Python 3.12.3, PyTorch 2.9.1+cu130, CUDA 13.0, driver 595.91.07 | Main tabular and relational EP/DP comparisons |
+| Host 2 | Spot four-L4 host, acquired for CP/placement; detailed topology pending | Pending runtime receipt | Separate hardware ladder; do not combine raw speedup denominators with Host 1 |
+
+Eight-GPU/NVSwitch capacity was not acquired: the coordinator reports a regional 64-vCPU Spot quota constraint. This limits the hardware/topology scope, not the validity of any algorithm.
 
 Prepared source workloads use fixed nested TRAIN/validation subsets, recorded in their manifests. Available rows are distinct from rows actually measured in any run:
 
@@ -63,16 +70,18 @@ Tabular splits are custom deterministic 80/20 splits (seed `20261008`), not offi
 
 | Model / dataset | Method | GPUs | Context / E / query / batch | Warm rows/s | Speedup vs same executor 1 GPU | Cold seconds | Peak GPU / aggregate memory | Quality / max prediction error | Evidence |
 |---|---|---:|---|---:|---:|---:|---|---|---|
-| KumoTabular | Public baseline | 1 | Pending | — | — | — | — | — | Pending |
+| KumoTabular large / Covertype | Public baseline, L40S | 1 | 1,024 / 4 / 2,048 / 256 | 1,818.93 median (1,807.68–1,824.77, n=3) | — | Fit 122.751, load 4.615 | Fit peak allocated 1.408 GiB; prediction 1.284 GiB; CPU cache 342.001 MiB | Accuracy 0.764160; log loss 0.576045; OVR AUC 0.947415; repeat max difference 0 | `tabular-native-large-e4-c1024-q2048/result.json`, source `9f0d6c765` |
 | KumoTabular | EP / DP / CP / stages | 1 / 2 / 4 | Pending | — | — | — | — | — | Pending |
 | KumoRelational | Public baseline | 1 | Pending | — | — | — | — | — | Pending |
 | KumoRelational | EP / DP / CP / stages | 1 / 2 / 4 | Pending | — | — | — | — | — | Pending |
+
+The first native fit took 122.751 seconds, whereas warm inference took about 1.126 seconds for 2,048 rows (batch p50 141.42 ms). First-use compilation/library initialization is a hypothesis for the long fit, not an established cause. A repeated native fit is queued to distinguish cold startup from parallel fit gains. The result's CPU-offloaded cache is explicitly recorded; EP comparisons require their resident one-GPU control. Independent quality review confirmed the baseline metrics and stable repeat outputs.
 
 ## Reproduction and failure log
 
 The CP prototype (`8e22f29c8`) has three passing CPU tests exercising real 2/4-rank Gloo groups, both model ICL blocks, MHA/GQA, broadcast batches, empty/uneven shards, cache backing-storage release, and invalid topology. This establishes distributed CPU correctness within those tests. It does not establish CUDA kernel compatibility, model quality, or GPU speedup. See the implementation's `research/multigpu/context-parallel.md` for its exact scope.
 
-The EP implementation (`d1775c0f3` + `f74f2cc30`) has eight passing CPU tests, including reduced real KumoTabular modules with 12-class ECOC, class shuffling, exact member codebooks/predictions across 1/2/4 replicas, and refit. Two CUDA tests await hardware execution. Independent review found and the owner fixed replica-initialization stream dependencies and output tensor stream lifetime; a CPU pass cannot validate those CUDA fixes. Its public documentation is `research/multigpu/ensemble.md` and the independent comparison checklist is `research/multigpu/quality.md` (`bf3a602e8`).
+The EP implementation's CPU tests include reduced real KumoTabular modules with 12-class ECOC, class shuffling, exact member codebooks/predictions across 1/2/4 replicas, and refit. The first CUDA run failed both tests because output stream bookkeeping called an unavailable `TableTensor._tensors()` method. `c4ddd7f15` switched to the public `TableTensor.record_stream` method; the runner then reported both CUDA tests passed in 0.80 seconds on integrated `6c3f1e22e`. Independent review also fixed replica-initialization stream dependencies and output tensor stream lifetime. Its public documentation is `research/multigpu/ensemble.md` and the independent comparison checklist is `research/multigpu/quality.md` (`bf3a602e8`).
 
 The tabular runner (`af6d89791` + `10159e909`) provides the following initial comparison. Repeat for native estimator batch sizes that fit memory, then `--mode ensemble --gpus 1`, `2`, and `4`, each with a fresh output directory. CPU-complete outputs and profiler-only passes are separate from throughput measurements.
 
@@ -141,3 +150,6 @@ git diff origin/prototype/kumotabular-row-partition^ origin/prototype/kumotabula
 | Assume cached CP solves fit OOM | Rejected by code inspection | Aki branch computes full fit then shards cached ICL KV | Measure fit peak separately; investigate full-fit sharding |
 | Slice relational neighbors by query row indices | Invalid graph transformation | Related-table row spaces differ and shared neighbors cross task rows | Freeze complete sampled graph per batch |
 | Suspected singular relationship metadata keys | Valid supported alias; no defect | Quality reviewer inspected `sdm/relational/data.py` and `task.py` | No change needed |
+| Initial EP CUDA stream tests | Failed: unavailable `TableTensor._tensors()` | Initial host test log: two failed, eight passed | Fixed by `c4ddd7f15`; both CUDA tests passed on `6c3f1e22e` |
+| CP full-model runner evidence audit | Six reporting/boundary gaps found | Cache residency, requested/actual graph sizes, silent truncation, eager input memory, failed-run artifacts, repeat parity | `250cae105` adds explicit evidence; inputs remain GPU-resident consistently across native/LSE/CP |
+| Eight-GPU/NVSwitch capacity | Unavailable under observed regional Spot quota | Coordinator reports 64-vCPU regional limit | Use separate four-L40S and four-L4 ladders; no NVLink conclusion |
