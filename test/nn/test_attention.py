@@ -231,6 +231,26 @@ def test_sdpa_scale(device: torch.device) -> None:
     torch.testing.assert_close(out, expected)
 
 
+@withCUDA
+@pytest.mark.parametrize("value_channels", [8, 4])
+def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
+    # Empty key/value batches should give empty results, even with queries.
+    module = SDPA(num_query_heads=2)
+    query = torch.randn(3, 2, 8, dtype=torch.bfloat16, device=device)
+    key = torch.randn(0, 5, 2, 8, dtype=torch.bfloat16, device=device)
+    value = torch.randn(
+        0, 5, 2, value_channels, dtype=torch.bfloat16, device=device
+    )
+    for tensor in (query, key, value):
+        tensor.requires_grad_()
+
+    out = module(query=query, key=key, value=value)
+    assert out.size() == (0, 3, 2, value_channels)
+    out.sum().backward()
+    for tensor in (query, key, value):
+        torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
+
+
 def test_sdpa_errors() -> None:
     channels = 3
     num_heads = 2
