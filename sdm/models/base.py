@@ -419,7 +419,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             if x.is_cuda:
                 assert compute_stream is not None
                 assert transfer_stream is not None
-                compute_stream.wait_stream(transfer_stream)
+                compute_stream.wait_event(transfer_stream.record_event())
 
             outs: list[TableTensor] = []
             start = 0
@@ -476,7 +476,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 if x.is_cuda and next_cache is not None:
                     assert compute_stream is not None
                     assert transfer_stream is not None
-                    compute_stream.wait_stream(transfer_stream)
+                    compute_stream.wait_event(transfer_stream.record_event())
 
         except BaseException:
             if transfer_stream is not None:
