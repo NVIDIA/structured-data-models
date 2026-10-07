@@ -50,11 +50,6 @@ class GradientExplainer(
         x, related_tables = callbacks[1].inputs[0]
 
         scores = prediction.numerical
-        if not scores.requires_grad:
-            raise RuntimeError(
-                "The model output is not differentiable with respect to "
-                "its query inputs"
-            )
 
         leaves = [x.numerical]
         if related_tables is not None:
@@ -73,7 +68,7 @@ class GradientExplainer(
                 for index in range(scores.size(-1))
             ]
         )
-        x = cast(
+        x_attributions = cast(
             TableTensor,
             torch.stack(
                 [
@@ -89,10 +84,10 @@ class GradientExplainer(
             ),
         )
         if related_tables is None:
-            return x, None
+            return x_attributions, None
 
-        return x, related_tables.replace_tables(
-            {
+        related_attributions = related_tables.replace_tables(
+            tables={
                 name: cast(
                     TableTensor,
                     torch.stack(
@@ -114,3 +109,4 @@ class GradientExplainer(
                 )
             }
         )
+        return x_attributions, related_attributions

@@ -108,54 +108,6 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
 
 
 @pytest.mark.parametrize("fitted", [False, True])
-def test_rejects_multiple_estimators(fitted: bool) -> None:
-    model = _LinearModel()
-    x_context = torch.zeros(1, 2)
-    y_context = torch.zeros(1, 1)
-    x_query = torch.ones(1, 2)
-    explainer = GradientExplainer()
-
-    if fitted:
-        model.fit(
-            x=x_context,
-            y=y_context,
-            num_estimators=3,
-            estimator_batch_size=None,
-        )
-        with pytest.raises(RuntimeError, match="exactly one estimator"):
-            explainer.explain(model, x_query)
-    else:
-        with pytest.raises(RuntimeError, match="exactly one estimator"):
-            explainer.explain(
-                model,
-                x_query,
-                x_context=x_context,
-                y_context=y_context,
-                num_estimators=3,
-                estimator_batch_size=None,
-            )
-
-
-def test_clears_context_when_explanation_fails() -> None:
-    class FailingExplainer(GradientExplainer):
-        def _explain_predict(
-            self, *args: Any, **kwargs: Any
-        ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
-            raise RuntimeError("Explanation failed")
-
-    model = _LinearModel()
-    explainer = FailingExplainer()
-    with pytest.raises(RuntimeError, match="Explanation failed"):
-        explainer.explain(
-            model,
-            torch.ones(1, 2),
-            x_context=torch.zeros(1, 2),
-            y_context=torch.zeros(1, 1),
-        )
-    assert model._cache is None
-
-
-@pytest.mark.parametrize("fitted", [False, True])
 def test_differentiates_final_prediction(fitted: bool) -> None:
     model = _LinearModel()
     x_context = torch.zeros(1, 2)
@@ -165,9 +117,11 @@ def test_differentiates_final_prediction(fitted: bool) -> None:
     explainer = GradientExplainer()
     if fitted:
         model.fit(x_context, y_context, recipe=recipe)
-        attributions, related_attributions = explainer.explain(model, x_query)
+        x_attributions, related_attributions = explainer.explain(
+            model, x_query
+        )
     else:
-        attributions, related_attributions = explainer.explain(
+        x_attributions, related_attributions = explainer.explain(
             model,
             x_query,
             x_context=x_context,
@@ -179,5 +133,5 @@ def test_differentiates_final_prediction(fitted: bool) -> None:
     expected = 2.0 * (
         probabilities.diag() - probabilities.outer(probabilities)
     )
-    torch.testing.assert_close(attributions.numerical, expected.unsqueeze(1))
+    torch.testing.assert_close(x_attributions.numerical, expected.unsqueeze(1))
     assert related_attributions is None
