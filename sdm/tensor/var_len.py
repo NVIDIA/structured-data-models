@@ -12,6 +12,7 @@ import pyarrow as pa
 import torch
 from torch import Tensor
 from torch._subclasses.fake_tensor import is_fake
+from torch.fx.experimental.symbolic_shapes import statically_known_true
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import override
 
@@ -567,7 +568,7 @@ class VarLenTensor(Tensor):
     ) -> VarLenTensor:
         (cls,) = ctx
         layout = inner_tensors["_layout"]
-        out = cls(
+        return cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
             valid=inner_tensors.get("_valid"),
@@ -575,7 +576,6 @@ class VarLenTensor(Tensor):
             stride=layout.stride(),
             storage_offset=layout.storage_offset(),
         )
-        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
@@ -1417,8 +1417,11 @@ def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
     )
 
 
-def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
-    if isinstance(start.numel(), int) and start.numel() == 0:
+def _compact(
+    start: Tensor, end: Tensor, *, max_total: int | None = None
+) -> tuple[Tensor, Tensor]:
+    """Pack spans, optionally using a caller-proven output-length bound."""
+    if statically_known_true(start.numel() == 0):
         return start.new_zeros(1), start.new_empty(0)
     count = end - start
 
@@ -1428,6 +1431,11 @@ def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
 
     total = offset[-1].item()
     torch._constrain_as_size(total, min=0, max=torch.iinfo(torch.int64).max)
+    if max_total is not None and max_total <= torch.iinfo(torch.int32).max:
+        torch._check(total <= max_total)
+        torch._constrain_as_size(
+            total, min=0, max=torch.iinfo(torch.int32).max
+        )
     if start.dtype == torch.int32 and total <= torch.iinfo(torch.int32).max:
         offset = offset.to(torch.int32)
 
