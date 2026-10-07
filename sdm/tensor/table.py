@@ -21,7 +21,7 @@ from typing_extensions import override
 from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.mixin import _resolve_device
+from sdm.tensor.mixin import _copy_wrapper_, _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -1415,6 +1415,15 @@ def _to_copy(
         copy=True,
         memory_format=memory_format,
     )
+
+
+@TableTensor.implements(aten.copy_.default)
+def _copy_(
+    inp: TableTensor,
+    src: TableTensor,
+    non_blocking: bool = False,
+) -> TableTensor:
+    return cast(TableTensor, _copy_wrapper_(inp, src, non_blocking))
 
 
 @TableTensor.implements(aten.clone.default)

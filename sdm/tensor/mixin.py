@@ -3,7 +3,7 @@
 
 import abc
 from collections.abc import Callable, Iterator
-from typing import Self
+from typing import Any, Self, cast
 
 import torch
 from torch import Tensor
@@ -122,3 +122,41 @@ def _resolve_device(device: torch.device | str | None) -> torch.device | None:
     if device.type == "mps" and device.index is None:
         return torch.device("mps", 0)
     return device
+
+
+def _copy_wrapper_(
+    destination: Tensor,
+    source: Tensor,
+    non_blocking: bool = False,
+) -> Tensor:
+    """Copy matching encoded storage while retaining tensor aliases."""
+    leaves: dict[int, tuple[Tensor, Tensor]] = {}
+
+    def collect(dst: Tensor, src: Tensor) -> None:
+        if dst.shape != src.shape:
+            raise ValueError("Copy requires matching tensor storage shapes")
+        if hasattr(dst, "__tensor_flatten__"):
+            if type(dst) is not type(src):
+                raise TypeError(
+                    "Copy requires matching tensor container types"
+                )
+            dst_names, dst_context = cast(Any, dst).__tensor_flatten__()
+            src_names, src_context = cast(Any, src).__tensor_flatten__()
+            if dst_names != src_names or dst_context != src_context:
+                raise ValueError(
+                    "Copy requires matching tensor container metadata"
+                )
+            for name in dst_names:
+                collect(getattr(dst, name), getattr(src, name))
+        else:
+            if id(dst) in leaves and leaves[id(dst)][1] is not src:
+                raise ValueError(
+                    "Copy requires matching aliased tensor leaves"
+                )
+            leaves[id(dst)] = (dst, src)
+
+    collect(destination, source)
+    for dst, src in leaves.values():
+        if dst is not src:
+            dst.copy_(src, non_blocking=non_blocking)
+    return destination

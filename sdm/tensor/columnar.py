@@ -16,7 +16,7 @@ from typing_extensions import override
 
 from sdm.tensor import NullableTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.mixin import _resolve_device
+from sdm.tensor.mixin import _copy_wrapper_, _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -527,6 +527,15 @@ def _to_copy(
         copy=True,
         memory_format=memory_format,
     )
+
+
+@ColumnarTensor.implements(aten.copy_.default)
+def _copy_(
+    inp: ColumnarTensor,
+    src: ColumnarTensor,
+    non_blocking: bool = False,
+) -> ColumnarTensor:
+    return cast(ColumnarTensor, _copy_wrapper_(inp, src, non_blocking))
 
 
 @ColumnarTensor.implements(aten.clone.default)
