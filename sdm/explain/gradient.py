@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -16,20 +15,6 @@ from sdm.models import ICLModel
 from sdm.models.callback import Callback
 
 
-@dataclass(frozen=True)
-class GradientExplanationOutput:
-    r"""Gradients with respect to preprocessed query inputs.
-
-    Args:
-        x: Gradients for the primary query table.
-        related_tables: Gradients for the related query tables, or ``None``
-            when the model call has no related query tables.
-    """
-
-    x: TableTensor
-    related_tables: RelatedTables[TableTensor] | None = None
-
-
 class _GradientCallback(Callback):
     requires_grad = True
 
@@ -37,7 +22,9 @@ class _GradientCallback(Callback):
         self._output = output
         self._inputs: list[tuple[str | None, tuple[str, ...], Tensor]] = []
         self._related_tables: RelatedTables[TableTensor] | None = None
-        self.result: GradientExplanationOutput | None = None
+        self.result: (
+            tuple[TableTensor, RelatedTables[TableTensor] | None] | None
+        ) = None
 
     def on_query_preprocessing_end(
         self,
@@ -92,9 +79,9 @@ class _GradientCallback(Callback):
                 ),
             )
 
-        self.result = GradientExplanationOutput(
-            x=grad_tables[None],
-            related_tables=(
+        self.result = (
+            grad_tables[None],
+            (
                 self._related_tables.replace_tables(
                     {
                         name: grad_tables[name]
@@ -108,7 +95,9 @@ class _GradientCallback(Callback):
         return out
 
 
-class GradientExplainer(ICLExplainer[GradientExplanationOutput]):
+class GradientExplainer(
+    ICLExplainer[tuple[TableTensor, RelatedTables[TableTensor] | None]]
+):
     r"""Return gradients of selected outputs with respect to query inputs.
 
     Args:
@@ -134,7 +123,7 @@ class GradientExplainer(ICLExplainer[GradientExplanationOutput]):
         recipe: Recipe | None = None,
         generator: torch.Generator | None = None,
         **kwargs: Any,
-    ) -> GradientExplanationOutput:
+    ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
         callback = _GradientCallback(self._output)
         model(
             x_context=x_context,
@@ -157,7 +146,7 @@ class GradientExplainer(ICLExplainer[GradientExplanationOutput]):
         related_query_tables: RelatedTables | None = None,
         *,
         generator: torch.Generator | None = None,
-    ) -> GradientExplanationOutput:
+    ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
         callback = _GradientCallback(self._output)
         model.predict(
             x=x_query,
