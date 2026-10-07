@@ -677,7 +677,9 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     torch.testing.assert_close(out1, out3)
 
 
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize(
+    "dtype", [torch.bfloat16, torch.float16, torch.float32, torch.float64]
+)
 def test_transformer_block_chunked_noncontiguous_out(
     dtype: torch.dtype,
 ) -> None:
