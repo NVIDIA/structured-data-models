@@ -19,7 +19,7 @@ from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
 from sdm.tensor.string import _sort_indices
-from sdm.tensor.var_len import _clone
+from sdm.tensor.var_len import _clone, _compact
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
@@ -154,6 +154,16 @@ class AlignCategories(EnsembleProcessor):
                 and self.sort_by != "frequency"
             ):
                 fitted_categories.append(ordered_categories)
+            elif (
+                torch.compiler.is_compiling()
+                and isinstance(input_categories, StringTensor)
+                and input_categories._offset.dtype == torch.int32
+            ):
+                fitted_categories.append(
+                    _select_string_categories(
+                        input_categories, selected_indices
+                    )
+                )
             elif (
                 input_categories.dtype in _UNSIGNED_DTYPES
                 and input_categories.is_cpu
@@ -673,3 +683,26 @@ def _string_category_order_fake(
     storage_offset: int,
 ) -> Tensor:
     return data.new_empty(size, dtype=torch.long)
+
+
+def _select_string_categories(
+    categories: StringTensor, indices: Tensor
+) -> StringTensor:
+    """Select unique dictionary entries while preserving their offset dtype."""
+    physical = indices * categories.stride(0) + categories._storage_offset
+    # This bound includes repeated backing bytes in stride-zero dictionaries.
+    offset, index = _compact(
+        categories._offset[physical],
+        categories._offset[physical + 1],
+        max_total=categories.numel() * categories._data.numel(),
+    )
+    return StringTensor(
+        data=categories._data[index],
+        offset=offset,
+        valid=(
+            categories._valid[physical]
+            if categories._valid is not None
+            else None
+        ),
+        size=indices.shape,
+    )
