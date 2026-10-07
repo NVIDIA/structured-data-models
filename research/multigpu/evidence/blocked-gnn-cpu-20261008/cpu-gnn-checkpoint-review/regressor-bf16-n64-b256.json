@@ -1,0 +1,45 @@
+{
+  "evidence_kind": "CPU GNN-only, synthetic inputs, actual weights",
+  "torch_version": "2.9.1",
+  "checkpoint": "regressor",
+  "checkpoint_revision": "2bd603d3d8f25f67a7aaa8579908595e20567e22",
+  "checkpoint_sha256": "f863b3632f738e1444fb83a8cea5746f298889b5c96953a000c4720d202ae4cf",
+  "adapter_source_sha256": "b19353e17ff432371efcc9affc53a6151b50fc94e1d11b4ba2badac2a4c2c47c",
+  "test_source_sha256": "e88f92b3595b05d485779a6df39cba012c70e4d29244a0bd70f558b768215669",
+  "nodes": 64,
+  "edges": 336,
+  "channels": 512,
+  "degree_pattern": [
+    0,
+    1,
+    3,
+    17
+  ],
+  "feature_formula": "sin(arange(nodes*512)*0.01)",
+  "edge_rng_seed": 1729,
+  "num_hops": 2,
+  "block_size": 256,
+  "precision": "bf16",
+  "tolerance": {
+    "rtol": 0.02,
+    "atol": 0.02
+  },
+  "comparisons": {
+    "fit": {
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "elements": 2560,
+      "pass": true,
+      "bitwise_equal": true
+    },
+    "frozen_query": {
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "elements": 2560,
+      "pass": true,
+      "bitwise_equal": true
+    }
+  }
+}

@@ -20,9 +20,9 @@ The coordinator independently reran `collect_evidence.verify(..., external=True)
 
 | Check | Result |
 |---|---:|
-| Evidence snapshots | 25 |
-| Archived-file references checked | 247 |
-| Original-artifact references checked | 599 |
+| Evidence snapshots | 26 |
+| Archived-file references checked | 277 |
+| Original-artifact references checked | 629 |
 | Missing/mismatched references | 0 |
 | External references left unchecked | 0 |
 
@@ -61,13 +61,15 @@ These limitations supplement the objective-by-objective completion checklist in 
 
 The user's subsequent literature request is documented in [literature.md](literature.md) and four linked primary-source reviews. Published measurements are kept separate from SDM results. The review prioritizes exact execution/caching, bounded upstream fit allocations, and only then approximate context selection or distillation.
 
-A research-only destination-block GNN statistics/projection prototype is now being investigated in an isolated worktree, with independent review of reduction, cache/RNG, and empty-segment semantics. Its target is the observed 6.10 GiB statistics allocation, not a new distributed-serving framework. This follow-up is not yet integrated or GPU measured. It cannot close the remote-state/teardown gaps above.
+The research-only [destination-block GNN](blocked-gnn.md) is integrated, with optional `--gnn-block-size` benchmark selection and independent reduction/cache/RNG/empty-segment review. Its target is the observed 6.10 GiB statistics allocation, not a new distributed-serving framework. The coordinator's combined synthetic/scoring/protocol suite passed 119 tests, and the evidence collector's four tests passed. The actual-checkpoint CPU screen was independently rerun: 29 passed, two FP32 singleton-block cases failed the unchanged gate. All 30 checkpoint-case receipts, including failures, are archived and verified in the new CPU-only evidence snapshot. Ruff and `git diff --check` passed. No CUDA, full-model quality, measured memory or performance claim is made for this prototype.
 
 ## Access and resource risk
 
 At 16:30:55 UTC the session's network restrictions denied SSH to both hosts and AWS EC2 endpoint access. Approval policy is `never`; no alternative route or bypass was attempted. User authorization to use `al` does not remove this execution restriction. This is not an observed expired-login error.
 
 Fresh read-only probes at 16:44:41–16:44:51 UTC produced the same SSH `Operation not permitted` and regional EC2 endpoint connection failures. No new instance/process state was obtained. Academic-paper browsing remains available through the separate web tool; that does not establish SSH or EC2 access.
+
+The third consecutive goal-turn check at 16:57:56 UTC again denied both SSH hosts and both EC2 endpoints. The previous two turns made local integration, scoring, evidence and literature progress despite that restriction; this turn completed the bounded-GNN CPU follow-up and preserved its failures. Local follow-up work is now handed off. Remaining execution, remote evidence recovery, Git publication, cost reconciliation and teardown require restored permitted networking. The full goal remains unachieved; unsupported network bypasses and assumed job termination are not alternatives.
 
 Both task hosts were last verified reachable at 16:27:25 UTC, without a Spot interruption notice. They **may still incur charges**. Previously verified shutdown-to-terminate deadlines were 19:28:00 UTC for L4 and 23:15:34 UTC for L40S, on 2026-10-07. Their execution is not yet confirmed.
 
