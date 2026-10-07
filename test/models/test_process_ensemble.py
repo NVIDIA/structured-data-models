@@ -3,8 +3,8 @@
 
 import pytest
 import torch
+from research.multigpu._test_models import _RandomCacheModel
 from research.multigpu.process_ensemble import ProcessEnsembleParallel
-from test.models.test_ensemble_parallel import _RandomCacheModel
 
 from sdm.models import EnsembleParallel
 
