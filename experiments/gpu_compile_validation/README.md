@@ -10,7 +10,7 @@ The unchanged parity tolerance is `atol=1e-5, rtol=1e-4` for both FP32 and BF16.
 
 ## Stage these files
 
-Archive or check out this branch, including `sdm/`, `pyproject.toml`, and this script. Install the repository dependencies for the selected CUDA/PyTorch environment; record the environment rather than silently upgrading the intended PyTorch version. The relational CUDA path also needs the project's cuDF dependencies.
+Archive or check out this branch, including `sdm/`, `pyproject.toml`, and this script. For a git archive without `.git`, pass `--source-commit SHA` or write the exact SHA into a `SOURCE_COMMIT` file at the source root. Explicit arguments take precedence over the receipt; a Git checkout is used only as the final fallback. Install the repository dependencies for the selected CUDA/PyTorch environment; record the environment rather than silently upgrading the intended PyTorch version. The relational CUDA path also needs the project's cuDF dependencies.
 
 | Host filename | Existing local source |
 |---|---|
@@ -21,7 +21,7 @@ Archive or check out this branch, including `sdm/`, `pyproject.toml`, and this s
 | `driver-dnf_bundle.pt` | `/Users/ardrianw/repositories/sdm-realdata-validation-20261002/evidence/gpu-staging-v1/evidence/kumo_relational/driver-dnf_bundle.pt` |
 | `relational-classifier.pt` | `/Users/ardrianw/.cache/huggingface/hub/models--nvidia--Kumo-Relational/snapshots/613d8f930f3a9f4d306fadfe80794da8c9a28570/classifier.pt` |
 
-The RelBench bundle contains trusted pickled SDM objects; do not substitute an untrusted pickle. `RelatedTables.to(device)` recursively transfers its table tensors. The regression validation split contains 111 rows, so request 32/111 rather than 128 when comparing actual row counts.
+The RelBench bundle contains trusted pickled SDM objects; do not substitute an untrusted pickle. `RelatedTables.to(device)` recursively transfers its table tensors. The regression validation split contains 111 rows, so request 32/111 rather than 128 when comparing actual row counts. Each sample records actual `rows` separately from `requested_rows`, and `actual_query_rows` records the complete sequence.
 
 ## Commands
 

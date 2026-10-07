@@ -30,6 +30,7 @@ def main() -> None:
     parser.add_argument("--data", required=True)
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--source-commit")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cuda")
     parser.add_argument("--autocast", choices=["off", "bf16"], default="off")
     parser.add_argument("--backend", default="inductor")
@@ -55,9 +56,7 @@ def main() -> None:
         "torch": torch.__version__,
         "cuda_runtime": torch.version.cuda,
         "platform": platform.platform(),
-        "source": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
-        ).strip(),
+        "source": None,
         "weight_dtype": "float32",
         "autocast_dtype": "bfloat16" if args.autocast == "bf16" else None,
         "samples": [],
@@ -105,6 +104,17 @@ def main() -> None:
         return actual.detach().cpu().clone(), metrics
 
     try:
+        source_root = Path(__file__).resolve().parents[2]
+        receipt = source_root / "SOURCE_COMMIT"
+        if args.source_commit:
+            result["source"] = args.source_commit
+        elif receipt.is_file():
+            result["source"] = receipt.read_text().strip()
+        else:
+            result["source"] = subprocess.check_output(
+                ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+                text=True,
+            ).strip()
         torch.set_num_threads(1)
         torch.manual_seed(123)
         if cuda:
@@ -167,6 +177,9 @@ def main() -> None:
                 task=args.task, pretrained=False, device=device
             )
             fit_options = {"num_hops": arm["num_hops"]}
+        result["actual_query_rows"] = [
+            query.size(-2) for _, query, _ in queries
+        ]
         model.models[args.task].load_state_dict(
             torch.load(
                 args.checkpoint, weights_only=True, map_location=device
@@ -229,6 +242,9 @@ def main() -> None:
                             "phase": phase,
                             "case": case,
                             "rows": query.size(-2),
+                            "requested_rows": case
+                            if args.model == "tabular"
+                            else None,
                             "repetition": repetition,
                             "kind": "first"
                             if repetition == -1 - args.warmups
