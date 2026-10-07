@@ -1129,7 +1129,7 @@ class TableTensor(Tensor):
         return (self.__class__, args)
 
     @classmethod
-    @torch.compiler.disable
+    @torch.compiler.disable(recursive=False)
     def __torch_dispatch__(  # type: ignore
         cls,
         func: Callable[..., Any],
