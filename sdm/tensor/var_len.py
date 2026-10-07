@@ -802,7 +802,13 @@ def _to_dtype_layout(
     storage_offset = int(inp.storage_offset())
     span_len = _span_len(inp.size(), inp.stride())
     offset = inp._offset[storage_offset : storage_offset + span_len + 1]
-    data = inp._data[offset[0] : offset[-1]].to(
+    # Empty payloads need no data-dependent slice boundaries.
+    data = (
+        inp._data
+        if inp._data.numel() == 0
+        else inp._data[offset[0] : offset[-1]]
+    )
+    data = data.to(
         device=device,
         dtype=dtype,
         non_blocking=non_blocking,
