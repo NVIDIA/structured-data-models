@@ -48,14 +48,14 @@ The previous TabFM diagnostic reported 224.98 to 421.99 rows/s on one versus two
 
 ## Results
 
-The first native one-GPU baseline has completed. There is no multi-GPU speedup claim yet. Its three repeats reuse one fit, so they characterize warm prediction variability rather than independent fits.
+The first native and 1/2/4-GPU EP ladder has completed. For the small initial workload, thread-based EP scales poorly: two GPUs improve only 8.9% over the same resident executor on one GPU, and four GPUs are 4.9% slower. This is a measured result for this workload and executor, not a rejection of ensemble parallelism. Three repeats reuse one fit, so they characterize warm prediction variability rather than independent fits.
 
 | Hardware ladder | Instance / topology | Runtime | Scope |
 |---|---|---|---|
-| Host 1 | Spot `g6e.12xlarge`, 4× L40S, 46,068 MiB each; all pairwise links reported `NODE` (PCIe host bridges, no NVLink) | Python 3.12.3, PyTorch 2.9.1+cu130, CUDA 13.0, driver 595.91.07 | Main tabular and relational EP/DP comparisons |
+| Host 1 | Spot `g6e.12xlarge`, 4× L40S, 46,068 MiB each; all pairwise links reported `NODE` (PCIe host bridges, no NVLink); CUDA peer-access checks false between devices | Python 3.12.3, PyTorch 2.9.1+cu130, CUDA 13.0, driver 595.91.07 | Main tabular and relational EP/DP comparisons |
 | Host 2 | Spot four-L4 host, acquired for CP/placement; detailed topology pending | Pending runtime receipt | Separate hardware ladder; do not combine raw speedup denominators with Host 1 |
 
-Eight-GPU/NVSwitch capacity was not acquired: the coordinator reports a regional 64-vCPU Spot quota constraint. This limits the hardware/topology scope, not the validity of any algorithm.
+Eight-GPU/NVSwitch capacity was not acquired: the operator reports A100-family launch denied by an organization policy and eight-GPU G-family shapes blocked by a regional 64-vCPU Spot quota (192 vCPUs required). This limits the hardware/topology scope, not the validity of any algorithm.
 
 Prepared source workloads use fixed nested TRAIN/validation subsets, recorded in their manifests. Available rows are distinct from rows actually measured in any run:
 
@@ -71,11 +71,18 @@ Tabular splits are custom deterministic 80/20 splits (seed `20261008`), not offi
 | Model / dataset | Method | GPUs | Context / E / query / batch | Warm rows/s | Speedup vs same executor 1 GPU | Cold seconds | Peak GPU / aggregate memory | Quality / max prediction error | Evidence |
 |---|---|---:|---|---:|---:|---:|---|---|---|
 | KumoTabular large / Covertype | Public baseline, L40S | 1 | 1,024 / 4 / 2,048 / 256 | 1,818.93 median (1,807.68–1,824.77, n=3) | — | Fit 122.751, load 4.615 | Fit peak allocated 1.408 GiB; prediction 1.284 GiB; CPU cache 342.001 MiB | Accuracy 0.764160; log loss 0.576045; OVR AUC 0.947415; repeat max difference 0 | `tabular-native-large-e4-c1024-q2048/result.json`, source `9f0d6c765` |
-| KumoTabular | EP / DP / CP / stages | 1 / 2 / 4 | Pending | — | — | — | — | — | Pending |
+| KumoTabular large / Covertype | Resident EP, L40S | 1 | 1,024 / 4 / 2,048 / 256 | 1,729.77 | 1.000× | Fit 1.075 (warmed environment) | Prediction peak 1.598 GiB | Exact native predictions | `tabular-ep1-large-e4-c1024-q2048`, `6c3f1e22e` |
+| KumoTabular large / Covertype | Resident EP, L40S | 2 | 1,024 / 4 / 2,048 / 256 | 1,883.05 | 1.089× | Fit 1.114 | Prediction peak max 1.358 GiB/GPU; summed rank peaks 2.714 GiB | Max prediction difference 0 | `tabular-ep2-large-e4-c1024-q2048`, `6c3f1e22e` |
+| KumoTabular large / Covertype | Resident EP, L40S | 4 | 1,024 / 4 / 2,048 / 256 | 1,644.81 | 0.951× | Fit 1.298 | Prediction peak max 1.176 GiB/GPU; summed rank peaks 4.699 GiB | Max prediction difference 0 | `tabular-ep4-large-e4-c1024-q2048`, `6c3f1e22e` |
+| KumoTabular | DP / CP / stages / tuned EP | 1 / 2 / 4 | Pending | — | — | — | — | — | Pending |
 | KumoRelational | Public baseline | 1 | Pending | — | — | — | — | — | Pending |
 | KumoRelational | EP / DP / CP / stages | 1 / 2 / 4 | Pending | — | — | — | — | — | Pending |
 
 The first native fit took 122.751 seconds, whereas warm inference took about 1.126 seconds for 2,048 rows (batch p50 141.42 ms). First-use compilation/library initialization is a hypothesis for the long fit, not an established cause. A repeated native fit is queued to distinguish cold startup from parallel fit gains. The result's CPU-offloaded cache is explicitly recorded; EP comparisons require their resident one-GPU control. Independent quality review confirmed the baseline metrics and stable repeat outputs.
+
+EP batch p50 was 147.96 / 135.90 / 155.55 ms at 1/2/4 GPUs. Scaling efficiency was 54.4% at two GPUs and 23.8% at four. All four saved prediction arrays, including native, are byte-identical (`92cb62ec…`). EP resident cache storage distributes as 489.00 / 244.50 / 122.25 MiB per GPU, while replicated parameters make aggregate device memory increase. Summed per-rank peaks are an upper bound on simultaneous aggregate use, not a synchronized aggregate trace.
+
+The EP cache's 489 MiB unique backing storage exceeds the public CPU cache's 342 MiB, despite identical predictions; retained view backing allocations versus compact CPU copies are under investigation. CPU dispatch/launch overhead and short member work are candidate explanations for poor scaling, pending profiles. The next experiments compare native estimator batching, larger contexts/batches/E8, batched EP, and process-based execution. The historical TabFM 1.876× result does not predict these Kumo results.
 
 ## Reproduction and failure log
 
