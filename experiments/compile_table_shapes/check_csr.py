@@ -44,9 +44,10 @@ for dtype in (torch.int32, torch.int64):
             for empty in (False, True):
                 inp = indices[:0] if empty else indices
                 nodes = torch.empty(size, device=args.device)
-                expected = torch._convert_indices_from_coo_to_csr(
-                    inp, size, out_int32=dtype == torch.int32
-                )
+                counts = inp.long().bincount(minlength=size)
+                expected = torch.cat(
+                    (counts.new_zeros(1), counts.cumsum(0))
+                ).to(dtype)
                 actual = compiled(inp, nodes)
                 assert actual.dtype == expected.dtype
                 assert torch.equal(actual, expected)

@@ -50,9 +50,8 @@ base = torch.arange(10, dtype=dtype)
 indices = base[::2] if layout == "strided" else base
 if layout == "empty":
     indices = indices[:0]
-expected = torch._convert_indices_from_coo_to_csr(
-    indices, 10, out_int32=dtype == torch.int32
-)
+counts = indices.long().bincount(minlength=10)
+expected = torch.cat((counts.new_zeros(1), counts.cumsum(0))).to(dtype)
 base = base.to(args.device)
 indices = base[::2] if layout == "strided" else base
 if layout == "empty":

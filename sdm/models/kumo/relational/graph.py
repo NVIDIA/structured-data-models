@@ -110,8 +110,9 @@ class HomogeneousGraph:  # noqa: D101
 def _coo_to_csr(
     indices: Tensor, size: int, *, out_int32: bool = False
 ) -> Tensor:
+    # The native kernel reads contiguous storage, ignoring index strides.
     return torch._convert_indices_from_coo_to_csr(
-        indices, size, out_int32=out_int32
+        indices.contiguous(), size, out_int32=out_int32
     )
 
 

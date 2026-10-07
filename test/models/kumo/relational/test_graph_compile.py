@@ -22,7 +22,6 @@ def test_compile_csr_changing_size(
     for size in (5, 9, 13, 0, 1, 5):
         indices = torch.arange(size, dtype=dtype).repeat_interleave(2)[::2]
         nodes = torch.empty(size)
-        expected = torch._convert_indices_from_coo_to_csr(
-            indices, size, out_int32=dtype == torch.int32
-        )
+        counts = indices.long().bincount(minlength=size)
+        expected = torch.cat((counts.new_zeros(1), counts.cumsum(0))).to(dtype)
         assert torch.equal(compiled(indices, nodes), expected)
