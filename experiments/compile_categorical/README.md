@@ -16,7 +16,7 @@ The compiler needs the custom operator's fake implementation to determine output
 
 ## Validation
 
-CPU, actual Inductor, same dtype as eager. No GPU validation or performance claim.
+CPU, actual Inductor, same dtype as eager. No GPU validation or model-performance claim. Compact results, including the rejected unconditional eager-operator measurements, are in `results.jsonl`.
 
 | Check | PyTorch 2.7.1 | PyTorch 2.14 |
 |---|---|---|
