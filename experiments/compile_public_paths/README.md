@@ -64,3 +64,9 @@ Omit `--fullgraph` to allow breaks. Select `--query-input fresh` to construct fr
 ## Baseline evidence
 
 `baseline.json` records all 24 current-main combinations (two models × public fit/predict/outer forward × two graph-break settings × two runtimes). All eager reference calls succeeded and all compiled entries failed before the fixes. `containers-initial.json` and `recipe-integration.json` preserve intermediate first errors and source commits. Local ignored `results/` retains full tracebacks. No failure or pure eager fallback is counted as successful compilation.
+
+## Follow-up: external join boundary
+
+The continuing integration adds individual category access during alignment and an explicit compiler boundary around `join_index`. Arrow/cuDF joins remain eager; surrounding tensor arithmetic can compile. Before this boundary, even `fullgraph=False` attempted `TableTensor.to_arrow()` with fake tensors and raised `.numpy() is not supported for tensor subclasses`. With the boundary, actual Inductor passes a duplicate-key join followed by tensor arithmetic on 2.7.1 and 2.14, including inside SDM's inference context. Fullgraph correctly rejects this explicit graph break; it is not fullgraph support for Arrow. Existing join checks pass (6 CPU cases, 5 CUDA skips on 2.14).
+
+This alone does not finish public relational prediction: string dictionary packing still fails before the join, and a diagnostic that keeps just string lookup eager exposes partially initialized `CategoricalTensor` reconstruction after a graph break. These are being handled separately. The earlier result table remains evidence for the explicitly recorded source commit, not a claim that every ongoing integration change has passed that entire matrix again.
