@@ -71,6 +71,7 @@ class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
     _valid: Tensor | None
+    _storage_offset: int
 
     # Constructors ############################################################
 
@@ -226,6 +227,7 @@ class VarLenTensor(Tensor):
         out._data = data
         out._offset = offset
         out._valid = valid
+        out._storage_offset = storage_offset
 
         return out
 
@@ -1347,7 +1349,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     data = torch.cat(data_list, dim=0)
 
     if math.prod(tensors[0].size()[:dim]) == 1:  # Contiguous path:
-        offset[-1] = storage_offset
+        offset[-1:].fill_(storage_offset)
         return tensor_cls(data=data, offset=offset, valid=valid, size=size)
 
     end = torch.cat(end_views, dim=dim)
@@ -1410,7 +1412,7 @@ def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
     count = end - start
 
     offset = count.new_empty(count.numel() + 1, dtype=torch.int64)
-    offset[0] = 0
+    offset[:1].zero_()
     offset[1:] = count.cumsum(dim=0, dtype=torch.int64)
 
     total = int(offset[-1])
