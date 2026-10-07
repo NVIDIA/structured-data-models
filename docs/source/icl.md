@@ -73,6 +73,35 @@ Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls wh
 
 Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.predict` does not support gradient-based fine-tuning and raises if the model is in train mode.
 
+### Pinned host memory for fitted caches
+
+For CUDA fits with multiple estimators, SDM can store fitted state in pinned host memory, which supports asynchronous transfers to the GPU.
+PyTorch normally rounds individual pinned allocations up to a power of two.
+For example, a 3 MiB tensor can occupy a 4 MiB allocation.
+
+With PyTorch 2.13 or later, set `pinned_max_round_threshold_mb:1` before starting Python to use exact allocation sizes above 1 MiB:
+
+```bash
+alloc_conf="${PYTORCH_ALLOC_CONF:-${PYTORCH_CUDA_ALLOC_CONF:-}}"
+PYTORCH_ALLOC_CONF="${alloc_conf:+${alloc_conf},}pinned_max_round_threshold_mb:1" \
+  python inference.py
+```
+
+Replace `inference.py` with your inference script.
+The command preserves other allocator options from `PYTORCH_ALLOC_CONF`, or from its legacy alias `PYTORCH_CUDA_ALLOC_CONF`.
+If the existing configuration already specifies `pinned_max_round_threshold_mb`, edit that value instead of appending it again.
+Older PyTorch versions can reject this option.
+
+The setting applies to all pinned allocations in the process.
+It changes allocation capacity without changing tensor contents or model arithmetic.
+Exact sizes can reduce buffer reuse when allocation sizes vary, so compare fit time, prediction time, and host memory on your workload.
+
+This setting does not limit how much freed pinned memory PyTorch retains for reuse.
+Keep `pinned_max_cached_size_mb` unchanged when evaluating rounding alone.
+Reducing that separate limit can require expensive pinned allocations during later fits.
+The live cache still needs space for its full tensor payload.
+See [PyTorch's pinned-memory allocator options](https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage) for details.
+
 ## Model Concepts
 
 Structured data foundation models are not bound to a specific task type.
