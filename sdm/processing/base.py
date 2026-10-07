@@ -162,7 +162,8 @@ class Processor(torch.nn.Module, abc.ABC):
             generator: Pseudorandom number generator used for sampling.
         """
         if not any(
-            stype in self.handles_stypes for stype in table.active_stypes
+            len(columns) > 0 and stype in self.handles_stypes
+            for stype, columns in table.columns.items()
         ):
             return self
         if self.requires_fit:
@@ -180,7 +181,8 @@ class Processor(torch.nn.Module, abc.ABC):
             The transformed table.
         """
         if not any(
-            stype in self.handles_stypes for stype in table.active_stypes
+            len(columns) > 0 and stype in self.handles_stypes
+            for stype, columns in table.columns.items()
         ):
             return table
         self._check_is_fitted()
@@ -206,7 +208,8 @@ class Processor(torch.nn.Module, abc.ABC):
             The transformed table.
         """
         if not any(
-            stype in self.handles_stypes for stype in table.active_stypes
+            len(columns) > 0 and stype in self.handles_stypes
+            for stype, columns in table.columns.items()
         ):
             return table
         out = self._fit_transform(table, generator=generator)
