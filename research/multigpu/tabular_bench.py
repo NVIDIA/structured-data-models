@@ -473,6 +473,8 @@ def main() -> None:
         report["status"] = "complete"
     except Exception as error:
         report.update(status="error", error=repr(error))
+        with contextlib.suppress(RuntimeError):
+            report["memory_at_failure"] = memory(devices)
         raise
     finally:
         if "model" in locals() and hasattr(model, "close"):
