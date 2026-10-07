@@ -127,14 +127,19 @@ class ColumnarTensor(Tensor):
 
         out._columns = columns
         if not columns:
-            out._empty = torch.empty((*size, 0), dtype=torch.uint8, device=device)
+            # Even an empty wrapper needs a leaf to carry its tracing mode.
+            out._empty = torch.empty(
+                (*size, 0), dtype=torch.uint8, device=device
+            )
         for i, column in enumerate(columns):
             setattr(out, f"_column_{i}", column)
 
         return out
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        return [f"_column_{i}" for i in range(len(self._columns))] or ["_empty"], ()
+        return [f"_column_{i}" for i in range(len(self._columns))] or [
+            "_empty"
+        ], ()
 
     @classmethod
     def __tensor_unflatten__(
