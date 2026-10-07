@@ -31,6 +31,9 @@ p.add_argument("--query-input", choices=["view", "fresh"], default="view")
 p.add_argument("--arm-index", type=int, default=0)
 p.add_argument("--relational-query-indices", type=int, nargs="+")
 p.add_argument("--recompile-limit", type=int)
+p.add_argument("--include-predictions", action="store_true")
+p.add_argument("--disable-cpp-contraction", action="store_true")
+p.add_argument("--inner-only", action="store_true")
 a = p.parse_args()
 torch.set_num_threads(1)
 torch.manual_seed(123)
@@ -109,6 +112,8 @@ result = {
     "query_input": a.query_input,
     "arm_index": a.arm_index if a.model == "relational" else None,
     "recompile_limit": a.recompile_limit,
+    "inner_only": a.inner_only,
+    "disable_cpp_contraction": a.disable_cpp_contraction,
 }
 compiler_config = (
     contextlib.nullcontext()
@@ -130,13 +135,22 @@ try:
             "fullgraph": a.fullgraph,
             "dynamic": a.dynamic == "true",
         }
+        if a.disable_cpp_contraction:
+            kwargs["options"] = {
+                "cpp.enable_floating_point_contract_flag": False
+            }
         if a.entry == "fit":
             fit(model, torch.compile(model.fit, **kwargs))
             actual = predict(model).numerical
         elif a.entry == "predict":
             fit(model)
             torch._dynamo.utils.counters.clear()
-            compiled_predict = torch.compile(model.predict, **kwargs)
+            if a.inner_only:
+                for inner_model in model.models.values():
+                    inner_model.compile(**kwargs)
+                compiled_predict = model.predict
+            else:
+                compiled_predict = torch.compile(model.predict, **kwargs)
             all_queries = qx
             samples = []
             cases = (
@@ -184,6 +198,9 @@ try:
                         ]["calls_captured"],
                     }
                 )
+                if a.include_predictions:
+                    samples[-1]["expected"] = expected.tolist()
+                    samples[-1]["actual"] = actual.tolist()
                 result["samples"] = samples
             result["all_samples_parity"] = all(
                 sample["parity"] for sample in samples
