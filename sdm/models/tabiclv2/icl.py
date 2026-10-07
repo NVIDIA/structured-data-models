@@ -15,6 +15,7 @@ from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
+from sdm.nn.context_parallel import cached_context, shard_cached_context
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
 
@@ -113,24 +114,28 @@ class ICLBlock(torch.nn.Module):
 
         for i, layer in enumerate(self.layers):
             key = f"{cache_prefix}.layer{i}"
-            result = layer(
-                query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
-                key_value=(
-                    cast(KVCacheEntry, cache[key])
-                    if cache is not None and cache.is_replaying
-                    else x[..., :R_train, :]
-                ),
-                return_key_value=cache is not None and cache.is_recording,
-                # `x` is still the caller's tensor at i == 0; don't mutate.
-                out=None
-                if torch.is_grad_enabled() or i == 0
-                else x[..., R_train:, :]
-                if i == len(self.layers) - 1
-                else x,
-            )
+            with cached_context(cache, key):
+                result = layer(
+                    query=x[..., R_train:, :]
+                    if i == len(self.layers) - 1
+                    else x,
+                    key_value=(
+                        cast(KVCacheEntry, cache[key])
+                        if cache is not None and cache.is_replaying
+                        else x[..., :R_train, :]
+                    ),
+                    return_key_value=cache is not None and cache.is_recording,
+                    # `x` is still the caller's tensor at i == 0; don't mutate.
+                    out=None
+                    if torch.is_grad_enabled() or i == 0
+                    else x[..., R_train:, :]
+                    if i == len(self.layers) - 1
+                    else x,
+                )
 
             if cache is not None and cache.is_recording:
-                x, cache[key] = result
+                x, kv = result
+                cache[key] = shard_cached_context(kv, cache, key)
             else:
                 x = result
             del result

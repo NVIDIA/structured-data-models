@@ -14,6 +14,10 @@ from torch.nn import Linear
 from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
+from sdm.nn.context_parallel import (
+    attention_context,
+    context_parallel_attention,
+)
 
 
 class SDPA(torch.nn.Module):
@@ -85,6 +89,20 @@ class SDPA(torch.nn.Module):
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
         """
+        context = attention_context()
+        if context is not None:
+            if attn_mask is not None or seqused_key_value is not None:
+                raise NotImplementedError(
+                    "Context parallel ICL does not support masks "
+                    "or valid lengths"
+                )
+            group, global_length = context
+            if self.query_scaling is not None:
+                query = self.query_scaling(query, key_len=global_length)
+            return context_parallel_attention(
+                query, key, value, group=group, scale=self.scale
+            )
+
         if query.numel() == 0:
             return query
 

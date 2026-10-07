@@ -12,6 +12,7 @@ from torch.nn import GELU, Embedding, Linear, ModuleList, Sequential
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.nn import LogScale, RMSNorm
+from sdm.nn.context_parallel import cached_context, shard_cached_context
 
 
 class ICLBlock(torch.nn.Module):
@@ -64,6 +65,9 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
+        if cache is None:
+            with cached_context(cache, "icl_block"):
+                pass
         R_train = y.size(-1)
 
         if y.numel() > 0:
@@ -81,27 +85,31 @@ class ICLBlock(torch.nn.Module):
             last_layer = i == len(self.layers) - 1
 
             if self.kv_heads is None or cache is not None:
-                result = layer(
-                    query=x[..., R_train:, :] if last_layer else x,
-                    key_value=(
-                        cast(KVCacheEntry, cache[cache_key])
-                        if cache is not None and cache.is_replaying
-                        else x[..., :R_train, :]
-                    ),
-                    return_key_value=cache is not None and cache.is_recording,
-                    out=None
-                    if torch.is_grad_enabled()
-                    else x[..., R_train:, :]
-                    if last_layer
-                    else x,
-                )
+                with cached_context(cache, cache_key):
+                    result = layer(
+                        query=x[..., R_train:, :] if last_layer else x,
+                        key_value=(
+                            cast(KVCacheEntry, cache[cache_key])
+                            if cache is not None and cache.is_replaying
+                            else x[..., :R_train, :]
+                        ),
+                        return_key_value=cache is not None
+                        and cache.is_recording,
+                        out=None
+                        if torch.is_grad_enabled()
+                        else x[..., R_train:, :]
+                        if last_layer
+                        else x,
+                    )
 
                 if cache is not None and cache.is_recording:
                     x, (key, value) = result
                     if self.kv_heads is not None:
                         key = key[..., : self.kv_heads, :].contiguous()
                         value = value[..., : self.kv_heads, :].contiguous()
-                    cache[cache_key] = KVCacheEntry(key, value)
+                    cache[cache_key] = shard_cached_context(
+                        KVCacheEntry(key, value), cache, cache_key
+                    )
                     del key, value
                 else:
                     x = result
