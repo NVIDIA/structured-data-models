@@ -396,9 +396,8 @@ class AlignCategories(EnsembleProcessor):
         fitted_categories: Tensor,
         codes: Tensor,
     ) -> Tensor:
-        lookup = codes.new_full((input_categories.numel(),), -1)
         if fitted_categories.numel() == 0:
-            return lookup
+            return codes.new_full((input_categories.numel(),), -1)
 
         comparable_categories = input_categories
         sorted_categories = fitted_categories
