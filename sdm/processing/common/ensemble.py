@@ -6,6 +6,7 @@ from itertools import repeat
 from typing import cast
 
 import torch
+from torch import Tensor
 from torch.nn import ModuleList
 
 from sdm import EnsembleTable, Stype
@@ -15,9 +16,12 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
 )
+from sdm.processing.common._positions import _ForwardEnsemblePositions
 
 
-class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
+class EnsembleProcessorAdapter(
+    _ForwardEnsemblePositions, EnsembleProcessor, EnsembleInvertibleMixin
+):
     """Adapt an ordinary processor to ensemble-aware processing.
 
     The adapter turns a :class:`~sdm.processing.base.Processor` into an
@@ -67,6 +71,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -77,17 +82,22 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
                 processor = self.processor
             else:
                 processor = copy.deepcopy(self.processor)
-            processor.fit(group, generator=generator)
+            processor.fit(
+                group, row_positions=row_positions, generator=generator
+            )
             self._processors.append(processor)
 
     def _fit_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         if not self.requires_fit:
-            return self._transform_ensemble(ensemble_table)
+            return self._transform_ensemble(
+                ensemble_table, row_positions=row_positions
+            )
 
         self._fitted_locations = ensemble_table._locations
         outputs = []
@@ -97,20 +107,25 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
                 processor = self.processor
             else:
                 processor = copy.deepcopy(self.processor)
-            outputs.append(processor.fit_transform(group, generator=generator))
+            outputs.append(
+                processor.fit_transform(
+                    group, row_positions=row_positions, generator=generator
+                )
+            )
             self._processors.append(processor)
         return ensemble_table.replace_groups(outputs)
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
         if self.requires_fit:
             processors = self._aligned_processors(ensemble_table)
         else:
             processors = repeat(self.processor, ensemble_table.num_groups)
         outputs = [
-            processor.transform(group)
+            processor.transform(group, row_positions=row_positions)
             for group, processor in zip(
                 ensemble_table._iter_groups(), processors, strict=True
             )
@@ -120,6 +135,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
         if self.requires_fit:
             processors = self._aligned_processors(ensemble_table)
@@ -135,7 +151,9 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
                     f"{self.processor.__class__.__name__!r} object has no "
                     "attribute 'inverse_transform'"
                 )
-            outputs.append(processor.inverse_transform(group))
+            outputs.append(
+                processor.inverse_transform(group, row_positions=row_positions)
+            )
         return ensemble_table.replace_groups(outputs)
 
     def _aligned_processors(

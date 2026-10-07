@@ -5,13 +5,17 @@ from collections.abc import Iterator
 from typing import Literal, cast
 
 import torch
+from torch import Tensor
 from torch.nn import ModuleList
 
 from sdm import EnsembleTable
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing.common._positions import _ForwardEnsemblePositions
 
 
-class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
+class Choice(
+    _ForwardEnsemblePositions, EnsembleProcessor, EnsembleInvertibleMixin
+):
     """Route each table or ensemble member through one selected option.
 
     Options are selected when the processor is fitted. Only selected options
@@ -117,6 +121,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -125,11 +130,14 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             generator=generator,
         )
         for option_id, table in self._tables_by_option(ensemble_table):
-            self.options[option_id].fit_ensemble(table, generator=generator)
+            self.options[option_id].fit_ensemble(
+                table, row_positions=row_positions, generator=generator
+            )
 
     def _fit_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
@@ -140,6 +148,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         outputs = {
             option_id: self.options[option_id].fit_transform_ensemble(
                 table,
+                row_positions=row_positions,
                 generator=generator,
             )
             for option_id, table in self._tables_by_option(ensemble_table)
@@ -149,10 +158,13 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
         self._check_num_members(ensemble_table)
         outputs = {
-            option_id: self.options[option_id].transform_ensemble(table)
+            option_id: self.options[option_id].transform_ensemble(
+                table, row_positions=row_positions
+            )
             for option_id, table in self._tables_by_option(ensemble_table)
         }
         return self._gather_outputs(ensemble_table, outputs)
@@ -160,6 +172,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
         self._check_num_members(ensemble_table)
         outputs = {}
@@ -169,7 +182,9 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
                 raise TypeError(
                     f"{processor.__class__.__name__!r} is not invertible."
                 )
-            outputs[option_id] = processor.inverse_transform_ensemble(table)
+            outputs[option_id] = processor.inverse_transform_ensemble(
+                table, row_positions=row_positions
+            )
         return self._gather_outputs(ensemble_table, outputs)
 
     def __repr__(self, *, indent: int = 0) -> str:

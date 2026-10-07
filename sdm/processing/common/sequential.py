@@ -5,15 +5,19 @@ from collections.abc import Iterable, Iterator
 from typing import Self, cast
 
 import torch
+from torch import Tensor
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
 )
+from sdm.processing.common._positions import _ForwardEnsemblePositions
 
 
-class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
+class Sequential(
+    _ForwardEnsemblePositions, EnsembleProcessor, EnsembleInvertibleMixin
+):
     r"""Apply processors and callables to a table in sequence.
 
     Args:
@@ -84,48 +88,65 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.append(processor)
         return self
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(
+        self, table: TableTensor, row_positions: Tensor | None = None
+    ) -> TableTensor:
         out = table
         for child in self:
-            out = child.transform(out)
+            out = child.transform(out, row_positions=row_positions)
         return out
+
+    def _transform_with_positions(
+        self, table: TableTensor, row_positions: Tensor
+    ) -> TableTensor:
+        return self._transform(table, row_positions)
 
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
         out = ensemble_table
         for i, child in enumerate(self):
             if i < len(self) - 1:
-                out = child.fit_transform_ensemble(out, generator=generator)
+                out = child.fit_transform_ensemble(
+                    out, row_positions=row_positions, generator=generator
+                )
             else:
-                child.fit_ensemble(out, generator=generator)
+                child.fit_ensemble(
+                    out, row_positions=row_positions, generator=generator
+                )
 
     def _fit_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         out = ensemble_table
         for child in self:
-            out = child.fit_transform_ensemble(out, generator=generator)
+            out = child.fit_transform_ensemble(
+                out, row_positions=row_positions, generator=generator
+            )
         return out
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
         out = ensemble_table
         for child in self:
-            out = child.transform_ensemble(out)
+            out = child.transform_ensemble(out, row_positions=row_positions)
         return out
 
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
         out = ensemble_table
         for child in reversed(list(self)):
@@ -134,7 +155,9 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
                     f"{child.__class__.__name__!r} object has no "
                     "attribute 'inverse_transform_ensemble'"
                 )
-            out = child.inverse_transform_ensemble(out)
+            out = child.inverse_transform_ensemble(
+                out, row_positions=row_positions
+            )
         return out
 
     def __iter__(self) -> Iterator[EnsembleProcessor]:

@@ -4,13 +4,15 @@
 from typing import Literal, cast
 
 import torch
+from torch import Tensor
 from torch.nn import ModuleDict
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor, Processor
+from sdm.processing.common._positions import _ForwardEnsemblePositions
 
 
-class TaskDispatch(EnsembleProcessor):
+class TaskDispatch(_ForwardEnsemblePositions, EnsembleProcessor):
     """Apply separate processors based on the semantic type of the target.
 
     :class:`TaskDispatch` is resolved only during model execution.
@@ -66,46 +68,85 @@ class TaskDispatch(EnsembleProcessor):
     def _fit(
         self,
         table: TableTensor,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._processor().fit(table, generator=generator)
+        self._processor().fit(
+            table, row_positions=row_positions, generator=generator
+        )
+
+    def _fit_with_positions(
+        self,
+        table: TableTensor,
+        row_positions: Tensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        self._fit(table, row_positions, generator=generator)
 
     def _fit_transform(
         self,
         table: TableTensor,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        return self._processor().fit_transform(table, generator=generator)
+        return self._processor().fit_transform(
+            table, row_positions=row_positions, generator=generator
+        )
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return self._processor().transform(table)
+    def _fit_transform_with_positions(
+        self,
+        table: TableTensor,
+        row_positions: Tensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        return self._fit_transform(table, row_positions, generator=generator)
+
+    def _transform(
+        self, table: TableTensor, row_positions: Tensor | None = None
+    ) -> TableTensor:
+        return self._processor().transform(table, row_positions=row_positions)
+
+    def _transform_with_positions(
+        self, table: TableTensor, row_positions: Tensor
+    ) -> TableTensor:
+        return self._transform(table, row_positions)
 
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._processor().fit_ensemble(ensemble_table, generator=generator)
+        self._processor().fit_ensemble(
+            ensemble_table, row_positions=row_positions, generator=generator
+        )
 
     def _fit_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         return self._processor().fit_transform_ensemble(
             ensemble_table,
+            row_positions=row_positions,
             generator=generator,
         )
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
-        return self._processor().transform_ensemble(ensemble_table)
+        return self._processor().transform_ensemble(
+            ensemble_table, row_positions=row_positions
+        )
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415

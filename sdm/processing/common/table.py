@@ -4,13 +4,15 @@
 from typing import Literal, cast
 
 import torch
+from torch import Tensor
 from torch.nn import ModuleDict
 
 from sdm import EnsembleTable, Stype
 from sdm.processing import EnsembleProcessor, Processor
+from sdm.processing.common._positions import _ForwardEnsemblePositions
 
 
-class TableDispatch(EnsembleProcessor):
+class TableDispatch(_ForwardEnsemblePositions, EnsembleProcessor):
     """Apply separate feature processors to task and related tables.
 
     :class:`TableDispatch` is resolved only during model execution.
@@ -50,6 +52,7 @@ class TableDispatch(EnsembleProcessor):
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -61,12 +64,14 @@ class TableDispatch(EnsembleProcessor):
         if self._route in self.processors:
             self.processors[self._route].fit_ensemble(
                 ensemble_table,
+                row_positions=row_positions,
                 generator=generator,
             )
 
     def _fit_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
@@ -79,12 +84,14 @@ class TableDispatch(EnsembleProcessor):
             return ensemble_table
         return self.processors[self._route].fit_transform_ensemble(
             ensemble_table,
+            row_positions=row_positions,
             generator=generator,
         )
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
         if self._route is None:
             raise RuntimeError(
@@ -93,7 +100,9 @@ class TableDispatch(EnsembleProcessor):
             )
         if self._route not in self.processors:
             return ensemble_table
-        return self.processors[self._route].transform_ensemble(ensemble_table)
+        return self.processors[self._route].transform_ensemble(
+            ensemble_table, row_positions=row_positions
+        )
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415

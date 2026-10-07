@@ -13,6 +13,7 @@ from torch import Tensor
 from sdm import Stype, TableTensor
 
 if TYPE_CHECKING:
+    from sdm import EnsembleTable
     from sdm.processing import Sequential
 
 
@@ -36,6 +37,9 @@ class Processor(torch.nn.Module, abc.ABC):
 
     #: Whether this processor requires fitting.
     requires_fit: bool
+
+    #: Whether this processor requires row coordinates for its operations.
+    requires_row_positions: bool = False
 
     _fitted_state: Tensor
 
@@ -127,6 +131,18 @@ class Processor(torch.nn.Module, abc.ABC):
                 "call 'fit()' before."
             )
 
+    def _check_row_positions(
+        self, table: TableTensor, row_positions: Tensor | None
+    ) -> None:
+        if row_positions is None:
+            if self.requires_row_positions:
+                raise ValueError(
+                    f"{self.__class__.__name__} requires row_positions"
+                )
+            return
+        if row_positions.shape != (table.size(-2),):
+            raise ValueError("row_positions must have shape [R]")
+
     def _fit(
         self,
         table: TableTensor,
@@ -137,7 +153,21 @@ class Processor(torch.nn.Module, abc.ABC):
 
     @abc.abstractmethod
     def _transform(self, table: TableTensor) -> TableTensor:
-        pass
+        raise NotImplementedError
+
+    def _fit_with_positions(
+        self,
+        table: TableTensor,
+        row_positions: Tensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        self._fit(table, generator=generator)
+
+    def _transform_with_positions(
+        self, table: TableTensor, row_positions: Tensor
+    ) -> TableTensor:
+        return self._transform(table)
 
     def _fit_transform(
         self,
@@ -149,30 +179,59 @@ class Processor(torch.nn.Module, abc.ABC):
             self._fit(table, generator=generator)
         return self._transform(table)
 
+    def _fit_transform_with_positions(
+        self,
+        table: TableTensor,
+        row_positions: Tensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        if (
+            not self.requires_row_positions
+            and type(self)._fit_with_positions is Processor._fit_with_positions
+            and type(self)._transform_with_positions
+            is Processor._transform_with_positions
+        ):
+            return self._fit_transform(table, generator=generator)
+        if self.requires_fit:
+            self._fit_with_positions(table, row_positions, generator=generator)
+        return self._transform_with_positions(table, row_positions)
+
     def fit(
         self,
         table: TableTensor,
         *,
+        row_positions: Tensor | None = None,
         generator: torch.Generator | None = None,
     ) -> Self:
-        r"""Fit the processor.
+        """Fit the processor.
 
         Args:
             table: The table used to compute the processor state.
+            row_positions: Shared row coordinates with shape ``[R]``.
             generator: Pseudorandom number generator used for sampling.
         """
         if not table.active_stypes & self.handles_stypes:
             return self
         if self.requires_fit:
-            self._fit(table, generator=generator)
+            self._check_row_positions(table, row_positions)
+            if row_positions is None:
+                self._fit(table, generator=generator)
+            else:
+                self._fit_with_positions(
+                    table, row_positions, generator=generator
+                )
             self._set_fitted(table.device)
         return self
 
-    def transform(self, table: TableTensor) -> TableTensor:
-        r"""Transform ``table``.
+    def transform(
+        self, table: TableTensor, *, row_positions: Tensor | None = None
+    ) -> TableTensor:
+        """Transform the table.
 
         Args:
             table: The table to transform.
+            row_positions: Shared row coordinates with shape ``[R]``.
 
         Returns:
             The transformed table.
@@ -180,22 +239,34 @@ class Processor(torch.nn.Module, abc.ABC):
         if not table.active_stypes & self.handles_stypes:
             return table
         self._check_is_fitted()
-        return self._transform(table)
+        self._check_row_positions(table, row_positions)
+        if row_positions is None:
+            return self._transform(table)
+        return self._transform_with_positions(table, row_positions)
 
-    def forward(self, table: TableTensor) -> TableTensor:
-        r"""Alias of :meth:`transform`."""
-        return self.transform(table)
+    def forward(
+        self, table: TableTensor, *, row_positions: Tensor | None = None
+    ) -> TableTensor:
+        """Alias of transform.
+
+        Args:
+            table: The table to transform.
+            row_positions: Shared row coordinates with shape ``[R]``.
+        """
+        return self.transform(table, row_positions=row_positions)
 
     def fit_transform(
         self,
         table: TableTensor,
         *,
+        row_positions: Tensor | None = None,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        r"""Fit the processor and transform ``table``.
+        """Fit the processor and transform the table.
 
         Args:
             table: The table to fit on and transform.
+            row_positions: Shared row coordinates with shape ``[R]``.
             generator: Pseudorandom number generator used for sampling.
 
         Returns:
@@ -203,7 +274,13 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         if not table.active_stypes & self.handles_stypes:
             return table
-        out = self._fit_transform(table, generator=generator)
+        self._check_row_positions(table, row_positions)
+        if row_positions is None:
+            out = self._fit_transform(table, generator=generator)
+        else:
+            out = self._fit_transform_with_positions(
+                table, row_positions, generator=generator
+            )
         if self.requires_fit:
             self._set_fitted(table.device)
         return out
@@ -230,25 +307,65 @@ class Processor(torch.nn.Module, abc.ABC):
         return f"{' ' * indent}{self.__class__.__name__}()"
 
 
+class RowPositionMixin:
+    """Require shared row coordinates for a position-aware processor.
+
+    Implement the positioned transform hook and any needed fit or inverse
+    hooks on the processor.
+    """
+
+    requires_row_positions = True
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        raise ValueError(f"{self.__class__.__name__} requires row_positions")
+
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        raise ValueError(f"{self.__class__.__name__} requires row_positions")
+
+    def _transform_ensemble(
+        self, ensemble_table: EnsembleTable
+    ) -> EnsembleTable:
+        raise ValueError(f"{self.__class__.__name__} requires row_positions")
+
+    def _inverse_transform_ensemble(
+        self, ensemble_table: EnsembleTable
+    ) -> EnsembleTable:
+        raise ValueError(f"{self.__class__.__name__} requires row_positions")
+
+
 class InvertibleMixin(abc.ABC):
-    r"""Extend a :class:`Processor` by an inverse transformation."""
+    """Extend a Processor by an inverse transformation."""
 
     @abc.abstractmethod
     def _inverse_transform(self, table: TableTensor) -> TableTensor: ...
 
-    def inverse_transform(self, table: TableTensor) -> TableTensor:
-        r"""Apply the inverse transformation to ``table``.
+    def _inverse_transform_with_positions(
+        self, table: TableTensor, row_positions: Tensor
+    ) -> TableTensor:
+        return self._inverse_transform(table)
+
+    def inverse_transform(
+        self, table: TableTensor, *, row_positions: Tensor | None = None
+    ) -> TableTensor:
+        """Apply the inverse transformation to the table.
 
         Args:
             table: The table in transformed representation.
+            row_positions: Shared row coordinates with shape ``[R]``.
 
         Returns:
-            The table restored to the representation before
-            :meth:`~Processor.transform`.
+            The table restored to its prior representation.
         """
         self._check_is_fitted()
-        return self._inverse_transform(table)
+        self._check_row_positions(table, row_positions)
+        if row_positions is None:
+            return self._inverse_transform(table)
+        return self._inverse_transform_with_positions(table, row_positions)
 
     if TYPE_CHECKING:
-        # Provided at runtime by `Processor` via the MRO.
+        # Provided at runtime by Processor via the MRO.
         def _check_is_fitted(self) -> None: ...
+
+        def _check_row_positions(
+            self, table: TableTensor, row_positions: Tensor | None
+        ) -> None: ...

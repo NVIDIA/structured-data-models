@@ -4,6 +4,7 @@
 from typing import cast
 
 import torch
+from torch import Tensor
 from torch.nn import ModuleDict
 
 from sdm import EnsembleTable, Stype
@@ -12,9 +13,12 @@ from sdm.processing import (
     EnsembleProcessor,
     Processor,
 )
+from sdm.processing.common._positions import _ForwardEnsemblePositions
 
 
-class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
+class StypeDispatch(
+    _ForwardEnsemblePositions, EnsembleProcessor, EnsembleInvertibleMixin
+):
     r"""Apply separate processor pipelines to columns grouped by semantic type.
 
     For each configured route, matching columns from a
@@ -98,6 +102,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -105,12 +110,14 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         for stype in self._active_routes:
             self.processors[stype].fit_ensemble(
                 ensemble_table.select_stypes(stype),
+                row_positions=row_positions,
                 generator=generator,
             )
 
     def _fit_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
@@ -118,6 +125,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         outputs = [
             self.processors[stype].fit_transform_ensemble(
                 ensemble_table.select_stypes(stype),
+                row_positions=row_positions,
                 generator=generator,
             )
             for stype in self._active_routes
@@ -130,6 +138,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
         active_routes = self._active_routes
         if not self.requires_fit or active_routes is None:
@@ -137,7 +146,8 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             self._active_routes = active_routes
         outputs = [
             self.processors[stype].transform_ensemble(
-                ensemble_table.select_stypes(stype)
+                ensemble_table.select_stypes(stype),
+                row_positions=row_positions,
             )
             for stype in active_routes
         ]
@@ -149,6 +159,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
+        row_positions: Tensor | None = None,
     ) -> EnsembleTable:
         active_routes = self._active_routes
         if not self.requires_fit or active_routes is None:
@@ -165,7 +176,8 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             # TODO This is wrong. A processor may not map to same stype back!
             outputs.append(
                 processor.inverse_transform_ensemble(
-                    ensemble_table.select_stypes(stype)
+                    ensemble_table.select_stypes(stype),
+                    row_positions=row_positions,
                 )
             )
 
