@@ -5,7 +5,6 @@ import argparse
 import math
 from typing import Any, cast
 
-import numpy as np
 import pandas as pd
 import relbench
 import torch
@@ -94,7 +93,7 @@ left = pd.DataFrame(
 for lag in range(1, args.num_lags + 1):
     column = f"{task.target_col}_lag_{lag}"
     if task.task_type == relbench.base.TaskType.REGRESSION:
-        df[column] = np.nan
+        df[column] = float("NaN")
     else:
         df[column] = pd.Series(pd.NA, index=df.index, dtype="object")
 
