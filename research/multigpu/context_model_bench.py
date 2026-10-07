@@ -70,6 +70,9 @@ def main() -> None:
         "--precision", choices=["float32", "bfloat16"], default="bfloat16"
     )
     parser.add_argument("--profile", action="store_true")
+    parser.add_argument(
+        "--source-commit", help="Revision for archive deployments"
+    )
     args = parser.parse_args()
     rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(rank)
@@ -270,9 +273,14 @@ def main() -> None:
                 "world": world,
                 "gpu": torch.cuda.get_device_name(),
                 "torch": torch.__version__,
-                "revision": subprocess.check_output(
-                    ["git", "rev-parse", "HEAD"], text=True
-                ).strip(),
+                "revision": args.source_commit
+                or subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                ).stdout.strip()
+                or "unknown",
                 "ranks": gathered,
                 "slowest_rank_pass_seconds": slowest,
                 "unique_rows_per_second": [
