@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
 from torch.utils import _pytree as pytree
 from typing_extensions import override
 
@@ -349,7 +350,7 @@ class CategoricalTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["code"]
+        attrs = ["_code", "code"]
         attrs.extend(f"_category_{i}" for i in range(len(self._categories)))
         return attrs, (self.__class__, len(self._categories))
 
@@ -367,6 +368,11 @@ class CategoricalTensor(Tensor):
                 inner_tensors[f"_category_{i}"] for i in range(num_categories)
             ),
         )
+
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        if is_fake(self):
+            return f"{self.__class__.__name__}(size={tuple(self.shape)})"
+        return super().__repr__(tensor_contents=tensor_contents)
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._code, self._categories)
