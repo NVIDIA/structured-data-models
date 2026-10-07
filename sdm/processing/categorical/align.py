@@ -337,6 +337,7 @@ class AlignCategories(EnsembleProcessor):
         fitted_categories: tuple[Tensor, ...],
         codes: Tensor,
     ) -> tuple[Tensor, ...]:
+        # Compiled graphs keep the external Arrow/cuDF join opaque.
         if not torch.compiler.is_compiling():
             return AlignCategories._string_category_lookups_eager(
                 input_categories=input_categories,

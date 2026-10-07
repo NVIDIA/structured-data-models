@@ -504,3 +504,20 @@ def test_align_categories_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output[member_id].equal(expected_query)
         assert fitted_query_output[member_id].equal(expected_query)
+
+
+@pytest.mark.parametrize("fullgraph", [False, True])
+def test_align_string_lookup_compile(fullgraph: bool) -> None:
+    inputs = StringTensor.from_list(
+        ["pad", "red", "skip", "new", "skip", "blue"]
+    )
+    fitted = StringTensor.from_list(["pad", "blue", "skip", "red"])
+    compiled = torch.compile(
+        AlignCategories._string_category_lookups,
+        fullgraph=fullgraph,
+    )
+    codes = torch.empty(0, dtype=torch.int32)
+    actual = compiled((inputs[1::2],), (fitted[1::2],), codes)
+    torch.testing.assert_close(
+        actual[0], torch.tensor([1, -1, 0], dtype=codes.dtype)
+    )
