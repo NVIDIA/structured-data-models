@@ -55,3 +55,25 @@
 {"check": "string_order_operator_214", "source": "9f673e44a", "opcheck": {"test_schema": "SUCCESS", "test_autograd_registration": "SUCCESS", "test_faketensor": "SUCCESS", "test_aot_dispatch_dynamic": "SUCCESS"}}
 {"check": "relbench_driver_alignment", "source": "9f673e44a", "version": "2.14.0", "fullgraph": false, "status": "pass"}
 {"check": "relbench_driver_alignment", "source": "9f673e44a", "version": "2.14.0", "fullgraph": true, "status": "fail", "error": "Could not guard on data-dependent expression u1 <= 2147483647 (unhinted: u1 <= 2147483647).  (Size-like symbols: u1)"}
+{"check": "relbench_driver_bounded_selection", "source": "3b8b0204d", "version": "2.14.0", "case": "relbench_drivers", "fullgraph": false, "sort_by": "code", "status": "pass"}
+{"check": "relbench_driver_bounded_selection", "source": "3b8b0204d", "version": "2.14.0", "case": "relbench_drivers", "fullgraph": false, "sort_by": "frequency", "status": "pass"}
+{"check": "relbench_driver_bounded_selection", "source": "3b8b0204d", "version": "2.14.0", "case": "relbench_drivers", "fullgraph": false, "sort_by": "value", "status": "pass"}
+{"check": "relbench_driver_bounded_selection", "source": "3b8b0204d", "version": "2.14.0", "case": "relbench_drivers", "fullgraph": true, "sort_by": "code", "status": "pass"}
+{"check": "relbench_driver_bounded_selection", "source": "3b8b0204d", "version": "2.14.0", "case": "relbench_drivers", "fullgraph": true, "sort_by": "frequency", "status": "pass"}
+{"check": "relbench_driver_bounded_selection", "source": "3b8b0204d", "version": "2.14.0", "case": "relbench_drivers", "fullgraph": true, "sort_by": "value", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": false, "fullgraph": false, "order": "value", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": false, "fullgraph": false, "order": "code", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": false, "fullgraph": false, "order": "frequency", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": false, "fullgraph": true, "order": "value", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": false, "fullgraph": true, "order": "code", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": false, "fullgraph": true, "order": "frequency", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": true, "fullgraph": false, "order": "value", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": true, "fullgraph": false, "order": "code", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": true, "fullgraph": false, "order": "frequency", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": true, "fullgraph": true, "order": "value", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": true, "fullgraph": true, "order": "code", "status": "pass"}
+{"check": "all_observed_before_packing", "source": "3b8b0204d", "strings": true, "fullgraph": true, "order": "frequency", "status": "pass"}
+{"check": "all_observed_int32", "source": "3b8b0204d", "strings": true, "fullgraph": false, "order": "value", "status": "pass"}
+{"check": "all_observed_int32", "source": "3b8b0204d", "strings": true, "fullgraph": true, "order": "value", "status": "pass"}
+{"check": "all_observed_int64_layout_restored", "source": "3b8b0204d", "strings": true, "fullgraph": false, "order": "value", "status": "pass"}
+{"check": "all_observed_int64_layout_restored", "source": "3b8b0204d", "strings": true, "fullgraph": true, "order": "value", "status": "pass"}

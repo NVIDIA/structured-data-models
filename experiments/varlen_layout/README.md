@@ -1,3 +1,5 @@
+> Follow-up: the alias-reconstruction change described below was reverted on this branch by `c31f252ed`. Retaining the exact flattened layout leaf is necessary for Dynamo source guards in partial-graph categorical fitting. Canonical physical aliasing alone is insufficient. See `../compile_categorical_fit/README.md` for the reproducing case.
+
 # Preserve variable-length tensor layouts
 
 `VarLenTensor` and its `StringTensor` subclass have logical shape/strides separate from the byte payload and offsets. Their previous flatten context retained scalar layout metadata. With dynamic input sizes, PyTorch 2.7.1 reconstructed a stacked output with an incorrect stride: `(7, 2, 1)` instead of `(4, 2, 1)` after the row count changed from 4 to 7.
