@@ -1,15 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
 from typing import Any, cast
 
 import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import Recipe, Stype, TableTensor
+from sdm import CategoricalTensor, Recipe, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.models import EnsembleParallel, ICLModel
+from sdm.models import EnsembleParallel, ICLModel, KumoTabular
+from sdm.models.kumo.tabular.model import MODEL_KWARGS
 
 
 class _RandomCacheModel(ICLModel):
@@ -47,7 +49,7 @@ class _RandomCacheModel(ICLModel):
             return x_context
         assert x_query is not None
         return TableTensor(
-            numerical=x_query.numerical[..., :1]
+            numerical=x_query.numerical[..., :1] * self.weight
             + cast(torch.Tensor, cache["bias"])
         )
 
@@ -101,6 +103,81 @@ def test_duplicate_replica_rejected() -> None:
         EnsembleParallel([model, model])
 
 
+@pytest.mark.parametrize("replicas", [1, 2, 4])
+def test_kumo_ecoc_and_class_permutations(
+    replicas: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        MODEL_KWARGS,
+        "small",
+        {
+            "cell_channels": 8,
+            "num_embedding_layers": 1,
+            "num_embedding_heads": 2,
+            "num_inducing_points": 4,
+            "group_size": 2,
+            "num_frequencies": 2,
+            "num_readout_tokens": 2,
+            "icl_channels": 16,
+            "num_icl_layers": 1,
+            "num_icl_heads": 2,
+            "num_icl_key_value_heads_for_query": None,
+        },
+    )
+    model = KumoTabular(task="classification", size="small", pretrained=False)
+    for parameter in model.parameters():
+        if not parameter.any():
+            torch.nn.init.normal_(parameter, std=0.1)
+    x = torch.randn(24, 4)
+    y = TableTensor(
+        categorical=CategoricalTensor.from_tensor(
+            torch.arange(24).remainder(12).view(-1, 1) * 10
+        )
+    )
+    recipe = Recipe(
+        features=sp.ShuffleColumns(),
+        target=sp.ShuffleCategories(),
+        output=[sp.AverageEstimators(), sp.Softmax()],
+    )
+    with EnsembleParallel([copy.deepcopy(model)]) as serial:
+        serial.fit(
+            x,
+            y,
+            num_estimators=5,
+            recipe=recipe,
+            generator=torch.Generator().manual_seed(4),
+            member_seed=42,
+        )
+        expected = serial.predict(x[:4])
+        codebooks = [
+            cast(torch.Tensor, c["ecoc_codebook"]).clone()
+            for c in serial._caches
+        ]
+    with EnsembleParallel(
+        [copy.deepcopy(model) for _ in range(replicas)]
+    ) as parallel:
+        for _ in range(2):
+            parallel.fit(
+                x,
+                y,
+                num_estimators=5,
+                recipe=recipe,
+                generator=torch.Generator().manual_seed(4),
+                member_seed=42,
+            )
+            actual = parallel.predict(x[:4])
+            assert actual.columns == expected.columns
+            torch.testing.assert_close(
+                actual.numerical, expected.numerical, rtol=0, atol=0
+            )
+            for cache, codebook in zip(
+                parallel._caches, codebooks, strict=True
+            ):
+                torch.testing.assert_close(
+                    cache["ecoc_codebook"], codebook, rtol=0, atol=0
+                )
+
+
 @pytest.mark.skipif(
     torch.cuda.device_count() < 2, reason="needs two CUDA GPUs"
 )
@@ -133,3 +210,35 @@ def test_cuda_caller_stream_and_autocast() -> None:
             torch.testing.assert_close(
                 actual.numerical, expected.numerical, rtol=0, atol=0
             )
+
+
+@pytest.mark.skipif(
+    torch.cuda.device_count() < 2, reason="needs two CUDA GPUs"
+)
+def test_cuda_replica_initialization_and_changed_caller_stream() -> None:
+    stream0 = torch.cuda.Stream(device="cuda:0")
+    stream1 = torch.cuda.Stream(device="cuda:1")
+    with torch.cuda.stream(stream1), torch.no_grad():
+        remote = _RandomCacheModel("cuda:1")
+        torch.cuda._sleep(10_000_000)
+        remote.weight.fill_(2)
+        local = _RandomCacheModel("cuda:0")
+        local.weight.fill_(2)
+        executor = EnsembleParallel([local, remote])
+    with executor:
+        with torch.cuda.stream(stream0):
+            x = torch.arange(24.0, device="cuda:0").view(8, 3)
+            y = torch.arange(8.0, device="cuda:0").view(-1, 1)
+            executor.fit(x, y, recipe=Recipe(), num_estimators=4)
+            ready = torch.cuda.Event()
+            ready.record(stream0)
+        with torch.cuda.stream(torch.cuda.Stream(device="cuda:0")):
+            torch.cuda.current_stream().wait_event(ready)
+            actual = executor.predict(x).numerical.cpu()
+        serial_model = _RandomCacheModel("cuda:0")
+        with torch.no_grad():
+            serial_model.weight.fill_(2)
+        with EnsembleParallel([serial_model]) as serial:
+            serial.fit(x.cpu(), y.cpu(), recipe=Recipe(), num_estimators=4)
+            expected = serial.predict(x.cpu()).numerical
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)

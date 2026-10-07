@@ -29,7 +29,7 @@ T = TypeVar("T")
 class EnsembleParallel:
     """Run independent ensemble members on explicitly placed model replicas.
 
-    Preprocessing and output reduction run once on the input device. Member
+    Preprocessing and output reduction run once on the input device.
     Member ``i`` retains its cache on replica ``i % len(replicas)``.
     Calls are synchronous and must not overlap on the same executor. Replicas
     must have identical weights and remain unchanged while fitted.
@@ -48,6 +48,9 @@ class EnsembleParallel:
         self.devices = tuple(
             next(model.parameters()).device for model in replicas
         )
+        cuda_devices = [d for d in self.devices if d.type == "cuda"]
+        if len(set(cuda_devices)) != len(cuda_devices):
+            raise ValueError("Use one replica per CUDA device")
         self._workers = tuple(
             ThreadPoolExecutor(max_workers=1) for _ in replicas
         )
@@ -55,6 +58,9 @@ class EnsembleParallel:
             torch.cuda.Stream(device=device) if device.type == "cuda" else None
             for device in self.devices
         )
+        for device, stream in zip(self.devices, self._streams, strict=True):
+            if stream is not None:
+                stream.wait_stream(torch.cuda.current_stream(device))
         self._execution: RecipeExecution | None = None
         self._caches: list[Cache] = []
         self._kwargs: dict[str, Any] = {}
@@ -267,6 +273,11 @@ class EnsembleParallel:
             return output.to(x.device, non_blocking=True)
 
         outputs = self._dispatch(predict_member, len(queries), x.device)
+        if x.device.type == "cuda":
+            stream = torch.cuda.current_stream(x.device)
+            for output in outputs:
+                for tensor in output._tensors():
+                    tensor.record_stream(stream)
         with (
             torch.inference_mode(),
             torch.autocast(x.device.type, enabled=False),
