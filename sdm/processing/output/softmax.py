@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import math
-
 import torch
 
 from sdm import Stype, TableTensor
@@ -16,7 +14,7 @@ class Softmax(Processor):
     dimensions, so it supports both stacked and reduced estimator outputs.
 
     Args:
-        temperature: Finite, positive divisor applied to logits before softmax;
+        temperature: Positive divisor applied to logits before softmax;
             higher values produce a softer distribution.
     """
 
@@ -29,8 +27,8 @@ class Softmax(Processor):
         temperature: float = 1.0,
     ) -> None:
         super().__init__()
-        if not math.isfinite(temperature) or temperature <= 0:
-            raise ValueError("temperature must be finite and positive.")
+        if temperature <= 0:
+            raise ValueError("temperature must be positive.")
         self.temperature = temperature
 
     def _transform(self, table: TableTensor) -> TableTensor:
