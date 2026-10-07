@@ -156,6 +156,9 @@ def main() -> None:
         "--precision", choices=["float32", "bfloat16"], default="bfloat16"
     )
     parser.add_argument("--profile", action="store_true")
+    parser.add_argument(
+        "--query-residency", choices=["cpu", "gpu"], default="gpu"
+    )
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     devices = [f"cuda:{i}" for i in range(args.gpus)]
@@ -249,7 +252,11 @@ def main() -> None:
 
         def transfer() -> tuple[TableTensor, TableTensor, TableTensor]:
             context = TableTensor.from_tensor(x_context.to(devices[0]))
-            query = TableTensor.from_tensor(x_query.to(devices[0]))
+            query = TableTensor.from_tensor(
+                x_query.to(
+                    devices[0] if args.query_residency == "gpu" else "cpu"
+                )
+            )
             if args.task == "classification":
                 labels = TableTensor(
                     columns={Stype.categorical: ["target"]},
@@ -327,6 +334,9 @@ def main() -> None:
             report["member_seeds"] = list(model.member_seeds)
         batches = list(query.split(args.batch_size))
 
+        def predict_batch(batch: TableTensor) -> TableTensor:
+            return model.predict(batch.to(devices[0]))
+
         def predict_pass() -> tuple[torch.Tensor, list[float]]:
             if hasattr(model, "predict_batches"):
                 outputs = model.predict_batches(batches)
@@ -337,7 +347,7 @@ def main() -> None:
             outputs, times = [], []
             for batch in batches:
                 output, elapsed = timed(
-                    lambda batch=batch: model.predict(batch), devices
+                    lambda batch=batch: predict_batch(batch), devices
                 )
                 report["prediction_columns"] = list(
                     output.columns[Stype.numerical]
@@ -355,7 +365,7 @@ def main() -> None:
                         devices,
                     )
                 else:
-                    timed(lambda: model.predict(batches[0]), devices)
+                    timed(lambda: predict_batch(batches[0]), devices)
             report["warmup_s"] = time.perf_counter() - warmup_start
             for device in devices:
                 torch.cuda.reset_peak_memory_stats(device)
@@ -415,7 +425,7 @@ def main() -> None:
                             devices,
                         )
                     else:
-                        timed(lambda: model.predict(batches[0]), devices)
+                        timed(lambda: predict_batch(batches[0]), devices)
                 profiler.export_chrome_trace(str(args.output / "trace.json"))
                 (args.output / "profile.txt").write_text(
                     profiler.key_averages().table(
