@@ -230,7 +230,13 @@ class KumoTabular(ICLModel):
             categorical_mask=categorical_mask,
         )
         return TableTensor(
-            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
+            columns={
+                Stype.numerical: (
+                    cast(tuple[str, ...], cache["class_columns"])
+                    if cache is not None and "class_columns" in cache
+                    else tuple(str(value) for value in classes.tolist())
+                )
+            },
             numerical=out,
         )
 

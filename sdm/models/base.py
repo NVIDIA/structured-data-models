@@ -297,6 +297,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         else None
                     ),
                     class_values=class_values[batch],
+                    class_columns=(
+                        tuple(
+                            str(value)
+                            for value in context.y.categorical.categories[
+                                0
+                            ].tolist()
+                        )
+                        if context.y.categorical.size(-1) > 0
+                        else None
+                    ),
                     categorical_mask=categorical_mask,
                 )
                 self._forward(
