@@ -68,7 +68,7 @@ No GPU performance or memory improvement is claimed. The branch's change removes
 
 ## Integrated public-method results
 
-Combining this branch with the initial container and processor-applicability fixes produces these results. The exact commit list is in `evidence/categorical-compilation/integration-results.json`; it is a snapshot of those patches, not a claim about future revisions.
+Combining this branch with the initial container and processor-applicability fixes produces these results. The exact commit list is in `evidence/categorical-compilation/integration-results.jsonl`; it is a snapshot of those patches, not a claim about future revisions.
 
 | Public operation | 2.14, graph breaks allowed | 2.14, fullgraph | 2.7.1 |
 |---|---|---|---|
