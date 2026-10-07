@@ -7,8 +7,25 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Self
 
+from torch.nn import Module
+
 import sdm.processing as sp
 from sdm.processing import EnsembleProcessor, Processor
+
+
+def _contains_processor(module: Module, processor_type: type[Processor]) -> bool:
+    # Read registered children directly so newly built recipes can be traced.
+    pending = [module]
+    visited = set()
+    while pending:
+        child = pending.pop()
+        if child in visited:
+            continue
+        visited.add(child)
+        if isinstance(child, processor_type):
+            return True
+        pending.extend(m for m in child._modules.values() if m is not None)
+    return False
 
 
 @dataclass(init=False, repr=False)
@@ -84,11 +101,11 @@ class Recipe:
             processor = sp.Identity()
         self._target = EnsembleProcessor.as_processor(processor)
 
-        if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
+        if _contains_processor(self.target, sp.TaskDispatch):
             raise ValueError(
                 "'TaskDispatch' is not supported in 'Recipe.target'"
             )
-        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+        if _contains_processor(self.target, sp.TableDispatch):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.target'"
             )
@@ -107,7 +124,7 @@ class Recipe:
             processor = sp.Identity()
         self._output = EnsembleProcessor.as_processor(processor)
 
-        if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
+        if _contains_processor(self.output, sp.TableDispatch):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.output'"
             )
