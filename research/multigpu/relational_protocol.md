@@ -52,11 +52,13 @@ python research/multigpu/relational_bench.py prepare \
   --output /results/workload-hm-c1024-b250
 
 python research/multigpu/relational_bench.py run \
+  --source-commit SOURCE_COMMIT \
   --workload /results/workload-hm-c1024-b250 \
   --mode native --gpus 1 --estimators 4 --repeats 3 --warmups 1 \
   --output /results/hm-native-e4
 
 python research/multigpu/relational_bench.py run \
+  --source-commit SOURCE_COMMIT \
   --workload /results/workload-hm-c1024-b250 \
   --mode ensemble --gpus 4 --estimators 4 --repeats 3 --warmups 1 \
   --profile --output /results/hm-ensemble4-e4
