@@ -1,8 +1,8 @@
 # Preprocessing compilation investigation
 
-**Status: active.** Experimental branches now compile useful public prediction and fitting paths. They are not merged support, and CUDA validation is in progress on one automatically terminating L4 Spot instance. The first 2.14 relational fullgraph run fails in Inductor graph ordering; CPU results do not establish CUDA support.
+**Status: active.** Experimental branches now compile useful public prediction and fitting paths. They are not merged support, and CUDA validation is in progress on one automatically terminating L4 Spot instance. On 2.14/L4, Tabular public prediction passes both graph modes; the first relational fullgraph run fails in Inductor CUDA stream ordering. A resident-cache transfer fix is being tested.
 
-Baseline main: `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`. All results below use actual CPU Inductor, not the eager tracing backend. Eager and compiled comparisons use the same data, weights and datatype. Prediction tolerances remain atol=1e-5, rtol=1e-4.
+Baseline main: `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`. Results are labeled CPU or CUDA; successful compilation claims use actual Inductor unless explicitly marked as tracing diagnostics. Eager and compiled comparisons use the same data, weights and datatype. Prediction tolerances remain atol=1e-5, rtol=1e-4.
 
 ## What is being compiled
 
@@ -84,8 +84,14 @@ These branches overlap. Integration branches contain their prerequisites; they a
 | [compile/recipe-preparation](https://github.com/NVIDIA/structured-data-models/tree/compile/recipe-preparation) | Recipe construction and packing foundations |
 | [compile/dynamic-table-neighborhoods](https://github.com/NVIDIA/structured-data-models/tree/compile/dynamic-table-neighborhoods) | Preserve symbolic table sizes and shape-compatible ensemble packing; keep the native CSR kernel behind a symbolic-size operator |
 | [compile/preserve-linear-bmm](https://github.com/NVIDIA/structured-data-models/tree/compile/preserve-linear-bmm) | Preserve eager batched-matmul arithmetic in the compiled strided-output path; residual Inductor differences remain |
-| [compile/tensor-subclass-cache](https://github.com/NVIDIA/structured-data-models/tree/compile/tensor-subclass-cache) | Unsafe experiment pending correction: independent review found a storage-alias cache collision that returns incorrect values |
+| [compile/tensor-subclass-cache](https://github.com/NVIDIA/structured-data-models/tree/compile/tensor-subclass-cache) | Experimental 2.14 persistent-cache metadata hashing; alias coverage under review, and a separate upstream plain-Tensor AOT cache mutation bug remains |
 | [experiment/kumotabular-predict-compile-cpu](https://github.com/NVIDIA/structured-data-models/tree/experiment/kumotabular-predict-compile-cpu) | Timing, graph counts, cold-call costs and exact prediction-quality evidence |
+
+## Initial CUDA result
+
+On an L4 Spot GPU, PyTorch 2.14.0+cu130, source `c75ba3af6`, Tabular classification public prediction passes both graph policies on query rows 32→128→32, with FP32 weights and autocast disabled. Maximum difference is 1.52e-6. With 32 context rows and 128 query rows, warm wall latency is approximately 17.0 ms eager versus 4.3 ms compiled; peak allocated memory is 166.8 versus 158.6 MiB (additional live allocations 25.5 versus 17.3 MiB). These are initial small-context measurements; larger-context and BF16 validation are still running.
+
+Relational public fullgraph compilation fails on the same runtime with `Argument '_tensor_constant9' of Node 'control_deps' was used before it has been defined`. A small PyTorch-only reproduction identifies a graph-ordering bug around CUDA stream waits. A candidate skips unnecessary transfer work for already-resident caches while retaining asynchronous transfer for offloaded caches and allocator lifetime tracking. It is not yet a validated GPU fix.
 
 ## Suggested production changes
 
@@ -105,7 +111,7 @@ The relative-time/internal-model changes are separate from public preprocessing 
 - Validate custom operations on CUDA/cuDF, memory use and warm/cold latency. One L4 Spot instance is running with automatic termination and explicit cleanup scheduled.
 - Relational public fitting on 2.7 still encounters compiler resume failures. Classification fitting works with a prebuilt recipe; whole-fit speed is not established.
 - Fullgraph fitting still needs support for data-dependent schema decisions and explicit random generators. Removing generators or changing learned categories would alter behavior and is not accepted.
-- Correct the experimental cache hash before any integration: two distinct tensor views sharing storage currently collide with independent storage and can reuse a graph with incorrect mutation semantics. The cache branch is not safe to use in its reviewed form.
+- Complete the experimental cache-hash review before integration. A mutation/aliasing wrong-result reproduction also fails with plain PyTorch tensors and never calls the subclass hook; it is an upstream AOT cache issue. Adding storage topology to the subclass hash cannot fix a cache key that bypasses that hook. A conservative cache bypass is being validated.
 - Review persistent compilation-cache behavior. PyTorch 2.14 supports a metadata-hash hook; 2.7 ignores it and can reuse incompatible artifacts after tensor-flattening code changes. Experiments use fresh, source-specific cache directories; no global cache deletion or production configuration change is required.
 - Keep external Arrow/cuDF work explicit. An opaque operation lets a compiled graph invoke it; it does not turn that external implementation into fused PyTorch kernels.
 
