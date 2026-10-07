@@ -61,6 +61,7 @@ def preserve_autograd_state(fn: Callable) -> Callable:
     caller's scope.
     """
 
+    @torch.compiler.disable(recursive=False)
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         inference_mode_enabled = torch.is_inference_mode_enabled()
