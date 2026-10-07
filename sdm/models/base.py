@@ -102,6 +102,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
         related_query_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
+        context_row_positions: Tensor | None = None,
+        query_row_positions: Tensor | None = None,
         num_estimators: int | None = None,
         estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
@@ -121,6 +123,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
             related_context_tables: Related context for in-context examples.
             related_query_tables: Related context for query examples.
             recipe: The custom recipe for pre- and post-processing.
+            context_row_positions: Shared context row coordinates with
+                shape ``[R_context]``.
+            query_row_positions: Shared query row coordinates with
+                shape ``[R_query]``.
             num_estimators: The number of estimators ``E`` for ensembling.
                 If ``None``, the leading dimension of higher-rank inputs is
                 used as the estimator dimension, allowing input data to be
@@ -168,6 +174,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 x=x_context,
                 y=y_context,
                 related_tables=related_context_tables,
+                row_positions=context_row_positions,
                 num_members=num_estimators,
                 generator=generator,
             )
@@ -178,6 +185,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             queries = recipe_execution.transform(
                 x=x_query,
                 related_tables=related_query_tables,
+                row_positions=query_row_positions,
             )
 
         outs = self._forward_members(
@@ -195,13 +203,19 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 torch.amp.autocast(x_query.device.type, enabled=False),
                 inference_mode("grad" if requires_grad else "inference"),
             ):
-                outs = list(recipe_execution.inverse_transform_target(outs))
+                outs = list(
+                    recipe_execution.inverse_transform_target(
+                        outs, row_positions=query_row_positions
+                    )
+                )
 
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
         ):
-            return recipe_execution.transform_output(outs)
+            return recipe_execution.transform_output(
+                outs, row_positions=query_row_positions
+            )
 
     def fit(
         self,
@@ -210,6 +224,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         related_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
+        context_row_positions: Tensor | None = None,
         num_estimators: int | None = None,
         estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
@@ -228,6 +243,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ``[..., R, 1]``.
             related_tables: Related context for in-context examples.
             recipe: The custom recipe for pre- and post-processing.
+            context_row_positions: Shared context row coordinates with shape
+                ``[R]``.
             num_estimators: The number of estimators ``E`` for ensembling.
                 If ``None``, the leading dimension of higher-rank inputs is
                 used as the estimator dimension, allowing input data to be
@@ -260,6 +277,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 x=x,
                 y=y,
                 related_tables=related_tables,
+                row_positions=context_row_positions,
                 num_members=num_estimators,
                 generator=generator,
             )
@@ -333,6 +351,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         x: Tensor | TableTensor | EnsembleTable,  # [..., R, D]
         related_tables: RelatedTables | None = None,
         *,
+        query_row_positions: Tensor | None = None,
         callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""Predict unseen query examples.
@@ -345,6 +364,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
             x: The feature tensor of query examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
             related_tables: Related context for query examples.
+            query_row_positions: Shared query row coordinates with shape
+                ``[R]``.
             callbacks: Callbacks applied in sequence to this model call.
 
         Returns:
@@ -404,7 +425,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 torch.amp.autocast(x.device.type, enabled=False),
                 inference_mode("no_grad" if requires_grad else "inference"),
             ):
-                queries = recipe_execution.transform(x, related_tables)
+                queries = recipe_execution.transform(
+                    x, related_tables, row_positions=query_row_positions
+                )
 
             if x.is_cuda:
                 assert compute_stream is not None
@@ -479,13 +502,19 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 torch.amp.autocast(x.device.type, enabled=False),
                 inference_mode("grad" if requires_grad else "inference"),
             ):
-                outs = list(recipe_execution.inverse_transform_target(outs))
+                outs = list(
+                    recipe_execution.inverse_transform_target(
+                        outs, row_positions=query_row_positions
+                    )
+                )
 
         with (
             torch.amp.autocast(x.device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
         ):
-            return recipe_execution.transform_output(outs)
+            return recipe_execution.transform_output(
+                outs, row_positions=query_row_positions
+            )
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""

@@ -57,6 +57,7 @@ class RecipeExecution:
         y: Tensor | TableTensor | EnsembleTable,
         related_tables: RelatedTables | None,
         *,
+        row_positions: Tensor | None = None,
         num_members: int | None = None,
         generator: torch.Generator | None = None,
     ) -> tuple[MemberContext, ...]:
@@ -64,7 +65,9 @@ class RecipeExecution:
         # Transform target first to be able to resolve task type. Inverse
         # target transforms require distinct member assignment:
         y = _to_ensemble_table(y, num_members, expand=True)
-        y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
+        y = self.recipe.target.fit_transform_ensemble(
+            y, row_positions=row_positions, generator=generator
+        )
 
         self._num_estimators = num_members
         self._y_locations = y._locations
@@ -129,6 +132,7 @@ class RecipeExecution:
         inputs = _to_ensemble_table(x, num_members)
         x = self.recipe.features.fit_transform_ensemble(
             inputs,
+            row_positions=row_positions,
             generator=generator,
         )
         if len(x) != self.num_members:
@@ -163,10 +167,14 @@ class RecipeExecution:
         self,
         x: Tensor | TableTensor | EnsembleTable,
         related_tables: RelatedTables | None,
+        *,
+        row_positions: Tensor | None = None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
         x = _to_ensemble_table(x, self._num_estimators)
-        x = self.recipe.features.transform_ensemble(x)
+        x = self.recipe.features.transform_ensemble(
+            x, row_positions=row_positions
+        )
         if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
@@ -218,6 +226,8 @@ class RecipeExecution:
     def inverse_transform_target(
         self,
         outputs: Sequence[TableTensor],
+        *,
+        row_positions: Tensor | None = None,
     ) -> tuple[TableTensor, ...]:
         """Invert fitted target transforms on member outputs."""
         assert len(outputs) == self.num_members
@@ -248,12 +258,16 @@ class RecipeExecution:
 
         if not isinstance(self.recipe.target, EnsembleInvertibleMixin):
             raise RuntimeError("Target recipe is not invertible")
-        table = self.recipe.target.inverse_transform_ensemble(table)
+        table = self.recipe.target.inverse_transform_ensemble(
+            table, row_positions=row_positions
+        )
         return tuple(table[i] for i in range(len(table)))
 
     def transform_output(
         self,
         outputs: Sequence[TableTensor],
+        *,
+        row_positions: Tensor | None = None,
     ) -> TableTensor:
         """Apply ``recipe.output`` to member outputs."""
         if len(outputs) == 1:
@@ -270,7 +284,9 @@ class RecipeExecution:
 
             out = torch.stack(list(outputs), dim=0)
 
-        return self.recipe.output.transform(cast(TableTensor, out))
+        return self.recipe.output.transform(
+            cast(TableTensor, out), row_positions=row_positions
+        )
 
 
 def _align_to_fitted_groups(

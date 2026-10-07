@@ -19,7 +19,7 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models.callback import Callback
-from sdm.processing import InvertibleMixin, Processor
+from sdm.processing import InvertibleMixin, Processor, RowPositionMixin
 
 
 @dataclass
@@ -200,6 +200,52 @@ class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
         return table
 
 
+class _PositionOffset(RowPositionMixin, Processor, InvertibleMixin):
+    handles_stypes = frozenset({Stype.numerical})
+    requires_fit = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("offset", torch.tensor(0.0))
+
+    def _fit_with_positions(
+        self,
+        table: TableTensor,
+        row_positions: torch.Tensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        self.offset = (table.numerical - row_positions[..., None]).mean(
+            dim=-2, keepdim=True
+        )
+
+    def _transform_with_positions(
+        self, table: TableTensor, row_positions: torch.Tensor
+    ) -> TableTensor:
+        return table.replace_blocks(
+            numerical=table.numerical - self.offset - row_positions[..., None]
+        )
+
+    def _inverse_transform_with_positions(
+        self, table: TableTensor, row_positions: torch.Tensor
+    ) -> TableTensor:
+        return table.replace_blocks(
+            numerical=table.numerical + self.offset + row_positions[..., None]
+        )
+
+
+class _AddPositions(RowPositionMixin, Processor):
+    handles_stypes = frozenset({Stype.numerical})
+    requires_fit = False
+
+    def _transform_with_positions(
+        self, table: TableTensor, row_positions: torch.Tensor
+    ) -> TableTensor:
+        return table.replace_blocks(
+            numerical=table.numerical + row_positions[..., None]
+        )
+
+
 def _table(
     values: list[float],
     ids: list[int],
@@ -292,6 +338,79 @@ def _fit_draws(
 
     assert _GeneratorRecordingProcessor.generators == [generator] * 4
     return list(_GeneratorRecordingProcessor.draws)
+
+
+@pytest.mark.parametrize("num_estimators", [1, 2])
+def test_model_recipe_uses_positions_for_repeated_predictions(
+    num_estimators: int,
+) -> None:
+    model = _RecordingModel()
+    recipe = sp.Recipe(target=_PositionOffset())
+    x_context = torch.zeros(4, 1)
+    y_context = torch.tensor([[10.0], [11.0], [13.0], [14.0]])
+    x_query = torch.zeros(2, 1)
+    context_positions = torch.tensor([0.0, 1.0, 3.0, 4.0])
+    first_positions = torch.tensor([6.0, 9.0])
+    second_positions = torch.tensor([9.0, 6.0])
+
+    direct = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=recipe,
+        num_estimators=num_estimators,
+        context_row_positions=context_positions,
+        query_row_positions=first_positions,
+    )
+    model.fit(
+        x_context,
+        y_context,
+        recipe=recipe,
+        num_estimators=num_estimators,
+        context_row_positions=context_positions,
+    )
+    first = model.predict(x_query, query_row_positions=first_positions)
+    second = model.predict(x_query, query_row_positions=second_positions)
+
+    expected_first = torch.tensor([[16.0], [19.0]]).expand(
+        num_estimators, -1, -1
+    )
+    expected_second = torch.tensor([[19.0], [16.0]]).expand(
+        num_estimators, -1, -1
+    )
+    torch.testing.assert_close(direct.numerical, expected_first)
+    torch.testing.assert_close(first.numerical, expected_first)
+    torch.testing.assert_close(second.numerical, expected_second)
+
+
+def test_model_recipe_passes_positions_to_features_and_output() -> None:
+    model = _RecordingModel()
+    recipe = sp.Recipe(features=_AddPositions(), output=_AddPositions())
+    x_context = torch.zeros(3, 1)
+    y_context = torch.zeros(3, 1)
+    x_query = torch.zeros(2, 1)
+    context_positions = torch.tensor([0.0, 2.0, 5.0])
+    query_positions = torch.tensor([6.0, 9.0])
+
+    direct = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=recipe,
+        context_row_positions=context_positions,
+        query_row_positions=query_positions,
+    )
+    model.fit(
+        x_context,
+        y_context,
+        recipe=recipe,
+        context_row_positions=context_positions,
+    )
+    cached = model.predict(x_query, query_row_positions=query_positions)
+
+    expected = torch.tensor([[[12.0], [18.0]]])
+    torch.testing.assert_close(direct.numerical, expected)
+    torch.testing.assert_close(cached.numerical, expected)
 
 
 @pytest.mark.parametrize("cached", [False, True])
