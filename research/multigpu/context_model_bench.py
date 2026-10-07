@@ -84,6 +84,11 @@ def main() -> None:
     )
     parser.add_argument("--profile", action="store_true")
     parser.add_argument(
+        "--reduction",
+        choices=["all_reduce", "all_gather"],
+        default="all_reduce",
+    )
+    parser.add_argument(
         "--cache-residency", choices=["default", "resident"], default="default"
     )
     parser.add_argument(
@@ -198,7 +203,9 @@ def main() -> None:
         scope = (
             nullcontext()
             if args.mode == "native"
-            else context_parallel(dist.group.WORLD, kernel=args.kernel)
+            else context_parallel(
+                dist.group.WORLD, kernel=args.kernel, reduction=args.reduction
+            )
         )
         dtype = getattr(torch, args.precision)
         with (

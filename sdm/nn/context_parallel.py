@@ -29,6 +29,10 @@ _Kernel: TypeAlias = Literal["efficient", "flash", "efficient_fp32"]
 _kernel: ContextVar[_Kernel] = ContextVar(
     "context_kernel", default="efficient"
 )
+_Reduction: TypeAlias = Literal["all_reduce", "all_gather"]
+_reduction: ContextVar[_Reduction] = ContextVar(
+    "context_reduction", default="all_reduce"
+)
 
 
 @contextmanager
@@ -36,6 +40,7 @@ def context_parallel(
     group: dist.ProcessGroup,
     *,
     kernel: _Kernel = "efficient",
+    reduction: _Reduction = "all_reduce",
 ) -> Iterator[None]:
     """Shard fitted ICL caches and combine predictions across ``group``.
 
@@ -46,6 +51,8 @@ def context_parallel(
     CUDA FP16/BF16. The default efficient kernel also supports FP32.
     ``kernel="efficient_fp32"`` preserves autocast's Q/K/V quantization but
     computes local outputs and their distributed merge in FP32.
+    ``reduction="all_gather"`` trades larger communication and temporary
+    storage for one collective per layer instead of two all-reductions.
     """
     if torch.is_grad_enabled():
         raise RuntimeError(
@@ -53,11 +60,13 @@ def context_parallel(
         )
     token = _group.set(group)
     kernel_token = _kernel.set(kernel)
+    reduction_token = _reduction.set(reduction)
     try:
         yield
     finally:
         _group.reset(token)
         _kernel.reset(kernel_token)
+        _reduction.reset(reduction_token)
 
 
 def shard_cached_context(
@@ -204,6 +213,7 @@ def context_parallel_attention(
     group: dist.ProcessGroup,
     scale: float | None = None,
     kernel: _Kernel | None = None,
+    reduction: _Reduction | None = None,
 ) -> Tensor:
     """Combine local KV attention using stable FP32 all-reductions.
 
@@ -215,11 +225,27 @@ def context_parallel_attention(
     out, lse = partial_attention(query, key, value, scale=scale, kernel=kernel)
     if dist.get_world_size(group) == 1 or out.numel() == 0:
         return out
+    reduction = _reduction.get() if reduction is None else reduction
+    dtype = torch.float64 if out.dtype == torch.float64 else torch.float32
+    if reduction == "all_gather":
+        packed = torch.cat((out.to(dtype), lse.unsqueeze(-1)), dim=-1)
+        gathered = packed.new_empty(dist.get_world_size(group), packed.numel())
+        dist.all_gather_into_tensor(
+            gathered.flatten(), packed.flatten(), group=group
+        )
+        gathered = gathered.view(-1, *packed.shape)
+        normalizers = gathered[..., -1]
+        maximum = normalizers.amax(dim=0).nan_to_num(neginf=0)
+        weights = (normalizers - maximum).exp()
+        numerator = (gathered[..., :-1] * weights.unsqueeze(-1)).sum(dim=0)
+        denominator = weights.sum(dim=0).unsqueeze(-1)
+        return (numerator / denominator.clamp_min(torch.finfo(dtype).tiny)).to(
+            out.dtype
+        )
     maximum = lse.contiguous().clone()
     dist.all_reduce(maximum, op=dist.ReduceOp.MAX, group=group)
     weight = (lse - maximum.nan_to_num(neginf=0)).exp()
     # Pack numerator and denominator into one SUM collective after MAX.
-    dtype = torch.float64 if out.dtype == torch.float64 else torch.float32
     weighted = out.to(dtype) * weight.unsqueeze(-1)
     combined = torch.cat((weighted, weight.unsqueeze(-1)), dim=-1).contiguous()
     dist.all_reduce(combined, group=group)

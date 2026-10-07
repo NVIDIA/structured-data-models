@@ -31,6 +31,7 @@ def _worker(
     device_type: str = "cpu",
     dtype: torch.dtype = torch.float32,
     kernel: Literal["efficient", "flash", "efficient_fp32"] = "efficient",
+    reduction: Literal["all_reduce", "all_gather"] = "all_reduce",
 ) -> None:
     torch.set_num_threads(1)
     if device_type == "cuda":
@@ -64,6 +65,7 @@ def _worker(
                         v.tensor_split(world, -3)[rank],
                         group=dist.group.WORLD,
                         kernel=kernel,
+                        reduction=reduction,
                     )
                     torch.testing.assert_close(
                         actual, native, atol=atol, rtol=rtol, check_dtype=False
@@ -97,7 +99,9 @@ def _worker(
                 native_cache.freeze()
                 expected = model(query.clone(), y[..., :0], cache=native_cache)
                 cache = Cache()
-                with context_parallel(dist.group.WORLD, kernel=kernel):
+                with context_parallel(
+                    dist.group.WORLD, kernel=kernel, reduction=reduction
+                ):
                     model(x.clone(), y, cache=cache)
                     cache.freeze()
                     actual = model(query.clone(), y[..., :0], cache=cache)
@@ -136,8 +140,11 @@ def _worker(
 
 
 @pytest.mark.parametrize("world", [2, 4])
-def test_distributed_context_attention(tmp_path: Path, world: int) -> None:
-    _run_workers(tmp_path, world, "cpu", torch.float32, "efficient")
+@pytest.mark.parametrize("reduction", ["all_reduce", "all_gather"])
+def test_distributed_context_attention(
+    tmp_path: Path, world: int, reduction: str
+) -> None:
+    _run_workers(tmp_path, world, "cpu", torch.float32, "efficient", reduction)
 
 
 def test_requires_inference() -> None:
@@ -150,24 +157,30 @@ def test_requires_inference() -> None:
 
 @pytest.mark.parametrize("world", [2, 4])
 @pytest.mark.parametrize(
-    ("kernel", "dtype"),
+    ("kernel", "dtype", "reduction"),
     [
-        ("efficient", torch.float32),
-        ("efficient", torch.bfloat16),
-        ("flash", torch.bfloat16),
-        ("efficient_fp32", torch.bfloat16),
+        ("efficient", torch.float32, "all_reduce"),
+        ("efficient", torch.bfloat16, "all_reduce"),
+        ("flash", torch.bfloat16, "all_reduce"),
+        ("efficient_fp32", torch.bfloat16, "all_reduce"),
+        ("flash", torch.bfloat16, "all_gather"),
     ],
 )
 def test_cuda_distributed_context_attention(
-    tmp_path: Path, world: int, dtype: torch.dtype, kernel: str
+    tmp_path: Path, world: int, dtype: torch.dtype, kernel: str, reduction: str
 ) -> None:
     if torch.cuda.device_count() < world:
         pytest.skip(f"Requires {world} CUDA devices")
-    _run_workers(tmp_path, world, "cuda", dtype, kernel)
+    _run_workers(tmp_path, world, "cuda", dtype, kernel, reduction)
 
 
 def _run_workers(
-    tmp_path: Path, world: int, device: str, dtype: torch.dtype, kernel: str
+    tmp_path: Path,
+    world: int,
+    device: str,
+    dtype: torch.dtype,
+    kernel: str,
+    reduction: str,
 ) -> None:
     # Pytest importlib names can collide with Linux's stdlib `test` package.
     # Launch this file directly instead of pickling a pytest-module function.
@@ -185,6 +198,7 @@ def _run_workers(
             device,
             str(dtype).removeprefix("torch."),
             kernel,
+            reduction,
         ],
         env={
             **os.environ,
@@ -202,4 +216,5 @@ if __name__ == "__main__":
         sys.argv[2],
         getattr(torch, sys.argv[3]),
         sys.argv[4],
+        sys.argv[5],
     )

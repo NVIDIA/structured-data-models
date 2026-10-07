@@ -26,6 +26,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
+        "--reduction",
+        choices=["all_reduce", "all_gather"],
+        default="all_reduce",
+    )
+    parser.add_argument(
         "--kernel",
         choices=["efficient", "flash", "efficient_fp32"],
         default="efficient",
@@ -92,7 +97,9 @@ def main() -> None:
                 scope = (
                     nullcontext()
                     if mode == "native_sdpa"
-                    else context_parallel(group, kernel=args.kernel)
+                    else context_parallel(
+                        group, kernel=args.kernel, reduction=args.reduction
+                    )
                 )
                 with scope:
                     torch.cuda.empty_cache()
