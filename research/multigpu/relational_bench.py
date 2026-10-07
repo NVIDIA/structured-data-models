@@ -520,7 +520,7 @@ def run(args: argparse.Namespace) -> None:
         stats["max_rss_kib"] = max_rss_kib()
         np.save(args.output / "predictions.npy", arrays[0])
         torch.save(pred, args.output / "predictions.pt")
-        if args.profile:
+        if args.profile or args.phase_profile:
             phase_times: dict[str, list[float]] = {}
             phase_lock = threading.Lock()
 
@@ -573,6 +573,7 @@ def run(args: argparse.Namespace) -> None:
                     arrays[0],
                 )
             )
+        if args.profile:
             handles = []
             scopes = {}
 
@@ -669,6 +670,7 @@ def main() -> None:
         "--dtype", choices=["bf16", "fp16", "fp32"], default="bf16"
     )
     bench.add_argument("--profile", action="store_true")
+    bench.add_argument("--phase-profile", action="store_true")
     bench.add_argument("--source-commit", required=True)
     for command in [prep, bench]:
         command.add_argument("--seed", type=int, default=1729)
