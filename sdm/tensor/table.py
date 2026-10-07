@@ -1953,7 +1953,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
         tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
 
     blocks: dict[Stype, Tensor] = {}
-    for stype, _ in ref.items():
+    for stype, _ in TableTensor.items(ref):
         block_list = [tensor.blocks[stype] for tensor in tensors]
         block_list = [block for block in block_list if block.size(-1) > 0]
         if len(block_list) == 1:
@@ -1973,7 +1973,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
             stype: tuple(
                 chain.from_iterable(t._columns[stype] for t in tensors)
             )
-            for stype, _ in ref.items()
+            for stype, _ in TableTensor.items(ref)
         }
         size = ref.size()
 
