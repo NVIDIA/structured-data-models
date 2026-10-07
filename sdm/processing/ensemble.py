@@ -117,7 +117,7 @@ class EnsembleProcessor(Processor):
         if not any(
             columns and stype in self.handles_stypes
             for group in ensemble_table._iter_groups()
-            for stype, columns in group.columns.items()
+            for stype, columns in group._column_items
         ):
             return self
         if self.requires_fit:
@@ -140,7 +140,7 @@ class EnsembleProcessor(Processor):
         if not any(
             columns and stype in self.handles_stypes
             for group in ensemble_table._iter_groups()
-            for stype, columns in group.columns.items()
+            for stype, columns in group._column_items
         ):
             return ensemble_table
         self._check_is_fitted()
@@ -164,7 +164,7 @@ class EnsembleProcessor(Processor):
         if not any(
             columns and stype in self.handles_stypes
             for group in ensemble_table._iter_groups()
-            for stype, columns in group.columns.items()
+            for stype, columns in group._column_items
         ):
             return ensemble_table
         output = self._fit_transform_ensemble(
