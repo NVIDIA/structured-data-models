@@ -88,7 +88,7 @@ class GradientExplainer(
             return x, None
 
         return x, related_tables.replace_tables(
-            {
+            tables={
                 name: cast(
                     TableTensor,
                     torch.stack(

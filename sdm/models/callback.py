@@ -89,7 +89,7 @@ class EnableInputGradients(Callback):
 
 
 class CaptureInputs(Callback):
-    """Collect preprocessed query inputs in callback execution order."""
+    """Collect preprocessed query inputs."""
 
     def __init__(self) -> None:
         self.inputs: list[
