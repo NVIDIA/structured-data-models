@@ -81,7 +81,8 @@ python research/multigpu/tabular_bench.py \
   --data /path/to/covertype --output /path/to/tabular-native \
   --task classification --size large --mode native --gpus 1 \
   --estimators 4 --context 1024 --queries 2048 --batch-size 256 \
-  --repeats 3 --precision bfloat16 --profile
+  --repeats 3 --precision bfloat16 --profile \
+  --source-commit "$(git rev-parse HEAD)"
 ```
 
 The native relational harness exposes the following commands (paths must point to the installed runner revision and the actual RelBench cache). Execution evidence is still pending:
@@ -92,10 +93,12 @@ python research/multigpu/relational_bench.py prepare \
   --context 1024 --queries 2000 --batch-size 250
 python research/multigpu/relational_bench.py run \
   --workload /path/to/fixed-workload --mode native --gpus 1 \
-  --estimators 4 --repeats 3 --output /path/to/native-result --profile
+  --estimators 4 --repeats 3 --output /path/to/native-result --profile \
+  --source-commit "$(git rev-parse HEAD)"
 python research/multigpu/relational_bench.py run \
   --workload /path/to/fixed-workload --mode ensemble --gpus 2 \
-  --estimators 4 --repeats 3 --output /path/to/ep2-result --profile
+  --estimators 4 --repeats 3 --output /path/to/ep2-result --profile \
+  --source-commit "$(git rev-parse HEAD)"
 ```
 
 Expected harness artifacts are `result.json`, predictions, utilization samples, and a profiler trace. Native complete graph batches are prepared once, with sampling time recorded separately. The independent CP probe uses random weights and is a kernel/scaling diagnostic, not a quality benchmark:
@@ -103,8 +106,23 @@ Expected harness artifacts are `result.json`, predictions, utilization samples, 
 ```sh
 torchrun --standalone --nproc-per-node=4 research/multigpu/context_probe.py \
   --family tabular --context 4096 --queries 128 --channels 512 \
-  --heads 8 --kv-heads 2 --layers 4 --dtype bfloat16
+  --heads 8 --kv-heads 2 --layers 4 --dtype bfloat16 \
+  --output /path/to/context-probe-result
 ```
+
+For pretrained full-model CP, run a fresh process group for each arm; use one process for `--mode native` and `--mode lse`, then 2/4 processes for `--mode context`. The relational variant consumes all graphs from its fixed workload and records actual sizes from that workload, irrespective of tabular-only size arguments.
+
+```sh
+torchrun --standalone --nproc-per-node=2 \
+  research/multigpu/context_model_bench.py \
+  --family tabular --data /path/to/covertype \
+  --output /path/to/cp2-result --mode context --size small \
+  --context 4096 --queries 2048 --batch-size 256 --estimators 4 \
+  --repeats 3 --precision bfloat16 \
+  --source-commit "$(git rev-parse HEAD)"
+```
+
+These commands assume execution from a Git checkout. For an exported source archive, pass its recorded commit explicitly instead of invoking `git rev-parse`. The coordinator's integrated local validation currently reports 43 CPU tests passed and 22 CUDA tests skipped; this is not a GPU validation result.
 
 Historical inspection is reproducible with:
 
