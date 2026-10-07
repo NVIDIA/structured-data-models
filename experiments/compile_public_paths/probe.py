@@ -25,6 +25,7 @@ p.add_argument(
 )
 p.add_argument("--estimators", type=int, default=1)
 p.add_argument("--query-rows", type=int, nargs="+")
+p.add_argument("--query-input", choices=["view", "fresh"], default="view")
 a = p.parse_args()
 torch.set_num_threads(1)
 torch.manual_seed(123)
@@ -37,7 +38,7 @@ if a.model == "tabular":
     cy = TableTensor.from_tensor(
         CategoricalTensor.from_tensor(target.long())
         if a.task == "classification"
-        else target
+        else target.to(torch.float32)
     )
     qx = TableTensor.from_tensor(
         torch.tensor(
@@ -99,6 +100,7 @@ result = {
     "device": "cpu",
     "task": a.task,
     "estimators": a.estimators,
+    "query_input": a.query_input,
 }
 try:
     with torch.inference_mode():
@@ -125,7 +127,14 @@ try:
             all_queries = qx
             samples = []
             for rows in a.query_rows or [qx.size(-2)]:
-                qx = all_queries[..., :rows, :]
+                if a.query_rows is None:
+                    qx = all_queries
+                elif a.query_input == "fresh" and a.model == "tabular":
+                    qx = TableTensor.from_tensor(
+                        all_queries.numerical[..., :rows, :]
+                    )
+                else:
+                    qx = all_queries[..., :rows, :]
                 expected = predict(oracle).numerical.clone()
                 actual = predict(model, compiled_predict).numerical
                 samples.append(
