@@ -75,7 +75,35 @@ Flash LSE1 predictions were byte-identical to the native baseline. Maximum proba
 
 Each Flash CP batch generated 96 NCCL all-reductions per rank (two per layer × 12 layers × four estimators). CPU launch annotations summed to 5.03 ms for CP2 and 4.94 ms for CP4. The initial torch.profiler traces did not contain CUDA kernel events despite requesting them, so these values are **CPU launch spans**, not GPU communication time. Nsight follow-up is required for a compute/communication breakdown. Prediction timing itself used explicit CUDA synchronization and CPU-completed output copies. Cold first-fit time (8.27 seconds) versus subsequent runs (~1 second) is confounded by runtime/kernel cache warmup; no fit acceleration is claimed.
 
-Raw evidence directories are `cp-probe4-c1024-{efficient,flash}`, `cp-covertype-small-c1024-e4-{native1,lse1,context2,context4}`, and `cp-covertype-small-c1024-e4-flash-{lse1,context2,context4}` under the shared experiment artifact root. Long-context, large-model GQA, resident-cache, and relational results are pending and must precede a general recommendation.
+Raw evidence directories are `cp-probe4-c1024-{efficient,flash}`, `cp-covertype-small-c1024-e4-{native1,lse1,context2,context4}`, and `cp-covertype-small-c1024-e4-flash-{lse1,context2,context4}` under the shared experiment artifact root.
+
+## Large model and resident cache at 16k context
+
+Source `1686803e4`, same L4 host, pretrained KumoTabular **large** (24 ICL layers, 16 query heads, two cached KV heads), Covertype, context 16,384, query 2,048, E4, batch 256, three timed BF16 passes. Every arm moves its fitted cache to its assigned GPU once before warmup; transfer time and fit-plus-transfer transient peak are separately recorded. This isolates resident GPU cache scaling from repeated CPU-to-GPU transfers.
+
+| Arm | Unique rows/s | Accuracy | Log loss | Resident ICL cache/rank | Total GPU cache/rank | Prediction allocated peak/rank |
+|---|---:|---:|---:|---:|---:|---:|
+| Native SDPA, 1 GPU | 1,887.25 | 0.914551 | 0.225671 | 768 MiB | 1,080.00 MiB | 2.1895 GiB |
+| Flash LSE, 1 GPU | 1,824.62 | 0.914551 | 0.225671 | 768 MiB | 1,080.00 MiB | 2.1895 GiB |
+| Flash CP, 2 GPUs | 1,525.92 | 0.914551 | 0.225536 | 384 MiB | 696.00 MiB | 1.8164 GiB |
+| Flash CP, 4 GPUs | 1,492.31 | 0.914551 | 0.225547 | 192 MiB | 504.00 MiB | 1.6284 GiB |
+
+The one-rank Flash LSE control remains byte-identical to native. CP2/CP4 maximum probability differences are 0.009093/0.008519. Resident CP4 lowers prediction allocated peak by 25.6%, but throughput is 0.791x native. This demonstrates memory reduction without a speedup at this context length and topology. It does not solve the replicated fit peak. Evidence: `cp-covertype-large-c16384-e4-resident-flash-{native1,lse1,context2,context4}`.
+
+## Native relational regression and a numerical failure
+
+RelBench `rel-f1/driver-position`, native sampled `[16,16]` graph input, context 1,024, all 499 ordered validation queries in batches of 125, E4, same L4 host and three BF16 timed passes. The full graph encoder, relational operations, and final ICL head execute normally; this is not a flattened feature surrogate. Default fitted caches reside on CPU. The runtime lacks cuDF and emits CPU string-sort/join fallback warnings, so those upstream CPU costs are part of every arm.
+
+| Arm | Unique rows/s | MAE | RMSE | Prediction peak/rank |
+|---|---:|---:|---:|---:|
+| Native SDPA | 364.23 | 3.414711 | 4.214993 | 338.86 MiB |
+| Flash LSE, 1 GPU | 362.35 | 3.414711 | 4.214993 | 338.40 MiB |
+| Flash CP, 2 GPUs | 361.15 | 3.418062 | 4.219112 | 313.90 MiB |
+| Flash CP, 4 GPUs | 376.00 | 3.416702 | 4.217447 | 301.65 MiB |
+
+Native and Flash LSE predictions are identical. All predictions are finite, all 999 quantiles remain monotonic, and each arm is repeat-stable. However, **BF16 CP fails the full-quantile numerical gate** `abs(actual-native) <= 0.01 + 0.05*abs(native)`: CP2 fails 938/498,501 entries and CP4 fails 915. Do not label these full-model results numerically equivalent merely because median predictions and aggregate MAE are close. CP2's worst tolerance excess is row 133, q002: native -0.268077 versus CP -0.354751. CP4's is row 63, q007: native 0.165292 versus CP 0.078619. The maximum absolute differences (~0.20224) occur in other, large-valued tail quantiles and do not identify the worst relative failures.
+
+The diagnostic `--kernel efficient_fp32` preserves the ordinary BF16 Q/K/V input quantization but computes local normalized attention outputs and the global merge in FP32, delaying rounding until the normal output projection. This tests whether information lost by BF16 local outputs before merging causes the failures; it incurs additional compute/memory and is not yet validated. The BF16 failures remain recorded, and tolerances will not be loosened. Evidence: `cp-f1-c1024-e4-flash-{native1,lse1,context2,context4}`.
 
 `research/multigpu/context_model_bench.py` adds pretrained full-model comparisons using the team's fixed tabular arrays and native relational sampled graphs. Run `--mode native` and `--mode lse` with one torchrun process each; run `--mode context` with 2/4 processes. Keep all other parameters fixed. It saves every prediction repeat, query IDs, per-rank timings/peaks, resident ICL versus total cache bytes, quality metrics, and optional per-rank traces. Validation targets are opened after prediction only. Query throughput uses each repeat's slowest rank and counts replicated output rows once. Inputs and graphs are resident on each GPU for all three modes; this is a controlled execution comparison, not host-to-GPU streaming throughput.
 
