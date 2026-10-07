@@ -93,7 +93,57 @@ All arms must return outputs to CPU inside the same timing boundary for the prin
 
 Run `PYTHONPATH=. python -m pytest research/multigpu/test_query_parallel.py` from the checkout. The tests cover irregular batch sizes and nonmonotonic observation IDs, 1/2/4/8 CPU worker counts (including idle workers), whole related-table delivery, mixed numerical/categorical inputs, concurrent callers on one replica, accidental shared model rejection, empty input, spawned-process serialization, and real small-architecture KumoTabular fit/predict parity against the identical sequential recipe/member plan. Random weights are used for this CPU model test; it tests execution semantics and does not measure pretrained prediction quality.
 
-The CPU contract tests passed with real KumoTabular output parity at zero absolute/relative tolerance. CUDA performance, native KumoRelational parity, real-task quality and hybrid scaling are owned by the GPU runners and must be filled from their saved measurements. No GPU speedup is claimed solely from this implementation or the CPU tests.
+The CPU contract tests passed with real KumoTabular output parity at zero absolute/relative tolerance. Integrated DP/EP regression tests passed 22 cases with two CUDA-only cases skipped locally. The actual process GPU experiments below were subsequently executed; CPU tests alone do not establish those performance claims.
+
+## Measured process DP on four L40S GPUs
+
+All measurements used the same `g6e.12xlarge` Spot host with four L40S GPUs, PyTorch 2.9.1+cu130, source `1686803e4`, BF16 autocast and seed 1729. Each configuration received one warmup and three complete measured passes. The tabular model was pretrained KumoTabular large; relational was pretrained KumoRelational with exact prepared `[16,16]` temporal-last neighborhoods. Checkpoint, TRAIN context, batch boundaries and member recipe were fixed across GPU counts.
+
+The original process timing includes parent submission, input IPC, host-to-device transfers, prediction, device-to-host copies and returned CPU batch outputs. It excludes the final parent `TableTensor` concatenation. This small but real boundary difference must remain visible when comparing against native runners that include final concatenation. Later runner revision `c8df1be76` additionally records `gathered_output_repeats_s` and `gathered_rows_per_s`; it leaves the original worker-return measurement unchanged. Do not retroactively rename the original timings as fully gathered output.
+
+| Workload | Estimator batching | Query rows / batch | 1 GPU rows/s | 2 GPUs rows/s | 4 GPUs rows/s | 4/1 speedup | Four-GPU efficiency |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Covertype, C1024, E4 | 1 | 2048 / 256 | 1780.50 | 3418.27 | 6650.11 | 3.735× | 93.4% |
+| Covertype, C1024, E4 | 4 | 2048 / 256 | 3665.05 | — | 13990.88 | 3.817× | 95.4% |
+| Rel-HM user-churn, C1024, E4 | 1 | 2000 / 250 | 1186.19 | 2216.50 | 3859.33 | 3.254× | 81.3% |
+
+The table reports median throughput across three passes, not the best repeat. Covertype workers used one intra-op CPU thread each; the relational workers used eight each, matching the configured per-process value of the earlier native/threaded run. Consequently four relational processes permit up to 32 intra-op CPU threads, whereas the threaded executor shares one process configured with eight. This is a viable implementation comparison, not a controlled attribution of all improvement to the GIL.
+
+Independent comparison of saved output arrays, ordered IDs, class columns and hashes passed. Covertype process DP with estimator batch size 1 exactly matched the native size-1 reference at every GPU count: accuracy 0.76416015625, log loss 0.5760445594787598. The tuned size-4 process variants exactly matched the tuned native size-4 reference: accuracy 0.76416015625, log loss 0.5759778022766113. The small difference between estimator batching settings is BF16 numerical behavior; use the matching batching reference rather than treating it as a GPU-placement quality change.
+
+Rel-HM process DP exactly matched the native predictions at all three GPU counts: accuracy 0.808, log loss 0.46684929728507996, AUROC 0.6619477128615511 with explicit positive class 1. The original prediction column order was `["1", "0"]`; scoring must follow semantic class labels rather than assuming column 1 is the positive class.
+
+The earlier threaded relational executor achieved about 1350 rows/s on one GPU and 1212 on four. Its typical batch service time grew from about 0.185 seconds to 0.80–0.84 seconds when four threads ran concurrently. Process isolation improved four-GPU throughput to 3859 rows/s. This is consistent with shared Python/runtime contention in the threaded path; CPU-thread allocation and separate CUDA runtimes are also changed, so a GIL-only causal claim would be too strong. Input IPC makes the process one-GPU reference slower than its threaded counterpart, while parallelism more than compensates at four GPUs.
+
+| Workload | Peak allocated VRAM per GPU during prediction | Child host lifetime peak per process | Spawn + import + checkpoint + fit |
+| --- | ---: | ---: | ---: |
+| Covertype estimator batch 1 | 1314.6 MiB | about 2120 MiB | 5.09–5.52 s |
+| Covertype estimator batch 4 | 1438.2 MiB | about 2115 MiB | 5.01–5.47 s |
+| Rel-HM estimator batch 1 | 457–470 MiB | about 2390–2560 MiB | 5.15–5.66 s |
+
+Startup used already staged checkpoints and warmed filesystem/compiler caches and parallel replica construction; it is not comparable to the first cold machine invocation. Host-memory figures are per-child lifetime maxima. Their sum is neither a simultaneous node peak nor unique resident memory because shared library pages may be counted multiple times. Every DP replica retains its own complete fitted ensemble/cache, as expected.
+
+### Weak scaling
+
+The weak-scaling control kept 4096 queries per GPU, Covertype C1024/E4, query batch 256 and estimator batch 4. Total query rows therefore differed across configurations; quality differences between those full cohorts are not GPU-induced quality deltas.
+
+| GPUs | Total queries | Aggregate rows/s | Rows/s per GPU | Per-GPU throughput retained |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 4096 | 3782.40 | 3782.40 | 100% |
+| 2 | 8192 | 7344.95 | 3672.47 | 97.09% |
+| 4 | 16384 | 14682.72 | 3670.68 | 97.05% |
+
+Independent audits verified exact predictions and identities over the shared 4096-row prefix and the common 2048-row tuned-reference prefix. A one-GPU full-16384-row comparison is scheduled to close the remaining full-cohort comparison; shared-prefix parity does not by itself certify rows absent from smaller runs.
+
+Raw results and independent audit sidecars are under `.kumo-multigpu-20261008/results/process-dp/` outside the repository. Each directory retains `result.json`, `predictions.npy`, query IDs where applicable, targets where applicable, and sampled `nvidia-smi` telemetry. Naming records model, context, query count, estimator batching, GPU count and CPU threads.
+
+## Multi-host protocol
+
+`ssh_query_worker.py` runs one persistent process per physical GPU. `multihost_query_bench.py` starts local or SSH peers, waits for every model's READY message, verifies identical context hashes and exact query hashes/IDs, then dispatches whole fixed batches. The global timer uses only the coordinator's monotonic clock and includes command dispatch, worker computation, result encoding/network transport, decoding and validated ordered gathering. Worker clocks are never compared or summed to estimate global throughput. Input batches are staged before timing, which is explicitly a preloaded-query inference measurement rather than network ingress throughput.
+
+The cluster JSON supplies shared `source`, `python`, `data`, `hf_cache`, task-only SSH `identity`, and `workers` entries with `name`, optional remote `host`, and physical CUDA `device`. `--worker-indices 0 1 2 3` or `4 5 6 7` selects each four-GPU group; `--workers 8` selects the combined node set. Each worker records observed GPU UUID/model/memory, host CPU count, framework version, fitted-context hashes and process memory. CPU protocol/shard tests passed 20 cases, including empty worker assignments, irregular batches and corrupted row/class/output schemas.
+
+An attempted homogeneous eight-L4 experiment could not obtain the four additional singleton Spot workers across the searched east-region capacity pools. No eight-L4 performance claim is supported. The planned alternative combines the existing four L4s and four L40S GPUs across regions. This must be labeled heterogeneous multi-host execution. Compare each four-GPU group with the combined run on identical query rows, and treat the sum of separately measured group throughputs only as an optimistic capacity reference, not as an observed eight-GPU throughput or a homogeneous scaling denominator.
 
 ## Approaches intentionally rejected or deferred
 
