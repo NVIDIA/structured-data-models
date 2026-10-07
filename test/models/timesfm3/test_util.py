@@ -3,7 +3,6 @@
 
 import math
 
-import pytest
 import torch
 
 from sdm.models.timesfm3.util import (
