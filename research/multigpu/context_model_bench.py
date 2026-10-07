@@ -100,6 +100,10 @@ def main() -> None:
         "--source-commit", help="Revision for archive deployments"
     )
     args = parser.parse_args()
+    requested_config = {
+        k: str(v) if isinstance(v, Path) else v
+        for k, v in vars(args).items()
+    }
     rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(rank)
     device = f"cuda:{rank}"
@@ -181,11 +185,16 @@ def main() -> None:
             rows = sum(len(batch[0]) for batch in batches)
             query_ids = np.arange(rows)
             args.task = manifest["problem"]
+            args.context = len(context.task_table)
+            args.queries = rows
+            args.batch_size = max(len(batch[0]) for batch in batches)
             input_identity = {
                 "workload": manifest,
                 "workload_sha256": hashlib.sha256(
                     (args.data / "workload.json").read_bytes()
                 ).hexdigest(),
+                "context_rows": args.context,
+                "query_rows": rows,
             }
         input_identity["actual_batch_rows"] = [
             len(batch[0]) for batch in batches
@@ -354,6 +363,7 @@ def main() -> None:
             result = {
                 "status": "complete",
                 "input_identity": input_identity,
+                "requested_config": requested_config,
                 "config": {
                     k: str(v) if isinstance(v, Path) else v
                     for k, v in vars(args).items()
