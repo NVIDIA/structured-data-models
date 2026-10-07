@@ -1,6 +1,6 @@
 # SDM multi-GPU integration design
 
-Inspection baseline: `842c408fe`, 2026-10-08. Recommendations below are architectural inferences from the source, not measured performance claims.
+Inspection baseline: `842c408fe`, 2026-10-08. Architecture descriptions follow source inspection; the outcome-directed recommendations below also use the explicitly scoped measurements in [README.md](README.md).
 
 ## Model boundaries that matter
 
@@ -74,6 +74,16 @@ A reusable core abstraction is warranted only once it has at least two real user
 | Benchmark runners, EC2 launch operations, result collector and raw evidence | Research/benchmark documentation and scripts | Remain optional and out of import-time model code; preserve reproduction and failure history |
 
 The initial small-context measurements favor tuning existing estimator batching before adding a new default execution mode. They do not justify enabling EP or CP automatically. Explicit opt-in research modes allow capacity and workload-dependent benefits to be evaluated without burdening every model-family wrapper.
+
+### What the measured results prioritize
+
+1. **Throughput with many independent batches: persistent process DP plus native local batching.** The matched Covertype E4 process ladder reaches 3.817× on four L40S GPUs, and native H&M reaches 3.254×, with exact matched predictions. This is the least invasive useful path for both model families: publish a small persistent-worker/`torchrun` example with complete query batch ownership, not another distributed model class. Keep process startup, replicated fit state, IPC, and final output gather explicit.
+2. **A single wider ensemble: batch compatible local members, then use resident EP.** Covertype E8 gives 1.836× on two GPUs with exact predictions; the initial unbatched executor did not provide useful scaling, and four-way batched output still fails its declared numerical gate. Reuse native batching and output finalization rather than preserving a duplicate single-member loop as production architecture.
+3. **Capacity without new attention arithmetic: sequential stage/layer placement.** The L4 tabular layer split approximately halves prediction peak per device with exact predictions and a small throughput penalty. This supports an explicit capacity option, not a throughput promise or an overlapped pipeline claim. Stage/cache ownership should be formalized before hook-based research code becomes public.
+4. **Retained long-context memory: keep CP experimental.** Resident 16k GQA caches shrink as expected, but PCIe throughput declines. F1 BF16 regression fails the all-quantile numerical gate despite close aggregate metrics. Test higher-precision recombination under the original tolerance; do not auto-select CP based on GPU count or call a small nominal speedup an accepted result when correctness fails.
+5. **More invasive splits remain profile-gated.** Tensor parallelism, exact graph partition, table fan-out, full-fit context sharding, and overlapped pipelines have design paths but no measured implementation result in this report. Weight sizes alone do not justify tensor sharding. Large H&M graph/activation pressure may justify fit or encoder work; use measured phase memory and time, not architectural estimates, to select the next implementation.
+
+These rankings concern the measured PCIe L40S/L4 hosts and selected workload sizes. They are not a general rejection of CP on faster fabrics or a proof that process DP always wins single-request latency. The process results exclude final CPU concatenation in their original timer, a documented boundary difference from a fully gathered application response.
 
 ## Recommended progression
 

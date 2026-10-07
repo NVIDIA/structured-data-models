@@ -1,0 +1,103 @@
+{
+  "run": "process-tabular-covertype-e4-ebs4-c1024-q2048-b256-g1-t1",
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/process-tabular-covertype-e4-ebs4-c1024-q2048-b256-g1-t1",
+    "source_commit": "1686803e4",
+    "task": "classification",
+    "size": "large",
+    "gpus": 1,
+    "context": 1024,
+    "queries": 2048,
+    "batch_size": 256,
+    "estimators": 4,
+    "estimator_batch_size": 4,
+    "seed": 1729,
+    "threads": 1,
+    "warmups": 1,
+    "repeats": 3,
+    "precision": "bfloat16"
+  },
+  "prediction_sha256": "5f3830f7af05b2c742f5058071f7849d2efd4a5997f8daa0b7d33f91b2dea163",
+  "matches_recorded_sha": true,
+  "query_ids_match": true,
+  "targets_match": true,
+  "class_columns_match": true,
+  "query_values_hash_match": true,
+  "numerical_vs_dp1": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "numerical_vs_tuned_native": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "quality": {
+    "rows": 2048,
+    "accuracy": 0.76416015625,
+    "log_loss": 0.5759778337511707,
+    "brier_multiclass": 0.3375688362469243,
+    "auroc_by_class": [
+      0.893344191597138,
+      0.8868205524269036,
+      0.98820942696166,
+      0.9947141845131056,
+      0.9262703777870361,
+      0.9682170314294972,
+      0.9743097728295097
+    ],
+    "auroc_macro_present_classes": 0.9474122196492643,
+    "max_probability_sum_error": 1.610278559383005e-7
+  },
+  "recomputed_rows_s": [
+    3680.2436347176713,
+    3657.5728048268174,
+    3665.0510293747143
+  ],
+  "median_rows_s": 3665.0510293747143,
+  "speedup": 1,
+  "timing": "parent_wall_including_input_IPC_H2D_predict_D2H_output_IPC",
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 23860,
+      "device": "cuda:0",
+      "max_rss_bytes": 2218930176,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    }
+  ],
+  "spawn_load_fit_s": 5.013001173999783
+}
