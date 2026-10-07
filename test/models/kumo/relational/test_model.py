@@ -20,6 +20,7 @@ from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.model import (
     _KumoRelational,
 )
+from sdm.models.kumo.relational.task import TaskGraph
 from sdm.testing import withCUDA
 
 
@@ -303,13 +304,20 @@ def test_many_classes_forward_and_cache(
         device=device,
     )
 
-    expected = model(
-        x_context=task,
-        y_context=target,
-        x_query=task[:2],
-        related_context_tables=related_tables,
-        related_query_tables=related_tables,
+    context = TaskGraph.from_input(
+        x=task,
+        related_tables=related_tables,
         num_hops=0,
+    )
+    query = TaskGraph.from_input(
+        x=task[:2],
+        related_tables=related_tables,
+        num_hops=0,
+    )
+    expected = model(
+        context=context,
+        y_context=target,
+        query=query,
     )
     assert expected.size() == (2, num_classes)
     probabilities = expected.div(0.9).exp()
@@ -320,22 +328,17 @@ def test_many_classes_forward_and_cache(
 
     cache = Cache(classes=classes)
     recorded = model(
-        x_context=task,
+        context=context,
         y_context=target,
-        x_query=None,
-        related_context_tables=related_tables,
-        related_query_tables=None,
+        query=None,
         cache=cache,
-        num_hops=0,
     )
     assert recorded.size() == (0, num_classes)
 
     predicted = model(
-        x_context=None,
+        context=None,
         y_context=None,
-        x_query=task[:2],
-        related_context_tables=None,
-        related_query_tables=related_tables,
+        query=query,
         cache=cache.freeze(),
     )
     torch.testing.assert_close(predicted, expected)

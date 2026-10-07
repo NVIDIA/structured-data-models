@@ -215,16 +215,56 @@ class KumoRelational(ICLModel):
         elif cache is not None:
             classes = cast(Tensor | None, cache["classes"])
 
+        # Table joins use Arrow and must run before the compiled inner model.
+        num_hops = kwargs.get("num_hops")
+        context: TaskGraph | None = None
+        if x_context is not None:
+            if related_context_tables is None:
+                raise ValueError(
+                    f"{self.__class__.__name__!r} requires related tables"
+                )
+            context = TaskGraph.from_input(
+                x=x_context,
+                related_tables=related_context_tables,
+                num_hops=num_hops,
+            )
+            if cache is not None and cache.is_recording:
+                cache["relationships"] = context.related_tables.relationships
+                cache["num_hops"] = context.num_hops
+
+        query: TaskGraph | None = None
+        if x_query is not None:
+            if related_query_tables is None:
+                raise ValueError(
+                    f"{self.__class__.__name__!r} requires related tables"
+                )
+            if context is not None:
+                relationships = context.related_tables.relationships
+                num_hops = context.num_hops
+            else:
+                assert cache is not None
+                assert cache.is_replaying
+                relationships = cast(
+                    Sequence[Relationship], cache["relationships"]
+                )
+                num_hops = cast(int, cache["num_hops"])
+            query = TaskGraph.from_input(
+                x=x_query,
+                related_tables=RelatedTables[TableTensor](
+                    tables=related_query_tables.tables,
+                    relationships=relationships,
+                    task_links=related_query_tables.task_links,
+                ),
+                num_hops=num_hops,
+            )
+
         task = Task.classification if classes is not None else Task.regression
         out = self.models[task](
-            x_context=x_context,
+            context=context,
             y_context=y_context,
-            x_query=x_query,
-            related_context_tables=related_context_tables,
-            related_query_tables=related_query_tables,
+            query=query,
             cache=cache,
             generator=generator,
-            num_hops=kwargs.get("num_hops"),
         )
 
         if classes is None:
@@ -297,16 +337,15 @@ class _KumoRelational(torch.nn.Module):
 
     def forward(
         self,
-        x_context: TableTensor | None,  # [..., R_context, D]
+        context: TaskGraph | None,
         y_context: TableTensor | None,  # [..., R_context, 1]
-        x_query: TableTensor | None,  # [..., R_query, D]
-        related_context_tables: RelatedTables[TableTensor] | None,
-        related_query_tables: RelatedTables[TableTensor] | None,
+        query: TaskGraph | None,
         *,
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
-        num_hops: int | None = None,
     ) -> Tensor:  # [..., R_query, *]
+        x_context = context.x if context is not None else None
+        x_query = query.x if query is not None else None
 
         num_classes: int | None = None  # Extract `y` as tensor:
         if y_context is not None and y_context.categorical.size(-1) > 0:
@@ -322,47 +361,6 @@ class _KumoRelational(torch.nn.Module):
                 (0,),  # NOTE Guaranteed to be 1D for now.
                 dtype=torch.float32 if num_classes is None else torch.int64,
                 device=next(self.parameters()).device,
-            )
-
-        context: TaskGraph | None = None
-        if x_context is not None:
-            if related_context_tables is None:
-                raise ValueError(
-                    f"{self.__class__.__name__!r} requires related tables"
-                )
-            context = TaskGraph.from_input(
-                x=x_context,
-                related_tables=related_context_tables,
-                num_hops=num_hops,
-            )
-            if cache is not None and cache.is_recording:
-                cache["relationships"] = context.related_tables.relationships
-                cache["num_hops"] = context.num_hops
-
-        query: TaskGraph | None = None
-        if x_query is not None:
-            if related_query_tables is None:
-                raise ValueError(
-                    f"{self.__class__.__name__!r} requires related tables"
-                )
-            if context is not None:
-                relationships = context.related_tables.relationships
-                num_hops = context.num_hops
-            else:
-                assert cache is not None
-                assert cache.is_replaying
-                relationships = cast(
-                    Sequence[Relationship], cache["relationships"]
-                )
-                num_hops = cast(int, cache["num_hops"])
-            query = TaskGraph.from_input(
-                x=x_query,
-                related_tables=RelatedTables[TableTensor](
-                    tables=related_query_tables.tables,
-                    relationships=relationships,
-                    task_links=related_query_tables.task_links,
-                ),
-                num_hops=num_hops,
             )
 
         # TODO Inject random heterogeneous GNN.
