@@ -96,3 +96,16 @@ torch.compile(view)(x)
 ```
 
 2.7.1 raises `InternalTorchDynamoError: KeyError: Instruction(... LOAD_FAST ... args ...)`; 2.14 succeeds. Moving the metadata loop and return outside the context passes on both versions. The actual tensor view remains inside inference mode. This narrow reordering also removes the failure from the real 2.7 relational prediction trace; subsequent schema guards remain separate blockers. Container/compile regression checks: 25 passed, 5 CUDA skips on each runtime.
+
+## Cache isolation while changing wrapper protocols
+
+Changing `__tensor_flatten__` signatures during this investigation left incompatible PyTorch 2.7 compilation artifacts in the shared disk cache. An outer KumoTabular forward reported `ValueError: too many values to unpack (expected 13)` inside generated Inductor code called by `Cast._transform`. Earlier shuffle `.tolist()` messages were fallback warnings, not the final failure. No shuffle or RNG change was needed.
+
+Controlled actual-Inductor reruns used a distinct temporary `TORCHINDUCTOR_CACHE_DIR` for each source revision, plus `TORCHINDUCTOR_FX_GRAPH_CACHE=0` and `TORCHINDUCTOR_AUTOGRAD_CACHE=0`. For `torch.compile(model, fullgraph=False, dynamic=True)` with a prepared recipe and the real classification data:
+
+| Integration source | Fresh-cache outcome |
+|---|---|
+| `2a428e0ac`, before atomic dispatch | Unpack failure cleared; subsequent wrong-handler error remained (`unsqueeze` received a dtype instead of an integer) |
+| `9879a9983`, with atomic dispatch | Pass; maximum eager/compiled difference 5.96e-8 |
+
+An independent run at `9879a9983` with `TORCHINDUCTOR_FORCE_DISABLE_CACHES=1` also passed with the same difference. These are partial-compilation results; graph breaks remain. Cache isolation is needed when comparing experimental wrapper representations. No shared user cache was deleted, and no production cache-version mechanism was added.
