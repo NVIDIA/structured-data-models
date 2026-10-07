@@ -211,6 +211,12 @@ class ProcessEnsembleParallel:
             )
             for model, device in zip(replicas, self.devices, strict=True)
         ]
+        # Parent replicas were moved to CPU; release their inactive CUDA
+        # allocator blocks before children allocate their own parameter copies.
+        for device in self.devices:
+            if device.type == "cuda":
+                with torch.cuda.device(device):
+                    torch.cuda.empty_cache()
         try:
             self.memory()  # Include process/model startup in load timing.
         except BaseException:
