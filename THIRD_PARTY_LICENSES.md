@@ -23,17 +23,6 @@ The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) and [`sdm/models/kumo/relatio
 The [`sdm/models/tabfm/`](sdm/models/tabfm/) implementation contains code derived from [`TabFM`](https://github.com/google-research/tabfm).
 Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
-## TimesFM 3.0
-
-- Source: https://github.com/google-research/timesfm
-- Code license: Apache License 2.0
-- License terms: [`sdm/models/timesfm3/LICENSE`](sdm/models/timesfm3/LICENSE)
-- Optional pretrained weights: https://huggingface.co/google/timesfm-3.0-pytorch
-- Weights license: [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE)
-
-The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
-Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
-
 ## TabPFN Extensions
 
 - Source: https://github.com/PriorLabs/tabpfn-extensions
