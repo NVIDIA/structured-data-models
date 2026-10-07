@@ -402,7 +402,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
         try:
             if x.is_cuda:
                 compute_stream = torch.cuda.current_stream(x.device)
-                if x.device not in self._transfer_streams:
+                if torch.compiler.is_compiling():
+                    # Inductor may reuse transferred buffers before the
+                    # compute stream finishes reading them.
+                    transfer_stream = compute_stream
+                elif x.device not in self._transfer_streams:
                     transfer_stream = torch.cuda.Stream(x.device)
                     self._transfer_streams[x.device] = transfer_stream
                 else:
