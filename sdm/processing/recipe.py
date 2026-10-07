@@ -13,10 +13,12 @@ import sdm.processing as sp
 from sdm.processing import EnsembleProcessor, Processor
 
 
-def _contains_processor(module: Module, processor_type: type[Processor]) -> bool:
+def _contains_processor(
+    module: Module, processor_type: type[Processor]
+) -> bool:
     # Read registered children directly so newly built recipes can be traced.
     pending = [module]
-    visited = set()
+    visited: set[Module] = set()
     while pending:
         child = pending.pop()
         if child in visited:
