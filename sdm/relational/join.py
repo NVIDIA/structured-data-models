@@ -11,7 +11,7 @@ import pyarrow.compute as pc
 import torch
 from torch import Tensor
 
-from sdm import TableTensor
+from sdm import ColumnarTensor, NullableTensor, StringTensor, TableTensor
 from sdm._warnings import warn_once
 from sdm.tensor.io import arrow_as_tensor, to_cudf
 
@@ -20,8 +20,6 @@ LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
 RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
 
 
-# Arrow and cuDF execute outside tensor graphs; compile their callers instead.
-@torch.compiler.disable
 def join_index(
     left_table: TableTensor,
     right_table: TableTensor,
@@ -45,6 +43,52 @@ def join_index(
     Returns:
         ``(left_index, right_index)`` pair with one entry per matched row.
     """
+    # Keep Arrow/cuDF opaque; only the surrounding tensor work is compiled.
+    if torch.compiler.is_compiling() and all(
+        table._column_to_loc[key][0] == "id"
+        for table, keys in ((left_table, left_keys), (right_table, right_keys))
+        for key in keys
+    ):
+        columns = [
+            getattr(table.id, f"_column_{table._column_to_loc[key][1]}")
+            for table, keys in (
+                (left_table, left_keys),
+                (right_table, right_keys),
+            )
+            for key in keys
+        ]
+        if all(
+            type(column) is Tensor
+            or isinstance(column, (NullableTensor, StringTensor))
+            for column in columns
+        ):
+            assert how == "inner"
+            leaves, kinds, metadata = _pack_columns(columns)
+            return _join_indices(
+                leaves,
+                kinds,
+                metadata,
+                len(left_keys),
+                dtype or torch.long,
+                torch.device(device)
+                if device is not None
+                else left_table.device,
+            )
+    return _join_index_eager(
+        left_table, right_table, left_keys, right_keys, how, dtype, device
+    )
+
+
+@torch.compiler.disable
+def _join_index_eager(
+    left_table: TableTensor,
+    right_table: TableTensor,
+    left_keys: Sequence[str],
+    right_keys: Sequence[str],
+    how: Literal["inner"] = "inner",
+    dtype: torch.dtype | None = None,
+    device: torch.device | str | None = None,
+) -> tuple[Tensor, Tensor]:
     assert how == "inner"
 
     if left_table.device != right_table.device:
@@ -173,3 +217,103 @@ def dropna(
             mask = _mask
 
     return table if mask is None else table.filter(mask)
+
+
+def _pack_columns(
+    columns: Sequence[Tensor],
+) -> tuple[list[Tensor], str, list[int]]:
+    leaves, kinds, metadata = [], [], []
+    for column in columns:
+        if isinstance(column, StringTensor):
+            kinds.append("v" if column._valid is not None else "s")
+            leaves.extend((column._data, column._offset))
+            if column._valid is not None:
+                leaves.append(column._valid)
+            metadata.extend(
+                (
+                    column.ndim,
+                    *column.shape,
+                    *column.stride(),
+                    column._storage_offset,
+                )
+            )
+        elif isinstance(column, NullableTensor):
+            kinds.append("n")
+            leaves.extend((column._data, column._valid))
+        else:
+            kinds.append("t")
+            leaves.append(column)
+    return leaves, "".join(kinds), metadata
+
+
+@torch.library.custom_op("sdm::_join_indices", mutates_args=())
+def _join_indices(
+    leaves: list[Tensor],
+    kinds: str,
+    metadata: list[int],
+    left_count: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> tuple[Tensor, Tensor]:
+    columns = []
+    tensor_index = metadata_index = 0
+    for kind in kinds:
+        if kind in ("s", "v"):
+            ndim = metadata[metadata_index]
+            size = metadata[metadata_index + 1 : metadata_index + 1 + ndim]
+            stride = metadata[
+                metadata_index + 1 + ndim : metadata_index + 1 + 2 * ndim
+            ]
+            storage_offset = metadata[metadata_index + 1 + 2 * ndim]
+            has_valid = kind == "v"
+            column = StringTensor(
+                data=leaves[tensor_index],
+                offset=leaves[tensor_index + 1],
+                valid=leaves[tensor_index + 2] if has_valid else None,
+                size=size,
+                stride=stride,
+                storage_offset=storage_offset,
+            )
+            tensor_index += 3 if has_valid else 2
+            metadata_index += 2 + 2 * ndim
+        elif kind == "n":
+            column = NullableTensor(
+                leaves[tensor_index], leaves[tensor_index + 1]
+            )
+            tensor_index += 2
+        else:
+            column = leaves[tensor_index]
+            tensor_index += 1
+        columns.append(column)
+    names = [f"key_{i}" for i in range(left_count)]
+    return _join_index_eager(
+        TableTensor(
+            columns={"id": names},
+            id=ColumnarTensor(tuple(columns[:left_count])),
+        ),
+        TableTensor(
+            columns={"id": names},
+            id=ColumnarTensor(tuple(columns[left_count:])),
+        ),
+        names,
+        names,
+        dtype=dtype,
+        device=device,
+    )
+
+
+@_join_indices.register_fake
+def _join_indices_fake(
+    leaves: list[Tensor],
+    kinds: str,
+    metadata: list[int],
+    left_count: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> tuple[Tensor, Tensor]:
+    # Both index arrays have the same data-dependent number of matches.
+    size = torch.library.get_ctx().new_dynamic_size()
+    return (
+        torch.empty(size, dtype=dtype, device=device),
+        torch.empty(size, dtype=dtype, device=device),
+    )
