@@ -40,6 +40,7 @@ class DataParallelAdapter:
         replicas: Models or ensemble groups already loaded on their devices.
         devices: Input device for each replica or ensemble group.
         dtype: Explicit worker autocast dtype, or None for FP32.
+        autocast_device_type: Compute backend if different from input device.
         estimator_batch_size: Same within-replica estimator batching as the
             native reference, unless explicitly overridden by fit.
     """
@@ -52,12 +53,14 @@ class DataParallelAdapter:
         dtype: torch.dtype | None,
         estimator_batch_size: int | None = 1,
         member_seed: int | None = None,
+        autocast_device_type: str | None = None,
     ) -> None:
         self.replicas = tuple(replicas)
         self.devices = tuple(devices)
         self.dtype = dtype
         self.estimator_batch_size = estimator_batch_size
         self.member_seed = member_seed
+        self.autocast_device_type = autocast_device_type
         self.executor: QueryParallel | None = None
 
     def fit(
@@ -90,12 +93,13 @@ class DataParallelAdapter:
                 )
             local_generator = torch.Generator(device=device)
             local_generator.set_state(generator.get_state())
+            autocast_type = self.autocast_device_type or device.type
             with (
                 torch.inference_mode(),
                 torch.autocast(
-                    device.type,
+                    autocast_type,
                     dtype=self.dtype,
-                    enabled=self.dtype is not None and device.type == "cuda",
+                    enabled=self.dtype is not None and autocast_type == "cuda",
                 ),
             ):
                 model.fit(
@@ -108,7 +112,10 @@ class DataParallelAdapter:
                     **kwargs,
                 )
         self.executor = QueryParallel(
-            self.replicas, self.devices, dtype=self.dtype
+            self.replicas,
+            self.devices,
+            dtype=self.dtype,
+            autocast_device_type=self.autocast_device_type,
         )
 
     def predict_batches(
@@ -195,6 +202,7 @@ def hybrid_factory(
         EnsembleParallel(replicas[width:]),
     ]
     base = factory(args, replicas)
+    cpu_recipe = getattr(args, "recipe_device", "cuda") == "cpu"
 
     class HybridAdapter(DataParallelAdapter):
         def close(self) -> None:
@@ -204,7 +212,12 @@ def hybrid_factory(
 
     return HybridAdapter(
         groups,
-        devices=[base.devices[0], base.devices[width]],
+        devices=(
+            [torch.device("cpu"), torch.device("cpu")]
+            if cpu_recipe
+            else [base.devices[0], base.devices[width]]
+        ),
         dtype=base.dtype,
         member_seed=args.seed,
+        autocast_device_type=base.devices[0].type,
     )

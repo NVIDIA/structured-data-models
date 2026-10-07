@@ -96,16 +96,18 @@ def _predict_batch(
     worker: int,
     device: torch.device,
     dtype: torch.dtype | None,
+    autocast_device_type: str | None = None,
 ) -> QueryResult:
     if device.type == "cuda":
         torch.cuda.set_device(device)
     start = time.perf_counter()
+    autocast_device_type = autocast_device_type or device.type
     with (
         torch.inference_mode(),
         torch.autocast(
-            device_type=device.type,
+            device_type=autocast_device_type,
             dtype=dtype,
-            enabled=dtype is not None and device.type == "cuda",
+            enabled=dtype is not None and autocast_device_type == "cuda",
         ),
     ):
         x = batch.x.to(device)
@@ -130,6 +132,8 @@ class QueryParallel:
             than one device internally.
         dtype: Explicit worker autocast dtype, or None to disable autocast.
             Thread-local caller autocast and inference state are not inherited.
+        autocast_device_type: Compute backend when preprocessing uses a
+            different device, e.g. CPU recipes with CUDA ensemble workers.
 
     The persistent single-thread queue per worker serializes access to that
     worker's mutable recipe/cache state, including concurrent submit callers.
@@ -144,6 +148,7 @@ class QueryParallel:
         devices: Sequence[torch.device | str],
         *,
         dtype: torch.dtype | None = torch.bfloat16,
+        autocast_device_type: str | None = None,
     ) -> None:
         if not models or len(models) != len(devices):
             raise ValueError("Provide one device for each fitted model")
@@ -152,6 +157,7 @@ class QueryParallel:
         self.models = tuple(models)
         self.devices = tuple(torch.device(device) for device in devices)
         self.dtype = dtype
+        self.autocast_device_type = autocast_device_type
         # Explicit setup boundary: fit may have used another CUDA stream.
         for device in self.devices:
             if device.type == "cuda":
@@ -178,6 +184,7 @@ class QueryParallel:
             worker,
             self.devices[worker],
             self.dtype,
+            self.autocast_device_type,
         )
 
     def close(self) -> None:
