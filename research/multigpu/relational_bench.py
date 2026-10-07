@@ -14,10 +14,13 @@ import resource
 import shlex
 import subprocess
 import sys
+import threading
 import time
 import traceback
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -31,6 +34,9 @@ from sklearn.metrics import (
 )
 
 import sdm
+from sdm.models.kumo.relational.graph import HomogeneousGraph
+from sdm.models.kumo.relational.task import TaskGraph
+from sdm.processing.execution import RecipeExecution
 
 
 def digest_table(table: sdm.TableTensor) -> str:
@@ -471,6 +477,58 @@ def run(args: argparse.Namespace) -> None:
         np.save(args.output / "predictions.npy", arrays[0])
         torch.save(pred, args.output / "predictions.pt")
         if args.profile:
+            phase_times: dict[str, list[float]] = {}
+            phase_lock = threading.Lock()
+
+            def timed_method(name: str, original: Any) -> Any:
+                def wrapped(*positional: Any, **keywords: Any) -> Any:
+                    started = time.perf_counter()
+                    try:
+                        with torch.cuda.nvtx.range(name):
+                            return original(*positional, **keywords)
+                    finally:
+                        with phase_lock:
+                            phase_times[name].append(
+                                time.perf_counter() - started
+                            )
+
+                return wrapped
+
+            with ExitStack() as stack:
+                for owner, method, is_classmethod in [
+                    (TaskGraph, "from_input", True),
+                    (HomogeneousGraph, "from_tables", True),
+                    (RecipeExecution, "transform", False),
+                ]:
+                    name = f"{owner.__name__}.{method}"
+                    phase_times[name] = []
+                    wrapped = timed_method(name, getattr(owner, method))
+                    stack.enter_context(
+                        patch.object(
+                            owner,
+                            method,
+                            staticmethod(wrapped)
+                            if is_classmethod
+                            else wrapped,
+                        )
+                    )
+                synchronize(devices)
+                started = time.perf_counter()
+                phase_predictions, _ = predict()
+                synchronize(devices)
+                stats["phase_profile_pass_s"] = time.perf_counter() - started
+            stats["phase_profile_host_seconds"] = phase_times
+            stats["phase_profile_note"] = (
+                "Inclusive host wall times with asynchronous GPU launches; "
+                "nested and concurrent calls overlap. Separate pass, "
+                "excluded from throughput measurements."
+            )
+            stats["phase_profile_exact_prediction_match"] = bool(
+                np.array_equal(
+                    torch.cat(phase_predictions, dim=0).numerical.numpy(),
+                    arrays[0],
+                )
+            )
             handles = []
             scopes = {}
 
