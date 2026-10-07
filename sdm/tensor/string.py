@@ -494,6 +494,12 @@ def _sort(
     if inp.dim() != 1:
         raise NotImplementedError("'sort' only supports one-dimensional input")
 
+    perm = _sort_indices(inp, descending=descending)
+    return cast(StringTensor, inp[perm]), perm
+
+
+def _sort_indices(inp: StringTensor, *, descending: bool = False) -> Tensor:
+    """Return the backend sort permutation without gathering values."""
     backend: Literal["arrow", "cudf"] = "arrow"
     if inp.is_cuda:
         if importlib.util.find_spec("cudf") is not None:
@@ -523,4 +529,4 @@ def _sort(
             perm_ser = inp.to_cudf().argsort(ascending=not descending)
             perm = torch.from_dlpack(perm_ser.astype("int64").to_cupy())
 
-    return cast(StringTensor, inp[perm]), perm
+    return perm
