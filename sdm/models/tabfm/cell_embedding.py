@@ -180,7 +180,8 @@ class CellEmbedding(torch.nn.Module):
         if torch.is_grad_enabled():
             x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., R, C, G, F]
         elif torch.compiler.is_compiling():
-            # Match eager inference's multiply, then float32 buffer cast.
+            # Compiled inference: avoid out= on a transposed buffer.
+            # Cast after multiplying to match the FP32 inference buffer.
             x = (x.unsqueeze(-1) * freq).to(torch.float32)
         else:
             tmp = x.new_empty((*B, C, R, G, F), dtype=torch.float32)
