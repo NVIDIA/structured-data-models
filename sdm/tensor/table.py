@@ -111,6 +111,27 @@ def _move_categories(
     return cast(tuple[Tensor, ...], tuple(moved))
 
 
+class _Columns(Mapping[Stype, tuple[str, ...]]):
+    """Read-only schema snapshot with compiler-guardable tuple storage."""
+
+    def __init__(
+        self, items: tuple[tuple[Stype, tuple[str, ...]], ...]
+    ) -> None:
+        self._items = items
+
+    def __getitem__(self, key: Stype) -> tuple[str, ...]:
+        for stype, names in self._items:
+            if stype == key:
+                return names
+        raise KeyError(key)
+
+    def __iter__(self) -> Iterator[Stype]:
+        return iter(tuple(stype for stype, _ in self._items))
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+
 @dataclass(frozen=True)
 class TableSchema:
     r"""The schema of a :class:`TableTensor`.
@@ -869,7 +890,7 @@ class TableTensor(Tensor):
     @property
     def columns(self) -> Mapping[Stype, tuple[str, ...]]:
         r"""Return column names grouped by semantic type."""
-        return self._columns.copy()
+        return _Columns(tuple(self._columns.items()))
 
     @property
     def column_names(self) -> frozenset[str]:
