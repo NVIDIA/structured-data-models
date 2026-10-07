@@ -1,0 +1,35 @@
+{
+  "backend": "arrow",
+  "harness_override": "Intercept only find_spec('cudf')",
+  "cudf_installed": true,
+  "backend_checks_by_module": {
+    "sdm.relational.join": 492
+  },
+  "runner": "/home/ubuntu/kumo-multigpu/relational_bench-a12b70a75.py",
+  "runner_args": [
+    "run",
+    "--workload",
+    "/home/ubuntu/kumo-multigpu/results/workload-hm-c1024-b250",
+    "--mode",
+    "ensemble",
+    "--gpus",
+    "4",
+    "--estimators",
+    "4",
+    "--repeats",
+    "3",
+    "--phase-profile",
+    "--source-commit",
+    "1686803e4",
+    "--output",
+    "/home/ubuntu/kumo-multigpu/results/relational-backend-arrow-ensemble4-e4-c1024"
+  ],
+  "versions": {
+    "torch": "2.9.1+cu130",
+    "cudf-cu13": "26.6.0",
+    "pandas": "2.3.3",
+    "numpy": "2.4.6",
+    "pyarrow": "23.0.1"
+  },
+  "scope": "Single process or thread-based ensemble; not inherited by spawned processes"
+}

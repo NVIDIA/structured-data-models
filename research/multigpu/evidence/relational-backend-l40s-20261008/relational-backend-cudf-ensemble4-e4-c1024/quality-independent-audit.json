@@ -1,0 +1,68 @@
+{
+  "run": "relational-backend-cudf-ensemble4-e4-c1024",
+  "reference": "relational-backend-arrow-ensemble4-e4-c1024",
+  "checks": {
+    "full_workload_graphs": true,
+    "class_columns": true,
+    "model_seeds": true,
+    "prediction_sha": true,
+    "backend_receipt": true,
+    "same_runtime_versions": true
+  },
+  "raw_prediction_sha256": "a6c0ce579bc5348b946e6cf71c7311ced24cbadc9bd3dfa22319ee4e0e7577ee",
+  "comparison_vs_arrow_same_placement": {
+    "shape": [
+      2000,
+      2
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.011601954698562622,
+    "mean_abs": 0.0015706043019890785,
+    "rms": 0.0023721105317104784,
+    "p99_abs": 0.0073817986249923705,
+    "relative_l2": 0.0039563951269384195,
+    "within_tolerance": true
+  },
+  "class_changes_vs_arrow": 0,
+  "quality": {
+    "rows": 2000,
+    "accuracy": 0.8085,
+    "log_loss": 0.4652032128858019,
+    "brier_multiclass": 0.2955254014597249,
+    "auroc_by_class": [
+      0.6642300879525795,
+      0.6642421981847569
+    ],
+    "auroc_macro_present_classes": 0.6642361430686683,
+    "max_probability_sum_error": 8.940696716308594e-8
+  },
+  "positive_class": 1,
+  "positive_class_auroc": 0.6642300879525795,
+  "paired_logloss_delta_vs_arrow": {
+    "candidate_minus_reference": -0.0001546887422968668,
+    "ci95": [
+      -0.0004310250840870149,
+      0.00011516404814410911
+    ],
+    "groups": 2000,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_median_rows_s": 1059.5104932050122,
+  "backend_speed_ratio": 0.7764610809424157,
+  "reported_repeat_max_abs_difference": [
+    0,
+    0.004012465476989746,
+    0.004012465476989746
+  ],
+  "saved_repeats_available": false,
+  "phase_profile_exact_prediction_match": false,
+  "phase_taskgraph_median_ms": 66.89818850054507,
+  "note": "One saved prediction array; reported within-run repeat differences cannot be independently recomputed because other repeats are not archived. Phase measurements are separate inclusive host times, nested/concurrent and not additive kernel time. Native preprocessing also checks cuDF string support, so native backend comparison is not join-only."
+}

@@ -1,0 +1,68 @@
+{
+  "run": "relational-backend-arrow-ensemble1-e4-c1024",
+  "reference": "relational-backend-arrow-ensemble1-e4-c1024",
+  "checks": {
+    "full_workload_graphs": true,
+    "class_columns": true,
+    "model_seeds": true,
+    "prediction_sha": true,
+    "backend_receipt": true,
+    "same_runtime_versions": true
+  },
+  "raw_prediction_sha256": "5af5af3a60a478151c9ec6638694e858cd5bb8d697dddc7da2a6835a895ac7c9",
+  "comparison_vs_arrow_same_placement": {
+    "shape": [
+      2000,
+      2
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "class_changes_vs_arrow": 0,
+  "quality": {
+    "rows": 2000,
+    "accuracy": 0.8085,
+    "log_loss": 0.4653579016280988,
+    "brier_multiclass": 0.295628182879823,
+    "auroc_by_class": [
+      0.6635244650910447,
+      0.6635422267649048
+    ],
+    "auroc_macro_present_classes": 0.6635333459279747,
+    "max_probability_sum_error": 8.940696716308594e-8
+  },
+  "positive_class": 1,
+  "positive_class_auroc": 0.6635244650910447,
+  "paired_logloss_delta_vs_arrow": {
+    "candidate_minus_reference": 0,
+    "ci95": [
+      0,
+      0
+    ],
+    "groups": 2000,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_median_rows_s": 1347.5548014421388,
+  "backend_speed_ratio": 1,
+  "reported_repeat_max_abs_difference": [
+    0,
+    0,
+    0
+  ],
+  "saved_repeats_available": false,
+  "phase_profile_exact_prediction_match": true,
+  "phase_taskgraph_median_ms": 6.294465499877333,
+  "note": "One saved prediction array; reported within-run repeat differences cannot be independently recomputed because other repeats are not archived. Phase measurements are separate inclusive host times, nested/concurrent and not additive kernel time. Native preprocessing also checks cuDF string support, so native backend comparison is not join-only."
+}

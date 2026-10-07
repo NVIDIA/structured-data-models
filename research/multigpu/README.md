@@ -230,6 +230,20 @@ Persistent-process DP improves the **same native H&M workload** without changing
 
 The four-GPU result is 2.981× public native (1,294.66 rows/s), with 81.3% process scaling efficiency. Every process output is byte-identical to native, including class order, and complete workload hashes match. Churn-positive AUC remains 0.661948, accuracy 0.808, and log loss 0.466849. Whole graph batches travel through IPC; no related-table slicing or graph partition is used. As in the tabular process run, final CPU concatenation is outside this timer and preprocessing uses the existing Arrow/CPU fallback runtime.
 
+### Relational Arrow versus cuDF control
+
+Six matched runs test the CPU-fallback hypothesis on H&M E4/context-1,024/query-2,000/batch-250. Both modes run inside the **same cuDF 26.6 overlay environment** with unchanged Torch 2.9.1+cu130. An explicit harness switch controls cuDF discovery; receipts record actual backend checks. The native switch also changes string preprocessing availability, so that comparison is not join-only. These are backend controls, not new parallelism methods.
+
+| Executor | Arrow rows/s | cuDF rows/s | cuDF / Arrow | Saved-array class-1 AUC: Arrow / cuDF | Max saved-array probability difference |
+|---|---:|---:|---:|---|---:|
+| Native1 | 1,328.04 | 1,082.90 | 0.815× | 0.661948 / 0.662338 | 0.011796 |
+| Resident EP1 | 1,347.55 | 1,154.27 | 0.857× | 0.663524 / 0.663781 | 0.011978 |
+| Resident EP4 | 1,364.54 | 1,059.51 | 0.776× | 0.663524 / 0.664230 | 0.011602 |
+
+All three saved cuDF arrays pass the unchanged BF16 tolerance against their Arrow control; native changes one predicted label and EP changes none. Paired log-loss intervals include zero. cuDF is slower in this workload, so installing it does not resolve the observed scaling bottleneck. Separate inclusive TaskGraph host timings also increase, but nested/concurrent host spans must not be summed as GPU kernel time or used alone to identify the cause.
+
+This control exposes a reporting limitation: the harness saves the **first** repeat's prediction array/hash but scores the **last** repeat. cuDF repeats are not identical according to logged maximum differences (roughly 0.0020–0.0041), and later arrays were not saved. Consequently the table uses independent metrics recomputed from the saved first array; original logged last-repeat scores remain unchanged in the raw record. Cross-repeat differences cannot be independently reconstructed from the available artifact. Native cuDF saved-array AUC is 0.662338 rather than the logged 0.662308; the same distinction applies to EP1/EP4. This is a measurement limitation, not evidence of a quality benefit.
+
 ### Cached context split on L4
 
 This initial pretrained comparison uses **KumoTabular small**, Covertype, E4, context 1,024, queries 2,048, batch 256, BF16 autocast, and the public CPU cache-offload policy. All controls use the same input hashes and ordered query IDs. Independent recomputation matched each recorded quality metric, and every repeat/rank output hash agrees within its arm.
@@ -348,16 +362,16 @@ This checklist follows the [study questions and completion evidence](study-plan.
 | Test viable multi-GPU decompositions | GPU-measured EP, thread/process query DP, cached CP, stages/layers, and threaded 2DP×2EP | Process EP has synthetic CUDA fixture tests; graph EP has reduced-Kumo CUDA tests, but neither has accepted pretrained performance evidence |
 | Proper strong and weak scaling | Fixed-work 1/2/4-GPU ladders; tuned and fully gathered process controls; weak 4k/8k/16k queries with full16k equivalence audit | Homogeneous eight-GPU and NVLink unavailable; mixed-eight results are not locally verified and must not be inferred |
 | Separate native tuning from parallel gains | Native estimator batching, resident-one-GPU controls, fixed local batch-two EP, reverse-order repetitions, explicit input/gather boundaries | Not every method has an identical complete invocation boundary; claim warm execution only where measured |
-| Prediction quality and correctness | Fixed row/graph/member identities, positive-class correction, byte comparisons, unchanged BF16 gates, paired metrics and full999 quantiles | CP BF16 and FP32-partial F1 failures remain; full-model FP32 diagnostic has no accepted local result yet |
+| Prediction quality and correctness | Fixed row/graph/member identities, positive-class correction, byte comparisons, unchanged BF16 gates, paired metrics and full999 quantiles | CP BF16 and FP32-partial F1 failures remain; full-model FP32 diagnostic was staged but never launched |
 | Memory and feasible workload capacity | Per-device allocator peaks/cache/RSS, compact-cache control, contexts up to64k, retained OOMs and successful allocator retries | No proof yet of multi-GPU-only feasibility; E8 partial remote status is not accepted evidence, and a native CPU-offload capacity control is absent |
 | Profile and explain successes/failures | Separate Nsight EP/CP traces, device overlap, kernel counts, cache traffic, collective waiting, tested autocast/compaction interventions | Full frontend/ICL phase attribution and some pending traces are unavailable; no GIL-only or pure-bandwidth causal claim |
-| Native relational setup and pipeline costs | Fixed complete temporal graphs, sampling/load/fit timing, CPU fallback explicitly recorded | Whole-pipeline one-shot latency and service-tail latency are not uniformly measured; local matched Arrow/cuDF arms await final audit/integration |
+| Native relational setup and pipeline costs | Fixed complete temporal graphs, sampling/load/fit timing, matched Arrow/cuDF arms audited and slower with cuDF | Whole-pipeline one-shot latency and service-tail latency are not uniformly measured; cuDF first-saved/last-scored repeat mismatch is retained explicitly |
 | Go beyond prior user/Aki work | Native Kumo adaptations, batching/process isolation, explicit CP global-length/GQA handling, placement/capacity work, analyzed TP/table/graph/full-fit options | Analyzed-only options remain unimplemented, with architecture/communication reasons documented; no implied benchmark |
 | Generic SDM integration | Tested candidates and public-API examples; small extraction boundaries in integration.md | Study harness is research, not production API; final integrated tests/source inventory must be recorded before handoff |
 | Reproducibility and failures | Raw small records, exact commands where recorded, hashes for local predictions/profiles, hardware/runtime/checkpoint receipts, failures retained | Final index sweep and complete run/source manifest reconciliation still required; remote-only artifacts are not retained merely because mentioned |
 | Resource closure | Task-owned Spot hosts and resource/capacity failures documented by the sole operator | Final instance/resource teardown confirmation and actual elapsed-cost receipt are required; shutdown timers alone are not verification |
 
-Pending full-FP32 CP, alternative-collective, pretrained graph/process EP, E8 capacity, and mixed-host diagnostics may be completed only within existing scope and access. If unavailable, close them explicitly as unmeasured or incomplete attempts rather than extending the study with new methods or fabricating outcomes. Operational cleanup and local evidence verification remain separate obligations.
+The CP owner confirms that full-FP32 F1, alternative-collective, and 32k MHA diagnostic scripts were staged but **never launched** before access restrictions; these are unmeasured, not failed experiments. Pretrained graph/process EP and mixed-host performance have no accepted local results. E8 capacity has partial owner-reported remote status but no complete local attempt/result receipt, so no feasibility conclusion is accepted. Any recovery stays within existing scope and permitted access; otherwise close these explicitly as unmeasured/incomplete rather than adding methods or inventing outcomes. Operational cleanup and local evidence verification remain separate obligations.
 
 ## Retained evidence
 
@@ -366,6 +380,7 @@ The [initial tabular evidence index](evidence/initial-tabular-20261008/index.jso
 Additional checked snapshots retain the new measurements:
 
 - [Initial relational L40S evidence](evidence/initial-relational-l40s-20261008/index.json): 29 archived records, 62 external artifacts verified; includes corrected class-aware quality audits and the separately labeled E1 smoke.
+- [Relational backend controls](evidence/relational-backend-l40s-20261008/index.json): 18 archived result/audit/backend records, 30 external artifacts verified; saved-first-array quality and logged-last-repeat caveat preserved.
 - [Initial context L4 evidence](evidence/initial-context-l4-20261008/index.json): 14 archived records, 36 external artifacts verified; includes native/LSE/CP full-model runs and both kernel probes.
 - [Initial placement L4 evidence](evidence/initial-placement-l4-20261008/index.json): four archived records, 20 external artifacts verified.
 - [Batched ensemble L40S evidence](evidence/batched-ensemble-l40s-20261008/index.json): eight archived result/audit records, 24 external artifacts verified; includes the passing EP2 and failing EP4 comparisons.

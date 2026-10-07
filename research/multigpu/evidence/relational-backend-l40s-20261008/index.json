@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-07T16:37:37.829420+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "relational-backend-arrow-ensemble1-e4-c1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble1-e4-c1024",
+      "artifacts": [
+        {
+          "name": "backend.json",
+          "role": "record",
+          "bytes": 874,
+          "sha256": "036f39c6b2365e4c627d4db04732e5067867d5319f0800c110775ba3dc4de56c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble1-e4-c1024/backend.json",
+          "archived_path": "relational-backend-arrow-ensemble1-e4-c1024/backend.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 11373,
+          "sha256": "8c3e548b1540954b3eb68f94098e458d97d1d275746a0b8c75f01b9ea40b154f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble1-e4-c1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "95b43efcbe1a8e8f2cb8e564887129b00963db262aed976c86f86283e68b7b4b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble1-e4-c1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 2049,
+          "sha256": "f87b5195e44d8f860ca3c7706650f62dd77c52f8b0cc4cdc37467da1be752c78",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble1-e4-c1024/quality-independent-audit.json",
+          "archived_path": "relational-backend-arrow-ensemble1-e4-c1024/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 14424,
+          "sha256": "26c89701cf28b1305a7e87be9c47ac66619dc3971b4221318495c069eadb5318",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble1-e4-c1024/result.json",
+          "archived_path": "relational-backend-arrow-ensemble1-e4-c1024/result.json"
+        }
+      ]
+    },
+    {
+      "label": "relational-backend-arrow-ensemble4-e4-c1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble4-e4-c1024",
+      "artifacts": [
+        {
+          "name": "backend.json",
+          "role": "record",
+          "bytes": 874,
+          "sha256": "c3c30c65e438e231bb3e1111355f9ff1a1afc4ec28f68ae71651eee2c871e553",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble4-e4-c1024/backend.json",
+          "archived_path": "relational-backend-arrow-ensemble4-e4-c1024/backend.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 12618,
+          "sha256": "4de9a9c30c4c99607bb7930b4f6f42301766ee27ce832353dd7918c2905cdd33",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble4-e4-c1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "95b43efcbe1a8e8f2cb8e564887129b00963db262aed976c86f86283e68b7b4b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble4-e4-c1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 2050,
+          "sha256": "f8bcd51a0b985b1be74c92a30167ee4f0d6800a1742d82fbb6e0086f015f1eb4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble4-e4-c1024/quality-independent-audit.json",
+          "archived_path": "relational-backend-arrow-ensemble4-e4-c1024/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 16028,
+          "sha256": "57d26890fb24c9cfb3fa286a13f0a686fad1f103d444f5dcb0b21c67be2cf8e8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-ensemble4-e4-c1024/result.json",
+          "archived_path": "relational-backend-arrow-ensemble4-e4-c1024/result.json"
+        }
+      ]
+    },
+    {
+      "label": "relational-backend-arrow-native1-e4-c1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-native1-e4-c1024",
+      "artifacts": [
+        {
+          "name": "backend.json",
+          "role": "record",
+          "bytes": 899,
+          "sha256": "70c58379da5150f1854d290e641bc284653759b8c10fa2eef7d2a3b70afc0dde",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-native1-e4-c1024/backend.json",
+          "archived_path": "relational-backend-arrow-native1-e4-c1024/backend.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 11157,
+          "sha256": "e1a6efa679d2320e26183f151be8e8a2fea8bcf306b5fcfa6c78ff1d3d7ea744",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-native1-e4-c1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "3ef8db488136657b833e3687b00671927ef1219507f0a8767dccb007023020c3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-native1-e4-c1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 2040,
+          "sha256": "e7a8a9845f60488b6af2d02f4ce9ded5fa1be6c29afb752887267c97b1acbb36",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-native1-e4-c1024/quality-independent-audit.json",
+          "archived_path": "relational-backend-arrow-native1-e4-c1024/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 14306,
+          "sha256": "ada3bd9d3fe3e069616514dbb14129ee0e85315ccaa1ea4501f147e6a15a77e3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-arrow-native1-e4-c1024/result.json",
+          "archived_path": "relational-backend-arrow-native1-e4-c1024/result.json"
+        }
+      ]
+    },
+    {
+      "label": "relational-backend-cudf-ensemble1-e4-c1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble1-e4-c1024",
+      "artifacts": [
+        {
+          "name": "backend.json",
+          "role": "record",
+          "bytes": 872,
+          "sha256": "401fd70f4e266acc7af301944f2f2c2e425555872b920ffd8e48229fb385bd0c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble1-e4-c1024/backend.json",
+          "archived_path": "relational-backend-cudf-ensemble1-e4-c1024/backend.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 13529,
+          "sha256": "2b7ff8ea8ccd393913284f2da4fb5bfff3670638ff096ad54005555a5915345f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble1-e4-c1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "0300ec5ce7c1440841d475d202f7eb39dd5203898d090e3bb1fe54c6109a41a8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble1-e4-c1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 2266,
+          "sha256": "0920f04f2f3817641c31a0bc91e3dbae9ae2febd5983caf3eb4edf524fa28a4f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble1-e4-c1024/quality-independent-audit.json",
+          "archived_path": "relational-backend-cudf-ensemble1-e4-c1024/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 14442,
+          "sha256": "aebea1c1b0d61de230ee4a122dc12944b7bc8d1822092ff67a897ec9409c68ed",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble1-e4-c1024/result.json",
+          "archived_path": "relational-backend-cudf-ensemble1-e4-c1024/result.json"
+        }
+      ]
+    },
+    {
+      "label": "relational-backend-cudf-ensemble4-e4-c1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble4-e4-c1024",
+      "artifacts": [
+        {
+          "name": "backend.json",
+          "role": "record",
+          "bytes": 872,
+          "sha256": "9816adc7c50e491db194c3bad0078fe69a41a264cfc0f25faf6f9155dbcba433",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble4-e4-c1024/backend.json",
+          "archived_path": "relational-backend-cudf-ensemble4-e4-c1024/backend.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 15744,
+          "sha256": "69d8c923580e92f8bff94e6b54521f501b050c9b7da84bb0dbd38bf3b18565c9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble4-e4-c1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "b0c109f38c5c342a24b079ee71d36e1e0ab5eae89b6b5c79518e58f468d66846",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble4-e4-c1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 2268,
+          "sha256": "ab31de9fcd53736aba49dc0532ef80aa72de429034b0992373082399a26cb19e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble4-e4-c1024/quality-independent-audit.json",
+          "archived_path": "relational-backend-cudf-ensemble4-e4-c1024/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 16011,
+          "sha256": "7070e320c51c4ba6d7b82b0fe6539568a275acbc07f3da5d86c1e9c94b70dfba",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-ensemble4-e4-c1024/result.json",
+          "archived_path": "relational-backend-cudf-ensemble4-e4-c1024/result.json"
+        }
+      ]
+    },
+    {
+      "label": "relational-backend-cudf-native1-e4-c1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-native1-e4-c1024",
+      "artifacts": [
+        {
+          "name": "backend.json",
+          "role": "record",
+          "bytes": 897,
+          "sha256": "eb828fde1d861ca49cdca30c39d1e8388e9076ab45993f47426b456b5dfeef85",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-native1-e4-c1024/backend.json",
+          "archived_path": "relational-backend-cudf-native1-e4-c1024/backend.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 13957,
+          "sha256": "1e954c41ae690699659da0f2cf81d3bbc241bfc0d4e66ab33d9d08ba1359e6ff",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-native1-e4-c1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "155ee79ae8dba4662632074546a8dc1044c23bdc3317b71a469d4043faf16501",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-native1-e4-c1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 2259,
+          "sha256": "18f0bb6ea365b9c2df5491474d5204e5c30b95c9fa37d9224caca9c7f04db38d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-native1-e4-c1024/quality-independent-audit.json",
+          "archived_path": "relational-backend-cudf-native1-e4-c1024/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 14319,
+          "sha256": "3b806e89a8940003f4adf7b06889c99f3eb0be0249f9ba9e010562aea62e19d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational/relational-backend-cudf-native1-e4-c1024/result.json",
+          "archived_path": "relational-backend-cudf-native1-e4-c1024/result.json"
+        }
+      ]
+    }
+  ]
+}
