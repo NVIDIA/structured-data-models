@@ -79,17 +79,20 @@ For CUDA fits with multiple estimators, SDM can store fitted state in pinned hos
 PyTorch normally rounds individual pinned allocations up to a power of two.
 For example, a 3 MiB tensor can occupy a 4 MiB allocation.
 
-With PyTorch 2.13 or later, set `pinned_max_round_threshold_mb:1` before starting Python to use exact allocation sizes above 1 MiB:
+With PyTorch 2.13 or later, SDM automatically sets `pinned_max_round_threshold_mb:1` before offloading a fitted cache.
+Allocations above 1 MiB then use exact sizes.
+SDM preserves the current allocator options, including settings applied after CUDA initialization.
+An explicit rounding threshold takes precedence over SDM's default.
+Older PyTorch versions keep their existing allocation behavior.
+
+To select a different threshold, configure PyTorch before starting Python:
 
 ```bash
-alloc_conf="${PYTORCH_ALLOC_CONF:-${PYTORCH_CUDA_ALLOC_CONF:-}}"
-PYTORCH_ALLOC_CONF="${alloc_conf:+${alloc_conf},}pinned_max_round_threshold_mb:1" \
-  python inference.py
+PYTORCH_ALLOC_CONF=pinned_max_round_threshold_mb:128 python inference.py
 ```
 
 Replace `inference.py` with your inference script.
-The command preserves other allocator options from `PYTORCH_ALLOC_CONF`, or from its legacy alias `PYTORCH_CUDA_ALLOC_CONF`.
-If the existing configuration already specifies `pinned_max_round_threshold_mb`, edit that value instead of appending it again.
+If you already configure the allocator, add or edit the threshold in that configuration while keeping your other options.
 Older PyTorch versions can reject this option.
 
 The setting applies to all pinned allocations in the process.

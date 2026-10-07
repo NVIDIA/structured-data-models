@@ -6,6 +6,24 @@ import os
 import torch
 
 
+def configure_pinned_memory() -> None:
+    r"""Avoid rounding large pinned allocations unless explicitly configured.
+
+    The allocator setting applies process-wide and retains freed blocks for
+    reuse. PyTorch versions before 2.13 do not support the rounding threshold.
+    """
+    version = tuple(int(part) for part in torch.__version__.split(".")[:2])
+    if version < (2, 13):
+        return
+    settings = torch._C._accelerator_getAllocatorSettings()
+    if "pinned_max_round_threshold_mb" in settings:
+        return
+    setting = "pinned_max_round_threshold_mb:1"
+    torch._C._accelerator_setAllocatorSettings(
+        f"{settings},{setting}" if settings else setting
+    )
+
+
 def chunk_memory_limit(device: torch.device) -> int:
     r"""Bytes one chunk of a chunked operation may occupy on a CUDA device.
 

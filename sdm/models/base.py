@@ -20,6 +20,7 @@ from sdm import (
     TaskLike,
 )
 from sdm._inference import inference_mode
+from sdm._memory import configure_pinned_memory
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.models.callback import Callback
@@ -312,6 +313,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 )
 
             if x.is_cuda and len(contexts) > 1:
+                configure_pinned_memory()
                 try:  # Copy to pinned CPU memory:
                     batch_cache = batch_cache._apply_tensor(
                         lambda tensor: torch.ops.aten._to_copy.default(
