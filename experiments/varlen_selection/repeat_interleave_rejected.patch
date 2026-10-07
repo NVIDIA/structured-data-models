@@ -1,0 +1,19 @@
+diff --git a/sdm/tensor/var_len.py b/sdm/tensor/var_len.py
+index dcd7a3a49..1f245ac0d 100644
+--- a/sdm/tensor/var_len.py
++++ b/sdm/tensor/var_len.py
+@@ -1436,12 +1436,8 @@ def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
+         dtype=offset.dtype,
+         device=offset.device,
+     )
+-    local -= offset[:-1].repeat_interleave(
+-        count,
+-        output_size=total,
+-    )
+-    index = start.repeat_interleave(count, output_size=total)
+-    index += local
++    group = torch.repeat_interleave(count, output_size=total)
++    index = start[group] + (local - offset[group])
+ 
+     return offset, index
+ 
