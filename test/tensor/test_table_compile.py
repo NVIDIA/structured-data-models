@@ -6,12 +6,20 @@ from typing import Any
 import pytest
 import torch
 
-from sdm import CategoricalTensor, ColumnarTensor, StringTensor, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 
 
 @pytest.mark.parametrize("fullgraph", [False, True])
 @pytest.mark.parametrize("mixed", [False, True])
 def test_compile_table(fullgraph: bool, mixed: bool) -> None:
+    torch.compiler.reset()
+
     def transform(table: TableTensor) -> TableTensor:
         return table.replace_blocks(numerical=table.numerical.square())[1::2]
 
@@ -39,6 +47,8 @@ def test_compile_table(fullgraph: bool, mixed: bool) -> None:
 
 @pytest.mark.parametrize("fullgraph", [False, True])
 def test_compile_table_construction(fullgraph: bool) -> None:
+    torch.compiler.reset()
+
     def transform(x: torch.Tensor) -> TableTensor:
         return TableTensor.from_tensor(x.sin())
 
@@ -50,6 +60,8 @@ def test_compile_table_construction(fullgraph: bool) -> None:
 
 @pytest.mark.parametrize("fullgraph", [False, True])
 def test_compile_table_view_alias(fullgraph: bool) -> None:
+    torch.compiler.reset()
+
     def transform(table: TableTensor) -> TableTensor:
         return table[1::2]
 
@@ -63,3 +75,27 @@ def test_compile_table_view_alias(fullgraph: bool) -> None:
         assert torch.equal(table, expected)
         result.numerical.add_(5)
         assert torch.equal(result.numerical, table.numerical[1::2])
+
+
+@pytest.mark.parametrize("fullgraph", [False, True])
+def test_compile_table_schema_guards(fullgraph: bool) -> None:
+    torch.compiler.reset()
+
+    def transform(table: TableTensor) -> torch.Tensor:
+        columns = dict(table._column_items)
+        scale = 2 if columns[Stype.numerical][0] == "a" else 3
+        return table.numerical * scale
+
+    compiled = torch.compile(transform, fullgraph=fullgraph, dynamic=True)
+    for names, rows in (
+        (["a", "b"], 5),
+        (["c", "d"], 5),
+        (["b", "a"], 5),
+        (["a", "b"], 9),
+    ):
+        table = TableTensor(
+            columns={"numerical": names},
+            numerical=torch.randn(rows, 2),
+        )
+        assert all(isinstance(key, Stype) for key in table.columns)
+        torch.testing.assert_close(compiled(table), transform(table))
