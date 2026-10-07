@@ -107,4 +107,39 @@ The fitted cache occupied 512,754,868 bytes in every arm. Stage placement moved 
 
 Each result directory retains configuration, runtime and source identity, three raw prediction times, per-batch latency, per-GPU allocated/reserved memory, cache storage by physical device, query identities, targets, predictions, and sampled utilization/power. Local evidence root: `.kumo-multigpu-20261008/placement/host2/placement-large-e4-c1024-q2048-v1-{ep1,stage2,layers2,layers4}`. The GPU test log is `placement-tests-55dba6bb5.log` in the same root. These results are not compared by ratio with the separate L40S throughput host.
 
-Long-context capacity, relational placement, and transfer profiling remain in progress. An actual OOM frontier has not yet been measured. No cloud instances were launched by this workstream.
+## Longer contexts and native relational measurements
+
+The Covertype comparison was repeated at 16,384 TRAIN rows with the same 2,048 queries, E=4, batch 256, precision, and L4 hardware. Source was `1686803e4`. All predictions remained byte-identical; validation accuracy was 0.91455078125, log loss 0.22567126154899597, and OVR AUROC 0.9925490711478547.
+
+| Covertype C=16,384 | Resident 1 GPU | Stage 2 GPUs | Layers 2 GPUs | Layers 4 GPUs |
+|---|---:|---:|---:|---:|
+| Median throughput (rows/s) | 1,865.11 | 1,830.66 | 1,754.70 | 1,809.19 |
+| Relative throughput | 1.000x | 0.982x | 0.941x | 0.970x |
+| Maximum per-GPU fit allocation (GiB) | 3.049 | 2.085 | 2.264 | 1.876 |
+| Maximum per-GPU prediction allocation (GiB) | 2.187 | 1.764 | 1.309 | 0.876 |
+
+Four-layer-device placement reduced the maximum prediction allocation by 59.9% and fit allocation by 38.5%, with a 3.0% throughput penalty. Total logical cache and unique backing storage both equaled 1,132,463,344 bytes. A separate compact-cache arm therefore correctly made no storage reduction on this workload and produced identical predictions. This differs from the small-context case, where oversized backing views existed; compaction benefit depends on actual cache layout.
+
+| Cache configuration | Logical bytes, summed over members | Unique backing bytes | Physical bytes by GPU in stage mode | Physical bytes by GPU in four-device layer mode |
+|---|---:|---:|---|---|
+| Covertype C=1,024, E=4 | 358,614,196 | 512,754,868 | `[462423220, 50331648]` | `[475006132, 12582912, 12582912, 12582912]` |
+| Covertype C=16,384, E=4 | 1,132,463,344 | 1,132,463,344 | `[327156976, 805306368]` | `[528483568, 201326592, 201326592, 201326592]` |
+
+The non-ICL cache changed between contexts because fitted preprocessing and batching affect its dimensions and backing allocation; do not extrapolate the measured C=1,024 encoder-cache byte count as a fixed constant for every context. All arms within each workload had the same total cache bytes.
+
+Native KumoRelational was then measured on `rel-hm/user-churn`: 16,384 TRAIN context rows, 4,096 ordered validation queries, eight batches of 512, two-hop `[16,16]` temporal-last sampling, E=4, BF16 autocast, and the same L4 host. The context graph contained 319,383 sampled nodes: 142,681 article, 16,384 customer, and 160,318 transaction rows. Source was `1686803e4`, with phase-accounting-fixed runner `36b4f6fe5`; the runner SHA is recorded in each result. Graph SHA256 was independently matched across local and remote copies before the accepted four-arm comparison. An earlier baseline overlapping graph transfer is retained as `v1` but excluded; accepted comparisons use `v2` only.
+
+| Native H&M C=16,384 | Resident 1 GPU | Stage 2 GPUs | Layers 2 GPUs | Layers 4 GPUs |
+|---|---:|---:|---:|---:|
+| Median throughput (rows/s) | 1,050.73 | 1,066.06 | 1,060.83 | 1,057.60 |
+| Relative throughput | 1.000x | 1.015x | 1.010x | 1.007x |
+| Maximum per-GPU fit allocation (GiB) | 5.322 | 4.061 | 4.687 | 4.374 |
+| Maximum per-GPU prediction allocation (GiB) | 2.111 | 1.650 | 1.293 | 0.886 |
+
+All four 4,096-by-2 prediction arrays were byte-identical. Accuracy was 0.80810546875, positive-class-1 AUROC 0.670048930298348, and runner log loss 0.46131277084350586. The small throughput differences are not convincing evidence of acceleration. Stage placement achieved the lowest fit peak, a 23.7% reduction, because the encoder/GNN remained on GPU0 without any ICL cache there. Layer placement achieved the lowest prediction peak, a 58.0% reduction, by spreading the ICL cache. This illustrates why fit and prediction need separate memory measurements.
+
+The relational executor reported 1,636,581,408 logical cache bytes in every arm. This runner revision did not separately record unique physical cache storage, so no measured physical-cache total is inferred from the logical number. Larger-context follow-ups add that measurement. Relational joins used SDM's CPU fallback because cuDF was unavailable; the runtime used eight CPU threads. The measured end-to-end latency includes that fallback and host/device synchronization.
+
+Independent audits passed input/graph identities, member seeds, prediction columns, prediction hashes, numerical equality, and recomputed performance/quality for both tables. Evidence directories are `placement-large-e4-c16384-q2048-v1-*` and `placement-hm-e4-c16384-q4096-v2-*` beneath the same local evidence root. Each contains an independent quality-audit sidecar.
+
+An actual OOM frontier and transfer profiling remain in progress. No cloud instances were launched by this workstream.
