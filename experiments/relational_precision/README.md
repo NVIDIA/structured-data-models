@@ -71,3 +71,13 @@ PYTHONPATH=/path/to/source python gpu_native_norm.py \
 ```
 
 Use the bmm candidate source for these comparisons. The follow-up `eb2567919` preserves existing vector-input support in the compiled Linear fallback; it does not change these batched model results. Compare the same source without the diagnostic import first. Keep BF16 versus eager BF16 separate from FP32 versus eager FP32. The GPU runner is staged from `experiment/kumo-gpu-compile-validation`.
+
+### Intermediate rounding diagnostic
+
+`gpu_emulate_casts.py --runner RUNNER [RUNNER_ARGS]` adds the per-compilation
+`emulate_precision_casts=True` option. It leaves model inputs, weights, autocast,
+and tolerances unchanged. PyTorch documents this option as preserving intermediate
+low-precision casts that fusion can otherwise eliminate. It also selects PyTorch's
+libdevice behavior, so an improvement alone does not isolate rounding from
+transcendental implementation differences. This is a diagnostic, not a default
+configuration recommendation; model parity and performance must be measured.
