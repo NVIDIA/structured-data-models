@@ -156,7 +156,13 @@ def _copy_wrapper_(
             leaves[id(dst)] = (dst, src)
 
     collect(destination, source)
-    for dst, src in leaves.values():
-        if dst is not src:
-            dst.copy_(src, non_blocking=non_blocking)
+    copies = [(dst, src) for dst, src in leaves.values() if dst is not src]
+    for i, (dst, _) in enumerate(copies):
+        for j, (_, src) in enumerate(copies):
+            if i != j and torch._C._is_alias_of(dst, src):
+                raise ValueError(
+                    "Copy does not support cross-leaf storage overlap"
+                )
+    for dst, src in copies:
+        dst.copy_(src, non_blocking=non_blocking)
     return destination

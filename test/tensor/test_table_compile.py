@@ -59,11 +59,13 @@ def test_compile_table_construction(fullgraph: bool) -> None:
 
 
 @pytest.mark.parametrize("fullgraph", [False, True])
-def test_compile_table_view_alias(fullgraph: bool) -> None:
+def test_compile_table_view_mutation(fullgraph: bool) -> None:
     torch.compiler.reset()
 
     def transform(table: TableTensor) -> TableTensor:
-        return table[1::2]
+        view = table[1::2]
+        view.numerical.add_(3)
+        return view
 
     compiled = torch.compile(transform, fullgraph=fullgraph, dynamic=True)
     for rows in (5, 9, 0):
