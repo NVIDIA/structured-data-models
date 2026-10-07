@@ -161,7 +161,10 @@ class Processor(torch.nn.Module, abc.ABC):
             table: The table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        if not table.active_stypes & self.handles_stypes:
+        if not any(
+            len(columns) > 0 and stype in self.handles_stypes
+            for stype, columns in table.columns.items()
+        ):
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
@@ -177,7 +180,10 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not table.active_stypes & self.handles_stypes:
+        if not any(
+            len(columns) > 0 and stype in self.handles_stypes
+            for stype, columns in table.columns.items()
+        ):
             return table
         self._check_is_fitted()
         return self._transform(table)
@@ -201,7 +207,10 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not table.active_stypes & self.handles_stypes:
+        if not any(
+            len(columns) > 0 and stype in self.handles_stypes
+            for stype, columns in table.columns.items()
+        ):
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:
