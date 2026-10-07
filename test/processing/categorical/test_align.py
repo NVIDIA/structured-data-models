@@ -504,3 +504,19 @@ def test_align_categories_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output[member_id].equal(expected_query)
         assert fitted_query_output[member_id].equal(expected_query)
+
+
+@pytest.mark.parametrize("fullgraph", [False, True])
+def test_align_numeric_lookup_compile(fullgraph: bool) -> None:
+    lookup = torch.compile(
+        AlignCategories._category_lookup,
+        fullgraph=fullgraph,
+        dynamic=True,
+    )
+    fitted = torch.tensor([30, 10])
+    codes = torch.empty(0, dtype=torch.int32)
+    for values in ([10, 20, 30], [40, 30, 10, 20], [30, 10]):
+        categories = torch.tensor(values)
+        actual = lookup(categories, fitted, codes)
+        expected = AlignCategories._category_lookup(categories, fitted, codes)
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)

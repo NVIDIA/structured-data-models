@@ -416,10 +416,7 @@ class AlignCategories(EnsembleProcessor):
         )
         position = position.clamp(max=sorted_categories.numel() - 1)
         match = sorted_categories[position] == comparable_categories
-        left_index = match.nonzero().view(-1)
-        right_index = perm[position[left_index]]
-        lookup[left_index] = right_index.to(codes.dtype)
-        return lookup
+        return torch.where(match, perm[position].to(codes.dtype), -1)
 
     def _align_to_categories(
         self,
