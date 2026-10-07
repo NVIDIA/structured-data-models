@@ -1,6 +1,5 @@
 # ruff: noqa: D103, T201
 import argparse
-import contextlib
 import json
 import traceback
 from pathlib import Path
@@ -33,6 +32,7 @@ p.add_argument("--relational-query-indices", type=int, nargs="+")
 p.add_argument("--recompile-limit", type=int)
 p.add_argument("--include-predictions", action="store_true")
 p.add_argument("--inner-only", action="store_true")
+p.add_argument("--capture-dynamic-outputs", action="store_true")
 a = p.parse_args()
 torch.set_num_threads(1)
 torch.manual_seed(123)
@@ -112,12 +112,14 @@ result = {
     "arm_index": a.arm_index if a.model == "relational" else None,
     "recompile_limit": a.recompile_limit,
     "inner_only": a.inner_only,
+    "capture_dynamic_outputs": a.capture_dynamic_outputs,
 }
-compiler_config = (
-    contextlib.nullcontext()
-    if a.recompile_limit is None
-    else torch._dynamo.config.patch(cache_size_limit=a.recompile_limit)
-)
+compiler_options = {}
+if a.recompile_limit is not None:
+    compiler_options["cache_size_limit"] = a.recompile_limit
+if a.capture_dynamic_outputs:
+    compiler_options["capture_dynamic_output_shape_ops"] = True
+compiler_config = torch._dynamo.config.patch(compiler_options)
 try:
     with torch.inference_mode(), compiler_config:
         oracle = new_model()
