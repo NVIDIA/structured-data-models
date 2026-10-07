@@ -105,18 +105,14 @@ class ShuffleCategories(EnsembleProcessor):
                 unused_offsets=unused_offsets,
                 generator=generator,
             )
-            if torch.compiler.is_compiling():
+            key = tuple(
+                tuple(permutation.tolist()) for permutation in permutations
+            )
+            permutation_id = permutation_id_by_key.get(key)
+            if permutation_id is None:
                 permutation_id = len(permutations_by_id)
+                permutation_id_by_key[key] = permutation_id
                 permutations_by_id.append(permutations)
-            else:
-                key = tuple(
-                    tuple(permutation.tolist()) for permutation in permutations
-                )
-                permutation_id = permutation_id_by_key.get(key)
-                if permutation_id is None:
-                    permutation_id = len(permutations_by_id)
-                    permutation_id_by_key[key] = permutation_id
-                    permutations_by_id.append(permutations)
             permutation_ids.append(permutation_id)
 
         self._permutations = BufferList(
