@@ -104,6 +104,8 @@ def test_returns_query_input_gradients(fitted: bool) -> None:
     )
     assert related_attributions.relationships == related_tables.relationships
     assert related_attributions.task_links == related_tables.task_links
+    if not fitted:
+        assert model._cache is None
 
 
 @pytest.mark.parametrize("fitted", [False, True])
