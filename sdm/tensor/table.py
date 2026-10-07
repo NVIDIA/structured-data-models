@@ -355,6 +355,28 @@ class TableTensor(Tensor):
 
         return out
 
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        return ["_numerical", "_categorical", "_datetime", "_text", "_id"], (
+            tuple(self._columns.items()),
+        )
+
+    @classmethod
+    def __tensor_unflatten__(
+        cls,
+        inner_tensors: dict[str, Tensor],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> Self:
+        return cls(
+            columns=dict(ctx[0]),
+            numerical=inner_tensors["_numerical"],
+            categorical=inner_tensors["_categorical"],
+            datetime=inner_tensors["_datetime"],
+            text=inner_tensors["_text"],
+            id=inner_tensors["_id"],
+        )
+
     @classmethod
     def from_arrow(
         cls,

@@ -126,7 +126,35 @@ class ColumnarTensor(Tensor):
         )
 
         out._columns = columns
+        if not columns:
+            out._empty = torch.empty((*size, 0), dtype=torch.uint8, device=device)
+        for i, column in enumerate(columns):
+            setattr(out, f"_column_{i}", column)
 
+        return out
+
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        return [f"_column_{i}" for i in range(len(self._columns))] or ["_empty"], (
+            self.device,
+        )
+
+    @classmethod
+    def __tensor_unflatten__(
+        cls,
+        inner_tensors: dict[str, Tensor],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> Self:
+        out = cls(
+            columns=tuple(
+                value for name, value in inner_tensors.items() if name != "_empty"
+            ),
+            size=outer_size[:-1],
+            device=ctx[0],
+        )
+        if "_empty" in inner_tensors:
+            out._empty = inner_tensors["_empty"]
         return out
 
     @classmethod
