@@ -205,6 +205,8 @@ class VarLenTensor(Tensor):
                 f"{valid.numel()} entries, but expected at least "
                 f"{storage_offset + _span_len(size, stride)} entries)"
             )
+        if isinstance(data.numel(), torch.SymInt):
+            torch._check(data.numel() <= torch.iinfo(offset.dtype).max)
         if data.numel() > torch.iinfo(offset.dtype).max:
             raise ValueError(
                 f"Expected 'offset' in {cls.__name__!r} to represent "
@@ -1386,6 +1388,8 @@ def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
 
 
 def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
+    if len(size) == 1 and stride[0] == 1:
+        return size[0]
     if math.prod(size) == 0:
         return 0
     return 1 + sum(
@@ -1421,7 +1425,8 @@ def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
     offset[:1].zero_()
     offset[1:] = count.cumsum(dim=0, dtype=torch.int64)
 
-    total = int(offset[-1])
+    total = offset[-1].item()
+    torch._constrain_as_size(total, min=0, max=torch.iinfo(torch.int64).max)
     if start.dtype == torch.int32 and total <= torch.iinfo(torch.int32).max:
         offset = offset.to(torch.int32)
 
