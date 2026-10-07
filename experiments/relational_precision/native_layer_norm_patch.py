@@ -31,8 +31,12 @@ def _fake(
     return input.new_empty(input.shape)
 
 
+# Match CUDA LayerNorm autocast without changing parameter storage dtypes.
+torch.library.register_autocast(native_layer_norm, "cuda", torch.float32)
+
+
 def _forward(self: torch.nn.LayerNorm, input: Tensor) -> Tensor:
-    if not torch.compiler.is_compiling():
+    if not torch.compiler.is_compiling() or torch.is_grad_enabled():
         return _original_forward(self, input)
     return native_layer_norm(
         input,
