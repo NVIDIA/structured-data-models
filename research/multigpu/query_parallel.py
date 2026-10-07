@@ -10,6 +10,7 @@ worker may itself be an EnsembleParallel executor for DP x EP composition.
 from __future__ import annotations
 
 import multiprocessing
+import os
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import (
@@ -218,6 +219,27 @@ def _process_predict(batch: QueryBatch | None) -> QueryResult | None:
     return _predict_batch(model, batch, worker, device, dtype)
 
 
+def _process_memory(reset_peak: bool) -> dict[str, int | str]:
+    assert _process_state is not None
+    _, worker, device, _ = _process_state
+    out: dict[str, int | str] = {
+        "worker": worker,
+        "pid": os.getpid(),
+        "device": str(device),
+    }
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+        out.update(
+            allocated_bytes=torch.cuda.memory_allocated(device),
+            reserved_bytes=torch.cuda.memory_reserved(device),
+            peak_allocated_bytes=torch.cuda.max_memory_allocated(device),
+            peak_reserved_bytes=torch.cuda.max_memory_reserved(device),
+        )
+        if reset_peak:
+            torch.cuda.reset_peak_memory_stats(device)
+    return out
+
+
 class ProcessQueryParallel:
     """Spawn one process per replica, fitting through a picklable factory.
 
@@ -265,6 +287,15 @@ class ProcessQueryParallel:
         futures = [pool.submit(_process_predict, None) for pool in self._pools]
         for future in futures:
             future.result()
+
+    def memory(
+        self, *, reset_peak: bool = False
+    ) -> list[dict[str, int | str]]:
+        """Read child allocator memory and optionally reset its peak."""
+        futures = [
+            pool.submit(_process_memory, reset_peak) for pool in self._pools
+        ]
+        return [future.result() for future in futures]
 
     def predict(self, batches: Sequence[QueryBatch]) -> list[QueryResult]:
         """Predict complete batches and return results in their input order."""

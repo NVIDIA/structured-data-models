@@ -35,11 +35,15 @@ with QueryParallel(replicas, ["cuda:0", "cuda:1"]) as executor:
 
 For tabular-only data, omit `related_tables_cpu`. For spawned workers, supply an importable module-level factory `(worker, device) -> fitted_model`, instantiate `ProcessQueryParallel(factory, devices)`, and call `ready()` before warm timing. Use the usual `if __name__ == "__main__":` guard. The factory must use the same seed/state and context for every worker, rather than adding rank to the seed. `num_threads=1` limits child CPU intra-op oversubscription.
 
+The actual runner factories live in `process_factories.py`: `TabularProcessFactory(data, context, task, size, estimators, seed, precision)` reads only the prepared TRAIN arrays, while `RelationalProcessFactory(graphs, target, task, estimators, seed, precision, num_hops)` fits the exact prepared context graph. Both load pretrained weights within each spawned process. Call `executor.memory(reset_peak=True)` after fit/warmup and `executor.memory()` after a prediction pass to obtain each child's allocator statistics. The parent's `torch.cuda.memory_allocated()` does not measure child allocations. External host/process RAM and device utilization sampling remains necessary.
+
 ## Hybrid 2 DP × 2 EP on four GPUs
 
 Create and fit two independent `EnsembleParallel` groups, one on GPUs `[0,1]`, the other on `[2,3]`. Both groups must represent the same full ensemble member plan. Pass the two group executors to `QueryParallel`, with input devices `cuda:0` and `cuda:2`. Whole query batches alternate between groups, while members within a batch execute concurrently on the group's two GPUs. Construct/finalize the groups before creating the outer executor and close the outer executor before closing the groups.
 
 This composition has two copies of the full ensemble cache across the node, rather than four copies for pure 4-way DP. Each GPU still has its own complete model parameters. The expected advantage is lower per-GPU member-cache pressure than pure DP and higher batch throughput than single-group EP. It introduces extra CPU recipe work and two independent group coordinators; GPU measurements, parity checks and cold-start costs must establish whether it is actually better.
+
+The runnable adapter is `data_parallel_adapter.py:hybrid_factory(args, replicas)`. It accepts the same benchmark factory interface as native DP, creates two equal contiguous replica groups, fits identical recipes with the same cloned generator and `member_seed`, and exposes `predict_batches`. Four supplied replicas produce the intended 2 × 2 layout; two replicas produce two singleton resident ensemble groups, a useful resident-cache DP control. Closing the adapter drains outer work before closing both inner executors. CPU tests verify exact output parity for the actual KumoTabular model with a reduced random-weight architecture; they exercise the nested scheduler, not GPU scaling.
 
 ## Memory and timing expectations
 

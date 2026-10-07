@@ -9,12 +9,14 @@ import threading
 import time
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 from research.multigpu.data_parallel_adapter import (
     DataParallelAdapter,
     hybrid_factory,
 )
+from research.multigpu.process_factories import TabularProcessFactory
 from research.multigpu.query_parallel import (
     ProcessQueryParallel,
     QueryBatch,
@@ -121,6 +123,8 @@ def test_spawn_process_roundtrip():
     query = batches()
     with ProcessQueryParallel(echo_factory, ["cpu", "cpu"]) as executor:
         executor.ready()
+        memory = executor.memory(reset_peak=True)
+        assert len({item["pid"] for item in memory}) == 2
         result = executor.predict(query)
     assert [r.row_ids for r in result] == [b.row_ids for b in query]
     with torch.inference_mode():
@@ -203,3 +207,48 @@ def test_real_kumotabular_fitted_recipe_parity(monkeypatch, adapter):
         )
         assert actual.columns == expected.columns
     assert reference[0].numerical.std() > 0
+
+
+def test_tabular_process_factory_reproduces_weights_and_fit(
+    tmp_path, monkeypatch
+):
+    torch.set_num_threads(1)
+    monkeypatch.setitem(
+        MODEL_KWARGS,
+        "small",
+        {
+            "cell_channels": 16,
+            "num_embedding_layers": 1,
+            "num_embedding_heads": 2,
+            "num_inducing_points": 4,
+            "group_size": 3,
+            "num_frequencies": 4,
+            "num_readout_tokens": 2,
+            "icl_channels": 32,
+            "num_icl_layers": 1,
+            "num_icl_heads": 2,
+            "num_icl_key_value_heads_for_query": None,
+        },
+    )
+    x = np.arange(72, dtype=np.float32).reshape(24, 3)
+    y = np.arange(24) % 2
+    np.save(tmp_path / "x_train.npy", x)
+    np.save(tmp_path / "y_train.npy", y)
+    factory = TabularProcessFactory(
+        data=tmp_path,
+        context=24,
+        estimators=2,
+        pretrained=False,
+        precision="float32",
+    )
+    first = factory(0, torch.device("cpu"))
+    second = factory(3, torch.device("cpu"))
+    for a, b in zip(first.parameters(), second.parameters(), strict=True):
+        torch.testing.assert_close(a, b, rtol=0, atol=0)
+    query = TableTensor.from_tensor(torch.from_numpy(x[:3]))
+    torch.testing.assert_close(
+        first.predict(query).numerical,
+        second.predict(query).numerical,
+        rtol=0,
+        atol=0,
+    )
