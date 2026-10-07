@@ -1,0 +1,35 @@
+{
+  "torch": "2.14.0",
+  "model": "relational",
+  "entry": "fit",
+  "fullgraph": false,
+  "backend": "inductor",
+  "device": "cpu",
+  "task": "classification",
+  "estimators": 1,
+  "query_input": "view",
+  "cache_limit": 64,
+  "capture_dynamic": false,
+  "prepared_recipe": false,
+  "atomic_recipe": false,
+  "eager_succeeded": true,
+  "fit_generator_state_exact": true,
+  "fitted_buffer_differences": [],
+  "compile_stats": {
+    "calls_captured": 6654,
+    "unique_graphs": 129
+  },
+  "graph_breaks": {
+    "Dynamic shape operator": 1,
+    "Uninitialized nn.Module": 2,
+    "Failed to convert args/kwargs to proxy": 1,
+    "Tensor.tolist() with non-integer tensor": 6,
+    "Data dependent operator": 1,
+    "torch.* op returned non-Tensor": 6,
+    "Unsupported Tensor.item() call with capture_scalar_outputs=False": 2,
+    "Skip calling `torch.compiler.disable()`d function": 3
+  },
+  "status": "pass",
+  "max_abs_error": 1.1354684829711914e-05,
+  "parity": true
+}

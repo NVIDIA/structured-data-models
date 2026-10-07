@@ -17,6 +17,7 @@ p.add_argument("--data", required=True)
 p.add_argument("--checkpoint", required=True)
 p.add_argument("--entry", choices=["fit", "predict", "forward"], required=True)
 p.add_argument("--fullgraph", action="store_true")
+p.add_argument("--capture-dynamic", action="store_true")
 p.add_argument("--backend", default="inductor")
 p.add_argument("--cache-limit", type=int, default=64)
 p.add_argument("--native-sum", action="store_true")
@@ -49,6 +50,8 @@ if a.atomic_recipe:
         torch.compiler.disable(KumoRelational.default_recipe.__func__)
     )
 torch._dynamo.config.cache_size_limit = a.cache_limit
+if a.capture_dynamic:
+    torch._dynamo.config.capture_dynamic_output_shape_ops = True
 torch.set_num_threads(1)
 torch.manual_seed(123)
 if a.model == "tabular":
@@ -133,6 +136,7 @@ result = {
     "estimators": a.estimators,
     "query_input": a.query_input,
     "cache_limit": a.cache_limit,
+    "capture_dynamic": a.capture_dynamic,
     "prepared_recipe": a.prepared_recipe,
     "atomic_recipe": a.atomic_recipe,
 }

@@ -9,6 +9,7 @@
   "estimators": 4,
   "query_input": "view",
   "cache_limit": 64,
+  "capture_dynamic": false,
   "prepared_recipe": false,
   "atomic_recipe": false,
   "eager_succeeded": true,

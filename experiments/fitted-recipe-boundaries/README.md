@@ -29,14 +29,13 @@ tolerance, not a claim of bitwise equality or changed model precision.
 | Tabular regression `torch.compile(model.fit)`; diabetes, 32 context rows, one estimator | 2.14 / breaks allowed | Pass: max prediction difference `2.75e-4`; 36 graphs / 3,430 calls. |
 | Tabular regression `torch.compile(model.fit, fullgraph=True)` | 2.14 / no breaks | Buffer registration fix advances tracing to explicit-generator `FlipSign.bernoulli_`, which Dynamo cannot proxy. |
 | Tabular classification `torch.compile(model.fit)` | 2.7.1 / breaks allowed | Default recipe construction can resume with an uninitialized `TaskDispatch` module. Passing a prebuilt recipe avoids that failure. |
-| Same, with `recipe=model.default_recipe()` prepared before the compiled call | 2.7.1 / breaks allowed | With schema patches, progresses into categorical transformation, then, after fixing a dictionary-key compiler guard in `TableTensor.replace_blocks`, fails compiler bytecode handling while resuming a table unsqueeze dispatcher. Still unsupported. |
-| Relational classification public fit; actual RelBench driver-DNF bundle with related tables | 2.14 / breaks allowed | Fails fitting string vocabularies: external sorting cannot execute on fake tensors. A fixed-output sort boundary advances it, but the latest run still fails at a resumed string sort. Still unsupported. |
+| Same, with `recipe=model.default_recipe()` prepared before the compiled call | 2.7.1 / breaks allowed | Pass after schema/view/mask patches, four estimators / 31 query rows: max prediction difference `4.77e-7`; 88 graphs / 8,614 calls; generator state exact. |
+| Relational classification public fit; actual RelBench driver-DNF bundle with related tables | 2.14 / breaks allowed | Pass with string-sort support and a narrow eager boundary for external Arrow/cuDF joins: max prediction difference `1.14e-5`; 129 graphs / 6,654 calls; generator and all fitted recipe buffers exact. |
 
 Tabular classification's fitted mean, scale, power-transform parameters and
-random state match eager exactly. Only clipping bounds differ, by `8.88e-16`.
-The successful four-estimator run is recorded before adding subsequent
-string-sort and schema patches, at source `9b3a838bb`; those later patches are
-not presented as independently revalidated for that run.
+random state match eager exactly. Only clipping bounds differ, by `8.88e-16` on 2.14 and up to `4.44e-15` on 2.7.
+The four-estimator result was reconfirmed with the subsequent schema,
+string-sort, ragged-selection and view-cleanup patches at source `43c9a142b`.
 
 All public probes use a process-local compiler cache limit of 64 to avoid
 the default limit of eight causing shared processor methods to fall back
@@ -66,9 +65,9 @@ same default recipe with sparse NaNs has:
 | Remaining buffer differences | Only clipping bounds, max `9.54e-7` |
 | Captured regions | 23 graphs / 2,245 calls |
 
-This is a real default **feature recipe** check, not successful compilation
-of the entire relational model's public fit. The public string blocker above
-remains separate. `native_sum_backend.py` retains the diagnostic backend
+This is an independent default **feature recipe** check. The public fitting
+result above additionally validates categorical and related-table preprocessing
+before the neural context computation. `native_sum_backend.py` retains the diagnostic backend
 used to isolate the cause; the passing final result uses the production
 source patch and ordinary Inductor, without that backend.
 
@@ -93,8 +92,8 @@ compiled_fit = torch.compile(model.fit, fullgraph=False, dynamic=True)
 compiled_fit(context, target, recipe=recipe, generator=generator)
 ```
 
-This helps the 2.7 constructor problem but is not sufficient to solve its
-remaining schema guards. `model.fit` still deep-copies the supplied recipe,
+This avoids the 2.7 constructor problem and, with the schema and view fixes
+in this branch, passes the public fitting probe. `model.fit` still deep-copies the supplied recipe,
 so the caller's recipe remains reusable with independent fitted state.
 
 ## Reproduce

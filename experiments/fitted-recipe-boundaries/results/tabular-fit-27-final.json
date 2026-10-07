@@ -1,0 +1,50 @@
+{
+  "torch": "2.7.1",
+  "model": "tabular",
+  "entry": "fit",
+  "fullgraph": false,
+  "backend": "inductor",
+  "device": "cpu",
+  "task": "classification",
+  "estimators": 1,
+  "query_input": "view",
+  "cache_limit": 64,
+  "capture_dynamic": false,
+  "prepared_recipe": true,
+  "atomic_recipe": false,
+  "eager_succeeded": true,
+  "fit_generator_state_exact": true,
+  "fitted_buffer_differences": [
+    {
+      "role": "features",
+      "name": "0.processors.numerical.5.processor.lower_bound",
+      "max_abs": 8.881784197001252e-16
+    },
+    {
+      "role": "features",
+      "name": "0.processors.numerical.5.processor.upper_bound",
+      "max_abs": 8.881784197001252e-16
+    }
+  ],
+  "compile_stats": {
+    "calls_captured": 1736,
+    "unique_graphs": 64
+  },
+  "graph_breaks": {
+    "copy.deepcopy UserDefinedObjectVariable(Recipe)": 1,
+    "SKIPPED INLINING <code object any at 0x10f8be6b0, file \"/Users/ardrianw/repositories/sdm-main-audit-20261001/evidence/runtime27/lib/python3.12/site-packages/torch/_dynamo/polyfills/builtins.py\", line 38>: ": 6,
+    "Attempted to call function marked as skipped": 5,
+    "Dynamic shape operator": 1,
+    "Uninitialized nn.Module": 1,
+    "Failed to convert args/kwargs to proxy": 1,
+    "Unsupported method call": 1,
+    "Failed to trace builtin operator": 2,
+    "set(): (RangeVariable(),) {}": 1,
+    "torch.* op returned non-Tensor generator call_method items": 5,
+    "torch.* op returned non-Tensor int call_method storage_offset": 3,
+    "Input tensor for tolist must be an integer tensor": 2
+  },
+  "status": "pass",
+  "max_abs_error": 1.0132789611816406e-06,
+  "parity": true
+}
