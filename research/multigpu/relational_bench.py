@@ -253,9 +253,10 @@ def run(args: argparse.Namespace) -> None:
         "torch": torch.__version__,
         "cuda": torch.version.cuda,
         "gpus": [torch.cuda.get_device_name(device) for device in devices],
-        "commit": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
-        ).strip(),
+        "commit": args.source_commit,
+        "runner_sha256": hashlib.sha256(
+            Path(__file__).read_bytes()
+        ).hexdigest(),
     }
     telemetry = (args.output / "nvidia-smi.csv").open("w")
     monitor = subprocess.Popen(
@@ -513,6 +514,7 @@ def main() -> None:
         "--dtype", choices=["bf16", "fp16", "fp32"], default="bf16"
     )
     bench.add_argument("--profile", action="store_true")
+    bench.add_argument("--source-commit", required=True)
     for command in [prep, bench]:
         command.add_argument("--seed", type=int, default=1729)
         command.add_argument("--output", type=Path, required=True)
