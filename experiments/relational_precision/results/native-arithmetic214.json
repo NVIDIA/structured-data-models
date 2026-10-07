@@ -1,0 +1,104 @@
+[
+  {
+    "shape": [
+      64,
+      5,
+      128
+    ],
+    "stride": [
+      1152,
+      128,
+      1
+    ],
+    "compiled_error": 2.384185791015625e-07,
+    "matmul_error": 2.384185791015625e-07,
+    "bmm_error": 0.0,
+    "compiled_equal_matmul": true,
+    "bmm_equal_eager": true
+  },
+  {
+    "shape": [
+      16,
+      9,
+      128
+    ],
+    "stride": [
+      1664,
+      128,
+      1
+    ],
+    "compiled_error": 2.384185791015625e-07,
+    "matmul_error": 2.384185791015625e-07,
+    "bmm_error": 0.0,
+    "compiled_equal_matmul": true,
+    "bmm_equal_eager": true
+  },
+  {
+    "shape": [
+      64,
+      14,
+      128
+    ],
+    "stride": [
+      2304,
+      128,
+      1
+    ],
+    "compiled_error": 2.384185791015625e-07,
+    "matmul_error": 2.384185791015625e-07,
+    "bmm_error": 0.0,
+    "compiled_equal_matmul": true,
+    "bmm_equal_eager": true
+  },
+  {
+    "shape": [
+      60,
+      7,
+      128
+    ],
+    "stride": [
+      1408,
+      128,
+      1
+    ],
+    "compiled_error": 1.1920928955078125e-07,
+    "matmul_error": 1.1920928955078125e-07,
+    "bmm_error": 0.0,
+    "compiled_equal_matmul": true,
+    "bmm_equal_eager": true
+  },
+  {
+    "shape": [
+      65,
+      7,
+      128
+    ],
+    "stride": [
+      1408,
+      128,
+      1
+    ],
+    "compiled_error": 1.1920928955078125e-07,
+    "matmul_error": 1.1920928955078125e-07,
+    "bmm_error": 0.0,
+    "compiled_equal_matmul": true,
+    "bmm_equal_eager": true
+  },
+  {
+    "shape": [
+      16,
+      3,
+      128
+    ],
+    "stride": [
+      896,
+      128,
+      1
+    ],
+    "compiled_error": 1.1920928955078125e-07,
+    "matmul_error": 1.1920928955078125e-07,
+    "bmm_error": 0.0,
+    "compiled_equal_matmul": true,
+    "bmm_equal_eager": true
+  }
+]

@@ -1,0 +1,143 @@
+{
+  "torch": "2.14.0",
+  "record_counts": [
+    14,
+    14
+  ],
+  "parity": false,
+  "max_abs_error": 6.267428398132324e-05,
+  "layers": [
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        64,
+        5,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        64,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 9.417533874511719e-06
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        16,
+        9,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        16,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 8.58306884765625e-06
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        64,
+        14,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        64,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 1.2278556823730469e-05
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        60,
+        7,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 1.1920928955078125e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        60,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 1.8835067749023438e-05
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        65,
+        7,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 1.1920928955078125e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        65,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 1.0728836059570312e-05
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        16,
+        3,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 1.1920928955078125e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        16,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 7.152557373046875e-06
+    },
+    {
+      "name": "gnn",
+      "shape": [
+        16,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 9.822845458984375e-05
+    },
+    {
+      "name": "icl_block",
+      "shape": [
+        16,
+        10
+      ],
+      "equal": false,
+      "max_abs_error": 0.00018739700317382812
+    }
+  ]
+}

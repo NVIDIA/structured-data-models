@@ -1,0 +1,206 @@
+{
+  "torch": "2.14.0",
+  "backend": "inductor",
+  "arm": 1,
+  "query": 4,
+  "record_counts": [
+    20,
+    20
+  ],
+  "parity": true,
+  "max_abs_error": 5.1915645599365234e-05,
+  "layers": [
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        64,
+        5,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.col_layers.0.output_block.query_norm",
+      "shape": [
+        5,
+        64,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 3.5762786865234375e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        64,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 8.463859558105469e-06
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        16,
+        9,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.col_layers.0.output_block.query_norm",
+      "shape": [
+        9,
+        16,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 3.5762786865234375e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        16,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 1.1324882507324219e-05
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        64,
+        14,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.col_layers.0.output_block.query_norm",
+      "shape": [
+        14,
+        64,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 3.5762786865234375e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        64,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 2.1338462829589844e-05
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        60,
+        7,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.col_layers.0.output_block.query_norm",
+      "shape": [
+        7,
+        60,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 3.5762786865234375e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        60,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 2.3543834686279297e-05
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        65,
+        7,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.col_layers.0.output_block.query_norm",
+      "shape": [
+        7,
+        65,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 3.5762786865234375e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        65,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 8.07642936706543e-06
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        16,
+        3,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.col_layers.0.output_block.query_norm",
+      "shape": [
+        3,
+        16,
+        128
+      ],
+      "equal": false,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        16,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 7.867813110351562e-06
+    },
+    {
+      "name": "gnn",
+      "shape": [
+        16,
+        512
+      ],
+      "equal": false,
+      "max_abs_error": 0.00010073184967041016
+    },
+    {
+      "name": "icl_block",
+      "shape": [
+        16,
+        10
+      ],
+      "equal": false,
+      "max_abs_error": 0.0001583099365234375
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "torch": "2.14.0",
+  "backend": "eager",
+  "arm": 1,
+  "query": 4,
+  "record_counts": [
+    14,
+    14
+  ],
+  "parity": true,
+  "max_abs_error": 0.0,
+  "layers": [
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        64,
+        5,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        64,
+        512
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        16,
+        9,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        16,
+        512
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        64,
+        14,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        64,
+        512
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        60,
+        7,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        60,
+        512
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        65,
+        7,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        65,
+        512
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding.lin",
+      "shape": [
+        16,
+        3,
+        128
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "row_embedding",
+      "shape": [
+        16,
+        512
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "gnn",
+      "shape": [
+        16,
+        512
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    },
+    {
+      "name": "icl_block",
+      "shape": [
+        16,
+        10
+      ],
+      "equal": true,
+      "max_abs_error": 0.0
+    }
+  ]
+}
