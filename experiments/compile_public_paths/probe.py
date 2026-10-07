@@ -32,7 +32,6 @@ p.add_argument("--arm-index", type=int, default=0)
 p.add_argument("--relational-query-indices", type=int, nargs="+")
 p.add_argument("--recompile-limit", type=int)
 p.add_argument("--include-predictions", action="store_true")
-p.add_argument("--disable-cpp-contraction", action="store_true")
 p.add_argument("--inner-only", action="store_true")
 a = p.parse_args()
 torch.set_num_threads(1)
@@ -113,7 +112,6 @@ result = {
     "arm_index": a.arm_index if a.model == "relational" else None,
     "recompile_limit": a.recompile_limit,
     "inner_only": a.inner_only,
-    "disable_cpp_contraction": a.disable_cpp_contraction,
 }
 compiler_config = (
     contextlib.nullcontext()
@@ -135,10 +133,6 @@ try:
             "fullgraph": a.fullgraph,
             "dynamic": a.dynamic == "true",
         }
-        if a.disable_cpp_contraction:
-            kwargs["options"] = {
-                "cpp.enable_floating_point_contract_flag": False
-            }
         if a.entry == "fit":
             fit(model, torch.compile(model.fit, **kwargs))
             actual = predict(model).numerical
