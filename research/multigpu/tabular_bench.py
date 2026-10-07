@@ -327,14 +327,20 @@ def main() -> None:
                 report["prediction_columns"] = list(
                     output.columns[Stype.numerical]
                 )
-                outputs.append(output.numerical)
+                outputs.append(output.numerical.float().cpu())
                 times.append(elapsed)
             return torch.cat(outputs), times
 
         with torch.inference_mode(), dtype_context():
             warmup_start = time.perf_counter()
             for _ in range(args.warmups):
-                timed(lambda: model.predict(batches[0]), devices)
+                if hasattr(model, "predict_batches"):
+                    timed(
+                        lambda: model.predict_batches(batches[: args.gpus]),
+                        devices,
+                    )
+                else:
+                    timed(lambda: model.predict(batches[0]), devices)
             report["warmup_s"] = time.perf_counter() - warmup_start
             for device in devices:
                 torch.cuda.reset_peak_memory_stats(device)
@@ -380,7 +386,15 @@ def main() -> None:
                         "profiled_prediction_batch"
                     ),
                 ):
-                    timed(lambda: model.predict(batches[0]), devices)
+                    if hasattr(model, "predict_batches"):
+                        timed(
+                            lambda: model.predict_batches(
+                                batches[: args.gpus]
+                            ),
+                            devices,
+                        )
+                    else:
+                        timed(lambda: model.predict(batches[0]), devices)
                 profiler.export_chrome_trace(str(args.output / "trace.json"))
                 (args.output / "profile.txt").write_text(
                     profiler.key_averages().table(
