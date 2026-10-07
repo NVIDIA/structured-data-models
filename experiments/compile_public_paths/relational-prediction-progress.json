@@ -378,5 +378,65 @@
     "error": "Skip calling `torch.compiler.disable()`d function\n  Explanation: Skip calling function `<function join_index at 0x10ea62e80>` since it was wrapped with `torch.compiler.disable` (reason: None)\n  Hint: Remove the `torch.compiler.disable` call\n\n  Developer debug context: <function join_index at 0x10ea62e80>\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0098.html\n\nfrom user code:\n   File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/base.py\", line 456, in predict\n    outs += self._forward_batch(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/base.py\", line 707, in _forward_batch\n    out = self._forward(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/kumo/relational/model.py\", line 251, in _forward\n    query = TaskGraph.from_input(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/kumo/relational/task.py\", line 47, in from_input\n    graph = HomogeneousGraph.from_tables(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/kumo/relational/graph.py\", line 59, in from_tables\n    row, col = join_index(\n    \n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
     "source_commit": "acc37828a",
     "source_result": "relational-schema-full-214.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": null,
+    "inner_only": true,
+    "capture_dynamic_outputs": false,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 1.2233853340148926e-05,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 5980
+      },
+      {
+        "rows": 1,
+        "case": 0,
+        "max_abs_error": 9.238719940185547e-06,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 11940
+      },
+      {
+        "rows": 8,
+        "case": 2,
+        "max_abs_error": 2.0131468772888184e-05,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 17972
+      },
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 1.2233853340148926e-05,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 17972
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 2.0131468772888184e-05,
+    "parity": true,
+    "source_commit": "b5206c2ef",
+    "diagnostic_options": {
+      "cpp.simdlen": 1
+    },
+    "source_result": "relational-arm1-inner-scalar-varied214.json"
   }
 ]

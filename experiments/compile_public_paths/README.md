@@ -85,3 +85,6 @@ The two-hop arm completes public prediction with default limits (`dynamic=True`)
 A separate direct comparison of eager and compiled `recipe_execution.transform` gives bitwise equal outputs for all 12 nonempty numerical/datetime blocks across the task and six related tables (`relational-preprocessing-parity.json`). Prediction source snapshot: `ebd902af6`. The broader CPU result still does not establish CUDA quality or speed.
 
 Explicit schema construction (`acc37828a`) moves 2.14 fullgraph past recipe preparation and validation to the intentional external `join_index` boundary. Existing relational and base-model checks pass: 43 passed, 31 CUDA skips. PyTorch 2.7 still needs further schema guard fixes; its current failure is preserved in the progress artifact.
+
+
+A CPU-only diagnostic sets `torch._inductor.config.cpp.simdlen = 1` before compiling the inner model, leaving FP32 inputs/weights unchanged. All four two-hop query sizes then pass the original tolerance, with maximum difference `2.01e-5`. The default C++ contraction setting was already `off`. This supports generated vector/reduction arithmetic as the source of the marginal miss; scalar code generation is not a recommended performance fix, and no library precision flag has been changed.
