@@ -253,8 +253,13 @@ def cache_sizes(models: list[Any]) -> dict[str, dict[str, int]]:
 
 
 def score(
-    pred: sdm.TableTensor, labels: sdm.TableTensor, problem: str
-) -> dict[str, float]:
+    pred: sdm.TableTensor,
+    labels: sdm.TableTensor,
+    problem: str,
+    *,
+    positive_class: bool | int | float | str = 1,
+) -> dict[str, Any]:
+    """Score full model support; class columns must denote distinct classes."""
     if problem == "regression":
         values = pred["q500"].numerical.squeeze(-1).numpy()
         target = labels.numerical.squeeze(-1).numpy()
@@ -267,8 +272,33 @@ def score(
                 (np.diff(quantiles, axis=-1) < 0).mean()
             ),
         }
-    probabilities, indices = sdm.evaluation.to_class_indices(pred, labels)
-    probabilities, indices = probabilities.numpy(), indices.numpy()
+    # Align target semantics using the public conversion, but retain every
+    # prediction column. Converting the actual probabilities would project
+    # onto observed target categories and drop unobserved-class mass.
+    columns = pred.columns[sdm.Stype.numerical]
+    class_probe = sdm.TableTensor.from_tensor(
+        torch.arange(len(columns), device=pred.device, dtype=torch.float32)
+        .unsqueeze(0)
+        .expand(len(pred), -1),
+        columns=columns,
+    )
+    aligned_indices, target_codes = sdm.evaluation.to_class_indices(
+        class_probe, labels
+    )
+    indices = (
+        aligned_indices.gather(-1, target_codes.unsqueeze(-1))
+        .squeeze(-1)
+        .long()
+        .numpy()
+    )
+    probabilities = pred.numerical.numpy()
+    if (
+        not np.isfinite(probabilities).all()
+        or (probabilities < 0).any()
+        or (probabilities > 1).any()
+        or not np.allclose(probabilities.sum(-1), 1, rtol=1e-4, atol=1e-4)
+    ):
+        raise ValueError("Expected finite normalized class probabilities")
     result = {
         "log_loss": log_loss(
             indices, probabilities, labels=np.arange(probabilities.shape[1])
@@ -276,13 +306,21 @@ def score(
         "accuracy": float((probabilities.argmax(-1) == indices).mean()),
     }
     if probabilities.shape[1] == 2:
-        positive_scores, positive_targets = sdm.evaluation.to_binary_class(
-            pred, labels, positive_class=1
-        )
-        result["auroc"] = roc_auc_score(
-            positive_targets.numpy(), positive_scores.numpy()
-        )
-        result["positive_class"] = 1
+        result["positive_class"] = positive_class
+        positive_column = str(positive_class)
+        if positive_column not in columns and positive_class in columns:
+            positive_column = positive_class
+        if positive_column not in columns:
+            result["auroc"] = None
+            result["auroc_undefined_reason"] = "positive_class_not_in_model"
+        elif np.unique(indices).size < 2:
+            result["auroc"] = None
+            result["auroc_undefined_reason"] = "validation_contains_one_class"
+        else:
+            positive_index = columns.index(positive_column)
+            result["auroc"] = roc_auc_score(
+                indices == positive_index, probabilities[:, positive_index]
+            )
     return result
 
 
