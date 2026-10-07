@@ -89,6 +89,22 @@ Independent checks found all four saved FP32 prediction arrays `[2048,7]` bitwis
 
 Independent NumPy scoring gives accuracy 0.76416015625, macro one-vs-rest AUROC 0.9474149901961447, multiclass Brier score 0.3375792160360528 and FP64 logloss 0.5760446019729857. The harness logloss 0.5760445594787598 differs by 4.25e-8 from FP32 scoring roundoff. Native timing variation across three passes is 0.39% coefficient of variation. This is repeated timing of one context/query cohort, not repeated independent training/context selection or population-level accuracy evidence.
 
-Native caches occupy 358,614,196 CPU bytes (342.001 MiB). Resident EP reports the same logical tensor bytes but 512,754,868 aggregate unique GPU storage bytes, illustrating that logical tensor sizes can underestimate memory retained by views. Peak allocated memory is the stronger capacity measurement; aggregate parameter replication must also be counted.
+Native enumerated model-cache tensors occupy 358,614,196 CPU bytes (342.001 MiB). Resident EP reports the same logical tensor bytes but 512,754,868 aggregate unique GPU storage bytes, illustrating that logical tensor sizes can underestimate memory retained by views. Both counters omit fitted preprocessing objects that are not traversed by `Cache._tensors()`. Peak allocated memory is the stronger capacity measurement; aggregate parameter replication must also be counted.
 
 The first native fit took 122.75 seconds, whereas later executor fits took roughly 1.1-1.3 seconds. Cold initialization/JIT/cache effects have not yet been isolated; do not attribute that difference to ensemble placement. A fresh matched native control and estimator-batching controls are being run separately.
+
+## Tuned single-GPU control changes the comparison
+
+The subsequent native controls keep the same context, query rows, four members and BF16 settings while grouping one, two or four members per forward. All raw IDs/input hashes/targets/output class orders and prediction file hashes passed independent checks.
+
+| Estimator batch size | Median pass seconds | Recomputed rows/s | Prediction peak allocated GiB | Max probability difference from native E-batch1 | Mean absolute difference | Class changes |
+|---|---:|---:|---:|---:|---:|---:|
+| 1, repeated warm control | 1.164541 | 1,758.63 | 1.284 | 0 | 0 | 0 |
+| 2 | 0.686325 | 2,984.01 | 1.519 | 0.00880432 | 0.00026306 | 0 |
+| 4 | 0.511088 | 4,007.14 | 1.646 | 0.00560689 | 0.00025861 | 0 |
+
+The tuned single GPU is 2.13 times faster than the best initial two-GPU ensemble result. Therefore the small-workload study does not establish a multi-GPU performance benefit over a well-batched single GPU. Any later headline must include this stronger baseline.
+
+Batch sizes two and four change floating-point computation and are not bitwise identical, although both meet the predeclared BF16 screening tolerance. All 2,048 predicted classes and accuracy remain unchanged. Batch four's FP64 logloss is 0.5759778337511707, a paired change of -0.0000667682; its paired-row bootstrap 95% interval is [-0.000186384, +0.0000527502]. Macro AUROC changes by -0.00000277055. Batch two's logloss delta is -0.0000488099 with interval [-0.000176049, +0.0000781554]. These bootstrap intervals describe numerical loss differences on the available cohort, not independence of spatial forest observations or performance on another dataset.
+
+The repeated native fit is 1.3268 seconds. This confirms that the earlier 122.75-second first fit contains a large cold-start effect; it is unsuitable as a placement speedup claim.
