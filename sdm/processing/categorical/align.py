@@ -134,7 +134,8 @@ class AlignCategories(EnsembleProcessor):
         for batch_index in range(batch_size):
             selected_indices = order[batch_index, observed[batch_index]]
             if (
-                selected_indices.numel() == input_categories.numel()
+                not torch.compiler.is_compiling()
+                and selected_indices.numel() == input_categories.numel()
                 and self.sort_by != "frequency"
             ):
                 fitted_categories.append(ordered_categories)
