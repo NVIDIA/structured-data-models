@@ -17,12 +17,16 @@ from sdm.models.callback import CaptureInputs, EnableInputGradients
 class GradientExplainer(
     ICLExplainer[tuple[TableTensor, RelatedTables[TableTensor] | None]]
 ):
-    """Return per-output gradients for preprocessed query inputs.
+    """Return gradients showing how small input changes affect predictions.
 
-    Explain the final prediction of one estimator, including target inversion
-    and output processing. Attribution tables have shape ``[C, ..., R, D]``,
-    where ``C`` is the output count, ``R`` the input rows, and ``D`` the
-    preprocessed input columns.
+    Gradients describe model predictions with respect to preprocessed
+    numerical query inputs, not the original input data.
+
+    For each output column, differentiate the sum of predictions over query
+    rows and batch dimensions. Requires exactly one estimator.
+
+    Attribution tables have shape ``[C, ..., R, D]``, where ``C`` is the output
+    count, ``R`` the query rows, and ``D`` the preprocessed input columns.
     """
 
     def _explain_predict(
@@ -46,11 +50,6 @@ class GradientExplainer(
         x, related_tables = callbacks[1].inputs[0]
 
         scores = prediction.numerical
-        if not scores.requires_grad:
-            raise RuntimeError(
-                "The model output is not differentiable with respect to "
-                "its query inputs"
-            )
 
         leaves = [x.numerical]
         if related_tables is not None:
