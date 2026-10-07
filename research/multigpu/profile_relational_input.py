@@ -65,6 +65,13 @@ def profile(workload: Path, estimators: int, output: Path) -> None:
         width = columns + relative_times + injected_task
         tables[name] = {
             "rows": rows,
+            "eligible_labeled_rows": int(
+                (graph.task_row_by_table[name] >= 0).sum()
+            ),
+            "column_attention_selected_keys": min(
+                int((graph.task_row_by_table[name] >= 0).sum()), 20_000
+            ),
+            "column_attention_key_limit": 20_000,
             "numeric_features_after_recipe": columns,
             "numeric_dtype": str(table.numerical.dtype),
             "features_with_model_injections": width,
