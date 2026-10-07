@@ -11,7 +11,7 @@ The goal is practical multi-GPU inference for both `KumoTabular` and `KumoRelati
 | Query data parallelism (DP) | Complete, fixed query batches across persistent replicas | High aggregate throughput; no attention collectives | Full model and fitted context replicated; preserve batch boundaries and complete relational neighborhoods | `data_parallel_impl`; prototype and measurements pending |
 | Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | `ensemble_impl`, `d1775c0f3` + `f74f2cc30`; eight CPU tests passed, two CUDA tests pending |
 | Cached context parallelism (CP) | ICL KV rows across ranks; queries replicated | Larger retained context and faster long-context attention | Full fit still replicated; stable softmax reduction, global length scaling, uneven shards; collectives every layer | `context_parallel_impl`, commit `8e22f29c8`; 2/4-rank CPU tests passed, GPU measurements pending |
-| Layer/stage placement | Row encoder, GNN, and/or ICL layers on different devices | Parameter/cache capacity; pipeline overlap across query batches | Single-query latency can worsen; cache ownership and transferred activations must follow stages | `model_parallel_impl`; feasibility prototype pending |
+| Layer/stage placement | Row encoder, GNN, and/or ICL layers on different devices | Parameter/cache capacity; potential pipeline overlap across query batches | Single-query latency can worsen; cache ownership and transferred activations must follow stages | `model_parallel_impl`, `70db412fa`; 12 CPU tests passed, 10 CUDA tests pending; current implementation is sequential stage placement, not overlapped pipelining |
 | Table embedding parallelism | Independent related-table encoders across devices, then gather row embeddings | Parallel relational table encoding before GNN | Tables may be imbalanced; shared preprocessing/target propagation and per-table RNG must remain fixed | Design inspected; no measurement |
 | Tensor parallelism (TP) | Projection/MLP widths or attention heads across ranks | Parameter and compute sharding for a single member | Many collectives, packed projections/custom kernels, small widths and GQA limit useful partitions | Design inspected; implementation not yet established |
 | Full context fit sharding | Row encoder inducing attention and context self-attention distributed during fit | Reduce peak fit memory, not only retained cache | Requires global induced-state/attention reductions in both row encoder and ICL | Design inspected; separate from cached CP |
@@ -49,6 +49,17 @@ The previous TabFM diagnostic reported 224.98 to 421.99 rows/s on one versus two
 ## Results
 
 No new Kumo GPU measurements have been supplied to this report yet.
+
+Prepared source workloads use fixed nested TRAIN/validation subsets, recorded in their manifests. Available rows are distinct from rows actually measured in any run:
+
+| Model family | Workload | Available TRAIN / validation | Planned context range | Purpose |
+|---|---|---:|---|---|
+| Tabular classification | Covertype, 54 input columns | 464,809 / 116,203 | 1,024–65,536 | Large tabular throughput/context scaling; seven-class quality |
+| Tabular regression | California housing, 8 columns | 16,512 / 4,128 | 1,024–16,384 | Regression and complete 999-quantile output behavior |
+| Relational classification | `rel-hm/user-churn`, native 3-table database | 3,832,692 / 76,556 | 1,024–65,536 | Native two-hop `[16,16]` temporal relational scaling |
+| Relational regression | `rel-f1/driver-position` | 7,453 / 499 | 1,024–4,096 | Regression and structurally different relational graph |
+
+Tabular splits are custom deterministic 80/20 splits (seed `20261008`), not official test evaluations. RelBench retains native TRAIN/validation splits. The October KumoRelational experiment uses native related tables and should not be described as the earlier TabFM flattened two-hop representation.
 
 | Model / dataset | Method | GPUs | Context / E / query / batch | Warm rows/s | Speedup vs same executor 1 GPU | Cold seconds | Peak GPU / aggregate memory | Quality / max prediction error | Evidence |
 |---|---|---:|---|---:|---:|---:|---|---|---|
