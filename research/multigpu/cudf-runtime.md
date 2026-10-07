@@ -42,4 +42,16 @@ Official [cuDF v26.06.00 Series source](https://github.com/NVIDIA/cudf/blob/v26.
 
 The successor is installed at `/home/ubuntu/kumo-multigpu/venv-cudf26.6`. After constraining `rich==14.3.4` to retain compatibility with the inherited SageMaker dependency, its final `pip check` reports **No broken requirements found**. The final report and package freeze are `runtime-cudf/check26.6-final.txt` and `freeze26.6-final.txt`. This establishes dependency consistency, not successful CUDA execution; GPU interface validation and performance comparisons are separate steps.
 
+| Component | Original runtime | Isolated paired-backend runtime |
+|---|---|---|
+| PyTorch | 2.9.1+cu130 | 2.9.1+cu130, inherited unchanged |
+| CUDA runtime / nvJitLink | 13.0.48 / 13.0.39 | 13.0.48 / 13.0.39 |
+| cuDF / libcudf / pylibcudf / RMM | Absent | 26.6.0 |
+| CuPy | Absent | 13.6.0 |
+| pandas | 3.0.6 | 2.3.3 |
+| NumPy | 2.5.3 | 2.4.6 |
+| PyArrow | 25.0.1 | 23.0.1 |
+
+These versions come from the captured baseline and final overlay freezes. Therefore comparing cuDF directly with the original runtime would confound dataframe-backend selection with three dependency changes. The same-overlay Arrow control is necessary for backend attribution.
+
 For paired comparisons, `run_dataframe_backend.py --backend arrow|cudf --receipt RECEIPT RUNNER [RUNNER_ARGUMENTS]` executes both arms in the same 26.6 environment. The Arrow arm intercepts only `find_spec("cudf")` availability checks, and the receipt records observed calling modules and dependency versions. This research override covers a single process and thread-based ensemble workers, not spawned data-parallel processes. Keep receipts outside the runner's new output directory and compare saved predictions as well as throughput. In particular, differing join order can change floating-point reduction order even when matched row pairs are identical.
