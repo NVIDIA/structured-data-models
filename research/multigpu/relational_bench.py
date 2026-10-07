@@ -11,7 +11,9 @@ import argparse
 import hashlib
 import json
 import resource
+import shlex
 import subprocess
+import sys
 import time
 import traceback
 from pathlib import Path
@@ -241,6 +243,7 @@ def run(args: argparse.Namespace) -> None:
     if args.mode == "native" and args.gpus != 1:
         raise ValueError("Native baseline uses exactly one GPU")
     args.output.mkdir(parents=True, exist_ok=False)
+    (args.output / "command.txt").write_text(shlex.join(sys.argv) + "\n")
     devices = [f"cuda:{i}" for i in range(args.gpus)]
     ensemble_mode = args.mode in {"ensemble", "stage", "layers"}
     dtype = {
@@ -424,17 +427,20 @@ def run(args: argparse.Namespace) -> None:
         stats["warmup_s"] = time.perf_counter() - start
         for device in devices:
             torch.cuda.reset_peak_memory_stats(device)
-        elapsed, batch_times, arrays = [], [], []
+        elapsed, batch_times, arrays, windows = [], [], [], []
         for _ in range(args.repeats):
             synchronize(devices)
+            wall_start = time.time()
             start = time.perf_counter()
             predictions, durations = predict()
             synchronize(devices)
             elapsed.append(time.perf_counter() - start)
+            windows.append([wall_start, time.time()])
             batch_times.append(durations)
             pred = torch.cat(predictions, dim=0)
             arrays.append(pred.numerical.numpy().copy())
         stats["predict_repeats_s"] = elapsed
+        stats["prediction_unix_windows"] = windows
         stats["batch_times_s"] = batch_times
         stats["batch_times_kind"] = (
             "worker_service_time_excluding_queue_delay"
