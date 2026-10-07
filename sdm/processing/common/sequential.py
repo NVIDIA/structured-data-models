@@ -30,9 +30,9 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         r""":meta private:"""  # noqa: D415
         if len(self) == 0:
             return frozenset(Stype)
-        return frozenset(
+        return frozenset(tuple(
             stype for child in self for stype in child.handles_stypes
-        )
+        ))
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.
