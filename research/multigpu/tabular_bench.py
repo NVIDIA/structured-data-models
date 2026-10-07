@@ -311,6 +311,8 @@ def main() -> None:
             flush=True,
         )
         report["memory_after_load"] = memory(devices)
+        if callable(getattr(model, "memory", None)):
+            report["worker_memory_after_load"] = model.memory()
 
         def dtype_context() -> torch.autocast:
             return torch.autocast(
@@ -342,6 +344,8 @@ def main() -> None:
             flush=True,
         )
         report["memory_after_fit"] = memory(devices)
+        if callable(getattr(model, "memory", None)):
+            report["worker_memory_after_fit"] = model.memory()
         report["cache_storage_bytes_after_fit"] = cache_memory(model)
         if hasattr(model, "cache_bytes"):
             report["executor_cache_bytes"] = list(model.cache_bytes)
@@ -384,6 +388,8 @@ def main() -> None:
             report["warmup_s"] = time.perf_counter() - warmup_start
             for device in devices:
                 torch.cuda.reset_peak_memory_stats(device)
+            if callable(getattr(model, "memory", None)):
+                model.memory(reset_peak=True)
             repeats, batches_s, predictions = [], [], []
             for _ in range(args.repeats):
                 with phase("prediction_pass"):
@@ -400,6 +406,8 @@ def main() -> None:
                 batches_s.append(batch_times)
                 predictions.append(prediction.detach().float().cpu().numpy())
             report["memory_after_prediction"] = memory(devices)
+            if callable(getattr(model, "memory", None)):
+                report["worker_memory_after_prediction"] = model.memory()
             report["predict_repeats_s"] = repeats
             report["batch_times_s"] = batches_s
             report["throughput_rows_s"] = [
@@ -453,6 +461,8 @@ def main() -> None:
         report.update(status="error", error=repr(error))
         raise
     finally:
+        if "model" in locals() and hasattr(model, "close"):
+            model.close()
         monitor.terminate()
         with contextlib.suppress(subprocess.TimeoutExpired):
             monitor.wait(timeout=5)
