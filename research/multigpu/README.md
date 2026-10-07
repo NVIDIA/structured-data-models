@@ -9,7 +9,7 @@ The goal is practical multi-GPU inference for both `KumoTabular` and `KumoRelati
 | Approach | Work placement | Expected benefit | Main limitation / correctness requirement | Current owner and evidence |
 |---|---|---|---|---|
 | Query data parallelism (DP) | Complete, fixed query batches across persistent replicas | High aggregate throughput; no attention collectives | Full model and fitted context replicated; preserve batch boundaries and complete relational neighborhoods | `data_parallel_impl`; prototype and measurements pending |
-| Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | `ensemble_impl`; adaptation and measurements pending |
+| Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | `ensemble_impl`, `d1775c0f3` + `f74f2cc30`; eight CPU tests passed, two CUDA tests pending |
 | Cached context parallelism (CP) | ICL KV rows across ranks; queries replicated | Larger retained context and faster long-context attention | Full fit still replicated; stable softmax reduction, global length scaling, uneven shards; collectives every layer | `context_parallel_impl`, commit `8e22f29c8`; 2/4-rank CPU tests passed, GPU measurements pending |
 | Layer/stage placement | Row encoder, GNN, and/or ICL layers on different devices | Parameter/cache capacity; pipeline overlap across query batches | Single-query latency can worsen; cache ownership and transferred activations must follow stages | `model_parallel_impl`; feasibility prototype pending |
 | Table embedding parallelism | Independent related-table encoders across devices, then gather row embeddings | Parallel relational table encoding before GNN | Tables may be imbalanced; shared preprocessing/target propagation and per-table RNG must remain fixed | Design inspected; no measurement |
@@ -60,6 +60,18 @@ No new Kumo GPU measurements have been supplied to this report yet.
 ## Reproduction and failure log
 
 The CP prototype (`8e22f29c8`) has three passing CPU tests exercising real 2/4-rank Gloo groups, both model ICL blocks, MHA/GQA, broadcast batches, empty/uneven shards, cache backing-storage release, and invalid topology. This establishes distributed CPU correctness within those tests. It does not establish CUDA kernel compatibility, model quality, or GPU speedup. See the implementation's `research/multigpu/context-parallel.md` for its exact scope.
+
+The EP implementation (`d1775c0f3` + `f74f2cc30`) has eight passing CPU tests, including reduced real KumoTabular modules with 12-class ECOC, class shuffling, exact member codebooks/predictions across 1/2/4 replicas, and refit. Two CUDA tests await hardware execution. Independent review found and the owner fixed replica-initialization stream dependencies and output tensor stream lifetime; a CPU pass cannot validate those CUDA fixes. Its public documentation is `research/multigpu/ensemble.md` and the independent comparison checklist is `research/multigpu/quality.md` (`bf3a602e8`).
+
+The tabular runner (`af6d89791` + `10159e909`) provides the following initial comparison. Repeat for native estimator batch sizes that fit memory, then `--mode ensemble --gpus 1`, `2`, and `4`, each with a fresh output directory. CPU-complete outputs and profiler-only passes are separate from throughput measurements.
+
+```sh
+python research/multigpu/tabular_bench.py \
+  --data /path/to/covertype --output /path/to/tabular-native \
+  --task classification --size large --mode native --gpus 1 \
+  --estimators 4 --context 1024 --queries 2048 --batch-size 256 \
+  --repeats 3 --precision bfloat16 --profile
+```
 
 The native relational harness exposes the following commands (paths must point to the installed runner revision and the actual RelBench cache). Execution evidence is still pending:
 
