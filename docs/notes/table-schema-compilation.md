@@ -1,6 +1,6 @@
 # Column schema guards in PyTorch 2.7
 
-This branch is based on preprocessing integration commit `8950a466c`; the schema-specific production change is two lines. It adds an immutable `_column_items` tuple alongside the table's existing schema dictionary. The public `table.columns` property still returns the same detached dictionary with `Stype` enum keys. No column ordering or public mapping behavior changes.
+This branch is based on preprocessing integration commit `8950a466c`; the initial container change is two lines, with affected processor call sites updated separately. It adds an immutable `_column_items` tuple alongside the table's existing schema dictionary. The public `table.columns` property still returns the same detached dictionary with `Stype` enum keys. No column ordering or public mapping behavior changes.
 
 ## Failure
 
@@ -46,3 +46,10 @@ OMP_NUM_THREADS=1 TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS=0 PYTHONPATH=. \
 ```
 
 The existing table and Standardize tests also run as regression checks. PyTorch 2.7's two pre-existing pandas default-device failures are excluded from that suite; they reproduce on main. GPU behavior and performance are not measured by this metadata-focused change.
+
+
+## Real relational prediction follow-up
+
+Tracing the public KumoRelational `predict()` method on the cached RelBench driver-DNF task identified the same 2.7 guard failure in `AddCalendarFields._transform` (`sdm/processing/datetime/calendar.py`), specifically the datetime column-name lookup. Both raw and cyclic naming paths now reconstruct their dictionary from `_column_items` inside tracing. This leaves calendar arithmetic unchanged.
+
+The calendar tensor computation passes actual Inductor with both graph policies on both versions. Its public `transform()` passes both policies on 2.14 and graph-break-allowed mode on 2.7. Fullgraph 2.7 still fails earlier on the separate `handles_stypes` frozenset handling. This scoped fix is not a claim that every remaining relational preprocessing stage compiles.
