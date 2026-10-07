@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
@@ -40,9 +41,12 @@ class Standardize(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
 
-        finite = _isfinite(table.numerical)
+        self._fit_tensor(table.numerical)
+
+    def _fit_tensor(self, numerical: Tensor) -> None:
+        finite = _isfinite(numerical)
         count = finite.sum(dim=-2, keepdim=True)
-        finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
+        finite_or_nan = numerical.masked_fill(~finite, torch.nan)
 
         self.mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
         self.mean.masked_fill_(self.mean.isnan(), 0.0)
@@ -59,8 +63,12 @@ class Standardize(Processor, InvertibleMixin):
             self.scale += self.eps
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = (table.numerical - self.mean).div_(self.scale)
-        return table.replace_blocks(numerical=numerical)
+        return table.replace_blocks(
+            numerical=self._transform_tensor(table.numerical)
+        )
+
+    def _transform_tensor(self, numerical: Tensor) -> Tensor:
+        return (numerical - self.mean).div_(self.scale)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         dtype = table.numerical.dtype
