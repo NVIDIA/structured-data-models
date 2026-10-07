@@ -46,6 +46,37 @@ torchrun --standalone --nproc-per-node=4 research/multigpu/context_probe.py \
 
 Requested sweep: ranks 1/2/4, contexts 1024/4096/16384/32768, MHA (`--kv-heads 8`) versus GQA (`--kv-heads 2`), float32/BF16, both families. Use context/queries small enough for initial smoke and measure all ranks' latency; the slowest rank sets throughput. No GPU speedup or accuracy claim has been established yet.
 
+## First measured results: four L4 GPUs
+
+Source `55dba6bb5`, PyTorch 2.9.1+cu130, four NVIDIA L4 GPUs on one Spot host. These GPUs use PCIe without NVLink. A100/NVSwitch capacity was denied by the organization policy, so these measurements say nothing about NVLink scaling. All nine correctness cases passed on the GPU host, including 2/4-rank FP32 efficient attention and BF16 efficient/Flash attention, in 142.79 seconds. The first test attempt failed before execution because Linux's standard-library `test` namespace conflicted with pytest importlib's pickled module name; retrying with prepend mode passed. Tests now launch workers directly through torchrun to remove that namespace dependency.
+
+The attention microprobe used random weights, four ICL layers, channels 512, eight query heads/two KV heads, context 1,024, query 128, and seven timed BF16 replays. It isolates attention implementation effects and is not a quality benchmark.
+
+| Replay kernel | Native SDPA | One-rank LSE | CP4, slowest-rank median | CP4 / native speed |
+|---|---:|---:|---:|---:|
+| Efficient | 3.021 ms | 3.296 ms | 4.681 ms | 0.645x |
+| Flash, native GQA | 3.117 ms | 3.271 ms | 4.568 ms | 0.682x |
+
+Both four-rank microprobes had maximum logit difference 0.0009765625 versus native SDPA. Flash one-rank output was identical to native. These are short-context measurements; the collectives cost more than the partitioned attention work saves.
+
+The first full-model workload used pretrained KumoTabular **small** (12 ICL layers, MHA), Covertype, fixed TRAIN context 1,024, fixed VAL query 2,048, E4, batch 256, seed 1729, FP32 parameters/BF16 autocast, and three timed passes. Query IDs and input hashes matched across arms. Default E4 fitted caches reside on CPU, so the cache columns below describe CPU storage; this is not a GPU-resident capacity claim.
+
+| Arm | Unique rows/s, median | Accuracy | Log loss | ICL cache/rank | Total cache/rank | Prediction allocated peak/rank |
+|---|---:|---:|---:|---:|---:|---:|
+| Native SDPA, 1 GPU | 3,082.25 | 0.756836 | 0.586389 | 96 MiB | 145.00 MiB | 265.63 MiB |
+| Efficient LSE, 1 GPU | 3,085.89 | 0.755859 | 0.586496 | 96 MiB | 145.00 MiB | 265.63 MiB |
+| Efficient CP, 2 GPUs | 2,648.21 | 0.755859 | 0.586468 | 48 MiB | 97.00 MiB | 241.13 MiB |
+| Efficient CP, 4 GPUs | 2,576.37 | 0.754395 | 0.586577 | 24 MiB | 73.00 MiB | 228.88 MiB |
+| Flash LSE, 1 GPU | 2,960.10 | 0.756836 | 0.586389 | 96 MiB | 145.00 MiB | Pending aggregation |
+| Flash CP, 2 GPUs | 2,604.96 | 0.756348 | 0.586461 | 48 MiB | 97.00 MiB | Pending aggregation |
+| Flash CP, 4 GPUs | 2,538.58 | 0.754395 | 0.586535 | 24 MiB | 73.00 MiB | Pending aggregation |
+
+Flash LSE1 predictions were byte-identical to the native baseline. Maximum probability differences were 0.007744/0.008601 for efficient CP2/CP4 and 0.009326/0.009801 for Flash CP2/CP4. The corresponding class-decision changes were 4/5 and 3/7 out of 2,048. This is tolerance-based equivalence, not exact prediction identity. The small changes in validation quality are measured outcomes, not evidence of an accuracy improvement or regression across datasets.
+
+Each Flash CP batch generated 96 NCCL all-reductions per rank (two per layer × 12 layers × four estimators). CPU launch annotations summed to 5.03 ms for CP2 and 4.94 ms for CP4. The initial torch.profiler traces did not contain CUDA kernel events despite requesting them, so these values are **CPU launch spans**, not GPU communication time. Nsight follow-up is required for a compute/communication breakdown. Prediction timing itself used explicit CUDA synchronization and CPU-completed output copies. Cold first-fit time (8.27 seconds) versus subsequent runs (~1 second) is confounded by runtime/kernel cache warmup; no fit acceleration is claimed.
+
+Raw evidence directories are `cp-probe4-c1024-{efficient,flash}`, `cp-covertype-small-c1024-e4-{native1,lse1,context2,context4}`, and `cp-covertype-small-c1024-e4-flash-{lse1,context2,context4}` under the shared experiment artifact root. Long-context, large-model GQA, resident-cache, and relational results are pending and must precede a general recommendation.
+
 `research/multigpu/context_model_bench.py` adds pretrained full-model comparisons using the team's fixed tabular arrays and native relational sampled graphs. Run `--mode native` and `--mode lse` with one torchrun process each; run `--mode context` with 2/4 processes. Keep all other parameters fixed. It saves every prediction repeat, query IDs, per-rank timings/peaks, resident ICL versus total cache bytes, quality metrics, and optional per-rank traces. Validation targets are opened after prediction only. Query throughput uses each repeat's slowest rank and counts replicated output rows once. Inputs and graphs are resident on each GPU for all three modes; this is a controlled execution comparison, not host-to-GPU streaming throughput.
 
 ```sh
