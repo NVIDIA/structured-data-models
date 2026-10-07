@@ -50,7 +50,7 @@ def _yeojohnson_transform(
     if (
         fitting
         and torch.compiler.is_compiling()
-        and not torch.is_grad_enabled()
+        and not (torch.is_grad_enabled() and out.requires_grad)
     ):
         out.copy_(_fitting_expm1(out))
     else:
