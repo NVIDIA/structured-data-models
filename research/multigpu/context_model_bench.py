@@ -4,6 +4,8 @@ Use a fresh torchrun invocation for each native, single-rank LSE, or CP arm.
 All ranks receive identical context/query rows; throughput counts rows once.
 """
 
+# ruff: noqa: PLC0415
+
 import argparse
 import hashlib
 import json
