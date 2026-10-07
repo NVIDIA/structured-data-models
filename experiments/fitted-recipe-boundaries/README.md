@@ -30,8 +30,8 @@ tolerance, not a claim of bitwise equality or changed model precision.
 | Tabular regression `torch.compile(model.fit, fullgraph=True)` | 2.14 / no breaks | Buffer registration fix advances tracing to explicit-generator `FlipSign.bernoulli_`, which Dynamo cannot proxy. |
 | Tabular classification `torch.compile(model.fit)` | 2.7.1 / breaks allowed | Default recipe construction can resume with an uninitialized `TaskDispatch` module. Passing a prebuilt recipe avoids that failure. |
 | Same, with `recipe=model.default_recipe()` prepared before the compiled call | 2.7.1 / breaks allowed | Pass after schema/view/mask patches, four estimators / 31 query rows: max prediction difference `4.77e-7`; 88 graphs / 8,614 calls; generator state exact. |
-| Relational classification public fit; actual RelBench driver-DNF bundle with related tables | 2.14 / breaks allowed | Pass with string-sort support and a narrow eager boundary for external Arrow/cuDF joins: two estimators: max prediction difference `1.41e-5`; 139 graphs / 15,055 calls; generator and all fitted recipe buffers exact. |
-| Same relational public fit, with a prebuilt recipe | 2.7.1 / breaks allowed | Atomic dispatch fixes a wrong-handler resume failure; dynamic tracing then fails a compiler symbol-to-source guard assertion. Still unsupported. |
+| Relational classification public fit; actual RelBench driver-DNF bundle with related tables | 2.14 / breaks allowed | Pass with string-sort support and a narrow eager boundary for external Arrow/cuDF joins: two estimators: max prediction difference `1.41e-5`; 139 graphs / 15,055 calls; generator exact; all 213 fitted buffers checked, with only eight related-table clipping bounds differing (max `1.91e-6`). |
+| Same relational public fit, with a prebuilt recipe | 2.7.1 / breaks allowed | Atomic dispatch fixes a wrong-handler resume failure; dynamic tracing then fails a compiler symbol-to-source guard assertion. `dynamic=False` progresses into neural context embedding but hits a Dynamo side-effect assertion; enabling dynamic-output capture instead exposes a compiler local-generator error. Still unsupported. |
 
 Tabular classification's fitted mean, scale, power-transform parameters and
 random state match eager exactly. Only clipping bounds differ, by `8.88e-16` on 2.14 and up to `4.44e-15` on 2.7.
@@ -43,6 +43,34 @@ the default limit of eight causing shared processor methods to fall back
 after repeated specialization. No production configuration is changed.
 Captured graph counts establish that fitting arithmetic is compiled; they
 do not establish that every operation is compiled, nor measure speedup.
+
+## Reusing the same compiled fit callable
+
+`repeat_fit.py` retains one model and one compiled `fit` callable while fitting
+32, then 48, then 32 real context rows; each call is compared with a freshly
+fitted eager model on the same 31 query rows. All three calls preserve labels
+and generator state exactly on both runtimes. Prediction differences remain
+within the stated public-probe tolerance (max `5.62e-6` on 2.14 and `8.40e-6`
+on 2.7). The prebuilt recipe on 2.7 is also reused; each fit deep-copies it.
+
+| Runtime | Context rows | Newly captured graphs | Compiled fit seconds | Eager fit seconds |
+|---|---|---|---|---|
+| 2.14 | 32 / 48 / 32 | 37 / 35 / 7 | 16.30 / 74.82 / 5.99 | 0.055 / 0.049 / 0.045 |
+| 2.7.1 | 32 / 48 / 32 | 63 / 32 / 2 | 13.82 / 67.30 / 0.328 | 0.055 / 0.067 / 0.056 |
+
+These are concurrent CPU diagnostic timings, including compilation, rather
+than a controlled performance benchmark. The graph counts show a practical
+problem independently of timing noise: returning to a previously fitted
+shape still creates new compiled regions. This prototype establishes
+correctness on these workloads; compiling the entire public fit is not a
+speed improvement for these small contexts. Reusing already-fitted
+transform/predict computation avoids repeatedly constructing and mutating
+processing modules and is a more useful optimization boundary to measure.
+No GPU throughput conclusion follows from these CPU timings.
+
+Run the same data/checkpoint arguments with
+`experiments/fitted-recipe-boundaries/repeat_fit.py`; add `--prepared-recipe`
+for 2.7. Raw per-call timing, graph and parity records are in `results/`.
 
 ## Fitted numerical parity
 

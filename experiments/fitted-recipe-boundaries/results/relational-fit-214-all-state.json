@@ -1,0 +1,78 @@
+{
+  "torch": "2.14.0",
+  "model": "relational",
+  "entry": "fit",
+  "fullgraph": false,
+  "backend": "inductor",
+  "device": "cpu",
+  "task": "classification",
+  "estimators": 2,
+  "query_input": "view",
+  "cache_limit": 64,
+  "capture_dynamic": false,
+  "dynamic": "true",
+  "prepared_recipe": false,
+  "atomic_recipe": false,
+  "eager_succeeded": true,
+  "fit_generator_state_exact": true,
+  "fitted_buffer_differences": [
+    {
+      "role": "related:qualifying",
+      "name": "2.processors.numerical.5.processor.lower_bound",
+      "max_abs": 4.76837158203125e-07
+    },
+    {
+      "role": "related:qualifying",
+      "name": "2.processors.numerical.5.processor.upper_bound",
+      "max_abs": 4.76837158203125e-07
+    },
+    {
+      "role": "related:drivers",
+      "name": "2.processors.numerical.5.processor.lower_bound",
+      "max_abs": 9.5367431640625e-07
+    },
+    {
+      "role": "related:drivers",
+      "name": "2.processors.numerical.5.processor.upper_bound",
+      "max_abs": 9.5367431640625e-07
+    },
+    {
+      "role": "related:results",
+      "name": "2.processors.numerical.5.processor.lower_bound",
+      "max_abs": 1.9073486328125e-06
+    },
+    {
+      "role": "related:results",
+      "name": "2.processors.numerical.5.processor.upper_bound",
+      "max_abs": 1.9073486328125e-06
+    },
+    {
+      "role": "related:standings",
+      "name": "2.processors.numerical.5.processor.lower_bound",
+      "max_abs": 1.430511474609375e-06
+    },
+    {
+      "role": "related:standings",
+      "name": "2.processors.numerical.5.processor.upper_bound",
+      "max_abs": 1.430511474609375e-06
+    }
+  ],
+  "fitted_buffer_checks": 213,
+  "compile_stats": {
+    "calls_captured": 15055,
+    "unique_graphs": 139
+  },
+  "graph_breaks": {
+    "Dynamic shape operator": 1,
+    "Uninitialized nn.Module": 2,
+    "Failed to convert args/kwargs to proxy": 1,
+    "Tensor.tolist() with non-integer tensor": 6,
+    "Data dependent operator": 1,
+    "torch.* op returned non-Tensor": 10,
+    "Unsupported Tensor.item() call with capture_scalar_outputs=False": 2,
+    "Skip calling `torch.compiler.disable()`d function": 5
+  },
+  "status": "pass",
+  "max_abs_error": 1.4126300811767578e-05,
+  "parity": true
+}

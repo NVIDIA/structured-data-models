@@ -1,0 +1,60 @@
+{
+  "torch": "2.7.1",
+  "backend": "inductor",
+  "device": "cpu",
+  "dynamic": true,
+  "fullgraph": false,
+  "cache_limit": 64,
+  "prepared_recipe": true,
+  "same_compiled_callable": true,
+  "query_rows": 31,
+  "estimators": 1,
+  "samples": [
+    {
+      "rows": 32,
+      "eager_fit_seconds": 0.054677375010214746,
+      "compiled_fit_seconds": 13.822909249924123,
+      "new_graphs": 63,
+      "new_captured_calls": 1735,
+      "max_prediction_error": 2.0265579223632812e-06,
+      "parity": true,
+      "labels_equal": true,
+      "generator_state_exact": true,
+      "stats": {
+        "calls_captured": 1735,
+        "unique_graphs": 63
+      }
+    },
+    {
+      "rows": 48,
+      "eager_fit_seconds": 0.06742545799352229,
+      "compiled_fit_seconds": 67.29918870900292,
+      "new_graphs": 32,
+      "new_captured_calls": 1561,
+      "max_prediction_error": 8.404254913330078e-06,
+      "parity": true,
+      "labels_equal": true,
+      "generator_state_exact": true,
+      "stats": {
+        "calls_captured": 3296,
+        "unique_graphs": 95
+      }
+    },
+    {
+      "rows": 32,
+      "eager_fit_seconds": 0.05605158302932978,
+      "compiled_fit_seconds": 0.32844787498470396,
+      "new_graphs": 2,
+      "new_captured_calls": 9,
+      "max_prediction_error": 2.0265579223632812e-06,
+      "parity": true,
+      "labels_equal": true,
+      "generator_state_exact": true,
+      "stats": {
+        "calls_captured": 3305,
+        "unique_graphs": 97
+      }
+    }
+  ],
+  "status": "pass"
+}

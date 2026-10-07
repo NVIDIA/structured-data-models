@@ -171,16 +171,34 @@ try:
                 )
             )
             result["fitted_buffer_differences"] = []
-            for role in ("features", "target", "output"):
-                expected_buffers = dict(
-                    getattr(
-                        oracle._cache["recipe_execution"].recipe, role
-                    ).named_buffers()
+            reference_execution = oracle._cache["recipe_execution"]
+            actual_execution = model._cache["recipe_execution"]
+            processor_pairs = [
+                (
+                    role,
+                    getattr(reference_execution.recipe, role),
+                    getattr(actual_execution.recipe, role),
                 )
-                for name, value in getattr(
-                    model._cache["recipe_execution"].recipe, role
-                ).named_buffers():
+                for role in ("features", "target", "output")
+            ]
+            for name, processor in (
+                actual_execution._related_processors or {}
+            ).items():
+                processor_pairs.append(
+                    (
+                        f"related:{name}",
+                        reference_execution._related_processors[name],
+                        processor,
+                    )
+                )
+            result["fitted_buffer_checks"] = 0
+            for role, reference_processor, actual_processor in processor_pairs:
+                expected_buffers = dict(reference_processor.named_buffers())
+                actual_buffers = dict(actual_processor.named_buffers())
+                assert expected_buffers.keys() == actual_buffers.keys()
+                for name, value in actual_buffers.items():
                     expected_value = expected_buffers[name]
+                    result["fitted_buffer_checks"] += 1
                     if not torch.equal(value, expected_value):
                         result["fitted_buffer_differences"].append(
                             {
