@@ -121,6 +121,9 @@ def main() -> None:
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
+        "--source-commit", help="Git revision for an archived source tree"
+    )
+    parser.add_argument(
         "--task", choices=["classification", "regression"], required=True
     )
     parser.add_argument(
@@ -173,9 +176,13 @@ def main() -> None:
             "gpu_names": [
                 torch.cuda.get_device_name(device) for device in devices
             ],
-            "git_revision": subprocess.check_output(
+            "git_revision": args.source_commit
+            or subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], text=True
             ).strip(),
+            "runner_sha256": hashlib.sha256(
+                Path(__file__).read_bytes()
+            ).hexdigest(),
         },
     }
     telemetry = (args.output / "nvidia-smi.csv").open("w")
