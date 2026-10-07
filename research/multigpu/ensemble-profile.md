@@ -31,6 +31,8 @@ All 7,888 additional EP kernels are accounted for by demangled-name differences:
 
 The cache storage issue is separate: row-encoder value views can retain unused fused KV backing storage. `compact_ensemble:factory` tests that memory mechanism. Compaction is not guaranteed to save memory for every context size; a larger-context run may already allocate compact cache tensors.
 
+A read-only copy-size check also found 32 device-to-host copies of 56 bytes in each trace, matching seven int64 class labels across four members and eight query batches. This is consistent with the model's `classes.tolist()` output-label construction. Their total device-copy durations were only 0.053 ms native and 0.043 ms EP4; all `cudaStreamSynchronize` CPU durations summed to 1.77 and 1.79 ms respectively. The metadata synchronization exists, but these traces do not identify it as a dominant part of the approximately 1.5-second inference range. CUDA graph replay also moves this metadata to CPU, so any future graph improvement must not be attributed solely to fewer kernel launches without a separate control.
+
 Coverage checks find GPU kernel records on all four EP devices and launch records from all four workers plus the coordinator. Nsight diagnostics report missing OS scheduling information and several ancillary-process NVTX/CUDA warnings. The requested top-level inference ranges are present, and the four model workers have CUDA coverage, but these traces cannot establish Python thread scheduling or GIL wait fractions. A persistent-process comparison is needed to test interpreter isolation directly.
 
 ## Reproduction and source artifacts
