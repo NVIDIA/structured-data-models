@@ -28,7 +28,7 @@ elif x.device not in self._transfer_streams:
     # Existing eager stream setup.
 ```
 
-This preserves CPU cache offloading, cache contents, model calculations, and all `record_stream` lifetime tracking. Within compiled prediction, copies and their readers now execute in stream order; copy/compute overlap is sacrificed. This is an explicit workaround for compiler scheduling, not a numerical adjustment.
+Compiling only the inner models leaves `predict()` eager, so that usage also retains asynchronous transfers. This preserves CPU cache offloading, cache contents, model calculations, and all `record_stream` lifetime tracking. Within compiled prediction, copies and their readers now execute in stream order; copy/compute overlap is sacrificed. This is an explicit workaround for compiler scheduling, not a numerical adjustment.
 
 Source commit: `f0a5db1e4`, based on `18a4d151a` (the explicit-event fix) and frozen integration `c75ba3af6`. This branch is a separate candidate; its exact GPU replay is pending.
 
