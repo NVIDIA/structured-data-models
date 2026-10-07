@@ -1,0 +1,211 @@
+{
+  "config": {
+    "model": "relational",
+    "task": "classification",
+    "entry": "predict",
+    "data": "/home/ubuntu/validation/data/driver-dnf_bundle.pt",
+    "checkpoint": "/home/ubuntu/validation/data/relational-classifier.pt",
+    "output": "/home/ubuntu/validation/results/relational-onehop-predict-fp32-full-events18.json",
+    "source_commit": "c75ba3af6+18a4d151a",
+    "device": "cuda",
+    "autocast": "off",
+    "backend": "inductor",
+    "fullgraph": true,
+    "single_stream": false,
+    "capture_dynamic_outputs": true,
+    "recompile_limit": null,
+    "estimators": 1,
+    "context_rows": 32,
+    "query_rows": [
+      32,
+      128,
+      32
+    ],
+    "arm_index": 0,
+    "query_indices": [
+      1,
+      0,
+      2,
+      1
+    ],
+    "warmups": 2,
+    "repeats": 5
+  },
+  "torch": "2.14.0+cu130",
+  "cuda_runtime": "13.0",
+  "platform": "Linux-7.0.0-1013-aws-x86_64-with-glibc2.39",
+  "source": "c75ba3af6+18a4d151a",
+  "weight_dtype": "float32",
+  "autocast_dtype": null,
+  "gpu": "NVIDIA L4",
+  "gpu_capability": [
+    8,
+    9
+  ],
+  "gpu_total_memory": 23661248512,
+  "tf32_matmul": false,
+  "tf32_cudnn": true,
+  "actual_query_rows": [
+    4,
+    1,
+    8,
+    4
+  ],
+  "eager_fit_succeeded": true,
+  "cache_devices": {
+    "cuda:0": 51
+  },
+  "graph_breaks": {},
+  "status": "pass",
+  "source_receipt": {
+    "base_commit": "c75ba3af6c231c7bdcd181a50d35cdc7fb53c090",
+    "source_patch_commit": "18a4d151a",
+    "source_patch_sha256": "f94e376bb991ef65c2e6400d051dbd7450405de8ce29ebce1f857a5da5e6b473",
+    "runner_base_commit": "937beb883",
+    "runner_sha256": "2e8807ea7f1ef2907bbfc2e828667d3a7e0ba0505629b3482bdc56f863af2c6a",
+    "raw_result_file": "relational-onehop-predict-fp32-full-events18.json",
+    "raw_result_sha256": "aab83a26a12bc614b4e38ed5a74f0ac059698f45bce3cc6a7d71fdc09e914dcf"
+  },
+  "inputs": [
+    {
+      "name": "driver-dnf_bundle.pt",
+      "bytes": 1975223,
+      "sha256": "f7dfe6cd2881ec6713efa99fa96fa97489d1c3041e82e2effb6c64506783ac51"
+    },
+    {
+      "name": "relational-classifier.pt",
+      "bytes": 119862733,
+      "sha256": "0c2e35cc18303f0d3ddeaf04e9cab6ca3a8bd6ea17195ac0e42d47af4bcb2a2d"
+    }
+  ],
+  "warm_summary": [
+    {
+      "phase": "eager",
+      "rows": 1,
+      "samples": 5,
+      "wall_median_ms": 74.51341999990291,
+      "peak_allocated_mib": 141.20166015625,
+      "max_abs_error": 0.0,
+      "class_agreement": 1.0,
+      "graphs": {}
+    },
+    {
+      "phase": "eager",
+      "rows": 4,
+      "samples": 10,
+      "wall_median_ms": 74.70999550002944,
+      "peak_allocated_mib": 141.69384765625,
+      "max_abs_error": 0.0,
+      "class_agreement": 1.0,
+      "graphs": {}
+    },
+    {
+      "phase": "eager",
+      "rows": 8,
+      "samples": 5,
+      "wall_median_ms": 74.85495800005992,
+      "peak_allocated_mib": 142.1904296875,
+      "max_abs_error": 0.0,
+      "class_agreement": 1.0,
+      "graphs": {}
+    },
+    {
+      "phase": "compiled",
+      "rows": 1,
+      "samples": 5,
+      "wall_median_ms": 39.61300100013432,
+      "peak_allocated_mib": 141.15185546875,
+      "max_abs_error": 1.3113021850585938e-06,
+      "class_agreement": 1.0,
+      "graphs": {
+        "calls_captured": 12384,
+        "unique_graphs": 2
+      }
+    },
+    {
+      "phase": "compiled",
+      "rows": 4,
+      "samples": 10,
+      "wall_median_ms": 40.33085949993165,
+      "peak_allocated_mib": 141.50634765625,
+      "max_abs_error": 2.294778823852539e-06,
+      "class_agreement": 1.0,
+      "graphs": {
+        "calls_captured": 18582,
+        "unique_graphs": 3
+      }
+    },
+    {
+      "phase": "compiled",
+      "rows": 8,
+      "samples": 5,
+      "wall_median_ms": 41.01310500004729,
+      "peak_allocated_mib": 141.86279296875,
+      "max_abs_error": 1.7881393432617188e-06,
+      "class_agreement": 1.0,
+      "graphs": {
+        "calls_captured": 18582,
+        "unique_graphs": 3
+      }
+    }
+  ],
+  "stream_probe": [
+    {
+      "torch": "2.14.0+cu130",
+      "offloaded": false,
+      "events": false,
+      "fullgraph": false,
+      "status": "fail"
+    },
+    {
+      "torch": "2.14.0+cu130",
+      "offloaded": false,
+      "events": false,
+      "fullgraph": true,
+      "status": "fail"
+    },
+    {
+      "torch": "2.14.0+cu130",
+      "offloaded": false,
+      "events": true,
+      "fullgraph": false,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0+cu130",
+      "offloaded": false,
+      "events": true,
+      "fullgraph": true,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0+cu130",
+      "offloaded": true,
+      "events": false,
+      "fullgraph": false,
+      "status": "fail"
+    },
+    {
+      "torch": "2.14.0+cu130",
+      "offloaded": true,
+      "events": false,
+      "fullgraph": true,
+      "status": "fail"
+    },
+    {
+      "torch": "2.14.0+cu130",
+      "offloaded": true,
+      "events": true,
+      "fullgraph": false,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0+cu130",
+      "offloaded": true,
+      "events": true,
+      "fullgraph": true,
+      "status": "pass"
+    }
+  ],
+  "stream_probe_sha256": "c30f6ebdb7aade91b61f6f72afa0e1bed0639524551e67890ebe51192f0f05f4"
+}
