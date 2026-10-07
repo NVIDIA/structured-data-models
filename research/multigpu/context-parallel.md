@@ -67,9 +67,9 @@ The first full-model workload used pretrained KumoTabular **small** (12 ICL laye
 | Efficient LSE, 1 GPU | 3,085.89 | 0.755859 | 0.586496 | 96 MiB | 145.00 MiB | 265.63 MiB |
 | Efficient CP, 2 GPUs | 2,648.21 | 0.755859 | 0.586468 | 48 MiB | 97.00 MiB | 241.13 MiB |
 | Efficient CP, 4 GPUs | 2,576.37 | 0.754395 | 0.586577 | 24 MiB | 73.00 MiB | 228.88 MiB |
-| Flash LSE, 1 GPU | 2,960.10 | 0.756836 | 0.586389 | 96 MiB | 145.00 MiB | Pending aggregation |
-| Flash CP, 2 GPUs | 2,604.96 | 0.756348 | 0.586461 | 48 MiB | 97.00 MiB | Pending aggregation |
-| Flash CP, 4 GPUs | 2,538.58 | 0.754395 | 0.586535 | 24 MiB | 73.00 MiB | Pending aggregation |
+| Flash LSE, 1 GPU | 2,960.10 | 0.756836 | 0.586389 | 96 MiB | 145.00 MiB | 265.63 MiB |
+| Flash CP, 2 GPUs | 2,604.96 | 0.756348 | 0.586461 | 48 MiB | 97.00 MiB | 241.13 MiB |
+| Flash CP, 4 GPUs | 2,538.58 | 0.754395 | 0.586535 | 24 MiB | 73.00 MiB | 228.88 MiB |
 
 Flash LSE1 predictions were byte-identical to the native baseline. Maximum probability differences were 0.007744/0.008601 for efficient CP2/CP4 and 0.009326/0.009801 for Flash CP2/CP4. The corresponding class-decision changes were 4/5 and 3/7 out of 2,048. This is tolerance-based equivalence, not exact prediction identity. The small changes in validation quality are measured outcomes, not evidence of an accuracy improvement or regression across datasets.
 
