@@ -485,6 +485,7 @@ def run(args: argparse.Namespace) -> None:
         for device in devices:
             torch.cuda.reset_peak_memory_stats(device)
         elapsed, batch_times, arrays, windows = [], [], [], []
+        prediction_tables = []
         for repetition in range(args.repeats):
             synchronize(devices)
             wall_start = time.time()
@@ -497,7 +498,9 @@ def run(args: argparse.Namespace) -> None:
             windows.append([wall_start, time.time()])
             batch_times.append(durations)
             pred = torch.cat(predictions, dim=0)
+            prediction_tables.append(pred)
             arrays.append(pred.numerical.numpy().copy())
+        pred = prediction_tables[0]
         stats["predict_repeats_s"] = elapsed
         stats["prediction_unix_windows"] = windows
         stats["batch_times_s"] = batch_times
@@ -519,6 +522,8 @@ def run(args: argparse.Namespace) -> None:
         stats["prediction_columns"] = list(pred.columns[sdm.Stype.numerical])
         stats["max_rss_kib"] = max_rss_kib()
         np.save(args.output / "predictions.npy", arrays[0])
+        for repetition, array in enumerate(arrays):
+            np.save(args.output / f"predictions-repeat-{repetition}.npy", array)
         torch.save(pred, args.output / "predictions.pt")
         if args.profile or args.phase_profile:
             phase_times: dict[str, list[float]] = {}
@@ -614,6 +619,10 @@ def run(args: argparse.Namespace) -> None:
             args.workload / "validation-labels.pt", weights_only=False
         )
         stats["quality"] = score(pred.cpu(), labels, task)
+        stats["quality_repeats"] = [
+            score(table, labels, task) for table in prediction_tables
+        ]
+        stats["quality_reference_repeat"] = 0
         if query_executor is not None:
             query_executor.close()
         if ensemble_mode or args.mode == "hybrid":
