@@ -357,7 +357,7 @@ class _KumoRelational(torch.nn.Module):
                 num_hops = cast(int, cache["num_hops"])
             query = TaskGraph.from_input(
                 x=x_query,
-                related_tables=RelatedTables[TableTensor](
+                related_tables=RelatedTables(
                     tables=related_query_tables.tables,
                     relationships=relationships,
                     task_links=related_query_tables.task_links,
