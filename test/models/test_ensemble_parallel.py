@@ -104,8 +104,9 @@ def test_duplicate_replica_rejected() -> None:
 
 
 @pytest.mark.parametrize("replicas", [1, 2, 4])
+@pytest.mark.parametrize("classes", [7, 12])
 def test_kumo_ecoc_and_class_permutations(
-    replicas: int, monkeypatch: pytest.MonkeyPatch
+    replicas: int, classes: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setitem(
         MODEL_KWARGS,
@@ -131,7 +132,7 @@ def test_kumo_ecoc_and_class_permutations(
     x = torch.randn(24, 4)
     y = TableTensor(
         categorical=CategoricalTensor.from_tensor(
-            torch.arange(24).remainder(12).view(-1, 1) * 10
+            torch.arange(24).remainder(classes).view(-1, 1) * 10
         )
     )
     recipe = Recipe(
@@ -149,10 +150,18 @@ def test_kumo_ecoc_and_class_permutations(
             member_seed=42,
         )
         expected = serial.predict(x[:4])
-        codebooks = [
-            cast(torch.Tensor, c["ecoc_codebook"]).clone()
-            for c in serial._caches
-        ]
+        codebooks = [c.get("ecoc_codebook") for c in serial._caches]
+    if classes <= 10:
+        model.fit(
+            x,
+            y,
+            num_estimators=5,
+            recipe=recipe,
+            generator=torch.Generator().manual_seed(4),
+        )
+        torch.testing.assert_close(
+            model.predict(x[:4]).numerical, expected.numerical, rtol=0, atol=0
+        )
     with EnsembleParallel(
         [copy.deepcopy(model) for _ in range(replicas)]
     ) as parallel:
@@ -173,9 +182,10 @@ def test_kumo_ecoc_and_class_permutations(
             for cache, codebook in zip(
                 parallel._caches, codebooks, strict=True
             ):
-                torch.testing.assert_close(
-                    cache["ecoc_codebook"], codebook, rtol=0, atol=0
-                )
+                if codebook is not None:
+                    torch.testing.assert_close(
+                        cache["ecoc_codebook"], codebook, rtol=0, atol=0
+                    )
 
 
 @pytest.mark.skipif(
