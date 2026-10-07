@@ -285,18 +285,19 @@ def _join_indices(
             column = leaves[tensor_index]
             tensor_index += 1
         columns.append(column)
-    names = [f"key_{i}" for i in range(left_count)]
+    left_names = [f"key_{i}" for i in range(left_count)]
+    right_names = [f"key_{i}" for i in range(len(columns) - left_count)]
     return _join_index_eager(
         TableTensor(
-            columns={"id": names},
+            columns={"id": left_names},
             id=ColumnarTensor(tuple(columns[:left_count])),
         ),
         TableTensor(
-            columns={"id": names},
+            columns={"id": right_names},
             id=ColumnarTensor(tuple(columns[left_count:])),
         ),
-        names,
-        names,
+        left_names,
+        right_names,
         dtype=dtype,
         device=device,
     )
