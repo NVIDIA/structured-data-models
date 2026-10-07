@@ -30,9 +30,11 @@ def test_compile_table(fullgraph: bool, mixed: bool) -> None:
                 "id": ColumnarTensor((torch.arange(rows),)),
             }
         table = TableTensor(numerical=numerical, **blocks)
-        actual, expected = compiled(table), transform(table)
-        assert actual.columns == expected.columns
-        assert torch.equal(actual, expected)
+        inputs = (table,) if mixed else (table, table[..., 1::2, :])
+        for inp in inputs:
+            actual, expected = compiled(inp), transform(inp)
+            assert actual.columns == expected.columns
+            assert torch.equal(actual, expected)
 
 
 @pytest.mark.parametrize("fullgraph", [False, True])

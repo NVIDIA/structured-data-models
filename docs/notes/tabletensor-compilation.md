@@ -14,6 +14,7 @@ compiled(TableTensor.from_tensor(torch.randn(5, 3)))
 `__tensor_flatten__` exposes each contained tensor, while `__tensor_unflatten__` rebuilds the same schema and blocks from the compiler's tensor values. This allows tensor operations to be traced without converting tables to another public input type.
 
 - Both private storage attributes and public block properties are exposed. Public properties are required when constructing a table inside a graph; PyTorch 2.7 additionally needs the private aliases to avoid recursive property guards. These are aliases of the same tensors, not copied data.
+- Slicing an input table must also preserve the empty identifier block's tensor leaf. PyTorch replays views while rebuilding fake inputs, sometimes outside an active fake mode. Empty-column views therefore reshape the existing zero-element leaf instead of retaining a newly allocated real tensor. This fixes `All fake tensor modes must be the same` for sliced inputs.
 - An empty `ColumnarTensor` keeps one zero-element tensor so that device, symbolic shape, and fake-tensor mode remain available even without any columns. Reconstruction reuses the supplied leaf and its device; it does not allocate a new symbolic tensor.
 - Schema names remain immutable metadata. Changing the schema can legitimately require recompilation.
 - Fake-tensor representations avoid reading values. The nested variable-length concatenation change also avoids value-dependent slicing when the entire payload is empty, including absent text columns.
@@ -67,5 +68,7 @@ compiled(TableTensor.from_tensor(torch.randn(5, 3)))
 Both tested versions fail with and without graph breaks. General copy support must define behavior for categorical dictionaries and variable-length payloads while preserving aliases; this branch does not add a numerical-only copy workaround. Pure transformations returning a replacement table work in the tested cases.
 
 **Python container methods.** In PyTorch 2.7, some custom methods on traceable tensor subclasses are treated as tensor operators. A generator-returning `table.items()` or newly created `frozenset` metadata can still prevent fullgraph tracing in processors. Separate recipe/processor changes address call sites without changing the table's public metadata types.
+
+**Pre-sliced mixed inputs.** Numeric input-table views now compile after preserving the empty identifier leaf. Passing a pre-sliced table with nonempty text into a compiled replacement-and-slice function still exposes symbolic-shape failures: PyTorch 2.7 reports an undefined symbolic variable and 2.14 reports missing symbolic metadata. Fresh mixed tables pass the same operation. This needs additional nested-container/view work; mixed slicing in the table above means slicing inside compilation from a fresh table, not arbitrary pre-sliced mixed inputs.
 
 **Compilation cache.** PyTorch 2.14 warns that these subclasses lack `_stable_hash_for_caching`; dynamic subclass metadata may prevent persistent AOT cache serialization. The tested computations still execute, but cross-process compilation cache behavior is not established.

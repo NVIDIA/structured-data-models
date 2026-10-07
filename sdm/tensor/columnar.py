@@ -30,7 +30,14 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         with torch.inference_mode(args[0].is_inference()):
-            return fn(*args, **kwargs)
+            out = fn(*args, **kwargs)
+            if not args[0]._columns:
+                # View replay can run without an active fake mode. Reuse the
+                # input leaf instead of retaining a freshly allocated tensor.
+                for tensor in out if isinstance(out, tuple) else (out,):
+                    if isinstance(tensor, ColumnarTensor):
+                        tensor._empty = args[0]._empty.reshape(tensor.shape)
+            return out
 
     return wrapper
 
