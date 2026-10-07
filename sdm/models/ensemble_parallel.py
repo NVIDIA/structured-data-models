@@ -291,8 +291,7 @@ class EnsembleParallel:
         if x.device.type == "cuda":
             stream = torch.cuda.current_stream(x.device)
             for output in outputs:
-                for tensor in output._tensors():
-                    tensor.record_stream(stream)
+                output.record_stream(stream)
         with (
             torch.inference_mode(),
             torch.autocast(x.device.type, enabled=False),
