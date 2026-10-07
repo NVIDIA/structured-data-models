@@ -56,7 +56,8 @@ class ShuffleCategories(EnsembleProcessor):
     ) -> list[Tensor]:
         device = table.categorical.device
         permutations: list[Tensor] = []
-        for column_index, category in enumerate(table.categorical.categories):
+        for column_index in range(table.categorical.size(-1)):
+            category = table.categorical.category(column_index)
             n_classes = category.numel()
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
@@ -183,9 +184,10 @@ class ShuffleCategories(EnsembleProcessor):
         code = table.categorical.code.clone()
         valid_mask = table.categorical.isfinite()
         categories: list[Tensor] = []
-        for index, (category, permutation) in enumerate(
-            zip(table.categorical.categories, permutations, strict=True)
+        for index, permutation in zip(
+            range(table.categorical.size(-1)), permutations, strict=True
         ):
+            category = table.categorical.category(index)
             codes = code[..., index]
             valid = valid_mask[..., index]
             valid_codes = codes[valid].to(torch.long)
