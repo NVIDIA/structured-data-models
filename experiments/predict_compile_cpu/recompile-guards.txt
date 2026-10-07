@@ -1,0 +1,6 @@
+V1008 02:31:50.535000 8701 torch/_dynamo/guards.py:5621] [0/1] [__recompiles] Recompiling function forward in /Users/ardrianw/repositories/sdm-predict-compile-cpu-20261008/sdm/models/kumo/tabular/model.py:295
+V1008 02:31:50.535000 8701 torch/_dynamo/guards.py:5621] [0/1] [__recompiles]     triggered by the following guard failure(s):
+V1008 02:31:50.535000 8701 torch/_dynamo/guards.py:5621] [0/1] [__recompiles]     - 0/0: tensor 'x' size mismatch at index 0. expected 32, actual 111
+V1008 02:31:59.225000 8701 torch/_dynamo/guards.py:5621] [1/1] [__recompiles] Recompiling function predict in /Users/ardrianw/repositories/sdm-predict-compile-cpu-20261008/sdm/models/base.py:341
+V1008 02:31:59.225000 8701 torch/_dynamo/guards.py:5621] [1/1] [__recompiles]     triggered by the following guard failure(s):
+V1008 02:31:59.225000 8701 torch/_dynamo/guards.py:5621] [1/1] [__recompiles]     - 1/0: tensor 'x' size mismatch at index 0. expected 32, actual 111
