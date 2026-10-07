@@ -163,7 +163,8 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                 ),
                 table.device,
                 tuple(
-                    id(category) for category in table.categorical.categories
+                    id(table.categorical.category(index))
+                    for index in range(table.categorical.shape[-1])
                 ),
             )
             compatible_groups.setdefault(compatibility_key, []).append(index)
