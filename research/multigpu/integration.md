@@ -110,3 +110,24 @@ PyTorch offers [DTensor tensor parallel styles](https://docs.pytorch.org/docs/st
 | Worker exception or Spot interruption | Hangs, partial outputs treated as complete, stale distributed process groups |
 
 Per-rank random seeding alone is insufficient for EP: logical members must retain their seeds when they change ranks. DP replicas should match full fit state. CP participants must agree on input ordering, query tensors, model state, ensemble branch, and collective order. Hierarchical classification can introduce variable control flow; all ranks in a context group must traverse the same branches.
+
+## Profile-directed follow-up experiments
+
+These are proposed experiments, not implemented or measured optimizations. Choose an experiment after the corresponding signal appears in traces; measure it against the same existing baseline before combining it with another change.
+
+| Observed signal | Focused experiment | Evidence needed to accept it |
+|---|---|---|
+| CP slower even on one rank with the LSE path | Replace or specialize the LSE attention backend; preserve GQA without materializing repeated KV heads | Native SDPA vs LSE1 kernel latency, temporary bytes, and full-model prediction tolerance |
+| CP rank-local attention fast but NCCL dominates | Reduce/fuse collective launches, larger query batches, compare PCIe to NVLink/NVSwitch | Collective time/bytes and synchronization stalls; fixed batch/context and identical useful outputs |
+| CP peak dominated by full fit | Shard fit's induced-column reductions and ICL attention, or fit once then scatter caches | Fit peak/latency and distributed fit parity; fitting once does not solve that rank's fit OOM |
+| EP GPU idle while CPU transforms inputs | Cache transformed query members when legal; separate preprocessing and execution; compare persistent processes | CPU phase time, GPU idle intervals, transfer bytes, no state fitted on validation |
+| EP scaling plateaus when estimators per GPU are small | Batch compatible estimators locally, then distribute batches | Best native estimator batching vs EP batching, same member plan and available memory |
+| DP replicas dominated by immutable input copies | Share read-only host buffers or stage batches per worker; keep model/fit state local | Host RSS/transfer reductions without changing sampled graphs or moving labels into inputs |
+| Relational encoder dominated by multiple similar tables | Table fan-out with stable per-table state and gather order | Per-table cost balance, transfer overhead, target/RNG/cache parity |
+| One relational table dominates | Split its cached query rows, preserving fitted encoder state, and gather before unchanged GNN | Row encoder speedup and graph parity; avoid independently re-fitting row subsets |
+| GNN dominates with large boundary-connected graph | Exact destination partition with source halos or merged sufficient statistics | Hop-wise state parity, boundary bytes, load balance, memory/latency crossover |
+| Sequential placement reduces memory but idles devices | Overlap independent query microbatches through explicit stage queues | Pipeline occupancy, end-to-end p50/p95, steady-state throughput, bounded live buffers |
+
+The current CP prototype expands reduced KV heads via `repeat_interleave` before its efficient-attention kernel, while native attention requests GQA directly. For KumoTabular large this turns two KV heads into sixteen during each call. The retained-cache formula remains correct, but temporary memory and memory traffic are different. A poor CP result on that path is evidence about the complete prototype/kernel combination; it does not by itself reject the mathematical context split.
+
+Hybrid EP × DP should partition complete estimators inside each request and complete batches across request groups. Local averaging followed by averaging group outputs is only equivalent for a linear, equally weighted reducer; SDM regression can use trimmed estimator averaging after inverse target transforms. Preserve the original global estimator reduction rather than assuming associativity.
