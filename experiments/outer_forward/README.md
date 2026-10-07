@@ -34,3 +34,11 @@ Keep explicit random-generator state and learned vocabulary semantics. Dropping 
 The same four outer-forward cases were also run on actual CPU PyTorch 2.7.1 Inductor. Both tasks fail partial compilation while resuming construction of a TaskDispatch module (`object has no attribute '_modules'`). Both strict cases reject construction of a frozenset from a generator during recipe setup. See [results27.json](results27.json). Passing an explicitly prepared recipe is a separate experiment on the fitting branch; these results use the default public call unchanged.
 
 No GPU or end-to-end speed claim is made here.
+
+## Fresh-cache follow-up on 2.7
+
+Passing an eagerly constructed recipe via `--prepared-recipe` gets past default recipe setup. At source `9879a9983`, actual Inductor outer classification then passes with graph breaks allowed, maximum error 5.96e-8. This includes fitting and the uncached internal model call.
+
+A controlled comparison uses distinct fresh cache directories, with FX/AOT caches disabled: parent `2a428e0ac` fails by routing a dtype argument to `unsqueeze`; adding the atomic table-dispatch boundary passes. See [fresh-cache27.json](fresh-cache27.json) for exact environments, commands and results. The boundary preserves compiler access to tensor computation; this is still partial compilation.
+
+Earlier `expected 13` argument-count errors in [prepared-recipe27.json](prepared-recipe27.json) came from incompatible cached generated code after experimental tensor flatten layouts changed. They are not evidence that column shuffling needs a source fix. Fresh caches avoid that artifact; compatibility of old compiled artifacts across wrapper-layout changes remains separate work.

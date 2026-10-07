@@ -1,0 +1,94 @@
+[
+  {
+    "torch": "2.7.1",
+    "model": "tabular",
+    "entry": "forward",
+    "fullgraph": false,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "prepared_recipe": true,
+    "query_input": "view",
+    "arm_index": null,
+    "recompile_limit": null,
+    "inner_only": false,
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "TypeError",
+    "error": "unsqueeze(): argument 'dim' (position 1) must be int, not torch.dtype",
+    "cache_configuration": {
+      "source": "/tmp/sdm-outer-cache-baseline-20261008",
+      "cache": "/var/folders/k4/ywqq5h690nx1mhkz9j236q4r0000gn/T/sdm-outer-outer-cache-baseline27-ervuao0n",
+      "command": [
+        "/Users/ardrianw/repositories/sdm-main-audit-20261001/evidence/runtime27/bin/python",
+        "/Users/ardrianw/repositories/sdm-compile-shuffle-metadata-20261008/evidence/outer_probe.py",
+        "--model",
+        "tabular",
+        "--entry",
+        "forward",
+        "--prepared-recipe",
+        "--data",
+        "/Users/ardrianw/repositories/sdm-realdata-validation-20261002/evidence/kumo_tabular/cpu/classification/data_train_validation.npz",
+        "--checkpoint",
+        "/Users/ardrianw/.cache/huggingface/hub/models--nvidia--Kumo-Tabular/snapshots/bd7fa122b516c7355583873ffcf38f5e79403ebd/small/classifier.pt",
+        "--output",
+        "/Users/ardrianw/repositories/sdm-compile-shuffle-metadata-20261008/evidence/outer-cache-baseline27.json"
+      ],
+      "environment": {
+        "PYTHONPATH": "/tmp/sdm-outer-cache-baseline-20261008",
+        "OMP_NUM_THREADS": "1",
+        "TORCHINDUCTOR_CACHE_DIR": "/var/folders/k4/ywqq5h690nx1mhkz9j236q4r0000gn/T/sdm-outer-outer-cache-baseline27-ervuao0n",
+        "TORCHINDUCTOR_FX_GRAPH_CACHE": "0",
+        "TORCHINDUCTOR_AUTOGRAD_CACHE": "0"
+      }
+    }
+  },
+  {
+    "torch": "2.7.1",
+    "model": "tabular",
+    "entry": "forward",
+    "fullgraph": false,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "prepared_recipe": true,
+    "query_input": "view",
+    "arm_index": null,
+    "recompile_limit": null,
+    "inner_only": false,
+    "eager_succeeded": true,
+    "status": "pass",
+    "max_abs_error": 5.960464477539063e-08,
+    "parity": true,
+    "cache_configuration": {
+      "source": "/Users/ardrianw/repositories/sdm-compile-shuffle-metadata-20261008",
+      "cache": "/var/folders/k4/ywqq5h690nx1mhkz9j236q4r0000gn/T/sdm-outer-outer-cache-atomic27-p_qltgue",
+      "command": [
+        "/Users/ardrianw/repositories/sdm-main-audit-20261001/evidence/runtime27/bin/python",
+        "/Users/ardrianw/repositories/sdm-compile-shuffle-metadata-20261008/evidence/outer_probe.py",
+        "--model",
+        "tabular",
+        "--entry",
+        "forward",
+        "--prepared-recipe",
+        "--data",
+        "/Users/ardrianw/repositories/sdm-realdata-validation-20261002/evidence/kumo_tabular/cpu/classification/data_train_validation.npz",
+        "--checkpoint",
+        "/Users/ardrianw/.cache/huggingface/hub/models--nvidia--Kumo-Tabular/snapshots/bd7fa122b516c7355583873ffcf38f5e79403ebd/small/classifier.pt",
+        "--output",
+        "/Users/ardrianw/repositories/sdm-compile-shuffle-metadata-20261008/evidence/outer-cache-atomic27.json"
+      ],
+      "environment": {
+        "PYTHONPATH": "/Users/ardrianw/repositories/sdm-compile-shuffle-metadata-20261008",
+        "OMP_NUM_THREADS": "1",
+        "TORCHINDUCTOR_CACHE_DIR": "/var/folders/k4/ywqq5h690nx1mhkz9j236q4r0000gn/T/sdm-outer-outer-cache-atomic27-p_qltgue",
+        "TORCHINDUCTOR_FX_GRAPH_CACHE": "0",
+        "TORCHINDUCTOR_AUTOGRAD_CACHE": "0"
+      }
+    }
+  }
+]
