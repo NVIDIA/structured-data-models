@@ -24,6 +24,8 @@ The relational fullgraph checks run **4 → 1 → 8 → 4 query rows with their 
 
 Relational fullgraph source: `d8cbc7383`. The latest tabular classifier repeat passes after atomic wrapper construction (`aa3876c33`). Initial tabular regression/four-estimator source: `284f612cf`. Exact comparisons use `atol=1e-5, rtol=1e-4`; they are not bitwise or dataset-wide quality guarantees. [Prediction results](relational-prediction-progress.json) preserve source commits, failures, graph counts, and exact probability values; [initial results](prediction-final.json) preserve the earlier tabular matrix.
 
+A final independent-cache repeat at `450444af9` confirms both one-hop prediction successes and the small two-hop precision misses above. Each process uses its own cache directory with FX/AOT caches disabled; [fresh-validation.json](fresh-validation.json) records all settings and outcomes. This excludes stale artifacts from earlier subclass-layout experiments. Cross-version compilation-cache compatibility is still being reviewed separately.
+
 ## Usage
 
 ```python
