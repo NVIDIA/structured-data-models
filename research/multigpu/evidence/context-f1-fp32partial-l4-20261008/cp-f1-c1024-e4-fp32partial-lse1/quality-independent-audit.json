@@ -1,0 +1,87 @@
+{
+  "run": "cp-f1-c1024-e4-fp32partial-lse1",
+  "prediction_sha256": "e23b14a983f20de665b641f0cfbbf0d7ffc90573db1ccf3fba2bc0e2b8868441",
+  "rank_hashes_equal": true,
+  "repeat_arrays_equal": true,
+  "input_identity_equal": true,
+  "query_ids_equal": true,
+  "quantile_columns_correct": true,
+  "numerical_vs_native_bf16": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.1444568634033203,
+    "mean_abs": 0.010493517724535833,
+    "rms": 0.014709459061653109,
+    "p99_abs": 0.04333686828613281,
+    "relative_l2": 0.0012948189796400374,
+    "within_tolerance": false
+  },
+  "numerical_vs_fp32partial_lse1": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "failed_entries_vs_native": 771,
+  "failed_entries_vs_fp32partial_lse1": 0,
+  "metrics": {
+    "rmse": 4.215017698661024,
+    "mae": 3.4147195022904087,
+    "crossing_pairs": 0,
+    "rows_with_crossings": 0,
+    "max_crossing": 0,
+    "mean_pinball_loss": 1.193327954003361,
+    "coverage_q050_q950": 0.9539078156312625
+  },
+  "paired_mae_delta_vs_native": {
+    "candidate_minus_reference": 0.000008425779476431912,
+    "ci95": [
+      -0.0011635924600038212,
+      0.0010795106011700908
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "paired_mae_delta_vs_fp32partial_lse1": {
+    "candidate_minus_reference": 0,
+    "ci95": [
+      0,
+      0
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_slowest_rank_seconds": [
+    1.473956263999753,
+    1.5690439540003354,
+    1.4817882560000726
+  ],
+  "slowest_rank_matches_record": true,
+  "median_unique_rows_s": 336.7552671439013,
+  "speedup_native_bf16": 0.9245661641955017,
+  "speedup_fp32partial_lse1": 1
+}

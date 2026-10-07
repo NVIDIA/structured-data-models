@@ -1,0 +1,87 @@
+{
+  "run": "cp-f1-c1024-e4-fp32partial-context4",
+  "prediction_sha256": "456ae1088553969e2930d19426b1651e89d4915d81bc994655c89284ebc4d473",
+  "rank_hashes_equal": true,
+  "repeat_arrays_equal": true,
+  "input_identity_equal": true,
+  "query_ids_equal": true,
+  "quantile_columns_correct": true,
+  "numerical_vs_native_bf16": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.14445877075195312,
+    "mean_abs": 0.010600171953723746,
+    "rms": 0.014841961155189353,
+    "p99_abs": 0.04333686828613281,
+    "relative_l2": 0.001306482646185059,
+    "within_tolerance": false
+  },
+  "numerical_vs_fp32partial_lse1": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.08667373657226562,
+    "mean_abs": 0.0014739563150793914,
+    "rms": 0.004328462959860307,
+    "p99_abs": 0.014446258544921875,
+    "relative_l2": 0.0003810230790353511,
+    "within_tolerance": false
+  },
+  "failed_entries_vs_native": 786,
+  "failed_entries_vs_fp32partial_lse1": 93,
+  "metrics": {
+    "rmse": 4.215113641544751,
+    "mae": 3.4148466314724786,
+    "crossing_pairs": 0,
+    "rows_with_crossings": 0,
+    "max_crossing": 0,
+    "mean_pinball_loss": 1.193332178960123,
+    "coverage_q050_q950": 0.9539078156312625
+  },
+  "paired_mae_delta_vs_native": {
+    "candidate_minus_reference": 0.00013555496154662699,
+    "ci95": [
+      -0.0010650382324924365,
+      0.0012964087979211558
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "paired_mae_delta_vs_fp32partial_lse1": {
+    "candidate_minus_reference": 0.00012712918207019507,
+    "ci95": [
+      -0.00011263907714684863,
+      0.0003745394303951984
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_slowest_rank_seconds": [
+    1.3512121079997996,
+    1.4573400219996984,
+    1.3451520659996277
+  ],
+  "slowest_rank_matches_record": true,
+  "median_unique_rows_s": 369.2980525009283,
+  "speedup_native_bf16": 1.0139128238185773,
+  "speedup_fp32partial_lse1": 1.0966363069330136
+}

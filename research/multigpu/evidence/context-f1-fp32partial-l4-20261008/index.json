@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-07T16:16:45.426389+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "cp-f1-c1024-e4-fp32partial-context2",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context2",
+      "artifacts": [
+        {
+          "name": "predictions-0.npy",
+          "role": "predictions",
+          "bytes": 1994132,
+          "sha256": "702c671de9f668103e08edb148c1329cea949410ad9300d82b26f67dd1bce2e3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context2/predictions-0.npy"
+        },
+        {
+          "name": "predictions-1.npy",
+          "role": "predictions",
+          "bytes": 1994132,
+          "sha256": "702c671de9f668103e08edb148c1329cea949410ad9300d82b26f67dd1bce2e3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context2/predictions-1.npy"
+        },
+        {
+          "name": "predictions-2.npy",
+          "role": "predictions",
+          "bytes": 1994132,
+          "sha256": "702c671de9f668103e08edb148c1329cea949410ad9300d82b26f67dd1bce2e3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context2/predictions-2.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 2355,
+          "sha256": "bce119defe1160b01ea12dd5d25aed4a6ffe82cdfd3e93edf88220c5ec03d930",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context2/quality-independent-audit.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context2/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 4120,
+          "sha256": "ca0bd0af49febd7d1493a67d259fb8409509fbdef0ffd47f13c96609065f3cb5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context2/query_ids.npy"
+        },
+        {
+          "name": "rank0.json",
+          "role": "record",
+          "bytes": 1392,
+          "sha256": "4c44a764a9fd6e3ba9e1a3871cd2773acfe4e6a160cccf8d5e7a5e840e2ef66e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context2/rank0.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context2/rank0.json"
+        },
+        {
+          "name": "rank1.json",
+          "role": "record",
+          "bytes": 1391,
+          "sha256": "e216d1e4753f0d46e625ff3c46f475acf861f3d305dc2e42101cf3c967fb8b50",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context2/rank1.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context2/rank1.json"
+        },
+        {
+          "name": "results.json",
+          "role": "record",
+          "bytes": 26570,
+          "sha256": "c3208cb0066094ac4fcfc9440f12074842e74ae51b0bb7ad2defd477252df551",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context2/results.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context2/results.json"
+        }
+      ]
+    },
+    {
+      "label": "cp-f1-c1024-e4-fp32partial-context4",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4",
+      "artifacts": [
+        {
+          "name": "predictions-0.npy",
+          "role": "predictions",
+          "bytes": 1994132,
+          "sha256": "5777e1abe44b33bb91949d0ca8613755161047099dff4fa8bcfae8be00b8f8db",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/predictions-0.npy"
+        },
+        {
+          "name": "predictions-1.npy",
+          "role": "predictions",
+          "bytes": 1994132,
+          "sha256": "5777e1abe44b33bb91949d0ca8613755161047099dff4fa8bcfae8be00b8f8db",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/predictions-1.npy"
+        },
+        {
+          "name": "predictions-2.npy",
+          "role": "predictions",
+          "bytes": 1994132,
+          "sha256": "5777e1abe44b33bb91949d0ca8613755161047099dff4fa8bcfae8be00b8f8db",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/predictions-2.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 2360,
+          "sha256": "9a84383eb6a2eb964eb8d0ca4b9ba065a9be26924224c29c9f0c1460feb55f05",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/quality-independent-audit.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context4/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 4120,
+          "sha256": "ca0bd0af49febd7d1493a67d259fb8409509fbdef0ffd47f13c96609065f3cb5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/query_ids.npy"
+        },
+        {
+          "name": "rank0.json",
+          "role": "record",
+          "bytes": 1391,
+          "sha256": "53a5b7d6718dc3c12c0f83305f2d4c7174c4bf8f34d41787c7b874eb6c989521",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/rank0.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context4/rank0.json"
+        },
+        {
+          "name": "rank1.json",
+          "role": "record",
+          "bytes": 1393,
+          "sha256": "80404356fbda4d06ca0142cc106c53596270d3fd3117fda987dadb4d99dbd750",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/rank1.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context4/rank1.json"
+        },
+        {
+          "name": "rank2.json",
+          "role": "record",
+          "bytes": 1394,
+          "sha256": "f22d825d21991f85c21ec7e662c666dbe4c1c153b3f387e1b802889d4e0a5abe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/rank2.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context4/rank2.json"
+        },
+        {
+          "name": "rank3.json",
+          "role": "record",
+          "bytes": 1399,
+          "sha256": "7f1f1b4801e80de822db4abb1c14accf9b59906a261b98890fee674cff3aa095",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/rank3.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context4/rank3.json"
+        },
+        {
+          "name": "results.json",
+          "role": "record",
+          "bytes": 29768,
+          "sha256": "0fc792295d9464029565f571688763934e9f65855633d01de89f941aaac73a51",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-context4/results.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-context4/results.json"
+        }
+      ]
+    },
+    {
+      "label": "cp-f1-c1024-e4-fp32partial-lse1",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-lse1",
+      "artifacts": [
+        {
+          "name": "predictions-0.npy",
+          "role": "predictions",
+          "bytes": 1994132,
+          "sha256": "7eda0175e8b51c8903a305f1e0b9af5c6721df1bee325ea6d6151271f9e3bfad",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-lse1/predictions-0.npy"
+        },
+        {
+          "name": "predictions-1.npy",
+          "role": "predictions",
+          "bytes": 1994132,
+          "sha256": "7eda0175e8b51c8903a305f1e0b9af5c6721df1bee325ea6d6151271f9e3bfad",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-lse1/predictions-1.npy"
+        },
+        {
+          "name": "predictions-2.npy",
+          "role": "predictions",
+          "bytes": 1994132,
+          "sha256": "7eda0175e8b51c8903a305f1e0b9af5c6721df1bee325ea6d6151271f9e3bfad",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-lse1/predictions-2.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 2177,
+          "sha256": "33e081c839f4cbb5e6444c6192fe9b0792754cfb6d3d2a535af62cc43101945f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-lse1/quality-independent-audit.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-lse1/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 4120,
+          "sha256": "ca0bd0af49febd7d1493a67d259fb8409509fbdef0ffd47f13c96609065f3cb5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-lse1/query_ids.npy"
+        },
+        {
+          "name": "rank0.json",
+          "role": "record",
+          "bytes": 1390,
+          "sha256": "dbc49a4ec7dc590dda7b6a8b53dca10f843c78e0a21d9be80a97c8ec65d6ebe3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-lse1/rank0.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-lse1/rank0.json"
+        },
+        {
+          "name": "results.json",
+          "role": "record",
+          "bytes": 24971,
+          "sha256": "298ca5e48a9dd4c268afe4cedf6e70d14e2fad26bd493c8ecacb1846dff3e0de",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-f1-c1024-e4-fp32partial-lse1/results.json",
+          "archived_path": "cp-f1-c1024-e4-fp32partial-lse1/results.json"
+        }
+      ]
+    }
+  ]
+}

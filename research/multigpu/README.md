@@ -229,7 +229,17 @@ Native KumoRelational regression on F1 also tested the Flash LSE path, with E4, 
 | Context parallel | 2 | 361.15 | 3.418062 | 4.219112 | **Fail** |
 | Context parallel | 4 | 376.00 | 3.416702 | 4.217447 | **Fail** |
 
-Both CP outputs are finite and monotone, and their median predictions pass tolerance, but the complete 499 × 999 arrays fail `atol=0.01, rtol=0.05`: 938 entries fail at two ranks and 915 at four. Maximum absolute error is about 0.20224; mean absolute errors are 0.017043 and 0.014253. The largest relative failures occur in near-zero tail quantiles, not necessarily the largest absolute-error entries. Paired MAE changes are small but consistently positive in the auditor's driver-cluster bootstrap. Consequently the approximately 3.2% CP4 throughput gain is not an accepted equivalent-result win. A higher-precision local-attention/merge arm is being tested with unchanged tolerances.
+Both CP outputs are finite and monotone, and their median predictions pass tolerance, but the complete 499 × 999 arrays fail `atol=0.01, rtol=0.05`: 938 entries fail at two ranks and 915 at four. Maximum absolute error is about 0.20224; mean absolute errors are 0.017043 and 0.014253. The largest relative failures occur in near-zero tail quantiles, not necessarily the largest absolute-error entries. Paired MAE changes are small but consistently positive in the auditor's driver-cluster bootstrap. Consequently the approximately 3.2% CP4 throughput gain is not an accepted equivalent-result win.
+
+The attempted correction keeps BF16 model inputs but computes local attention outputs and distributed recombination in FP32 before one cast back. It reduces error but **does not fix the gate**:
+
+| FP32-partial arm | Rows/s | MAE | Failed quantiles vs original native | Failed quantiles vs matching FP32-partial LSE1 | Max difference vs matching LSE1 |
+|---|---:|---:|---:|---:|---:|
+| LSE1 | 336.76 | 3.414720 | 771 | 0 | 0 |
+| CP2 | 365.78 | 3.414638 | 792 | 98 | 0.057785 |
+| CP4 | 369.30 | 3.414847 | 786 | 93 | 0.086674 |
+
+The higher-precision single-rank kernel itself changes results versus original native (maximum difference 0.144457), so it cannot be silently substituted as an identical control. Even against that new matching LSE1, both distributed arms fail the unchanged tolerance. All outputs remain finite and monotone, and paired MAE intervals span zero. This is a failed numerical-fix attempt, not an accepted speedup; a full-FP32 model/native-versus-CP control is queued to isolate remaining BF16 propagation effects.
 
 The resident native H&M comparison uses **actual context 16,384, queries 4,096, batch 512**, E4, and two-hop `[16,16]` graphs. These sizes come from the input identity manifest; the runner's unused CLI defaults still display 1,024/2,048/256 and must not be mistaken for executed shapes.
 
@@ -277,6 +287,7 @@ Additional checked snapshots retain the new measurements:
 - [Batched ensemble L40S evidence](evidence/batched-ensemble-l40s-20261008/index.json): eight archived result/audit records, 24 external artifacts verified; includes the passing EP2 and failing EP4 comparisons.
 - [Ensemble batching controls](evidence/ensemble-batch-controls-l40s-20261008/index.json): 12 archived result/audit records, 36 external artifacts verified; isolates local batching arithmetic and preserves the stronger one-GPU baseline.
 - [Context F1 L4 evidence](evidence/context-f1-l4-20261008/index.json): 16 archived result/rank/audit records, 32 external artifacts verified; preserves full-quantile failures and paired quality analysis.
+- [F1 FP32-partial correction evidence](evidence/context-f1-fp32partial-l4-20261008/index.json): 13 archived result/rank/audit records, 25 external artifacts verified; both original-native and matching-kernel comparisons remain failures.
 - [Process DP L40S evidence](evidence/process-data-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified.
 - [Tuned and relational process DP evidence](evidence/tuned-process-data-l40s-20261008/index.json): ten archived result/audit records, 27 external artifacts verified; includes matched estimator-batch-four quality references.
 - [Weak process DP evidence](evidence/weak-process-data-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified; current equivalence audit covers common prefixes.

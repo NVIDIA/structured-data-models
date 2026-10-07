@@ -1,0 +1,87 @@
+{
+  "run": "cp-f1-c1024-e4-fp32partial-context2",
+  "prediction_sha256": "32c880ec9dc853b244726a425e7508550d62822f51373c6a193d773d4afc1634",
+  "rank_hashes_equal": true,
+  "repeat_arrays_equal": true,
+  "input_identity_equal": true,
+  "query_ids_equal": true,
+  "quantile_columns_correct": true,
+  "numerical_vs_native_bf16": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.1444549560546875,
+    "mean_abs": 0.010545957399370531,
+    "rms": 0.0147595188024022,
+    "p99_abs": 0.04333686828613281,
+    "relative_l2": 0.0012992255524559445,
+    "within_tolerance": false
+  },
+  "numerical_vs_fp32partial_lse1": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.0577850341796875,
+    "mean_abs": 0.0014005220746011937,
+    "rms": 0.004231071219345496,
+    "p99_abs": 0.014446258544921875,
+    "relative_l2": 0.0003724499432160804,
+    "within_tolerance": false
+  },
+  "failed_entries_vs_native": 792,
+  "failed_entries_vs_fp32partial_lse1": 98,
+  "metrics": {
+    "rmse": 4.2149704221358855,
+    "mae": 3.414638100740666,
+    "crossing_pairs": 0,
+    "rows_with_crossings": 0,
+    "max_crossing": 0,
+    "mean_pinball_loss": 1.193339496389734,
+    "coverage_q050_q950": 0.9539078156312625
+  },
+  "paired_mae_delta_vs_native": {
+    "candidate_minus_reference": -0.0000729757702661196,
+    "ci95": [
+      -0.0011628864507694729,
+      0.0010162886367632588
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "paired_mae_delta_vs_fp32partial_lse1": {
+    "candidate_minus_reference": -0.0000814015497425515,
+    "ci95": [
+      -0.0003333995565154476,
+      0.00017008923541418926
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_slowest_rank_seconds": [
+    1.3642032899997503,
+    1.4552755650001927,
+    1.362876461000269
+  ],
+  "slowest_rank_matches_record": true,
+  "median_unique_rows_s": 365.781261237166,
+  "speedup_native_bf16": 1.0042574255924717,
+  "speedup_fp32partial_lse1": 1.0861931406134813
+}
