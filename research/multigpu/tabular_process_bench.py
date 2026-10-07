@@ -101,7 +101,7 @@ def run(args: argparse.Namespace) -> None:
                 executor.predict(batches)
             report["warmup_s"] = time.perf_counter() - start
             executor.memory(reset_peak=True)
-            elapsed, durations, arrays = [], [], []
+            elapsed, gathered_elapsed, durations, arrays = [], [], [], []
             for _ in range(args.repeats):
                 start = time.perf_counter()
                 result = executor.predict(batches)
@@ -116,9 +116,14 @@ def run(args: argparse.Namespace) -> None:
                 prediction = torch.cat(
                     [item.prediction for item in result], dim=0
                 )
+                gathered_elapsed.append(time.perf_counter() - start)
                 arrays.append(prediction.numerical.float().numpy().copy())
             report["memory_after_prediction"] = executor.memory()
         report["predict_repeats_s"] = elapsed
+        report["gathered_output_repeats_s"] = gathered_elapsed
+        report["gathered_rows_per_s"] = [
+            args.queries / seconds for seconds in gathered_elapsed
+        ]
         report["rows_per_s"] = [args.queries / seconds for seconds in elapsed]
         report["batch_times_s"] = durations
         report["repeat_max_abs_difference"] = [

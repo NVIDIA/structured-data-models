@@ -102,7 +102,7 @@ def run(args: argparse.Namespace) -> None:
                 executor.predict(batches)
             stats["warmup_s"] = time.perf_counter() - start
             executor.memory(reset_peak=True)
-            elapsed, batch_times, arrays = [], [], []
+            elapsed, gathered_elapsed, batch_times, arrays = [], [], [], []
             for _ in range(args.repeats):
                 start = time.perf_counter()
                 result = executor.predict(batches)
@@ -115,10 +115,15 @@ def run(args: argparse.Namespace) -> None:
                     )
                 batch_times.append([item.seconds for item in result])
                 pred = torch.cat([item.prediction for item in result], dim=0)
+                gathered_elapsed.append(time.perf_counter() - start)
                 arrays.append(pred.numerical.numpy().copy())
             stats["memory_prediction"] = executor.memory()
         # All child models are gone before validation targets become visible.
         stats["predict_repeats_s"] = elapsed
+        stats["gathered_output_repeats_s"] = gathered_elapsed
+        stats["gathered_rows_per_s"] = [
+            workload["queries"] / seconds for seconds in gathered_elapsed
+        ]
         stats["batch_times_s"] = batch_times
         stats["rows_per_s"] = [
             workload["queries"] / seconds for seconds in elapsed
