@@ -34,3 +34,7 @@ Commit `08ae7e201` adds an optional caller-proven bound to the private packing h
 The raw-leaf caller prototype is recorded in `bounded_category_caller.patch`; the categorical preprocessing branch owns its production integration. On CPU 2.14 Inductor, both graph modes pass direct helper checks with int32 offsets, strides 0/1/2, nonzero storage offset, missing/empty strings, changing bytes and an empty selection. `bounded_selection.py` reproduces those six cases. The exact int32 `AlignCategories.fit_transform` code-sort probe also passes fullgraph with changing contexts, including no observed categories. Actual model-level validation is separate.
 
 The generic `StringTensor.index_select` method does not assume selections are unique; its int32 fullgraph limitation above remains accurate.
+
+Further validation: bounded int32 raw-leaf selection passes with graph breaks on 2.7.1 across strides 0/1/2 after opting in to dynamic/scalar capture. Strict fullgraph is still blocked because that version skips `statically_known_true`; 2.14 supports it. Both eager tensor suites remain 48 passed, 15 skipped.
+
+Unflattening must retain the supplied `_layout` leaf for Dynamo source tracking. An attempted cleanup that regenerated an equivalent offset view regressed all-observed string fitting in partial-graph mode; commit `c31f252ed` restores leaf identity. The layout's values are metadata-only and need not be copied during payload mutation.
