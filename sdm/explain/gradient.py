@@ -23,6 +23,10 @@ class GradientExplainer(
     and output processing. Attribution tables have shape ``[C, ..., R, D]``,
     where ``C`` is the output count, ``R`` the input rows, and ``D`` the
     preprocessed input columns.
+
+    For each output column, differentiate the sum of predictions over query
+    rows and batch dimensions. Gradients refer to preprocessed numerical
+    inputs, not raw features or context inputs.
     """
 
     def _explain_predict(
