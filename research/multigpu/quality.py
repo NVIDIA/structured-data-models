@@ -7,7 +7,6 @@ from typing import Any
 
 import numpy as np
 
-
 # Screening thresholds, not promises about acceptable application degradation.
 TOLERANCES = {
     "float64": (1e-9, 1e-7),
@@ -23,7 +22,7 @@ def numerical_comparison(
     *,
     compute_dtype: str,
 ) -> dict[str, Any]:
-    """Compare identically ordered arrays; caller must align identities first."""
+    """Compare arrays after the caller aligns observation identities."""
     a, b = np.asarray(reference), np.asarray(candidate)
     if a.shape != b.shape or not a.size:
         raise ValueError("Predictions must have the same nonempty shape")
@@ -33,7 +32,9 @@ def numerical_comparison(
         "reference_dtype": str(a.dtype),
         "candidate_dtype": str(b.dtype),
         "finite": finite,
-        "bitwise_equal": bool(a.dtype == b.dtype and a.tobytes() == b.tobytes()),
+        "bitwise_equal": bool(
+            a.dtype == b.dtype and a.tobytes() == b.tobytes()
+        ),
     }
     atol, rtol = TOLERANCES[compute_dtype]
     result.update(atol=atol, rtol=rtol, compute_dtype=compute_dtype)
@@ -47,14 +48,16 @@ def numerical_comparison(
         mean_abs=float(error.mean()),
         rms=float(np.sqrt(np.square(error).mean())),
         p99_abs=float(np.quantile(error, 0.99)),
-        relative_l2=float(np.linalg.norm(a - b) / max(np.linalg.norm(a), 1e-30)),
+        relative_l2=float(
+            np.linalg.norm(a - b) / max(np.linalg.norm(a), 1e-30)
+        ),
         within_tolerance=bool(np.all(error <= atol + rtol * np.abs(a))),
     )
     return result
 
 
 def binary_auroc(labels: np.ndarray, scores: np.ndarray) -> float | None:
-    """Mann–Whitney AUROC with average ranks for tied scores."""
+    """Mann-Whitney AUROC with average ranks for tied scores."""
     labels, scores = np.asarray(labels, dtype=bool), np.asarray(scores)
     positive, negative = int(labels.sum()), int((~labels).sum())
     if not positive or not negative:
@@ -76,15 +79,22 @@ def classification_metrics(
     *,
     classes: Sequence[Any],
 ) -> dict[str, Any]:
-    """Score validation probabilities using explicit probability-column labels."""
-    y, p = np.asarray(labels).reshape(-1), np.asarray(probabilities, dtype=np.float64)
+    """Score validation probabilities with explicit column labels."""
+    y, p = (
+        np.asarray(labels).reshape(-1),
+        np.asarray(probabilities, dtype=np.float64),
+    )
     if p.shape != (len(y), len(classes)) or len(set(classes)) != len(classes):
-        raise ValueError("Probability shape/class labels must match observations")
+        raise ValueError(
+            "Probability shape/class labels must match observations"
+        )
     index = {value: i for i, value in enumerate(classes)}
     try:
         target = np.asarray([index[value] for value in y])
     except KeyError as exc:
-        raise ValueError("A validation label is absent from the fitted classes") from exc
+        raise ValueError(
+            "A validation label is absent from the fitted classes"
+        ) from exc
     if not np.isfinite(p).all() or (p < 0).any() or (p > 1).any():
         raise ValueError("Expected finite probabilities in [0, 1]")
     if not np.allclose(p.sum(-1), 1, atol=1e-4, rtol=1e-4):
@@ -95,25 +105,41 @@ def classification_metrics(
     return {
         "rows": len(y),
         "accuracy": float(np.mean(p.argmax(-1) == target)),
-        "log_loss": float(-np.log(np.clip(p[np.arange(len(y)), target], 1e-15, 1)).mean()),
+        "log_loss": float(
+            -np.log(np.clip(p[np.arange(len(y)), target], 1e-15, 1)).mean()
+        ),
         "brier_multiclass": float(np.square(p - one_hot).sum(-1).mean()),
         "auroc_by_class": aucs,
-        "auroc_macro_present_classes": float(np.mean(present_aucs)) if present_aucs else None,
+        "auroc_macro_present_classes": float(np.mean(present_aucs))
+        if present_aucs
+        else None,
         "max_probability_sum_error": float(np.abs(p.sum(-1) - 1).max()),
     }
 
 
-def regression_metrics(labels: np.ndarray, prediction: np.ndarray) -> dict[str, float]:
-    """Score predictions in the original target units, after inverse transforms."""
+def regression_metrics(
+    labels: np.ndarray, prediction: np.ndarray
+) -> dict[str, float]:
+    """Score predictions in original target units after inverse transforms."""
     y, p = np.asarray(labels).reshape(-1), np.asarray(prediction).reshape(-1)
-    if y.shape != p.shape or not y.size or not np.isfinite(p).all() or not np.isfinite(y).all():
+    if (
+        y.shape != p.shape
+        or not y.size
+        or not np.isfinite(p).all()
+        or not np.isfinite(y).all()
+    ):
         raise ValueError("Expected aligned nonempty finite regression arrays")
     error = y.astype(np.float64) - p.astype(np.float64)
-    return {"rmse": float(np.sqrt(np.square(error).mean())), "mae": float(np.abs(error).mean())}
+    return {
+        "rmse": float(np.sqrt(np.square(error).mean())),
+        "mae": float(np.abs(error).mean()),
+    }
 
 
-def quantile_metrics(labels: np.ndarray, prediction: np.ndarray) -> dict[str, Any]:
-    """Audit KumoTabular's q001..q999 outputs without sorting away crossings."""
+def quantile_metrics(
+    labels: np.ndarray, prediction: np.ndarray
+) -> dict[str, Any]:
+    """Audit q001..q999 outputs without sorting away quantile crossings."""
     p = np.asarray(prediction)
     y = np.asarray(labels).reshape(-1)
     if p.shape != (len(y), 999) or not np.isfinite(p).all():
@@ -126,8 +152,12 @@ def quantile_metrics(labels: np.ndarray, prediction: np.ndarray) -> dict[str, An
         "crossing_pairs": int((gaps < 0).sum()),
         "rows_with_crossings": int((gaps < 0).any(axis=1).sum()),
         "max_crossing": float(max(0, -gaps.min())),
-        "mean_pinball_loss": float(np.maximum(levels * errors, (levels - 1) * errors).mean()),
-        "coverage_q050_q950": float(((y >= p[:, 49]) & (y <= p[:, 949])).mean()),
+        "mean_pinball_loss": float(
+            np.maximum(levels * errors, (levels - 1) * errors).mean()
+        ),
+        "coverage_q050_q950": float(
+            ((y >= p[:, 49]) & (y <= p[:, 949])).mean()
+        ),
     }
 
 
@@ -144,10 +174,20 @@ def paired_loss_interval(
     Use entity IDs as groups for repeated relational observations; this samples
     entities with replacement and includes all their rows on each draw.
     """
-    a, b = np.asarray(reference_loss).reshape(-1), np.asarray(candidate_loss).reshape(-1)
-    if a.shape != b.shape or not a.size or not np.isfinite(a).all() or not np.isfinite(b).all():
+    a, b = (
+        np.asarray(reference_loss).reshape(-1),
+        np.asarray(candidate_loss).reshape(-1),
+    )
+    if (
+        a.shape != b.shape
+        or not a.size
+        or not np.isfinite(a).all()
+        or not np.isfinite(b).all()
+    ):
         raise ValueError("Expected aligned finite loss arrays")
-    groups = np.arange(len(a)) if groups is None else np.asarray(groups).reshape(-1)
+    groups = (
+        np.arange(len(a)) if groups is None else np.asarray(groups).reshape(-1)
+    )
     if len(groups) != len(a):
         raise ValueError("One group is required per observation")
     _, inverse = np.unique(groups, return_inverse=True)
