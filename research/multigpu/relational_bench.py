@@ -55,6 +55,11 @@ def write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, default=str) + "\n")
 
 
+def max_rss_kib() -> float:
+    value = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return value / 1024 if sys.platform == "darwin" else value
+
+
 def prepare(args: argparse.Namespace) -> None:
     args.output.mkdir(parents=True, exist_ok=False)
     start = time.perf_counter()
@@ -167,7 +172,8 @@ def prepare(args: argparse.Namespace) -> None:
         "context_sample_s": context_sample_s,
         "query_sample_s": sample_times,
         "db_rows": {name: len(table) for name, table in tables.items()},
-        "max_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+        "max_rss_kib": max_rss_kib(),
+        "preparation_platform": sys.platform,
     }
     torch.save(
         {"context": sampled_context, "queries": query_batches},
@@ -458,9 +464,7 @@ def run(args: argparse.Namespace) -> None:
             arrays[0].tobytes()
         ).hexdigest()
         stats["prediction_columns"] = list(pred.columns[sdm.Stype.numerical])
-        stats["max_rss_kib"] = resource.getrusage(
-            resource.RUSAGE_SELF
-        ).ru_maxrss
+        stats["max_rss_kib"] = max_rss_kib()
         np.save(args.output / "predictions.npy", arrays[0])
         torch.save(pred, args.output / "predictions.pt")
         if args.profile:
