@@ -156,17 +156,24 @@ class ColumnarTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> Self:
+        columns = tuple(
+            value for name, value in inner_tensors.items() if name != "_empty"
+        )
+        # Nested reconstruction may supply concrete outer sizes. Tensor leaves
+        # retain the symbolic dimensions used for changing row counts.
+        size = (
+            (*columns[0].shape, len(columns))
+            if columns
+            else inner_tensors["_empty"].shape
+        )
         out = Tensor._make_wrapper_subclass(
             cls,
-            size=outer_size,
-            strides=outer_stride,
+            size=size,
             dtype=torch.uint8,
             device=next(iter(inner_tensors.values())).device,
             requires_grad=False,
         )
-        out._columns = tuple(
-            value for name, value in inner_tensors.items() if name != "_empty"
-        )
+        out._columns = columns
         for name, value in inner_tensors.items():
             setattr(out, name, value)
         return out
@@ -1155,6 +1162,16 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
         ),
         device=tensors[0].device,
     )
+
+
+@ColumnarTensor.implements(aten.sym_size.int)
+def _sym_size(inp: ColumnarTensor, dim: int) -> int:
+    dim = _normalize_dim(inp, dim)
+    if not inp._columns:
+        return inp._empty.size(dim)
+    if dim == inp.dim() - 1:
+        return len(inp._columns)
+    return inp._columns[0].size(dim)
 
 
 # Helpers #####################################################################
