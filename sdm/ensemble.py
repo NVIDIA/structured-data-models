@@ -145,7 +145,9 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
     def _pack_tables(
         tables: Sequence[TableTensor],
     ) -> tuple[tuple[TableTensor, ...], tuple[tuple[int, int], ...]]:
-        compatible_groups: dict[tuple[object, ...], list[int]] = {}
+        candidates: dict[tuple[object, ...], list[int]] = {}
+        compatible_groups: list[list[int]] = []
+        group_shapes: list[tuple[torch.Size, ...]] = []
         for index, table in enumerate(tables):
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
@@ -155,7 +157,6 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                     (
                         stype,
                         type(block),
-                        block.size(),
                         block.layout,
                         block.dtype,
                     )
@@ -167,11 +168,24 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                     for index in range(table.categorical.shape[-1])
                 ),
             )
-            compatible_groups.setdefault(compatibility_key, []).append(index)
+            # Hashing symbolic sizes specializes them to the current batch.
+            # Compare shapes within each schema group instead.
+            shapes = tuple(
+                block.size() for _, block in TableTensor.items(table)
+            )
+            candidate_ids = candidates.setdefault(compatibility_key, [])
+            for group_id in candidate_ids:
+                if shapes == group_shapes[group_id]:
+                    compatible_groups[group_id].append(index)
+                    break
+            else:
+                candidate_ids.append(len(compatible_groups))
+                compatible_groups.append([index])
+                group_shapes.append(shapes)
 
         groups: list[TableTensor] = []
         locations = [(-1, -1)] * len(tables)
-        for indices in compatible_groups.values():
+        for indices in compatible_groups:
             group_index = len(groups)
             groups.append(
                 cast(TableTensor, tables[indices[0]].unsqueeze(0))

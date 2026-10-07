@@ -283,3 +283,19 @@ def test_concatenate_columns_rejects_different_member_counts() -> None:
                 EnsembleTable.from_table(table, num_members=3),
             )
         )
+
+
+def test_pack_tables_preserves_order_across_shapes() -> None:
+    tables = tuple(
+        TableTensor.from_tensor(torch.full((rows, 2), float(index)))
+        for index, rows in enumerate((3, 5, 3, 7, 5))
+    )
+    groups, locations = EnsembleTable._pack_tables(tables)
+    assert locations == ((0, 0), (1, 0), (0, 1), (2, 0), (1, 1))
+    assert [tuple(group.shape) for group in groups] == [
+        (2, 3, 2),
+        (2, 5, 2),
+        (1, 7, 2),
+    ]
+    for table, (group, position) in zip(tables, locations):
+        assert groups[group][position].equal(table)
