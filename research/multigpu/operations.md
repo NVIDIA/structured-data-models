@@ -58,9 +58,36 @@ Nsight Systems CLI 2026.5.1.161 was installed on the L40S host during a pause be
 
 The second host completed installation and direct public checkpoint downloads. All 15 manifest-listed model files were independently rehashed on that host and matched their expected SHA-256 and size. Its runtime matches the first host: Python 3.12, PyTorch 2.9.1+cu130, pyg-lib 0.7.0+pt29cu130, and Nsight Systems CLI 2026.5.1. All L4 GPU pairs also report `NODE` topology. The prepared relational query/context graph artifacts were copied directly from the first host, preserving identical samples.
 
+The same 15-file model rehash subsequently passed on the first host during a pause between timed experiment queues. Both machines therefore use verified identical pretrained checkpoint bytes.
+
+## Attempted eight-L4 distributed data parallelism
+
+The coordinator authorized four additional `g6.xlarge` Spot workers (one L4 and four vCPUs each), which would fit the remaining 16 vCPUs of the regional quota beside the four-GPU L4 host. This would provide eight homogeneous L4 GPUs across hosts, while explicitly retaining heterogeneous CPU/network resources. The proposed transport was persistent SSH workers with a task-only key generated on the L4 coordinator; its private key never left that host. No public service listener was planned.
+
+Same-zone `us-east-1d` attempts failed both with an exact count of four and a flexible count of one through four. All remaining eligible zones in us-east-1 (`1a`, `1b`, `1c`, then `1f` with a raised $3/hour combined worker ceiling) also returned insufficient Spot capacity. Cross-region fallback attempts in all three us-east-2 zones failed identically. No additional worker instance was launched and no worker compute charge accrued. West-region quotes were inspected, but no further launch was attempted after the coordinator's bounded search window.
+
+Homogeneous eight-L4 scaling is therefore an unmeasured capacity limitation of this experiment, not a measured software limitation. The reproducible implementations and worker orchestration can be rerun when capacity becomes available. Four-GPU measurements on each original host remain the primary empirical scaling evidence.
+
+The coordinator subsequently authorized a separate heterogeneous eight-GPU query-DP arm using the two existing machines: four L4s in us-east-1d and four L40S GPUs in us-east-2a. This adds no capacity or compute resources. Its results must be labeled cross-region and heterogeneous, with matched four-L4 and four-L40S baselines rather than a homogeneous eight-GPU speedup claim. The task-only SSH key on the L4 coordinator was authorized on the L40S host; its security group permits SSH solely from the coordinator's public `/32` address. No service port was opened. The now-unused same-region private SSH rule was revoked. Both the cross-region SSH ingress rule and the task identity are removed with task resource teardown.
+
 ## Cleanup tracking
 
 The unused us-west-2 task security group `sg-0e1cf114cb4fb68cb` and imported task key pair `key-0cc808fae3cc35d69` were removed after a read-only check confirmed that no task instances existed in that region. This removed only empty temporary cloud access resources; the user's local SSH key remains unchanged. Active host resources in us-east-1 and us-east-2 remain until evidence collection and experiment completion.
+
+## Access restriction during continuation
+
+At 2026-10-07 16:30:55 UTC the execution environment changed to workspace-write filesystem access, restricted networking, and approval policy `never`. Fresh read-only SSH attempts to both task hosts failed immediately with `Operation not permitted`; read-only AWS instance queries failed to connect to both regional EC2 endpoints. No alternate access route, new instance, restart, or permission bypass was attempted.
+
+The last successful lifecycle probes, at 16:27:25 UTC, observed both hosts reachable and no Spot interruption notice. Current process state, any newly completed remote result files, and termination status are **unverified** after the restriction. The relational owner last reported a five-arm large-context queue under `results/relational-hm-c16384-b512-*`; these arms must not be marked complete or rerun until actual host state can be inspected.
+
+The previously verified shutdown-to-terminate timers remain the fallback: L4 host at 19:28:00 UTC and L40S host at 23:15:34 UTC. Their subsequent execution is not asserted without a successful EC2 state query. After network access is restored, retrieve and checksum remaining results, confirm scientific workers are finished, terminate both task instances, then remove the remaining task access resources:
+
+| Region | Instance | Security group | Imported key-pair name |
+|---|---|---|---|
+| us-east-1 | `i-05cea203a4e1895fd` | `sg-03014ad8f6269f6ec` | `kumo-multigpu-20261008` |
+| us-east-2 | `i-0f247930321bbf67e` | `sg-01bcb7f6ec49e2c71` | `kumo-multigpu-20261008` |
+
+The cross-region SSH rule `sgr-028d1b8e6657ba968` belongs to the us-east-2 task security group. The earlier private SSH rule `sgr-03b0ff34c5bc7c929` was already revoked. The task-only private SSH identity exists solely on the L4 host's encrypted, delete-on-termination root volume. No current cloud resource has been claimed terminated merely because direct access is blocked.
 
 ## Evidence
 
