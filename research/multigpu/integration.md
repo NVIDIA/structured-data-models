@@ -21,6 +21,31 @@ For one ordinary classification/regression member, ICL KV storage is approximate
 
 Actual measurements must report cache tensor dtype and backing storage. A four-way CP run does not quarter total model memory: if sharded ICL KV accounts for fraction `f` of live memory, ideal total-memory ratio is `(1-f) + f/4`, before communication buffers. Likewise, if ICL attention is fraction `a` of elapsed time, even zero-overhead infinite attention scaling cannot exceed `1/(1-a)`. This makes phase attribution necessary before investing in more invasive partitioning.
 
+A meta-device census on `842c408fe` gives the following exact parameter counts. The FP32 column multiplies count by four and is not a measured GPU peak. Each row initializes one task, not both classification and regression networks.
+
+| Model | Classification parameters | FP32 parameter bytes | Regression parameters | FP32 parameter bytes |
+|---|---:|---:|---:|---:|
+| KumoTabular small | 27,458,266 | 109,833,064 | 28,466,231 | 113,864,924 |
+| KumoTabular medium | 61,485,274 | 245,941,096 | 62,492,087 | 249,968,348 |
+| KumoTabular large | 213,668,250 | 854,673,000 | 215,683,191 | 862,732,764 |
+| KumoRelational | 29,915,010 | 119,660,040 | 30,908,383 | 123,633,532 |
+
+All are below one GiB of FP32 weights per task, making weight capacity alone a weak reason to introduce tensor parallelism/FSDP on 24–48 GiB GPUs. Caches, row activations, and sampled graphs need direct measurement. Parameter share is not compute share: the ICL block contains roughly 95% of large KumoTabular and 88% of relational classifier parameters, while row-encoder cost grows with data rows and columns.
+
+Reproduce without loading pretrained weights or allocating GPU storage:
+
+```python
+from sdm.models import KumoRelational, KumoTabular
+
+for task in ("classification", "regression"):
+    models = [KumoTabular(task=task, size=size, pretrained=False, device="meta")
+              for size in ("small", "medium", "large")]
+    models.append(KumoRelational(task=task, pretrained=False, device="meta"))
+    for model in models:
+        count = sum(parameter.numel() for parameter in model.parameters())
+        print(task, type(model).__name__, count, count * 4)
+```
+
 ## Minimal public surface
 
 Keep inference placement independent of model construction and preprocessing recipes. Use the existing `ICLModel.fit` / `predict` contracts and explicit replicas or process groups. Avoid introducing a cluster manager, service scheduler, mandatory configuration schema, or cloud dependency into SDM.
