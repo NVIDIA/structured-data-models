@@ -122,8 +122,17 @@ class SDPA(torch.nn.Module):
         key_size = key.size()[-3:]
         value_size = value.size()[-3:]
 
-        if key_size[0] == 0:  # No key/value pairs - abort early:
-            return query.new_zeros(batch_shape + query_size)
+        # FlashAttention rejects empty batches before PyTorch 2.10.
+        if key_size[0] == 0 or 0 in batch_shape:
+            out = query.new_zeros(
+                batch_shape + query_size[:-1] + value_size[-1:]
+            )
+            if torch.is_grad_enabled():
+                # Summing an empty slice gives zero and keeps backward working.
+                for tensor in (query, key, value):
+                    if tensor.requires_grad:
+                        out = out + tensor[..., :0, :, :].sum()
+            return out
 
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
@@ -701,7 +710,8 @@ class TransformerBlock(torch.nn.Module):
             and torch.compiler.is_compiling()
             and not out.is_contiguous()
         ):
-            tmp = attn_out + query
+            # Match eager out= rounding before the MLP.
+            tmp = (attn_out + query).to(out.dtype)
             out.copy_(tmp + self.mlp(tmp))
         else:
             tmp = torch.add(attn_out, query, out=out)

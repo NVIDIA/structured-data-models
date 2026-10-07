@@ -12,6 +12,7 @@ import torchmetrics
 from tqdm import tqdm
 
 import sdm
+import sdm.processing as sp
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
@@ -23,6 +24,8 @@ parser.add_argument("--num_neighbors", type=int, nargs="*", default=[16, 16])
 parser.add_argument("--num_estimators", type=int, default=1)
 parser.add_argument("--num_lags", type=int, default=20)
 parser.add_argument("--seed", type=int, default=0)
+parser.add_argument("--text", action="store_true")
+parser.add_argument("--text_dim", type=int, default=64)
 args = parser.parse_args()
 
 torch.manual_seed(args.seed)
@@ -42,7 +45,11 @@ data = sdm.RelationalData(
                     cast(str, table.pkey_col): "id",
                     **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
                 },
-                text="drop",
+                text=(
+                    "infer"
+                    if args.text and name == task.entity_table
+                    else "drop"
+                ),
                 unsupported="drop",
             ),
         )
@@ -145,6 +152,18 @@ if len(context) > args.context_size:  # Sample different context per estimator:
 
 # Execute Model ###############################################################
 model = sdm.models.KumoRelational(device=device)
+recipe = None
+if args.text:
+    recipe = model.default_recipe().prepend_features(
+        sp.StypeDispatch(
+            text=[
+                sp.SentenceTransformer(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2",
+                ),
+                sp.PCA(args.text_dim),
+            ],
+        )
+    )
 kwargs: dict[str, Any] = {
     "task_link": {
         "task_column": task.entity_col,
@@ -162,6 +181,7 @@ with torch.amp.autocast(device.type, torch.float16, enabled=True):
         y=context[task.target_col],
         related_tables=related_tables,
         num_estimators=num_estimators,
+        recipe=recipe,
     )
 
 if task.task_type == relbench.base.TaskType.REGRESSION:
