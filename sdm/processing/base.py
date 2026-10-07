@@ -163,7 +163,7 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         if not any(
             len(columns) > 0 and stype in self.handles_stypes
-            for stype, columns in table.columns.items()
+            for stype, columns in table._column_items
         ):
             return self
         if self.requires_fit:
@@ -182,7 +182,7 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         if not any(
             len(columns) > 0 and stype in self.handles_stypes
-            for stype, columns in table.columns.items()
+            for stype, columns in table._column_items
         ):
             return table
         self._check_is_fitted()
@@ -209,7 +209,7 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         if not any(
             len(columns) > 0 and stype in self.handles_stypes
-            for stype, columns in table.columns.items()
+            for stype, columns in table._column_items
         ):
             return table
         out = self._fit_transform(table, generator=generator)
