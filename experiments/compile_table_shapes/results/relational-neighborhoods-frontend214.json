@@ -1,0 +1,109 @@
+{
+  "torch": "2.14.0",
+  "compiler_cache_environment": {
+    "TORCHINDUCTOR_CACHE_DIR": "/var/folders/k4/ywqq5h690nx1mhkz9j236q4r0000gn/T/torchinductor_ardrianw",
+    "TORCHINDUCTOR_FORCE_DISABLE_CACHES": "1",
+    "TORCHINDUCTOR_FX_GRAPH_CACHE": null,
+    "TORCHINDUCTOR_AUTOGRAD_CACHE": null
+  },
+  "model": "relational",
+  "entry": "predict",
+  "fullgraph": true,
+  "dynamic": true,
+  "backend": "eager",
+  "device": "cpu",
+  "task": "classification",
+  "estimators": 1,
+  "query_input": "view",
+  "arm_index": 1,
+  "recompile_limit": null,
+  "inner_only": false,
+  "capture_dynamic_outputs": true,
+  "eager_succeeded": true,
+  "samples": [
+    {
+      "rows": 16,
+      "case": 3,
+      "max_abs_error": 2.8431415557861328e-05,
+      "parity": false,
+      "graphs_captured": 1,
+      "calls_captured": 4227
+    },
+    {
+      "rows": 16,
+      "case": 4,
+      "max_abs_error": 6.267428398132324e-05,
+      "parity": false,
+      "graphs_captured": 2,
+      "calls_captured": 8456
+    },
+    {
+      "rows": 16,
+      "case": 5,
+      "max_abs_error": 1.436471939086914e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 8456
+    },
+    {
+      "rows": 16,
+      "case": 6,
+      "max_abs_error": 2.288818359375e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 8456
+    },
+    {
+      "rows": 16,
+      "case": 7,
+      "max_abs_error": 3.9458274841308594e-05,
+      "parity": false,
+      "graphs_captured": 2,
+      "calls_captured": 8456
+    },
+    {
+      "rows": 16,
+      "case": 8,
+      "max_abs_error": 2.6687979698181152e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 8456
+    },
+    {
+      "rows": 16,
+      "case": 9,
+      "max_abs_error": 2.0205974578857422e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 8456
+    },
+    {
+      "rows": 16,
+      "case": 10,
+      "max_abs_error": 6.914138793945312e-05,
+      "parity": false,
+      "graphs_captured": 2,
+      "calls_captured": 8456
+    },
+    {
+      "rows": 16,
+      "case": 11,
+      "max_abs_error": 2.7954578399658203e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 8456
+    },
+    {
+      "rows": 16,
+      "case": 3,
+      "max_abs_error": 2.8431415557861328e-05,
+      "parity": false,
+      "graphs_captured": 2,
+      "calls_captured": 8456
+    }
+  ],
+  "all_samples_parity": false,
+  "status": "parity_fail",
+  "max_abs_error": 6.914138793945312e-05,
+  "parity": false
+}
