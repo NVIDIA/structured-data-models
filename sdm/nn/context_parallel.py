@@ -111,6 +111,14 @@ def partial_attention(
     arbitrary broadcast batch dimensions, GQA, and empty shards. Masks, causal
     attention, and variable valid lengths are deliberately not supported.
     """
+    if query.is_cuda and torch.is_autocast_enabled("cuda"):
+        # Public SDPA is autocast-registered; the private LSE operator is not.
+        # RMSNorm can promote Q to FP32 while the fitted KV remains BF16.
+        dtype = torch.get_autocast_dtype("cuda")
+        query, key, value = (
+            tensor.to(dtype) if tensor.dtype != torch.float64 else tensor
+            for tensor in (query, key, value)
+        )
     batch = torch.broadcast_shapes(
         query.shape[:-3], key.shape[:-3], value.shape[:-3]
     )
