@@ -4,6 +4,28 @@ Baseline: `842c408fe2a8711bdf2e7cff4bfbe54266d6b940` (2026-10-08).
 
 This investigation targets the computations before KumoTabular and KumoRelational internal model calls. It separates compiler compatibility from speed claims and preserves preprocessing statistics, missing-value behavior, categorical mappings, and context-only fitting.
 
+## Continued investigation: new evidence
+
+Work remains active. The initial results below describe the first integration snapshot; the following findings extend them.
+
+- Public KumoRelational prediction on the real RelBench driver-dnf one-hop case now passes CPU 2.14 Inductor with graph breaks allowed. Queries of 4, 1, 8, and 4 rows have maximum absolute error 4.828e-6 against eager prediction. Cumulative graph counts are 27, 38, 43, and 43. The default recompilation limit causes some processor routing to fall back to eager execution; this is not fullgraph support. A separate two-hop case still fails and is under investigation.
+- A fixed-output custom operator lets compiled string-category alignment call the existing Arrow/cuDF implementation. The external join remains opaque to Inductor. The original eager path is retained because routing it through the custom operator measured 4–16% extra lookup overhead on CPU. Missing values remain negative category codes; dictionary tensors themselves cannot be nullable.
+- On integration snapshot `ddb25ab3b`, an independent actual-Inductor test of `torch.compile(model)` for KumoTabular regression passes with graph breaks allowed on CPU 2.14 (32 context rows, one estimator, maximum output difference 0.000366211 at atol=1e-5, rtol=1e-4). It hits the default processor recompilation limit. Classification fails while resuming a partially initialized CategoricalTensor constructor. Fullgraph regression fails during Python signature inspection; fullgraph classification fails on data-dependent vocabulary selection. These are fitting/preparation failures before a claim of complete outer-forward support.
+- Preserving native reductions fixes the tested 2.14 PowerTransform fitting discrepancy without changing input dtype. Missing-value data also requires preserving the imputation mean reduction. PyTorch 2.7 additionally differs in expm1 during fitting. A focused source prototype is being validated; no universal numerical-parity or GPU performance claim is made.
+- Existing categorical, string, variable-length tensor, and join regression suites independently passed 105 tests on each runtime at integration snapshot `09e934174`; 45 CUDA tests were skipped per runtime.
+
+Additional branches:
+
+| Branch | Scope |
+|---|---|
+| [compile/categorical-recipe-support](https://github.com/NVIDIA/structured-data-models/tree/compile/categorical-recipe-support) | String lookup custom operator, traceable dictionary access and numeric shuffle; stacked on the initial public integration. |
+| [compile/varlen-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/varlen-preprocessing) | Logical offset metadata and dispatch-compatible scalar writes; stacked on the initial public integration. |
+| [compile/table-schema-guards](https://github.com/NVIDIA/structured-data-models/tree/compile/table-schema-guards) | Immutable internal schema items without changing the public columns dictionary API; callers must explicitly use this metadata. |
+
+The rejected read-only replacement for the public columns dictionary is not part of the accepted schema change. It broke an already passing 2.14 prediction path.
+
+No Spot instances have been launched during this continuation. AWS authentication expired; CPU work continues independently.
+
 ## Scope
 
 - CPU PyTorch 2.7.1 and 2.14.0; same input dtype for eager/compiled comparisons.
