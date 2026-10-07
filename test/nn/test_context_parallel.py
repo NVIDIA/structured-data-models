@@ -21,13 +21,31 @@ from sdm.nn.context_parallel import (
 )
 
 
-def _worker(rank: int, world: int, rendezvous: str) -> None:
+def _worker(
+    rank: int,
+    world: int,
+    rendezvous: str,
+    device_type: str = "cpu",
+    dtype: torch.dtype = torch.float32,
+) -> None:
     torch.set_num_threads(1)
+    if device_type == "cuda":
+        torch.cuda.set_device(rank)
+        torch.set_default_device(f"cuda:{rank}")
     dist.init_process_group(
-        "gloo", init_method=rendezvous, rank=rank, world_size=world
+        "nccl" if device_type == "cuda" else "gloo",
+        init_method=rendezvous,
+        rank=rank,
+        world_size=world,
     )
+    atol, rtol = (0.003, 0.02) if dtype == torch.bfloat16 else (3e-6, 3e-5)
     try:
-        with torch.inference_mode():
+        with (
+            torch.inference_mode(),
+            torch.autocast(
+                device_type, dtype=dtype, enabled=dtype != torch.float32
+            ),
+        ):
             # Identical replicated queries/model weights are the CP contract.
             torch.manual_seed(32)
             for length in (0, 1, 7, 17):
@@ -43,7 +61,7 @@ def _worker(rank: int, world: int, rendezvous: str) -> None:
                         group=dist.group.WORLD,
                     )
                     torch.testing.assert_close(
-                        actual, native, atol=3e-6, rtol=3e-5
+                        actual, native, atol=atol, rtol=rtol, check_dtype=False
                     )
             for family, kv_heads in (
                 ("tabular", None),
@@ -79,7 +97,7 @@ def _worker(rank: int, world: int, rendezvous: str) -> None:
                     cache.freeze()
                     actual = model(query.clone(), y[..., :0], cache=cache)
                     torch.testing.assert_close(
-                        actual, expected, atol=3e-6, rtol=3e-5
+                        actual, expected, atol=atol, rtol=rtol
                     )
                     actual_cache_bytes = cache.size()
                     assert actual_cache_bytes < native_cache.size()
@@ -128,3 +146,18 @@ def test_requires_inference() -> None:
         context_parallel(dist.group.WORLD),
     ):
         pass
+
+
+@pytest.mark.parametrize("world", [2, 4])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_cuda_distributed_context_attention(
+    tmp_path: Path, world: int, dtype: torch.dtype
+) -> None:
+    if torch.cuda.device_count() < world:
+        pytest.skip(f"Requires {world} CUDA devices")
+    mp.spawn(
+        _worker,
+        args=(world, f"file://{tmp_path / 'rendezvous'}", "cuda", dtype),
+        nprocs=world,
+        join=True,
+    )
