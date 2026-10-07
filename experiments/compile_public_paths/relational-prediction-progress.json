@@ -866,5 +866,215 @@
     "parity": true,
     "source_commit": "3afe3e967",
     "source_result": "relational-final-contract-full214.json"
+  },
+  {
+    "torch": "2.7.1",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": null,
+    "inner_only": false,
+    "capture_dynamic_outputs": false,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 2.4318695068359375e-05,
+        "parity": true,
+        "graphs_captured": 112,
+        "calls_captured": 3393
+      },
+      {
+        "rows": 1,
+        "case": 0,
+        "max_abs_error": 2.0578503608703613e-05,
+        "parity": false,
+        "graphs_captured": 163,
+        "calls_captured": 6638
+      },
+      {
+        "rows": 8,
+        "case": 2,
+        "max_abs_error": 1.558661460876465e-05,
+        "parity": true,
+        "graphs_captured": 186,
+        "calls_captured": 9764
+      },
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 2.4318695068359375e-05,
+        "parity": true,
+        "graphs_captured": 186,
+        "calls_captured": 9764
+      }
+    ],
+    "all_samples_parity": false,
+    "status": "parity_fail",
+    "max_abs_error": 2.4318695068359375e-05,
+    "parity": false,
+    "source_commit": "3afe3e967",
+    "source_result": "relational-preserved-layout-arm1-varied27.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": true,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": null,
+    "inner_only": false,
+    "capture_dynamic_outputs": true,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 16,
+        "case": 3,
+        "max_abs_error": 1.6339123249053955e-05,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 8084
+      },
+      {
+        "rows": 16,
+        "case": 4,
+        "max_abs_error": 2.181529998779297e-05,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 16160
+      },
+      {
+        "rows": 16,
+        "case": 5,
+        "max_abs_error": 3.2767653465270996e-05,
+        "parity": false,
+        "graphs_captured": 3,
+        "calls_captured": 20198
+      },
+      {
+        "rows": 16,
+        "case": 3,
+        "max_abs_error": 1.6339123249053955e-05,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 20198
+      }
+    ],
+    "all_samples_parity": false,
+    "status": "parity_fail",
+    "max_abs_error": 3.2767653465270996e-05,
+    "parity": false,
+    "source_commit": "3afe3e967",
+    "source_result": "relational-samebatch-neighborhoods-full214.json"
+  },
+  {
+    "torch": "2.14.0",
+    "compiler_cache_environment": {
+      "TORCHINDUCTOR_CACHE_DIR": "/tmp/sdm-neighborhood-guard-diagnostic-214-c75",
+      "TORCHINDUCTOR_FORCE_DISABLE_CACHES": "1",
+      "TORCHINDUCTOR_FX_GRAPH_CACHE": null,
+      "TORCHINDUCTOR_AUTOGRAD_CACHE": null
+    },
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": true,
+    "dynamic": true,
+    "backend": "eager",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": null,
+    "inner_only": false,
+    "capture_dynamic_outputs": true,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 16,
+        "case": 3,
+        "max_abs_error": 2.8431415557861328e-05,
+        "parity": false,
+        "graphs_captured": 1,
+        "calls_captured": 4042
+      },
+      {
+        "rows": 16,
+        "case": 4,
+        "max_abs_error": 6.267428398132324e-05,
+        "parity": false,
+        "graphs_captured": 2,
+        "calls_captured": 8080
+      },
+      {
+        "rows": 16,
+        "case": 5,
+        "max_abs_error": 1.436471939086914e-05,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 12118
+      },
+      {
+        "rows": 16,
+        "case": 6,
+        "max_abs_error": 2.288818359375e-05,
+        "parity": true,
+        "graphs_captured": 4,
+        "calls_captured": 16156
+      },
+      {
+        "rows": 16,
+        "case": 7,
+        "max_abs_error": 3.9458274841308594e-05,
+        "parity": false,
+        "graphs_captured": 5,
+        "calls_captured": 20194
+      },
+      {
+        "rows": 16,
+        "case": 8,
+        "max_abs_error": 2.6687979698181152e-05,
+        "parity": true,
+        "graphs_captured": 6,
+        "calls_captured": 24232
+      },
+      {
+        "rows": 16,
+        "case": 9,
+        "max_abs_error": 2.0205974578857422e-05,
+        "parity": true,
+        "graphs_captured": 7,
+        "calls_captured": 28270
+      },
+      {
+        "rows": 16,
+        "case": 10,
+        "max_abs_error": 6.914138793945312e-05,
+        "parity": false,
+        "graphs_captured": 8,
+        "calls_captured": 32308
+      }
+    ],
+    "status": "fail",
+    "error_type": "FailOnRecompileLimitHit",
+    "error": "Hard failure due to fullgraph=True",
+    "max_abs_error": 6.914138793945312e-05,
+    "parity": false,
+    "source_commit": "c75ba3af6",
+    "source_result": "relational-neighborhood-guard-diagnostic214.json"
   }
 ]
