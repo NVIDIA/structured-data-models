@@ -485,13 +485,15 @@ def run(args: argparse.Namespace) -> None:
         for device in devices:
             torch.cuda.reset_peak_memory_stats(device)
         elapsed, batch_times, arrays, windows = [], [], [], []
-        for _ in range(args.repeats):
+        for repetition in range(args.repeats):
             synchronize(devices)
             wall_start = time.time()
+            torch.cuda.nvtx.range_push(f"timed_prediction_{repetition}")
             start = time.perf_counter()
             predictions, durations = predict()
             synchronize(devices)
             elapsed.append(time.perf_counter() - start)
+            torch.cuda.nvtx.range_pop()
             windows.append([wall_start, time.time()])
             batch_times.append(durations)
             pred = torch.cat(predictions, dim=0)
