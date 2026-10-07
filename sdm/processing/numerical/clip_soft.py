@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import math
-
 import torch
 
 from sdm import Stype, TableTensor
@@ -33,8 +31,8 @@ class ClipSoft(Processor):
 
     def __init__(self, max_absolute_value: float) -> None:
         super().__init__()
-        if not math.isfinite(max_absolute_value) or max_absolute_value <= 0:
-            raise ValueError("max_absolute_value must be finite and positive.")
+        if max_absolute_value <= 0:
+            raise ValueError("max_absolute_value must be positive.")
         self.max_absolute_value = max_absolute_value
 
     def _transform(self, table: TableTensor) -> TableTensor:
