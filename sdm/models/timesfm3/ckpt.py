@@ -11,7 +11,7 @@ def remap_ckpt(
     ckpt: dict[str, Tensor],
     model: torch.nn.Module,
 ) -> dict[str, Tensor]:
-    """Map Google TimesFM-3 block weights to the SDM block layout.
+    """Remap Google TimesFM-3 weights for strict SDM loading.
 
     Args:
         ckpt: Google's state dictionary with separate query, key, and value
@@ -19,10 +19,31 @@ def remap_ckpt(
         model: Target model containing TimesFM-3 transformer blocks.
 
     Returns:
-        A new state dictionary with renamed block weights, fused attention
+        A new state dictionary with renamed layers, fused attention
         projections, and fixed rotary frequencies.
     """
-    out = dict(ckpt)
+    out = {}
+    for key, value in ckpt.items():
+        if key.startswith("transformer_stack.layers."):
+            key = "icl_block.layers." + key.removeprefix(
+                "transformer_stack.layers."
+            )
+        elif key.startswith("output_head."):
+            key = "icl_block.head." + key.removeprefix("output_head.")
+        elif key.startswith("pre_transformer_resblock.hidden_layer."):
+            key = "patch_embedding.mlp.0." + key.removeprefix(
+                "pre_transformer_resblock.hidden_layer."
+            )
+        elif key.startswith("pre_transformer_resblock.output_layer."):
+            key = "patch_embedding.mlp.2." + key.removeprefix(
+                "pre_transformer_resblock.output_layer."
+            )
+        elif key.startswith("pre_transformer_resblock.residual_layer."):
+            key = "patch_embedding.res." + key.removeprefix(
+                "pre_transformer_resblock.residual_layer."
+            )
+        out[key] = value
+
     for name, module in model.named_modules():
         if not isinstance(module, TimesFM3TransformerBlock):
             continue

@@ -4,10 +4,9 @@
 import pytest
 import torch
 from torch import Tensor
-from torch.nn import ModuleDict, ModuleList
 
-from sdm.models.timesfm3.block import TimesFM3TransformerBlock
 from sdm.models.timesfm3.ckpt import remap_ckpt
+from sdm.models.timesfm3.model import _TimesFM3
 from sdm.testing import withCUDA
 
 
@@ -17,9 +16,18 @@ def test_remap_ckpt_loads_all_weights(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
-    block = TimesFM3TransformerBlock(8, 2, device="meta", dtype=dtype)
-    model = ModuleDict({"layers": ModuleList([block])})
-    prefix = "layers.0."
+    model = _TimesFM3(
+        input_patch_len=2,
+        output_patch_len=4,
+        quantiles=(0.1, 0.5, 0.9),
+        channels=8,
+        num_layers=1,
+        num_heads=2,
+        device="meta",
+        dtype=dtype,
+    )
+    prefix = "transformer_stack.layers.0."
+    mapped_prefix = "icl_block.layers.0."
     source: dict[str, Tensor] = {
         prefix + name + ".weight": torch.full(
             (8,), index + 1, device=device, dtype=dtype
@@ -58,11 +66,33 @@ def test_remap_ckpt_loads_all_weights(
             4, device=device, dtype=dtype
         )
 
+    for index, (name, shape) in enumerate(
+        (
+            ("pre_transformer_resblock.hidden_layer.weight", (8, 12)),
+            ("pre_transformer_resblock.output_layer.weight", (8, 8)),
+            ("pre_transformer_resblock.residual_layer.weight", (8, 12)),
+            ("output_head.weight", (12, 8)),
+            ("output_head.bias", (12,)),
+        )
+    ):
+        source[name] = torch.full(
+            shape, (index + 1) / 10, device=device, dtype=dtype
+        )
+
     source_keys = set(source)
     mapped = remap_ckpt(source, model)
 
     assert set(source) == source_keys
     assert set(mapped) == set(model.state_dict())
+    for source_name, target_name in (
+        ("hidden_layer", "mlp.0"),
+        ("output_layer", "mlp.2"),
+        ("residual_layer", "res"),
+    ):
+        torch.testing.assert_close(
+            mapped[f"patch_embedding.{target_name}.weight"],
+            source[f"pre_transformer_resblock.{source_name}.weight"],
+        )
     for source_name, target_name in (
         ("pre_seq_attn_ln", "time.query_norm"),
         ("post_seq_attn_ln", "time.post_attn_norm"),
@@ -74,12 +104,12 @@ def test_remap_ckpt_loads_all_weights(
         ("post_ff_ln", "var.mlp.4"),
     ):
         torch.testing.assert_close(
-            mapped[prefix + target_name + ".weight"],
+            mapped[mapped_prefix + target_name + ".weight"],
             source[prefix + source_name + ".weight"],
         )
     for source_axis, target_axis in (("seq", "time"), ("var", "var")):
         source_prefix = f"{prefix}{source_axis}_attn."
-        target_prefix = f"{prefix}{target_axis}.attn."
+        target_prefix = f"{mapped_prefix}{target_axis}.attn."
         torch.testing.assert_close(
             mapped[target_prefix + "qkv_lin.weight"],
             torch.cat(
@@ -96,14 +126,17 @@ def test_remap_ckpt_loads_all_weights(
         )
     for branch in ("query", "key"):
         torch.testing.assert_close(
-            mapped[prefix + f"time.attn.{branch}_transform.0.inv_freq"],
+            mapped[mapped_prefix + f"time.attn.{branch}_transform.0.inv_freq"],
             torch.tensor([1.0, 0.01], device=device),
         )
 
+    torch.testing.assert_close(
+        mapped["icl_block.head.weight"], source["output_head.weight"]
+    )
     model.load_state_dict(mapped, strict=True, assign=True)
     assert all(parameter.device == device for parameter in model.parameters())
-    x = torch.arange(48, device=device, dtype=dtype).reshape(1, 2, 3, 8) / 10
-    patch_mask = torch.zeros(1, 2, 3, device=device, dtype=torch.bool)
-    output = block(x, patch_mask)
+
+    x = torch.ones(1, 2, 3, 12, device=device, dtype=dtype)
+    output = model.icl_block(model.patch_embedding(x))
     assert output.isfinite().all()
-    assert output.shape == x.shape
+    assert output.shape == (1, 2, 3, 12)
