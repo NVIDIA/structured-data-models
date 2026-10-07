@@ -5,7 +5,7 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
-from sdm.processing.numerical._stats import _isfinite
+from sdm.processing.numerical._stats import _isfinite, _nanmean_rows
 
 
 class ImputeMean(Processor):
@@ -38,10 +38,8 @@ class ImputeMean(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
-        mean = torch.nanmean(
-            numerical.masked_fill(~_isfinite(numerical), torch.nan),
-            dim=-2,
-            keepdim=True,
+        mean = _nanmean_rows(
+            numerical.masked_fill(~_isfinite(numerical), torch.nan)
         )
         self._mean = torch.where(mean.isnan(), self.fill_value, mean)
 

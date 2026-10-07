@@ -27,3 +27,36 @@ def _constant_feature_mask(
     eps = torch.finfo(var.dtype).eps
     upper_bound = num_samples * eps * var + (num_samples * mean * eps) ** 2
     return var <= upper_bound
+
+
+@torch.library.custom_op("sdm::fitting_nansum", mutates_args=())
+def _fitting_nansum(inp: Tensor) -> Tensor:
+    return inp.nansum(dim=-2, keepdim=True)
+
+
+@_fitting_nansum.register_fake
+def _fitting_nansum_fake(inp: Tensor) -> Tensor:
+    return inp.new_empty((*inp.shape[:-2], 1, inp.size(-1)))
+
+
+@torch.library.custom_op("sdm::fitting_nanmean", mutates_args=())
+def _fitting_nanmean(inp: Tensor) -> Tensor:
+    return inp.nanmean(dim=-2, keepdim=True)
+
+
+@_fitting_nanmean.register_fake
+def _fitting_nanmean_fake(inp: Tensor) -> Tensor:
+    return inp.new_empty((*inp.shape[:-2], 1, inp.size(-1)))
+
+
+def _nansum_rows(inp: Tensor) -> Tensor:
+    # Native reductions keep fitted power-search comparisons consistent.
+    if torch.compiler.is_compiling() and not torch.is_grad_enabled():
+        return _fitting_nansum(inp)
+    return inp.nansum(dim=-2, keepdim=True)
+
+
+def _nanmean_rows(inp: Tensor) -> Tensor:
+    if torch.compiler.is_compiling() and not torch.is_grad_enabled():
+        return _fitting_nanmean(inp)
+    return inp.nanmean(dim=-2, keepdim=True)
