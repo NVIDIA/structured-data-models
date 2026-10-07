@@ -59,10 +59,13 @@ def cache_memory(model: Any) -> dict[str, int]:
     """Count unique cache tensor storages, grouped by residency."""
     result: dict[str, int] = {}
     seen: set[tuple[str, int]] = set()
-    caches = [getattr(model, "_cache", None)]
-    caches.extend(getattr(model, "_caches", []))
-    for replica in getattr(model, "replicas", []):
-        caches.append(getattr(replica, "_cache", None))
+    caches = []
+    pending = [model]
+    while pending:
+        current = pending.pop()
+        caches.append(getattr(current, "_cache", None))
+        caches.extend(getattr(current, "_caches", []))
+        pending.extend(getattr(current, "replicas", []))
     for cache in caches:
         if isinstance(cache, Cache):
             for tensor in cache._tensors():
