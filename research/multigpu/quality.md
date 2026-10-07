@@ -71,3 +71,24 @@ The first four-L40S host execution of `test/models/test_ensemble_parallel.py` co
 Fix `c4ddd7f15` replaces that call with `output.record_stream(stream)`, the existing public operation dispatched by `sdm/tensor/table.py`. The failed run remains evidence; a separate GPU rerun is required before claiming the stream tests pass.
 
 The coordinator also executed the existing base/KumoTabular/KumoRelational/TabICLv2 CPU regression suite: 88 passed, 19 CUDA-only skipped, 27.82 seconds. The integrated new research suites returned 43 passed and 22 CUDA-only skipped in approximately 10 seconds. These support CPU API and model regression coverage; skipped tests are not counted as GPU evidence.
+
+## First measured strong-scaling audit: Covertype
+
+Raw host result directories `tabular-{native,ep1,ep2,ep4}-large-e4-c1024-q2048` were copied independently under `.kumo-multigpu-20261008/results/quality/`. The native source was `9f0d6c765`; the corrected executor source was `6c3f1e22e`. All arms use the pretrained large KumoTabular classifier, four members, 1,024 fixed TRAIN context rows, 2,048 fixed validation queries, microbatch 256, BF16 autocast and three measured passes on the same four-L40S Spot host. Total work remains fixed, so this is strong scaling.
+
+| Arm | Median pass seconds | Recomputed rows/s | Speedup over resident EP1 | Per-device prediction peak allocated GiB |
+|---|---:|---:|---:|---|
+| Native one GPU, CPU-offloaded caches | 1.125935 | 1,818.93 | Separate policy baseline | 1.284 |
+| Resident EP1 | 1.183971 | 1,729.77 | 1.000x | 1.598 |
+| Resident EP2 | 1.087597 | 1,883.05 | 1.089x | 1.358, 1.356 |
+| Resident EP4 | 1.245131 | 1,644.81 | 0.951x | 1.176, 1.174, 1.174, 1.174 |
+
+The small workload does not scale well: two-GPU efficiency is 54.4% and four-GPU efficiency is 23.8%; four GPUs are slower than one. The resident single-GPU executor itself is slower than the native baseline here. This result must remain in the final account even if larger workloads later improve.
+
+Independent checks found all four saved FP32 prediction arrays `[2048,7]` bitwise identical, finite, and matching their recorded SHA256. Max/mean/p99 absolute differences, relative L2 differences and class disagreement are all zero. All context/query content hashes, query observation IDs, target arrays and class-column orders match. Query IDs and targets additionally match the original fixed Covertype validation prefix. Thus all paired quality deltas are exactly zero on these observations.
+
+Independent NumPy scoring gives accuracy 0.76416015625, macro one-vs-rest AUROC 0.9474149901961447, multiclass Brier score 0.3375792160360528 and FP64 logloss 0.5760446019729857. The harness logloss 0.5760445594787598 differs by 4.25e-8 from FP32 scoring roundoff. Native timing variation across three passes is 0.39% coefficient of variation. This is repeated timing of one context/query cohort, not repeated independent training/context selection or population-level accuracy evidence.
+
+Native caches occupy 358,614,196 CPU bytes (342.001 MiB). Resident EP reports the same logical tensor bytes but 512,754,868 aggregate unique GPU storage bytes, illustrating that logical tensor sizes can underestimate memory retained by views. Peak allocated memory is the stronger capacity measurement; aggregate parameter replication must also be counted.
+
+The first native fit took 122.75 seconds, whereas later executor fits took roughly 1.1-1.3 seconds. Cold initialization/JIT/cache effects have not yet been isolated; do not attribute that difference to ensemble placement. A fresh matched native control and estimator-batching controls are being run separately.
