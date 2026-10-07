@@ -1,0 +1,125 @@
+{
+  "classes": [
+    0,
+    1
+  ],
+  "scope": "First 32/128 validation rows, 256 context rows",
+  "cases": [
+    {
+      "arm": "inner-control",
+      "rows": 32,
+      "label_counts": [
+        10,
+        22
+      ],
+      "eager": {
+        "accuracy": 0.96875,
+        "roc_auc": 1.0,
+        "log_loss": 0.05880954867872247,
+        "brier": 0.01813302243167724
+      },
+      "compiled": {
+        "accuracy": 0.96875,
+        "roc_auc": 1.0,
+        "log_loss": 0.057786536853809425,
+        "brier": 0.017734483324845465
+      },
+      "compiled_minus_eager": {
+        "accuracy": 0.0,
+        "roc_auc": 0.0,
+        "log_loss": -0.0010230118249130449,
+        "brier": -0.0003985391068317759
+      },
+      "max_probability_difference": 0.009696781635284424,
+      "failed_probability_values": 42,
+      "changed_classes": 0
+    },
+    {
+      "arm": "inner-control",
+      "rows": 128,
+      "label_counts": [
+        44,
+        84
+      ],
+      "eager": {
+        "accuracy": 0.9765625,
+        "roc_auc": 1.0,
+        "log_loss": 0.04687336719892475,
+        "brier": 0.012758390256686868
+      },
+      "compiled": {
+        "accuracy": 0.9765625,
+        "roc_auc": 1.0,
+        "log_loss": 0.0463726568449412,
+        "brier": 0.012599745360204636
+      },
+      "compiled_minus_eager": {
+        "accuracy": 0.0,
+        "roc_auc": 0.0,
+        "log_loss": -0.0005007103539835522,
+        "brier": -0.00015864489648223165
+      },
+      "max_probability_difference": 0.015538036823272705,
+      "failed_probability_values": 162,
+      "changed_classes": 0
+    },
+    {
+      "arm": "inner-backend-eager",
+      "rows": 32,
+      "label_counts": [
+        10,
+        22
+      ],
+      "eager": {
+        "accuracy": 0.96875,
+        "roc_auc": 1.0,
+        "log_loss": 0.05880954867872247,
+        "brier": 0.01813302243167724
+      },
+      "compiled": {
+        "accuracy": 0.96875,
+        "roc_auc": 1.0,
+        "log_loss": 0.05880954867872247,
+        "brier": 0.01813302243167724
+      },
+      "compiled_minus_eager": {
+        "accuracy": 0.0,
+        "roc_auc": 0.0,
+        "log_loss": 0.0,
+        "brier": 0.0
+      },
+      "max_probability_difference": 0.0,
+      "failed_probability_values": 0,
+      "changed_classes": 0
+    },
+    {
+      "arm": "inner-emulate-casts",
+      "rows": 32,
+      "label_counts": [
+        10,
+        22
+      ],
+      "eager": {
+        "accuracy": 0.96875,
+        "roc_auc": 1.0,
+        "log_loss": 0.05880954867872247,
+        "brier": 0.01813302243167724
+      },
+      "compiled": {
+        "accuracy": 0.96875,
+        "roc_auc": 1.0,
+        "log_loss": 0.05868921137562909,
+        "brier": 0.018073235531075274
+      },
+      "compiled_minus_eager": {
+        "accuracy": 0.0,
+        "roc_auc": 0.0,
+        "log_loss": -0.00012033730309338186,
+        "brier": -5.9786900601967174e-05
+      },
+      "max_probability_difference": 0.0019418597221374512,
+      "failed_probability_values": 17,
+      "changed_classes": 0
+    }
+  ]
+}

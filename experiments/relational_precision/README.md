@@ -81,3 +81,18 @@ low-precision casts that fusion can otherwise eliminate. It also selects PyTorch
 libdevice behavior, so an improvement alone does not isolate rounding from
 transcendental implementation differences. This is a diagnostic, not a default
 configuration recommendation; model parity and performance must be measured.
+
+The L4 BF16-autocast control uses FP32 stored weights in both arms. Inner-model
+`backend="eager"` capture matches eager bitwise on 32 breast-cancer validation
+rows. Actual Inductor differs by at most 0.00969678 (42/64 probabilities outside
+the existing tolerance); cast emulation reduces this to 0.00194186 (17/64), still
+failing that strict check. The original 128-row run differs by at most 0.01553804.
+
+`bf16_task_metrics.py` scores the saved predictions against the exact validation
+indices and checks the context category mapping is `[0, 1]`. Results are in
+`results/bf16-gpu-task-metrics.json`. Accuracy and AUC are unchanged on both
+subsets: 96.875%/1.0 for 32 rows and 97.65625%/1.0 for 128 rows. Log loss and
+Brier score decrease slightly in the compiled arms. These cases therefore show
+a strict numerical mismatch without observed task-quality degradation; they
+establish neither general quality equivalence nor a general quality improvement.
+Raw GPU outputs are owned by the separate GPU experiment's evidence directory.
