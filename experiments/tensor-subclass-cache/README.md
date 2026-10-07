@@ -1,9 +1,15 @@
 # Tensor-subclass compiler caches
 
-**Do not use this experimental hash yet.** Independent review found that
-distinct tensor views sharing storage can collide with independent tensors.
-When a compiled operation mutates a leaf, cache reuse can return incorrect
-results. A storage-alias correction and independent validation are pending.
+**Experimental; keep this cache optimization out of integration.** Review
+found an additional PyTorch 2.14 cache correctness blocker: changing storage
+aliasing can reuse a compiled mutation graph incorrectly. The failure also
+occurs with plain PyTorch tensors and no SDM code. The wrapper hook is never
+called in that reproduction, so changing this hash cannot fix it.
+
+The original hash also omitted storage sharing between distinct leaf views.
+Revision v2 now includes deterministic storage-group numbers as well as view
+offsets/strides. That metadata correction does not establish general cache
+safety, especially for aliasing between separate inputs.
 
 This branch adds PyTorch's `_stable_hash_for_caching` hook to SDM tensor
 wrappers. It changes cache keys, not model calculations or tensor flattening.
@@ -32,8 +38,18 @@ PyTorch's default wrapper hash pickles symbolic tensor metadata, which reaches
 its unpicklable shape environment. The new hash describes the symbolic
 expression and hint instead. It includes the wrapper class, schema, tensor
 shape/strides/offset, dtype/device, inference/gradient flags, flattened leaf
-names, and repeated-leaf aliases. It never reads tensor values. Unknown
+names, repeated-leaf aliases, and shared-storage groups. It never reads tensor values. Unknown
 metadata types raise an error rather than silently disappear from the key.
+
+## Accepted findings and rejected rollout
+
+- Accepted: metadata-only hashing removes the symbolic serialization failure
+  in the small read-only example; cache invalidation checks below pass.
+- Accepted workaround: on the tested 2.14 CPU mutation reproduction,
+  `TORCHINDUCTOR_AUTOGRAD_CACHE=0` restores correct results while leaving
+  Inductor kernel caching active. No production compiler setting is changed.
+- Rejected for integration: enabling the optional cache optimization while
+  these alias/mutation cases remain unresolved.
 
 ## Results
 
@@ -88,3 +104,31 @@ This preserves caching within one revision without deleting unrelated caches.
 A representation hash cannot identify arbitrary changes to dispatch or
 unflatten implementation semantics either; separate cache namespaces remain
 appropriate when developing those implementations on either runtime.
+
+## Separate native PyTorch 2.14 correctness blocker
+
+The standalone `alias_repro.py` imports only PyTorch. It compiles a function
+that mutates its first input and clones its second. When the inputs initially
+share storage, the expected result is ones. After recompilation with
+independent inputs, the expected result is zeros, but the cached graph returns
+ones. Instrumented SDM-wrapper controls made zero calls to the hash hook and
+failed identically with every hook removed. Independent mutation probes that
+do invoke the hook pass with both hash revisions, including separate wrapper
+inputs sharing storage. No hook-specific wrong result has been demonstrated.
+
+```bash
+# With an unused cache directory: reproduces incorrect output/assertion failure.
+TORCHINDUCTOR_CACHE_DIR=/tmp/native-alias-case python \
+  experiments/tensor-subclass-cache/alias_repro.py
+
+# Scoped workaround; kernel caching remains enabled.
+TORCHINDUCTOR_AUTOGRAD_CACHE=0 \
+  TORCHINDUCTOR_CACHE_DIR=/tmp/native-alias-case-no-aot python \
+  experiments/tensor-subclass-cache/alias_repro.py
+```
+
+On CPU PyTorch 2.14.0 the first command returns ones instead of zeros for the
+independent-input case. The workaround returns the correct sequence (ones,
+zeros, ones), and the third case records an Inductor FX graph cache hit.
+This alias/mutation result has not been established on CUDA or PyTorch 2.7.
+The separate 2.7 flatten-ABI failure above remains a different problem.
