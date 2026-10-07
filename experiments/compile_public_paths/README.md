@@ -26,7 +26,7 @@ Final model/processor source for these checks: `284f612cf`. `prediction-final.js
 4. Fit caches class column names once. Previously both Kumo wrappers converted class tensors into Python strings on every prediction; prediction now reuses those names. Class order and numerical calculations are unchanged. The shared fit cache adds this small metadata item for other models too; only the two Kumo wrappers consume it here.
 5. Internal-model prerequisites remain necessary. This branch includes them to test the public path rather than stop at a known inner-model error. Chunk-size preservation (#1055) is separate and is not included; passing compilation does not establish memory-efficiency parity.
 
-## Remaining blockers
+## Blockers at the first snapshot (`284f612cf`)
 
 | Path | Current evidence |
 |---|---|
@@ -65,8 +65,14 @@ Omit `--fullgraph` to allow breaks. Select `--query-input fresh` to construct fr
 
 `baseline.json` records all 24 current-main combinations (two models × public fit/predict/outer forward × two graph-break settings × two runtimes). All eager reference calls succeeded and all compiled entries failed before the fixes. `containers-initial.json` and `recipe-integration.json` preserve intermediate first errors and source commits. Local ignored `results/` retains full tracebacks. No failure or pure eager fallback is counted as successful compilation.
 
-## Follow-up: external join boundary
+## Follow-up: external join boundary and real relational prediction
 
 The continuing integration adds individual category access during alignment and an explicit compiler boundary around `join_index`. Arrow/cuDF joins remain eager; surrounding tensor arithmetic can compile. Before this boundary, even `fullgraph=False` attempted `TableTensor.to_arrow()` with fake tensors and raised `.numpy() is not supported for tensor subclasses`. With the boundary, actual Inductor passes a duplicate-key join followed by tensor arithmetic on 2.7.1 and 2.14, including inside SDM's inference context. Fullgraph correctly rejects this explicit graph break; it is not fullgraph support for Arrow. Existing join checks pass (6 CPU cases, 5 CUDA skips on 2.14).
 
-This alone does not finish public relational prediction: string dictionary packing still fails before the join, and a diagnostic that keeps just string lookup eager exposes partially initialized `CategoricalTensor` reconstruction after a graph break. These are being handled separately. The earlier result table remains evidence for the explicitly recorded source commit, not a claim that every ongoing integration change has passed that entire matrix again.
+String alignment now exposes fixed-size dictionary lookup as a custom compiler operation with the same Arrow/cuDF implementation. The compiler sees the lookup result shape; it does not optimize Arrow. Eager alignment retains its direct helper to avoid dispatcher overhead.
+
+At `ddb25ab3b`, real pretrained **KumoRelational public prediction passes on PyTorch 2.14 CPU Inductor with `fullgraph=False`** for the one-hop RelBench arm. The same compiled callable handles query rows **4 → 1 → 8 → 4** with their corresponding related tables. Maximum absolute prediction difference is **4.83e-6**; all samples satisfy the unchanged `atol=1e-5, rtol=1e-4`. Cumulative captured graphs are **27 → 38 → 43 → 43** and tensor calls **4,976 → 9,419 → 13,912 → 13,912**. The default recompilation limit is reached in schema dispatch, so some regions fall back to eager; this is partial compilation, not every operation compiled.
+
+Broader checks are still incomplete. A two-hop arm with six related tables and a scoped recompilation limit of 64 fails inside Dynamo's symbolic shape guards (`IndexError: list index out of range`). Fullgraph still stops in categorical ensemble packing before reaching the explicit external join boundary. `relational-prediction-progress.json` preserves these passes and failures. The limit override exists only in the experiment, not the library. Existing categorical, numerical-conversion, join, and relational-model suites pass: **70 passed, 39 CUDA skips** on 2.14.
+
+Use `--arm-index 0 --relational-query-indices 1 0 2 1` to reproduce the passing neighborhood sweep. `--dynamic false` allows a diagnostic without symbolic shape handling; default is true. No speed, memory, CUDA, general-schema, or 2.7 relational success claim follows from this CPU partial-compilation milestone.

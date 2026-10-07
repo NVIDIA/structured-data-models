@@ -1,0 +1,94 @@
+[
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 0,
+    "recompile_limit": null,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 4.0531158447265625e-06,
+        "parity": true,
+        "graphs_captured": 27,
+        "calls_captured": 4976
+      },
+      {
+        "rows": 1,
+        "case": 0,
+        "max_abs_error": 1.3709068298339844e-06,
+        "parity": true,
+        "graphs_captured": 38,
+        "calls_captured": 9419
+      },
+      {
+        "rows": 8,
+        "case": 2,
+        "max_abs_error": 4.827976226806641e-06,
+        "parity": true,
+        "graphs_captured": 43,
+        "calls_captured": 13912
+      },
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 4.0531158447265625e-06,
+        "parity": true,
+        "graphs_captured": 43,
+        "calls_captured": 13912
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 4.827976226806641e-06,
+    "parity": true,
+    "source_commit": "ddb25ab3b",
+    "source_result": "relational-varied-arm0-default-2.14.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": 64,
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "IndexError",
+    "error": "list index out of range\n",
+    "source_commit": "ddb25ab3b",
+    "source_result": "relational-varied-arm1-limit64-2.14.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 0,
+    "recompile_limit": null,
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "Unsupported",
+    "error": "Unexpected type in sourceless builder\n  Explanation: SourcelessBuilder.create does not know how to wrap <class 'sdm.tensor.string.StringTensor'>\n  Hint: This is likely to be a Dynamo bug. Please report an issue to PyTorch.\n\n  Developer debug context: sdm.tensor.string.StringTensor\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0116.html\n\nfrom user code:\n   File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/base.py\", line 417, in predict\n    queries = recipe_execution.transform(x, related_tables)\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/execution.py\", line 188, in transform\n    related_ensembles[name] = processor.transform_ensemble(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/common/sequential.py\", line 123, in _transform_ensemble\n    out = child.transform_ensemble(out)\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/common/stype.py\", line 139, in _transform_ensemble\n    self.processors[stype].transform_ensemble(\n    ^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/common/sequential.py\", line 123, in _transform_ensemble\n    out = child.transform_ensemble(out)\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/categorical/align.py\", line 328, in _transform_ensemble\n    return ensemble_table.replace_tables(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/ensemble.py\", line 457, in replace_tables\n    packed_groups, packed_locations = self._pack_tables(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/ensemble.py\", line 166, in _pack_tables\n    id(category) for category in table.categorical.categories\n                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
+    "source_commit": "ddb25ab3b",
+    "source_result": "relational-string-op-2.14-full.json"
+  }
+]
