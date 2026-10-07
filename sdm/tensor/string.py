@@ -12,6 +12,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
 from typing_extensions import override
 
 from sdm._warnings import warn_once
@@ -342,7 +343,7 @@ class StringTensor(VarLenTensor):
         # TODO Support tensor content printing.
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
-        if self.valid is not None:
+        if not is_fake(self) and self.valid is not None:
             out += f", null_count={int((~self.valid).sum())}"
         if not self.is_cpu:
             out += f", device={self.device}"
