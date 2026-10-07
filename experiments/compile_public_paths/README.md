@@ -13,7 +13,7 @@ Real cached data, pretrained weights, CPU Inductor, and the same FP32 weights/in
 | KumoTabular, numerical regression | 2.14 | Pass | Pass | Max `1.84e-4`; initial snapshot |
 | KumoRelational, one-hop RelBench / four related tables | 2.14 | Pass | Pass* | All query sizes pass; max `4.83e-6` |
 | KumoRelational, two-hop RelBench / six related tables | 2.14 | Runs | Runs* | One of eight probabilities narrowly misses tolerance on the four-row sample; reproduced by compiling only the inner model |
-| KumoRelational public prediction | 2.7.1 | Still iterating schema guards | Still blocked | No end-to-end support claim |
+| KumoRelational public prediction | 2.7.1 | Blocked in dispatch/resume tracing | Still blocked | No end-to-end support claim |
 | Public `fit()` / outer `model(...)` | Both | Separate investigation | Separate investigation | Not covered by the successful prediction cases |
 
 *Relational fullgraph needs scoped `capture_dynamic_output_shape_ops=True` and an explicit finite `num_hops`. Arrow/cuDF joins remain opaque external operations inside the captured graph; their algorithms are not compiled.
@@ -49,7 +49,7 @@ The two-hop probability miss also occurs with entirely eager preprocessing and *
 
 A CPU diagnostic using scalar code generation (`cpp.simdlen=1`) passes the original tolerance across all four two-hop query sizes. FP32 is unchanged. This points to vector/reduction arithmetic in the inner compiler, but scalar code generation is not recommended as a performance fix without further measurement. No precision flags were changed in the library.
 
-PyTorch 2.7 has additional dictionary-source and graph-break-resume limitations. Individual schema and wrapper fixes make progress, but public prediction has not passed end to end. Changing the inference context alone does not fix its fullgraph failure: a diagnostic exposes an earlier recipe-applicability failure.
+PyTorch 2.7 has additional dictionary-source and graph-break-resume limitations. After the observed schema guards are fixed, public prediction still fails in tensor dispatch: the default limit sends a tensor list into a view wrapper; a scoped limit of 64 instead sends a dtype to `unsqueeze`. A tracing-only backend also fails in generated resume code (`NameError: Stype is not defined`), so this is not only an Inductor kernel issue. These are failed diagnostics, not supported configurations. Changing the inference context alone does not fix fullgraph: a diagnostic exposes an earlier recipe-applicability failure.
 
 Unbounded graph traversal, arbitrary schemas, input mutation, nonempty variable-length operations outside the tested paths, CUDA/cuDF, and full dataset metrics still need separate validation. Opaque external operations may add overhead; no speedup is inferred from capturing fewer graphs.
 
