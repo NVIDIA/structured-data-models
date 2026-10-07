@@ -32,9 +32,9 @@ The CSR fix is a separate commit. A `searchsorted` formulation confirmed the dia
 
 The frontend stream uses `backend="eager"` only to measure capture and guards. It is not an optimized-kernel performance result. Its existing strict prediction-tolerance failures remain: maximum absolute error is `6.914138793945312e-05`, unchanged from the preceding prototype. This change fixes shape support, not that separate numerical discrepancy. Actual CPU Inductor also completed all ten queries using two graphs at the default limit. All 160 predicted classes matched eager; three batches missed the existing strict probability tolerance, with maximum absolute error `6.246566772460938e-05`. The numerical discrepancy is therefore still a separate blocker to claiming strict prediction parity. No CUDA speed or memory improvement is claimed here.
 
-CPU `opcheck` passed four dtype/empty-input combinations on each runtime; another 48 actual-Inductor calls per runtime matched the native CSR output exactly, including empty edges with nonzero node counts. The portable probe is `experiments/compile_table_shapes/check_csr.py --device cpu` (use `--device cuda` for a GPU).
+CPU `opcheck` passed four dtype/empty-input combinations on each runtime; another 48 actual-Inductor calls per runtime matched an independent histogram/prefix-sum reference exactly, including empty edges with nonzero node counts. The portable probe is `experiments/compile_table_shapes/check_csr.py --device cpu` (use `--device cuda` for a GPU).
 
-The focused regression tests cover eager ensemble grouping order, columnar size queries, table construction/views, changing dimensions, and exact CSR parity for int32/int64 indices, empty inputs, and strided indices. Each compiler test resets Dynamo so independent parameterizations do not consume one another's recompilation limit.
+The focused regression tests cover eager ensemble grouping order, columnar size queries, table construction/views, changing dimensions, and exact CSR correctness against an independent reference for int32/int64 indices, empty inputs, and strided indices. Each compiler test resets Dynamo so independent parameterizations do not consume one another's recompilation limit.
 
 Run the focused checks:
 
@@ -60,6 +60,10 @@ python experiments/compile_public_paths/probe.py \
 
 The recorded frontend result is in `experiments/compile_table_shapes/results/relational-neighborhoods-frontend214.json`. The actual-Inductor summary is `relational-neighborhoods-inductor214.json` in the same directory, run against integration commit `6df9aeab5`; prediction arrays are omitted from that summary. `experiments/compile_table_shapes/check_grouping.py` reproduces the independent actual-Inductor grouping checks. Neither validation raises the recompilation limit or changes prediction tolerances. Different schemas, category identities, grouping relationships, empty dimensions, or model configuration may legitimately require another graph; this branch does not promise a single graph for every workload.
 
-## CUDA validation still under investigation
+## Sparse-index stride correction
 
-An initial PyTorch 2.14 CUDA `opcheck` using strided int32 indices reported illegal memory access. Native-versus-wrapper isolation is required before attributing it to this change. The graph builder supplies sorted contiguous indices, but the private wrapper must either support or explicitly normalize the strided case. Do not treat the CPU results as a CUDA validation result.
+Fresh-process isolation showed that the native COO-to-CSR kernel ignores index strides on both CPU and CUDA. For logical indices `[0, 2, 4, 6, 8]`, it read the underlying contiguous prefix instead and returned incorrect pointers. The initial tests compared against the same native limitation, so their reference was insufficient; they now use independent histogram counts and prefix sums. CUDA `opcheck` also reported illegal memory access with the strided input, while direct fresh-process calls returned incorrect values.
+
+The compiled wrapper now calls `indices.contiguous()` before the native kernel. The graph builder's sorted indices are already contiguous, so this is a no-op on its normal path. It does not change eager graph construction. CPU operator checks and all 48 dynamic cases per version pass against the corrected reference. CUDA checks are being repeated after this correction; do not treat the CPU results as CUDA validation.
+
+The native implementation reads raw contiguous offsets rather than tensor strides: [PyTorch CUDA CSR kernel](https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/sparse/cuda/SparseCsrTensorMath.cu#L48-L75). `experiments/compile_table_shapes/isolate_csr.py` runs each native/wrapper, dtype, and layout combination in a fresh process.
