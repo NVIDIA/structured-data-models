@@ -1,6 +1,6 @@
 # Categorical fitting compilation experiments
 
-This branch is stacked on `compile/categorical-recipe-support` at `c04de44fc`. The changes below have different readiness levels. Do not treat the entire branch as a production-ready fix.
+This branch is stacked on `compile/categorical-recipe-support` at `c04de44fc`. The active source contains the validated compatibility changes. The rejected shuffle prototype is preserved only as an experiment patch and historical results.
 
 ## Minimal alignment fix: `ff08a40e8`
 
@@ -40,11 +40,11 @@ The helper applies only to compiled fitting of int32-offset string dictionaries;
 
 An additional all-observed → partially-observed vocabulary check passes with both graph settings. It exposed a dependency regression: reconstructing a fresh layout leaf lost Dynamo's symbolic sources during partial-graph int64 fitting. `c31f252ed` retains the original flattened `_layout` leaf identity; do not apply the earlier alias-reconstruction change without this restoration.
 
-Direct numeric `_fit_column` checks on 2.7.1 pass all sort modes with graph breaks. Fullgraph numeric selection needs `capture_dynamic_output_shape_ops=True` on that version. This is a helper result, not evidence that every 2.7 public processor/schema path compiles.
+Direct numeric `_fit_column` checks on 2.7.1 pass all sort modes with graph breaks. Fullgraph numeric selection needs `capture_dynamic_output_shape_ops=True` on that version. This is a helper result, not evidence that every 2.7 public processor/schema path compiles. The bounded string-selection helper passes on 2.7 with graph breaks and explicit capture options, across strides 0/1/2; strict fullgraph on 2.7 rejects the `statically_known_true` helper. On 2.14 both graph settings pass those stride cases, including missing strings, changing bytes, nonzero offsets and empty selections.
 
-## Experimental shuffle change: `4d092d8e2`
+## Rejected shuffle change: `4d092d8e2`
 
-Existing fitting samples permutations and deduplicates identical ones using `permutation.tolist()` as Python dictionary keys. The prototype skips this value-dependent deduplication during compilation, keeping one permutation group per ensemble member. It preserves sampled values and RNG draws, but can increase stored groups and downstream computation.
+Existing fitting samples permutations and deduplicates identical ones using `permutation.tolist()` as Python dictionary keys. The rejected prototype skipped this value-dependent deduplication during compilation, keeping one permutation group per ensemble member. It has been reverted from active source; its exact diff remains in `rejected-shuffle.patch` for review. It preserves sampled values and RNG draws, but can increase stored groups and downstream computation.
 
 CPU 2.14 Inductor, four ensemble members, random and cyclic-shift strategies:
 
@@ -57,7 +57,7 @@ CPU 2.14 Inductor, four ensemble members, random and cyclic-shift strategies:
 
 The 0/1-category fullgraph results are **not** evidence that normal categorical fitting works with an explicit generator. With the global RNG diagnostic, groups grew from 1 to 4 for 0/1 categories, and from 3 to 4 for the tested 3-category draws. No model speed or memory improvement is established, and no replacement of SDM's explicit-generator behavior is proposed.
 
-Recommendation: the alignment guard is a small independent compatibility change. The shuffle prototype documents what a static grouping scheme costs; explicit generator support and grouping overhead need resolution before recommending it for integration.
+The shuffle bypass is not part of the implementation. It increased grouping costs without solving explicit generator support. Active fitting retains the original deduplication and RNG behavior; fullgraph shuffle fitting remains a separate unresolved issue.
 
 ## Reproduce
 

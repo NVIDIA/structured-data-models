@@ -77,3 +77,15 @@
 {"check": "all_observed_int32", "source": "3b8b0204d", "strings": true, "fullgraph": true, "order": "value", "status": "pass"}
 {"check": "all_observed_int64_layout_restored", "source": "3b8b0204d", "strings": true, "fullgraph": false, "order": "value", "status": "pass"}
 {"check": "all_observed_int64_layout_restored", "source": "3b8b0204d", "strings": true, "fullgraph": true, "order": "value", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "numeric", "fullgraph": false, "sort_by": "code", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "numeric", "fullgraph": false, "sort_by": "frequency", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "numeric", "fullgraph": false, "sort_by": "value", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "numeric", "fullgraph": true, "sort_by": "code", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "numeric", "fullgraph": true, "sort_by": "frequency", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "numeric", "fullgraph": true, "sort_by": "value", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "string_int64", "fullgraph": false, "sort_by": "code", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "string_int64", "fullgraph": false, "sort_by": "frequency", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "string_int64", "fullgraph": false, "sort_by": "value", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "string_int64", "fullgraph": true, "sort_by": "code", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "string_int64", "fullgraph": true, "sort_by": "frequency", "status": "pass"}
+{"check": "public_fit_after_shuffle_revert", "source": "c0d3788ae", "version": "2.14.0", "case": "string_int64", "fullgraph": true, "sort_by": "value", "status": "pass"}
