@@ -20,7 +20,8 @@ def _check_categorical_codes(table: TableTensor) -> None:
     if os.getenv("SDM_ENABLE_CATEGORY_CHECKS", "1") == "0":
         return
     columns = table.columns[Stype.categorical]
-    for index, category in enumerate(table.categorical.categories):
+    for index in range(table.categorical.size(-1)):
+        category = table.categorical.category(index)
         codes = table.categorical[..., index]
         if (codes >= category.numel()).any():
             raise ValueError(
@@ -42,13 +43,19 @@ def _check_categories(
     if os.getenv("SDM_ENABLE_CATEGORY_CHECKS", "1") == "0":
         return
     columns = table.columns[Stype.categorical]
-    if len(table.categorical.categories) != len(categories):
+    if table.categorical.size(-1) != len(categories):
         raise ValueError(
             f"Expected {len(categories)} fitted categorical "
             f"columns (got {len(columns)})."
         )
     for index, (actual, expected) in enumerate(
-        zip(table.categorical.categories, categories)
+        zip(
+            (
+                table.categorical.category(i)
+                for i in range(table.categorical.size(-1))
+            ),
+            categories,
+        )
     ):
         expected = expected.to(device=actual.device)
         if not actual.equal(expected):

@@ -63,14 +63,15 @@ class AddCategoryCounts(Processor):
         _check_categorical_codes(table)
         self._columns = tuple(
             column
-            for column, categories in zip(
-                table.columns[Stype.categorical], table.categorical.categories
-            )
-            if categories.numel() > self.min_cardinality
+            for index, column in enumerate(table.columns[Stype.categorical])
+            if table.categorical.category(index).numel() > self.min_cardinality
         )
         categorical = table.select_columns(self._columns).categorical
         codes = categorical.code  # [*batch, num_rows, num_columns]
-        sizes = [categories.numel() for categories in categorical.categories]
+        sizes = [
+            categorical.category(index).numel()
+            for index in range(categorical.size(-1))
+        ]
         num_categories = codes.new_tensor(sizes, dtype=torch.long)
         # Negative codes accumulate in the slot behind their column's
         # vocabulary: [*batch, num_columns, max(sizes) + 1].
@@ -91,7 +92,10 @@ class AddCategoryCounts(Processor):
         )
         self._log_counts = counts.to(count_dtype).log1p().to(dtype)
         self._num_categories = num_categories
-        self._categories = BufferList(table.categorical.categories)
+        self._categories = BufferList(
+            table.categorical.category(index)
+            for index in range(table.categorical.size(-1))
+        )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         _check_categories(table, self._categories)
