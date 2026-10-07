@@ -208,16 +208,22 @@ def score(
     if problem == "regression":
         values = pred["q500"].numerical.squeeze(-1).numpy()
         target = labels.numerical.squeeze(-1).numpy()
+        quantiles = pred.numerical.numpy()
         return {
             "mae": mean_absolute_error(target, values),
             "rmse": mean_squared_error(target, values) ** 0.5,
+            "nonfinite_predictions": int((~np.isfinite(quantiles)).sum()),
+            "quantile_crossing_fraction": float(
+                (np.diff(quantiles, axis=-1) < 0).mean()
+            ),
         }
     probabilities, indices = sdm.evaluation.to_class_indices(pred, labels)
     probabilities, indices = probabilities.numpy(), indices.numpy()
     result = {
         "log_loss": log_loss(
             indices, probabilities, labels=np.arange(probabilities.shape[1])
-        )
+        ),
+        "accuracy": float((probabilities.argmax(-1) == indices).mean()),
     }
     if probabilities.shape[1] == 2:
         result["auroc"] = roc_auc_score(indices, probabilities[:, 1])
@@ -270,8 +276,11 @@ def run(args: argparse.Namespace) -> None:
         ]
         synchronize(devices)
         stats["load_s"] = time.perf_counter() - start
+        stats["memory_after_load"] = memory(devices)
+        for device in devices:
+            torch.cuda.reset_peak_memory_stats(device)
         if args.mode == "ensemble":
-            from sdm.models.ensemble import EnsembleParallel
+            from sdm.models.ensemble_parallel import EnsembleParallel
 
             model = EnsembleParallel(replicas)
         else:
@@ -384,6 +393,11 @@ def run(args: argparse.Namespace) -> None:
             arrays.append(pred.numerical.numpy().copy())
         stats["predict_repeats_s"] = elapsed
         stats["batch_times_s"] = batch_times
+        stats["batch_times_kind"] = (
+            "worker_service_time_excluding_queue_delay"
+            if args.mode == "data"
+            else "synchronized_end_to_end_batch_latency"
+        )
         stats["rows_per_s"] = [
             workload["queries"] / seconds for seconds in elapsed
         ]
