@@ -3,12 +3,14 @@
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import numpy as np
 import torch
 from research.multigpu.relational_bench import (
     archive_prediction_repeats,
     cache_sizes,
+    configure_gnn_blocks,
     score,
 )
 
@@ -77,3 +79,38 @@ def test_archive_rejects_missing_repeats(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="At least one"):
         archive_prediction_repeats([], tmp_path)
+
+
+def test_gnn_block_size_zero_preserves_native_and_negative_rejected() -> None:
+    import pytest
+
+    core = torch.nn.Module()
+    core.gnn = torch.nn.Linear(2, 2)
+    native = core.gnn
+    replicas = [SimpleNamespace(models={"test": core})]
+    configure_gnn_blocks(replicas, 0)
+    assert core.gnn is native
+    with pytest.raises(ValueError, match="nonnegative"):
+        configure_gnn_blocks(replicas, -1)
+
+
+def test_gnn_blocks_installed_on_all_replica_cores() -> None:
+    cores = [torch.nn.Module() for _ in range(4)]
+    replicas = [
+        SimpleNamespace(models={"a": cores[0], "b": cores[1]}),
+        SimpleNamespace(models={"a": cores[2], "b": cores[3]}),
+    ]
+    install = Mock()
+    with patch.dict(
+        "sys.modules",
+        {
+            "research.multigpu.blocked_gnn": SimpleNamespace(
+                install_blocked_gnn=install
+            )
+        },
+    ):
+        configure_gnn_blocks(replicas, 17)
+    assert len(install.call_args_list) == 4
+    for call, core in zip(install.call_args_list, cores, strict=True):
+        assert call.args == (core,)
+        assert call.kwargs == {"block_size": 17}

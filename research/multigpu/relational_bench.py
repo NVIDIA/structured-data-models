@@ -341,7 +341,22 @@ def archive_prediction_repeats(
     return reference
 
 
+def configure_gnn_blocks(replicas: list[Any], block_size: int) -> None:
+    """Opt loaded replicas into the research-only bounded-memory GNN."""
+    if block_size < 0:
+        raise ValueError("gnn_block_size must be nonnegative")
+    if block_size == 0:
+        return
+    from research.multigpu.blocked_gnn import install_blocked_gnn
+
+    for replica in replicas:
+        for core in replica.models.values():
+            install_blocked_gnn(core, block_size=block_size)
+
+
 def run(args: argparse.Namespace) -> None:
+    if args.gnn_block_size < 0:
+        raise ValueError("gnn_block_size must be nonnegative")
     if args.mode == "native" and args.gpus != 1:
         raise ValueError("Native baseline uses exactly one GPU")
     args.output.mkdir(parents=True, exist_ok=False)
@@ -390,6 +405,7 @@ def run(args: argparse.Namespace) -> None:
                 devices[:1] if args.mode in {"stage", "layers"} else devices
             )
         ]
+        configure_gnn_blocks(replicas, args.gnn_block_size)
         synchronize(devices)
         stats["replica_load_s"] = time.perf_counter() - start
         if args.mode in {"stage", "layers"}:
@@ -726,6 +742,12 @@ def main() -> None:
     bench.add_argument("--repeats", type=int, default=3)
     bench.add_argument("--warmups", type=int, default=1)
     bench.add_argument("--threads", type=int, default=8)
+    bench.add_argument(
+        "--gnn-block-size",
+        type=int,
+        default=0,
+        help="Destination rows per GNN block; 0 keeps the native GNN",
+    )
     bench.add_argument(
         "--dtype", choices=["bf16", "fp16", "fp32"], default="bf16"
     )
