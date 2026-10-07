@@ -42,9 +42,7 @@ class InvertTarget(EnsembleProcessor):
             return outputs.expanded_group(0)
         return cast(
             TableTensor,
-            torch.stack(
-                tuple(outputs[i] for i in range(len(outputs))), dim=0
-            ),
+            torch.stack(tuple(outputs[i] for i in range(len(outputs))), dim=0),
         )
 
     def _transform_ensemble(
