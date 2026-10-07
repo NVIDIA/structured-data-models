@@ -211,6 +211,7 @@ def main() -> None:
             dist.barrier()
             torch.cuda.reset_peak_memory_stats()
             started = time.perf_counter()
+            torch.cuda.nvtx.range_push("context_fit")
             model.fit(
                 *fit_args,
                 num_estimators=args.estimators,
@@ -219,6 +220,7 @@ def main() -> None:
                 **extra,
             )
             torch.cuda.synchronize()
+            torch.cuda.nvtx.range_pop()
             fit_seconds = time.perf_counter() - started
             fit_peak = torch.cuda.max_memory_allocated()
             residency_start = time.perf_counter()
@@ -245,9 +247,11 @@ def main() -> None:
                 predictions, durations = [], []
                 for batch in batches:
                     batch_start = time.perf_counter()
+                    torch.cuda.nvtx.range_push("context_predict_batch")
                     pred = model.predict(*batch)
                     predictions.append(pred.cpu())
                     torch.cuda.synchronize()
+                    torch.cuda.nvtx.range_pop()
                     durations.append(time.perf_counter() - batch_start)
                 pass_times.append(time.perf_counter() - started)
                 batch_times.append(durations)
