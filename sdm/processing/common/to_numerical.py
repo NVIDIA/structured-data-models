@@ -38,9 +38,10 @@ class ToNumerical(Processor):
         # Casting to the (floating-point) numerical dtype also unwraps a
         # CategoricalTensor to its raw ordinal ids as a plain tensor.
         categorical = table.categorical.to(table.numerical.dtype)
+        schema = dict(table._column_items)
         columns = (
-            *table.columns[Stype.numerical],
-            *table.columns[Stype.categorical],
+            *schema[Stype.numerical],
+            *schema[Stype.categorical],
         )
         numerical = (
             categorical
