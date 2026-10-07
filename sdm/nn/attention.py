@@ -125,7 +125,15 @@ class SDPA(torch.nn.Module):
         # No key/value pairs or an empty batch, which FlashAttention rejects
         # before PyTorch 2.10 - abort early:
         if key_size[0] == 0 or 0 in batch_shape:
-            return query.new_zeros(batch_shape + query_size)
+            out = query.new_zeros(
+                batch_shape + query_size[:-1] + value_size[-1:]
+            )
+            if torch.is_grad_enabled():
+                # Empty slices preserve zero gradients without reading inputs.
+                for tensor in (query, key, value):
+                    if tensor.requires_grad:
+                        out = out + tensor[..., :0, :, :].sum()
+            return out
 
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
