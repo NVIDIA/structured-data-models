@@ -6,6 +6,9 @@
 from __future__ import annotations
 
 import copy
+from argparse import Namespace
+from collections.abc import Sequence
+from functools import partial
 from typing import Any, cast
 
 import torch
@@ -25,6 +28,19 @@ from sdm.processing.execution import (
     MemberQuery,
     RecipeExecution,
 )
+
+
+def factory(
+    args: Namespace, replicas: Sequence[ICLModel]
+) -> BatchedEnsembleParallel:
+    """Construct the adapter for ``tabular_bench --mode adapter``."""
+    model = BatchedEnsembleParallel(replicas)
+    model.fit = partial(
+        model.fit,
+        member_seed=args.seed,
+        estimator_batch_size=args.estimator_batch_size,
+    )
+    return model
 
 
 class BatchedEnsembleParallel(EnsembleParallel):
