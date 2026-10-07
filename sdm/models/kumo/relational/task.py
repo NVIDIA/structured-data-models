@@ -98,9 +98,10 @@ class TaskGraph:  # noqa: D101
             mask = frontier[graph.row] & (task_row[graph.col] < 0)
             row = graph.row[mask]
             # Empty frontiers make subsequent bounded updates no-ops.
-            if not torch.compiler.is_compiling() or num_hops is None:
-                if row.numel() == 0:
-                    break
+            if (
+                not torch.compiler.is_compiling() or num_hops is None
+            ) and row.numel() == 0:
+                break
             col = graph.col[mask]
 
             task_row[col] = task_row[row]
