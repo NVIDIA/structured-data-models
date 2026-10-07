@@ -18,6 +18,7 @@ from sdm import (
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
+from sdm.tensor.var_len import _clone
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
@@ -338,6 +339,32 @@ class AlignCategories(EnsembleProcessor):
     ) -> tuple[Tensor, ...]:
         if not input_categories:
             return ()
+        categories = (
+            *input_categories,
+            *cast(tuple[StringTensor, ...], fitted_categories),
+        )
+        lookup = _string_category_lookup(
+            data=[category._data for category in categories],
+            offsets=[category._offset for category in categories],
+            sizes=[category.numel() for category in categories],
+            strides=[category.stride(0) for category in categories],
+            storage_offsets=[
+                category._storage_offset for category in categories
+            ],
+            codes=codes,
+        )
+        return lookup.split(
+            [category.numel() for category in input_categories]
+        )
+
+    @staticmethod
+    def _string_category_lookups_eager(
+        input_categories: tuple[StringTensor, ...],
+        fitted_categories: tuple[Tensor, ...],
+        codes: Tensor,
+    ) -> tuple[Tensor, ...]:
+        if not input_categories:
+            return ()
 
         # Pair IDs for each input category: (total_input_categories,).
         left_pair = torch.cat(
@@ -538,3 +565,53 @@ class AlignCategories(EnsembleProcessor):
         return (
             f"{' ' * indent}{self.__class__.__name__}({', '.join(arguments)})"
         )
+
+
+@torch.library.custom_op("sdm::_string_category_lookup", mutates_args=())
+def _string_category_lookup(
+    data: list[Tensor],
+    offsets: list[Tensor],
+    sizes: list[int],
+    strides: list[int],
+    storage_offsets: list[int],
+    codes: Tensor,
+) -> Tensor:
+    """Keep external string joins opaque while tracing tensor preprocessing."""
+    categories = tuple(
+        StringTensor(
+            data=values,
+            offset=offset,
+            valid=None,
+            size=(size,),
+            stride=(stride,),
+            storage_offset=storage_offset,
+        )
+        for values, offset, size, stride, storage_offset in zip(
+            data, offsets, sizes, strides, storage_offsets, strict=True
+        )
+    )
+    categories = tuple(
+        category
+        if category.is_contiguous()
+        else _clone(category, memory_format=torch.contiguous_format)
+        for category in categories
+    )
+    pairs = len(categories) // 2
+    lookup = AlignCategories._string_category_lookups_eager(
+        input_categories=categories[:pairs],
+        fitted_categories=categories[pairs:],
+        codes=codes,
+    )
+    return torch.cat(lookup)
+
+
+@_string_category_lookup.register_fake
+def _string_category_lookup_fake(
+    data: list[Tensor],
+    offsets: list[Tensor],
+    sizes: list[int],
+    strides: list[int],
+    storage_offsets: list[int],
+    codes: Tensor,
+) -> Tensor:
+    return codes.new_empty(sum(sizes[: len(sizes) // 2]))
