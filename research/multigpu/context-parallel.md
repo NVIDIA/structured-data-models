@@ -30,11 +30,11 @@ Fit still computes the full context on every GPU, then copies only each local IC
 - Explicitly rejected: masks and valid-length tensors while distributed ICL attention is active; sharded cache replay without matching world/rank topology; ordinary unsharded cache replay inside a parallel scope; one-shot KumoTabular calls without a fitted cache; autograd-enabled scopes.
 - Unsupported research boundaries: torch.compile; distributed context fitting; arbitrary query partitions within the same group; graph partitions; training; serializing and moving caches to a different rank topology. CPU offload via the existing Cache tensor traversal preserves the scalar topology metadata, but offload timing needs measurement.
 - CUDA LSE uses PyTorch's private efficient attention operator, also used by Aki. This is a version-sensitive prototype dependency. Native SDPA and one-rank efficient/LSE baselines must both be measured to distinguish kernel choice from distribution.
-- Experimental `context_parallel(group, kernel="flash")` / benchmark `--kernel flash` uses PyTorch's FlashAttention LSE output without repeating GQA KV heads. It requires CUDA FP16/BF16; FP32 is explicitly rejected. PyTorch's [FlashAttention integration](https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/transformers/cuda/flash_attn/flash_api.cpp) exposes separate query and KV head counts, so native GQA is a viable alternative to the efficient kernel's expanded KV representation. This variant has separate 2/4-rank BF16 parity tests and must pass them before any performance result is accepted. CUDA execution is still pending.
+- Experimental `context_parallel(group, kernel="flash")` / benchmark `--kernel flash` uses PyTorch's FlashAttention LSE output without repeating GQA KV heads. It requires CUDA FP16/BF16; FP32 is explicitly rejected. PyTorch's [FlashAttention integration](https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/transformers/cuda/flash_attn/flash_api.cpp) exposes separate query and KV head counts. Separate 2/4-rank BF16 parity tests passed on L4; full-model regression quantile failures below remain a limitation despite kernel-level parity.
 
 ## Validation and measurement
 
-`test/nn/test_context_parallel.py` launches real 2-rank and 4-rank Gloo process groups and, when GPUs are present, 2/4-rank NCCL groups under FP32 and BF16. It checks zero/one/uneven context lengths, MHA and GQA, broadcast batches, KumoTabular and relational ICL prediction parity, actual backing-storage release, mask rejection, and topology errors. Output projections are randomized so the zero-initialized residual defaults cannot make a broken attention path pass. Local result: 3 tests passed and 4 CUDA cases skipped; existing Kumo/TabICLv2 ICL regression suite plus the original CP tests passed 19 with 10 CUDA skips. Distributed CUDA evidence is pending.
+`test/nn/test_context_parallel.py` launches real 2-rank and 4-rank Gloo process groups and, when GPUs are present, 2/4-rank NCCL groups under FP32 and BF16. It checks zero/one/uneven context lengths, MHA and GQA, broadcast batches, KumoTabular and relational ICL prediction parity, actual backing-storage release, mask rejection, and topology errors. Output projections are randomized so the zero-initialized residual defaults cannot make a broken attention path pass. The initial nine-case CPU/CUDA suite passed on L4. After adding precision/reduction variants, local CPU validation passed five cases with ten CUDA cases skipped; the added CUDA cases require the separately recorded follow-up run.
 
 `research/multigpu/context_probe.py` is a torchrun microbenchmark of native SDPA, single-rank efficient/LSE, and distributed cached ICL. It records fit time/peak, cache bytes, synchronized repeated prediction times/peak, and prediction differences. Its random weights establish kernel behavior and scalability only; dataset quality must come from pretrained full-model runner measurements.
 
@@ -44,7 +44,7 @@ torchrun --standalone --nproc-per-node=4 research/multigpu/context_probe.py \
   --heads 8 --kv-heads 2 --layers 4 --dtype bfloat16 --output /tmp/cp-probe
 ```
 
-Requested sweep: ranks 1/2/4, contexts 1024/4096/16384/32768, MHA (`--kv-heads 8`) versus GQA (`--kv-heads 2`), float32/BF16, both families. Use context/queries small enough for initial smoke and measure all ranks' latency; the slowest rank sets throughput. No GPU speedup or accuracy claim has been established yet.
+Requested sweep: ranks 1/2/4, contexts 1024/4096/16384/32768, MHA (`--kv-heads 8`) versus GQA (`--kv-heads 2`), float32/BF16, both families. Use context/queries small enough for initial smoke and measure all ranks' latency; the slowest rank sets throughput. Completed cells are reported below; unmeasured cells are not implied by this sweep description.
 
 ## First measured results: four L4 GPUs
 
@@ -103,7 +103,27 @@ RelBench `rel-f1/driver-position`, native sampled `[16,16]` graph input, context
 
 Native and Flash LSE predictions are identical. All predictions are finite, all 999 quantiles remain monotonic, and each arm is repeat-stable. However, **BF16 CP fails the full-quantile numerical gate** `abs(actual-native) <= 0.01 + 0.05*abs(native)`: CP2 fails 938/498,501 entries and CP4 fails 915. Do not label these full-model results numerically equivalent merely because median predictions and aggregate MAE are close. CP2's worst tolerance excess is row 133, q002: native -0.268077 versus CP -0.354751. CP4's is row 63, q007: native 0.165292 versus CP 0.078619. The maximum absolute differences (~0.20224) occur in other, large-valued tail quantiles and do not identify the worst relative failures.
 
-The diagnostic `--kernel efficient_fp32` preserves the ordinary BF16 Q/K/V input quantization but computes local normalized attention outputs and the global merge in FP32, delaying rounding until the normal output projection. This tests whether information lost by BF16 local outputs before merging causes the failures; it incurs additional compute/memory and is not yet validated. The BF16 failures remain recorded, and tolerances will not be loosened. Evidence: `cp-f1-c1024-e4-flash-{native1,lse1,context2,context4}`.
+The diagnostic `--kernel efficient_fp32` preserves the ordinary BF16 Q/K/V input quantization but computes local normalized attention outputs and the global merge in FP32, delaying rounding until the normal output projection. It does **not** restore full-model numerical parity. Relative to the original BF16 native output, one-rank FP32-partial already fails 771 entries, CP2 fails 792, and CP4 fails 786. Relative to its own one-rank control, CP2/CP4 still fail 98/93 entries. Maximum errors versus BF16 native decrease from about 0.20224 to 0.14446, but this does not establish that partial-output rounding is the sole cause. Tolerances remain unchanged.
+
+| FP32-partial arm, otherwise BF16 | Unique rows/s | MAE | RMSE | Gate failures vs BF16 native |
+|---|---:|---:|---:|---:|
+| One-rank LSE | 336.76 | 3.414720 | 4.215018 | 771 |
+| CP2 | 365.78 | 3.414638 | 4.214971 | 792 |
+| CP4 | 369.30 | 3.414846 | 4.215114 | 786 |
+
+Evidence: `cp-f1-c1024-e4-flash-{native1,lse1,context2,context4}` and `cp-f1-c1024-e4-fp32partial-{lse1,context2,context4}`. A separate full-model FP32 comparison is needed to distinguish mathematical distributed-attention correctness from BF16 model sensitivity.
+
+## Native H&M classification at 16k context
+
+Source `5c8d19806`, native `rel-hm/user-churn` graphs with two-hop `[16,16]` sampling, actual context 16,384, 4,096 validation rows in eight batches of 512, E4, GPU-resident fitted caches, three BF16 timing passes on the same four-L4 host. These context graphs include roughly 319k related nodes; the full graph encoder remains replicated. Inputs and all query graphs reside on each rank for every arm. Existing raw CLI fields contain historical defaults; `input_identity.workload` and actual batch lengths are authoritative. The runner now records effective configuration separately from the original requested CLI.
+
+| Arm | Unique rows/s | Accuracy | Log loss | AUROC | ICL cache/rank | Prediction peak/rank |
+|---|---:|---:|---:|---:|---:|---:|
+| Native SDPA | 1,061.85 | 0.807617 | 0.464014 | 0.662424 | 1,536 MiB | 2.3700 GiB |
+| Flash LSE1 | 1,057.77 | 0.807617 | 0.464049 | 0.662432 | 1,536 MiB | 2.3700 GiB |
+| Flash CP4 | 1,048.54 | 0.807617 | 0.464047 | 0.662425 | 384 MiB | 1.2450 GiB |
+
+CP4 reduces prediction allocated peak by 47.5%, with throughput 0.987x native: memory relief without measured acceleration. Maximum probability differences are 0.008284 for LSE1 and 0.016804 for CP4; unlike the smaller workloads, even this native/LSE1 pair is not byte-identical. Both pass the fixed BF16 probability gate; CP4 changes no class decisions. No claim of improved prediction quality follows from the negligible metric differences. Evidence: `cp-hm-c16384-e4-resident-flash-{native1,lse1,context4}`.
 
 `research/multigpu/context_model_bench.py` adds pretrained full-model comparisons using the team's fixed tabular arrays and native relational sampled graphs. Run `--mode native` and `--mode lse` with one torchrun process each; run `--mode context` with 2/4 processes. Keep all other parameters fixed. It saves every prediction repeat, query IDs, per-rank timings/peaks, resident ICL versus total cache bytes, quality metrics, and optional per-rank traces. Validation targets are opened after prediction only. Query throughput uses each repeat's slowest rank and counts replicated output rows once. Inputs and graphs are resident on each GPU for all three modes; this is a controlled execution comparison, not host-to-GPU streaming throughput.
 
