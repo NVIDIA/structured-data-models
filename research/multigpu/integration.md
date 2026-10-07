@@ -10,6 +10,17 @@ Inspection baseline: `842c408fe`, 2026-10-08. Recommendations below are architec
 
 The current public fitted path offloads multi-estimator CUDA caches to pinned CPU and overlaps their reload with compute. A device-resident executor must document that policy change. Model parameters, fit recipes, fitted caches, and logical estimator identities have distinct lifecycles; treating a fitted model as an ordinary movable module loses this distinction.
 
+For one ordinary classification/regression member, ICL KV storage is approximately `2 × layers × context_rows × KV_heads × head_width × bytes_per_element`. These are architectural estimates at BF16/FP16 (two bytes), excluding parameters, row-encoder caches, graph state, allocator overhead, hierarchical class branches, and transient fit activations:
+
+| Model | ICL layers / KV heads / head width | KV at 1,024 context | KV at 16,384 context | Ideal four-way retained KV at 16,384 |
+|---|---|---:|---:|---:|
+| KumoTabular small | 12 / 8 / 64 | 24 MiB | 384 MiB | 96 MiB/rank |
+| KumoTabular medium | 24 / 2 / 64 | 12 MiB | 192 MiB | 48 MiB/rank |
+| KumoTabular large | 24 / 2 / 64 | 12 MiB | 192 MiB | 48 MiB/rank |
+| KumoRelational | 12 / 8 / 64 | 24 MiB | 384 MiB | 96 MiB/rank |
+
+Actual measurements must report cache tensor dtype and backing storage. A four-way CP run does not quarter total model memory: if sharded ICL KV accounts for fraction `f` of live memory, ideal total-memory ratio is `(1-f) + f/4`, before communication buffers. Likewise, if ICL attention is fraction `a` of elapsed time, even zero-overhead infinite attention scaling cannot exceed `1/(1-a)`. This makes phase attribution necessary before investing in more invasive partitioning.
+
 ## Minimal public surface
 
 Keep inference placement independent of model construction and preprocessing recipes. Use the existing `ICLModel.fit` / `predict` contracts and explicit replicas or process groups. Avoid introducing a cluster manager, service scheduler, mandatory configuration schema, or cloud dependency into SDM.
