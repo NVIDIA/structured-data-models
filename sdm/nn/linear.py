@@ -28,7 +28,17 @@ class Linear(torch.nn.Linear):
         weight = self.weight.to(out.dtype).t()
 
         if torch.compiler.is_compiling() and not out.is_contiguous():
-            out.copy_(torch.matmul(input, weight))
+            if input.dim() == 2:
+                out.copy_(torch.matmul(input, weight))
+            else:
+                # Keep eager's batched arithmetic when avoiding strided out=.
+                batch_size = math.prod(input.shape[:-2])
+                input = input.view(batch_size, input.size(-2), input.size(-1))
+                projected = torch.bmm(
+                    input,
+                    weight.expand(batch_size, -1, -1),
+                )
+                out.copy_(projected.view_as(out))
         elif input.dim() == 2:
             torch.matmul(input, weight, out=out)
         else:
