@@ -48,7 +48,7 @@ The previous TabFM diagnostic reported 224.98 to 421.99 rows/s on one versus two
 
 ## Results
 
-The first native and 1/2/4-GPU EP ladder has completed. For the small initial workload, thread-based EP scales poorly: two GPUs improve only 8.9% over the same resident executor on one GPU, and four GPUs are 4.9% slower. This is a measured result for this workload and executor, not a rejection of ensemble parallelism. Three repeats reuse one fit, so they characterize warm prediction variability rather than independent fits.
+The first native and 1/2/4-GPU EP ladder has completed. For the small initial workload, thread-based EP scales poorly: two GPUs improve only 8.9% over the same resident executor on one GPU, and four GPUs are 4.9% slower. Native estimator batching on one GPU reaches 4,007 rows/s, more than twice the initial two-GPU EP throughput. This is a measured result for this workload and executor, not a rejection of ensemble parallelism. Three repeats reuse one fit, so they characterize warm prediction variability rather than independent fits.
 
 | Hardware ladder | Instance / topology | Runtime | Scope |
 |---|---|---|---|
@@ -78,11 +78,40 @@ Tabular splits are custom deterministic 80/20 splits (seed `20261008`), not offi
 | KumoRelational | Public baseline | 1 | Pending | — | — | — | — | — | Pending |
 | KumoRelational | EP / DP / CP / stages | 1 / 2 / 4 | Pending | — | — | — | — | — | Pending |
 
-The first native fit took 122.751 seconds, whereas warm inference took about 1.126 seconds for 2,048 rows (batch p50 141.42 ms). First-use compilation/library initialization is a hypothesis for the long fit, not an established cause. A repeated native fit is queued to distinguish cold startup from parallel fit gains. The result's CPU-offloaded cache is explicitly recorded; EP comparisons require their resident one-GPU control. Independent quality review confirmed the baseline metrics and stable repeat outputs.
+The first native fit took 122.751 seconds; a repeated native E4 fit with estimator batch size one took 1.327 seconds. Thus the cold first fit is not an appropriate denominator for an EP fit speedup. First-use compilation/library initialization remains a hypothesis for the cold delay. The result's CPU-offloaded cache is explicitly recorded; EP comparisons require their resident one-GPU control. Independent quality review confirmed the baseline metrics and stable repeat outputs.
 
 EP batch p50 was 147.96 / 135.90 / 155.55 ms at 1/2/4 GPUs. Scaling efficiency was 54.4% at two GPUs and 23.8% at four. All four saved prediction arrays, including native, are byte-identical (`92cb62ec…`). EP resident cache storage distributes as 489.00 / 244.50 / 122.25 MiB per GPU, while replicated parameters make aggregate device memory increase. Summed per-rank peaks are an upper bound on simultaneous aggregate use, not a synchronized aggregate trace.
 
 The EP cache's 489 MiB unique backing storage exceeds the public CPU cache's 342 MiB, despite identical predictions; retained view backing allocations versus compact CPU copies are under investigation. CPU dispatch/launch overhead and short member work are candidate explanations for poor scaling, pending profiles. The next experiments compare native estimator batching, larger contexts/batches/E8, batched EP, and process-based execution. The historical TabFM 1.876× result does not predict these Kumo results.
+
+The tuned one-GPU comparison uses the same large model, Covertype rows, E4, context 1,024, query 2,048, query batch 256, and BF16 autocast. Only estimator batching changes:
+
+| Native estimator batch | Median rows/s | Batch p50 | Fit seconds, warmed environment | Accuracy | Log loss | Max probability difference vs estimator batch 1 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1,758.63 | 145.36 ms | 1.327 | 0.764160 | 0.576045 | 0 |
+| 2 | 2,984.01 | 85.76 ms | 1.253 | 0.764160 | 0.575996 | 0.008804 |
+| 4 | 4,007.14 | 63.82 ms | 1.255 | 0.764160 | 0.575978 | 0.005607 |
+
+Predicted class labels are unchanged for all 2,048 rows. Estimator-batched BF16 outputs are not byte-identical; mean absolute probability differences are about 0.000263 and 0.000259. These quality changes must remain visible when comparing speed against the sequential member path. Best measured native batching is 2.28× the repeated unbatched native run and 2.13× the initial two-GPU EP. Multi-GPU follow-ups must include local estimator batching before claiming a useful advantage.
+
+## Retained evidence
+
+The [initial tabular evidence index](evidence/initial-tabular-20261008/index.json) archives all seven small raw result JSON files in the repository. It binds predictions, row/target identity arrays, and available telemetry to SHA-256 hashes and their original local paths. The index and all 34 original artifacts passed verification at collection; weights and raw datasets are excluded. Large artifacts must remain in the local `.kumo-multigpu-20261008` result store or be copied to a durable user-selected location before that local store is removed. EC2 teardown does not remove these downloaded local files.
+
+Collect each later completed group into a fresh directory; never overwrite an earlier collection. The collector preserves failed-run records too, and does not reconstruct a command that was never recorded. Source revisions, runner hashes, and exact parameters are preserved from raw result JSON. If the runner emits `command.txt`, that file is archived verbatim.
+
+```sh
+python research/multigpu/collect_evidence.py collect \
+  --run cp2=/absolute/local/cp2-result \
+  --output research/multigpu/evidence/context-comparison-20261008
+python research/multigpu/collect_evidence.py verify \
+  --index research/multigpu/evidence/initial-tabular-20261008/index.json
+python research/multigpu/collect_evidence.py verify \
+  --index research/multigpu/evidence/initial-tabular-20261008/index.json \
+  --external
+```
+
+Default verification checks repository-retained records and reports how many external files were not checked. `--external` also requires the large local files and verifies their content. Checksums detect changes; they do not themselves certify benchmark methodology.
 
 ## Reproduction and failure log
 
