@@ -14,3 +14,9 @@ This does not yet make public relational prediction fullgraph-compatible. Real p
 A follow-up custom operator preserves the task-to-entity validation at runtime (including its ValueError), and exposes the validated readout length as the task-row count. Compiled traversal with an explicit hop count executes that many updates: once the frontier empties, remaining updates do nothing. Eager traversal and unbounded traversal retain their existing behavior. Unbounded traversal is not claimed fullgraph-compatible.
 
 With these changes, actual CPU Inductor 2.14 public `predict` passes on pretrained RelBench driver-dnf: four query rows, one estimator, one captured graph / 5,714 captured calls; maximum absolute prediction difference 4.0531158447265625e-6 within unchanged atol=1e-5, rtol=1e-4. This is a compilation/correctness result, not a speed claim. The readout custom operator separately preserves valid, empty, duplicate-task, duplicate-entity, and missing-task behavior on both 2.7.1 and 2.14 (5/5 each).
+
+## Non-contiguous string identifiers
+
+The external join operator compacts reconstructed non-contiguous strings through the existing VarLen helper before handing them to Arrow/cuDF. This avoids a PyTorch 2.14 dispatcher assertion when `.contiguous()` is invoked on that subclass inside the compiled custom operator; ordinary contiguous inputs are unchanged. It does not replace the join algorithm.
+
+Actual CPU Inductor fullgraph verification on both 2.7.1 and 2.14: strided string slices with nonzero storage offsets pass with `dynamic=False`; transposed two-dimensional string keys pass with both dynamic settings, matching eager pair order exactly. Compiling the operator directly from ordinary tensor leaves passes both settings on 2.14. Native sliced StringTensor wrapper inputs with `dynamic=True` still encounter an upstream symbolic-source guard failure before execution. Do not claim arbitrary string-view dynamic support. CUDA/cuDF remains untested.
