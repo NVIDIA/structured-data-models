@@ -128,73 +128,73 @@ def revin(
 
 
 def gather_future_patches(
-    x: Tensor,  # [..., C, N, P]
-    num_future_patches: int,
-) -> tuple[Tensor, Tensor]:  # [..., C, N, K * P], [1, 1, N, K * P]
-    """Concatenate next patches to each patch, wrapping around past the end.
+    x: Tensor,  # [..., N, P]
+    num_patches: int,
+) -> tuple[Tensor, Tensor]:  # [..., N, num_patches * P]
+    """Concatenate the next future patches at each patch position.
 
     Args:
-        x: Input patches with shape ``[..., C, N, P]``, where ``C`` is the
-            number of channels, ``N`` is the number of patches, and ``P`` is
-            the patch size.
-        num_future_patches: Number ``K`` of subsequent patches to concatenate.
+        x: Input with shape ``[..., N, P]``, where ``N`` is the number of
+            patches, and ``P`` is the patch size.
+        num_patches: Number of following patches to Concatenate.
 
     Returns:
-        Concatenated patches with shape ``[..., C, N, K * P]``, and a
-        wrap-around mask with shape ``[1, 1, N, K * P]`` marking values taken
-        from the beginning of the sequence.
+        Rolled values with shape ``[..., N, num_patches * P]`` and a
+        broadcastable mask marking invalid wrapped values.
     """
-    *B, C, N, P = x.size()
-    K = num_future_patches
+    *B, N, P = x.size()
 
-    offsets = torch.arange(1, K + 1, device=x.device)
-    indices = torch.arange(N, device=x.device).unsqueeze(-1) + offsets
+    offset = torch.arange(1, num_patches + 1, device=x.device)
+    index = torch.arange(N, device=x.device).unsqueeze(-1) + offset
 
-    future = x.index_select(-2, (indices % N).flatten())
-    future = future.reshape(*B, C, N, K * P)
-    mask = (indices >= N).repeat_interleave(P, dim=-1)
+    out = x[..., index.view(-1) % N, :]  # [..., N * num_patches, P]
+    out = out.view(*B, N, num_patches * P)
 
-    return future, mask.unsqueeze(0).unsqueeze(0)
+    mask = (index >= N).repeat_interleave(P, dim=-1)
+    mask = mask.view(*(1,) * (x.dim() - 2), *mask.size())
+
+    return out, mask
 
 
 def crossfade_patches(
-    patches: Tensor,  # [..., N, S + O, D]
+    x: Tensor,  # [..., N, P, ...]
     step: int,
-) -> Tensor:  # [..., N * S + O, D]
-    """Merge overlapping patches into a sequence, crossfading the overlaps.
+    dim: int,
+) -> Tensor:  # [..., (N - 1) * step + P, ...]
+    """Merge overlapping patches into a single sequence, crossfading overlaps.
 
-    Patch ``i`` starts at position ``i * S``. Where consecutive patches
+    Patch ``i`` starts at position ``i * step``. Whenever consecutive patches
     overlap, values are linearly interpolated from the earlier patch to the
     later one.
 
     Args:
-        patches: Patches with shape ``[..., N, S + O, D]``, where ``N`` is the
-            number of patches, ``O`` is the overlap between consecutive
-            patches, and ``D`` is the feature dimension.
-        step: Distance ``S`` between patch starts, at least ``O``.
+        x: Input with shape ``[..., N, P, ...]``, where ``N`` is the
+            number of patches, and ``P`` is the patch size.
+        step: Distance between consecutive patch starts across ``N``.
+        dim: The patch dimension ``N``.
 
     Returns:
-        Merged sequence with shape ``[..., N * S + O, D]``.
+        Merged sequence with shape ``[..., (N - 1) * step + P, ...]``.
     """
-    *B, N, T, D = patches.size()
-    if N == 1:
-        return patches[..., 0, :, :]
+    dim = dim % x.dim()
+    N, P = x.size(dim), x.size(dim + 1)
 
-    overlap = T - step
+    overlap = P - step
     assert 0 <= overlap <= step
 
-    weights = torch.linspace(
-        1.0, 0.0, overlap, device=patches.device, dtype=patches.dtype
-    ).unsqueeze(-1)
+    weight_shape = [1] * x.dim()
+    weight_shape[dim + 1] = overlap
+    weight = torch.linspace(1.0, 0.0, overlap, device=x.device, dtype=x.dtype)
+    weight = weight.view(weight_shape)
 
-    tails = patches[..., :-1, step:, :]
-    heads = patches[..., 1:, :overlap, :]
-    blended = weights * tails + (1.0 - weights) * heads
-    bodies = patches[..., 1:, overlap:step, :]
+    tail = x.narrow(dim, 0, N - 1).narrow(dim + 1, step, overlap)
+    head = x.narrow(dim, 1, N - 1).narrow(dim + 1, 0, overlap)
+    blended = weight * tail + (1.0 - weight) * head
+    body = x.narrow(dim, 1, N - 1).narrow(dim + 1, overlap, step - overlap)
 
-    first = patches[..., 0, :step, :]
-    middle = torch.cat((blended, bodies), dim=-2)
-    middle = middle.reshape(*B, (N - 1) * step, D)
-    last = patches[..., -1, step:, :]
+    first = x.select(dim, 0).narrow(dim, 0, step)
+    middle = torch.cat([blended, body], dim=dim + 1)
+    middle = middle.flatten(dim, dim + 1)
+    last = x.select(dim, N - 1).narrow(dim, step, overlap)
 
-    return torch.cat((first, middle, last), dim=-2)
+    return torch.cat([first, middle, last], dim=dim)

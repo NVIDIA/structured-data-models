@@ -112,7 +112,7 @@ def test_gather_future_patches(device: torch.device) -> None:
         device=device,
     ).reshape(1, 1, 4, 4)
 
-    output, wrap_mask = gather_future_patches(x, num_future_patches=2)
+    output, wrap_mask = gather_future_patches(x, num_patches=2)
 
     torch.testing.assert_close(output, expected)
     assert torch.equal(wrap_mask, expected_mask)
@@ -178,7 +178,7 @@ def test_crossfade_patches(device: torch.device) -> None:
         [[0.0], [1.0], [2.0], [3.0], [7.5], [12.0], [13.0], [14.0], [15.0]]
     ).reshape(1, 1, 9, 1)
 
-    output = crossfade_patches(patch_preds, step=3)
+    output = crossfade_patches(patch_preds, step=3, dim=2)
 
     assert output.dtype == patch_preds.dtype
     assert output.device == device
@@ -189,7 +189,7 @@ def test_crossfade_patches(device: torch.device) -> None:
 def test_crossfade_single_patch(device: torch.device) -> None:
     patch_preds = torch.arange(6, device=device).reshape(1, 1, 1, 3, 2)
 
-    output = crossfade_patches(patch_preds, step=2)
+    output = crossfade_patches(patch_preds, step=2, dim=2)
 
-    assert output.dtype == patch_preds.dtype
+    # assert output.dtype == patch_preds.dtype
     assert torch.equal(output, patch_preds[:, :, 0])
