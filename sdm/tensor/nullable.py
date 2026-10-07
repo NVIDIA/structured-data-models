@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
 from typing_extensions import override
 
 from sdm.tensor.io import (
@@ -451,7 +452,8 @@ class NullableTensor(Tensor):
         out += f"size={tuple(self.size())}"
         if self.dtype != torch.int64:
             out += f", dtype={self.dtype}"
-        out += f", null_count={int((~self.valid).sum())}"
+        if not is_fake(self):
+            out += f", null_count={int((~self.valid).sum())}"
         if not self.is_cpu:
             out += f", device={self.device}"
         out += ")"
