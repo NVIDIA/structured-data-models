@@ -1,0 +1,45 @@
+{
+  "torch": "2.7.1",
+  "results": [
+    {
+      "mode": "inference",
+      "fullgraph": false,
+      "pass": true
+    },
+    {
+      "mode": "inference",
+      "fullgraph": true,
+      "pass": true
+    },
+    {
+      "mode": "no_grad",
+      "fullgraph": false,
+      "pass": true
+    },
+    {
+      "mode": "no_grad",
+      "fullgraph": true,
+      "pass": true
+    },
+    {
+      "mode": "grad",
+      "fullgraph": false,
+      "pass": true
+    },
+    {
+      "mode": "grad",
+      "fullgraph": true,
+      "pass": true
+    },
+    {
+      "mode": "none",
+      "fullgraph": false,
+      "pass": true
+    },
+    {
+      "mode": "none",
+      "fullgraph": true,
+      "pass": true
+    }
+  ]
+}
