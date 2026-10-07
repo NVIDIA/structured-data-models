@@ -86,9 +86,14 @@ class HomogeneousGraph:  # noqa: D101
             col, perm = col.sort()
             row = row[perm]
             edge_type = edge_type[perm]
-            colptr = torch._convert_indices_from_coo_to_csr(
-                col, start, out_int32=col.dtype != torch.int64
+            # The native operator takes a concrete int, specializing every
+            # neighborhood size. Keep its kernel behind a symbolic schema.
+            convert = (
+                _coo_to_csr
+                if torch.compiler.is_compiling()
+                else torch._convert_indices_from_coo_to_csr
             )
+            colptr = convert(col, start, out_int32=col.dtype != torch.int64)
 
         return cls(
             row=row,
@@ -99,3 +104,21 @@ class HomogeneousGraph:  # noqa: D101
             start_node_offsets=start_node_offsets,
             end_node_offsets=end_node_offsets,
         )
+
+
+@torch.library.custom_op("sdm::_coo_to_csr", mutates_args=())
+def _coo_to_csr(
+    indices: Tensor, size: int, *, out_int32: bool = False
+) -> Tensor:
+    return torch._convert_indices_from_coo_to_csr(
+        indices, size, out_int32=out_int32
+    )
+
+
+@_coo_to_csr.register_fake
+def _coo_to_csr_fake(
+    indices: Tensor, size: int, *, out_int32: bool = False
+) -> Tensor:
+    return indices.new_empty(
+        size + 1, dtype=torch.int32 if out_int32 else torch.int64
+    )
