@@ -1,0 +1,102 @@
+{
+  "config": {
+    "model": "tabular",
+    "task": "classification",
+    "entry": "predict",
+    "data": "/home/ubuntu/validation/data/classification.npz",
+    "checkpoint": "/home/ubuntu/validation/data/tabular-classifier.pt",
+    "output": "/home/ubuntu/validation/results/offload2-currentstream-source.json",
+    "source_commit": "c75ba3af6+18a4d151a+f0a5db1e4",
+    "device": "cuda",
+    "autocast": "off",
+    "backend": "inductor",
+    "save_predictions": true,
+    "fullgraph": true,
+    "single_stream": false,
+    "capture_dynamic_outputs": false,
+    "recompile_limit": null,
+    "estimators": 2,
+    "context_rows": 256,
+    "query_rows": [
+      128
+    ],
+    "arm_index": 0,
+    "query_indices": [
+      1,
+      0,
+      2,
+      1
+    ],
+    "warmups": 2,
+    "repeats": 5
+  },
+  "torch": "2.14.0+cu130",
+  "cuda_runtime": "13.0",
+  "platform": "Linux-7.0.0-1013-aws-x86_64-with-glibc2.39",
+  "source": "c75ba3af6+18a4d151a+f0a5db1e4",
+  "weight_dtype": "float32",
+  "autocast_dtype": null,
+  "gpu": "NVIDIA L4",
+  "gpu_capability": [
+    8,
+    9
+  ],
+  "gpu_total_memory": 23661248512,
+  "tf32_matmul": false,
+  "tf32_cudnn": true,
+  "actual_query_rows": [
+    128
+  ],
+  "eager_fit_succeeded": true,
+  "cache_num_batches": 2,
+  "plain_cpu_cache_tensors": 70,
+  "pinned_plain_cpu_cache_tensors": 70,
+  "cache_devices": {
+    "cpu": 70
+  },
+  "graph_breaks": {},
+  "status": "pass",
+  "artifact_sha256": {
+    "offload2-currentstream-source.json": "96019c0557eff8be7cd66c3699bcb26ea6fe50115aeb77758484519181fcc4b3",
+    "offload2-currentstream-source.predictions.pt": "db69ce5b399825d42e2080122db63e1f62d62013bd336bd9215d9bf882787337",
+    "compiled-current-stream-f0a5db1e4.patch": "c481b658463efa473f71a32be17a29b970672028b88f6c8271e1cd0fc16d4bf3",
+    "run-correctness.py": "47271c7cdf621fbf52df801196b51440bdb5113ddc180c575564f3dd7963347f"
+  },
+  "source_receipt": {
+    "base": "c75ba3af6c231c7bdcd181a50d35cdc7fb53c090",
+    "patches": [
+      "18a4d151a",
+      "f0a5db1e4"
+    ],
+    "fx_graph_cache": false,
+    "autograd_cache": false,
+    "triton_kernel_cache": "reused from same-stream diagnostic; no cold compile measurement"
+  },
+  "independent_saved_prediction_check": {
+    "eager_calls": 8,
+    "compiled_calls": 8,
+    "within_phase_max_difference": 0.0,
+    "compiled_vs_first_eager_max_difference": 1.996755599975586e-06,
+    "rtol": 0.0001,
+    "atol": 1e-05
+  },
+  "warm_summary": [
+    {
+      "phase": "eager",
+      "repeats": 5,
+      "median_wall_ms": 33.412760999453894,
+      "peak_allocated_mib": 195.85498046875,
+      "graphs": {}
+    },
+    {
+      "phase": "compiled",
+      "repeats": 5,
+      "median_wall_ms": 12.01653600037389,
+      "peak_allocated_mib": 169.779296875,
+      "graphs": {
+        "calls_captured": 4988,
+        "unique_graphs": 1
+      }
+    }
+  ]
+}
