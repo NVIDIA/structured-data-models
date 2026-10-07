@@ -84,7 +84,7 @@ parser.add_argument("--task", type=str, required=True)
 parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument("--batch_size", type=int, default=1000)
 parser.add_argument("--max_test_steps", type=int, default=None)
-parser.add_argument("--num_neighbors", type=int, nargs="*", default=[4, 4])
+parser.add_argument("--num_neighbors", type=int, nargs="*", default=[16, 16])
 parser.add_argument("--num_estimators", type=int, default=1)
 parser.add_argument("--num_lags", type=int, default=20)
 parser.add_argument("--seed", type=int, default=0)
@@ -144,6 +144,48 @@ dfs = [
     task.get_table(split, mask_input_cols=False).df
     for split in ["train", "val", "test"]
 ]
+df = pd.concat(dfs, ignore_index=True)
+if task.task_type == relbench.base.Task.REGRESSION:
+    target_stype = "numerical"
+else:
+    target_stype = "categorical"
+
+# Add lag target features to task table:
+history = df.rename(columns={task.time_col: "__history_time__"})
+history = history.sort_values(["__history_time__", task.entity_col])
+lookup = pd.DataFrame(
+    {
+        task.entity_col: df[task.entity_col].to_numpy(),
+        "__lookup_time__": df[task.time_col].to_numpy(),
+        "__row__": np.arange(len(df)),
+    }
+)
+for lag in range(1, args.num_lags + 1):
+    column = f"{task.target_col}_lag_{lag}"
+    if target_stype == "numerical":
+        df[column] = np.nan
+    else:
+        df[column] = pd.Series(pd.NA, index=df.index, dtype="object")
+
+    lookup = lookup.sort_values(["__lookup_time__", task.entity_col])
+    merged = pd.merge_asof(
+        lookup,
+        history,
+        by=task.entity_col,
+        left_on="__lookup_time__",
+        right_on="__history_time__",
+        direction="backward",
+        allow_exact_matches=False,
+    )
+    mask = merged["__history_time__"].notna()
+    rows = merged.loc[mask, "__row__"].to_numpy()
+    df.loc[rows, column] = merged.loc[mask, task.target_col].to_numpy()
+
+    # Find the next lag strictly before the previous observation.
+    lookup = merged.loc[
+        mask, [task.entity_col, "__row__", "__history_time__"]
+    ].rename(columns={"__history_time__": "__lookup_time__"})
+
 task_table = get_task_table(
     df=pd.concat(dfs, ignore_index=True),
     # Use the full context history before subsampling; never use test targets.
