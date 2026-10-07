@@ -13,6 +13,19 @@ This investigation uses actual sampled RelBench input, current SDM `842c408fe`, 
 
 Node/edge counts and index bytes are measured from `TaskGraph`. The three rightmost columns are explicit tensor-shape estimates, **not measured GPU peak memory**. They exclude other concurrently live tensors, attention intermediates, preprocessing, allocator reservation and model parameters. The row-embedding buffer is `rows × (numeric_features + 4) × 128 × 2` bytes; numerical feature counts include relative-time and task-feature injections. GNN statistics are `nodes × 5 × 512 × 2` bytes. ICL K/V is `context × 12 layers × 2 K/V × 512 × 2` bytes, assuming BF16 storage.
 
+### Subsequent GPU capacity evidence
+
+Fresh-process L4 runs at rel-hm context 65,536 and E4 failed during fit at `sdm/_kernels/triton/segment_multi_reduce.py`, specifically `output = src.new_empty(shape)`. Both the one-GPU ensemble control and four-GPU ICL-layer placement attempted a **6.10 GiB** allocation, matching the shape estimate above. The error reports were:
+
+| Arm | Device capacity | Torch allocated at failure | Torch reserved but unallocated | Device free | Requested allocation |
+|---|---:|---:|---:|---:|---:|
+| Ensemble, one GPU | 22.04 GiB | 10.40 GiB | 5.86 GiB | 5.52 GiB | 6.10 GiB |
+| ICL layers across four GPUs | 22.04 GiB | 9.18 GiB | 9.31 GiB | 3.30 GiB | 6.10 GiB |
+
+These are allocator snapshots from failed attempts, not completed-run peak measurements. They establish a failure boundary for the tested allocator/runtime configuration, not a hardware-impossibility theorem: reserved memory and fragmentation remain relevant. They do demonstrate that moving final ICL layers does not remove the upstream full GNN-statistics allocation. No allocator tuning or hidden context-size reduction was applied.
+
+Evidence: `.kumo-multigpu-20261008/placement/host2/capacity-hm-c65536-e4-v1-{ep1,layers4}/{attempt.json,stdout.log}`, source `4e1c5c33d`, runner `relational_bench-b9026ea3f.py`. Both failures occurred after roughly 33 seconds; no prediction-quality result exists for these failed arms.
+
 At 65,536 context, rel-hm has 571,256 article rows, 65,536 customer rows and 642,830 transaction rows. Post-recipe numerical widths are respectively 23, 4 and 5; the model adds one relative-time feature to transactions. Despite a much smaller raw database, rel-f1 expands to about 42 graph nodes per task row, compared with about 19.5 for rel-hm. Raw dataset size alone therefore does not predict inference memory.
 
 ## CPU input measurements
