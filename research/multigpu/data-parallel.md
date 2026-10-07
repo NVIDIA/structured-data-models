@@ -147,6 +147,8 @@ The cluster JSON supplies shared `source`, `python`, `data`, `hf_cache`, task-on
 
 An attempted homogeneous eight-L4 experiment could not obtain the four additional singleton Spot workers across the searched east-region capacity pools. No eight-L4 performance claim is supported. The planned alternative combines the existing four L4s and four L40S GPUs across regions. This must be labeled heterogeneous multi-host execution. Compare each four-GPU group with the combined run on identical query rows, and treat the sum of separately measured group throughputs only as an optimistic capacity reference, not as an observed eight-GPU throughput or a homogeneous scaling denominator.
 
+**Execution status:** the mixed-host GPU protocol has not been launched or measured. Source `0361a707f` and `cluster-mixed8-0361a707f.json` were staged on the intended L4 coordinator while other agents held the GPU leases. Before those leases cleared, the execution environment changed to restricted networking with no approval path, and the operator reported SSH `EPERM`. No remote restart or network-policy workaround was attempted. There is therefore no mixed-eight-GPU throughput, latency, memory or prediction-quality result. The 27 CPU protocol tests establish transport/sharding contracts only. Resume with a one-local-GPU smoke test, then matched four-L4 and four-L40S group runs and eight-worker equal/weighted assignments on identical Q65536/B1024/C1024/E4 workloads once ordinary access and explicit leases are restored.
+
 ## Approaches intentionally rejected or deferred
 
 - Wrapping a fitted model in training DDP: there are no gradients to synchronize, and it does not solve input/neighborhood partitioning or fitted-state placement.
