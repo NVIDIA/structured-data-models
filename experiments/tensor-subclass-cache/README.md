@@ -1,5 +1,10 @@
 # Tensor-subclass compiler caches
 
+**Do not use this experimental hash yet.** Independent review found that
+distinct tensor views sharing storage can collide with independent tensors.
+When a compiled operation mutates a leaf, cache reuse can return incorrect
+results. A storage-alias correction and independent validation are pending.
+
 This branch adds PyTorch's `_stable_hash_for_caching` hook to SDM tensor
 wrappers. It changes cache keys, not model calculations or tensor flattening.
 The implementation is exercised by PyTorch 2.14; PyTorch 2.7 does not call it.
