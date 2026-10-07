@@ -1,0 +1,694 @@
+{
+  "source": "candidate now integrated at 6df9aeab5",
+  "backend": "inductor",
+  "cases": [
+    {
+      "torch": "2.7.1",
+      "fullgraph": false,
+      "case": 0,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": false,
+      "case": 1,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": false,
+      "case": 2,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": false,
+      "case": 3,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 2,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": false,
+      "case": 4,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 3,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": false,
+      "case": 5,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 4,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": false,
+      "case": 6,
+      "members": 1,
+      "locations": [
+        [
+          0,
+          0
+        ]
+      ],
+      "graphs": 5,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": false,
+      "case": 7,
+      "members": 4,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "graphs": 6,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": true,
+      "case": 0,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": true,
+      "case": 1,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": true,
+      "case": 2,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": true,
+      "case": 3,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 2,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": true,
+      "case": 4,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 3,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": true,
+      "case": 5,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 4,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": true,
+      "case": 6,
+      "members": 1,
+      "locations": [
+        [
+          0,
+          0
+        ]
+      ],
+      "graphs": 5,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "fullgraph": true,
+      "case": 7,
+      "members": 4,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "graphs": 6,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": false,
+      "case": 0,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": false,
+      "case": 1,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": false,
+      "case": 2,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": false,
+      "case": 3,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 2,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": false,
+      "case": 4,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 3,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": false,
+      "case": 5,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 4,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": false,
+      "case": 6,
+      "members": 1,
+      "locations": [
+        [
+          0,
+          0
+        ]
+      ],
+      "graphs": 5,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": false,
+      "case": 7,
+      "members": 4,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "graphs": 6,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": true,
+      "case": 0,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": true,
+      "case": 1,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": true,
+      "case": 2,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "graphs": 1,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": true,
+      "case": 3,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 2,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": true,
+      "case": 4,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 3,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": true,
+      "case": 5,
+      "members": 3,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "graphs": 4,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": true,
+      "case": 6,
+      "members": 1,
+      "locations": [
+        [
+          0,
+          0
+        ]
+      ],
+      "graphs": 5,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "fullgraph": true,
+      "case": 7,
+      "members": 4,
+      "locations": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "graphs": 6,
+      "status": "pass"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "torch": "2.7.1",
+  "compiler_cache_environment": {
+    "TORCHINDUCTOR_CACHE_DIR": "/tmp/sdm-public-dynamic-onehop-27-20261008",
+    "TORCHINDUCTOR_FORCE_DISABLE_CACHES": "1",
+    "TORCHINDUCTOR_FX_GRAPH_CACHE": "0",
+    "TORCHINDUCTOR_AUTOGRAD_CACHE": "0"
+  },
+  "model": "relational",
+  "entry": "predict",
+  "fullgraph": false,
+  "dynamic": true,
+  "backend": "inductor",
+  "device": "cpu",
+  "task": "classification",
+  "estimators": 1,
+  "query_input": "view",
+  "arm_index": 0,
+  "recompile_limit": null,
+  "inner_only": false,
+  "capture_dynamic_outputs": true,
+  "eager_succeeded": true,
+  "samples": [
+    {
+      "rows": 4,
+      "case": 1,
+      "max_abs_error": 1.5497207641601562e-06,
+      "parity": true,
+      "graphs_captured": 82,
+      "calls_captured": 2604
+    },
+    {
+      "rows": 8,
+      "case": 2,
+      "max_abs_error": 4.827976226806641e-06,
+      "parity": true,
+      "graphs_captured": 95,
+      "calls_captured": 5071
+    },
+    {
+      "rows": 4,
+      "case": 1,
+      "max_abs_error": 1.5497207641601562e-06,
+      "parity": true,
+      "graphs_captured": 103,
+      "calls_captured": 5151
+    }
+  ],
+  "all_samples_parity": true,
+  "status": "pass",
+  "max_abs_error": 4.827976226806641e-06,
+  "parity": true,
+  "source": "6df9aeab5cc2d1d346001b833d80763ae075a642"
+}
