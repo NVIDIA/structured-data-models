@@ -5,10 +5,12 @@ Random weights test numerical behavior and kernel scaling, not model quality.
 """
 
 import argparse
+import json
 import os
 import statistics
 import time
 from contextlib import nullcontext
+from pathlib import Path
 
 import torch
 import torch.distributed as dist
@@ -22,6 +24,7 @@ from sdm.nn.context_parallel import context_parallel
 def main() -> None:
     """Measure synchronized replay and fit on the requested topology."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--family", choices=["tabular", "relational"], default="tabular"
     )
@@ -39,6 +42,9 @@ def main() -> None:
     rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(rank)
     dist.init_process_group("nccl")
+    if rank == 0:
+        args.output.mkdir(parents=True, exist_ok=False)
+    dist.barrier()
     single = dist.new_group([0])
     dtype = getattr(torch, args.dtype)
     torch.manual_seed(120)
@@ -120,6 +126,9 @@ def main() -> None:
                             atol=0.005 if dtype == torch.bfloat16 else 3e-5,
                             rtol=0.02 if dtype == torch.bfloat16 else 3e-4,
                         )
+                        torch.save(
+                            prediction.cpu(), args.output / f"{mode}.pt"
+                        )
                     prediction_peak = torch.cuda.max_memory_allocated()
                     record = {
                         "mode": mode,
@@ -144,7 +153,32 @@ def main() -> None:
                         results.append(record)
                     del cache, prediction
             if rank == 0:
-                pass
+                distributed = [
+                    r for r in results if r["mode"] == "context_parallel"
+                ]
+                slowest = [
+                    max(r["prediction_seconds"][i] for r in distributed)
+                    for i in range(args.repeats)
+                ]
+                (args.output / "results.json").write_text(
+                    json.dumps(
+                        {
+                            "setup": {
+                                k: str(v) if isinstance(v, Path) else v
+                                for k, v in vars(args).items()
+                            },
+                            "gpu": torch.cuda.get_device_name(),
+                            "torch": torch.__version__,
+                            "slowest_rank_prediction_seconds": slowest,
+                            "unique_rows_per_second": [
+                                args.queries / t for t in slowest
+                            ],
+                            "results": results,
+                        },
+                        indent=2,
+                    )
+                    + "\n"
+                )
     finally:
         dist.destroy_process_group()
 
