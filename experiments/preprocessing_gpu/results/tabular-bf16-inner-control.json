@@ -1,0 +1,1385 @@
+{
+  "config": {
+    "model": "tabular",
+    "task": "classification",
+    "entry": "inner",
+    "data": "/validation/data/classification.npz",
+    "checkpoint": "/validation/data/tabular-classifier.pt",
+    "output": "/validation/results/tabular-bf16-inner-control.json",
+    "source_commit": "c75ba3af6+18a4d151a+4071789e4",
+    "device": "cuda",
+    "autocast": "bf16",
+    "backend": "inductor",
+    "save_predictions": true,
+    "fullgraph": true,
+    "single_stream": false,
+    "capture_dynamic_outputs": false,
+    "recompile_limit": null,
+    "estimators": 1,
+    "context_rows": 256,
+    "query_rows": [
+      32,
+      128,
+      32
+    ],
+    "arm_index": 0,
+    "query_indices": [
+      1,
+      0,
+      2,
+      1
+    ],
+    "warmups": 2,
+    "repeats": 5
+  },
+  "torch": "2.14.0+cu130",
+  "cuda_runtime": "13.0",
+  "platform": "Linux-7.0.0-1013-aws-x86_64-with-glibc2.39",
+  "source": "c75ba3af6+18a4d151a+4071789e4",
+  "weight_dtype": "float32",
+  "autocast_dtype": "bfloat16",
+  "samples": [
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 51.906270000017685,
+      "graphs": {},
+      "cuda_ms": 51.884254455566406,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.776320000048145,
+      "graphs": {},
+      "cuda_ms": 22.75872039794922,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.223327000119752,
+      "graphs": {},
+      "cuda_ms": 22.20672035217285,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.96639099975073,
+      "graphs": {},
+      "cuda_ms": 21.950239181518555,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.95570100002442,
+      "graphs": {},
+      "cuda_ms": 21.939359664916992,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.024981999948068,
+      "graphs": {},
+      "cuda_ms": 22.00716781616211,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.911218999775883,
+      "graphs": {},
+      "cuda_ms": 21.89481544494629,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.168345999943995,
+      "graphs": {},
+      "cuda_ms": 22.152544021606445,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 22.351110000272456,
+      "graphs": {},
+      "cuda_ms": 22.3351993560791,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 22.348559999954887,
+      "graphs": {},
+      "cuda_ms": 22.31372833251953,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 22.0980240001154,
+      "graphs": {},
+      "cuda_ms": 22.081056594848633,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 22.168565999891143,
+      "graphs": {},
+      "cuda_ms": 22.151615142822266,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 22.805381000125635,
+      "graphs": {},
+      "cuda_ms": 22.788543701171875,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 22.003672000209917,
+      "graphs": {},
+      "cuda_ms": 21.987104415893555,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 21.90995999990264,
+      "graphs": {},
+      "cuda_ms": 21.893695831298828,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 21.798256000238325,
+      "graphs": {},
+      "cuda_ms": 21.782304763793945,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.987331999753223,
+      "graphs": {},
+      "cuda_ms": 21.970815658569336,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.896848999858776,
+      "graphs": {},
+      "cuda_ms": 21.88115119934082,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.79806699996334,
+      "graphs": {},
+      "cuda_ms": 21.782432556152344,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.01299199987261,
+      "graphs": {},
+      "cuda_ms": 21.9967041015625,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.949400000266905,
+      "graphs": {},
+      "cuda_ms": 21.93337631225586,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.036302000287833,
+      "graphs": {},
+      "cuda_ms": 22.020479202270508,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.208496000075684,
+      "graphs": {},
+      "cuda_ms": 22.19139289855957,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.217076999822893,
+      "graphs": {},
+      "cuda_ms": 22.200992584228516,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 43951.06417399984,
+      "graphs": {
+        "calls_captured": 2860,
+        "unique_graphs": 1
+      },
+      "cuda_ms": 43951.23828125,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 195661824,
+        "reserved": 278921216
+      },
+      "peak_extra_allocated_bytes": 52843008,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 11.921741999685764,
+      "graphs": {
+        "calls_captured": 2860,
+        "unique_graphs": 1
+      },
+      "cuda_ms": 11.904352188110352,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 278921216
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 278921216
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 11.248785999669053,
+      "graphs": {
+        "calls_captured": 2860,
+        "unique_graphs": 1
+      },
+      "cuda_ms": 11.212479591369629,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 278921216
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 278921216
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.939398000118672,
+      "graphs": {
+        "calls_captured": 2860,
+        "unique_graphs": 1
+      },
+      "cuda_ms": 10.921952247619629,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 278921216
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 278921216
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.848657000224193,
+      "graphs": {
+        "calls_captured": 2860,
+        "unique_graphs": 1
+      },
+      "cuda_ms": 10.832192420959473,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 278921216
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 278921216
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.643051999977615,
+      "graphs": {
+        "calls_captured": 2860,
+        "unique_graphs": 1
+      },
+      "cuda_ms": 10.625727653503418,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 278921216
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 278921216
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.640721000072517,
+      "graphs": {
+        "calls_captured": 2860,
+        "unique_graphs": 1
+      },
+      "cuda_ms": 10.62435245513916,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 278921216
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 278921216
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.7465940000111,
+      "graphs": {
+        "calls_captured": 2860,
+        "unique_graphs": 1
+      },
+      "cuda_ms": 10.730527877807617,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 278921216
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 278921216
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.015538036823272705,
+      "parity": false,
+      "failed_values": 162,
+      "total_values": 256,
+      "wall_ms": 32784.930672999966,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 32785.0546875,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 278921216
+      },
+      "memory_peak_bytes": {
+        "allocated": 204504064,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 61685248,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.015538036823272705,
+      "parity": false,
+      "failed_values": 162,
+      "total_values": 256,
+      "wall_ms": 11.817229999905976,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 11.798912048339844,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 154172416,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 11353600,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.015538036823272705,
+      "parity": false,
+      "failed_values": 162,
+      "total_values": 256,
+      "wall_ms": 11.328059000334179,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 11.31167984008789,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 154172416,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 11353600,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.015538036823272705,
+      "parity": false,
+      "failed_values": 162,
+      "total_values": 256,
+      "wall_ms": 11.046851999708451,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 11.02905559539795,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 154172416,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 11353600,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.015538036823272705,
+      "parity": false,
+      "failed_values": 162,
+      "total_values": 256,
+      "wall_ms": 11.102573000243865,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 11.085984230041504,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 154172416,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 11353600,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.015538036823272705,
+      "parity": false,
+      "failed_values": 162,
+      "total_values": 256,
+      "wall_ms": 11.035582000204158,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 11.018112182617188,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 154172416,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 11353600,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.015538036823272705,
+      "parity": false,
+      "failed_values": 162,
+      "total_values": 256,
+      "wall_ms": 11.093863000041893,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 11.077312469482422,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 154172416,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 11353600,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.015538036823272705,
+      "parity": false,
+      "failed_values": 162,
+      "total_values": 256,
+      "wall_ms": 11.01372099992659,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 10.996671676635742,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 154172416,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 11353600,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.921708999831026,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 10.904447555541992,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.920108999926015,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 10.902848243713379,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.910228999819083,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 10.893695831298828,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.936988999674213,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 10.919903755187988,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.73568499987232,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 10.718463897705078,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.888828000133799,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 10.871232032775879,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.872818000279949,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 10.854751586914062,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "compiled",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.009696781635284424,
+      "parity": false,
+      "failed_values": 42,
+      "total_values": 64,
+      "wall_ms": 10.922239000137779,
+      "graphs": {
+        "calls_captured": 4337,
+        "unique_graphs": 2
+      },
+      "cuda_ms": 10.904704093933105,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 281018368
+      },
+      "memory_peak_bytes": {
+        "allocated": 145330176,
+        "reserved": 281018368
+      },
+      "peak_extra_allocated_bytes": 2511360,
+      "class_agreement": 1.0
+    }
+  ],
+  "gpu": "NVIDIA L4",
+  "gpu_capability": [
+    8,
+    9
+  ],
+  "gpu_total_memory": 23661248512,
+  "tf32_matmul": false,
+  "tf32_cudnn": true,
+  "actual_query_rows": [
+    32,
+    128,
+    32
+  ],
+  "eager_fit_succeeded": true,
+  "cache_num_batches": 1,
+  "plain_cpu_cache_tensors": 0,
+  "pinned_plain_cpu_cache_tensors": 0,
+  "cache_devices": {
+    "cuda:0": 35
+  },
+  "graph_breaks": {},
+  "status": "parity_fail"
+}

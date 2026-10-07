@@ -1,0 +1,267 @@
+{
+  "config": {
+    "model": "tabular",
+    "task": "classification",
+    "entry": "predict",
+    "data": "/validation/data/classification.npz",
+    "checkpoint": "/validation/data/tabular-classifier.pt",
+    "output": "/validation/results/tabular27-context256-predict-fp32-full-events18.json",
+    "source_commit": "c75ba3af6+18a4d151a",
+    "device": "cuda",
+    "autocast": "off",
+    "backend": "inductor",
+    "fullgraph": true,
+    "single_stream": false,
+    "capture_dynamic_outputs": true,
+    "recompile_limit": null,
+    "estimators": 1,
+    "context_rows": 256,
+    "query_rows": [
+      128
+    ],
+    "arm_index": 0,
+    "query_indices": [
+      1,
+      0,
+      2,
+      1
+    ],
+    "warmups": 2,
+    "repeats": 5
+  },
+  "torch": "2.7.1+cu126",
+  "cuda_runtime": "12.6",
+  "platform": "Linux-7.0.0-1013-aws-x86_64-with-glibc2.39",
+  "source": "c75ba3af6+18a4d151a",
+  "weight_dtype": "float32",
+  "autocast_dtype": null,
+  "samples": [
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 43.789968000055524,
+      "graphs": {},
+      "cuda_ms": 43.770751953125,
+      "memory_before_bytes": {
+        "allocated": 164043264,
+        "reserved": 253755392
+      },
+      "memory_peak_bytes": {
+        "allocated": 191453184,
+        "reserved": 253755392
+      },
+      "peak_extra_allocated_bytes": 27409920,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 19.06270100016627,
+      "graphs": {},
+      "cuda_ms": 19.043872833251953,
+      "memory_before_bytes": {
+        "allocated": 164043264,
+        "reserved": 253755392
+      },
+      "memory_peak_bytes": {
+        "allocated": 191453184,
+        "reserved": 253755392
+      },
+      "peak_extra_allocated_bytes": 27409920,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 18.847426999855088,
+      "graphs": {},
+      "cuda_ms": 18.831104278564453,
+      "memory_before_bytes": {
+        "allocated": 164043264,
+        "reserved": 253755392
+      },
+      "memory_peak_bytes": {
+        "allocated": 191453184,
+        "reserved": 253755392
+      },
+      "peak_extra_allocated_bytes": 27409920,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 18.91286799991576,
+      "graphs": {},
+      "cuda_ms": 18.896991729736328,
+      "memory_before_bytes": {
+        "allocated": 164043264,
+        "reserved": 253755392
+      },
+      "memory_peak_bytes": {
+        "allocated": 191453184,
+        "reserved": 253755392
+      },
+      "peak_extra_allocated_bytes": 27409920,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 18.827995999799896,
+      "graphs": {},
+      "cuda_ms": 18.812992095947266,
+      "memory_before_bytes": {
+        "allocated": 164043264,
+        "reserved": 253755392
+      },
+      "memory_peak_bytes": {
+        "allocated": 191453184,
+        "reserved": 253755392
+      },
+      "peak_extra_allocated_bytes": 27409920,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 18.500708999908966,
+      "graphs": {},
+      "cuda_ms": 18.483840942382812,
+      "memory_before_bytes": {
+        "allocated": 164043264,
+        "reserved": 253755392
+      },
+      "memory_peak_bytes": {
+        "allocated": 191453184,
+        "reserved": 253755392
+      },
+      "peak_extra_allocated_bytes": 27409920,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 18.644540999957826,
+      "graphs": {},
+      "cuda_ms": 18.627967834472656,
+      "memory_before_bytes": {
+        "allocated": 164043264,
+        "reserved": 253755392
+      },
+      "memory_peak_bytes": {
+        "allocated": 191453184,
+        "reserved": 253755392
+      },
+      "peak_extra_allocated_bytes": 27409920,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 18.36675499998819,
+      "graphs": {},
+      "cuda_ms": 18.350719451904297,
+      "memory_before_bytes": {
+        "allocated": 164043264,
+        "reserved": 253755392
+      },
+      "memory_peak_bytes": {
+        "allocated": 191453184,
+        "reserved": 253755392
+      },
+      "peak_extra_allocated_bytes": 27409920,
+      "class_agreement": 1.0
+    }
+  ],
+  "gpu": "NVIDIA L4",
+  "gpu_capability": [
+    8,
+    9
+  ],
+  "gpu_total_memory": 23661248512,
+  "tf32_matmul": false,
+  "tf32_cudnn": true,
+  "actual_query_rows": [
+    128
+  ],
+  "eager_fit_succeeded": true,
+  "cache_devices": {
+    "cuda:0": 35
+  },
+  "status": "fail",
+  "error_type": "Unsupported",
+  "error": "Graph break under GenericContextWrappingVariable\n  Explanation: Attempted to graph break in an active context manager(s) that doesn't support graph breaking.\n  Hint: Move the offending context manager(s) to outside the compiled region.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: Active generic context managers: [GenericContextWrappingVariable(_GeneratorContextManager)]\n\n\nfrom user code:\n   File \"/validation/repo-events/sdm/models/base.py\", line 417, in predict\n    queries = recipe_execution.transform(x, related_tables)\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
+  "traceback": "Traceback (most recent call last):\n  File \"/validation/run-diagnostics.py\", line 242, in main\n    actual, metrics = measure(predict, query, related)\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/validation/run-diagnostics.py\", line 85, in measure\n    actual = function(query, related).numerical\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/validation/torch27/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 659, in _fn\n    raise e.with_traceback(None) from None\ntorch._dynamo.exc.Unsupported: Graph break under GenericContextWrappingVariable\n  Explanation: Attempted to graph break in an active context manager(s) that doesn't support graph breaking.\n  Hint: Move the offending context manager(s) to outside the compiled region.\n  Hint: This graph break may have been caused by an earlier graph break. Resolving the earlier graph break may resolve this one.\n\n  Developer debug context: Active generic context managers: [GenericContextWrappingVariable(_GeneratorContextManager)]\n\n\nfrom user code:\n   File \"/validation/repo-events/sdm/models/base.py\", line 417, in predict\n    queries = recipe_execution.transform(x, related_tables)\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n\n"
+}

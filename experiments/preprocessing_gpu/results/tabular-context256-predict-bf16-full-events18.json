@@ -1,0 +1,687 @@
+{
+  "config": {
+    "model": "tabular",
+    "task": "classification",
+    "entry": "predict",
+    "data": "/validation/data/classification.npz",
+    "checkpoint": "/validation/data/tabular-classifier.pt",
+    "output": "/validation/results/tabular-context256-predict-bf16-full-events18.json",
+    "source_commit": "c75ba3af6+18a4d151a",
+    "device": "cuda",
+    "autocast": "bf16",
+    "backend": "inductor",
+    "fullgraph": true,
+    "single_stream": false,
+    "capture_dynamic_outputs": false,
+    "recompile_limit": null,
+    "estimators": 1,
+    "context_rows": 256,
+    "query_rows": [
+      32,
+      128,
+      32
+    ],
+    "arm_index": 0,
+    "query_indices": [
+      1,
+      0,
+      2,
+      1
+    ],
+    "warmups": 2,
+    "repeats": 5
+  },
+  "torch": "2.14.0+cu130",
+  "cuda_runtime": "13.0",
+  "platform": "Linux-7.0.0-1013-aws-x86_64-with-glibc2.39",
+  "source": "c75ba3af6+18a4d151a",
+  "weight_dtype": "float32",
+  "autocast_dtype": "bfloat16",
+  "samples": [
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 50.09137099978034,
+      "graphs": {},
+      "cuda_ms": 50.06745529174805,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.643185000106314,
+      "graphs": {},
+      "cuda_ms": 22.624767303466797,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.18668300019999,
+      "graphs": {},
+      "cuda_ms": 22.16828727722168,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 22.101822000422544,
+      "graphs": {},
+      "cuda_ms": 22.08470344543457,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.936817000096198,
+      "graphs": {},
+      "cuda_ms": 21.918367385864258,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.813804999965214,
+      "graphs": {},
+      "cuda_ms": 21.794879913330078,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.796684000037203,
+      "graphs": {},
+      "cuda_ms": 21.77903938293457,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.926826999788318,
+      "graphs": {},
+      "cuda_ms": 21.90880012512207,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 22.03410900028757,
+      "graphs": {},
+      "cuda_ms": 22.01590347290039,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 21.81229500001791,
+      "graphs": {},
+      "cuda_ms": 21.79439926147461,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 21.927496999978757,
+      "graphs": {},
+      "cuda_ms": 21.910207748413086,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 21.7912839998462,
+      "graphs": {},
+      "cuda_ms": 21.771711349487305,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 21.739662000072713,
+      "graphs": {},
+      "cuda_ms": 21.72287940979004,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 21.81747499980702,
+      "graphs": {},
+      "cuda_ms": 21.799840927124023,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 21.932377000212,
+      "graphs": {},
+      "cuda_ms": 21.914400100708008,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 128,
+      "rows": 128,
+      "requested_rows": 128,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 256,
+      "wall_ms": 21.84523599999011,
+      "graphs": {},
+      "cuda_ms": 21.82819175720215,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 157842432,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 15023616,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -3,
+      "kind": "first",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.75034300034895,
+      "graphs": {},
+      "cuda_ms": 21.733312606811523,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -2,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.885346999624744,
+      "graphs": {},
+      "cuda_ms": 21.86582374572754,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": -1,
+      "kind": "warmup",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.77488400002403,
+      "graphs": {},
+      "cuda_ms": 21.75712013244629,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 0,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.831954999925074,
+      "graphs": {},
+      "cuda_ms": 21.814111709594727,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 1,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.757972999694175,
+      "graphs": {},
+      "cuda_ms": 21.74083137512207,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 2,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.88839700011158,
+      "graphs": {},
+      "cuda_ms": 21.87071990966797,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 3,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.843455999714934,
+      "graphs": {},
+      "cuda_ms": 21.825664520263672,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    },
+    {
+      "phase": "eager",
+      "case": 32,
+      "rows": 32,
+      "requested_rows": 32,
+      "repetition": 4,
+      "kind": "warm",
+      "output_dtype": "torch.float32",
+      "max_abs_error": 0.0,
+      "parity": true,
+      "failed_values": 0,
+      "total_values": 64,
+      "wall_ms": 21.79444399962449,
+      "graphs": {},
+      "cuda_ms": 21.776704788208008,
+      "memory_before_bytes": {
+        "allocated": 142818816,
+        "reserved": 228589568
+      },
+      "memory_peak_bytes": {
+        "allocated": 146461184,
+        "reserved": 228589568
+      },
+      "peak_extra_allocated_bytes": 3642368,
+      "class_agreement": 1.0
+    }
+  ],
+  "gpu": "NVIDIA L4",
+  "gpu_capability": [
+    8,
+    9
+  ],
+  "gpu_total_memory": 23661248512,
+  "tf32_matmul": false,
+  "tf32_cudnn": true,
+  "actual_query_rows": [
+    32,
+    128,
+    32
+  ],
+  "eager_fit_succeeded": true,
+  "cache_devices": {
+    "cuda:0": 35
+  },
+  "status": "fail",
+  "error_type": "UserError",
+  "error": "Could not extract specialized integer from data-dependent expression u0 (unhinted: u0).  (Size-like symbols: none)\n\n\nCaused by: return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]  # repo-events/sdm/models/base.py:724 in _forward_batch (repo-events/sdm/tensor/var_len.py:800 in _to_dtype_layout)\nFor more information, run with TORCH_LOGS=\"dynamic\"\nFor extended logs when we create symbols, also add TORCHDYNAMO_EXTENDED_DEBUG_CREATE_SYMBOL=\"u0\"\nIf you suspect the guard was triggered from C++, add TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\nFor more debugging help, see https://docs.google.com/document/d/1HSuTTVvYH1pTew89Rtpeu84Ht3nQEFTYhAX3Ypa_xJs/edit?usp=sharing\n\nUser Stack (most recent call last):\n  (snipped, see stack below for prefix)\n  File \"/validation/repo-events/sdm/models/base.py\", line 456, in predict\n    outs += self._forward_batch(\n            ^^^^^^^^^^^^^^^^^^^^\n  File \"/validation/repo-events/sdm/models/base.py\", line 724, in _forward_batch\n    return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nFor C++ stack trace, run with TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\nFor more information about this error, see: https://pytorch.org/docs/main/generated/exportdb/index.html#constrain-as-size-example\n\nfrom user code:\n   File \"/validation/repo-events/sdm/models/base.py\", line 456, in predict\n    outs += self._forward_batch(\n            ^^^^^^^^^^^^^^^^^^^^\n  File \"/validation/repo-events/sdm/models/base.py\", line 724, in _forward_batch\n    return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
+  "traceback": "torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode: Could not extract specialized integer from data-dependent expression u0 (unhinted: u0).  (Size-like symbols: none)\n\n\nCaused by: return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]  # repo-events/sdm/models/base.py:724 in _forward_batch (repo-events/sdm/tensor/var_len.py:800 in _to_dtype_layout)\nFor more information, run with TORCH_LOGS=\"dynamic\"\nFor extended logs when we create symbols, also add TORCHDYNAMO_EXTENDED_DEBUG_CREATE_SYMBOL=\"u0\"\nIf you suspect the guard was triggered from C++, add TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\nFor more debugging help, see https://docs.google.com/document/d/1HSuTTVvYH1pTew89Rtpeu84Ht3nQEFTYhAX3Ypa_xJs/edit?usp=sharing\n\nUser Stack (most recent call last):\n  (snipped, see stack below for prefix)\n  File \"/validation/repo-events/sdm/models/base.py\", line 456, in predict\n    outs += self._forward_batch(\n            ^^^^^^^^^^^^^^^^^^^^\n  File \"/validation/repo-events/sdm/models/base.py\", line 724, in _forward_batch\n    return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nFor C++ stack trace, run with TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/validation/run-diagnostics.py\", line 242, in main\n    actual, metrics = measure(predict, query, related)\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/validation/run-diagnostics.py\", line 85, in measure\n    actual = function(query, related).numerical\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/validation/torch214/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1272, in compile_wrapper\n    raise e.with_traceback(\ntorch._dynamo.exc.UserError: Could not extract specialized integer from data-dependent expression u0 (unhinted: u0).  (Size-like symbols: none)\n\n\nCaused by: return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]  # repo-events/sdm/models/base.py:724 in _forward_batch (repo-events/sdm/tensor/var_len.py:800 in _to_dtype_layout)\nFor more information, run with TORCH_LOGS=\"dynamic\"\nFor extended logs when we create symbols, also add TORCHDYNAMO_EXTENDED_DEBUG_CREATE_SYMBOL=\"u0\"\nIf you suspect the guard was triggered from C++, add TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\nFor more debugging help, see https://docs.google.com/document/d/1HSuTTVvYH1pTew89Rtpeu84Ht3nQEFTYhAX3Ypa_xJs/edit?usp=sharing\n\nUser Stack (most recent call last):\n  (snipped, see stack below for prefix)\n  File \"/validation/repo-events/sdm/models/base.py\", line 456, in predict\n    outs += self._forward_batch(\n            ^^^^^^^^^^^^^^^^^^^^\n  File \"/validation/repo-events/sdm/models/base.py\", line 724, in _forward_batch\n    return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nFor C++ stack trace, run with TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\nFor more information about this error, see: https://pytorch.org/docs/main/generated/exportdb/index.html#constrain-as-size-example\n\nfrom user code:\n   File \"/validation/repo-events/sdm/models/base.py\", line 456, in predict\n    outs += self._forward_batch(\n            ^^^^^^^^^^^^^^^^^^^^\n  File \"/validation/repo-events/sdm/models/base.py\", line 724, in _forward_batch\n    return [cast(TableTensor, out.to(query.x.dtype)) for out in outs]\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n\n"
+}

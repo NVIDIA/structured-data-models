@@ -1,0 +1,382 @@
+{
+  "torch": "2.14.0+cu130",
+  "device": "cuda",
+  "results": [
+    {
+      "dtype": "torch.int32",
+      "empty": false,
+      "opcheck": {
+        "test_schema": "SUCCESS",
+        "test_autograd_registration": "SUCCESS",
+        "test_faketensor": "SUCCESS",
+        "test_aot_dispatch_dynamic": "SUCCESS"
+      }
+    },
+    {
+      "dtype": "torch.int32",
+      "empty": true,
+      "opcheck": {
+        "test_schema": "SUCCESS",
+        "test_autograd_registration": "SUCCESS",
+        "test_faketensor": "SUCCESS",
+        "test_aot_dispatch_dynamic": "SUCCESS"
+      }
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 5,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 5,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 9,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 9,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 13,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 13,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 0,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 0,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 1,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 1,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 5,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": false,
+      "size": 5,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 5,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 5,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 9,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 9,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 13,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 13,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 0,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 0,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 1,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 1,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 5,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int32",
+      "fullgraph": true,
+      "size": 5,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "empty": false,
+      "opcheck": {
+        "test_schema": "SUCCESS",
+        "test_autograd_registration": "SUCCESS",
+        "test_faketensor": "SUCCESS",
+        "test_aot_dispatch_dynamic": "SUCCESS"
+      }
+    },
+    {
+      "dtype": "torch.int64",
+      "empty": true,
+      "opcheck": {
+        "test_schema": "SUCCESS",
+        "test_autograd_registration": "SUCCESS",
+        "test_faketensor": "SUCCESS",
+        "test_aot_dispatch_dynamic": "SUCCESS"
+      }
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 5,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 5,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 9,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 9,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 13,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 13,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 0,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 0,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 1,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 1,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 5,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": false,
+      "size": 5,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 5,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 5,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 9,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 9,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 13,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 13,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 0,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 0,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 1,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 1,
+      "empty": true,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 5,
+      "empty": false,
+      "pass": true
+    },
+    {
+      "dtype": "torch.int64",
+      "fullgraph": true,
+      "size": 5,
+      "empty": true,
+      "pass": true
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "name": "classification.npz",
+    "source": "sdm-realdata-validation-20261002/evidence/kumo_tabular/cpu/classification/data_train_validation.npz",
+    "bytes": 78384,
+    "sha256": "6a7591c90b0cd2142ebb430ecca0eb27498dc2483a00c42661ae2d64f1b62299"
+  },
+  {
+    "name": "regression.npz",
+    "source": "sdm-realdata-validation-20261002/evidence/kumo_tabular/cpu_regression_raw/regression/data_train_validation.npz",
+    "bytes": 25752,
+    "sha256": "fb0622e27f5c2f7d3820408a8f8eace7c599ed53f1a006cf41e7f45f486a2fb7"
+  },
+  {
+    "name": "tabular-classifier.pt",
+    "source": "huggingface/models--nvidia--Kumo-Tabular/snapshots/bd7fa122b516c7355583873ffcf38f5e79403ebd/small/classifier.pt",
+    "bytes": 109936978,
+    "sha256": "1ff91f484e19021aaf7d9eff6cc07e6d95a60b4aaad473e83e2ab2c3bfd2b617"
+  },
+  {
+    "name": "tabular-regressor.pt",
+    "source": "huggingface/models--nvidia--Kumo-Tabular/snapshots/bd7fa122b516c7355583873ffcf38f5e79403ebd/small/regressor.pt",
+    "bytes": 113968523,
+    "sha256": "fc672f536501d64356036050ac2acea7e46927f7b9ad38366abe048f88e7d423"
+  },
+  {
+    "name": "driver-dnf_bundle.pt",
+    "source": "sdm-realdata-validation-20261002/evidence/gpu-staging-v1/evidence/kumo_relational/driver-dnf_bundle.pt",
+    "bytes": 1975223,
+    "sha256": "f7dfe6cd2881ec6713efa99fa96fa97489d1c3041e82e2effb6c64506783ac51"
+  },
+  {
+    "name": "relational-classifier.pt",
+    "source": "huggingface/models--nvidia--Kumo-Relational/snapshots/613d8f930f3a9f4d306fadfe80794da8c9a28570/classifier.pt",
+    "bytes": 119862733,
+    "sha256": "0c2e35cc18303f0d3ddeaf04e9cab6ca3a8bd6ea17195ac0e42d47af4bcb2a2d"
+  }
+]

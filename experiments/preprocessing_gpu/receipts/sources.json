@@ -1,0 +1,40 @@
+{
+  "commits": {
+    "c75ba3af6": "c75ba3af6c231c7bdcd181a50d35cdc7fb53c090",
+    "18a4d151a": "18a4d151a61d0868df835286bbdbad078247ed57",
+    "4071789e4": "4071789e40bed02fb2440aac9bb4d45afd32c40a",
+    "e2abde154": "e2abde1542f15ce605b33739411a52edbc87d564",
+    "f0a5db1e4": "f0a5db1e46ede87cffc2d27563a693cff1ac5627",
+    "c61daad9d": "c61daad9dfcb979704acb4ed8ec4cc2278529448",
+    "4a77261ce": "4a77261ce9a68523fadd42b8e70539ae4815a9bd",
+    "937beb883": "937beb883ba74fead2bf30237abe1abbfa6e9836",
+    "de6d656c4": "de6d656c458dc56731f346c5607566814b36283d"
+  },
+  "variants": {
+    "repo": "c75ba3af6",
+    "repo-events": [
+      "c75ba3af6",
+      "18a4d151a"
+    ],
+    "repo-emptyfix": [
+      "c75ba3af6",
+      "18a4d151a",
+      "4071789e4"
+    ],
+    "repo-currentstream": [
+      "c75ba3af6",
+      "18a4d151a",
+      "f0a5db1e4"
+    ],
+    "repo-final": "e2abde154",
+    "repo-csr": [
+      "c75ba3af6",
+      "c61daad9d",
+      "4a77261ce"
+    ]
+  },
+  "gpu": "NVIDIA L4",
+  "timed_jobs": "serialized",
+  "compilation_cache": "FX and AOT disabled except initial small Tabular cases; kernel cache reuse explicitly recorded for source-currentstream replay",
+  "excluded": "Interrupted resident-cache source run; invalid original CSR native-vs-native oracle; rejected CUDA12.9 dependency environment"
+}
