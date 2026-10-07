@@ -12,7 +12,7 @@ from torch import Tensor
 
 import sdm.processing as sp
 from sdm import EnsembleTable, Recipe, RelatedTables, Stype, TableTensor
-from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing import EnsembleProcessor
 
 
 class MemberContext(NamedTuple):
@@ -44,8 +44,6 @@ class RecipeExecution:
         ) = None
         self._num_estimators: int | None = None
         self._y_locations: tuple[tuple[int, int], ...] | None = None
-        self._output_ndim = 0
-        self._regression = False
 
     @property
     def num_members(self) -> int:
@@ -70,11 +68,15 @@ class RecipeExecution:
 
         self._num_estimators = num_members
         self._y_locations = y._locations
-        self._output_ndim = y[0].dim()
-        self._regression = y[0].numerical.size(-1) > 0
         for module in self.recipe.output.modules():
             if isinstance(module, sp.InvertTarget):
-                module._inverse = self._invert_target
+                module._target = (
+                    self.recipe.target
+                    if y[0].numerical.size(-1) > 0
+                    else EnsembleProcessor.as_processor(sp.Identity())
+                )
+                module._locations = y._locations
+                module._ndim = y[0].dim()
 
         task_dispatchers = tuple(
             module
@@ -222,42 +224,6 @@ class RecipeExecution:
 
         return tuple(members)
 
-    def inverse_transform_target(
-        self,
-        outputs: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
-        """Invert fitted target transforms on member outputs."""
-        assert len(outputs) == self.num_members
-
-        # Reconstruct the group layout of the transformed target:
-        assert self._y_locations is not None
-        num_groups = max(group for group, _ in self._y_locations) + 1
-        groups: list[list[TableTensor | None]] = [
-            [] for _ in range(num_groups)
-        ]
-        for group_id, _ in self._y_locations:
-            groups[group_id].append(None)
-        for i, (group_id, position) in enumerate(self._y_locations):
-            groups[group_id][position] = outputs[i]
-
-        table = EnsembleTable(
-            groups=[
-                cast(
-                    TableTensor,
-                    group[0].unsqueeze(0)  # type: ignore
-                    if len(group) == 1
-                    else torch.stack(group, dim=0),  # type: ignore
-                )
-                for group in groups
-            ],
-            locations=self._y_locations,
-        )
-
-        if not isinstance(self.recipe.target, EnsembleInvertibleMixin):
-            raise RuntimeError("Target recipe is not invertible")
-        table = self.recipe.target.inverse_transform_ensemble(table)
-        return tuple(table[i] for i in range(len(table)))
-
     def transform_output(
         self,
         outputs: Sequence[TableTensor],
@@ -278,49 +244,6 @@ class RecipeExecution:
             out = torch.stack(list(outputs), dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
-
-    def _invert_target(
-        self,
-        table: TableTensor,
-        member: int | None,
-    ) -> TableTensor:
-        if not self._regression:
-            return table
-        reduced = table.dim() == self._output_ndim
-        if member is not None:
-            inputs = (
-                (table,)
-                if reduced
-                else cast(tuple[TableTensor, ...], table.unbind(0))
-            )
-            outputs = tuple(
-                self.inverse_transform_target([output] * self.num_members)[
-                    member
-                ]
-                for output in inputs
-            )
-            if reduced:
-                return outputs[0]
-            return cast(TableTensor, torch.stack(outputs, dim=0))
-
-        if reduced:
-            if self.num_members != 1:
-                raise RuntimeError(
-                    "Select a target state with 'InvertTarget(member=...)' "
-                    "when applying it to reduced estimator outputs"
-                )
-            outputs = self.inverse_transform_target((table,))
-            return outputs[0]
-
-        if table.size(0) != self.num_members:
-            raise RuntimeError(
-                f"Expected {self.num_members} estimator outputs for target "
-                f"inversion (got {table.size(0)})"
-            )
-        outputs = self.inverse_transform_target(
-            cast(tuple[TableTensor, ...], table.unbind(0))
-        )
-        return cast(TableTensor, torch.stack(outputs, dim=0))
 
 
 def _align_to_fitted_groups(

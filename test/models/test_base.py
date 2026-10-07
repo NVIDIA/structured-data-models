@@ -768,25 +768,20 @@ def test_target_inversion_follows_output_order(
 
 
 @pytest.mark.parametrize("fitted", [False, True])
-@pytest.mark.parametrize(
-    ("output", "expected"),
-    [
-        ([sp.InvertTarget(), sp.AverageEstimators()], 20.0),
-        ([sp.InvertTarget(member=0), sp.AverageEstimators()], 12.0),
-        ([sp.InvertTarget(member=1), sp.AverageEstimators()], 28.0),
-        ([sp.AverageEstimators(), sp.InvertTarget(member=0)], 12.0),
-        ([sp.AverageEstimators(), sp.InvertTarget(member=1)], 28.0),
-    ],
-)
-def test_target_inversion_before_or_after_estimator_reduction(
+@pytest.mark.parametrize("separate", [False, True])
+def test_target_inversion_uses_each_members_fitted_state(
     fitted: bool,
-    output: list[Processor],
-    expected: float,
+    separate: bool,
 ) -> None:
     model = _RecordingModel()
-    recipe = sp.Recipe(target=sp.Standardize(), output=output)
+    recipe = sp.Recipe(target=sp.Standardize(), output=sp.InvertTarget())
     x_context = torch.zeros(2, 2, 1)
     y_context = torch.tensor([[[8.0], [12.0]], [[20.0], [28.0]]])
+    if separate:
+        y_context = EnsembleTable.from_tables(
+            tables=tuple(TableTensor.from_tensor(y) for y in y_context),
+            member_table_ids=(0, 1),
+        )
     x_query = torch.ones(2, 1, 1)
 
     if fitted:
@@ -801,8 +796,43 @@ def test_target_inversion_before_or_after_estimator_reduction(
         )
 
     torch.testing.assert_close(
-        prediction.numerical, torch.tensor([[expected]])
+        prediction.numerical, torch.tensor([[[12.0]], [[28.0]]])
     )
+
+
+def test_target_inversion_after_single_member_reduction() -> None:
+    prediction = _RecordingModel()(
+        x_context=torch.zeros(2, 1),
+        y_context=torch.tensor([[8.0], [12.0]]),
+        x_query=torch.tensor([[0.5]]),
+        recipe=sp.Recipe(
+            target=sp.Standardize(),
+            output=[sp.AverageEstimators(), sp.InvertTarget()],
+        ),
+    )
+    torch.testing.assert_close(prediction.numerical, torch.tensor([[11.0]]))
+
+
+@pytest.mark.parametrize("fitted", [False, True])
+def test_target_inversion_does_not_reuse_member_state_after_reduction(
+    fitted: bool,
+) -> None:
+    model = _RecordingModel()
+    recipe = sp.Recipe(
+        target=sp.Standardize(),
+        output=[sp.AverageEstimators(), sp.InvertTarget()],
+    )
+    x_context = torch.zeros(2, 2, 1)
+    y_context = torch.tensor([[[8.0], [12.0]], [[20.0], [28.0]]])
+    x_query = torch.ones(2, 1, 1)
+
+    if fitted:
+        model.fit(x_context, y_context, recipe=recipe)
+        with pytest.raises(RuntimeError, match="fitted ensemble members"):
+            model.predict(x_query)
+    else:
+        with pytest.raises(RuntimeError, match="fitted ensemble members"):
+            model(x_context, y_context, x_query, recipe=recipe)
 
 
 def test_estimator_batching_does_not_stack_related_tables() -> None:

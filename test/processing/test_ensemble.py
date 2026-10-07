@@ -219,6 +219,22 @@ def test_adapter_inverse_restores_input() -> None:
         assert restored[member_id].equal(ensemble_table[member_id])
 
 
+@pytest.mark.parametrize("inverse", [False, True])
+def test_adapter_preserves_fitted_member_count(inverse: bool) -> None:
+    ensemble_table = _two_group_ensemble_table()
+    processor = EnsembleProcessorAdapter(Standardize())
+    transformed = processor.fit_transform_ensemble(ensemble_table)
+    transform = (
+        processor.inverse_transform_ensemble
+        if inverse
+        else processor.transform_ensemble
+    )
+    table = transformed[:1] if inverse else ensemble_table[:1]
+
+    with pytest.raises(RuntimeError, match="fitted ensemble members"):
+        transform(table)
+
+
 def test_stateless_adapter_supports_transform_and_inverse() -> None:
     table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     processor = EnsembleProcessorAdapter(_StatelessProcessor())
