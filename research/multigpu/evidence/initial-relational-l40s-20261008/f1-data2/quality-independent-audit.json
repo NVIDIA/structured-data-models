@@ -1,0 +1,69 @@
+{
+  "run": "relational-f1-c1024-b125-data2-e4",
+  "independent_validation": true,
+  "prediction_sha256": "174e4bd167f4a277421804c269141436e9ca70ab09912f9abf8df71aa4b00983",
+  "matches_recorded_sha": true,
+  "workload_matches_native": true,
+  "columns_match_native": true,
+  "original_logged_quality": {
+    "mae": 3.410428285598755,
+    "rmse": 4.211032845120145,
+    "nonfinite_predictions": 0,
+    "quantile_crossing_fraction": 0
+  },
+  "rescored_quality": {
+    "rmse": 4.211032922515187,
+    "mae": 3.4104285173282354,
+    "crossing_pairs": 0,
+    "rows_with_crossings": 0,
+    "max_crossing": 0,
+    "mean_pinball_loss": 1.192934339693154,
+    "coverage_q050_q950": 0.9539078156312625
+  },
+  "matched_reference": "relational-f1-c1024-b125-data1-e4",
+  "matched_numerical": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "native_numerical": {
+    "shape": [
+      499,
+      999
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "recomputed_rows_s": [
+    379.0733759776841,
+    338.1168801794516,
+    377.0696421316967
+  ],
+  "median_rows_s": 377.0696421316967,
+  "matched_speedup": 1.0550144864790232
+}

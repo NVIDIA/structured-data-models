@@ -1,0 +1,309 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-07T15:45:54.890752+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "cp2",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context2",
+      "artifacts": [
+        {
+          "name": "predictions-0.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "5d516e3420c7cc097105028b2780eec475ca32664708510540af1397f6077cbe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context2/predictions-0.npy"
+        },
+        {
+          "name": "predictions-1.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "5d516e3420c7cc097105028b2780eec475ca32664708510540af1397f6077cbe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context2/predictions-1.npy"
+        },
+        {
+          "name": "predictions-2.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "5d516e3420c7cc097105028b2780eec475ca32664708510540af1397f6077cbe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context2/predictions-2.npy"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context2/query_ids.npy"
+        },
+        {
+          "name": "rank0.json",
+          "role": "record",
+          "bytes": 1628,
+          "sha256": "ceef9ab2c4e5833fad85ee00c0b618ac73fc825ccf9da27da5b9eddc245526c7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context2/rank0.json",
+          "archived_path": "cp2/rank0.json"
+        },
+        {
+          "name": "rank1.json",
+          "role": "record",
+          "bytes": 1626,
+          "sha256": "0c6594b59de9945bae7b15f87c7284abc6247eb26479f9f5822848a6a692f8f8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context2/rank1.json",
+          "archived_path": "cp2/rank1.json"
+        },
+        {
+          "name": "results.json",
+          "role": "record",
+          "bytes": 5400,
+          "sha256": "f8fe91f73dd6832baec76f3183d398329e4ab24aabd37df9b711f589b033197b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context2/results.json",
+          "archived_path": "cp2/results.json"
+        }
+      ]
+    },
+    {
+      "label": "cp4",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4",
+      "artifacts": [
+        {
+          "name": "predictions-0.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "6cf74a1a0715ebd0a4c5d92d21fef7badce2175579d3c380e6512b7d249af6dc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4/predictions-0.npy"
+        },
+        {
+          "name": "predictions-1.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "6cf74a1a0715ebd0a4c5d92d21fef7badce2175579d3c380e6512b7d249af6dc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4/predictions-1.npy"
+        },
+        {
+          "name": "predictions-2.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "6cf74a1a0715ebd0a4c5d92d21fef7badce2175579d3c380e6512b7d249af6dc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4/predictions-2.npy"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4/query_ids.npy"
+        },
+        {
+          "name": "rank0.json",
+          "role": "record",
+          "bytes": 1627,
+          "sha256": "aed35630a750c8956dda1e71ae426235a9af8edb51c881eb8661c2488f71266a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4/rank0.json",
+          "archived_path": "cp4/rank0.json"
+        },
+        {
+          "name": "rank1.json",
+          "role": "record",
+          "bytes": 1624,
+          "sha256": "d91a4fec31d5ac8cfba8eb221379fcc58aa97bedbec74fd5b5670c2c937da06a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4/rank1.json",
+          "archived_path": "cp4/rank1.json"
+        },
+        {
+          "name": "rank2.json",
+          "role": "record",
+          "bytes": 1622,
+          "sha256": "d0b077b1e4be1a580dd854715f1a1ee1d15c8c69b59e495763a930ed0e583e6c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4/rank2.json",
+          "archived_path": "cp4/rank2.json"
+        },
+        {
+          "name": "rank3.json",
+          "role": "record",
+          "bytes": 1621,
+          "sha256": "75b300503d92a247fcde6ba4b4fde6fe02f5f00465c6a5683eaecf601b3b9fb0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4/rank3.json",
+          "archived_path": "cp4/rank3.json"
+        },
+        {
+          "name": "results.json",
+          "role": "record",
+          "bytes": 9122,
+          "sha256": "59f671ab8ef40e1c1a3b0815a574a3bf4c3fb4a6ac4778b0a73b2ddb30bf994e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-context4/results.json",
+          "archived_path": "cp4/results.json"
+        }
+      ]
+    },
+    {
+      "label": "lse1",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-lse1",
+      "artifacts": [
+        {
+          "name": "predictions-0.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "14d5999b6298150fd4554a1553085702312d6cfc71a9f1c479d84ce8f7de29ba",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-lse1/predictions-0.npy"
+        },
+        {
+          "name": "predictions-1.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "14d5999b6298150fd4554a1553085702312d6cfc71a9f1c479d84ce8f7de29ba",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-lse1/predictions-1.npy"
+        },
+        {
+          "name": "predictions-2.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "14d5999b6298150fd4554a1553085702312d6cfc71a9f1c479d84ce8f7de29ba",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-lse1/predictions-2.npy"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-lse1/query_ids.npy"
+        },
+        {
+          "name": "rank0.json",
+          "role": "record",
+          "bytes": 1629,
+          "sha256": "7fdd4b861df9ec6c697bdb22a464b492c444056b2387b528cce4ed45ebcdecf8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-lse1/rank0.json",
+          "archived_path": "lse1/rank0.json"
+        },
+        {
+          "name": "results.json",
+          "role": "record",
+          "bytes": 3525,
+          "sha256": "aa7ca2680f1bce42bfbca4b57a9354f3676bd8b4da168ed5ff5c8c5aceb918a6",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-lse1/results.json",
+          "archived_path": "lse1/results.json"
+        }
+      ]
+    },
+    {
+      "label": "native1",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-native1",
+      "artifacts": [
+        {
+          "name": "predictions-0.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "4c3f7b2aecdedb15463a8419d4bde27e4b498b9e9c53306d63cd8c884b68f21b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-native1/predictions-0.npy"
+        },
+        {
+          "name": "predictions-1.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "4c3f7b2aecdedb15463a8419d4bde27e4b498b9e9c53306d63cd8c884b68f21b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-native1/predictions-1.npy"
+        },
+        {
+          "name": "predictions-2.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "4c3f7b2aecdedb15463a8419d4bde27e4b498b9e9c53306d63cd8c884b68f21b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-native1/predictions-2.npy"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-native1/query_ids.npy"
+        },
+        {
+          "name": "rank0.json",
+          "role": "record",
+          "bytes": 1626,
+          "sha256": "63dc62e896934d5d7d1769d95095abe5c818d0994f72cb070e2d1821a19cb432",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-native1/rank0.json",
+          "archived_path": "native1/rank0.json"
+        },
+        {
+          "name": "results.json",
+          "role": "record",
+          "bytes": 3527,
+          "sha256": "45c287186cd0b3a4bc5fa055dc7dc11ce720951257b478629777d71576c12b7f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-covertype-small-c1024-e4-native1/results.json",
+          "archived_path": "native1/results.json"
+        }
+      ]
+    },
+    {
+      "label": "probe-efficient",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-efficient",
+      "artifacts": [
+        {
+          "name": "context_parallel.pt",
+          "role": "predictions",
+          "bytes": 2408,
+          "sha256": "9cffdd79d2f6bc8303d5a1529c72692f6b478287e9099ee479d6e7912b21a435",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-efficient/context_parallel.pt"
+        },
+        {
+          "name": "native_sdpa.pt",
+          "role": "predictions",
+          "bytes": 2373,
+          "sha256": "f464583e4007d1fecd7ea17b980c335f48a71cd4350472df198188c40598ba48",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-efficient/native_sdpa.pt"
+        },
+        {
+          "name": "results.json",
+          "role": "record",
+          "bytes": 4155,
+          "sha256": "e72635fa05ba998fbcc19d62b052ccef568e745aaaaac7f1ae22a74e5270a6cd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-efficient/results.json",
+          "archived_path": "probe-efficient/results.json"
+        },
+        {
+          "name": "single_rank_lse.pt",
+          "role": "predictions",
+          "bytes": 2401,
+          "sha256": "d4841688866ff83600a6c5256cafed5e217dfcda2ed78a732063d0ef05905233",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-efficient/single_rank_lse.pt"
+        }
+      ]
+    },
+    {
+      "label": "probe-flash",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-flash",
+      "artifacts": [
+        {
+          "name": "context_parallel.pt",
+          "role": "predictions",
+          "bytes": 2408,
+          "sha256": "ac6b35c70da7d5cfc152a0665757b83e87809b9b15b8c5d2b930d7989b8eb572",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-flash/context_parallel.pt"
+        },
+        {
+          "name": "native_sdpa.pt",
+          "role": "predictions",
+          "bytes": 2373,
+          "sha256": "f464583e4007d1fecd7ea17b980c335f48a71cd4350472df198188c40598ba48",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-flash/native_sdpa.pt"
+        },
+        {
+          "name": "results.json",
+          "role": "record",
+          "bytes": 4131,
+          "sha256": "9874460e0389ea82b61aa542b38f3f3c86a40748d4245cf7d0b04960e5957693",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-flash/results.json",
+          "archived_path": "probe-flash/results.json"
+        },
+        {
+          "name": "single_rank_lse.pt",
+          "role": "predictions",
+          "bytes": 2401,
+          "sha256": "5d06265e0bf7d30b6725c3500957f84f2958b5df885d0c2d1cd6a31d99cc5acf",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-probe4-c1024-flash/single_rank_lse.pt"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+{
+  "setup": {
+    "output": "/home/ubuntu/kumo-multigpu/results/cp-probe4-c1024-efficient",
+    "kernel": "efficient",
+    "family": "tabular",
+    "context": 1024,
+    "queries": 128,
+    "channels": 512,
+    "heads": 8,
+    "kv_heads": 2,
+    "layers": 4,
+    "repeats": 7,
+    "dtype": "bfloat16"
+  },
+  "gpu": "NVIDIA L4",
+  "torch": "2.9.1+cu130",
+  "slowest_rank_prediction_seconds": [
+    0.004683932000034474,
+    0.004681481000034182,
+    0.004851369999983035,
+    0.004658899999981259,
+    0.004644078999945123,
+    0.004749243999981445,
+    0.004663821000008284
+  ],
+  "unique_rows_per_second": [
+    27327.467606074963,
+    27341.774963748736,
+    26384.299692756398,
+    27474.296507869865,
+    27561.97730519066,
+    26951.657990303316,
+    27445.307184768168
+  ],
+  "results": [
+    {
+      "mode": "native_sdpa",
+      "rank": 0,
+      "world": 1,
+      "fit_seconds": 1.3297868529999732,
+      "fit_peak_bytes": 66059264,
+      "cache_bytes": 2097152,
+      "prediction_peak_bytes": 63211008,
+      "prediction_seconds": [
+        0.003060907999952178,
+        0.003097689000014725,
+        0.0030183349999788334,
+        0.0030277060000116762,
+        0.0030134849999967628,
+        0.0030205260000002454,
+        0.0030132360000152403
+      ],
+      "median_seconds": 0.0030205260000002454,
+      "max_abs_difference": 0.0
+    },
+    {
+      "mode": "single_rank_lse",
+      "rank": 0,
+      "world": 1,
+      "fit_seconds": 0.005141855000033502,
+      "fit_peak_bytes": 70825472,
+      "cache_bytes": 2097152,
+      "prediction_peak_bytes": 64243200,
+      "prediction_seconds": [
+        0.0033452220000071975,
+        0.0033157310000433426,
+        0.0032959600000594946,
+        0.0032953599999245853,
+        0.0032986590000518845,
+        0.003252816999975039,
+        0.0032433369999580464
+      ],
+      "median_seconds": 0.0032959600000594946,
+      "max_abs_difference": 0.0009765625
+    },
+    {
+      "mode": "context_parallel",
+      "rank": 0,
+      "world": 4,
+      "fit_seconds": 0.004313521999961267,
+      "fit_peak_bytes": 70039040,
+      "cache_bytes": 524288,
+      "prediction_peak_bytes": 61502976,
+      "prediction_seconds": [
+        0.004634958999986338,
+        0.004541303999985757,
+        0.004711142000019208,
+        0.004658899999981259,
+        0.0046359180000763445,
+        0.004729902999997648,
+        0.004663821000008284
+      ],
+      "median_seconds": 0.004658899999981259,
+      "max_abs_difference": 0.0009765625
+    },
+    {
+      "mode": "context_parallel",
+      "rank": 1,
+      "world": 4,
+      "fit_seconds": 0.7883390370000143,
+      "fit_peak_bytes": 65272832,
+      "cache_bytes": 524288,
+      "prediction_peak_bytes": 61501952,
+      "prediction_seconds": [
+        0.004555073999995329,
+        0.004562634999956572,
+        0.004760594000003948,
+        0.0045136219999903915,
+        0.004534014000000752,
+        0.0046077169999989565,
+        0.004662550000034571
+      ],
+      "median_seconds": 0.004562634999956572,
+      "max_abs_difference": null
+    },
+    {
+      "mode": "context_parallel",
+      "rank": 2,
+      "world": 4,
+      "fit_seconds": 0.7836319240000194,
+      "fit_peak_bytes": 65272832,
+      "cache_bytes": 524288,
+      "prediction_peak_bytes": 61501952,
+      "prediction_seconds": [
+        0.004683932000034474,
+        0.004681481000034182,
+        0.004851369999983035,
+        0.004626918999974805,
+        0.004644078999945123,
+        0.004749243999981445,
+        0.004628658000001451
+      ],
+      "median_seconds": 0.004681481000034182,
+      "max_abs_difference": null
+    },
+    {
+      "mode": "context_parallel",
+      "rank": 3,
+      "world": 4,
+      "fit_seconds": 0.7586828799999239,
+      "fit_peak_bytes": 65272832,
+      "cache_bytes": 524288,
+      "prediction_peak_bytes": 61501952,
+      "prediction_seconds": [
+        0.004599297000027036,
+        0.004543645000012475,
+        0.004746323999938795,
+        0.004655319999983476,
+        0.004638798999963001,
+        0.004728612999997495,
+        0.004659420000052705
+      ],
+      "median_seconds": 0.004655319999983476,
+      "max_abs_difference": null
+    }
+  ]
+}

@@ -34,6 +34,7 @@ def artifact_role(name: str) -> str | None:
         "workload.json",
         "config.json",
         "parity.json",
+        "quality-independent-audit.json",
     }:
         return "record"
     if re.fullmatch(r"(?:rank|error-rank)\d+\.json", name):
@@ -41,6 +42,8 @@ def artifact_role(name: str) -> str | None:
     if name == "command.txt":
         return "command"
     if name.startswith("predictions") and Path(name).suffix in {".npy", ".pt"}:
+        return "predictions"
+    if name in {"context_parallel.pt", "native_sdpa.pt", "single_rank_lse.pt"}:
         return "predictions"
     if name in {"query_ids.npy", "targets.npy", "context-row-indices.npy"}:
         return "row-or-target-identity"
