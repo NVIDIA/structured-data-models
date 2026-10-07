@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import resource
+import sys
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import (
@@ -233,6 +235,10 @@ def _process_memory(reset_peak: bool) -> dict[str, int | str]:
         "worker": worker,
         "pid": os.getpid(),
         "device": str(device),
+        "max_rss_bytes": int(
+            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            * (1 if sys.platform == "darwin" else 1024)
+        ),
     }
     if device.type == "cuda":
         torch.cuda.synchronize(device)
