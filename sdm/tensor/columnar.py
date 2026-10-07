@@ -15,6 +15,7 @@ from torch import Tensor
 from typing_extensions import override
 
 from sdm.tensor import NullableTensor, StringTensor, VarLenTensor
+from sdm.tensor._cache import _tensor_cache_hash
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.mixin import _resolve_device
 
@@ -142,6 +143,9 @@ class ColumnarTensor(Tensor):
             setattr(out, f"_column_{i}", column)
 
         return out
+
+    def _stable_hash_for_caching(self) -> str:
+        return _tensor_cache_hash(self)
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         return [f"_column_{i}" for i in range(len(self._columns))] or [

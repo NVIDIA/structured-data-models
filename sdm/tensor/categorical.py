@@ -16,6 +16,7 @@ from torch.utils import _pytree as pytree
 from typing_extensions import override
 
 from sdm.tensor import StringTensor, VarLenTensor
+from sdm.tensor._cache import _tensor_cache_hash
 from sdm.tensor.io import (
     arrow_as_tensor,
     combine_arrow_chunks,
@@ -353,6 +354,9 @@ class CategoricalTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def _stable_hash_for_caching(self) -> str:
+        return _tensor_cache_hash(self)
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ["_code", "code"]

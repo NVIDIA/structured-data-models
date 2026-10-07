@@ -14,6 +14,7 @@ from torch import Tensor
 from torch._subclasses.fake_tensor import is_fake
 from typing_extensions import override
 
+from sdm.tensor._cache import _tensor_cache_hash
 from sdm.tensor.io import (
     ARROW_TORCH_DTYPES,
     arrow_as_tensor,
@@ -341,6 +342,9 @@ class NullableTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def _stable_hash_for_caching(self) -> str:
+        return _tensor_cache_hash(self)
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ["_data", "_valid"]
