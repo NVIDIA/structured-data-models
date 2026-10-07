@@ -120,13 +120,22 @@ class RowEmbedding(torch.nn.Module):
         K = self.readout_token.size(-2)
         D = self.channels
 
+        # Functional assembly avoids buffer copies in compiled FP32 inference.
+        compiled_fp32 = (
+            torch.compiler.is_compiling()
+            and not torch.is_grad_enabled()
+            and x.dtype == torch.float32
+            and not torch.is_autocast_enabled(x.device.type)
+            and len(self.col_blocks) > 0
+        )
         buffer: Tensor | None = None
-        if torch.is_grad_enabled():
+        if torch.is_grad_enabled() or compiled_fp32:
             x = self.cell_embedding(
                 x=x,
                 categorical_mask=categorical_mask,
                 train_size=R_train,
                 cache=cache,
+                batch_size_limit="auto" if compiled_fp32 else None,
             )  # [..., R, C, D]
         else:
             buffer = torch.empty(
