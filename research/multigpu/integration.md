@@ -50,6 +50,8 @@ for task in ("classification", "regression"):
 
 Keep inference placement independent of model construction and preprocessing recipes. Use the existing `ICLModel.fit` / `predict` contracts and explicit replicas or process groups. Avoid introducing a cluster manager, service scheduler, mandatory configuration schema, or cloud dependency into SDM.
 
+The study branch contains experimental executors, adapters, cloud-operation notes, runners, profilers, and evidence retention. Their combined size is not a proposed production API. Any upstream change should be a separately reviewable extraction of a small reusable capability with behavior tests, rather than a wholesale merge of the investigation harness. The local study branch remains the integration point; no GitHub/PR publication is implied by these recommendations.
+
 | Boundary | Proposed responsibility | Must remain independent |
 |---|---|---|
 | Generic ensemble executor | Assign logical members; retain their fitted state; preserve ordered finalization; forward thread-local autocast/inference state | Kumo-specific layers and cloud launch |
@@ -59,6 +61,19 @@ Keep inference placement independent of model construction and preprocessing rec
 | Experiment harness | Hardware setup, immutable input choices, timings, profiler, targets/metrics, failures | Public core model API |
 
 A reusable core abstraction is warranted only once it has at least two real users. Query DP can remain a short `torchrun` example because it requires no model-internal synchronization. Use NCCL for GPU tensor collectives; CPU control or small output metadata can use a CPU-capable process group. Do not wrap inference in DDP just to replicate parameters: DDP is primarily a gradient synchronization mechanism, as described by [PyTorch distributed documentation](https://docs.pytorch.org/docs/stable/distributed.html).
+
+### Candidate extraction boundaries
+
+| Candidate | Potential destination | Required before promoting from research |
+|---|---|---|
+| Cache residency and stream lifetime semantics | Existing `Cache` / `ICLModel` fitted execution | One documented default-preserving policy; unique backing-storage accounting; clear/refit/device-lifetime tests; avoid separate model copies for each policy |
+| Resident ensemble execution | One generic model executor shared by Tabular and Relational | Reuse existing recipe/member batching and aggregation, preserve stable logical member RNG, reduce duplicated lifecycle code, validate actual GPU stream/failure behavior, demonstrate useful target workloads |
+| Partial attention and stable distributed recombination | Small optional `sdm.nn` primitives | Explicit group/global length/topology metadata, GQA and empty shards, version-tested backend, full model tolerances/quality, clear limitations on fit/compile/training |
+| Query data parallel usage | One short public example with `torchrun` | Fixed batch identities and full relational neighborhoods, local fit per rank, indexed output merge, clear initialization and teardown |
+| Layer placement hooks, process factories, hybrid adapters | `research/multigpu` until interfaces converge | Replace hooks with explicit stages/cache ownership if adopted; demonstrate capacity/pipeline benefit and interactions with public fitted APIs |
+| Benchmark runners, EC2 launch operations, result collector and raw evidence | Research/benchmark documentation and scripts | Remain optional and out of import-time model code; preserve reproduction and failure history |
+
+The initial small-context measurements favor tuning existing estimator batching before adding a new default execution mode. They do not justify enabling EP or CP automatically. Explicit opt-in research modes allow capacity and workload-dependent benefits to be evaluated without burdening every model-family wrapper.
 
 ## Recommended progression
 
@@ -128,6 +143,8 @@ These are proposed experiments, not implemented or measured optimizations. Choos
 | GNN dominates with large boundary-connected graph | Exact destination partition with source halos or merged sufficient statistics | Hop-wise state parity, boundary bytes, load balance, memory/latency crossover |
 | Sequential placement reduces memory but idles devices | Overlap independent query microbatches through explicit stage queues | Pipeline occupancy, end-to-end p50/p95, steady-state throughput, bounded live buffers |
 
-The current CP prototype expands reduced KV heads via `repeat_interleave` before its efficient-attention kernel, while native attention requests GQA directly. For KumoTabular large this turns two KV heads into sixteen during each call. The retained-cache formula remains correct, but temporary memory and memory traffic are different. A poor CP result on that path is evidence about the complete prototype/kernel combination; it does not by itself reject the mathematical context split.
+The initial CP efficient-attention path expands reduced KV heads via `repeat_interleave`, while native attention requests GQA directly. For KumoTabular large this turns two KV heads into sixteen during each call. The retained-cache formula remains correct, but temporary memory and memory traffic differ. A poor result on that path is evidence about the complete prototype/kernel combination; it does not by itself reject the mathematical context split.
+
+The follow-up Flash LSE variant (`926f6dc3f`) is now implemented and passed multi-rank CUDA tests. PyTorch 2.9.1's [CUDA attention implementation](https://github.com/pytorch/pytorch/blob/v2.9.1/aten/src/ATen/native/transformers/cuda/attention.cu) returns the Flash attention log-sum-exp, and its [dispatch constraints](https://github.com/pytorch/pytorch/blob/v2.9.1/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp) explicitly support GQA for Flash while the efficient backend requires matching head counts. This motivated using Flash for supported BF16/FP16 inputs without KV expansion; the version-sensitive private API remains a research boundary. Initial short-context probes still showed distributed overhead, so long-context measurements must determine its practical value.
 
 Hybrid EP × DP should partition complete estimators inside each request and complete batches across request groups. Local averaging followed by averaging group outputs is only equivalent for a linear, equally weighted reducer; SDM regression can use trimmed estimator averaging after inverse target transforms. Preserve the original global estimator reduction rather than assuming associativity.
