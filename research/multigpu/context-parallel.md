@@ -135,6 +135,25 @@ HF_HUB_OFFLINE=1 torchrun --standalone --nproc-per-node=4 \
   --batch-size 256 --estimators 4 --repeats 3 --profile
 ```
 
+## CUDA profile and collective overhead
+
+An independent Nsight Systems CUDA/NVTX trace of resident-cache Covertype large C16k/E4/CP4 captured all four CUDA processes, all four fit ranges, and all 32 expected prediction batch ranges. `context_trace.py` scopes kernel/copy/API records by both owning process and its NVTX intervals, avoiding double-counting the other ranks' work inside overlapping ranges. The original report, SQLite export, diagnostics, and derived JSON are retained as `cp-large16k-nsys.*` and `cp-large16k-nsys-analysis.json`.
+
+| Rank | Eight-batch traced wall | GPU kernel interval union | Kernel-active fraction | NCCL kernel sum/count |
+|---|---:|---:|---:|---:|
+| 0 | 1.894 s | 1.346 s | 71.1% | 0.892 s / 1,536 |
+| 1 | 1.894 s | 1.401 s | 74.0% | 0.960 s / 1,536 |
+| 2 | 1.894 s | 1.386 s | 73.2% | 0.941 s / 1,536 |
+| 3 | 1.894 s | 0.695 s | 36.7% | 0.250 s / 1,536 |
+
+The count matches two all-reductions × 24 ICL layers × four estimators × eight batches. Rank 0's 768 Flash split-KV attention kernels total only 64.30 ms. Non-NCCL kernels total roughly 0.44–0.45 seconds per rank, whereas collective kernel times vary substantially: NCCL time includes waiting for peers and cannot be interpreted as pure transfer bandwidth. GPU kernel-active fraction measures the presence of a running kernel, not SM occupancy. CUDA launch APIs add roughly 352–368 ms of CPU spans per rank; these may overlap GPU work and must not be added to GPU durations to reconstruct wall time. There are no frontend-versus-ICL nested NVTX scopes, so a full module-level split is unavailable from this trace.
+
+The resident-cache run copies only 64 bytes H2D and 59,744 bytes D2H per rank inside the prediction ranges; recorded D2D copies total 12 MiB. Their summed CUDA copy durations are under 1.1 ms per rank. These copy records do not account for traffic generated inside NCCL kernels. NCCL initialization confirms `SHM/direct/direct` ring transport and `isAllDirectP2p 0`, consistent with this host's disabled peer access. Fit remains replicated: no NCCL kernels occur inside fit, and each GPU is kernel-active for about 7.7–7.8 of the traced 9.6–9.7 seconds.
+
+Profiling perturbs execution: the traced prediction pass is about 1.894 seconds versus about 1.37 seconds in the unprofiled timing matrix. Use the latter for throughput claims. Nsight also emits missing-NVTX/CUDA warnings for auxiliary processes; the expected four worker traces and named ranges are present, and diagnostics remain in the derived record.
+
+This profile motivates the separately controlled `reduction="all_gather"` experiment: one packed output/LSE collective per ICL layer, followed by a stable local merge, instead of MAX then SUM all-reductions. It retains the default algorithm unchanged. For Q256/H16/D64 FP32 communication, the local packed tensor is 1,064,960 bytes and the CP4 gathered tensor is 4,259,840 bytes. An idealized ring sends about 3.19 MB per rank for all-gather versus 1.62 MB across the two all-reductions; actual transport traffic was not measured. Thus fewer launches trade against higher traffic and a world-size-scaled temporary buffer, not a free reduction in communication.
+
 ## Further viable extensions
 
 The prototype distributes only fitted-cache replay. Fit attention could also shard KV while retaining replicated queries/hidden rows, recombining every layer before residual and MLP. That partitions quadratic attention work but communicates full context-sized outputs and still replicates row embeddings/MLPs. A more complete distributed fit would partition query rows too, exchanging KV or circulating KV blocks while maintaining online softmax. It must preserve globally fitted preprocessing and induced-column attention, relational sampling/graph boundary semantics, hierarchical class routing, and estimator seeds. Splitting raw context into independent model fits and averaging their predictions is a different estimator, not exact context parallelism.
