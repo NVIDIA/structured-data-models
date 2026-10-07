@@ -160,9 +160,20 @@ def main() -> None:
     )
     parser.add_argument("--profile", action="store_true")
     parser.add_argument(
+        "--nvtx", action="store_true", help="Annotate separate Nsight runs"
+    )
+    parser.add_argument(
         "--query-residency", choices=["cpu", "gpu"], default="gpu"
     )
     args = parser.parse_args()
+
+    def phase(name: str) -> Any:
+        return (
+            torch.cuda.nvtx.range(name)
+            if args.nvtx
+            else contextlib.nullcontext()
+        )
+
     args.output.mkdir(parents=True, exist_ok=False)
     devices = [f"cuda:{i}" for i in range(args.gpus)]
     if args.mode == "native" and args.gpus != 1:
@@ -293,7 +304,8 @@ def main() -> None:
                 args, replicas
             )
 
-        model, report["load_s"] = timed(load, devices)
+        with phase("model_load"):
+            model, report["load_s"] = timed(load, devices)
         print(  # noqa: T201
             json.dumps({"phase": "loaded", "seconds": report["load_s"]}),
             flush=True,
@@ -321,7 +333,7 @@ def main() -> None:
             fit_kwargs["member_seed"] = args.seed
         for device in devices:
             torch.cuda.reset_peak_memory_stats(device)
-        with torch.inference_mode(), dtype_context():
+        with phase("context_fit"), torch.inference_mode(), dtype_context():
             _, report["fit_s"] = timed(
                 lambda: model.fit(context, labels, **fit_kwargs), devices
             )
@@ -374,9 +386,10 @@ def main() -> None:
                 torch.cuda.reset_peak_memory_stats(device)
             repeats, batches_s, predictions = [], [], []
             for _ in range(args.repeats):
-                (prediction, batch_times), elapsed = timed(
-                    predict_pass, devices
-                )
+                with phase("prediction_pass"):
+                    (prediction, batch_times), elapsed = timed(
+                        predict_pass, devices
+                    )
                 repeats.append(elapsed)
                 print(  # noqa: T201
                     json.dumps(
