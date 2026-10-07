@@ -2,6 +2,30 @@
 
 This branch is an integration prototype, based on main `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`. It includes table/recipe tracing work, PR #1054's Fourier-buffer fix, relational graph preparation, and PR #1068's relative-time fix. No PR, GPU validation, speed claim, or memory claim is attached to these results.
 
+## Latest public-prediction results
+
+All entries below compile and call **`model.predict` after eager `model.fit`**, with real cached data, pretrained weights, CPU Inductor, and unchanged FP32 comparisons. No GPU speed or memory claim is made.
+
+| Model / data | PyTorch | Graph breaks allowed | Fullgraph | Same-dtype prediction comparison |
+|---|---|---|---|---|
+| KumoTabular, numerical classification | 2.14 | Pass | Pass | Pass; latest fullgraph max `8.94e-7` |
+| KumoRelational, one-hop RelBench / four related tables | 2.14 | Pass | Pass* | All query sizes pass; max `4.83e-6` |
+| KumoRelational, two-hop RelBench / six related tables | 2.14 | Runs | Runs* | One of eight probabilities narrowly misses unchanged tolerance on the four-row sample; reproduced by compiling only the inner model |
+| KumoRelational | 2.7.1 | Still iterating schema guard failures | Still blocked | No end-to-end support claim yet |
+
+*Relational fullgraph uses scoped `capture_dynamic_output_shape_ops=True`. Arrow/cuDF joins remain **opaque external custom operations** inside the captured graph; their algorithms are not compiled. Runtime task-row validation is preserved by a small custom operation. Explicit finite `num_hops` permits bounded tensor propagation without a data-dependent early-exit condition. Unbounded traversal remains outside this guarantee.
+
+The relational fullgraph checks run **4 → 1 → 8 → 4 query rows with matching related neighborhoods** through one callable. Graph counts are **1 → 2 → 3 → 3**; first graphs capture 5,714 calls for one hop and 8,076 for two hops. Different row counts still recompile, while the repeated query reuses its graph. Source: `d8cbc7383`. Tabular fullgraph remains passing after atomic wrapper constructors (`aa3876c33`). Detailed results, including failures, are in `relational-prediction-progress.json`.
+
+```python
+model.fit(context, target, related_context, num_hops=1)
+with torch._dynamo.config.patch(capture_dynamic_output_shape_ops=True):
+    predict = torch.compile(model.predict, fullgraph=True, dynamic=True)
+    result = predict(query, related_query)
+```
+
+This is experimental branch behavior, not current-main support. Fitting, arbitrary schemas, CUDA, and preprocessing mutation still have separate validation requirements. The following sections retain earlier snapshots and explain the progression.
+
 ## What works
 
 Actual CPU Inductor, PyTorch 2.14, **public** `torch.compile(model.predict, fullgraph=..., dynamic=True)` after eager `fit()`:

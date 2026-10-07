@@ -438,5 +438,176 @@
       "cpp.simdlen": 1
     },
     "source_result": "relational-arm1-inner-scalar-varied214.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": true,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 0,
+    "recompile_limit": null,
+    "inner_only": false,
+    "capture_dynamic_outputs": true,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 4.0531158447265625e-06,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 5714
+      },
+      {
+        "rows": 1,
+        "case": 0,
+        "max_abs_error": 1.3709068298339844e-06,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 11416
+      },
+      {
+        "rows": 8,
+        "case": 2,
+        "max_abs_error": 4.827976226806641e-06,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 17130
+      },
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 4.0531158447265625e-06,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 17130
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 4.827976226806641e-06,
+    "parity": true,
+    "source_commit": "d8cbc7383",
+    "source_result": "relational-arm0-full-varied214.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": true,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": null,
+    "inner_only": false,
+    "capture_dynamic_outputs": true,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 1.9103288650512695e-05,
+        "parity": false,
+        "graphs_captured": 1,
+        "calls_captured": 8076
+      },
+      {
+        "rows": 1,
+        "case": 0,
+        "max_abs_error": 5.796551704406738e-06,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 16128
+      },
+      {
+        "rows": 8,
+        "case": 2,
+        "max_abs_error": 3.695487976074219e-05,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 24204
+      },
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 1.9103288650512695e-05,
+        "parity": false,
+        "graphs_captured": 3,
+        "calls_captured": 24204
+      }
+    ],
+    "all_samples_parity": false,
+    "status": "parity_fail",
+    "max_abs_error": 3.695487976074219e-05,
+    "parity": false,
+    "source_commit": "d8cbc7383",
+    "source_result": "relational-arm1-full-varied214.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "tabular",
+    "entry": "predict",
+    "fullgraph": true,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": null,
+    "recompile_limit": null,
+    "inner_only": false,
+    "capture_dynamic_outputs": false,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 4,
+        "max_abs_error": 5.960464477539063e-08,
+        "parity": true,
+        "graphs_captured": 1,
+        "calls_captured": 2234
+      },
+      {
+        "rows": 7,
+        "case": 7,
+        "max_abs_error": 8.940696716308594e-07,
+        "parity": true,
+        "graphs_captured": 2,
+        "calls_captured": 4472
+      },
+      {
+        "rows": 3,
+        "case": 3,
+        "max_abs_error": 5.960464477539063e-08,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6710
+      },
+      {
+        "rows": 4,
+        "case": 4,
+        "max_abs_error": 5.960464477539063e-08,
+        "parity": true,
+        "graphs_captured": 3,
+        "calls_captured": 6710
+      }
+    ],
+    "all_samples_parity": true,
+    "status": "pass",
+    "max_abs_error": 8.940696716308594e-07,
+    "parity": true,
+    "source_commit": "aa3876c33",
+    "source_result": "tabular-atomic-full214.json"
   }
 ]
