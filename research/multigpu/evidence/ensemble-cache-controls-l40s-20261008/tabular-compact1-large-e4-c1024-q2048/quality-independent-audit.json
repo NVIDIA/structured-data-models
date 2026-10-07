@@ -1,0 +1,100 @@
+{
+  "audit_version": 1,
+  "run": "tabular-compact1-large-e4-c1024-q2048",
+  "reference": "tabular-ep1-large-e4-c1024-q2048",
+  "checks": {
+    "input_hashes": true,
+    "columns": true,
+    "member_seeds": true,
+    "query_ids": true,
+    "targets": true,
+    "prediction_sha": true
+  },
+  "raw_prediction_sha256": "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+  "comparison": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "class_changes": 0,
+  "quality": {
+    "rows": 2048,
+    "accuracy": 0.76416015625,
+    "log_loss": 0.5760446019729857,
+    "brier_multiclass": 0.3375792160360528,
+    "auroc_by_class": [
+      0.8933421428681182,
+      0.8867785471323272,
+      0.988213353226408,
+      0.9946596915699417,
+      0.9262972569785101,
+      0.9682268500790401,
+      0.9743870895186685
+    ],
+    "auroc_macro_present_classes": 0.9474149901961447,
+    "max_probability_sum_error": 1.6590638551861048e-7
+  },
+  "recomputed_median_rows_s": 1816.9173024541137,
+  "matched_reference_median_rows_s": 1729.7717862673126,
+  "matched_speedup": 1.0503797766148406,
+  "memory_after_fit": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 1225441792,
+      "reserved_bytes": 2046820352,
+      "peak_allocated_bytes": 1899916288,
+      "peak_reserved_bytes": 2046820352
+    }
+  ],
+  "memory_after_prediction": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 1225441792,
+      "reserved_bytes": 2046820352,
+      "peak_allocated_bytes": 1560609280,
+      "peak_reserved_bytes": 2046820352
+    }
+  ],
+  "cache_storage_bytes_after_fit": {
+    "cuda:0": 358614196
+  },
+  "reference_cache_storage_bytes_after_fit": {
+    "cuda:0": 512754868
+  },
+  "other_cache_fields": {
+    "compaction_s": 0.0032308220002050803,
+    "compaction_storage_bytes": [
+      [
+        128188717,
+        89653549
+      ],
+      [
+        128188717,
+        89653549
+      ],
+      [
+        128188717,
+        89653549
+      ],
+      [
+        128188717,
+        89653549
+      ]
+    ]
+  },
+  "note": "Separate fresh three-pass measurements; small throughput changes are not robust gains. Cache counters exclude some processor state."
+}

@@ -1,0 +1,128 @@
+{
+  "audit_version": 1,
+  "run": "tabular-amp4-large-e4-c1024-q2048",
+  "reference": "tabular-ep4-large-e4-c1024-q2048",
+  "checks": {
+    "input_hashes": true,
+    "columns": true,
+    "member_seeds": true,
+    "query_ids": true,
+    "targets": true,
+    "prediction_sha": true
+  },
+  "raw_prediction_sha256": "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+  "comparison": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "class_changes": 0,
+  "quality": {
+    "rows": 2048,
+    "accuracy": 0.76416015625,
+    "log_loss": 0.5760446019729857,
+    "brier_multiclass": 0.3375792160360528,
+    "auroc_by_class": [
+      0.8933421428681182,
+      0.8867785471323272,
+      0.988213353226408,
+      0.9946596915699417,
+      0.9262972569785101,
+      0.9682268500790401,
+      0.9743870895186685
+    ],
+    "auroc_macro_present_classes": 0.9474149901961447,
+    "max_probability_sum_error": 1.6590638551861048e-7
+  },
+  "recomputed_median_rows_s": 1660.3578984795517,
+  "matched_reference_median_rows_s": 1644.8072373781115,
+  "matched_speedup": 1.0094543972983903,
+  "memory_after_fit": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 993964032,
+      "reserved_bytes": 1465909248,
+      "peak_allocated_bytes": 1268231680,
+      "peak_reserved_bytes": 1465909248
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 992452096,
+      "reserved_bytes": 1457520640,
+      "peak_allocated_bytes": 1266089984,
+      "peak_reserved_bytes": 1457520640
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 992452096,
+      "reserved_bytes": 1457520640,
+      "peak_allocated_bytes": 1266089984,
+      "peak_reserved_bytes": 1457520640
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 992452096,
+      "reserved_bytes": 1457520640,
+      "peak_allocated_bytes": 1266089984,
+      "peak_reserved_bytes": 1457520640
+    }
+  ],
+  "memory_after_prediction": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 1259298816,
+      "reserved_bytes": 1465909248,
+      "peak_allocated_bytes": 1328977408,
+      "peak_reserved_bytes": 1465909248
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 1257786880,
+      "reserved_bytes": 1457520640,
+      "peak_allocated_bytes": 1327305728,
+      "peak_reserved_bytes": 1457520640
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 1257786880,
+      "reserved_bytes": 1457520640,
+      "peak_allocated_bytes": 1327305728,
+      "peak_reserved_bytes": 1457520640
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 1257786880,
+      "reserved_bytes": 1457520640,
+      "peak_allocated_bytes": 1327305728,
+      "peak_reserved_bytes": 1457520640
+    }
+  ],
+  "cache_storage_bytes_after_fit": {
+    "cuda:0": 128188717,
+    "cuda:1": 128188717,
+    "cuda:2": 128188717,
+    "cuda:3": 128188717
+  },
+  "reference_cache_storage_bytes_after_fit": {
+    "cuda:0": 128188717,
+    "cuda:1": 128188717,
+    "cuda:2": 128188717,
+    "cuda:3": 128188717
+  },
+  "other_cache_fields": {},
+  "note": "Separate fresh three-pass measurements; small throughput changes are not robust gains. Cache counters exclude some processor state."
+}

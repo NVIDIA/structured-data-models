@@ -81,7 +81,7 @@ The first native fit took 122.751 seconds; a repeated native E4 fit with estimat
 
 EP batch p50 was 147.96 / 135.90 / 155.55 ms at 1/2/4 GPUs. Scaling efficiency was 54.4% at two GPUs and 23.8% at four. All four saved prediction arrays, including native, are byte-identical (`92cb62ec…`). EP resident cache storage distributes as 489.00 / 244.50 / 122.25 MiB per GPU, while replicated parameters make aggregate device memory increase. Summed per-rank peaks are an upper bound on simultaneous aggregate use, not a synchronized aggregate trace.
 
-The EP cache's 489 MiB unique backing storage exceeds the public CPU cache's 342 MiB, despite identical predictions. Source inspection identified row-encoder value views retaining fused KV backing buffers; a compact-cache clone prototype passed reduced real-model CPU parity, with GPU measurements pending. CPU dispatch/launch overhead and short member work remain candidate explanations for poor initial scaling, pending profiles. The historical TabFM 1.876× result does not predict these Kumo results.
+The EP cache's 489 MiB unique backing storage exceeds the public CPU cache's 342 MiB, despite identical predictions. Source inspection identified row-encoder value views retaining fused KV backing buffers; a later GPU-measured compact-cache clone reduces storage to 342 MiB with exact predictions, documented below. Nsight shows short-kernel scheduling and little compute overlap, but does not identify the complete causal chain. The historical TabFM 1.876× result does not predict these Kumo results.
 
 The tuned one-GPU comparison uses the same large model, Covertype rows, E4, context 1,024, query 2,048, query batch 256, and BF16 autocast. Only estimator batching changes:
 
@@ -166,6 +166,18 @@ The explicit `prediction_pass` ranges show many short kernels and little overlap
 | H2D bytes in range | 2.869 GB | 1.377 MB |
 
 Residency removes almost all cache H2D traffic, but does not fix short-kernel launch scheduling. Of 7,888 additional EP kernels, 7,840 are float-to-BF16 conversions and 48 integer additions; kernel-name accounting does not support calling them cache-view packing. Worker autocast-context lifetime is a specific hypothesis being tested. No-compute intervals can still contain copy-engine work, and these traces do not measure GIL waiting. See [ensemble-profile.md](ensemble-profile.md) for interval-union methodology, API timings, trace limitations, and reproduction.
+
+Two follow-ups test distinct hypotheses on the original E4/context-1k/query-2k workload:
+
+| Follow-up | GPUs | Rows/s | Change vs original matching EP | Unique fitted cache per GPU | Max prediction allocation |
+|---|---:|---:|---:|---:|---:|
+| Persistent worker autocast context | 1 | 1,753.36 | +1.36% | 489.00 MiB | 1.598 GiB |
+| Persistent worker autocast context | 4 | 1,660.36 | +0.95% | 122.25 MiB | 1.238 GiB |
+| Compact cache backing storage | 1 | 1,816.92 | +5.04% | **342.00 MiB** | **1.453 GiB** |
+
+All three outputs are byte-identical to their original reference, with full input/seed/column checks. Persistent autocast does not produce a meaningful scaling improvement in this ladder; its EP4 peak allocation is higher than original EP4. Compaction cuts actual retained backing storage from 512,754,868 to 358,614,196 bytes (30.1%) for 3.23 ms of fit-time copying; prediction peak decreases from 1,716,191,744 to 1,560,609,280 bytes, but fit peak stays unchanged. Three passes from one fresh fit are not enough to call the small throughput changes robust. This establishes a cache-memory improvement separately from any speed claim.
+
+Separate actual reduced-Kumo CUDA tests now pass for process EP (two tests, 5.30 s) and CUDA-graph EP (two tests, 2.52 s), including changed query values, remainder batches, retained outputs, and refit. These tests establish those exercised behaviors, not pretrained model throughput or broad graph-capture compatibility; full-model measurement is separate.
 
 ### Native relational EP and DP on L40S
 
@@ -286,6 +298,7 @@ Additional checked snapshots retain the new measurements:
 - [Initial placement L4 evidence](evidence/initial-placement-l4-20261008/index.json): four archived records, 20 external artifacts verified.
 - [Batched ensemble L40S evidence](evidence/batched-ensemble-l40s-20261008/index.json): eight archived result/audit records, 24 external artifacts verified; includes the passing EP2 and failing EP4 comparisons.
 - [Ensemble batching controls](evidence/ensemble-batch-controls-l40s-20261008/index.json): 12 archived result/audit records, 36 external artifacts verified; isolates local batching arithmetic and preserves the stronger one-GPU baseline.
+- [Ensemble cache controls](evidence/ensemble-cache-controls-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified; exact-output autocast and compact-cache interventions.
 - [Context F1 L4 evidence](evidence/context-f1-l4-20261008/index.json): 16 archived result/rank/audit records, 32 external artifacts verified; preserves full-quantile failures and paired quality analysis.
 - [F1 FP32-partial correction evidence](evidence/context-f1-fp32partial-l4-20261008/index.json): 13 archived result/rank/audit records, 25 external artifacts verified; both original-native and matching-kernel comparisons remain failures.
 - [Process DP L40S evidence](evidence/process-data-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified.
