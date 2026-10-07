@@ -31,7 +31,7 @@ class ToNumerical(Processor):
         # Already numerical-only: nothing to move.
         if all(
             stype == Stype.numerical or block.size(-1) == 0
-            for stype, block in table.items()
+            for stype, block in TableTensor.items(table)
         ):
             return table
 

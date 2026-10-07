@@ -40,6 +40,10 @@ The transform also materializes `tuple(batch_categories)` before constructing it
 
 Special-value parity includes NaN/infinities, duplicates, fitted category order, Boolean and unsigned integer vocabularies, empty inputs/fitted vocabularies, and int32/int64 output codes.
 
+## Fixed: table iteration during numerical conversion
+
+`ToNumerical` now calls `TableTensor.items(table)` instead of the bound `table.items()`. The former lets Dynamo inline the existing Python iterator. The latter was treated as a custom tensor operation returning a generator, which tracing rejects. The iterator, values, and output schema are unchanged. With the separate container/applicability patches, actual 2.14 Inductor passed both modes for mixed numerical/categorical tables with missing codes and row counts 4/6/3.
+
 ## Remaining work
 
 | Processor/path | Remaining compatibility issue |
