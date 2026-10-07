@@ -54,4 +54,46 @@ The successor is installed at `/home/ubuntu/kumo-multigpu/venv-cudf26.6`. After 
 
 These versions come from the captured baseline and final overlay freezes. Therefore comparing cuDF directly with the original runtime would confound dataframe-backend selection with three dependency changes. The same-overlay Arrow control is necessary for backend attribution.
 
+The actual CUDA interface smoke subsequently **passed** on the L40S host using source `1686803e4`: nullable composite-key join produced the same row pairs as CPU Arrow (`[(0,2),(1,0),(2,1)]`, dropping the null-key row), CUDA string sorting returned the expected order, and SDM string tensors round-tripped through cuDF. The success record and log are `runtime-cudf/smoke26.6.json` and `smoke26.6.log`; the imported cuDF version string is `26.06.00`. This establishes compatibility for the tested SDM interfaces, not comprehensive cuDF compatibility or a performance advantage.
+
 For paired comparisons, `run_dataframe_backend.py --backend arrow|cudf --receipt RECEIPT RUNNER [RUNNER_ARGUMENTS]` executes both arms in the same 26.6 environment. The Arrow arm intercepts only `find_spec("cudf")` availability checks, and the receipt records observed calling modules and dependency versions. This research override covers a single process and thread-based ensemble workers, not spawned data-parallel processes. Keep receipts outside the runner's new output directory and compare saved predictions as well as throughput. In particular, differing join order can change floating-point reduction order even when matched row pairs are identical.
+
+## Completed paired experiment
+
+All six arms completed on the same four-L40S host, using the same isolated environment, source `1686803e4`, runner `relational_bench-a12b70a75.py`, real rel-hm/user-churn sampled workload, 1,024 TRAIN context rows, 2,000 VAL queries, query batches of 250, exact temporal `[16,16]` neighbors, E4, BF16, seed 1729, eight CPU threads, one warmup and three timed repetitions. Each arm ran in its own process with an exclusive GPU lease. Native execution and ensemble execution use different existing ensemble plans, so backend effects are compared **within each row**, not native versus EP. The phase diagnostic is a separate pass excluded from throughput measurements.
+
+| Execution | Arrow median rows/s | cuDF median rows/s | cuDF / Arrow | Arrow → cuDF fit seconds | Arrow → cuDF AUROC | Largest within-cuDF repeat difference |
+|---|---:|---:|---:|---:|---:|---:|
+| Native, one GPU | 1,328.0 | 1,082.9 | 0.815× | 1.589 → 2.521 | 0.661948 → 0.662308 | 0.004085 |
+| Ensemble, one GPU | 1,347.6 | 1,154.3 | 0.857× | 1.831 → 2.802 | 0.663524 → 0.663760 | 0.003799 |
+| Ensemble, four GPUs | 1,364.5 | 1,059.5 | 0.776× | 2.015 → 2.882 | 0.663524 → 0.664215 | 0.004012 |
+
+cuDF was **14–22% slower** in measured warm throughput for this small sampled-graph workload. Fit measurements include each process's first backend/model calls and are not separate steady-state fit estimates. Three within-process repetitions are descriptive, not confidence intervals over independent runs. Four-GPU cuDF times declined from 1.982 to 1.888 to 1.780 seconds, so additional warmup could affect its steady-state estimate; even its fastest observed repetition remained slower than every matched Arrow repetition (1.463–1.484 seconds). No extrapolation to larger join batches or other datasets is justified.
+
+### Correctness and reproducibility
+
+All Arrow arms were prediction-identical across repetitions and their separate phase pass. Arrow EP1 and EP4 saved predictions were also exactly equal. In contrast, all cuDF arms had nonzero repeat differences shown above and failed the phase pass's exact-prediction check. cuDF EP1 versus EP4 differed by up to 0.009577 in probability, although hard class predictions agreed on all 2,000 rows.
+
+Cross-backend maximum probability differences were 0.011796 native, 0.011978 EP1 and 0.011602 EP4; mean absolute differences were approximately 0.00153–0.00157. Hard-prediction agreement was 99.95% native and 100% for both ensemble modes. cuDF native accuracy was 0.8085 versus Arrow 0.8080; all ensemble accuracies were 0.8085. Small observed AUROC differences are not evidence of a quality improvement, particularly given within-backend nondeterminism. This does **not** pass a bitwise or 1e-3 absolute/relative backend-equivalence check.
+
+The simple nullable-key smoke proves matching pairs for that fixture, not deterministic ordering or complete model equivalence. A plausible mechanism is unordered cuDF hash-join output feeding graph edge sorting by destination only, which leaves reduction order among equal destinations unconstrained. CUDA stream interoperability is another possibility and is not excluded by the available evidence. No completed graph-repeat diagnostic exists: `check_graph_repeatability.py` was prepared to compare ordered edges, canonical edge multisets and task/readout assignments under explicit synchronization, but new network restrictions prevented completing/retrieving that diagnostic. **The cause remains unresolved; no core fix is claimed.**
+
+### Phase and memory observations
+
+For the native separate phase pass, summed inclusive `TaskGraph.from_input` host intervals increased from 0.206 seconds (Arrow) to 0.513 seconds (cuDF), across 32 calls. The nested `HomogeneousGraph.from_tables` intervals increased from 0.136 to 0.318 seconds, while recipe transform increased from 0.371 to 0.412 seconds. Whole phase-pass wall time increased from 1.511 to 1.854 seconds. This is consistent with graph construction accounting for much of the slowdown in this case, but these are host intervals including any synchronization, **not exclusive GPU kernel percentages**. Do not add nested graph intervals, and do not divide four-worker summed intervals by wall time: their calls overlap.
+
+Executed backend receipts confirm 572 join and 16 string-backend checks in each native arm; ensemble arms each record 492 join checks and no CUDA string checks, consistent with CPU recipe processing. Package versions match across all six receipts.
+
+| Execution | Arrow → cuDF Torch prediction peak, MiB per GPU | Arrow → cuDF sampled whole-GPU prediction peak, MiB |
+|---|---:|---:|
+| Native, one GPU | 470.106 → 470.106 | 1,641 → 1,685 |
+| Ensemble, one GPU | 507.761 → 508.137 | 1,681 → 1,685 |
+| Ensemble, four GPUs | 379.838 → 379.838 on each GPU | 1,549–1,551 → 1,549–1,553 across GPUs |
+
+Torch numbers are measured maximum allocated bytes after warmup, converted using 2²⁰ bytes/MiB. Whole-GPU numbers are the maximum `nvidia-smi memory.used` sample within recorded prediction wall-clock windows, sampled every 200 ms; they include context/runtime/RMM allocations and can miss short peaks. They are not allocator-exact process peaks. These data do not demonstrate a meaningful memory reduction from cuDF.
+
+### Recommendation and evidence
+
+Keep the original Arrow runtime as the consistent baseline for the current multi-GPU results. cuDF 26.6 is installable and passes targeted SDM interface smoke, but this measured workload shows a latency regression and unresolved prediction-repeatability changes. Do not recommend it as a drop-in performance or exactness improvement without a resolved ordering/stream investigation and representative large-join measurements. cuDF 26.8 remains dependency-inconsistent with this Torch build and was not benchmarked.
+
+All six complete result bundles are local at `.kumo-multigpu-20261008/results/relational/relational-backend-{arrow,cudf}-{native1,ensemble1,ensemble4}-e4-c1024/`, each with `result.json`, `backend.json`, `predictions.npy` and `nvidia-smi.csv`. Local environment evidence is `.kumo-multigpu-20261008/ops/runtime-cudf/`, including successful smoke JSON/log, final freeze/dependency check and installation reports. No completed graph-repeat result is available locally or reported by its runner; preserve that missing evidence explicitly rather than inferring its outcome.
