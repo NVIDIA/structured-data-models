@@ -50,3 +50,16 @@ Record per-device allocated/reserved peaks, model/cache bytes, CPU RSS/pinned-ca
 | Context parallel | Source uses global-length query scaling, stable MAX then weighted numerator/denominator SUM, cloned KV shards, rejects unsupported masks/valid lengths and topology changes. Full fit remains replicated. | Real distributed runs, uneven/empty shards, current CUDA efficient-attention backend, full-model quality and memory. |
 
 Review alone is not a GPU correctness claim. Implementation owners are adding real distributed tests; runner results will be independently checked here when available.
+
+## Findings resolved before cloud execution
+
+- Ensemble source initially waited only for input readiness. Parameters initialized on another GPU's nondefault caller stream could race its worker. Follow-up `f74f2cc30` adds per-replica construction stream dependencies and records returned CUDA tensors on the consumer stream; two CUDA tests exercise initialization, different fit/predict streams and CPU outputs. Actual execution on multiple GPUs remains pending.
+- The relational runner initially imported the former ensemble module name and omitted the preprocessing generator for the resident executor. Owner follow-ups fix both and retain fixed CPU preprocessing for resident scaling. Native GPU preprocessing remains a separately disclosed baseline.
+- The query adapter now propagates estimator batch size, invalidates its executor before refitting, and drains sibling futures before propagating a worker failure. These avoid an unequal batching baseline and stale state after failed fits.
+- The ensemble tests now exercise actual reduced-size KumoTabular ECOC with twelve classes, shuffled class vocabularies, exact cached codebooks and predictions across one/two/four CPU replicas and repeated fits. CPU coverage cannot validate CUDA stream behavior.
+
+## Independently checked workload identities
+
+The raw numeric arrays were opened read-only to verify IDs and first-context coverage. Covertype has 464,809 TRAIN and 116,203 validation observations, zero ID overlap and 581,012 unique total IDs. Its first 1,024 TRAIN rows contain all seven classes (counts: 367, 506, 59, 11, 22, 22, 37 for labels 1 through 7). California housing has 16,512 TRAIN and 4,128 validation observations, zero overlap and 20,640 unique total IDs. These are custom deterministic splits, not published benchmark split reproductions.
+
+Rel-hm's 3,832,692 stored TRAIN indices are unique and its 76,556 validation indices are ordered. Rel-f1's 7,453 TRAIN indices are unique and its 499 validation indices are ordered. TRAIN and validation task indices belong to different parquet files, so numeric equality across split-local indices does not imply observation overlap. Validation inference graph sampling is still subject to the timestamp and target-exclusion checks above.
