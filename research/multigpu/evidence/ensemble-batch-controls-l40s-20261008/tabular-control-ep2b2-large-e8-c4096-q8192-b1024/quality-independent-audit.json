@@ -1,0 +1,67 @@
+{
+  "run": "tabular-control-ep2b2-large-e8-c4096-q8192-b1024",
+  "prediction_sha256": "74153d1e6bfa564a1e590bec99e4564faa55311186ec959eea3e7ee433f55353",
+  "matches_recorded_sha": true,
+  "input_hashes_match": true,
+  "query_ids_match": true,
+  "targets_match": true,
+  "class_columns_match": true,
+  "numerical_vs_native_batch2": {
+    "shape": [
+      8192,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "numerical_vs_native_batch8": {
+    "shape": [
+      8192,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.032253146171569824,
+    "mean_abs": 0.0005262674858496971,
+    "rms": 0.001516237361845122,
+    "p99_abs": 0.007043635994195938,
+    "relative_l2": 0.004597454961506176,
+    "within_tolerance": false
+  },
+  "quality": {
+    "rows": 8192,
+    "accuracy": 0.8419189453125,
+    "log_loss": 0.41392446582606,
+    "brier_multiclass": 0.2371795238466824,
+    "auroc_by_class": [
+      0.9430221024865839,
+      0.9388780345493478,
+      0.9932121548144834,
+      0.9969620184186148,
+      0.9747260934911445,
+      0.9839284786111544,
+      0.9937560536875606
+    ],
+    "auroc_macro_present_classes": 0.9749264194369841,
+    "max_probability_sum_error": 1.9400340534048155e-7
+  },
+  "median_rows_s": 6626.770070185196,
+  "speedup_vs_native_batch2": 1.494584385410098,
+  "speedup_vs_resident_batch2": 1.445706059028966
+}

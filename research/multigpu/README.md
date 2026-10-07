@@ -4,14 +4,14 @@ Status: investigation in progress, 2026-10-08. Implementation baseline: `842c408
 
 The goal is practical multi-GPU inference for both `KumoTabular` and `KumoRelational`, including throughput, latency, capacity, prediction quality, and a lightweight integration into SDM. The implementation recommendations are in [integration.md](integration.md).
 
-The strongest current throughput result is persistent process query DP with local estimator batching: KumoTabular reaches 13,991 rows/s on four L40S GPUs, 3.817× its matched one-process control and 3.492× the best native one-GPU result. Native relational H&M reaches 3,859 rows/s, 3.254× its process control and 2.981× public native. Predictions remain byte-identical to the matching native batching policy. Batched KumoTabular ensemble parallelism also scales 1.836× on two GPUs. Initial threaded small workloads scale poorly; sequential layer placement improves capacity; cached context parallelism saves KV memory but its current BF16 relational regression fails the declared full-quantile numerical gate. Final CPU concatenation is outside these process timers, so cross-runner application-boundary comparisons need that caveat.
+The strongest current throughput result is persistent process query DP with local estimator batching: KumoTabular reaches 13,991 rows/s on four L40S GPUs, 3.817× its matched one-process control and 3.492× the best native one-GPU result for that workload. Native relational H&M reaches 3,859 rows/s, 3.254× its process control and 2.981× public native. Predictions remain byte-identical to the matching native batching policy. Larger-workload ensemble parallelism also helps: after tuning the native baseline and fixing local estimator batch width, EP2 scales 1.446× with exact predictions. Initial threaded small workloads scale poorly; sequential layer placement improves capacity; cached context parallelism saves KV memory but its current BF16 relational regression fails the declared full-quantile numerical gate. Final CPU concatenation is outside these process timers, so cross-runner application-boundary comparisons need that caveat.
 
 ## Approach matrix
 
 | Approach | Work placement | Expected benefit | Main limitation / correctness requirement | Current owner and evidence |
 |---|---|---|---|---|
 | Query data parallelism (DP) | Complete, fixed query batches across persistent replicas | High aggregate throughput; no attention collectives | Full model and fitted context replicated; preserve batch boundaries and complete relational neighborhoods | Tuned process tabular DP achieves 3.817× and native H&M 3.254× at four GPUs; initial threaded results weak; hybrid follow-ups pending |
-| Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | Tested: initial unbatched scaling poor; batched E8 gives 1.836× on two GPUs with exact predictions; four-GPU numerical gate fails |
+| Ensemble parallelism (EP) | Fixed logical estimator IDs across replicas | Reduce member work and member cache per GPU; small output gather | Same recipes, member RNG, class alignment, output reduction, and cache residency as reference | Tested: initial unbatched scaling poor; E8 EP2 gives 1.446× at fixed tuned local batch2; earlier 1.836× changes local batch width; original EP4 gate failure isolated to batching arithmetic |
 | Cached context parallelism (CP) | ICL KV rows across ranks; queries replicated | Larger retained context; possible attention acceleration | Full context compute still replicated at fit; stable softmax reduction, global length scaling, uneven shards; collectives every layer | Real NCCL tests passed; 1k and resident 16k tabular runs slower; BF16 F1 all-quantile gate fails |
 | Layer/stage placement | Row encoder, GNN, and/or ICL layers on different devices | Parameter/cache capacity; potential pipeline overlap across query batches | Single-query latency can worsen; cache ownership and transferred activations must follow stages | Source `55dba6bb5`: 36 CPU/CUDA tests passed on L4; real model memory decreases with small throughput cost; sequential placement, not overlapped pipelining |
 | Table embedding parallelism | Independent related-table encoders across devices, then gather row embeddings | Parallel relational table encoding before GNN | Tables may be imbalanced; shared preprocessing/target propagation and per-table RNG must remain fixed | Design inspected; no measurement |
@@ -106,7 +106,20 @@ The larger workload uses KumoTabular large, Covertype, **E8, context 4,096, quer
 
 The two-GPU result is 91.8% scaling efficiency relative to resident EP1. Its 2.289× speedup over public native combines 1.247× from residency/scheduling with the separate 1.836× multi-GPU gain. Native/EP1/EP2 accuracy is 0.841797, log loss 0.413884, and multiclass AUC 0.974934. These are validation-prefix results, not a full dataset ranking.
 
-The four-GPU result is slower than two GPUs and differs in one of 57,344 probability entries beyond the predeclared BF16 tolerance; maximum difference is 0.032253, with six changed labels. Accuracy is 0.841919 and log loss 0.413924, with a paired log-loss change interval spanning zero. Similar aggregate quality does not turn a failed numerical gate into a pass. Local estimator groups shrink from eight to four to two across placements; a one-GPU batch-two control is queued to distinguish batching arithmetic from placement effects. Keep the original failure visible.
+The four-GPU result is slower than two GPUs and differs in one of 57,344 probability entries beyond the predeclared BF16 tolerance; maximum difference is 0.032253, with six changed labels. Accuracy is 0.841919 and log loss 0.413924, with a paired log-loss change interval spanning zero. Similar aggregate quality does not turn a failed numerical gate into a pass. Local estimator groups shrink from eight to four to two across placements; the following controls isolate that confound without removing the original failure.
+
+The same E8 workload was rerun with native estimator batches two/four and fixed local batch-two resident controls. The stronger native baseline changes the performance interpretation:
+
+| Arm | GPUs | Actual local member batch | Median rows/s | Speedup vs resident EP1 batch2 | Numerical comparison |
+|---|---:|---:|---:|---:|---|
+| Native batch2 | 1 | 2 | **4,433.85** | — | Batch2 reference |
+| Native batch4 | 1 | 4 | 3,777.01 | — | Exact native batch8, differs from batch2 |
+| Resident EP1 batch2 | 1 | 2 | 4,583.76 | 1.000× | Exact native batch2 |
+| Resident EP2 batch2 | 2 | 2 | **6,626.77** | **1.446×** | Exact native batch2 and EP1 batch2 |
+| EP2 reverse-order repeat | 2 | 4 | 7,282.49 | Not batch-matched | Exact native batch4/batch8 |
+| EP4 reverse-order repeat | 4 | 2 | 5,875.07 | 1.282× | Exact native batch2 and original EP4 |
+
+Fixed batch-two EP2 is 1.495× tuned public native and 1.446× its resident control. The earlier 1.836× result remains valid for its recorded execution policies, but its local member width changes eight→four and its native batch-eight baseline is not best tuned. Four-GPU outputs matching native batch2 exactly show that the original cross-batch numerical failure is a batching-shape effect rather than evidence of incorrect distributed member aggregation. The original native-batch8 comparison still fails; accepting a batch-two deployment means selecting and validating that numerical policy explicitly. Four GPUs remain slower than two here.
 
 ### Process query DP on L40S
 
@@ -262,6 +275,7 @@ Additional checked snapshots retain the new measurements:
 - [Initial context L4 evidence](evidence/initial-context-l4-20261008/index.json): 14 archived records, 36 external artifacts verified; includes native/LSE/CP full-model runs and both kernel probes.
 - [Initial placement L4 evidence](evidence/initial-placement-l4-20261008/index.json): four archived records, 20 external artifacts verified.
 - [Batched ensemble L40S evidence](evidence/batched-ensemble-l40s-20261008/index.json): eight archived result/audit records, 24 external artifacts verified; includes the passing EP2 and failing EP4 comparisons.
+- [Ensemble batching controls](evidence/ensemble-batch-controls-l40s-20261008/index.json): 12 archived result/audit records, 36 external artifacts verified; isolates local batching arithmetic and preserves the stronger one-GPU baseline.
 - [Context F1 L4 evidence](evidence/context-f1-l4-20261008/index.json): 16 archived result/rank/audit records, 32 external artifacts verified; preserves full-quantile failures and paired quality analysis.
 - [Process DP L40S evidence](evidence/process-data-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified.
 - [Tuned and relational process DP evidence](evidence/tuned-process-data-l40s-20261008/index.json): ten archived result/audit records, 27 external artifacts verified; includes matched estimator-batch-four quality references.

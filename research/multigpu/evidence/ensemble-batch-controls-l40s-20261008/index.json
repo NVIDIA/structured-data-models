@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-07T16:13:38.574340+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "tabular-control-ep1b2-large-e8-c4096-q8192-b1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep1b2-large-e8-c4096-q8192-b1024",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 11014,
+          "sha256": "d9b8514c71b55e7f372710b524d1938f3a7530e5602d01f2b6981f939d123409",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep1b2-large-e8-c4096-q8192-b1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "fceb9b6731a14002d8c01c9a4b5b5701d8a83819a6b234fdd519f027c32ea9c1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep1b2-large-e8-c4096-q8192-b1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1762,
+          "sha256": "46e4028b6be0b3a578bd478ed03ea8d8b4e57d4f5312c6e6425bbeb866ffd9e6",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep1b2-large-e8-c4096-q8192-b1024/quality-independent-audit.json",
+          "archived_path": "tabular-control-ep1b2-large-e8-c4096-q8192-b1024/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep1b2-large-e8-c4096-q8192-b1024/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 4275,
+          "sha256": "e265f8375c31fcd18a376a79b0b0b0b3c71a5d48801a15de7fe4adffb280f58c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep1b2-large-e8-c4096-q8192-b1024/result.json",
+          "archived_path": "tabular-control-ep1b2-large-e8-c4096-q8192-b1024/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep1b2-large-e8-c4096-q8192-b1024/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "tabular-control-ep2b2-large-e8-c4096-q8192-b1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2b2-large-e8-c4096-q8192-b1024",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 8901,
+          "sha256": "ed177a87d4c7dd03b2f6daca67f502bcb43a0fc06a0acfc6a1aac7fff2412d3d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2b2-large-e8-c4096-q8192-b1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "fceb9b6731a14002d8c01c9a4b5b5701d8a83819a6b234fdd519f027c32ea9c1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2b2-large-e8-c4096-q8192-b1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1777,
+          "sha256": "857d27d21a8428363cf2b968dc0d74edc4f4b834a8ef31cceabc237b1ce2a094",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2b2-large-e8-c4096-q8192-b1024/quality-independent-audit.json",
+          "archived_path": "tabular-control-ep2b2-large-e8-c4096-q8192-b1024/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2b2-large-e8-c4096-q8192-b1024/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 4907,
+          "sha256": "86e2b5b011debbcabef51cc7a7d7fa9b32e697f00388695e7774ac076a5216a7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2b2-large-e8-c4096-q8192-b1024/result.json",
+          "archived_path": "tabular-control-ep2b2-large-e8-c4096-q8192-b1024/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2b2-large-e8-c4096-q8192-b1024/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "tabular-control-ep2reverse-large-e8-c4096-q8192-b1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2reverse-large-e8-c4096-q8192-b1024",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 8653,
+          "sha256": "8a2e99e6c4a293f3b8a4e26f6dc46a30779cd6845c674d3bc06f2a04129a4056",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2reverse-large-e8-c4096-q8192-b1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "974b36e5d1afcae9ebc136ac98125630c7c7f4a6ff9af06be1d132f0ef9b2011",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2reverse-large-e8-c4096-q8192-b1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1780,
+          "sha256": "ecece6b67056f197c285d5be31054ae7f93742963a30ee1ab0a53fa9c8d854be",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2reverse-large-e8-c4096-q8192-b1024/quality-independent-audit.json",
+          "archived_path": "tabular-control-ep2reverse-large-e8-c4096-q8192-b1024/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2reverse-large-e8-c4096-q8192-b1024/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 4908,
+          "sha256": "7eab211da774bc5a89af44c6099d3992c65decc13b55804150cd7ab1b188fbc1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2reverse-large-e8-c4096-q8192-b1024/result.json",
+          "archived_path": "tabular-control-ep2reverse-large-e8-c4096-q8192-b1024/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep2reverse-large-e8-c4096-q8192-b1024/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "tabular-control-ep4reverse-large-e8-c4096-q8192-b1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep4reverse-large-e8-c4096-q8192-b1024",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 10715,
+          "sha256": "cf22f652477590035448b7ef331da6ed6a1e5350dde0b7d6843ec103b7c89a68",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep4reverse-large-e8-c4096-q8192-b1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "fceb9b6731a14002d8c01c9a4b5b5701d8a83819a6b234fdd519f027c32ea9c1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep4reverse-large-e8-c4096-q8192-b1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1784,
+          "sha256": "ea9f184086c638e4e6da6810b920f51463feac6f673e2d7621a8538d8b6207ed",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep4reverse-large-e8-c4096-q8192-b1024/quality-independent-audit.json",
+          "archived_path": "tabular-control-ep4reverse-large-e8-c4096-q8192-b1024/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep4reverse-large-e8-c4096-q8192-b1024/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 6196,
+          "sha256": "4b9fd7d5d7f2caac25d36418a81b73d742079907cf323cb0a0d36734dac1f015",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep4reverse-large-e8-c4096-q8192-b1024/result.json",
+          "archived_path": "tabular-control-ep4reverse-large-e8-c4096-q8192-b1024/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-ep4reverse-large-e8-c4096-q8192-b1024/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "tabular-control-native2-large-e8-c4096-q8192-b1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native2-large-e8-c4096-q8192-b1024",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 12257,
+          "sha256": "5c9d296287237d1985480b233ecbd1f2c8498f5e5ea1d0eabc7223c715c8f7e0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native2-large-e8-c4096-q8192-b1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "fceb9b6731a14002d8c01c9a4b5b5701d8a83819a6b234fdd519f027c32ea9c1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native2-large-e8-c4096-q8192-b1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1764,
+          "sha256": "0b2c3b92bff831faa0e8f2df3fb1826e255bba98b8c69077396c8ac8f966740b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native2-large-e8-c4096-q8192-b1024/quality-independent-audit.json",
+          "archived_path": "tabular-control-native2-large-e8-c4096-q8192-b1024/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native2-large-e8-c4096-q8192-b1024/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 4117,
+          "sha256": "29fe9236e44a0dc50297d896eb2ed6b4fdffead3331496c7a43ecd5b66af3591",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native2-large-e8-c4096-q8192-b1024/result.json",
+          "archived_path": "tabular-control-native2-large-e8-c4096-q8192-b1024/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native2-large-e8-c4096-q8192-b1024/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "tabular-control-native4-large-e8-c4096-q8192-b1024",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native4-large-e8-c4096-q8192-b1024",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 13261,
+          "sha256": "a2ede62e80dfa3591d0efa0eebd53c5110ab34d46c4c657cb4a9f4cbc5684277",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native4-large-e8-c4096-q8192-b1024/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "974b36e5d1afcae9ebc136ac98125630c7c7f4a6ff9af06be1d132f0ef9b2011",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native4-large-e8-c4096-q8192-b1024/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 1776,
+          "sha256": "9af4e8e7c99dddf89e5e0fa9acfbd049598f21be698104e1c84cd5c702dafce9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native4-large-e8-c4096-q8192-b1024/quality-independent-audit.json",
+          "archived_path": "tabular-control-native4-large-e8-c4096-q8192-b1024/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native4-large-e8-c4096-q8192-b1024/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 4108,
+          "sha256": "e25819bb826532d425c5f2a6e66e820d588eea4a30707f97c81dcb6fcfa57fce",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native4-large-e8-c4096-q8192-b1024/result.json",
+          "archived_path": "tabular-control-native4-large-e8-c4096-q8192-b1024/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/quality/tabular-control-native4-large-e8-c4096-q8192-b1024/targets.npy"
+        }
+      ]
+    }
+  ]
+}
