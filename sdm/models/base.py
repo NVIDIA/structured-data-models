@@ -396,11 +396,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
         num_batches = cast(int, self._cache["num_batches"])
         caches = [cast(Cache, self._cache[i]) for i in range(num_batches)]
         next_cache = caches[0]
+        needs_cache_transfer = x.is_cuda and any(
+            tensor.device != x.device
+            for cache in caches
+            for tensor in cache._tensors()
+        )
 
         compute_stream: torch.cuda.Stream | None = None
         transfer_stream: torch.cuda.Stream | None = None
         try:
-            if x.is_cuda:
+            if needs_cache_transfer:
                 compute_stream = torch.cuda.current_stream(x.device)
                 if x.device not in self._transfer_streams:
                     transfer_stream = torch.cuda.Stream(x.device)
@@ -416,7 +421,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             ):
                 queries = recipe_execution.transform(x, related_tables)
 
-            if x.is_cuda:
+            if needs_cache_transfer:
                 assert compute_stream is not None
                 assert transfer_stream is not None
                 compute_stream.wait_stream(transfer_stream)
@@ -448,7 +453,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
                 if i + 1 < len(caches):
                     next_cache = caches[i + 1]
-                if x.is_cuda and next_cache is not None:
+                if needs_cache_transfer and next_cache is not None:
                     assert transfer_stream is not None
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
@@ -468,12 +473,12 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     **cast(dict[str, Any], self._cache["kwargs"]),
                 )
 
-                if x.is_cuda:
+                if needs_cache_transfer:
                     assert compute_stream is not None
                     for tensor in cache._tensors():
                         tensor.record_stream(compute_stream)
 
-                if x.is_cuda and next_cache is not None:
+                if needs_cache_transfer and next_cache is not None:
                     assert compute_stream is not None
                     assert transfer_stream is not None
                     compute_stream.wait_stream(transfer_stream)
