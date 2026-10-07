@@ -227,7 +227,13 @@ def score(
         "accuracy": float((probabilities.argmax(-1) == indices).mean()),
     }
     if probabilities.shape[1] == 2:
-        result["auroc"] = roc_auc_score(indices, probabilities[:, 1])
+        positive_scores, positive_targets = sdm.evaluation.to_binary_class(
+            pred, labels, positive_class=1
+        )
+        result["auroc"] = roc_auc_score(
+            positive_targets.numpy(), positive_scores.numpy()
+        )
+        result["positive_class"] = 1
     return result
 
 
