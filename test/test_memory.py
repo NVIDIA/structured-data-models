@@ -8,6 +8,7 @@ import sys
 
 import pytest
 import torch
+from torch.torch_version import TorchVersion
 
 from sdm._memory import configure_pinned_memory
 from sdm.testing import onlyCUDA
@@ -61,7 +62,7 @@ def test_fit_pinned_memory(
     runtime_settings: str,
     expected_mib: int,
 ) -> None:
-    if tuple(int(part) for part in torch.__version__.split(".")[:2]) < (2, 13):
+    if TorchVersion(torch.__version__) < "2.13":
         pytest.skip("Pinned allocation rounding requires PyTorch 2.13")
 
     # A fresh process isolates allocator state and previously retained blocks.
