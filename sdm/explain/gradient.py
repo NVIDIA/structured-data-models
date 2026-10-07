@@ -12,7 +12,8 @@ from torch import Tensor
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.explain.base import ICLExplainer
 from sdm.models import ICLModel
-from sdm.models.callback import Callback, CaptureInputs, EnableInputGradients
+from sdm.models.callback import Callback
+from sdm.models.input_callbacks import CaptureInputs, EnableInputGradients
 
 
 class _GradientCallback(Callback):
