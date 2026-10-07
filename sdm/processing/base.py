@@ -117,7 +117,11 @@ class Processor(torch.nn.Module, abc.ABC):
         self.__fitted = bool(self._fitted_state)
 
     def _set_fitted(self, device: torch.device) -> None:
-        self._fitted_state = self._fitted_state.to(device=device)
+        self.register_buffer(
+            "_fitted_state",
+            self._fitted_state.to(device=device),
+            persistent="_fitted_state" not in self._non_persistent_buffers_set,
+        )
         self._fitted = True
 
     def _check_is_fitted(self) -> None:
