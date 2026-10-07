@@ -7,10 +7,14 @@
 import copy
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 import torch
-from research.multigpu.data_parallel_adapter import DataParallelAdapter
+from research.multigpu.data_parallel_adapter import (
+    DataParallelAdapter,
+    hybrid_factory,
+)
 from research.multigpu.query_parallel import (
     ProcessQueryParallel,
     QueryBatch,
@@ -127,7 +131,7 @@ def test_spawn_process_roundtrip():
             )
 
 
-@pytest.mark.parametrize("adapter", [False, True])
+@pytest.mark.parametrize("adapter", [False, True, "hybrid"])
 def test_real_kumotabular_fitted_recipe_parity(monkeypatch, adapter):
     torch.set_num_threads(1)
     monkeypatch.setitem(
@@ -151,7 +155,9 @@ def test_real_kumotabular_fitted_recipe_parity(monkeypatch, adapter):
     for parameter in base.parameters():
         if not parameter.any():
             torch.nn.init.normal_(parameter, std=0.02)
-    models = [copy.deepcopy(base) for _ in range(2)]
+    models = [
+        copy.deepcopy(base) for _ in range(4 if adapter == "hybrid" else 2)
+    ]
     context = TableTensor.from_columns(
         {"n": list(range(24)), "c": ["a", "b", "c"] * 8},
         stypes={"n": "numerical", "c": "categorical"},
@@ -172,7 +178,14 @@ def test_real_kumotabular_fitted_recipe_parity(monkeypatch, adapter):
     ]
     reference = [models[0].predict(batch.x) for batch in query]
     if adapter:
-        executor = DataParallelAdapter(models, dtype=None)
+        if adapter == "hybrid":
+            executor = hybrid_factory(
+                SimpleNamespace(seed=123, precision="float32"), models
+            )
+        else:
+            executor = DataParallelAdapter(
+                models, devices=[torch.device("cpu")] * 2, dtype=None
+            )
         executor.fit(
             context,
             target,

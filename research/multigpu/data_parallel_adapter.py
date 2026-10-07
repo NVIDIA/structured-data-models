@@ -4,7 +4,7 @@
 """Thin runner adapter for identical per-replica fit and whole-batch DP."""
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Protocol
 
 import torch
 from research.multigpu.query_parallel import QueryBatch, QueryParallel
@@ -13,11 +13,32 @@ from sdm import RelatedTables, TableTensor
 from sdm.models import ICLModel
 
 
+class FittablePredictor(Protocol):
+    """Model or ensemble group accepted by the common benchmark adapter."""
+
+    def fit(
+        self,
+        x: TableTensor,
+        y: TableTensor,
+        related_tables: RelatedTables | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Fit a complete identical context and recipe."""
+        ...
+
+    def predict(
+        self, x: TableTensor, related_tables: RelatedTables | None = None
+    ) -> TableTensor:
+        """Predict one complete query batch."""
+        ...
+
+
 class DataParallelAdapter:
     """Fit identical native replicas and dispatch complete prepared batches.
 
     Args:
-        replicas: Models already loaded on their individual devices.
+        replicas: Models or ensemble groups already loaded on their devices.
+        devices: Input device for each replica or ensemble group.
         dtype: Explicit worker autocast dtype, or None for FP32.
         estimator_batch_size: Same within-replica estimator batching as the
             native reference, unless explicitly overridden by fit.
@@ -25,17 +46,18 @@ class DataParallelAdapter:
 
     def __init__(
         self,
-        replicas: Sequence[ICLModel],
+        replicas: Sequence[FittablePredictor],
         *,
+        devices: Sequence[torch.device],
         dtype: torch.dtype | None,
         estimator_batch_size: int | None = 1,
+        member_seed: int | None = None,
     ) -> None:
         self.replicas = tuple(replicas)
-        self.devices = tuple(
-            next(model.parameters()).device for model in replicas
-        )
+        self.devices = tuple(devices)
         self.dtype = dtype
         self.estimator_batch_size = estimator_batch_size
+        self.member_seed = member_seed
         self.executor: QueryParallel | None = None
 
     def fit(
@@ -51,7 +73,16 @@ class DataParallelAdapter:
         if self.executor is not None:
             self.executor.close()
         self.executor = None
-        kwargs.setdefault("estimator_batch_size", self.estimator_batch_size)
+        if self.member_seed is None:
+            kwargs.setdefault(
+                "estimator_batch_size", self.estimator_batch_size
+            )
+        else:
+            if kwargs.pop("estimator_batch_size", 1) != 1:
+                raise ValueError(
+                    "Hybrid ensemble groups run members separately"
+                )
+            kwargs.setdefault("member_seed", self.member_seed)
         for model, device in zip(self.replicas, self.devices, strict=True):
             if generator.device.type != device.type:
                 raise ValueError(
@@ -140,6 +171,40 @@ def factory(args: Any, replicas: Sequence[ICLModel]) -> DataParallelAdapter:
     }[precision]
     return DataParallelAdapter(
         replicas,
+        devices=[next(replica.parameters()).device for replica in replicas],
         dtype=dtype,
         estimator_batch_size=getattr(args, "estimator_batch_size", 1),
+    )
+
+
+def hybrid_factory(
+    args: Any, replicas: Sequence[ICLModel]
+) -> DataParallelAdapter:
+    """Compose two DP groups, each using half the replicas for ensemble work.
+
+    Requires the separately implemented EnsembleParallel prototype. Compare
+    with its one-GPU resident/member-seeded reference rather than only native.
+    """
+    from sdm.models.ensemble_parallel import EnsembleParallel  # noqa: PLC0415
+
+    if len(replicas) < 2 or len(replicas) % 2:
+        raise ValueError("Hybrid requires two equally sized ensemble groups")
+    width = len(replicas) // 2
+    groups = [
+        EnsembleParallel(replicas[:width]),
+        EnsembleParallel(replicas[width:]),
+    ]
+    base = factory(args, replicas)
+
+    class HybridAdapter(DataParallelAdapter):
+        def close(self) -> None:
+            super().close()
+            for group in groups:
+                group.close()
+
+    return HybridAdapter(
+        groups,
+        devices=[base.devices[0], base.devices[width]],
+        dtype=base.dtype,
+        member_seed=args.seed,
     )
