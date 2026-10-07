@@ -324,6 +324,9 @@ def run(args: argparse.Namespace) -> None:
             replica._cache.size() if replica._cache is not None else 0
             for replica in replicas
         ]
+        if args.mode == "ensemble":
+            stats["ensemble_cache_bytes_per_gpu"] = model.cache_bytes
+            stats["member_seeds"] = model.member_seeds
         query_executor, query_batches = None, None
         if args.mode == "data":
             from research.multigpu.query_parallel import (
@@ -457,6 +460,8 @@ def run(args: argparse.Namespace) -> None:
         stats["quality"] = score(pred.cpu(), labels, task)
         if query_executor is not None:
             query_executor.close()
+        if args.mode == "ensemble":
+            model.close()
         write_json(args.output / "result.json", stats)
         print(
             json.dumps(
