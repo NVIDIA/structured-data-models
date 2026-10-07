@@ -61,21 +61,28 @@ class TaskGraph:  # noqa: D101
         )
         task_index, perm = task_index.sort()
         readout_index = readout_index[perm]
-        global_readout_index = readout_index + readout_offset
 
         arange = torch.arange(
             x.size(-2),
             dtype=task_index.dtype,
             device=task_index.device,
         )
-        if (
+        message = (
+            "Expected each task row to match exactly one distinct row in "
+            f"{readout_table!r}"
+        )
+        if torch.compiler.is_compiling():
+            # Validate at runtime and expose the known task-row count.
+            readout_index = _validated_readout(
+                task_index, readout_index, x.size(-2), message
+            )
+            task_index = arange
+        elif (
             not task_index.equal(arange)
             or readout_index.unique().numel() != readout_index.numel()
         ):
-            raise ValueError(
-                f"Expected each task row to match exactly one distinct row in "
-                f"{readout_table!r}"
-            )
+            raise ValueError(message)
+        global_readout_index = readout_index + readout_offset
 
         task_row = readout_index.new_full((graph.num_nodes,), fill_value=-1)
         task_row[global_readout_index] = task_index
@@ -90,8 +97,10 @@ class TaskGraph:  # noqa: D101
                 break
             mask = frontier[graph.row] & (task_row[graph.col] < 0)
             row = graph.row[mask]
-            if row.numel() == 0:
-                break
+            # Empty frontiers make subsequent bounded updates no-ops.
+            if not torch.compiler.is_compiling() or num_hops is None:
+                if row.numel() == 0:
+                    break
             col = graph.col[mask]
 
             task_row[col] = task_row[row]
@@ -111,3 +120,31 @@ class TaskGraph:  # noqa: D101
             },
             num_hops=propagated_hops if num_hops is None else num_hops,
         )
+
+
+@torch.library.custom_op("sdm::_validated_task_readout", mutates_args=())
+def _validated_readout(
+    task_index: Tensor,
+    readout_index: Tensor,
+    rows: int,
+    message: str,
+) -> Tensor:
+    arange = torch.arange(
+        rows, dtype=task_index.dtype, device=task_index.device
+    )
+    if (
+        not task_index.equal(arange)
+        or readout_index.unique().numel() != readout_index.numel()
+    ):
+        raise ValueError(message)
+    return readout_index.clone()
+
+
+@_validated_readout.register_fake
+def _validated_readout_fake(
+    task_index: Tensor,
+    readout_index: Tensor,
+    rows: int,
+    message: str,
+) -> Tensor:
+    return readout_index.new_empty(rows)
