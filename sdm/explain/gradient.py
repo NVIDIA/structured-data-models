@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 from typing import cast
+from collections.abc import Callable
 
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, TableTensor
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.explain.base import ICLExplainer
 from sdm.models import ICLModel
 from sdm.models.callback import CaptureInputs, EnableInputGradients
