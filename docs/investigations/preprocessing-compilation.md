@@ -1,6 +1,6 @@
 # Preprocessing compilation investigation
 
-**Status: active.** Experimental branches now compile useful public prediction and fitting paths. They are not merged support, and CUDA validation is in progress on one automatically terminating L4 Spot instance. No GPU result is claimed below yet.
+**Status: active.** Experimental branches now compile useful public prediction and fitting paths. They are not merged support, and CUDA validation is in progress on one automatically terminating L4 Spot instance. The first 2.14 relational fullgraph run fails in Inductor graph ordering; CPU results do not establish CUDA support.
 
 Baseline main: `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`. All results below use actual CPU Inductor, not the eager tracing backend. Eager and compiled comparisons use the same data, weights and datatype. Prediction tolerances remain atol=1e-5, rtol=1e-4.
 
@@ -24,7 +24,7 @@ Baseline main: `842c408fe2a8711bdf2e7cff4bfbe54266d6b940`. All results below use
 | Relational fit | Partial compilation passes two estimators; max prediction difference 1.41e-5, random-generator state exact | Still fails in compiler resume/metadata handling with fresh caches; no support claim |
 | Relational outer forward | Not established | Not established |
 
-Relational **fullgraph requires** experimental external-join operations, a finite specified hop count and scoped dynamic-output capture:
+Relational **fullgraph requires** experimental external-join operations, a finite hop count at graph construction and scoped dynamic-output capture. Fitted prediction already reads the finite hop count cached by eager fitting, including when fitting inferred it; users do not necessarily need to specify a new limit. This example makes the tested one-hop setting explicit:
 
 ```python
 model.fit(context, target, related_context, num_hops=1)
@@ -35,7 +35,7 @@ with torch._dynamo.config.patch(capture_dynamic_output_shape_ops=True):
 
 Arrow/cuDF joins are opaque operations inside the graph. Their existing algorithms execute at runtime; Inductor does not optimize Arrow. Small runtime validation operations preserve invalid-input errors. This distinction matters when assessing performance.
 
-Across relational query sizes 4→1→8→4, fullgraph counts are 1→2→3→3. The repeated query reuses its graph; `dynamic=True` does not establish universal reuse across new sizes. A longer stream of ten real 16-row queries exposes unnecessary specialization on neighborhood sizes: fullgraph reaches the default eight-graph limit and fails on the ninth case in a tracing diagnostic. Two identified causes are reconstruction from concrete wrapper sizes and hashing symbolic block sizes during ensemble packing. Fixes and actual-Inductor reuse checks are in progress. Partial compilation can instead fall back to eager for affected functions; raising the limit alone is not a fix.
+Across relational query sizes 4→1→8→4, fullgraph counts are 1→2→3→3. The repeated query reuses its graph; `dynamic=True` does not establish universal reuse across new sizes. A longer stream of ten real 16-row queries exposes unnecessary specialization on neighborhood sizes: fullgraph reaches the default eight-graph limit and fails on the ninth case in a tracing diagnostic. Three causes were isolated: reconstruction from concrete wrapper sizes, hashing symbolic block sizes during ensemble packing, and the native COO-to-CSR operator requiring a concrete node count. The fixes reduce the ten-case tracing run to two graphs without changing the native CSR kernel. Actual-Inductor end-to-end validation is in progress. Partial compilation can instead fall back to eager for affected functions; raising the limit alone is not a fix.
 
 ## Numerical quality
 
@@ -82,9 +82,21 @@ These branches overlap. Integration branches contain their prerequisites; they a
 | [compile/tabletensor-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/tabletensor-preprocessing) | Table/columnar flatten-unflatten and view support |
 | [compile/nested-tensor-preprocessing](https://github.com/NVIDIA/structured-data-models/tree/compile/nested-tensor-preprocessing) | Categorical/string tensor tracing foundations |
 | [compile/recipe-preparation](https://github.com/NVIDIA/structured-data-models/tree/compile/recipe-preparation) | Recipe construction and packing foundations |
+| [compile/dynamic-table-neighborhoods](https://github.com/NVIDIA/structured-data-models/tree/compile/dynamic-table-neighborhoods) | Preserve symbolic table sizes and shape-compatible ensemble packing; keep the native CSR kernel behind a symbolic-size operator |
 | [compile/preserve-linear-bmm](https://github.com/NVIDIA/structured-data-models/tree/compile/preserve-linear-bmm) | Preserve eager batched-matmul arithmetic in the compiled strided-output path; residual Inductor differences remain |
-| [compile/tensor-subclass-cache](https://github.com/NVIDIA/structured-data-models/tree/compile/tensor-subclass-cache) | Experimental metadata hashing for 2.14 persistent compilation caches; independent review pending |
+| [compile/tensor-subclass-cache](https://github.com/NVIDIA/structured-data-models/tree/compile/tensor-subclass-cache) | Unsafe experiment pending correction: independent review found a storage-alias cache collision that returns incorrect values |
 | [experiment/kumotabular-predict-compile-cpu](https://github.com/NVIDIA/structured-data-models/tree/experiment/kumotabular-predict-compile-cpu) | Timing, graph counts, cold-call costs and exact prediction-quality evidence |
+
+## Suggested production changes
+
+Do not merge the investigation history wholesale. Extract these groups with their focused regression checks:
+
+1. Tensor wrapper support: expose constituent tensors, schema and view metadata to tracing.
+2. Processor and ensemble routing: use those tensors/metadata during fitted transforms and prediction; preserve symbolic row sizes.
+3. External categorical lookup: keep existing Arrow/cuDF string lookup behind a compiler-visible operation.
+4. Relational graph preparation: variable-length identifier joins, validated readout, bounded traversal and a symbolic-size CSR adapter.
+
+The relative-time/internal-model changes are separate from public preprocessing support. Numerical-fitting precision, generated neural rounding and persistent compilation caching are separate concerns; they should not be bundled into a compatibility patch without their own justification. Full integration still needs the CUDA and dynamic-path checks below.
 
 ## Remaining work and rejected shortcuts
 
@@ -93,6 +105,7 @@ These branches overlap. Integration branches contain their prerequisites; they a
 - Validate custom operations on CUDA/cuDF, memory use and warm/cold latency. One L4 Spot instance is running with automatic termination and explicit cleanup scheduled.
 - Relational public fitting on 2.7 still encounters compiler resume failures. Classification fitting works with a prebuilt recipe; whole-fit speed is not established.
 - Fullgraph fitting still needs support for data-dependent schema decisions and explicit random generators. Removing generators or changing learned categories would alter behavior and is not accepted.
+- Correct the experimental cache hash before any integration: two distinct tensor views sharing storage currently collide with independent storage and can reuse a graph with incorrect mutation semantics. The cache branch is not safe to use in its reviewed form.
 - Review persistent compilation-cache behavior. PyTorch 2.14 supports a metadata-hash hook; 2.7 ignores it and can reuse incompatible artifacts after tensor-flattening code changes. Experiments use fresh, source-specific cache directories; no global cache deletion or production configuration change is required.
 - Keep external Arrow/cuDF work explicit. An opaque operation lets a compiled graph invoke it; it does not turn that external implementation into fused PyTorch kernels.
 
