@@ -29,3 +29,5 @@ OMP_NUM_THREADS=1 TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS=0 PYTHONPATH=. pyth
 ```
 
 This is a focused investigation branch atop `compile/varlen-preprocessing`; it includes its prerequisite container/preprocessing support. The two production decorators are commit `ed1cedee5`, which can be applied independently to the integration branch.
+
+The same partial-initialization failure also affects `VarLenTensor.__new__`, inherited by StringTensor (`_valid` is missing). Its constructor now uses the same atomic boundary. On the integrated string-selection branch, all six bounded-selection cases still pass 2.14 Inductor and the six-case nested-tensor dynamic matrix passes both 2.7.1 and 2.14.0 in both graph modes. Native nonempty cloning/concatenation is tested separately there; this decorator does not remove its strict-fullgraph scalar-slicing limitation.
