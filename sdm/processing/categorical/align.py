@@ -119,6 +119,9 @@ class AlignCategories(EnsembleProcessor):
                     storage_offset=input_categories._storage_offset,
                 )
                 ordered_categories = input_categories
+            elif isinstance(input_categories, StringTensor):
+                perm = _sort_indices(input_categories)
+                ordered_categories = input_categories[perm]
             elif (
                 input_categories.is_cuda
                 and input_categories.dtype in _UNSIGNED_DTYPES

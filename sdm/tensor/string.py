@@ -498,6 +498,7 @@ def _sort(
     return cast(StringTensor, inp[perm]), perm
 
 
+@torch.compiler.disable
 def _sort_indices(inp: StringTensor, *, descending: bool = False) -> Tensor:
     """Return the backend sort permutation without gathering values."""
     backend: Literal["arrow", "cudf"] = "arrow"
