@@ -1,0 +1,111 @@
+{
+  "torch": "2.14.0",
+  "compiler_cache_environment": {
+    "TORCHINDUCTOR_CACHE_DIR": "/tmp/sdm-public-longstream-dynamic-214-20261008",
+    "TORCHINDUCTOR_FORCE_DISABLE_CACHES": "1",
+    "TORCHINDUCTOR_FX_GRAPH_CACHE": "0",
+    "TORCHINDUCTOR_AUTOGRAD_CACHE": "0"
+  },
+  "model": "relational",
+  "entry": "predict",
+  "fullgraph": true,
+  "dynamic": true,
+  "backend": "inductor",
+  "device": "cpu",
+  "task": "classification",
+  "estimators": 1,
+  "query_input": "view",
+  "arm_index": 1,
+  "recompile_limit": null,
+  "inner_only": false,
+  "capture_dynamic_outputs": true,
+  "eager_succeeded": true,
+  "samples": [
+    {
+      "rows": 16,
+      "case": 3,
+      "max_abs_error": 1.6339123249053955e-05,
+      "parity": true,
+      "graphs_captured": 1,
+      "calls_captured": 8454
+    },
+    {
+      "rows": 16,
+      "case": 4,
+      "max_abs_error": 2.181529998779297e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 16912
+    },
+    {
+      "rows": 16,
+      "case": 5,
+      "max_abs_error": 3.2767653465270996e-05,
+      "parity": false,
+      "graphs_captured": 2,
+      "calls_captured": 16912
+    },
+    {
+      "rows": 16,
+      "case": 6,
+      "max_abs_error": 2.73287296295166e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 16912
+    },
+    {
+      "rows": 16,
+      "case": 7,
+      "max_abs_error": 2.276897430419922e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 16912
+    },
+    {
+      "rows": 16,
+      "case": 8,
+      "max_abs_error": 2.3603439331054688e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 16912
+    },
+    {
+      "rows": 16,
+      "case": 9,
+      "max_abs_error": 3.49581241607666e-05,
+      "parity": false,
+      "graphs_captured": 2,
+      "calls_captured": 16912
+    },
+    {
+      "rows": 16,
+      "case": 10,
+      "max_abs_error": 6.246566772460938e-05,
+      "parity": false,
+      "graphs_captured": 2,
+      "calls_captured": 16912
+    },
+    {
+      "rows": 16,
+      "case": 11,
+      "max_abs_error": 2.8580427169799805e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 16912
+    },
+    {
+      "rows": 16,
+      "case": 3,
+      "max_abs_error": 1.6339123249053955e-05,
+      "parity": true,
+      "graphs_captured": 2,
+      "calls_captured": 16912
+    }
+  ],
+  "all_samples_parity": false,
+  "status": "parity_fail",
+  "max_abs_error": 6.246566772460938e-05,
+  "parity": false,
+  "source_commit": "6df9aeab5",
+  "prediction_arrays_omitted": true
+}

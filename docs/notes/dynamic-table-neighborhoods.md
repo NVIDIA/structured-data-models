@@ -11,6 +11,13 @@ A real KumoRelational prediction stream used ten 16-row query batches, six relat
 3. Keep the native COO-to-CSR kernel behind a custom operator whose node-count argument is symbolic. The native operator declares a concrete `int size`, which specialized the sum of all neighborhood rows. The new operator declares `SymInt size` through PyTorch's schema inference and provides its output shape. Its runtime implementation calls the same native kernel. Eager graph construction keeps the original direct call.
 4. Support runtime symbolic-size queries on `ColumnarTensor`, `StringTensor`/`VarLenTensor`, and `NullableTensor`. Dynamic captured graphs emit `aten.sym_size.int`; these wrappers previously rejected it. Categorical tensors already forward this operation to their codes.
 
+The relevant operator schemas make the CSR issue explicit:
+
+```text
+aten::_convert_indices_from_coo_to_csr(Tensor self, int size, *, bool out_int32=False) -> Tensor
+sdm::_coo_to_csr(Tensor indices, SymInt size, *, bool out_int32=False) -> Tensor
+```
+
 The CSR fix is a separate commit. A `searchsorted` formulation confirmed the diagnosis but was removed because it would change the graph-construction algorithm and potentially its performance.
 
 ## Validation
@@ -21,8 +28,11 @@ The CSR fix is a separate commit. A `searchsorted` formulation confirmed the dia
 | Forced-dynamic table input, nine distinct row counts, noncontiguous numerical columns, both graph policies | Passed | Passed |
 | Independent ensemble grouping, eight shape/schema/dtype/member-count cases, both graph policies, actual CPU Inductor | Passed | Passed |
 | Real ten-neighborhood prediction stream, fullgraph frontend capture | Not claimed | Two graphs; all ten queries execute |
+| Same stream, actual CPU Inductor, fullgraph | Not claimed | Two graphs; all ten queries execute |
 
-The frontend stream uses `backend="eager"` only to measure capture and guards. It is not an optimized-kernel performance result. Its existing strict prediction-tolerance failures remain: maximum absolute error is `6.914138793945312e-05`, unchanged from the preceding prototype. This change fixes shape support, not that separate numerical discrepancy. Actual Inductor validation is recorded separately when complete; no CUDA speed or memory improvement is claimed here.
+The frontend stream uses `backend="eager"` only to measure capture and guards. It is not an optimized-kernel performance result. Its existing strict prediction-tolerance failures remain: maximum absolute error is `6.914138793945312e-05`, unchanged from the preceding prototype. This change fixes shape support, not that separate numerical discrepancy. Actual CPU Inductor also completed all ten queries using two graphs at the default limit. All 160 predicted classes matched eager; three batches missed the existing strict probability tolerance, with maximum absolute error `6.246566772460938e-05`. The numerical discrepancy is therefore still a separate blocker to claiming strict prediction parity. No CUDA speed or memory improvement is claimed here.
+
+CPU `opcheck` passed four dtype/empty-input combinations on each runtime; another 48 actual-Inductor calls per runtime matched the native CSR output exactly, including empty edges with nonzero node counts. The portable probe is `experiments/compile_table_shapes/check_csr.py --device cpu` (use `--device cuda` for a GPU).
 
 The focused regression tests cover eager ensemble grouping order, columnar size queries, table construction/views, changing dimensions, and exact CSR parity for int32/int64 indices, empty inputs, and strided indices. Each compiler test resets Dynamo so independent parameterizations do not consume one another's recompilation limit.
 
@@ -48,4 +58,8 @@ python experiments/compile_public_paths/probe.py \
   --output /tmp/relational-neighborhoods.json
 ```
 
-The recorded frontend result is in `experiments/compile_table_shapes/results/relational-neighborhoods-frontend214.json`. `experiments/compile_table_shapes/check_grouping.py` reproduces the independent actual-Inductor grouping checks. Neither validation raises the recompilation limit or changes prediction tolerances. Different schemas, category identities, grouping relationships, empty dimensions, or model configuration may legitimately require another graph; this branch does not promise a single graph for every workload.
+The recorded frontend result is in `experiments/compile_table_shapes/results/relational-neighborhoods-frontend214.json`. The actual-Inductor summary is `relational-neighborhoods-inductor214.json` in the same directory, run against integration commit `6df9aeab5`; prediction arrays are omitted from that summary. `experiments/compile_table_shapes/check_grouping.py` reproduces the independent actual-Inductor grouping checks. Neither validation raises the recompilation limit or changes prediction tolerances. Different schemas, category identities, grouping relationships, empty dimensions, or model configuration may legitimately require another graph; this branch does not promise a single graph for every workload.
+
+## CUDA validation still under investigation
+
+An initial PyTorch 2.14 CUDA `opcheck` using strided int32 indices reported illegal memory access. Native-versus-wrapper isolation is required before attributing it to this change. The graph builder supplies sorted contiguous indices, but the private wrapper must either support or explicitly normalize the strided case. Do not treat the CPU results as a CUDA validation result.
