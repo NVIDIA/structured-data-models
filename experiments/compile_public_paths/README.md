@@ -41,3 +41,7 @@ The recipe failures precede the internal model. Table flatten/unflatten support 
 3. Traceable recipe execution, semantic dispatch, row/column selection, stacking, and output conversion.
 4. Compile processor arithmetic and validate fitted state against eager.
 5. Integrate the internal-model fixes and validate the actual public paths again before claiming model support.
+
+## Container integration (in progress)
+
+The first table/categorical/columnar flatten hooks are integrated on this branch. `containers-initial.json` records a second full matrix at source `5fe85d13f`. No public entry passed yet. In particular, recognizing table inputs exposed symbolic empty-column allocation, semantic-type metadata (`frozenset`), and partially reconstructed categorical containers. This is progress through tracing, not end-to-end support. Follow-up container patches are present but must be evaluated independently from these recorded results.
