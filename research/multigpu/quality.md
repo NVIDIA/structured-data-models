@@ -109,6 +109,10 @@ Batch sizes two and four change floating-point computation and are not bitwise i
 
 The repeated native fit is 1.3268 seconds. This confirms that the earlier 122.75-second first fit contains a large cold-start effect; it is unsuitable as a placement speedup claim.
 
+Persistent autocast controls preserve bitwise predictions at one and four GPUs, reaching 1,753.36/1,660.36 rows/s versus 1,729.77/1,644.81 for the original EP arms. Improvements of 1.36%/0.95% from these separate three-pass measurements do not establish a robust gain. The four-GPU persistent-autocast prediction peak is actually higher (largest allocation 1,328,977,408 bytes), so retaining cast weights is not a free memory optimization.
+
+Cache compaction also preserves all predictions, input identities and member seeds exactly. On the small context-1,024 workload, measured physical cache storage falls from 512,754,868 to 358,614,196 bytes (30.1%), and peak prediction allocation falls from 1,716,191,744 to 1,560,609,280 bytes. Fit peak is unchanged at 1,899,916,288 bytes because compaction follows cache creation. Compaction itself takes 3.23 ms. The observed 1,816.92 rows/s (+5.0%) needs repeated alternating runs before a throughput claim; the directly measured storage reduction is the substantive result. This differs from the larger context-16,384 workload, where caches were already compact and the operation was a no-op. Three sidecars preserve the controls.
+
 ## Native relational ladder audit
 
 All seven rel-hm arms reuse the exact stored `[16,16]` temporal-last graphs, context 1,024, four members and first 2,000 ordered validation rows in microbatches of 250. Each stored workload object, graph hash, class-column sequence and prediction content hash passed independent comparison. Targets were reconstructed for scoring from the original ordered validation parquet.
