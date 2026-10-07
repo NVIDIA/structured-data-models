@@ -1,0 +1,146 @@
+[
+  {
+    "member": 0,
+    "table": "task",
+    "block": "datetime",
+    "shape": [
+      4,
+      1
+    ],
+    "equal": true,
+    "max_abs_error": 0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "qualifying",
+    "block": "numerical",
+    "shape": [
+      16,
+      4
+    ],
+    "equal": true,
+    "max_abs_error": 0.0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "qualifying",
+    "block": "datetime",
+    "shape": [
+      16,
+      1
+    ],
+    "equal": true,
+    "max_abs_error": 0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "drivers",
+    "block": "numerical",
+    "shape": [
+      4,
+      8
+    ],
+    "equal": true,
+    "max_abs_error": 0.0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "drivers",
+    "block": "datetime",
+    "shape": [
+      4,
+      1
+    ],
+    "equal": true,
+    "max_abs_error": 0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "results",
+    "block": "numerical",
+    "shape": [
+      16,
+      13
+    ],
+    "equal": true,
+    "max_abs_error": 0.0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "results",
+    "block": "datetime",
+    "shape": [
+      16,
+      1
+    ],
+    "equal": true,
+    "max_abs_error": 0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "standings",
+    "block": "numerical",
+    "shape": [
+      16,
+      6
+    ],
+    "equal": true,
+    "max_abs_error": 0.0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "standings",
+    "block": "datetime",
+    "shape": [
+      16,
+      1
+    ],
+    "equal": true,
+    "max_abs_error": 0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "races",
+    "block": "numerical",
+    "shape": [
+      16,
+      6
+    ],
+    "equal": true,
+    "max_abs_error": 0.0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "races",
+    "block": "datetime",
+    "shape": [
+      16,
+      1
+    ],
+    "equal": true,
+    "max_abs_error": 0,
+    "parity": true
+  },
+  {
+    "member": 0,
+    "table": "constructors",
+    "block": "numerical",
+    "shape": [
+      4,
+      3
+    ],
+    "equal": true,
+    "max_abs_error": 0.0,
+    "parity": true
+  }
+]

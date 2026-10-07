@@ -76,3 +76,12 @@ At `ddb25ab3b`, real pretrained **KumoRelational public prediction passes on PyT
 Broader checks are still incomplete. A two-hop arm with six related tables and a scoped recompilation limit of 64 fails inside Dynamo's symbolic shape guards (`IndexError: list index out of range`). Fullgraph still stops in categorical ensemble packing before reaching the explicit external join boundary. `relational-prediction-progress.json` preserves these passes and failures. The limit override exists only in the experiment, not the library. Existing categorical, numerical-conversion, join, and relational-model suites pass: **70 passed, 39 CUDA skips** on 2.14.
 
 Use `--arm-index 0 --relational-query-indices 1 0 2 1` to reproduce the passing neighborhood sweep. `--dynamic false` allows a diagnostic without symbolic shape handling; default is true. No speed, memory, CUDA, general-schema, or 2.7 relational success claim follows from this CPU partial-compilation milestone.
+
+
+### Two-hop precision follow-up
+
+The two-hop arm completes public prediction with default limits (`dynamic=True`) and with a scoped limit of 64 (`dynamic=False`). Both reproduce the same small probability discrepancy: one of eight four-row class probabilities narrowly exceeds the unchanged tolerance. Eager is `0.0907173976`; compiling **only the inner model** gives `0.0906983167`; compiling public prediction gives `0.0906982943`. The inner-only run already reproduces the miss, while the public-vs-inner difference is `2.24e-8` for that value. Predicted classes are unchanged. This is a precision limit in compiled neural computation, not evidence that the new preprocessing changes class semantics. We keep these runs marked `parity_fail`; we have not loosened tolerance.
+
+A separate direct comparison of eager and compiled `recipe_execution.transform` gives bitwise equal outputs for all 12 nonempty numerical/datetime blocks across the task and six related tables (`relational-preprocessing-parity.json`). Prediction source snapshot: `ebd902af6`. The broader CPU result still does not establish CUDA quality or speed.
+
+Explicit schema construction (`acc37828a`) moves 2.14 fullgraph past recipe preparation and validation to the intentional external `join_index` boundary. Existing relational and base-model checks pass: 43 passed, 31 CUDA skips. PyTorch 2.7 still needs further schema guard fixes; its current failure is preserved in the progress artifact.

@@ -90,5 +90,293 @@
     "error": "Unexpected type in sourceless builder\n  Explanation: SourcelessBuilder.create does not know how to wrap <class 'sdm.tensor.string.StringTensor'>\n  Hint: This is likely to be a Dynamo bug. Please report an issue to PyTorch.\n\n  Developer debug context: sdm.tensor.string.StringTensor\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0116.html\n\nfrom user code:\n   File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/base.py\", line 417, in predict\n    queries = recipe_execution.transform(x, related_tables)\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/execution.py\", line 188, in transform\n    related_ensembles[name] = processor.transform_ensemble(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/common/sequential.py\", line 123, in _transform_ensemble\n    out = child.transform_ensemble(out)\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/common/stype.py\", line 139, in _transform_ensemble\n    self.processors[stype].transform_ensemble(\n    ^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/common/sequential.py\", line 123, in _transform_ensemble\n    out = child.transform_ensemble(out)\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/ensemble.py\", line 147, in transform_ensemble\n    return self._transform_ensemble(ensemble_table)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/processing/categorical/align.py\", line 328, in _transform_ensemble\n    return ensemble_table.replace_tables(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/ensemble.py\", line 457, in replace_tables\n    packed_groups, packed_locations = self._pack_tables(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/ensemble.py\", line 166, in _pack_tables\n    id(category) for category in table.categorical.categories\n                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
     "source_commit": "ddb25ab3b",
     "source_result": "relational-string-op-2.14-full.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "dynamic": false,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": 64,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 1.9103288650512695e-05,
+        "parity": false,
+        "graphs_captured": 5,
+        "calls_captured": 3662
+      },
+      {
+        "rows": 1,
+        "case": 0,
+        "max_abs_error": 5.796551704406738e-06,
+        "parity": true,
+        "graphs_captured": 10,
+        "calls_captured": 7312
+      },
+      {
+        "rows": 8,
+        "case": 2,
+        "max_abs_error": 3.695487976074219e-05,
+        "parity": true,
+        "graphs_captured": 15,
+        "calls_captured": 10974
+      },
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 1.9103288650512695e-05,
+        "parity": false,
+        "graphs_captured": 15,
+        "calls_captured": 10974
+      }
+    ],
+    "all_samples_parity": false,
+    "status": "parity_fail",
+    "max_abs_error": 3.695487976074219e-05,
+    "parity": false,
+    "source_commit": "b5464cc53",
+    "source_result": "relational-arm1-static-214.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": null,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 1.9103288650512695e-05,
+        "parity": false,
+        "graphs_captured": 6,
+        "calls_captured": 7599
+      },
+      {
+        "rows": 1,
+        "case": 0,
+        "max_abs_error": 5.796551704406738e-06,
+        "parity": true,
+        "graphs_captured": 12,
+        "calls_captured": 15178
+      },
+      {
+        "rows": 8,
+        "case": 2,
+        "max_abs_error": 3.695487976074219e-05,
+        "parity": true,
+        "graphs_captured": 18,
+        "calls_captured": 22829
+      },
+      {
+        "rows": 4,
+        "case": 1,
+        "max_abs_error": 1.9103288650512695e-05,
+        "parity": false,
+        "graphs_captured": 18,
+        "calls_captured": 22829
+      }
+    ],
+    "all_samples_parity": false,
+    "status": "parity_fail",
+    "max_abs_error": 3.695487976074219e-05,
+    "parity": false,
+    "source_commit": "b5464cc53",
+    "source_result": "relational-arm1-default-214.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": null,
+    "inner_only": true,
+    "disable_cpp_contraction": false,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 4,
+        "max_abs_error": 1.9080936908721924e-05,
+        "parity": false,
+        "graphs_captured": 1,
+        "calls_captured": 5980,
+        "expected": [
+          [
+            0.09071739763021469,
+            0.9092826247215271
+          ],
+          [
+            0.16510692238807678,
+            0.8348930478096008
+          ],
+          [
+            0.09276954084634781,
+            0.9072304964065552
+          ],
+          [
+            0.04401738569140434,
+            0.9559826254844666
+          ]
+        ],
+        "actual": [
+          [
+            0.09069831669330597,
+            0.9093016982078552
+          ],
+          [
+            0.16510331630706787,
+            0.8348966836929321
+          ],
+          [
+            0.09276435524225235,
+            0.9072356224060059
+          ],
+          [
+            0.04401760920882225,
+            0.9559823870658875
+          ]
+        ]
+      }
+    ],
+    "all_samples_parity": false,
+    "status": "parity_fail",
+    "max_abs_error": 1.9080936908721924e-05,
+    "parity": false,
+    "source_commit": "ebd902af6",
+    "source_result": "relational-arm1-inner-parity214.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 1,
+    "recompile_limit": null,
+    "inner_only": false,
+    "disable_cpp_contraction": false,
+    "eager_succeeded": true,
+    "samples": [
+      {
+        "rows": 4,
+        "case": 4,
+        "max_abs_error": 1.9103288650512695e-05,
+        "parity": false,
+        "graphs_captured": 6,
+        "calls_captured": 7599,
+        "expected": [
+          [
+            0.09071739763021469,
+            0.9092826247215271
+          ],
+          [
+            0.16510692238807678,
+            0.8348930478096008
+          ],
+          [
+            0.09276954084634781,
+            0.9072304964065552
+          ],
+          [
+            0.04401738569140434,
+            0.9559826254844666
+          ]
+        ],
+        "actual": [
+          [
+            0.09069829434156418,
+            0.9093016982078552
+          ],
+          [
+            0.16510328650474548,
+            0.8348966836929321
+          ],
+          [
+            0.09276431798934937,
+            0.9072356820106506
+          ],
+          [
+            0.04401758685708046,
+            0.9559823870658875
+          ]
+        ]
+      }
+    ],
+    "all_samples_parity": false,
+    "status": "parity_fail",
+    "max_abs_error": 1.9103288650512695e-05,
+    "parity": false,
+    "source_commit": "ebd902af6",
+    "source_result": "relational-arm1-public-parity214.json"
+  },
+  {
+    "torch": "2.7.1",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": false,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 0,
+    "recompile_limit": null,
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "AssertionError",
+    "error": "ConstDictKeySource can only work on DictGuardManager\n",
+    "source_commit": "acc37828a",
+    "source_result": "relational-latest-breaks27.json"
+  },
+  {
+    "torch": "2.14.0",
+    "model": "relational",
+    "entry": "predict",
+    "fullgraph": true,
+    "dynamic": true,
+    "backend": "inductor",
+    "device": "cpu",
+    "task": "classification",
+    "estimators": 1,
+    "query_input": "view",
+    "arm_index": 0,
+    "recompile_limit": null,
+    "eager_succeeded": true,
+    "status": "fail",
+    "error_type": "Unsupported",
+    "error": "Skip calling `torch.compiler.disable()`d function\n  Explanation: Skip calling function `<function join_index at 0x10ea62e80>` since it was wrapped with `torch.compiler.disable` (reason: None)\n  Hint: Remove the `torch.compiler.disable` call\n\n  Developer debug context: <function join_index at 0x10ea62e80>\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0098.html\n\nfrom user code:\n   File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/base.py\", line 456, in predict\n    outs += self._forward_batch(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/base.py\", line 707, in _forward_batch\n    out = self._forward(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/kumo/relational/model.py\", line 251, in _forward\n    query = TaskGraph.from_input(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/kumo/relational/task.py\", line 47, in from_input\n    graph = HomogeneousGraph.from_tables(\n    \n  File \"/Users/ardrianw/repositories/sdm-public-preprocessing-20261008/sdm/models/kumo/relational/graph.py\", line 59, in from_tables\n    row, col = join_index(\n    \n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n",
+    "source_commit": "acc37828a",
+    "source_result": "relational-schema-full-214.json"
   }
 ]
