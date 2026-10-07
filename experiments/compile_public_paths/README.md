@@ -26,6 +26,18 @@ Relational fullgraph source: `d8cbc7383`. The latest tabular classifier repeat p
 
 A final independent-cache repeat at `450444af9` confirms both one-hop prediction successes and the small two-hop precision misses above. Each process uses its own cache directory with FX/AOT caches disabled; [fresh-validation.json](fresh-validation.json) records all settings and outcomes. This excludes stale artifacts from earlier subclass-layout experiments. Cross-version compilation-cache compatibility is still being reviewed separately.
 
+## Latest integration checkpoint
+
+Source `e2abde154` additionally includes three compatibility fixes:
+
+- Empty ragged payload conversion avoids reading unnecessary tensor-valued slice bounds. This covers empty text blocks during output dtype conversion and actual empty/missing strings.
+- Cache transfer dependencies use explicit CUDA events, which Dynamo can capture, while preserving stream ordering.
+- The compiled CSR adapter makes strided indices contiguous before calling the native kernel. Its regression oracle now uses independent counts/cumulative sums: comparing only with the native operator had hidden its stride limitation. Normal relational graph construction already supplies contiguous sorted indices.
+
+Focused checks on this combined source pass on both CPU runtimes: **98 passed, 13 skipped**, plus all **12 actual-Inductor empty-conversion combinations** (three input kinds × two modes × two versions, each with four row counts). The ten-neighborhood result above remains qualified to source `6df9aeab5`; it was not repeated for these targeted changes. The native-normalization and cache-hashing experiments remain separate ([checkpoint evidence](final-compatibility.json)).
+
+A separate NVIDIA L4 run passed fullgraph FP32 public relational prediction for rows **4 → 1 → 8 → 4**, maximum difference `2.30e-6`. That GPU source was **`c75ba3af6` plus `18a4d151a`**, not this combined checkpoint. [The source receipt and GPU evidence](https://github.com/NVIDIA/structured-data-models/blob/compile/cache-stream-events/experiments/cache_stream_events/gpu_summary.json) retain the exact patch/data/result hashes. GPU validation of the final combined source is pending; these earlier GPU measurements must not be attributed to it.
+
 ## Usage
 
 ```python

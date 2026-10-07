@@ -1,0 +1,124 @@
+{
+  "source": "e2abde154",
+  "focused_tests": {
+    "27": {
+      "passed": 98,
+      "skipped": 13,
+      "paths": [
+        "test/tensor/test_var_len.py",
+        "test/tensor/test_columnar.py",
+        "test/tensor/test_table_compile.py",
+        "test/models/test_base.py",
+        "test/models/kumo/relational/test_graph_compile.py"
+      ]
+    },
+    "214": {
+      "passed": 98,
+      "skipped": 13,
+      "paths": [
+        "test/tensor/test_var_len.py",
+        "test/tensor/test_columnar.py",
+        "test/tensor/test_table_compile.py",
+        "test/models/test_base.py",
+        "test/models/kumo/relational/test_graph_compile.py"
+      ]
+    }
+  },
+  "empty_conversion": [
+    {
+      "torch": "2.7.1",
+      "kind": "table",
+      "fullgraph": false,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "kind": "empty_payload",
+      "fullgraph": false,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "kind": "empty_strings",
+      "fullgraph": false,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "kind": "table",
+      "fullgraph": true,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "kind": "empty_payload",
+      "fullgraph": true,
+      "status": "pass"
+    },
+    {
+      "torch": "2.7.1",
+      "kind": "empty_strings",
+      "fullgraph": true,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "kind": "table",
+      "fullgraph": false,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "kind": "empty_payload",
+      "fullgraph": false,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "kind": "empty_strings",
+      "fullgraph": false,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "kind": "table",
+      "fullgraph": true,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "kind": "empty_payload",
+      "fullgraph": true,
+      "status": "pass"
+    },
+    {
+      "torch": "2.14.0",
+      "kind": "empty_strings",
+      "fullgraph": true,
+      "status": "pass"
+    }
+  ],
+  "prior_gpu_validation": {
+    "source": "c75ba3af6+18a4d151a",
+    "torch": "2.14.0+cu130",
+    "gpu": "NVIDIA L4",
+    "actual_query_rows": [
+      4,
+      1,
+      8,
+      4
+    ],
+    "status": "pass",
+    "source_receipt": {
+      "base_commit": "c75ba3af6c231c7bdcd181a50d35cdc7fb53c090",
+      "source_patch_commit": "18a4d151a",
+      "source_patch_sha256": "f94e376bb991ef65c2e6400d051dbd7450405de8ce29ebce1f857a5da5e6b473",
+      "runner_base_commit": "937beb883",
+      "runner_sha256": "2e8807ea7f1ef2907bbfc2e828667d3a7e0ba0505629b3482bdc56f863af2c6a",
+      "raw_result_file": "relational-onehop-predict-fp32-full-events18.json",
+      "raw_result_sha256": "aab83a26a12bc614b4e38ed5a74f0ac059698f45bce3cc6a7d71fdc09e914dcf"
+    },
+    "max_abs_error": 2.294778823852539e-06
+  },
+  "combined_source_gpu_validated": false
+}
