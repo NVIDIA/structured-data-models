@@ -65,3 +65,22 @@ OMP_NUM_THREADS=1 TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS=0 PYTHONPATH=. \
 ```
 
 No GPU performance or memory improvement is claimed. The branch's change removes one compilation blocker; broader compatibility and performance are separate validation steps.
+
+## Integrated public-method results
+
+Combining this branch with the initial container and processor-applicability fixes produces these results. The exact commit list is in `evidence/categorical-compilation/integration-results.json`; it is a snapshot of those patches, not a claim about future revisions.
+
+| Public operation | 2.14, graph breaks allowed | 2.14, fullgraph | 2.7.1 |
+|---|---|---|---|
+| Numeric alignment, transform after eager fitting | Pass | Pass | Still fails surrounding tracing |
+| Numeric/string alignment, fit-transform | Fails container reconstruction after graph break | Fails data-dependent vocabulary size | Still fails surrounding tracing |
+| String alignment, transform after eager fitting | Fails variable-length string operations | Fails variable-length string operations | Still fails |
+| Category counts, transform after eager fitting | Pass | Fails vocabulary validation using `equal` | Allowed-breaks passes; fullgraph fails |
+| Category counts, fit-transform | Fails symbolic table selection | Fails value-dependent input validation | Still fails |
+| Category shuffling, fit-transform/transform | Fails container reconstruction | Fails new-container category tuple access | Still fails |
+| Conversion to numerical, fit-transform/transform | Pass | Pass | Fails enum/schema guard handling |
+| Calendar fields, fit-transform/transform | Pass | Pass | Fails enum/schema guard handling |
+
+Passing results compare outputs, vocabularies, and schemas against eager behavior for row counts 4/6/3. The successful 2.14 fullgraph calls still created one graph per tested row count despite `dynamic=True`; a speedup or reuse of one graph across all shapes is not established. Numeric alignment graphs had 30 nodes, conversion 7 nodes, and calendar fields 78 nodes.
+
+The 2.7.1 fullgraph public calls first encounter shared `handles_stypes` tracing. Bypassing that check by probing the existing internal `_transform` also exposed enum/schema guard failures for conversion and calendar fields. Fixing only the applicability check therefore does not establish full 2.7 support.
