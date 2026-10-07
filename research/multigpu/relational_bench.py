@@ -295,10 +295,7 @@ def run(args: argparse.Namespace) -> None:
             )
         ]
         synchronize(devices)
-        stats["load_s"] = time.perf_counter() - start
-        stats["memory_after_load"] = memory(devices)
-        for device in devices:
-            torch.cuda.reset_peak_memory_stats(device)
+        stats["replica_load_s"] = time.perf_counter() - start
         if args.mode in {"stage", "layers"}:
             from research.multigpu.icl_placement import factory
 
@@ -315,6 +312,12 @@ def run(args: argparse.Namespace) -> None:
             model = hybrid_factory(args, replicas)
         else:
             model = replicas[0]
+        synchronize(devices)
+        stats["load_s"] = time.perf_counter() - start
+        stats["placement_setup_s"] = stats["load_s"] - stats["replica_load_s"]
+        stats["memory_after_load"] = memory(devices)
+        for device in devices:
+            torch.cuda.reset_peak_memory_stats(device)
         x = context.task_table.drop_columns(workload["target"])
         y = context.task_table[workload["target"]]
         synchronize(devices)
