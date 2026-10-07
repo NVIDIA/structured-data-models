@@ -149,3 +149,37 @@ The four-arm placement study runs on the second host's L4 GPUs, source `55dba6bb
 All four raw arrays, input hashes, query IDs, targets, class order, member seeds (1729 through 1732) and recorded output hashes pass independent checks. Predictions are bitwise identical on this host, with zero max/mean error and class changes. Accuracy is 0.76416015625, FP64 logloss 0.5758563016 and macro AUROC 0.9474312942. The L4 baseline differs slightly from the L40S baseline, so it must remain a same-host comparison. Four partitions cut the largest prediction allocation by about 49%, while reducing throughput by about 3.6%. The single cold-fit timing per arm is insufficient for a fit-speedup claim.
 
 The raw placement test log independently confirms 36 passing tests in 5.88 seconds, including 22 tests that required GPUs and had been skipped locally. Four per-arm `quality-independent-audit.json` sidecars store the recomputed results.
+
+At context 16,384 on the same L4 host, all five EP1/compact-cache/stage2/layers2/layers4 arms remain bitwise identical (accuracy 0.91455078, logloss 0.225671257). Their throughputs are 1,865.11/1,799.68/1,830.66/1,754.70/1,809.19 rows/s. Four layer partitions reduce the largest prediction allocation from 2.1873 to 0.8765 GiB (59.9%) and fit peak from 3.0489 to 1.8760 GiB (38.5%), with 0.970x throughput. Cache compaction is a no-op for this workload: its largest allocated peak is unchanged. All five raw directories contain independent audit sidecars.
+
+## Batched ensemble: larger workload changes the outcome
+
+The next Covertype ladder uses eight members, context 4,096, 8,192 fixed validation queries and microbatch 1,024 on L40S, with a maximum estimator batch size of eight. The native baseline batches eight members. The resident adapters cap local batch width to eight/four/two on one/two/four GPUs. Thus the multi-GPU comparison changes local arithmetic batch shape, while preserving total work and member semantics.
+
+| Arm | Recomputed rows/s | Speedup over resident EP1 | Largest prediction peak GiB |
+|---|---:|---:|---:|
+| Native, estimator batch 8 | 3,219.44 | Separate residency policy | 3.743 |
+| Resident batched EP1 | 4,013.81 | 1.000x | 3.503 |
+| Resident batched EP2 | 7,368.45 | 1.836x | 2.405 |
+| Resident batched EP4 | 5,981.13 | 1.490x | 1.612 |
+
+The two-GPU result is bitwise identical to both native and resident EP1 across `[8192,7]` predictions, with zero class or quality changes. Its 1.8358x resident scaling corresponds to 91.8% efficiency; the larger 2.2887x comparison against native includes the cache-residency effect. Accuracy is 0.841796875, FP64 logloss 0.4138842210 and macro AUROC 0.9749343473.
+
+Four GPUs are slower than two and are not numerically identical: maximum probability difference is 0.0322531, mean 0.000526267 and p99 0.00704364. One of 57,344 probability entries fails the original BF16 tolerance, and six of 8,192 predicted classes change. Accuracy rises by one correct observation, logloss changes by +0.0000402448 (paired-row 95% interval [-0.000119914, +0.000197948]), and macro AUROC changes by -0.00000792784. The threshold is not relaxed. Local batch-width differences are a plausible numerical cause; the result is reported with its observed error rather than called exact parity.
+
+All four input hashes, IDs, labels, columns and output hashes independently match, and per-arm audit sidecars preserve these checks. The larger query cohort strengthens the measured quality comparison but still represents one context selection and member plan.
+
+## Context-parallel pretrained relational regression
+
+The F1 Flash-attention study compares native attention, the one-rank LSE implementation, and two/four context ranks on L4. All arms use the same stored graphs, 1,024 context rows, E4 and all 499 validation observations; native/LSE1 outputs are bitwise identical. Every saved repeat and every rank's reported output hash agrees within its arm. Slowest-rank timing was independently recomputed from individual rank arrays and exactly matches the aggregate report.
+
+| Arm | Unique rows/s | Native speedup | Median RMSE | MAE | Largest prediction peak GiB |
+|---|---:|---:|---:|---:|---:|
+| Native | 364.23 | 1.000x | 4.21499280 | 3.41471108 | 0.331 |
+| One-rank LSE | 362.35 | 0.995x | 4.21499280 | 3.41471108 | 0.330 |
+| CP2 | 361.15 | 0.992x | 4.21911206 | 3.41806200 | 0.307 |
+| CP4 | 376.00 | 1.032x | 4.21744741 | 3.41670209 | 0.295 |
+
+The full `[499,999]` arrays are finite, correctly ordered and have zero quantile crossings. However, CP2/CP4 fail the predeclared full-quantile BF16 screen: maximum differences are 0.2022419/0.2022400, mean differences 0.0170425/0.0142532 and relative L2 errors 0.0019955/0.0016981. Failures affect 938/915 of 498,501 entries, confined to lower quantiles q001-q049/q052 near zero. Median-only comparisons pass and would miss these tail differences.
+
+CP2/CP4 increase MAE by 0.00335093/0.00199101. The paired 47-driver cluster bootstrap 95% intervals are [0.0013071, 0.0054785] and [0.0003818, 0.0037831]. The deterioration is small in absolute target units but is measured, not claimed away as equality. Per-rank ICL cache bytes fall from 100,663,296 to 50,331,648/25,165,824; the much smaller change in total GPU allocation reflects unsharded components and native cache offload. A 3.2% three-repeat throughput increase is insufficient for a robust speedup conclusion. Four sidecars beside the raw CP outputs record the independent numerical and timing audit.
