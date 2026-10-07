@@ -309,6 +309,4 @@ class _KumoTabular(torch.nn.Module):
             chunk_memory_bytes=chunk_memory_bytes,
         )
         x = self.row_project(x)
-        return self.icl_block(
-            x=x, y=y, cache=cache, chunk_memory_bytes=chunk_memory_bytes
-        )
+        return self.icl_block(x=x, y=y, cache=cache)
