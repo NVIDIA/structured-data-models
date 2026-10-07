@@ -33,14 +33,30 @@ Fit still computes the full context on every GPU, then copies only each local IC
 
 ## Validation and measurement
 
-`test/nn/test_context_parallel.py` launches real 2-rank and 4-rank Gloo process groups. It checks zero/one/uneven context lengths, MHA and GQA, broadcast batches, KumoTabular and relational ICL prediction parity, actual backing-storage release, mask rejection, and topology errors. Output projections are randomized so the zero-initialized residual defaults cannot make a broken attention path pass. Local result: 3 tests passed in 13.01 seconds on CPU; distributed CUDA evidence is pending.
+`test/nn/test_context_parallel.py` launches real 2-rank and 4-rank Gloo process groups and, when GPUs are present, 2/4-rank NCCL groups under FP32 and BF16. It checks zero/one/uneven context lengths, MHA and GQA, broadcast batches, KumoTabular and relational ICL prediction parity, actual backing-storage release, mask rejection, and topology errors. Output projections are randomized so the zero-initialized residual defaults cannot make a broken attention path pass. Local result: 3 tests passed and 4 CUDA cases skipped; existing Kumo/TabICLv2 ICL regression suite plus the original CP tests passed 19 with 10 CUDA skips. Distributed CUDA evidence is pending.
 
 `research/multigpu/context_probe.py` is a torchrun microbenchmark of native SDPA, single-rank efficient/LSE, and distributed cached ICL. It records fit time/peak, cache bytes, synchronized repeated prediction times/peak, and prediction differences. Its random weights establish kernel behavior and scalability only; dataset quality must come from pretrained full-model runner measurements.
 
 ```sh
 torchrun --standalone --nproc-per-node=4 research/multigpu/context_probe.py \
   --family tabular --context 4096 --queries 128 --channels 512 \
-  --heads 8 --kv-heads 2 --layers 4 --dtype bfloat16
+  --heads 8 --kv-heads 2 --layers 4 --dtype bfloat16 --output /tmp/cp-probe
 ```
 
 Requested sweep: ranks 1/2/4, contexts 1024/4096/16384/32768, MHA (`--kv-heads 8`) versus GQA (`--kv-heads 2`), float32/BF16, both families. Use context/queries small enough for initial smoke and measure all ranks' latency; the slowest rank sets throughput. No GPU speedup or accuracy claim has been established yet.
+
+`research/multigpu/context_model_bench.py` adds pretrained full-model comparisons using the team's fixed tabular arrays and native relational sampled graphs. Run `--mode native` and `--mode lse` with one torchrun process each; run `--mode context` with 2/4 processes. Keep all other parameters fixed. It saves every prediction repeat, query IDs, per-rank timings/peaks, resident ICL versus total cache bytes, quality metrics, and optional per-rank traces. Validation targets are opened after prediction only. Query throughput uses each repeat's slowest rank and counts replicated output rows once. Inputs and graphs are resident on each GPU for all three modes; this is a controlled execution comparison, not host-to-GPU streaming throughput.
+
+```sh
+HF_HUB_OFFLINE=1 torchrun --standalone --nproc-per-node=4 \
+  research/multigpu/context_model_bench.py --family tabular \
+  --data /data/covertype --output /results/covertype-cp4 \
+  --mode context --size small --context 1024 --queries 2048 \
+  --batch-size 256 --estimators 4 --repeats 3 --profile
+```
+
+## Further viable extensions
+
+The prototype distributes only fitted-cache replay. Fit attention could also shard KV while retaining replicated queries/hidden rows, recombining every layer before residual and MLP. That partitions quadratic attention work but communicates full context-sized outputs and still replicates row embeddings/MLPs. A more complete distributed fit would partition query rows too, exchanging KV or circulating KV blocks while maintaining online softmax. It must preserve globally fitted preprocessing and induced-column attention, relational sampling/graph boundary semantics, hierarchical class routing, and estimator seeds. Splitting raw context into independent model fits and averaging their predictions is a different estimator, not exact context parallelism.
+
+Query/data parallelism can wrap CP groups: split independent query batches across groups while sharing each group's context shards. Ensemble parallelism can assign distinct estimator groups similarly. These hybrids trade less cross-GPU replication against collective traffic. A useful next decision is whether long-context attention dominates total model time after the replicated preprocessing/row/GNN stages; the full-model trace determines that.
