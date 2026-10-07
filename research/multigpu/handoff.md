@@ -38,7 +38,9 @@ The ensemble owner's integrated local suite reported 110 passes and 17 hardware 
 
 After the repeat-provenance fix, the coordinator reran evidence-collector, relational-scoring/archive, and query-sharding tests: **32 passed**. Ruff passed on these changed files and the graph diagnostic. A separate multihost protocol run exposed a stale integer-column test fixture incompatible with SDM's string prediction-column contract; its correction is tracked separately rather than hidden as an environment failure.
 
-The fixture correction is integrated as `a886c2223`. The coordinator reran protocol and relational scoring tests: **11 passed**, including binary/seven-class cases across 1/2/4 fake workers and reordered semantic classes. Ruff passed. These overlap four tests in the preceding count; counts must not be summed as unique tests. Fake-worker timings are not GPU benchmark results. The generic scoring helper still assumes these prepared cohorts contain the intended class set; arbitrary cohorts missing classes require explicit full-class-support handling before wider reuse.
+The fixture correction is integrated as `a886c2223`. The coordinator reran protocol and relational scoring tests: **11 passed**, including binary/seven-class cases across 1/2/4 fake workers and reordered semantic classes. Ruff passed. These overlap four tests in the preceding count; counts must not be summed as unique tests. Fake-worker timings are not GPU benchmark results.
+
+A subsequent research-only scorer fix (`f13e29828`) preserves the full prediction class support even when a validation subset omits classes. It rejects unknown targets and malformed probabilities rather than dropping mass, and reports undefined binary AUROC as null with a reason. The coordinator's combined class-support/protocol/scoring suite passed **22 tests**, with Ruff clean; an independent reviewer also checked randomized semantic-order/subset cases. Existing archived Covertype metrics reproduced without changing raw records. Semantically duplicate prediction names such as `1` and `01` remain unsupported malformed input, not a measured-model case.
 
 ## Remaining remote evidence and unrun work
 
@@ -58,6 +60,8 @@ These limitations supplement the objective-by-objective completion checklist in 
 ## Access and resource risk
 
 At 16:30:55 UTC the session's network restrictions denied SSH to both hosts and AWS EC2 endpoint access. Approval policy is `never`; no alternative route or bypass was attempted. User authorization to use `al` does not remove this execution restriction. This is not an observed expired-login error.
+
+Fresh read-only probes at 16:44:41–16:44:51 UTC produced the same SSH `Operation not permitted` and regional EC2 endpoint connection failures. No new instance/process state was obtained. Academic-paper browsing remains available through the separate web tool; that does not establish SSH or EC2 access.
 
 Both task hosts were last verified reachable at 16:27:25 UTC, without a Spot interruption notice. They **may still incur charges**. Previously verified shutdown-to-terminate deadlines were 19:28:00 UTC for L4 and 23:15:34 UTC for L40S, on 2026-10-07. Their execution is not yet confirmed.
 
