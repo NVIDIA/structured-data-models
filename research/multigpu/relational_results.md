@@ -94,6 +94,32 @@ The telemetry files sample per-GPU utilization, memory, and power every 200 ms. 
 
 These are three repeated prediction passes on one fitted instance per arm in a fixed run order, not independent randomized trials. Small differences deserve further confirmation. Sampling is excluded from inference throughput: it separately cost 0.283 seconds for the HM query prefix and 0.0345 seconds for F1. The [protocol](relational_protocol.md) contains graph counts and setup costs.
 
+## Matched Arrow/cuDF backend experiment
+
+Six additional runs used the same isolated cuDF 26.6 Python environment for both backends, the same prepared HM graphs (context 1,024; queries 2,000; batch 250; E4), and the same source `1686803e4` and runner `a12b70a75`. The Arrow control disabled only cuDF discovery. This avoids confusing changes to pandas, NumPy, or Arrow versions with a backend effect. Backend receipts confirm that the cuDF string and relational-join paths actually executed. The environment smoke test passed its three interface checks.
+
+| Arm | Arrow median rows/s | cuDF median rows/s | cuDF / Arrow | Arrow AUROC | cuDF AUROC, archived first repeat | Largest cuDF repeat probability difference |
+|---|---:|---:|---:|---:|---:|---:|
+| Native 1 | 1,328.04 | 1,082.90 | 0.815 | 0.661947713 | 0.662338470 | 0.00408521 |
+| Ensemble 1 | 1,347.55 | 1,154.27 | 0.857 | 0.663524465 | 0.663781202 | 0.00379920 |
+| Ensemble 4 | 1,364.54 | 1,059.51 | 0.776 | 0.663524465 | 0.664230088 | 0.00401247 |
+
+cuDF was slower in all three matched comparisons and was not prediction-repeatable on the same fitted model. Arrow repetitions were byte-identical. cuDF Ensemble 1 versus Ensemble 4 also differed (maximum probability difference 0.00957660, mean 0.00127553), despite identical hard predictions. Consequently this experiment does **not** establish an exact cuDF ensemble-placement implementation or a quality improvement. AUROC differences are descriptive, not evidence of a better model.
+
+A separate instrumented pass measured inclusive host wall time in graph construction and recipe transforms. Native `TaskGraph.from_input` calls summed to 0.206 seconds with Arrow versus 0.513 seconds with cuDF. Ensemble 4 sums were 0.652 versus 2.145 seconds, but concurrent worker calls overlap; those sums are not elapsed time or additive fractions of total inference. No exclusive GPU attribution follows from these ranges. cuDF allocations can also be outside the PyTorch allocator; the accompanying timestamped GPU telemetry must be consulted for device-level memory.
+
+The nondeterminism's cause remains unresolved. Unordered hash joins followed by graph sorting on only one edge coordinate could change reduction order; stream interoperability is another possibility. A graph-only repeated-build diagnostic was prepared but has no observed result. Keep Arrow as the measured deterministic reference; do not promote the cuDF path based on this evidence.
+
+### Prediction archive correction
+
+The original runner archived `predictions.npy` and its hash from the first timed repeat, while `predictions.pt` and logged quality referred to the last repeat. This had no effect on the deterministic earlier arms but matters for cuDF. Original artifacts are preserved; the independent `quality-independent-audit.json` sidecars and the table above score the archived first-repeat NPY explicitly. Original last-repeat cuDF AUROC values were 0.662307790, 0.663760211, and 0.664214748 for native, Ensemble 1, and Ensemble 4 respectively. Runner revision `9c5f13378` fixes future runs to archive and score repeat zero consistently, and additionally saves every repeat and per-repeat quality.
+
+## Larger-context execution status
+
+Native two-hop HM contexts of 16,384 and 65,536 observations with 4,096 validation queries in batches of 512 were prepared and staged. A five-arm L40S queue (native 1, Ensemble 1/2/4, and hybrid 2DP × 2EP) at context 16,384 and E8 was launched after the backend comparisons. Network restrictions subsequently prevented checking its completion or retrieving its outputs. These launched-but-unverified arms are **not measured results in this report** and must not be restarted without first reconciling remote process and output state. Larger-context placement results collected by the placement owner are reported separately.
+
 ## Evidence
 
 External evidence root: `.kumo-multigpu-20261008/results/relational/`. Each `relational-{hm-c1024-b250,f1-c1024-b125}-{native1,ensemble1,ensemble2,ensemble4,data1,data2,data4}-e4` directory contains result JSON, raw prediction arrays, telemetry, and an independent quality/parity audit. Native HM and Ensemble 4 also retain profile outputs. Raw inference targets were unavailable to the query model; evaluation opened VAL labels after inference. TEST was not used.
+
+Backend evidence is in `relational-backend-{arrow,cudf}-{native1,ensemble1,ensemble4}-e4-c1024` directories under the same root, with environment receipts and interface-smoke evidence in `.kumo-multigpu-20261008/ops/runtime-cudf/`. All six backend result sets were retrieved locally before network access changed.
