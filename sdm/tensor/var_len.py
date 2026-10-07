@@ -70,6 +70,7 @@ class VarLenTensor(Tensor):
 
     _data: Tensor
     _offset: Tensor
+    _layout: Tensor
     _valid: Tensor | None
     _storage_offset: int
 
@@ -226,6 +227,8 @@ class VarLenTensor(Tensor):
 
         out._data = data
         out._offset = offset
+        # Carry logical shape and strides as a view of the offset storage.
+        out._layout = offset.as_strided(size, stride, storage_offset)
         out._valid = valid
         out._storage_offset = storage_offset
 
@@ -547,10 +550,10 @@ class VarLenTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["_data", "_offset"]
+        attrs = ["_data", "_offset", "_layout"]
         if self._valid is not None:
             attrs.append("_valid")
-        ctx = (self.__class__, self.storage_offset())
+        ctx = (self.__class__,)
         return attrs, ctx
 
     @staticmethod
@@ -560,15 +563,18 @@ class VarLenTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> VarLenTensor:
-        cls, storage_offset = ctx
-        return cls(
+        (cls,) = ctx
+        layout = inner_tensors["_layout"]
+        out = cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
             valid=inner_tensors.get("_valid"),
-            size=outer_size,
-            stride=outer_stride,
-            storage_offset=storage_offset,
+            size=layout.size(),
+            stride=layout.stride(),
+            storage_offset=layout.storage_offset(),
         )
+        out._layout = layout
+        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
