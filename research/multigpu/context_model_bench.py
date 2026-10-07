@@ -84,6 +84,9 @@ def main() -> None:
     )
     parser.add_argument("--profile", action="store_true")
     parser.add_argument(
+        "--cache-residency", choices=["default", "resident"], default="default"
+    )
+    parser.add_argument(
         "--kernel", choices=["efficient", "flash"], default="efficient"
     )
     parser.add_argument(
@@ -216,6 +219,12 @@ def main() -> None:
             torch.cuda.synchronize()
             fit_seconds = time.perf_counter() - started
             fit_peak = torch.cuda.max_memory_allocated()
+            residency_start = time.perf_counter()
+            if args.cache_residency == "resident":
+                model._cache = model._cache.to(device)
+            torch.cuda.synchronize()
+            residency_seconds = time.perf_counter() - residency_start
+            residency_peak = torch.cuda.max_memory_allocated()
             cache = model._cache
             cache_bytes = cache.size() if isinstance(cache, Cache) else None
             cache_icl_bytes = icl_bytes(cache)
@@ -270,6 +279,8 @@ def main() -> None:
             "load_seconds": load_seconds,
             "fit_seconds": fit_seconds,
             "fit_peak_bytes": fit_peak,
+            "residency_seconds": residency_seconds,
+            "fit_and_residency_peak_bytes": residency_peak,
             "cache_bytes": cache_bytes,
             "input_allocated_bytes": input_allocated,
             "cache_storage_bytes_by_device": cache_by_device,
