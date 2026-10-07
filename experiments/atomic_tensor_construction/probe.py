@@ -1,27 +1,25 @@
+"""Check tensor computations following traceable wrapper construction."""
+
 import torch
+
 from sdm import CategoricalTensor, TableTensor
 
 
-def fn(x):
-    return CategoricalTensor(x, (torch.arange(3),)).code + 1
+def _categorical(code):
+    return CategoricalTensor(code, (torch.arange(3),)).code + 1
 
 
-def table(x):
-    return TableTensor.from_tensor(x).numerical.sin()
+def _table(value):
+    return TableTensor.from_tensor(value).numerical.sin()
 
 
-for func in (fn, table):
+for function in (_categorical, _table):
     for fullgraph in (False, True):
         torch._dynamo.reset()
-        try:
-            f = torch.compile(func, fullgraph=fullgraph, dynamic=True)
-            for n in (3, 5):
-                x = torch.arange(n).remainder(3).reshape(n, 1)
-                if func is table:
-                    x = x.float()
-                torch.testing.assert_close(f(x), func(x))
-            print(func.__name__, fullgraph, "PASS", flush=True)
-        except Exception as e:
-            print(
-                func.__name__, fullgraph, type(e).__name__, str(e), flush=True
-            )
+        compiled = torch.compile(function, fullgraph=fullgraph, dynamic=True)
+        for rows in (3, 5):
+            value = torch.arange(rows).remainder(3).reshape(rows, 1)
+            if function is _table:
+                value = value.float()
+            torch.testing.assert_close(compiled(value), function(value))
+        print(function.__name__, fullgraph, "PASS", flush=True)  # noqa: T201
