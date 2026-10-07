@@ -152,9 +152,9 @@ if len(context) > args.context_size:  # Sample different context per estimator:
 
 # Execute Model ###############################################################
 model = sdm.models.KumoRelational(device=device)
-recipe = None
+recipe = model.default_recipe()
 if args.text:
-    recipe = model.default_recipe().prepend_features(
+    recipe = recipe.prepend_features(
         sp.StypeDispatch(
             text=[
                 sp.SentenceTransformer(
