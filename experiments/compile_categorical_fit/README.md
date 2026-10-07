@@ -52,3 +52,13 @@ CPU 2.14 Inductor, four ensemble members, random and cyclic-shift strategies:
 The 0/1-category fullgraph results are **not** evidence that normal categorical fitting works with an explicit generator. With the global RNG diagnostic, groups grew from 1 to 4 for 0/1 categories, and from 3 to 4 for the tested 3-category draws. No model speed or memory improvement is established, and no replacement of SDM's explicit-generator behavior is proposed.
 
 Recommendation: the alignment guard is a small independent compatibility change. The shuffle prototype documents what a static grouping scheme costs; explicit generator support and grouping overhead need resolution before recommending it for integration.
+
+## Reproduce
+
+Run from the branch root with the desired PyTorch environment:
+
+```bash
+OMP_NUM_THREADS=1 PYTHONPATH=. python experiments/compile_categorical_fit/fit_probe.py
+```
+
+The probe uses actual Inductor, `dynamic=True`, both graph settings and all three sort orders. It reports failures rather than silently switching backends. To use the existing real-data artifact, add `--bundle /path/to/driver-dnf_bundle.pt`; that checks the five driver string dictionaries with changing row counts. The bundle must be a trusted local artifact because loading it requires its serialized SDM container objects.
