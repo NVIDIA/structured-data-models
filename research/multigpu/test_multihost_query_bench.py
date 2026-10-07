@@ -94,6 +94,7 @@ def test_barrier_transport_and_ordered_gather(tmp_path, monkeypatch, workers):
         batch_size=4,
         workers=workers,
         worker_indices=None,
+        weights=None,
         source_commit="test",
         warmups=1,
         repeats=2,

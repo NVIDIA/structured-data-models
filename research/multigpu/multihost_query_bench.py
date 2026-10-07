@@ -20,7 +20,11 @@ from typing import Any
 
 import numpy as np
 import torch
-from research.multigpu.query_shards import gather_batches, plan_batches
+from research.multigpu.query_shards import (
+    gather_batches,
+    plan_batches,
+    weighted_plan_batches,
+)
 from research.multigpu.relational_bench import score, write_json
 
 from sdm import CategoricalTensor, Stype, TableTensor
@@ -150,7 +154,13 @@ def run(args: argparse.Namespace) -> None:
         ids[start : start + args.batch_size].tolist()
         for start in range(0, args.queries, args.batch_size)
     ]
-    assignments = plan_batches(rows, worker_count)
+    if args.weights is not None and len(args.weights) != worker_count:
+        raise ValueError("Provide one measured capacity weight per worker")
+    assignments = (
+        weighted_plan_batches(rows, args.weights)
+        if args.weights is not None
+        else plan_batches(rows, worker_count)
+    )
     expected_hashes = {
         str(index): hashlib.sha256(
             values[
@@ -184,6 +194,9 @@ def run(args: argparse.Namespace) -> None:
             ]
             if any(item["event"] != "READY" for item in ready):
                 raise ValueError("Not every worker completed setup")
+            uuids = [item.get("gpu_uuid", "unavailable") for item in ready]
+            if "unavailable" not in uuids and len(set(uuids)) != worker_count:
+                raise ValueError("Workers resolved to duplicate physical GPUs")
             if any(
                 item["context_hashes"] != ready[0]["context_hashes"]
                 for item in ready
@@ -303,6 +316,7 @@ def main() -> None:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--worker-indices", type=int, nargs="+")
+    parser.add_argument("--weights", type=float, nargs="+")
     parser.add_argument("--queries", type=int, default=65536)
     parser.add_argument("--batch-size", type=int, default=1024)
     parser.add_argument("--context", type=int, default=1024)
