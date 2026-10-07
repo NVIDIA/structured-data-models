@@ -19,6 +19,9 @@ parser.add_argument(
     "--dtype", choices=("float32", "float64"), default="float32"
 )
 parser.add_argument("--rows", nargs="+", type=int)
+parser.add_argument(
+    "--data-file", help="Optional cached (features, targets) tensor tuple."
+)
 parser.add_argument("--fullgraph", action="store_true")
 parser.add_argument("--benchmark", action="store_true")
 args = parser.parse_args()
@@ -28,9 +31,13 @@ rows_to_test = args.rows or (
 )
 features = None
 if args.dataset == "breast-cancer":
-    from sklearn.datasets import load_breast_cancer
+    if args.data_file:
+        features, _ = torch.load(args.data_file, weights_only=True)
+        features = features.to(dtype=dtype)
+    else:
+        from sklearn.datasets import load_breast_cancer
 
-    features = torch.as_tensor(load_breast_cancer().data, dtype=dtype)
+        features = torch.as_tensor(load_breast_cancer().data, dtype=dtype)
 
 reference = PowerTransform()
 candidate = PowerTransform()

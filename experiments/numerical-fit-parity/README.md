@@ -41,6 +41,7 @@ All checks below use CPU Inductor, not the tracing-only eager backend. Tolerance
 | Constant, all-missing, individual missing and infinite values | Passed in those cases | Passed in those cases |
 | Fitted lambdas, mean and scale | Exact in tested cases | Exact in tested cases |
 | Breast-cancer feature fitting, FP32, 160/79 rows | Default output tolerance passed; maximum `3.55e-6` / `1.31e-6` | Exact outputs |
+| Real-data reproduction with sparse missing values, 160 rows | Default tolerance passed; maximum `8.02e-6`, fitted parameters exact | Exact outputs and fitted parameters |
 | Existing PowerTransform/Standardize/ImputeMean tests | 25 passed, 27 skipped | 25 passed, 27 skipped |
 | Focused compiled fitting regression, both fullgraph settings | 2 passed | 2 passed |
 | Native-reduction wrapper finite-gradient smoke check | Passed | Passed |
@@ -69,7 +70,7 @@ PYTHONPATH=. OMP_NUM_THREADS=1 TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS=0 \
   --dataset breast-cancer --fullgraph --benchmark
 ```
 
-The real-data reproduction requires scikit-learn for its bundled dataset. The script asserts exact fitted parameters and unchanged default output tolerances. It does not call a custom compiler backend; the tested native boundaries are in source code.
+The real-data reproduction requires scikit-learn for its bundled dataset, or `--data-file PATH` pointing to a cached `(features, targets)` tensor tuple. The script asserts exact fitted parameters and unchanged default output tolerances. It does not call a custom compiler backend; the tested native boundaries are in source code.
 
 ## Deferred metadata prototype
 
