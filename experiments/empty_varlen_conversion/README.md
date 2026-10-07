@@ -22,9 +22,11 @@ Base: frozen integration `c75ba3af6c231c7bdcd181a50d35cdc7fb53c090`. Production 
 |---|---|---|
 | Actual Inductor table conversion, both graph settings, rows 4/9/0/3 | Pass | Pass |
 | Actual Inductor empty-payload dtype conversion, same matrix | Pass | Pass |
+| Compiled copies of empty/missing strings, both modes, changing rows | Pass | Pass |
+| Eager copy semantics across six layouts × two classes × two memory formats | 24 passed | 24 passed |
 | Existing VarLen/String suites | 48 passed, 15 skipped | 48 passed, 15 skipped |
 
-Before the change, the table reproduction fails in 2.14 fullgraph with the same error as actual L4 public BF16 prediction. The partial-graph reproduction succeeds by breaking the graph. After the change all eight version/mode/input-kind combinations pass; table output parity is exact. The probe checks ragged data and offsets as well as logical shape.
+Before the change, the table reproduction fails in 2.14 fullgraph with the same error as actual L4 public BF16 prediction. The partial-graph reproduction succeeds by breaking the graph. After the change all twelve version/mode/input-kind combinations pass; table output parity is exact. The probe checks ragged data, offsets, validity, logical shape, and independent storage for copies. Additional eager checks used StringTensor and VarLenTensor with a 3×4 logical shape, empty payloads, and missing values: contiguous, transposed, nonzero-offset row slice, strided column slice, zero-row slice, and stride-zero expansion. Both preserve-format and contiguous copies retained values/validity and allocated independent data, offset, and validity storage (including the zero-length data buffer). These checks cover ordinary empty values, not only zero-column table blocks.
 
 ```bash
 OMP_NUM_THREADS=1 PYTHONPATH=. TORCHINDUCTOR_FORCE_DISABLE_CACHES=1 \
