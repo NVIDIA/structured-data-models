@@ -1,0 +1,86 @@
+{
+  "run": "cp-hm-c16384-e4-resident-flash-context4",
+  "prediction_sha256": "a9772755ab058f747e476432643f5b1d8e2409af62c8876d15e788d3a6b049a6",
+  "rank_hashes_equal": true,
+  "repeat_hashes_equal": true,
+  "repeat_arrays_equal": true,
+  "input_identity_equal": true,
+  "actual_context_rows": 16384,
+  "actual_query_rows": 4096,
+  "actual_batch_rows": [
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512
+  ],
+  "query_ids_equal": true,
+  "class_columns_match": true,
+  "numerical_vs_native": {
+    "shape": [
+      4096,
+      2
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.016804367303848267,
+    "mean_abs": 0.0026238050659230794,
+    "rms": 0.003729150675402448,
+    "p99_abs": 0.01126203790307046,
+    "relative_l2": 0.00637031804685696,
+    "within_tolerance": true
+  },
+  "class_changes": 0,
+  "metrics": {
+    "rows": 4096,
+    "accuracy": 0.8076171875,
+    "log_loss": 0.4640468907889226,
+    "brier_multiclass": 0.29445538899648677,
+    "auroc_by_class": [
+      0.662424759576578,
+      0.6624253361315467
+    ],
+    "auroc_macro_present_classes": 0.6624250478540623,
+    "max_probability_sum_error": 8.568167686462402e-8,
+    "positive_class": 1,
+    "auroc_positive1": 0.662424759576578
+  },
+  "paired_logloss_delta": {
+    "candidate_minus_reference": 0.00003281070498618984,
+    "ci95": [
+      -0.00022544645626077037,
+      0.00030251121220291316
+    ],
+    "groups": 4096,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_slowest_rank_seconds": [
+    3.9124061119998714,
+    3.9063963090000016,
+    3.903410231999942
+  ],
+  "slowest_rank_matches_record": true,
+  "median_unique_rows_s": 1048.5367269478438,
+  "speedup_native": 0.9874582510004823,
+  "prediction_peak_gib": [
+    1.2450470924377441,
+    1.2450470924377441,
+    1.2450470924377441,
+    1.2450470924377441
+  ],
+  "icl_cache_bytes": [
+    402653184,
+    402653184,
+    402653184,
+    402653184
+  ]
+}

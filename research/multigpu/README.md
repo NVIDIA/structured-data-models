@@ -218,6 +218,16 @@ Native KumoRelational regression on F1 also tested the Flash LSE path, with E4, 
 
 Both CP outputs are finite and monotone, and their median predictions pass tolerance, but the complete 499 × 999 arrays fail `atol=0.01, rtol=0.05`: 938 entries fail at two ranks and 915 at four. Maximum absolute error is about 0.20224; mean absolute errors are 0.017043 and 0.014253. The largest relative failures occur in near-zero tail quantiles, not necessarily the largest absolute-error entries. Paired MAE changes are small but consistently positive in the auditor's driver-cluster bootstrap. Consequently the approximately 3.2% CP4 throughput gain is not an accepted equivalent-result win. A higher-precision local-attention/merge arm is being tested with unchanged tolerances.
 
+The resident native H&M comparison uses **actual context 16,384, queries 4,096, batch 512**, E4, and two-hop `[16,16]` graphs. These sizes come from the input identity manifest; the runner's unused CLI defaults still display 1,024/2,048/256 and must not be mistaken for executed shapes.
+
+| Arm | GPUs | Unique rows/s | ICL cache per rank | Max prediction peak per GPU | Max probability difference vs native |
+|---|---:|---:|---:|---:|---:|
+| Native | 1 | 1,061.85 | 1,536 MiB | 2.370 GiB | 0 |
+| Flash LSE1 | 1 | 1,057.77 | 1,536 MiB | 2.370 GiB | 0.008284 |
+| CP4 | 4 | 1,048.54 | 384 MiB | 1.245 GiB | 0.016804 |
+
+CP4 passes the unchanged BF16 probability tolerance and changes no class labels, but is 1.25% slower than native. Its mean probability error is 0.002624, and paired log-loss change is +0.0000328 with 95% interval [−0.0002254, +0.0003025]. Peak prediction allocation falls 47.5%; fit peak remains about 4.471 GiB. All rank/repeat hashes, workloads, row IDs, and slowest-rank timings were independently checked. This supports retained-cache capacity, not a throughput win. These native RNG/preprocessing controls are separate from the resident-member policy in the placement table; do not compare their different quality values as a GPU-count effect.
+
 ### Sequential model placement on L4
 
 This separate comparison uses **KumoTabular large**, E4, context 1,024, queries 2,048, batch 256, and the resident executor. Source `55dba6bb5` passed 36 placement tests on the L4 host, including actual CUDA cases. Each candidate saved exactly the same prediction bytes as its resident one-GPU reference.
@@ -258,6 +268,7 @@ Additional checked snapshots retain the new measurements:
 - [Weak process DP evidence](evidence/weak-process-data-l40s-20261008/index.json): six archived result/audit records, 18 external artifacts verified; current equivalence audit covers common prefixes.
 - [H&M 16k placement evidence](evidence/placement-hm16k-l4-20261008/index.json): 12 archived result/audit/command records, 24 external artifacts verified.
 - [Resident 16k context L4 evidence](evidence/context-large16k-l4-20261008/index.json): 12 archived records, 28 external artifacts verified.
+- [Native H&M 16k context evidence](evidence/context-hm16k-l4-20261008/index.json): 12 archived records, 24 external artifacts verified; actual input dimensions retained alongside stale CLI defaults.
 - [Initial Nsight evidence](evidence/initial-nsys-l40s-20261008/index.json): two archived analysis records, four external analysis/SQLite artifacts verified.
 
 Collect each later completed group into a fresh directory; never overwrite an earlier collection. The collector preserves failed-run records too, and does not reconstruct a command that was never recorded. Source revisions, runner hashes, and exact parameters are preserved from raw result JSON. If the runner emits `command.txt`, that file is archived verbatim.

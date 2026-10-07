@@ -1,0 +1,80 @@
+{
+  "run": "cp-hm-c16384-e4-resident-flash-native1",
+  "prediction_sha256": "f0258dbdf91654a5914e88bb7bf3fbd59ba6c9f53f92c9c7421d644a5b2df4c0",
+  "rank_hashes_equal": true,
+  "repeat_hashes_equal": true,
+  "repeat_arrays_equal": true,
+  "input_identity_equal": true,
+  "actual_context_rows": 16384,
+  "actual_query_rows": 4096,
+  "actual_batch_rows": [
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512
+  ],
+  "query_ids_equal": true,
+  "class_columns_match": true,
+  "numerical_vs_native": {
+    "shape": [
+      4096,
+      2
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": true,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0,
+    "mean_abs": 0,
+    "rms": 0,
+    "p99_abs": 0,
+    "relative_l2": 0,
+    "within_tolerance": true
+  },
+  "class_changes": 0,
+  "metrics": {
+    "rows": 4096,
+    "accuracy": 0.8076171875,
+    "log_loss": 0.4640140800839364,
+    "brier_multiclass": 0.294422248445272,
+    "auroc_by_class": [
+      0.6624237986516301,
+      0.6624228377266822
+    ],
+    "auroc_macro_present_classes": 0.6624233181891561,
+    "max_probability_sum_error": 8.568167686462402e-8,
+    "positive_class": 1,
+    "auroc_positive1": 0.6624237986516301
+  },
+  "paired_logloss_delta": {
+    "candidate_minus_reference": 0,
+    "ci95": [
+      0,
+      0
+    ],
+    "groups": 4096,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "recomputed_slowest_rank_seconds": [
+    3.8736886770000183,
+    3.853814844999988,
+    3.8574032669998815
+  ],
+  "slowest_rank_matches_record": true,
+  "median_unique_rows_s": 1061.8542362530036,
+  "speedup_native": 1,
+  "prediction_peak_gib": [
+    2.370047092437744
+  ],
+  "icl_cache_bytes": [
+    1610612736
+  ]
+}
