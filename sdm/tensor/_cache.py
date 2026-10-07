@@ -12,6 +12,7 @@ from torch import Tensor
 def _tensor_cache_hash(tensor: Tensor) -> str:
     """Hash wrapper metadata without pickling symbolic shape environments."""
     seen: dict[int, int] = {}
+    storages: dict[torch.UntypedStorage, int] = {}
 
     def normalize(value: Any) -> Any:
         if isinstance(value, Tensor):
@@ -44,7 +45,11 @@ def _tensor_cache_hash(tensor: Tensor) -> str:
                         for name in names
                     ),
                 )
-            return ("tensor", metadata)
+            # Distinct views may alias despite being different Tensor objects.
+            # Only traversal-order group numbers enter the persistent hash.
+            storage = value.untyped_storage()
+            group = storages.setdefault(storage, len(storages))
+            return ("tensor", metadata, group)
         if isinstance(value, (torch.SymInt, torch.SymFloat, torch.SymBool)):
             return (
                 "symbol",
@@ -72,5 +77,5 @@ def _tensor_cache_hash(tensor: Tensor) -> str:
             return value
         raise TypeError(f"Unsupported tensor cache metadata: {type(value)}")
 
-    payload = ("sdm-tensor-metadata-v1", normalize(tensor))
+    payload = ("sdm-tensor-metadata-v2", normalize(tensor))
     return hashlib.blake2b(repr(payload).encode(), digest_size=32).hexdigest()

@@ -30,3 +30,19 @@ def test_tensor_cache_leaf_aliases() -> None:
         shared._stable_hash_for_caching()
         != separate._stable_hash_for_caching()
     )
+
+
+def test_tensor_cache_storage_aliases() -> None:
+    values = torch.arange(4)
+    shared_views = ColumnarTensor((values[:3], values[1:]))
+    independent = ColumnarTensor((values[:3], values.clone()[1:]))
+    assert (
+        shared_views._stable_hash_for_caching()
+        != independent._stable_hash_for_caching()
+    )
+    another = torch.arange(4)
+    equivalent = ColumnarTensor((another[:3], another[1:]))
+    assert (
+        shared_views._stable_hash_for_caching()
+        == equivalent._stable_hash_for_caching()
+    )
