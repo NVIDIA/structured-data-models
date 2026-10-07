@@ -267,7 +267,10 @@ class RelatedTables(DeviceMixin, Generic[T]):
         table_schemas = {}
         for name, table in self.tables.items():
             if isinstance(table, EnsembleTable):
-                schemas = {group.schema for group in table._iter_groups()}
+                schemas = {
+                    TableSchema(columns=group.columns)
+                    for group in table._iter_groups()
+                }
                 if len(schemas) != 1:
                     raise ValueError(
                         "'schema' requires each 'EnsembleTable' to have a "
@@ -275,7 +278,7 @@ class RelatedTables(DeviceMixin, Generic[T]):
                     )
                 table_schemas[name] = next(iter(schemas))
                 continue
-            table_schemas[name] = table.schema
+            table_schemas[name] = TableSchema(columns=table.columns)
 
         return RelatedTablesSchema(
             tables=table_schemas,
