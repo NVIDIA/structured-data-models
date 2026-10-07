@@ -12,6 +12,7 @@ from torch import Tensor
 from torch.nn import Identity, Linear, ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
+from sdm._memory import chunk_memory_limit
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -204,6 +205,9 @@ class KumoTabular(ICLModel):
             )
 
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
+        chunk_memory_bytes = (
+            chunk_memory_limit(x.device) if x.is_cuda else None
+        )
 
         if classes is None:
             out = self.models[Task.regression](
@@ -211,6 +215,7 @@ class KumoTabular(ICLModel):
                 y=y,
                 categorical_mask=categorical_mask,
                 cache=cache,
+                chunk_memory_bytes=chunk_memory_bytes,
             )
             return TableTensor(
                 columns={
@@ -228,6 +233,7 @@ class KumoTabular(ICLModel):
             cache=cache,
             generator=generator,
             categorical_mask=categorical_mask,
+            chunk_memory_bytes=chunk_memory_bytes,
         )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
@@ -293,7 +299,14 @@ class _KumoTabular(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
+        chunk_memory_bytes: int | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x, y, categorical_mask, cache=cache)
+        x = self.row_embedding(
+            x=x,
+            y=y,
+            categorical_mask=categorical_mask,
+            cache=cache,
+            chunk_memory_bytes=chunk_memory_bytes,
+        )
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)

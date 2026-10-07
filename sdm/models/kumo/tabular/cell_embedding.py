@@ -46,6 +46,7 @@ class CellEmbedding(TabFMCellEmbedding):
         cache: Cache | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
+        chunk_memory_bytes: int | None = None,
     ) -> Tensor:  # [..., R, C, D]
         missing = x.isnan()
 
@@ -67,6 +68,7 @@ class CellEmbedding(TabFMCellEmbedding):
             batch_size_limit=batch_size_limit,
             out=out,
             missing=missing,
+            chunk_memory_bytes=chunk_memory_bytes,
         )
 
     def _forward(  # type: ignore

@@ -75,6 +75,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | Literal["auto"] | None = None,
+        chunk_memory_bytes: int | None = None,
         out: Tensor | None = None,
     ) -> Tensor: ...
 
@@ -88,6 +89,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: Literal[True],
         batch_size_limit: int | Literal["auto"] | None = None,
+        chunk_memory_bytes: int | None = None,
         out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
@@ -101,6 +103,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: bool,
         batch_size_limit: int | Literal["auto"] | None = None,
+        chunk_memory_bytes: int | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
@@ -113,6 +116,7 @@ class InducedTransformerBlock(torch.nn.Module):
         *,
         return_key_value: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
+        chunk_memory_bytes: int | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -134,6 +138,8 @@ class InducedTransformerBlock(torch.nn.Module):
                 projections for the final attention site alongside the output.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
+            chunk_memory_bytes: Pre-resolved memory budget for automatic
+                chunking. If omitted, the budget is read from the device.
             out: The output tensor.
 
         Returns:
@@ -152,11 +158,13 @@ class InducedTransformerBlock(torch.nn.Module):
                 seqused_key_value=seqused_key_value,  # [...]
                 attn_mask=attn_mask,  # [..., 1, KV]
                 batch_size_limit=batch_size_limit,
+                chunk_memory_bytes=chunk_memory_bytes,
             )  # [..., M, C]
         return self.output_block(
             query=query,  # [..., Q, C]
             key_value=key_value,  # [..., M, C]
             return_key_value=return_key_value,
             batch_size_limit=batch_size_limit,
+            chunk_memory_bytes=chunk_memory_bytes,
             out=out,
         )  # [..., Q, C]
