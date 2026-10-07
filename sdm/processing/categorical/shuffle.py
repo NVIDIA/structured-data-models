@@ -190,8 +190,11 @@ class ShuffleCategories(EnsembleProcessor):
             category = table.categorical.category(index)
             codes = code[..., index]
             valid = valid_mask[..., index]
-            valid_codes = codes[valid].to(torch.long)
-            codes[valid] = permutation[valid_codes].to(codes.dtype)
+            # Slot zero keeps missing codes out of the permutation lookup.
+            lookup = torch.cat((permutation.new_zeros(1), permutation))
+            indices = torch.where(valid, codes.long() + 1, 0)
+            mapped = lookup[indices].to(codes.dtype)
+            codes.copy_(torch.where(valid, mapped, codes))
             categories.append(category[permutation.argsort()])
 
         categorical = CategoricalTensor(
