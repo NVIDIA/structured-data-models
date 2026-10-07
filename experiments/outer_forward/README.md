@@ -31,4 +31,6 @@ Add `--fullgraph` for the strict case. Use `--task regression`, the diabetes dat
 
 Keep explicit random-generator state and learned vocabulary semantics. Dropping the generator or fitting all categories regardless of observed data would change behavior and is not a fix. Preparing random choices outside a compiled tensor function is a possible API boundary; it would not make the entire public fitting call a single graph.
 
-PyTorch 2.7 public recipe construction and metadata guards are being investigated separately. No GPU or end-to-end speed claim is made here.
+The same four outer-forward cases were also run on actual CPU PyTorch 2.7.1 Inductor. Both tasks fail partial compilation while resuming construction of a TaskDispatch module (`object has no attribute '_modules'`). Both strict cases reject construction of a frozenset from a generator during recipe setup. See [results27.json](results27.json). Passing an explicitly prepared recipe is a separate experiment on the fitting branch; these results use the default public call unchanged.
+
+No GPU or end-to-end speed claim is made here.
