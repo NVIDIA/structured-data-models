@@ -1419,6 +1419,8 @@ def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
 
 
 def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
+    if isinstance(start.numel(), int) and start.numel() == 0:
+        return start.new_zeros(1), start.new_empty(0)
     count = end - start
 
     offset = count.new_empty(count.numel() + 1, dtype=torch.int64)
