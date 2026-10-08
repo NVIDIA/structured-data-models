@@ -1,6 +1,6 @@
 # Destination-blocked relational GNN prototype
 
-`blocked_gnn.py` is a research-only adapter for the existing KumoRelational `InvariantGNN`. It addresses the measured 6.10 GiB five-statistic allocation on the H&M C=65,536 context graph without modifying checkpoint weights, graph sampling, features, or SDM core code. It is not another distributed execution framework and has not been GPU-benchmarked.
+`blocked_gnn.py` is a research-only adapter for the existing KumoRelational `InvariantGNN`. It addresses the measured 6.10 GiB five-statistic allocation on the H&M C=65,536 context graph without modifying checkpoint weights, graph sampling, features, or SDM core code. It is not another distributed execution framework. CUDA numerical screening below found significant checkpoint-dependent failures; this is not an accepted parity-preserving optimization.
 
 ## Preserved computation
 
@@ -32,4 +32,23 @@ The final local module suite passed 95 cases on CPU (PyTorch 2.9.1, Python 3.12.
 
 The completed independent screen ran 31 cases: 29 passed and the two FP32 singleton checkpoint configurations failed. N=257 with B=64 and B=128 passed all tested precisions for both classifier/regressor checkpoint GNNs, on fit and frozen-cache query calls, establishing actual multi-block coverage. The failed classifier singleton arm had maximum fit/query errors 1.263618e-5/1.66893e-5. Per-arm source/checkpoint identities and error JSON are retained in `.kumo-multigpu-20261008/blocked-gnn-cpu-review`; review commit `7f5251f56` retains the failing gates rather than marking them accepted. These remain CPU GNN-module results, not full-task predictions.
 
-Run `PYTHONPATH=. python -m pytest test/research/test_blocked_gnn.py`. Before deployment, measure the unmodified and blocked checkpoint on identical H&M context/query graphs, starting with FP32 and then the production BF16-autocast path. Check individual statistics, final predictions and task quality, fit/predict time, per-device allocated/reserved peaks, allocator settings, and a block-size sweep. Repeat the failed C64k E8 resident fit plus the native CPU-offload control; compare against stage placement under the same allocator. No such GPU result is claimed here because remote access is unavailable.
+Run `PYTHONPATH=. python -m pytest test/research/test_blocked_gnn.py`. Before deployment, measure the unmodified and blocked checkpoint on identical H&M context/query graphs, starting with FP32 and then the production BF16-autocast path. Check individual statistics, final predictions and task quality, fit/predict time, per-device allocated/reserved peaks, allocator settings, and a block-size sweep. Repeat the failed C64k E8 resident fit plus the native CPU-offload control; compare against stage placement under the same allocator. Full-task runs remain experimental when a module-level gate fails; task metrics cannot silently override that failure.
+
+## CUDA numerical screen on the replacement L4 host
+
+Source `b721583a9` was tested on the replacement Frankfurt four-L4 host, using one GPU, PyTorch 2.9.1+cu130, with TF32 disabled. The first suite passed 57/57 cases in 3.05 seconds: 45 exact statistic comparisons at D=33 (FP32/BF16/FP16, nonfinite/empty/reordered graphs, N=257, B=1/64/128) and 12 D=32 GNN comparisons covering every node plus duplicate readouts, fresh/frozen caches, default/nondefault streams, and FP32/BF16/autocast. These are correctness test durations, not inference-performance measurements.
+
+The stronger D=512 actual-checkpoint screen then collected 31 tests: one CPU threshold test passed, seven CUDA checkpoint configurations passed, and **23 CUDA checkpoint configurations failed** the original gates. All six N=64/B=256 single-block controls were bitwise equal; the other passing configuration was the N=64/B=17 FP32 regressor. Every N=257 multi-block case failed, including BF16 and BF16 autocast, despite the smaller synthetic GNN suite passing.
+
+| N=257, B=64 or 128, actual checkpoint | Maximum fit error | Maximum frozen-query error |
+|---|---:|---:|
+| Classifier, FP32 | 0.00168705 | 0.00124836 |
+| Classifier, BF16 weights/inputs | 0.125 | 0.09375 |
+| Classifier, FP32 weights + BF16 autocast | 0.12739873 | 0.12840009 |
+| Regressor, FP32 | 0.00000476837 | 0.00000476837 |
+| Regressor, BF16 weights/inputs | 0.046875 | 0.0390625 |
+| Regressor, FP32 weights + BF16 autocast | 0.04178393 | 0.04293317 |
+
+B=64 and B=128 produced the same recorded error values for these fixtures. A separate first-hop D=512 classifier probe used identical transformed-source and skip tensors for both projections. The full and blocked statistics were bitwise identical in FP32 and BF16 autocast. The projection itself differed: FP32 maximum/mean error 0.0000472069/0.00000172466, BF16-autocast maximum/mean 0.125/0.00348989. This directly locates a numerical change at the block-sized `addmm`; source review found no changed edge indexing, aggregation semantics, cache randomness, or hop ordering. Later amplification through nonlinearities or variance-threshold crossings is plausible but was not isolated by this first-hop probe. No tolerance was relaxed and no failed configuration was promoted as exact.
+
+Evidence is retained under `.kumo-multigpu-20261008/blocked-gnn-gpu-review/`: `blocked-gnn-lowlevel-b721583a9-v1` and `blocked-gnn-checkpoint-b721583a9-v1` contain timestamped bounded-process receipts, complete stdout and JUnit XML; the latter has all 30 per-configuration checkpoint/source hashes and fit/query error JSONs. `blocked-gnn-projection-probe-b721583a9-v1` preserves the exact stdin script, captured result JSON lines, and provenance. Independent audit reconciled all checkpoint records against XML and retained all failures; it did not independently recompute tensor errors because full hidden arrays were not saved. The low-level and checkpoint jobs ran at 02:05:43–02:05:49 and 02:06:33–02:06:41 UTC on 2026-10-08. Their compilation warms the shared Triton disk cache before subsequent full-model fits, which must therefore not be called cold-compilation measurements.
