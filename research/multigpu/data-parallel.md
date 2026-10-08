@@ -194,7 +194,52 @@ The cluster JSON supplies shared `source`, `python`, `data`, `hf_cache`, task-on
 
 An attempted homogeneous eight-L4 experiment could not obtain the four additional singleton Spot workers across the searched east-region capacity pools. No eight-L4 performance claim is supported. The planned alternative combines the existing four L4s and four L40S GPUs across regions. This must be labeled heterogeneous multi-host execution. Compare each four-GPU group with the combined run on identical query rows, and treat the sum of separately measured group throughputs only as an optimistic capacity reference, not as an observed eight-GPU throughput or a homogeneous scaling denominator.
 
-**Execution status:** the mixed-host GPU protocol has not been launched or measured. Source `0361a707f` and `cluster-mixed8-0361a707f.json` were staged on the intended L4 coordinator while other agents held the GPU leases. Before those leases cleared, the execution environment changed to restricted networking with no approval path, and the operator reported SSH `EPERM`. No remote restart or network-policy workaround was attempted. There is therefore no mixed-eight-GPU throughput, latency, memory or prediction-quality result. The 27 CPU protocol tests establish transport/sharding contracts only. Resume with a one-local-GPU smoke test, then matched four-L4 and four-L40S group runs and eight-worker equal/weighted assignments on identical Q65536/B1024/C1024/E4 workloads once ordinary access and explicit leases are restored.
+**Historical first attempt:** source `0361a707f` and `cluster-mixed8-0361a707f.json` were staged while other agents held the original GPU leases, but networking became restricted before execution and the operator reported SSH `EPERM`. No workaround or remote restart was attempted, and that attempt produced no mixed-eight-GPU result. The measurements below are a later, separately identified execution after ordinary access resumed and replacement hosts were provisioned; they do not retroactively turn the original CPU protocol checks into GPU evidence.
+
+### Measured heterogeneous eight-GPU execution
+
+The resumed study used immutable source `b721583a9`, four L4 GPUs in Frankfurt (`eu-central-1b`) and four L40S GPUs in Ohio (`us-east-2a`). Frankfurt coordinated local pipes and task-only SSH connections to Ohio. Each physical GPU ran one persistent native KumoTabular large replica: identical first-1024-row TRAIN context, E4, estimator batch 4, seed 1729, BF16, one intra-op CPU thread per worker, and fixed query batches of 1024. The principal strong-scaling cohort contained the same 65536 validation observations in all arms. Inputs were preloaded on each worker before timing; output encoding, trans-Atlantic transfer, decoding, row/schema checks and final ordered assembly were inside the single coordinator wall timer. Each arm used one warmup and three measured full passes. This is heterogeneous multi-host throughput, not a homogeneous eight-GPU result or a single-query latency improvement.
+
+| GPU group | Coordinator / output transport | GPUs | Median rows/s |
+| --- | --- | ---: | ---: |
+| L4, Frankfurt | Frankfurt / local pipes | 1 | 3114.87 |
+| L4, Frankfurt | Frankfurt / local pipes | 4 | 12411.89 |
+| L40S, Ohio | Ohio / local pipes | 1 | 7684.21 |
+| L40S, Ohio | Ohio / local pipes | 4 | 30554.81 |
+| L40S, Ohio | Frankfurt / trans-Atlantic SSH | 1 | 7040.60 |
+| L40S, Ohio | Frankfurt / trans-Atlantic SSH | 4 | 24095.59 |
+
+The L4 local group scaled 3.985×. Moving the four-L40S coordinator/output path from Ohio-local pipes to Frankfurt SSH retained 78.86% of throughput. This observed transport/coordinator cost matters: use the Frankfurt-origin reference for comparisons with the mixed runs, and do not silently use the faster Ohio-local denominator. The sum of independently measured local four-GPU capacities, 42966.70 rows/s, is only an optimistic reference, not measured simultaneous eight-GPU throughput.
+
+| Equal-assignment mixture | Median rows/s | Global pass wall | Speedup over mixed 2 GPUs |
+| --- | ---: | ---: | ---: |
+| 1 L4 + 1 L40S | 6238.82 | 10.5046 s | 1.000× |
+| 2 L4 + 2 L40S | 12433.52 | 5.2709 s | 1.993× |
+| 4 L4 + 4 L40S | 24770.03 | 2.6458 s | 3.970× |
+
+Interleaved worker order fixes every even-numbered original batch to an L4 and every odd-numbered batch to an L40S at all three GPU counts. Thus the mixture and each row's hardware family remain unchanged while GPU count increases. The 2-to-8 comparison retains 99.26% of composition-matched ideal throughput. Equal division nevertheless underuses the faster L40S workers, so that efficiency must not be interpreted as optimal use of heterogeneous capacity.
+
+One separately labeled weighted eight-GPU arm used the measured local group capacities above divided by four: 3102.972872 rows/s per L4 and 7638.703213 per L40S. Whole-batch greedy allocation assigned five batches to each L4 and eleven to each L40S, versus eight each in the equal arm. It reached **31877.39 rows/s**, with a 2.0559-second complete coordinator wall: **28.69% faster than equal eight-GPU assignment**, 32.30% faster than the Frankfurt-origin four-L40S control, and 74.19% of the optimistic summed local capacities. The worker-family assignment intentionally changes for some observations, so quality must be checked against the newly assembled family-specific oracle, not by requiring equality to the equal-split array. The report embeds the source control results and exact measured weights.
+
+### Mixed-host weak scaling, quality and resources
+
+The weak-scaling experiment held 8192 queries per GPU and the same 50/50 L4/L40S composition. Total cohorts differ, so their aggregate accuracy/loss values cannot be interpreted as GPU-induced changes. The eight-GPU entry reuses the identical Q65536 strong-scaling run explicitly; it is not a second independent measurement.
+
+| GPUs | Total query rows | Aggregate rows/s | Rows/s per GPU | Throughput per GPU retained from mixed 2 |
+| --- | ---: | ---: | ---: | ---: |
+| 2 | 16384 | 6215.24 | 3107.62 | 100% |
+| 4 | 32768 | 12415.49 | 3103.87 | 99.88% |
+| 8 | 65536 | 24770.03 | 3096.25 | 99.63% |
+
+The full-cohort L4 reference had accuracy 0.758941650390625 and log loss 0.5810518264770508; L40S had 0.7591094970703125 and 0.5810317993164062. Their predictions differed by maximum 0.010062933 and mean absolute 0.00020800404, with 30 argmax changes across 65536 observations; the predefined BF16 gate passed. These small hardware-family differences exist on one GPU and must not be attributed to distributed scheduling. Equal mixed 2/4/8 arms reported identical accuracy 0.75897216796875 and loss 0.5810484886169434. The weighted mixture reported accuracy 0.7590179443359375 and loss 0.5810374021530151.
+
+Independent audit verified all 13 new runs and all 39 prediction repeats as **byte-identical to the row-wise reference from each assigned GPU family**. It additionally verified original TRAIN/validation identities and hashes, all query-shard hashes, complete batch coverage, ordered rows, class schemas and unique GPU UUIDs. Equal 2/4/8 family ownership was identical; weak cohorts matched the corresponding full-reference prefixes. The weighted schedule changed hardware family for 28672 observations, and all still matched their newly assigned family's oracle exactly. Remote L40S predictions were also byte-identical to the Ohio-local-pipe full-cohort reference, isolating transport as an output-preserving change. All-repeat arrays and independent sidecars are retained rather than relying on aggregate metric agreement.
+
+The weighted eight-GPU arm's per-worker prediction peaks, reset after warmup, were 2280.55 MiB allocated / 2836 MiB reserved on L4 and 2480.92 MiB / 3168 MiB on L40S. Child lifetime host peak RSS was 2014.77–2016.52 MiB for L4 workers and 2010.55–2011.72 MiB for L40S workers. These are per-process high-water marks, not a summed simultaneous unique-RAM measurement; all eight workers retain complete model/context replicas. Spawn/import/checkpoint/fit readiness took 4.02–5.77 seconds across full-cohort arms on already staged, warm hosts, separate from warm prediction. Eight-worker reports include eight distinct physical GPU UUIDs, not logical replicas on fewer devices.
+
+All 13 new arms, 39 prediction-repeat arrays, input hashes, ordered IDs, assignments, worker memory/runtime metadata and stdout logs were downloaded under `.kumo-multigpu-20261008/results/multihost-dp/`. The two earlier Ohio-local transport controls remain separately named `resume-dp8-ohio-local-*`. Exact launch scripts and cluster configurations are retained in the enclosing experiment directory. The capacity-weighted arm is `resume-dp8-strong-mixed-g8-weighted-q65536`; equal strong/weak arms retain their original names and results unchanged.
+
+Metadata caveat: the CLI's unused `args.workers` default remains 4 when explicit `worker_indices` select a different count. Determine actual GPU count from the selected `workers`, READY receipts and unique physical UUIDs, not from that overridden default. This does not affect scheduling or measured execution.
 
 ## Approaches intentionally rejected or deferred
 
