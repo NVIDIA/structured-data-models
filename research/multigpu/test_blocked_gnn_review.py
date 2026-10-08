@@ -5,6 +5,7 @@ import hashlib
 import inspect
 import json
 import os
+from dataclasses import replace
 from functools import cache
 from pathlib import Path
 
@@ -79,6 +80,9 @@ def test_actual_checkpoint_gnn_and_frozen_cache(
     root = os.environ.get("SDM_RELATIONAL_CHECKPOINT_ROOT")
     if root is None:
         pytest.skip("Set SDM_RELATIONAL_CHECKPOINT_ROOT for offline weights")
+    device = torch.device(os.environ.get("SDM_GNN_REVIEW_DEVICE", "cpu"))
+    if device.type == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA review requested without a CUDA device")
     state = torch.load(
         Path(root) / f"{checkpoint}.pt", map_location="cpu", weights_only=True
     )
@@ -89,18 +93,33 @@ def test_actual_checkpoint_gnn_and_frozen_cache(
     }
     model = InvariantGNN(512).eval()
     model.load_state_dict(gnn_state)
+    model.to(device)
     if precision == "bf16":
         model.bfloat16()
     candidate = BlockedInvariantGNN(model, block_size=block_size)
     degrees = torch.tensor([0, 1, 3, 17]).repeat((nodes + 3) // 4)[:nodes]
     graph = graph_from_degrees(degrees)
+    graph = replace(
+        graph,
+        row=graph.row.to(device),
+        col=graph.col.to(device),
+        colptr=graph.colptr.to(device),
+        edge_type=graph.edge_type.to(device),
+    )
     x = torch.arange(nodes * 512).reshape(nodes, 512).float().mul(0.01).sin()
     if precision == "bf16":
         x = x.bfloat16()
+    x = x.to(device)
+    readout_index = torch.tensor([nodes - 3, 0, 13, 0, 39], device=device)
+    if device.type == "cuda":
+        # CPU historical screen remains unchanged; CUDA covers every target.
+        readout_index = torch.cat(
+            [torch.arange(nodes - 2, device=device), readout_index]
+        )
     kwargs = {
         "graph": graph,
         "readout_table": "readout",
-        "readout_index": torch.tensor([nodes - 3, 0, 13, 0, 39]),
+        "readout_index": readout_index,
         "num_hops": 2,
     }
     tolerance = (
@@ -112,20 +131,22 @@ def test_actual_checkpoint_gnn_and_frozen_cache(
     with (
         torch.inference_mode(),
         torch.autocast(
-            "cpu", dtype=torch.bfloat16, enabled=precision == "autocast_bf16"
+            device.type,
+            dtype=torch.bfloat16,
+            enabled=precision == "autocast_bf16",
         ),
     ):
         expected = model(
             x,
             **kwargs,
             cache=baseline_cache,
-            generator=torch.Generator().manual_seed(1729),
+            generator=torch.Generator(device=device).manual_seed(1729),
         )
         actual = candidate(
             x,
             **kwargs,
             cache=candidate_cache,
-            generator=torch.Generator().manual_seed(1729),
+            generator=torch.Generator(device=device).manual_seed(1729),
         )
         comparisons = [("fit", actual.clone(), expected.clone())]
         torch.testing.assert_close(
@@ -140,7 +161,15 @@ def test_actual_checkpoint_gnn_and_frozen_cache(
         actual = candidate(x.flip(0), **kwargs, cache=candidate_cache)
         comparisons.append(("frozen_query", actual, expected))
     record = {
-        "evidence_kind": "CPU GNN-only, synthetic inputs, actual weights",
+        "evidence_kind": (
+            f"{device.type.upper()} GNN-only, synthetic inputs, actual weights"
+        ),
+        "device": str(device),
+        "gpu_name": torch.cuda.get_device_name(device)
+        if device.type == "cuda"
+        else None,
+        "cuda_version": torch.version.cuda,
+        "allow_tf32": torch.backends.cuda.matmul.allow_tf32,
         "torch_version": torch.__version__,
         "checkpoint": checkpoint,
         "checkpoint_revision": "2bd603d3d8f25f67a7aaa8579908595e20567e22",
@@ -156,6 +185,7 @@ def test_actual_checkpoint_gnn_and_frozen_cache(
         "feature_formula": "sin(arange(nodes*512)*0.01)",
         "edge_rng_seed": 1729,
         "num_hops": 2,
+        "readout_rows": readout_index.numel(),
         "block_size": block_size,
         "precision": precision,
         "tolerance": tolerance,
@@ -178,7 +208,8 @@ def test_actual_checkpoint_gnn_and_frozen_cache(
     if output is not None:
         destination = Path(output)
         destination.mkdir(parents=True, exist_ok=True)
-        name = f"{checkpoint}-{precision}-n{nodes}-b{block_size}.json"
+        prefix = "cuda-" if device.type == "cuda" else ""
+        name = f"{prefix}{checkpoint}-{precision}-n{nodes}-b{block_size}.json"
         (destination / name).write_text(json.dumps(record, indent=2) + "\n")
     for _, actual, expected in comparisons:
         torch.testing.assert_close(actual, expected, **tolerance)
