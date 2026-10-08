@@ -99,7 +99,7 @@ class FakePeer:
         pass
 
 
-@pytest.mark.parametrize("workers", [1, 2, 4])
+@pytest.mark.parametrize("workers", [1, 2, 4, 8])
 @pytest.mark.parametrize("class_count", [2, 7])
 def test_barrier_transport_and_ordered_gather(
     tmp_path, monkeypatch, workers, class_count
@@ -117,7 +117,7 @@ def test_barrier_transport_and_ordered_gather(
                 "data": str(tmp_path),
                 "class_count": class_count,
                 "workers": [
-                    {"name": f"worker{i}", "device": i} for i in range(4)
+                    {"name": f"worker{i}", "device": i} for i in range(8)
                 ],
             }
         )
