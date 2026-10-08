@@ -74,6 +74,28 @@ CPU validation passes the existing process contracts and explicit nested-executo
 
 Use GraphDP1 as the exact graph-scaling oracle. Native-versus-graph prediction equivalence is a separate empirical check: ensemble recipe/member RNG consumption can differ for larger class counts or regression target transformations. The small random-weight, three-class CUDA fixture does not establish generic equivalence for those cases. The planned pretrained Covertype comparison uses all seven classes, a fixed 8192-row cohort and batch size 256, with native estimator-batch-4 controls at each GPU count and all prediction repeats retained.
 
+### Measured graph replay plus process DP
+
+The follow-up was executed on the replacement four-L40S Ohio Spot host with source `ae4e5e549`: pretrained KumoTabular large, Covertype TRAIN context 1024, E4, Q8192, query batch 256, seed 1729, BF16, one CPU thread per process, one complete warmup and three measured passes. The six CUDA contract cases passed on actual 1/2/4 GPU configurations in 55.06 seconds before the pretrained measurements. Both algorithms consume prepared CPU batches and return fully ordered, concatenated CPU outputs inside the reported timing boundary.
+
+| GPUs | Native estimator-batch-4 rows/s | Graph process DP rows/s | Graph speedup over GraphDP1 | Graph/native speedup |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 3744.04 | 6074.73 | 1.000× | 1.623× |
+| 2 | 7505.81 | 12072.97 | 1.987× | 1.608× |
+| 4 | 14341.62 | 22667.07 | 3.731× | 1.581× |
+
+These are medians of fully gathered throughput, not worker-service sums. GraphDP4 retained 93.28% of ideal four-GPU throughput relative to GraphDP1. Independent audits checked every saved prediction repeat: GraphDP2/4 were bitwise identical to GraphDP1, and the shared 2048-row graph prefix matched the earlier GraphEP1 result exactly. Native DP predictions likewise matched the native estimator-batch-4 reference. Graph versus native was **not** bitwise identical: maximum probability difference 0.006434143, mean absolute difference 0.00025358, and six argmax changes among 8192 rows. The net accuracy difference was one fewer correct graph prediction: native accuracy 0.7532958984375 versus graph 0.753173828125; native log loss 0.5902259349822998 versus graph 0.5902121663093567. The predefined BF16 numerical gate passed. These differences are between execution/batching/cache variants, not a quality change caused by increasing GraphDP worker count.
+
+Each graph worker captured exactly four graphs during warmup; capture counts and event lists remained unchanged through all timed passes. Capture took 0.439–0.478 seconds per worker and overlapped across workers. Spawn/import/checkpoint/fit took 4.78–5.28 seconds for graph DP versus 4.98–5.47 seconds for native DP on already staged, warm hosts. Cold graph capture therefore remains an explicit startup cost rather than hidden warm inference work.
+
+| Per-worker memory on this workload | Native estimator batch 4 | Graph resident member execution |
+| --- | ---: | ---: |
+| Peak allocated GPU memory | 1438.18 MiB | 1316.65 MiB |
+| Peak reserved GPU memory | 3168 MiB | 1802 MiB |
+| Lifetime host peak RSS | 2114–2119 MiB | 1714–1719 MiB |
+
+The graph configuration also changes cache residency and executes members individually instead of native estimator batching. Its improvement must not be attributed solely to fewer kernel launches from this pair alone; earlier matched resident eager/graph measurements provide that isolation. Every graph-DP worker still duplicates the full fitted resident ensemble, so this small-context memory result does not establish improved large-context capacity. Raw outputs, every repeat, independent audit sidecars and CUDA-test XML are retained under `.kumo-multigpu-20261008/results/graph-dp/`.
+
 ## Memory and timing expectations
 
 Let `W` denote one model's weights, `C(E)` the total fitted cache for E members, and `A(B)` the active workspace for a fixed query batch B. These are conceptual live-data terms, not allocator peak predictions.
