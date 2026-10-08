@@ -72,6 +72,8 @@ All fixed batches, including an irregular final batch, run during warmup. Child 
 
 CPU validation passes the existing process contracts and explicit nested-executor cleanup. CUDA tests cover 1/2/4 devices with batches 256/1024 plus a partial final batch, prediction tolerance against the same native member plan, stable graph counts across three repeats and ownership of already-returned outputs. These CUDA cases are skipped on CPU-only machines; their presence is not a measured graph-DP scaling result.
 
+Use GraphDP1 as the exact graph-scaling oracle. Native-versus-graph prediction equivalence is a separate empirical check: ensemble recipe/member RNG consumption can differ for larger class counts or regression target transformations. The small random-weight, three-class CUDA fixture does not establish generic equivalence for those cases. The planned pretrained Covertype comparison uses all seven classes, a fixed 8192-row cohort and batch size 256, with native estimator-batch-4 controls at each GPU count and all prediction repeats retained.
+
 ## Memory and timing expectations
 
 Let `W` denote one model's weights, `C(E)` the total fitted cache for E members, and `A(B)` the active workspace for a fixed query batch B. These are conceptual live-data terms, not allocator peak predictions.
