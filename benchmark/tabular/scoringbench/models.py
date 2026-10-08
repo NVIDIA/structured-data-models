@@ -214,8 +214,7 @@ class SDMKumoTabularLargeWrapper(SDMQuantileWrapper):
     config = MODEL_CONFIGS["kumo-tabular-large"]
 
 
-# Kept alongside `SDMKumoTabularSmallWrapper` for continuity with
-# already-collected ScoringBench results keyed by the `"kumo-small"` name.
+# Alias kept for continuity with results already keyed `"kumo-small"`.
 class SDMKumoTabularSmallAliasWrapper(SDMQuantileWrapper):
     config = MODEL_CONFIGS["kumo-small"]
 

@@ -182,8 +182,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 val_frac=params["finetune_val_frac"],
                 lr=params["finetune_lr"],
                 num_estimators=self._num_estimators,
-                # Reuse max_context_size to cap fine-tuning's own validation
-                # context the same way it caps the final fit()/predict() call.
+                # Reuse the same cap as fit()/predict()'s context.
                 max_val_context_size=max_context_size,
                 generator=generator,
             )
@@ -453,13 +452,8 @@ class SDMKumoTabularModel(SDMModel):
         )
         return model
 
-    # AutoGluon does not look inside the served model for the shared network,
-    # so the pickle holds a placeholder and the load restores the network on
-    # the fit device. A fine-tuning model's fit owns a deep copy rather than
-    # the literal shared network (copy_per_fit): that copy is this model's
-    # real, trained state, so it must pickle normally instead of being
-    # dropped for a placeholder and replaced on load with a freshly loaded
-    # (unfine-tuned) network.
+    # Placeholder-and-reload pickle trick for the shared network; skipped
+    # for copy_per_fit models since their deep copy is real trained state.
     def __getstate__(self) -> dict[str, Any]:
         if self.model is None or owns_network(self):
             return super().__getstate__()
@@ -515,9 +509,7 @@ class _FinetunedMixin:
 class SDMKumoTabularFinetunedModel(_FinetunedMixin, SDMKumoTabularLargeModel):
     ag_key = "SDM-KUMO-TABULAR-FT"
     ag_name = "SDMKumoTabularFT"
-    # Fine-tuning mutates the network in place, so each fold needs its own
-    # copy of the shared pretrained network rather than the same instance
-    # every other bagged fold trains on top of.
+    # Own a deep copy per fold instead of mutating the shared network.
     shared_weights: ClassVar[SharedWeights] = replace(
         SDMKumoTabularModel.shared_weights, copy_per_fit=True
     )

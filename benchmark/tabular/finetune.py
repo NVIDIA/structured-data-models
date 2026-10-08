@@ -4,10 +4,8 @@
 """Shared full fine-tuning core for the tabular benchmark harness.
 
 Fine-tunes every parameter of an :class:`~sdm.models.ICLModel` with gradient
-descent. Generic over ``x``/``y`` :class:`TableTensor`
-pools built however each benchmark adapter already builds them, so the same
-:func:`full_finetune` call can be dropped in right before each adapter's
-existing ``model.fit(...)`` call.
+descent, generic over ``x``/``y`` :class:`TableTensor` pools so
+:func:`full_finetune` drops in before any adapter's ``model.fit(...)`` call.
 """
 
 import copy
@@ -20,8 +18,7 @@ import sdm
 
 _EPS = 1e-12
 
-# Single source of truth for the fine-tuning defaults shared by every
-# benchmark adapter (TabArena/BeyondArena, ScoringBench, TALENT).
+# Shared by TabArena, BeyondArena, ScoringBench, and TALENT.
 FINETUNE_EPOCHS = 75
 FINETUNE_ITERS_PER_EPOCH = 10
 FINETUNE_LR = 1e-6
@@ -96,18 +93,12 @@ def full_finetune(
 ) -> float:
     """Full fine-tune every parameter of ``model`` in place.
 
-    Carves a fixed ``val_frac`` validation split out of ``x_pool``/``y_pool``
-    up front; the remainder is the training portion. Each epoch runs
-    ``iters_per_epoch`` training iterations before validating/checkpointing
-    once. Each iteration independently resamples up to ``train_size`` rows
-    from the training portion (or all of it, if smaller), splits that sample
-    ``context_frac``/``1 - context_frac`` into context/query, and runs one
-    differentiable ``model(...)`` forward/backward call. Validation always
-    uses the full training portion as context (optionally capped by
-    ``max_val_context_size``) against the held-out val split as query.
-    Leaves ``model`` in eval mode holding its best-validation-metric weights.
-    Returns that best validation metric (accuracy for classification, pinball
-    loss for regression -- lower is better for regression).
+    Carves a ``val_frac`` validation split from ``x_pool``/``y_pool``; each
+    epoch trains on resampled context/query batches from the rest, then
+    checkpoints if validation improves. Leaves ``model`` in eval mode
+    holding its best-validation-metric weights and returns that metric
+    (accuracy for classification, pinball loss for regression -- lower is
+    better for regression).
     """
     device = x_pool.device
     n = x_pool.size(0)
@@ -199,11 +190,8 @@ def full_finetune(
                 )
                 loss = F.nll_loss(scores.clamp_min(_EPS).log(), indices)
             else:
-                # Pinball loss over the model's quantile output columns,
-                # already back in the target's original scale; a model with
-                # a single point-estimate column (e.g. TabFM) has no
-                # quantiles to score against, so this reduces to squared
-                # error instead.
+                # Pinball loss over quantile columns; TabFM's single
+                # point-estimate column has none, so this is squared error.
                 diff = y_query.numerical - out.numerical
                 n_quantiles = out.numerical.size(-1)
                 if n_quantiles > 1:
