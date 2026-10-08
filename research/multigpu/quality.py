@@ -43,6 +43,7 @@ def numerical_comparison(
         return result
     a, b = a.astype(np.float64), b.astype(np.float64)
     error = np.abs(a - b)
+    failed = error > atol + rtol * np.abs(a)
     result.update(
         max_abs=float(error.max()),
         mean_abs=float(error.mean()),
@@ -51,9 +52,52 @@ def numerical_comparison(
         relative_l2=float(
             np.linalg.norm(a - b) / max(np.linalg.norm(a), 1e-30)
         ),
-        within_tolerance=bool(np.all(error <= atol + rtol * np.abs(a))),
+        within_tolerance=bool(not failed.any()),
+        failing_entries=int(failed.sum()),
+        rows_with_failures=int(
+            failed.reshape(a.shape[0] if a.ndim else 1, -1).any(axis=1).sum()
+        ),
     )
     return result
+
+
+def compare_prediction_repeats(
+    reference: np.ndarray,
+    candidates: Sequence[np.ndarray],
+    *,
+    compute_dtype: str,
+) -> dict[str, Any]:
+    """Compare every saved repeat without substituting a favorable repeat.
+
+    The caller must first validate row identities and output-column semantics.
+    This function never aligns, normalizes, sorts or overwrites predictions.
+    """
+    if not candidates:
+        raise ValueError(
+            "At least one candidate prediction repeat is required"
+        )
+    against_reference = [
+        numerical_comparison(reference, value, compute_dtype=compute_dtype)
+        for value in candidates
+    ]
+    against_first = [
+        numerical_comparison(candidates[0], value, compute_dtype=compute_dtype)
+        for value in candidates
+    ]
+    return {
+        "repeat_count": len(candidates),
+        "all_repeats_within_tolerance": all(
+            value["within_tolerance"] for value in against_reference
+        ),
+        "all_repeats_bitwise_equal_reference": all(
+            value["bitwise_equal"] for value in against_reference
+        ),
+        "bitwise_repeatable": all(
+            value["bitwise_equal"] for value in against_first
+        ),
+        "against_reference": against_reference,
+        "against_first_candidate": against_first,
+    }
 
 
 def binary_auroc(labels: np.ndarray, scores: np.ndarray) -> float | None:

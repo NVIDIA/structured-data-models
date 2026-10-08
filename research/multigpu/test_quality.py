@@ -4,6 +4,7 @@ import pytest
 from research.multigpu.quality import (
     binary_auroc,
     classification_metrics,
+    compare_prediction_repeats,
     numerical_comparison,
     paired_loss_interval,
     quantile_metrics,
@@ -80,3 +81,32 @@ def test_quantiles_preserve_crossings_and_choose_q500() -> None:
     result = quantile_metrics(np.array([500, 500]), p)
     assert result["crossing_pairs"] == 1
     assert result["max_crossing"] == 2
+
+
+def test_repeat_audit_does_not_hide_later_quantile_failure() -> None:
+    reference = np.zeros((2, 999), dtype=np.float32)
+    later = reference.copy()
+    later[1, 0] = 0.02
+    report = compare_prediction_repeats(
+        reference, [reference.copy(), later], compute_dtype="bfloat16"
+    )
+    assert not report["all_repeats_within_tolerance"]
+    assert not report["bitwise_repeatable"]
+    assert report["against_reference"][0]["bitwise_equal"]
+    assert report["against_reference"][1]["failing_entries"] == 1
+    assert report["against_reference"][1]["rows_with_failures"] == 1
+    assert np.count_nonzero(reference) == 0
+    assert later[1, 0] == np.float32(0.02)
+
+
+def test_repeat_audit_rejects_empty_and_retains_nonfinite() -> None:
+    reference = np.zeros((2, 7))
+    with pytest.raises(ValueError, match="At least one"):
+        compare_prediction_repeats(reference, [], compute_dtype="float32")
+    bad = reference.copy()
+    bad[0, 0] = np.nan
+    report = compare_prediction_repeats(
+        reference, [bad], compute_dtype="float32"
+    )
+    assert not report["all_repeats_within_tolerance"]
+    assert not report["against_reference"][0]["finite"]
