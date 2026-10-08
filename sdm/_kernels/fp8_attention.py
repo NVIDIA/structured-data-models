@@ -25,34 +25,13 @@ else:
     _triton_fp8_attention = _triton_fp8_attention_impl
 
 
-def supports_fp8(query: Tensor) -> bool:
-    """Check whether the query and execution mode support the FP8 kernel.
-
-    Args:
-        query: Query tensor with channels in its final dimension.
-
-    Returns:
-        Whether Triton, hardware, head width, and inference mode are supported.
-    """
-    return (
-        _triton_fp8_attention is not None
-        and not torch.is_grad_enabled()
-        and query.is_cuda
-        and query.size(-1) in {32, 64, 128, 256}
-        # CUDA compute capability (major, minor): Ada, Hopper, RTX Blackwell.
-        # Restrict dispatch to architectures supported by this FP8 kernel.
-        and torch.cuda.get_device_capability(query.device)
-        in {(8, 9), (9, 0), (12, 0)}
-    )
-
-
 def fp8_attention(
     query: Tensor,
     key: Tensor,
     value: Tensor,
     cache: QuantizedKVCacheEntry | None = None,
     scale: float | None = None,
-) -> tuple[Tensor, QuantizedKVCacheEntry]:
+) -> tuple[Tensor, QuantizedKVCacheEntry] | None:
     """Compute FP8 attention and create or reuse a quantized context cache.
 
     Args:
@@ -61,12 +40,33 @@ def fp8_attention(
         key: Keys shaped ``[..., context_rows, kv_heads, channels]``.
         value: Values with the same shape as the keys.
         cache: Fitted quantized K/V and scales to reuse, or ``None`` to create
-            them from the supplied context. Inputs must support FP8 inference.
+            them from the supplied context.
         scale: Attention score multiplier; defaults to inverse square-root
             head width.
 
     Returns:
-        The attention output and its quantized context cache.
+        The attention output and its quantized context cache, or ``None``
+        when unsupported inputs require the caller's regular attention path.
+
+    Raises:
+        ValueError: A fitted quantized cache cannot be used with the current
+            device, head width, backend, or execution mode.
     """
-    assert _triton_fp8_attention is not None
-    return _triton_fp8_attention(query, key, value, cache, scale)
+    if (
+        _triton_fp8_attention is not None
+        and not torch.is_grad_enabled()
+        and query.is_cuda
+        and query.size(-1) in {32, 64, 128, 256}
+        # CUDA compute capability (major, minor): Ada, Hopper, RTX Blackwell.
+        # Restrict dispatch to architectures supported by this FP8 kernel.
+        and torch.cuda.get_device_capability(query.device)
+        in {(8, 9), (9, 0), (12, 0)}
+    ):
+        if cache is not None and query.numel() == 0:
+            return query, cache
+        return _triton_fp8_attention(query, key, value, cache, scale)
+    if cache is not None:
+        raise ValueError(
+            "Fitted FP8 attention requires supported CUDA inference"
+        )
+    return None
