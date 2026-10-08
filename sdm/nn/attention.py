@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
-from sdm._kernels.fp8_attention import fp8_attention, supports_fp8
+from sdm._kernels.fp8_attention import fp8_attention
 from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheEntry, QuantizedKVCacheEntry
 from sdm.nn import QueryScaling
@@ -390,35 +390,28 @@ class Attention(torch.nn.Module):
             and query.size(-3) >= key.size(-3)
             and seqused_key_value is None
             and attn_mask is None
-            and supports_fp8(query)
         )
         if quantized_cache is not None:
-            if (
-                not supports_fp8(query)
-                or attn_mask is not None
-                or seqused_key_value is not None
-            ):
+            if attn_mask is not None or seqused_key_value is not None:
                 raise ValueError(
-                    "Fitted FP8 attention requires supported CUDA inference "
-                    "without attention masks"
+                    "Fitted FP8 attention does not support attention masks"
                 )
             use_fp8 = True
-        if quantized_cache is not None and query.numel() == 0:
-            out = query
-        elif use_fp8:
+        result = None
+        if use_fp8:
             scaled_query = query
-            if self.sdpa.query_scaling is not None:
+            if query.numel() > 0 and self.sdpa.query_scaling is not None:
                 scaled_query = self.sdpa.query_scaling(
                     query, key_len=key.size(-3)
                 )
-            out, quantized_cache = fp8_attention(
+            result = fp8_attention(
                 query=scaled_query,
                 key=key,
                 value=value,
                 cache=quantized_cache,
                 scale=self.sdpa.scale,
             )
-        else:
+        if result is None:
             out = self.sdpa(
                 query=query,  # [..., Q, Hq, C // Hq]
                 key=key,  # [..., KV, Hkv, C // Hq]
@@ -426,6 +419,8 @@ class Attention(torch.nn.Module):
                 seqused_key_value=seqused_key_value,  # [...]
                 attn_mask=attn_mask,  # [..., Q, KV]
             )  # [..., Q, Hq, C // Hq]
+        else:
+            out, quantized_cache = result
         out = out.flatten(-2, -1)  # [..., Q, C]
         out = self.out_lin(out)  # [..., Q, C]
         if return_key_value:
