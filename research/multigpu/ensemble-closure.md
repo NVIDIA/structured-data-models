@@ -49,3 +49,26 @@ Run GPU counts1/2/4 and the same command with `--mode ensemble --gpus 1`. Both u
 - Tiny graph CUDA tests already exercise changed query values, a second shape, output lifetime, and refit invalidation. Process tests now also cover actual reduced KumoRelational two-hop classification and all999 regression quantiles, with exact CPU replay across two processes. These tests support correctness of those exercised cases, not pretrained throughput claims.
 
 Actual measurements and independent audit paths will be appended only after result files are retrieved. Process/graph GPU startup failures, numerical failures, or memory errors must remain as separate immutable attempts.
+
+## Measured relational closure
+
+Completed on the replacement Ohio host with four L40S GPUs, frozen runtime `c0fb64fcc`, base `/opt/pytorch` environment, no cuDF overlay. All four arms exited successfully; every result, repeat, log, and sampled workload was downloaded before releasing the host. The parent uses eight CPU threads; each process worker uses one. These runs isolate GPU count within the process implementation, but comparing processes with threads also changes CPU execution and IPC.
+
+H&M user-churn uses E4, C1024, Q2000, B250, BF16, seed1729, two-hop `[16,16]` temporal-last sampling. Every arm reads the same fresh `graphs.pt`, SHA256 `072a81055e967d50438f85b1d054ea55fae81c9f7312b93b2512237389059fbd`; validation labels SHA256 `491125dcc0f42a0e12a74850ef9bba5d57fc64c92c8109461e010e11f03f3ca2`. Local and remote file hashes matched. Context and query row IDs and the context graph match the historical metadata, but query graph digests differ: historical throughput is not a matched control.
+
+| Execution | GPUs | Median rows/s | Median prediction s | Speedup / process1 | Load s | Fit s | Warmup s | Prediction peak per GPU, MB | Fit peak per GPU, MB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Resident threaded EP | 1 | 1,411.87 | 1.41657 | 1.146× | 0.796 | 6.862 | 1.565 | 532.43 | 960.88 |
+| Process EP | 1 | 1,232.49 | 1.62273 | 1.000× | 3.526 | 2.122 | 1.663 | 531.87 | 960.33 |
+| Process EP | 2 | 1,916.98 | 1.04331 | 1.555× | 6.183 | 1.965 | 1.092 | 466.87 | 895.47 |
+| Process EP | 4 | 2,396.15 | 0.83467 | 1.944× | 11.310 | 1.912 | 0.896 | 398.69 | 826.37 |
+
+Prediction is the median of three full passes after one complete warmup pass. It includes parent preprocessing, child IPC, GPU inference, per-batch CPU outputs, and final CPU concatenation; graph sampling is excluded. Load, fit, and warmup are separate single observations, not replicated setup benchmarks. Resident EP ran first, so its longer first fit may include cold runtime effects: do not interpret the fit column as a causal fit-speed comparison.
+
+Process4 is 1.697× the resident one-GPU baseline and 1.944× process1 (48.6% four-GPU scaling efficiency), with diminishing returns from two to four GPUs. One process on one GPU is slower than the resident threaded control. Higher startup cost and extra model/process memory make this a repeated-inference option, not an automatic win for one-off requests.
+
+The table reports decimal MB of PyTorch allocated-memory peaks, not total board memory. Process entries are child measurements, reset separately before fit and timed prediction; parent allocator data is retained separately. Each process4 worker has a 398.69MB prediction peak, but summing four child peaks gives 1,594.77MB, versus 532.43MB for resident1; these sums are not necessarily simultaneous host-wide peaks. Ensemble cache storage totals 126,631,968 bytes in every arm, divided evenly as 126.63/63.32/31.66MB per worker for process1/2/4. Process4 child maximum RSS ranges from 1.76–2.12GB, plus parent maximum RSS of about 2.67GB; high-water RSS can include shared pages and must not be summed as unique physical RAM.
+
+All four first prediction arrays have SHA256 `58f2b4f62c2048c2b7ab2c4adead44b0a2f2f14f79130e63f42b8176ad1a24e4`. Independent auditing confirmed all three repeats in all four arms are byte-exact to resident1, with accuracy0.8085, AUROC0.66351639, and log-loss0.46535898. The audit also verified graph/label hashes, labels against the original first2,000 validation rows, member seeds, graph metadata, runner identity, and positive-class column alignment. The fixed BF16 gate passes without needing its tolerance margin; per-arm `quality-independent-audit.json` sidecars retain the checks.
+
+Raw artifacts are under `.kumo-multigpu-20261008/results/relational-process-closure/` in sibling directories `relational-closure-v2-resident1`, `relational-closure-v2-process1`, `relational-closure-v2-process2`, `relational-closure-v2-process4`, and `workload-hm-c1024-b250-closure-v2`. The runner records source/runner hashes, exact arguments, runtime environment, ordered outputs, targets, identities, per-repeat timing, telemetry, and parent/child allocator snapshots. No relational CUDA-graph support or large-context relational ProcessEP claim follows from this small-workload result.
