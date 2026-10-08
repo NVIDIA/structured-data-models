@@ -117,6 +117,7 @@ class BlockedInvariantGNN(nn.Module):
                 del stats
             del src
             x = output
+            del output
             if hop == num_hops - 1:
                 x = x[readout][readout_index]
             x = F.gelu(block.norm(x))
