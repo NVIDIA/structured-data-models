@@ -94,4 +94,20 @@ All graph arms capture exactly four member graphs during warmup and retain four 
 
 Fresh native EB1 fit again incurs a first-use penalty (103.21 seconds), versus 1.245 seconds for native EB4 and roughly 1.05–1.56 seconds for subsequent fits. Cold fit is not a parallel speedup denominator. Core ensemble CUDA caller-stream/autocast tests passed again on the frozen source (two tests, 1.47 seconds).
 
-Raw arrays, result JSON, telemetry, and independent audit sidecars are under `.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-{native1,native4,resident1,process1,process2,process4,graph1,graph2,graph4}-large-e4-c1024-q2048`. Paired graph-versus-resident Nsight profiling is a separate follow-up, excluded from clean timing. These results close the earlier unmeasured pretrained-prototype gap; they do not establish arbitrary-shape performance, relational graph capture, or capacity scaling.
+Raw arrays, result JSON, telemetry, and independent audit sidecars are under `.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-{native1,native4,resident1,process1,process2,process4,graph1,graph2,graph4}-large-e4-c1024-q2048`. These results close the earlier unmeasured pretrained-prototype gap; they do not establish arbitrary-shape performance, relational graph capture, or capacity scaling.
+
+### Separate launch-overhead profile
+
+Nsight Systems 2026.5.1 traces use `--trace=cuda,nvtx,osrt --cuda-graph-trace=node --sample=none --cpuctxsw=none`, with one additional prediction pass after warmup. Analysis selects the synchronized `prediction_pass` NVTX range and unions kernel intervals on each device. All three traces use frozen source `c0fb64fcc` and the same workload. They are excluded from clean throughput results.
+
+| Traced executor | Prediction wall, s | GPU kernels | `cudaLaunchKernel` calls | `cudaGraphLaunch` calls | Kernel-active fraction of traced wall |
+|---|---:|---:|---:|---:|---|
+| Resident one GPU | 1.551 | 42,624 | 39,832 | 0 | 13.58% |
+| Graph one GPU | 0.398 | 48,536 | 944 | 32 | 55.96% |
+| Graph four GPUs | 0.238 | 48,584 | 992 | 32 | 22.90–24.31% per GPU |
+
+The one-GPU comparison isolates graph execution from GPU count: host launch calls collapse while underlying GPU kernel count actually increases. FP32-to-BF16 cast kernels rise from 9,032 to 14,912 because the graph capture disables the autocast weight cache; graphs replay those casts. Thus the measured gain is consistent with reducing host launch overhead and GPU idle gaps, not with doing fewer GPU operations. The graph-four trace covers all four devices, with at least two simultaneously executing kernels during 23.69% of its prediction range. Its remaining idle intervals show that four-way scaling is still incomplete.
+
+These are instrumented kernel-active fractions, not production utilization estimates. Driver launch APIs also appear in the trace and are retained in the raw analysis; the table names the specific runtime API being counted. Summed API time across threads is not a serial wall-time budget. Scheduler tracing was disabled, and Nsight emits collection warnings for auxiliary processes; the selected prediction range and CUDA kernels on every intended model device are present. This evidence does not directly identify Python GIL contention. The graph intervention also relocates output-column metadata to CPU, so launch overhead and that change are not separately randomized controls.
+
+The three `.nsys-rep`, SQLite exports, and reproducible `tabular-v2-nsys-{resident1,graph1,graph4}-analysis.json` outputs are retained beside the clean-run artifacts. `research/multigpu/analyze_nsys.py` generates the summaries without modifying the SQLite evidence.
