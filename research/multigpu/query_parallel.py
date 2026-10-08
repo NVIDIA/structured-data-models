@@ -21,6 +21,8 @@ from concurrent.futures import (
     ThreadPoolExecutor,
     wait,
 )
+from concurrent.futures.process import BrokenProcessPool
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -343,9 +345,15 @@ class ProcessQueryParallel:
             return
         self._closed = True
         try:
-            futures = [pool.submit(_process_close) for pool in self._pools]
+            futures = []
+            for pool in self._pools:
+                # ready/predict already surfaced a dead worker's failure;
+                # that worker cannot run additional resource cleanup.
+                with suppress(BrokenProcessPool):
+                    futures.append(pool.submit(_process_close))
             for future in futures:
-                future.result()
+                with suppress(BrokenProcessPool):
+                    future.result()
         finally:
             for pool in self._pools:
                 pool.shutdown(wait=True)

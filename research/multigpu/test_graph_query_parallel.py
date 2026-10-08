@@ -4,6 +4,8 @@
 """Compose existing graph replay with persistent query workers."""
 # ruff: noqa: D101, D102, D103, TID253
 
+import os
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,6 +35,26 @@ class ClosingFactory:
 
     def __call__(self, worker, device):
         return ClosingPredictor(self.directory / f"closed-{worker}")
+
+
+class KilledPredictor:
+    def predict(self, x, related_tables=None):
+        os._exit(7)
+
+
+def killed_factory(worker, device):
+    return KilledPredictor()
+
+
+def test_killed_worker_cleanup_does_not_replace_inference_failure():
+    with ProcessQueryParallel(killed_factory, ["cpu"]) as executor:
+        executor.ready()
+        with pytest.raises(BrokenProcessPool):
+            executor.predict(
+                [QueryBatch((0,), TableTensor.from_tensor(torch.ones(1, 1)))]
+            )
+    # Cleanup of the failed pool was successful and remains idempotent.
+    executor.close()
 
 
 def test_process_shutdown_closes_nested_predictors(tmp_path):

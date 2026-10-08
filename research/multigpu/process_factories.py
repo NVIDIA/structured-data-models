@@ -51,8 +51,6 @@ class TabularProcessFactory:
         self, worker: int, device: torch.device
     ) -> KumoTabular | GraphEnsembleParallel:
         """Construct weights and fit TRAIN context in the child process."""
-        if self.backend not in {"native", "graph"}:
-            raise ValueError(f"Unknown process backend: {self.backend}")
         if self.backend == "graph" and device.type != "cuda":
             raise ValueError("Graph process backend requires CUDA")
         torch.manual_seed(self.seed)
