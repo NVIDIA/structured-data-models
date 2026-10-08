@@ -14,7 +14,10 @@ import numpy as np
 import pandas as pd
 import torch
 from autogluon.core.constants import BINARY, MULTICLASS, REGRESSION
-from autogluon.core.models.abstract.shared_weights import SharedWeights
+from autogluon.core.models.abstract.shared_weights import (
+    SharedWeights,
+    owns_network,
+)
 from autogluon.tabular.models.abstract.abstract_torch_model import (
     AbstractTorchModel,
 )
@@ -452,9 +455,13 @@ class SDMKumoTabularModel(SDMModel):
 
     # AutoGluon does not look inside the served model for the shared network,
     # so the pickle holds a placeholder and the load restores the network on
-    # the fit device.
+    # the fit device. A fine-tuning model's fit owns a deep copy rather than
+    # the literal shared network (copy_per_fit): that copy is this model's
+    # real, trained state, so it must pickle normally instead of being
+    # dropped for a placeholder and replaced on load with a freshly loaded
+    # (unfine-tuned) network.
     def __getstate__(self) -> dict[str, Any]:
-        if self.model is None or self._shared_state is None:
+        if self.model is None or owns_network(self):
             return super().__getstate__()
         served = cast(sdm.models.KumoTabular, self.model)
         model = copy.copy(served)
@@ -466,7 +473,7 @@ class SDMKumoTabularModel(SDMModel):
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         super().__setstate__(state)
-        if self.model is None or self._shared_state is None:
+        if self.model is None or owns_network(self):
             return
         served = cast(sdm.models.KumoTabular, self.model)
         for task in served.models:
