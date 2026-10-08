@@ -271,3 +271,27 @@ The available archive supports a substantial but bounded study, not completion o
 | Tensor/head, feature/table, exact graph and full-fit sharding | Architecture and integration analysis | No implemented/measured distributed result; speculative paths remain labeled proposals |
 
 All measured hardware is PCIe L40S or L4. No NVLink/A100 performance or homogeneous eight-GPU scaling is established. Validation-only paired quality is evaluated on fixed cohorts, not multi-seed training variation or held-out TEST. Stable output agreement on measured cohorts does not establish general model accuracy. These boundaries must remain in any completion summary.
+
+## Resumed pretrained process-ensemble and CUDA-graph evidence
+
+After access resumed, a replacement four-L40S host ran nine new Covertype large-model arms with E4, context 1,024, query count 2,048 and microbatch 256. This closes the earlier pretrained process-ensemble/graph evidence gap for this specific workload. Every arm retains all three prediction repeats, and all were independently opened and compared against the fixed validation IDs, targets, input hashes and class order. Resident/process/graph outputs are bitwise identical to native estimator-batch-one on every repeat; native estimator-batch-four remains a separate tuning control that passes BF16 screening without bitwise equality.
+
+| Executor | Recomputed rows/s | Matched one-GPU executor speedup | Ratio to tuned native batch four |
+|---|---:|---:|---:|
+| Native batch one | 1,802.80 | Separate policy | 0.450x |
+| Native batch four | 4,006.46 | Separate policy | 1.000x |
+| Resident EP1 | 1,849.81 | 1.000x | 0.462x |
+| Process EP1 | 1,631.39 | 1.000x | 0.407x |
+| Process EP2 | 2,900.90 | 1.778x | 0.724x |
+| Process EP4 | 4,444.76 | 2.725x | 1.109x |
+| Graph EP1 | 6,398.19 | 1.000x | 1.597x |
+| Graph EP2 | 9,134.14 | 1.428x | 2.280x |
+| Graph EP4 | 11,145.61 | 1.742x | 2.782x |
+
+Graph replay's large single-GPU improvement must be separated from multi-GPU scaling: the matched four-GPU graph speedup is 1.742x, not 2.782x or the much larger comparison with unoptimized resident EP1. Each graph arm has four captured graphs both before and after measured prediction, so the timed passes contain no new capture. Warmup wall times are 0.525/0.466/0.540 seconds. Summed per-worker capture durations overlap across threads (the four-GPU sum is 1.992 seconds) and must not be described as capture wall time. Pretrained queries divide evenly into batches; remainder-shape and output-lifetime behavior are covered separately by reduced-model tests.
+
+Process EP child prediction peaks fall from approximately 1.597 to 1.357 to 1.173 GiB per worker. Parent GPU0 retains its own allocations, with a prediction high-water of 2,937,856 bytes; other parent device allocations are zero after replicas move to CPU. These are separate allocator counters, not a measured simultaneous device peak. During actual timed windows, sampled whole-device memory maxima are 2,946/2,726/2,396 MiB for Process EP1/2/4, including driver contexts and allocator reservations. Corresponding graph-arm maxima are 2,383/1,989/1,645 MiB. Telemetry sample maxima are lower bounds on physical peaks, not continuous peak measurements. Child maximum RSS is lifetime high-water and includes shared pages/startup history; summing it does not establish unique host RAM use.
+
+The graph warmup memory high-water also includes fit, because peak counters reset before fit and again only after warmup. It is not an isolated capture peak. The first native fit takes 103.210 seconds on the new host and is retained as a cold-start observation; later roughly one-second fits cannot be called a placement speedup. Resident EP1's third measured pass is 10.6% slower than its fastest pass (timing coefficient of variation 4.81%), cautioning against interpreting small improvements over that particular control.
+
+Nine per-arm `quality-independent-audit.json` files and an additive `quality-ladder-audit.json` retain every-repeat checks, matched denominators, capture counts, and the parent/child/physical-memory distinctions. Older evidence remains unchanged. Pretrained relational process-ensemble, CP precision diagnostics, bounded-GNN full-model checks and cross-host scaling are separate outstanding groups until their actual outputs are audited.
