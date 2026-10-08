@@ -1,0 +1,43 @@
+{
+  "args": {
+    "command": "run",
+    "workload": "/home/ubuntu/kumo-multigpu/results/workload-hm-c65536-b512",
+    "mode": "ensemble",
+    "gpus": 1,
+    "estimators": 8,
+    "repeats": 3,
+    "warmups": 1,
+    "threads": 8,
+    "gnn_block_size": 0,
+    "dtype": "bf16",
+    "profile": false,
+    "phase_profile": false,
+    "include_final_gather": false,
+    "source_commit": "ae4e5e549",
+    "seed": 1729,
+    "output": "/home/ubuntu/kumo-multigpu/results/relational-resume-l4-hm-c65536-e8-ensemble1-gnn0"
+  },
+  "runtime_environment": {
+    "PYTORCH_ALLOC_CONF": "expandable_segments:True",
+    "PYTORCH_CUDA_ALLOC_CONF": null,
+    "CUDA_VISIBLE_DEVICES": null,
+    "CUDA_DEVICE_MAX_CONNECTIONS": null,
+    "CUDA_MODULE_LOADING": null,
+    "CUBLAS_WORKSPACE_CONFIG": null,
+    "NVIDIA_TF32_OVERRIDE": null,
+    "OMP_NUM_THREADS": "8",
+    "MKL_NUM_THREADS": "8",
+    "HF_HUB_OFFLINE": "1",
+    "HF_HUB_CACHE": "/home/ubuntu/kumo-multigpu/models/hub"
+  },
+  "traceback": "Traceback (most recent call last):\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/research/multigpu/relational_bench.py\", line 860, in main\n    (prepare if args.command == \"prepare\" else run)(args)\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/research/multigpu/relational_bench.py\", line 519, in run\n    model.fit(\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/sdm/models/ensemble_parallel.py\", line 229, in fit\n    caches = self._dispatch(fit_member, len(contexts), x.device)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/sdm/models/ensemble_parallel.py\", line 143, in _dispatch\n    outputs = [item for future in futures for item in future.result()]\n                                                      ^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 449, in result\n    return self.__get_result()\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 401, in __get_result\n    raise self._exception\n  File \"/usr/lib/python3.12/concurrent/futures/thread.py\", line 58, in run\n    result = self.fn(*self.args, **self.kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/sdm/models/ensemble_parallel.py\", line 128, in run\n    operation(\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/sdm/models/ensemble_parallel.py\", line 216, in fit_member\n    model._forward(\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/sdm/models/kumo/relational/model.py\", line 219, in _forward\n    out = self.models[task](\n          ^^^^^^^^^^^^^^^^^^\n  File \"/opt/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1775, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1786, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/sdm/models/kumo/relational/model.py\", line 450, in forward\n    x_context = self.gnn(\n                ^^^^^^^^^\n  File \"/opt/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1775, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/pytorch/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1786, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/sdm/models/kumo/relational/invariant_gnn.py\", line 100, in forward\n    stats = segment_multi_reduce(\n            ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/sdm/_kernels/segment_multi_reduce.py\", line 128, in segment_multi_reduce\n    return _triton_segment_multi_reduce(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/kumo-multigpu/source-ae4e5e549/sdm/_kernels/triton/segment_multi_reduce.py\", line 139, in segment_multi_reduce\n    output = src.new_empty(shape)\n             ^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.10 GiB. GPU 0 has a total capacity of 22.04 GiB of which 5.52 GiB is free. Including non-PyTorch memory, this process has 16.51 GiB memory in use. Of the allocated memory 10.40 GiB is allocated by PyTorch, and 5.86 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n",
+  "memory_at_failure": {
+    "cuda:0": {
+      "allocated": 11130822656,
+      "reserved": 17460887552,
+      "peak_allocated": 17381440512,
+      "peak_reserved": 20208156672
+    }
+  },
+  "memory_peak_scope": "Since latest runner peak reset; use traceback to identify load, fit, or prediction phase. Current allocation is sampled after exception unwinding."
+}

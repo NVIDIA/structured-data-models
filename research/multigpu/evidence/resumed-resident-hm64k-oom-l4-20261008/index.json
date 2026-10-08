@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:33:13.985598+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "relational-resume-l4-hm-c65536-e8-ensemble1-gnn0",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn0",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 395,
+          "sha256": "7b37b45893336a555dd812be251631665065a1154614a4e0e02deeded02cc75c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn0/command.txt",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-ensemble1-gnn0/command.txt"
+        },
+        {
+          "name": "failure.json",
+          "role": "record",
+          "bytes": 5174,
+          "sha256": "c33bba7459d3f4b7640db22cebd6435957f07400e5b8de39503eb16e6cab6c56",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn0/failure.json",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-ensemble1-gnn0/failure.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 34051,
+          "sha256": "e955677a680131b577a4a4d5e48a617f3c856c2fea001c41797628372132b913",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn0/nvidia-smi.csv"
+        },
+        {
+          "name": "quality-failure-audit.json",
+          "role": "record",
+          "bytes": 1457,
+          "sha256": "e42c2c3cc7338f9795530d608bf1d1d0118b3f2c86c4b95511f87e269b9c6ad9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn0/quality-failure-audit.json",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-ensemble1-gnn0/quality-failure-audit.json"
+        }
+      ]
+    },
+    {
+      "label": "relational-resume-l4-hm-c65536-e8-ensemble1-gnn16384",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn16384",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 403,
+          "sha256": "17230d139b4b52b6dda685156b02f220fe7e652220c06418c0d91691bc44559e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn16384/command.txt",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-ensemble1-gnn16384/command.txt"
+        },
+        {
+          "name": "failure.json",
+          "role": "record",
+          "bytes": 5468,
+          "sha256": "58a13a622e7261c96e9fdb5e73d0470bb7c91a2f2533edd0114ba40d4f267dfe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn16384/failure.json",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-ensemble1-gnn16384/failure.json"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 69874,
+          "sha256": "6e3ee0e3738efb9c03eb458a17db253b5684ead8b5b6dea83541a9e3bc267ab0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn16384/nvidia-smi.csv"
+        },
+        {
+          "name": "quality-failure-audit.json",
+          "role": "record",
+          "bytes": 1456,
+          "sha256": "92b37abd16d71eeeb086819b343a2f148463401d589487613a430189bfc9b953",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-ensemble1-gnn16384/quality-failure-audit.json",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-ensemble1-gnn16384/quality-failure-audit.json"
+        }
+      ]
+    }
+  ]
+}

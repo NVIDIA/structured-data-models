@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:31:26.243862+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "resume-dp8-ohio-local-g1-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536",
+      "artifacts": [
+        {
+          "name": "ohio-local-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536/ohio-local-l40s-0.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 6130,
+          "sha256": "b980dcf3b014c4aa9a87478395370bfdbb13c0f17e1186afcf69bf66b60278f0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-ohio-local-g1-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 782936,
+          "sha256": "9529a07fe397e3f534d19fcc2803bd76a9e9e0141300ec4de9f48bc820ab6d12",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536/result.json",
+          "archived_path": "resume-dp8-ohio-local-g1-q65536/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-ohio-local-g4-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536",
+      "artifacts": [
+        {
+          "name": "ohio-local-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/ohio-local-l40s-0.stderr.log"
+        },
+        {
+          "name": "ohio-local-l40s-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/ohio-local-l40s-1.stderr.log"
+        },
+        {
+          "name": "ohio-local-l40s-2.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/ohio-local-l40s-2.stderr.log"
+        },
+        {
+          "name": "ohio-local-l40s-3.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/ohio-local-l40s-3.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 6923,
+          "sha256": "e701684e9a95a47724a45b053cdb1b7eabda6b2987ac6ff65227ef20e192aa1f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-ohio-local-g4-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 786529,
+          "sha256": "03681536435f67355ec49f49b9716bbf1a4a81f9281b5bd3be43826f9b9aea5c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g4-q65536/result.json",
+          "archived_path": "resume-dp8-ohio-local-g4-q65536/result.json"
+        }
+      ]
+    }
+  ]
+}

@@ -38,6 +38,7 @@ def artifact_role(name: str) -> str | None:
         "attempt.json",
         "backend.json",
         "quality-independent-audit.json",
+        "quality-allocator-correction.json",
         "runtime.txt",
         "pip-freeze.txt",
         "topology.txt",

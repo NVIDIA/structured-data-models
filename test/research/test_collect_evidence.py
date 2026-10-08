@@ -53,6 +53,7 @@ def test_retains_failures_and_additive_audits(tmp_path: Path) -> None:
         "failure.json",
         "attempt.json",
         "quality-full-cohort-audit.json",
+        "quality-allocator-correction.json",
         "classifier-fp32-n64-b1.json",
         "cuda-classifier-autocast_bf16-n257-b64.json",
         "provenance.json",
@@ -64,8 +65,8 @@ def test_retains_failures_and_additive_audits(tmp_path: Path) -> None:
         (run / name).write_text("{}\n")
     index_path = collect([f"attempt={run}"], tmp_path / "evidence")
     assert verify(index_path, external=True) == {
-        "archived_files": 10,
-        "external_files": 10,
+        "archived_files": 11,
+        "external_files": 11,
         "external_unchecked": 0,
     }
 

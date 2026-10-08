@@ -1,0 +1,25 @@
+{
+  "status": "failed_OOM_during_fit",
+  "prediction_or_quality_available": false,
+  "source": "ae4e5e549",
+  "block_size": 0,
+  "failure_json_sha256": "c33bba7459d3f4b7640db22cebd6435957f07400e5b8de39503eb16e6cab6c56",
+  "allocation_requested_gib": 6.1,
+  "failing_operation": "segment_multi_reduce output allocation",
+  "error": "CUDA out of memory. Tried to allocate 6.10 GiB. GPU 0 has a total capacity of 22.04 GiB of which 5.52 GiB is free. Including non-PyTorch memory, this process has 16.51 GiB memory in use. Of the allocated memory 10.40 GiB is allocated by PyTorch, and 5.86 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)",
+  "allocator_setting": "expandable_segments:True",
+  "memory_at_failure": {
+    "cuda:0": {
+      "allocated": 11130822656,
+      "reserved": 17460887552,
+      "peak_allocated": 17381440512,
+      "peak_reserved": 20208156672
+    }
+  },
+  "notes": [
+    "Exception traceback identifies fit phase, not prediction.",
+    "Current allocator values sampled after exception unwind differ from memory at allocation failure.",
+    "No performance or quality metric exists for this failed arm.",
+    "Blocking changes failing allocation but does not make residentEP1 E8C65536 fit."
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "recorded_at_utc": "2026-10-08 02:31:49 UTC",
+  "host": "ubuntu@18.195.223.18",
+  "runtime": "/opt/pytorch/bin/python; torch 2.9.1+cu130",
+  "probe_position": "After stage2 B0 finished and before ensemble4 B0 started; probe was a separate fresh process.",
+  "command": "PYTORCH_ALLOC_CONF=expandable_segments:True /opt/pytorch/bin/python -c 'import json,torch; x=torch.ones(1,device=\"cuda\"); print(json.dumps(torch.cuda.memory._snapshot()[\"allocator_settings\"],sort_keys=True))'",
+  "cuda_allocation_before_snapshot": true,
+  "observed_allocator_settings": {
+    "PYTORCH_CUDA_ALLOC_CONF": "",
+    "expandable_segments": false,
+    "garbage_collection_threshold": 0,
+    "graph_capture_record_stream_reuse": false,
+    "max_split_size": -1,
+    "pinned_num_register_threads": 1,
+    "pinned_use_cuda_host_register": false,
+    "release_lock_on_cudamalloc": false,
+    "roundup_power2_divisions": {
+      "1": 0,
+      "2": 0,
+      "4": 0,
+      "8": 0,
+      "16": 0,
+      "32": 0,
+      "64": 0,
+      "128": 0,
+      "256": 0,
+      "512": 0,
+      "1024": 0,
+      "2048": 0,
+      "4096": 0,
+      "8192": 0,
+      "16384": 0,
+      "32768": 0
+    }
+  },
+  "interpretation": "The new environment-variable name did not enable expandable segments in this observed runtime. Original requested-environment metadata is preserved.",
+  "applies_to": "The original relational-resume-l4 arms use the same runtime and requested environment, with the legacy key recorded unset. Label them matched default allocator, not verified expandable.",
+  "limitation": "This was a separate process, not an allocator snapshot captured inside each preceding benchmark. The correction is a same-runtime/environment inference; future verified retries capture settings in the benchmark process.",
+  "legacy_key_status": "Not yet tested at the time of this receipt."
+}

@@ -1,0 +1,222 @@
+{
+  "reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-ohio-local-g1-q65536",
+  "scope": "Ohio-local worker pipes, not cross-host execution",
+  "all_repeats": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": true,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "original_validation_ids_all_query_shard_hashes_and_train_context_hashes_verified": true,
+  "unique_worker_gpu_uuids_verified": true,
+  "assignments_cover_each_query_batch_exactly_once": true,
+  "quality_each_repeat": [
+    {
+      "rows": 65536,
+      "accuracy": 0.7591094970703125,
+      "log_loss": 0.5810317679581274,
+      "brier_multiclass": 0.3416973804885023,
+      "auroc_by_class": [
+        0.8904645695474667,
+        0.8814756113857891,
+        0.985999804604375,
+        0.9953075790019034,
+        0.9449911518592019,
+        0.9666841176453772,
+        0.9834398130369189
+      ],
+      "auroc_macro_present_classes": 0.9497660924401473,
+      "max_probability_sum_error": 1.8447917682351544e-7
+    },
+    {
+      "rows": 65536,
+      "accuracy": 0.7591094970703125,
+      "log_loss": 0.5810317679581274,
+      "brier_multiclass": 0.3416973804885023,
+      "auroc_by_class": [
+        0.8904645695474667,
+        0.8814756113857891,
+        0.985999804604375,
+        0.9953075790019034,
+        0.9449911518592019,
+        0.9666841176453772,
+        0.9834398130369189
+      ],
+      "auroc_macro_present_classes": 0.9497660924401473,
+      "max_probability_sum_error": 1.8447917682351544e-7
+    },
+    {
+      "rows": 65536,
+      "accuracy": 0.7591094970703125,
+      "log_loss": 0.5810317679581274,
+      "brier_multiclass": 0.3416973804885023,
+      "auroc_by_class": [
+        0.8904645695474667,
+        0.8814756113857891,
+        0.985999804604375,
+        0.9953075790019034,
+        0.9449911518592019,
+        0.9666841176453772,
+        0.9834398130369189
+      ],
+      "auroc_macro_present_classes": 0.9497660924401473,
+      "max_probability_sum_error": 1.8447917682351544e-7
+    }
+  ],
+  "median_rows_per_second_recomputed": 7684.2119690184,
+  "predict_repeats_s": [
+    8.528537575999962,
+    8.528963723000288,
+    8.52865593300021
+  ],
+  "timing": "single_coordinator_monotonic_wall_dispatch_network_decode_ordered_gather",
+  "input_residency": "preloaded_CPU_fixed_batches_per_worker",
+  "memory_prediction": [
+    {
+      "event": "MEMORY",
+      "memory": {
+        "allocated_bytes": 865092608,
+        "reserved_bytes": 3321888768,
+        "peak_allocated_bytes": 2601428992,
+        "peak_reserved_bytes": 3321888768,
+        "max_rss_bytes": 2140024832
+      }
+    }
+  ],
+  "notes": [
+    "Preloaded CPU batches and local worker pipes; this is not a cross-host/network scaling measurement.",
+    "Input query shipping is outside timed range; parent wall includes dispatch, output decode and ordered gather.",
+    "No worker-clock arithmetic used to establish end-to-end latency.",
+    "Every saved repeat verified across the full65536 rows; no prefix-only equivalence claim."
+  ]
+}

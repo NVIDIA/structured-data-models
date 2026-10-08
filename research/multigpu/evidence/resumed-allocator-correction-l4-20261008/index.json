@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:32:54.993737+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "allocator-correction",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume",
+      "artifacts": [
+        {
+          "name": "provenance.json",
+          "role": "record",
+          "bytes": 1856,
+          "sha256": "8afef22e1193240c8cf23588debb38e1e05374799077e11794056d7997d6ddf0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/provenance.json",
+          "archived_path": "allocator-correction/provenance.json"
+        },
+        {
+          "name": "quality-allocator-correction.json",
+          "role": "record",
+          "bytes": 1478,
+          "sha256": "4b6d747a2325fb7a019c27a8187c89a34d37be0f7ada0bc7b93da14d9a1aa1a9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/quality-allocator-correction.json",
+          "archived_path": "allocator-correction/quality-allocator-correction.json"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,418 @@
+{
+  "reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-b1024-native-g1-e4-ebs4-c1024-q65536",
+  "all_repeats": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": true,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "original_validation_ids_labels_verified": true,
+  "query_values_and_runtime_equal_reference": true,
+  "against_native_eb4": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": true,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "native_class_flips_each_repeat": [
+    0,
+    0,
+    0
+  ],
+  "prefix2048_reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-native4-large-e4-c1024-q2048",
+  "prefix2048": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.003823220729827881,
+    "mean_abs": 0.00017436552239009323,
+    "rms": 0.0003955860480873166,
+    "p99_abs": 0.0016638502478599545,
+    "relative_l2": 0.00129142144864661,
+    "within_tolerance": true,
+    "failing_entries": 0,
+    "rows_with_failures": 0
+  },
+  "quality_each_repeat": [
+    {
+      "rows": 65536,
+      "accuracy": 0.7591094970703125,
+      "log_loss": 0.5810317679581274,
+      "brier_multiclass": 0.3416973804885023,
+      "auroc_by_class": [
+        0.8904645695474667,
+        0.8814756113857891,
+        0.985999804604375,
+        0.9953075790019034,
+        0.9449911518592019,
+        0.9666841176453772,
+        0.9834398130369189
+      ],
+      "auroc_macro_present_classes": 0.9497660924401473,
+      "max_probability_sum_error": 1.8447917682351544e-7
+    },
+    {
+      "rows": 65536,
+      "accuracy": 0.7591094970703125,
+      "log_loss": 0.5810317679581274,
+      "brier_multiclass": 0.3416973804885023,
+      "auroc_by_class": [
+        0.8904645695474667,
+        0.8814756113857891,
+        0.985999804604375,
+        0.9953075790019034,
+        0.9449911518592019,
+        0.9666841176453772,
+        0.9834398130369189
+      ],
+      "auroc_macro_present_classes": 0.9497660924401473,
+      "max_probability_sum_error": 1.8447917682351544e-7
+    },
+    {
+      "rows": 65536,
+      "accuracy": 0.7591094970703125,
+      "log_loss": 0.5810317679581274,
+      "brier_multiclass": 0.3416973804885023,
+      "auroc_by_class": [
+        0.8904645695474667,
+        0.8814756113857891,
+        0.985999804604375,
+        0.9953075790019034,
+        0.9449911518592019,
+        0.9666841176453772,
+        0.9834398130369189
+      ],
+      "auroc_macro_present_classes": 0.9497660924401473,
+      "max_probability_sum_error": 1.8447917682351544e-7
+    }
+  ],
+  "paired_loss_vs_native": {
+    "candidate_minus_reference": 0,
+    "ci95": [
+      0,
+      0
+    ],
+    "groups": 65536,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "median_gathered_rows_per_second": 7520.653266691666,
+  "gathered_output_repeats_s": [
+    8.715409727000406,
+    8.71301564400028,
+    8.71413661500037
+  ],
+  "spawn_load_fit_s": 4.996173593000094,
+  "warmup_s": 8.750360745000307,
+  "memory_after_fit": [
+    {
+      "worker": 0,
+      "pid": 18071,
+      "device": "cuda:0",
+      "max_rss_bytes": 2178220032,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 2942304256,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 2942304256
+    }
+  ],
+  "memory_after_warmup": [
+    {
+      "worker": 0,
+      "pid": 18071,
+      "device": "cuda:0",
+      "max_rss_bytes": 2205073408,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 3321888768
+    }
+  ],
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 18071,
+      "device": "cuda:0",
+      "max_rss_bytes": 2205466624,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 2343033344,
+      "peak_reserved_bytes": 3321888768
+    }
+  ],
+  "notes": [
+    "Matched graphDP1 is graph scaling reference; nativeEB4 is a tuning control with different member batching.",
+    "All three full65536 prediction repeats inspected; prior2048 B256 overlap is a different query batch-shape diagnostic, not a parity requirement.",
+    "Parent gathered wall includes input/output IPC, CPU ordered gather, H2D/D2H and prediction, but excludes startup/fit/warmup.",
+    "Graph counts and capture event lists unchanged across timed prediction.",
+    "Process RSS high-water values are not additive unique host RAM; allocator peaks are not whole-device physical peaks."
+  ]
+}

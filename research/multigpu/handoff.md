@@ -20,9 +20,9 @@ The coordinator independently reran `collect_evidence.verify(..., external=True)
 
 | Check | Result |
 |---|---:|
-| Evidence snapshots | 37 |
-| Archived-file references checked | 430 |
-| Original-artifact references checked | 1,004 |
+| Evidence snapshots | 42 |
+| Archived-file references checked | 451 |
+| Original-artifact references checked | 1,070 |
 | Missing/mismatched references | 0 |
 | External references left unchecked | 0 |
 
@@ -36,9 +36,11 @@ Further additive snapshots retain [native relational process EP](evidence/resume
 
 The latest additions preserve [all blocked-GNN CUDA case receipts and failures](evidence/blocked-gnn-gpu-review-20261008/index.json), an [exploratory H&M full-model pair](evidence/blocked-gnn-hm16k-l4-20261008/index.json), [three graph-replay traces](evidence/resumed-graph-profiles-l40s-20261008/index.json), and their [independent SQL scope audit](evidence/resumed-graph-profile-sql-audit-l40s-20261008/index.json). Raw SQLite/NSight files stay outside Git and are checksum-bound; small analyses, original commands/probe source and numerical records are retained.
 
-The [graph-backed process query-DP snapshot](evidence/resumed-graph-query-dp-l40s-20261008/index.json) adds six independently audited 1/2/4-GPU controls and the six passing fixed/irregular-shape CUDA contract tests at source `ae4e5e549`. Fully gathered graph throughput is 6,075/12,073/22,667 rows/s, 3.731× matched four-GPU scaling on this batch256 numerical-tabular workload. Native-DP4 is 14,342 rows/s; graph versus native batch4 passes the unchanged BF16 gate but has six label flips, while every within-backend GPU-count/repeat comparison is byte-exact. Larger-batch saturation controls are distinct ongoing experiments, not replaceable denominators.
+The [graph-backed process query-DP snapshot](evidence/resumed-graph-query-dp-l40s-20261008/index.json) adds six independently audited 1/2/4-GPU controls and the six passing fixed/irregular-shape CUDA contract tests at source `ae4e5e549`. Fully gathered graph throughput is 6,075/12,073/22,667 rows/s, 3.731× matched four-GPU scaling on this batch256 numerical-tabular workload. Native-DP4 is 14,342 rows/s; graph versus native batch4 passes the unchanged BF16 gate but has six label flips, while every within-backend GPU-count/repeat comparison is byte-exact.
 
-The [H&M64k CPU-offload snapshot](evidence/blocked-gnn-hm64k-offload-l4-20261008/index.json) proves native E8/context65,536 fits a single L4 with expandable allocation. The exploratory blocked variant lowers fit allocation from 16.737 to 11.865 GiB, but reservation rises slightly and strict module-level failures remain. Do not call this multi-GPU-only feasibility or an accepted exact GNN replacement. Resident-cache attempts have a separate policy and evidence boundary.
+The [larger-batch snapshot](evidence/resumed-graph-query-dp-b1024-l40s-20261008/index.json) extends the same fully gathered IPC boundary to query65,536/batch1,024. Native1/4 achieves 7,521/29,545 rows/s; graph1/4 achieves 11,207/41,649 (3.716× graph scaling, 1.410× graph4/native4). Each backend is repeat/GPU-count byte-exact; graph versus native has 50 label flips while passing BF16 screening, with no quality improvement established. Graph lowers steady-state allocated peak but increases reserved peak. Separate [local-pipe controls](evidence/resumed-dp-local-pipe-l40s-20261008/index.json) use preloaded CPU inputs and are not network measurements; their [cross-transport audit](evidence/resumed-dp-b1024-transport-audit-20261008/index.json) proves output agreement, not timing equivalence.
+
+The [H&M64k CPU-offload snapshot](evidence/blocked-gnn-hm64k-offload-l4-20261008/index.json) proves native E8/context65,536 fits a single L4. **Allocator correction:** these new arms requested the unrecognized `PYTORCH_ALLOC_CONF` name. A subsequent same-runtime fresh-process probe observed default behavior, not expandable allocation. Labeling earlier new arms effective-default is an inference, not per-run telemetry; the [additive correction receipt](evidence/resumed-allocator-correction-l4-20261008/index.json) preserves that limitation and supersedes earlier prose. Historical legacy-key runs are unchanged. The blocked variant lowers fit allocation from 16.737 to 11.865 GiB, but reservation rises slightly and strict module-level failures remain. Both new resident EP1 variants instead [fail during fit](evidence/resumed-resident-hm64k-oom-l4-20261008/index.json), with no prediction result; verified allocator retries and stage placement remain distinct controls. Do not call the offload result multi-GPU-only feasibility or an accepted exact GNN replacement.
 
 The original cuDF results saved repeat-zero arrays but scored the last repeat. Original evidence remains unchanged; additive independent audits score the archived arrays. The runner now archives every repeat and uses the same first repeat for NPY, PT, and reported reference quality. A deliberately nondeterministic CPU fixture tests this contract.
 

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:31:09.833775+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "transport-audit",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp",
+      "artifacts": [
+        {
+          "name": "quality-b1024-transport-audit.json",
+          "role": "record",
+          "bytes": 8428,
+          "sha256": "31287cb19fc07f41469cf3b6b5cf188ff64886ee08dd3203bb737e6735898bd4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/quality-b1024-transport-audit.json",
+          "archived_path": "transport-audit/quality-b1024-transport-audit.json"
+        }
+      ]
+    }
+  ]
+}

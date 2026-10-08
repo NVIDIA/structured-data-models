@@ -1,0 +1,770 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/resume-graphdp-b1024-graph-g4-e4-ebs1-c1024-q65536",
+    "source_commit": "ae4e5e549",
+    "task": "classification",
+    "size": "large",
+    "gpus": 4,
+    "backend": "graph",
+    "context": 1024,
+    "queries": 65536,
+    "batch_size": 1024,
+    "estimators": 4,
+    "estimator_batch_size": 1,
+    "seed": 1729,
+    "threads": 1,
+    "warmups": 1,
+    "repeats": 3,
+    "precision": "bfloat16"
+  },
+  "runtime": {
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "git_revision": "ae4e5e549",
+    "runner_sha256": "bbc25b1a06a7c02826b95d50201b2e1bac9232c6b873eb112ed1c4c97608ce35"
+  },
+  "mode": "process-data-graph",
+  "effective_estimator_batch_size": 1,
+  "input_residency": "prepared_CPU_batches",
+  "timing": "parent_wall_including_input_IPC_H2D_predict_D2H_output_IPC",
+  "batch_times_kind": "worker_service_time_excluding_queue_and_ipc",
+  "query_ids_sha256": "1b3bbdc73d86e6a9635aa065b2d410abef3d78d902515745c38e48bf975b44c3",
+  "query_values_sha256": "70e51127734e896f2ed2a7b6ddaa4d56aa7b7c50f265776aac98506074309a6a",
+  "spawn_load_fit_s": 5.249475726000128,
+  "memory_after_fit": [
+    {
+      "worker": 0,
+      "pid": 19251,
+      "device": "cuda:0",
+      "max_rss_bytes": 1714696192,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    },
+    {
+      "worker": 1,
+      "pid": 19254,
+      "device": "cuda:1",
+      "max_rss_bytes": 1714032640,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    },
+    {
+      "worker": 2,
+      "pid": 19257,
+      "device": "cuda:2",
+      "max_rss_bytes": 1716854784,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    },
+    {
+      "worker": 3,
+      "pid": 19260,
+      "device": "cuda:3",
+      "max_rss_bytes": 1713876992,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    }
+  ],
+  "warmup_s": 2.0590369910000845,
+  "memory_after_warmup": [
+    {
+      "worker": 0,
+      "pid": 19251,
+      "device": "cuda:0",
+      "max_rss_bytes": 1791852544,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.492298455999844,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13381250400016143,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12043532100005905,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.11930959299979804,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.1187410379998255,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 1,
+      "pid": 19254,
+      "device": "cuda:1",
+      "max_rss_bytes": 1791631360,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.5029947200005154,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13618040700021083,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12324461500020334,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12182961000007708,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12174008800002412,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 2,
+      "pid": 19257,
+      "device": "cuda:2",
+      "max_rss_bytes": 1794846720,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.5103867349998836,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13783279100016443,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12477743499994176,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12393718499970419,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12383932400007325,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 3,
+      "pid": 19260,
+      "device": "cuda:3",
+      "max_rss_bytes": 1791414272,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.4974942229996486,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13404544099967097,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12240382199979649,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12061958799995409,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12042537200022707,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    }
+  ],
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 19251,
+      "device": "cuda:0",
+      "max_rss_bytes": 1792245760,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1385715712,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.492298455999844,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13381250400016143,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12043532100005905,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.11930959299979804,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.1187410379998255,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 1,
+      "pid": 19254,
+      "device": "cuda:1",
+      "max_rss_bytes": 1791631360,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1385715712,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.5029947200005154,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13618040700021083,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12324461500020334,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12182961000007708,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12174008800002412,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 2,
+      "pid": 19257,
+      "device": "cuda:2",
+      "max_rss_bytes": 1795239936,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1385715712,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.5103867349998836,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13783279100016443,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12477743499994176,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12393718499970419,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12383932400007325,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 3,
+      "pid": 19260,
+      "device": "cuda:3",
+      "max_rss_bytes": 1791414272,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1385715712,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.4974942229996486,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13404544099967097,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12240382199979649,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12061958799995409,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12042537200022707,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    }
+  ],
+  "predict_repeats_s": [
+    1.570832474999861,
+    1.5309754879999673,
+    1.572122348999983
+  ],
+  "gathered_output_repeats_s": [
+    1.573512665999715,
+    1.533551806000105,
+    1.5748042499999428
+  ],
+  "gathered_rows_per_s": [
+    41649.48996985822,
+    42734.78062076992,
+    41615.33092128903
+  ],
+  "rows_per_s": [
+    41720.55330088958,
+    42806.69449882231,
+    41686.322977144264
+  ],
+  "batch_times_s": [
+    [
+      0.09617379900009837,
+      0.09003946700022425,
+      0.08938106000005064,
+      0.09666741299997739,
+      0.09466995999991923,
+      0.08941186099991683,
+      0.08912068299969178,
+      0.09430754999993951,
+      0.09545407099994918,
+      0.0895184529999824,
+      0.08901715000001786,
+      0.09591982299980373,
+      0.09515614299971276,
+      0.08945799200000693,
+      0.08876019300032567,
+      0.09546315100033098,
+      0.09520843399968726,
+      0.08918693500027075,
+      0.0890330110000832,
+      0.09498350800004118,
+      0.09507686999995713,
+      0.08940729000005376,
+      0.08890115699978196,
+      0.09513293200006956,
+      0.09540998000011314,
+      0.08938910999995642,
+      0.08879750500000227,
+      0.09515468300014618,
+      0.09551628200006235,
+      0.08937512000011338,
+      0.0888663959999576,
+      0.09570937699982096,
+      0.09523102499997549,
+      0.08940080999991551,
+      0.08898253899997144,
+      0.09531004599966764,
+      0.09565969599998425,
+      0.08925858700013123,
+      0.08887516699996922,
+      0.09576093900022897,
+      0.0954148890000397,
+      0.0894345209999301,
+      0.08868851099987296,
+      0.0954228300001887,
+      0.09590937199982363,
+      0.089786260999972,
+      0.08889011700011906,
+      0.09584267099990029,
+      0.09506602000010389,
+      0.08992601399995692,
+      0.08898832900013076,
+      0.09534523799993622,
+      0.0957007980000526,
+      0.08974377999993521,
+      0.08887998600039282,
+      0.09569093699974474,
+      0.09522275399967839,
+      0.08995481400006611,
+      0.08889232699993954,
+      0.09563920600021447,
+      0.0947982329998922,
+      0.08953969300000608,
+      0.08914845300023444,
+      0.09490347600012683
+    ],
+    [
+      0.09563912500016158,
+      0.0897902609999619,
+      0.08944357099971967,
+      0.09431192099964392,
+      0.09378499600006762,
+      0.09017309999990175,
+      0.09472286100026395,
+      0.08904259099972478,
+      0.09399261199996545,
+      0.09024311300026966,
+      0.09445750399981989,
+      0.0898693720000665,
+      0.09365642300008403,
+      0.08986566200019297,
+      0.09442907399989053,
+      0.08948887199994715,
+      0.09380691700016541,
+      0.08984091199999966,
+      0.09420418800027619,
+      0.08930011700022078,
+      0.09394025000028705,
+      0.08966026800044347,
+      0.09424847900027089,
+      0.08916831399983494,
+      0.09403813299968533,
+      0.08989756399978432,
+      0.09449712600007842,
+      0.08907079099981274,
+      0.09415505700007998,
+      0.08976247999999032,
+      0.09458147799978178,
+      0.08909452199986845,
+      0.09416906700016625,
+      0.08971340800007965,
+      0.09434263200000714,
+      0.08899686899985682,
+      0.09408375400016666,
+      0.08979632099999435,
+      0.09459844699995301,
+      0.08891126700018503,
+      0.09436688100004176,
+      0.08987947300011001,
+      0.09460546799982694,
+      0.08897416799982238,
+      0.0932377619997169,
+      0.08940918100006456,
+      0.09412828500035175,
+      0.08984712199981004,
+      0.08946613199987041,
+      0.08969564800008811,
+      0.08939023000039015,
+      0.09217071400007626,
+      0.08962518599992109,
+      0.08953710400010095,
+      0.08945278200008033,
+      0.09224524599994766,
+      0.08972402799963675,
+      0.08984086200007368,
+      0.08953436399997372,
+      0.09227163599962296,
+      0.08917686399990998,
+      0.08964978599988171,
+      0.0895111029999498,
+      0.09213023199981762
+    ],
+    [
+      0.09561612600009539,
+      0.08968212699983269,
+      0.08952087300031053,
+      0.09602844600021854,
+      0.0949647580000601,
+      0.09020293200001106,
+      0.08953374300017458,
+      0.09569249600008334,
+      0.09518243399998028,
+      0.09020143099996858,
+      0.08944818099962504,
+      0.09503227899995181,
+      0.0946684999998979,
+      0.08985978200007594,
+      0.08930409699996744,
+      0.09484927499988771,
+      0.09496917799970106,
+      0.08943860099998346,
+      0.08915292299980138,
+      0.09518475300001228,
+      0.09486088500034384,
+      0.08968476800009739,
+      0.08939369899962912,
+      0.09478875300010259,
+      0.09506224999995538,
+      0.0897858210000777,
+      0.08950413299999127,
+      0.0952640360001169,
+      0.095603624999967,
+      0.08969445799993991,
+      0.0893018779997874,
+      0.09566116599989982,
+      0.09560998500001006,
+      0.08988012300005721,
+      0.08938562999992428,
+      0.09586661100001947,
+      0.09569724699986182,
+      0.0898686320001616,
+      0.08935605900023802,
+      0.0959272330001113,
+      0.0955586840000251,
+      0.08964668599992365,
+      0.08911750299967025,
+      0.0954386000003069,
+      0.09541417999980695,
+      0.08953125400012141,
+      0.08925566600009915,
+      0.09534708800038061,
+      0.09513809200007017,
+      0.08960011499993925,
+      0.08952091299988751,
+      0.09557783399986874,
+      0.09553229299990562,
+      0.08946312099988063,
+      0.08899692000022696,
+      0.09610412699976223,
+      0.09530312600008983,
+      0.08956680399978723,
+      0.08879376499999125,
+      0.09554648399989674,
+      0.09506464000014603,
+      0.08952627300004679,
+      0.08925501599969721,
+      0.09498801900008402
+    ]
+  ],
+  "repeat_max_abs_difference": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "prediction_sha256": "c550c2966253fb135b179a382c99ca1cc27ca212f7d4a4eb0dead2c41349a2de",
+  "prediction_repeat_sha256": [
+    "c550c2966253fb135b179a382c99ca1cc27ca212f7d4a4eb0dead2c41349a2de",
+    "c550c2966253fb135b179a382c99ca1cc27ca212f7d4a4eb0dead2c41349a2de",
+    "c550c2966253fb135b179a382c99ca1cc27ca212f7d4a4eb0dead2c41349a2de"
+  ],
+  "quality": {
+    "log_loss": 0.5810284614562988,
+    "accuracy": 0.7590484619140625
+  }
+}

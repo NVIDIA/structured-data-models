@@ -1,0 +1,20 @@
+{
+  "supersedes_interpretation": "Any effective-expandable claim for original relational-resume-l4 arms, including allocator_setting in resident1 quality-failure-audit.json.",
+  "requested_environment": {
+    "PYTORCH_ALLOC_CONF": "expandable_segments:True",
+    "PYTORCH_CUDA_ALLOC_CONF": null
+  },
+  "observed_separate_probe": {
+    "expandable_segments": false,
+    "legacy_config": "",
+    "runtime": "torch 2.9.1+cu130",
+    "cuda_allocation_before_snapshot": true,
+    "position": "After stage2 B0 and before ensemble4 B0; separate fresh process"
+  },
+  "receipt_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/provenance.json",
+  "receipt_sha256": "8afef22e1193240c8cf23588debb38e1e05374799077e11794056d7997d6ddf0",
+  "corrected_claim": "Original resumed paired arms have matched requested environments. Effective-default behavior is supported by the later same-runtime/environment probe, but not a per-benchmark-process snapshot.",
+  "inference_limit": "This is a same-runtime/environment inference, not direct retroactive measurement of each earlier process. Original raw requested variables and failures are preserved.",
+  "historical_scope": "Earlier capacity-hm-c65536-e4-expandable-v1 EP1/layers4 wrapper commands explicitly used PYTORCH_CUDA_ALLOC_CONF; they are not relabeled by this new-key probe.",
+  "future_gate": "Use legacy key and capture actual allocator settings inside each benchmark process before model work."
+}

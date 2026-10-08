@@ -1,0 +1,872 @@
+{
+  "reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-b1024-graph-g1-e4-ebs1-c1024-q65536",
+  "all_repeats": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": true,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "original_validation_ids_labels_verified": true,
+  "query_values_and_runtime_equal_reference": true,
+  "against_native_eb4": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": false,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.010723292827606201,
+        "mean_abs": 0.0002510877079536828,
+        "rms": 0.0005865947883405314,
+        "p99_abs": 0.002460984587669371,
+        "relative_l2": 0.001914137581599559,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.010723292827606201,
+        "mean_abs": 0.0002510877079536828,
+        "rms": 0.0005865947883405314,
+        "p99_abs": 0.002460984587669371,
+        "relative_l2": 0.001914137581599559,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.010723292827606201,
+        "mean_abs": 0.0002510877079536828,
+        "rms": 0.0005865947883405314,
+        "p99_abs": 0.002460984587669371,
+        "relative_l2": 0.001914137581599559,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "native_class_flips_each_repeat": [
+    50,
+    50,
+    50
+  ],
+  "prefix2048_reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-graph1-large-e4-c1024-q2048",
+  "prefix2048": {
+    "shape": [
+      2048,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.005259275436401367,
+    "mean_abs": 0.00019038313448665228,
+    "rms": 0.000446375541465501,
+    "p99_abs": 0.001892262697219848,
+    "relative_l2": 0.0014573091427687408,
+    "within_tolerance": true,
+    "failing_entries": 0,
+    "rows_with_failures": 0
+  },
+  "quality_each_repeat": [
+    {
+      "rows": 65536,
+      "accuracy": 0.7590484619140625,
+      "log_loss": 0.5810285028145422,
+      "brier_multiclass": 0.3416957739430226,
+      "auroc_by_class": [
+        0.8904658530639569,
+        0.881471270412341,
+        0.9860028599494738,
+        0.9953010463905934,
+        0.9449844814502418,
+        0.966690056324315,
+        0.9834450883188866
+      ],
+      "auroc_macro_present_classes": 0.9497658079871155,
+      "max_probability_sum_error": 1.8557057046564296e-7
+    },
+    {
+      "rows": 65536,
+      "accuracy": 0.7590484619140625,
+      "log_loss": 0.5810285028145422,
+      "brier_multiclass": 0.3416957739430226,
+      "auroc_by_class": [
+        0.8904658530639569,
+        0.881471270412341,
+        0.9860028599494738,
+        0.9953010463905934,
+        0.9449844814502418,
+        0.966690056324315,
+        0.9834450883188866
+      ],
+      "auroc_macro_present_classes": 0.9497658079871155,
+      "max_probability_sum_error": 1.8557057046564296e-7
+    },
+    {
+      "rows": 65536,
+      "accuracy": 0.7590484619140625,
+      "log_loss": 0.5810285028145422,
+      "brier_multiclass": 0.3416957739430226,
+      "auroc_by_class": [
+        0.8904658530639569,
+        0.881471270412341,
+        0.9860028599494738,
+        0.9953010463905934,
+        0.9449844814502418,
+        0.966690056324315,
+        0.9834450883188866
+      ],
+      "auroc_macro_present_classes": 0.9497658079871155,
+      "max_probability_sum_error": 1.8557057046564296e-7
+    }
+  ],
+  "paired_loss_vs_native": {
+    "candidate_minus_reference": -0.0000032653010748617817,
+    "ci95": [
+      -0.000024802984843663724,
+      0.00001813232606604486
+    ],
+    "groups": 65536,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "median_gathered_rows_per_second": 41649.48996985822,
+  "gathered_output_repeats_s": [
+    1.573512665999715,
+    1.533551806000105,
+    1.5748042499999428
+  ],
+  "spawn_load_fit_s": 5.249475726000128,
+  "warmup_s": 2.0590369910000845,
+  "memory_after_fit": [
+    {
+      "worker": 0,
+      "pid": 19251,
+      "device": "cuda:0",
+      "max_rss_bytes": 1714696192,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    },
+    {
+      "worker": 1,
+      "pid": 19254,
+      "device": "cuda:1",
+      "max_rss_bytes": 1714032640,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    },
+    {
+      "worker": 2,
+      "pid": 19257,
+      "device": "cuda:2",
+      "max_rss_bytes": 1716854784,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    },
+    {
+      "worker": 3,
+      "pid": 19260,
+      "device": "cuda:3",
+      "max_rss_bytes": 1713876992,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    }
+  ],
+  "memory_after_warmup": [
+    {
+      "worker": 0,
+      "pid": 19251,
+      "device": "cuda:0",
+      "max_rss_bytes": 1791852544,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.492298455999844,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13381250400016143,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12043532100005905,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.11930959299979804,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.1187410379998255,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 1,
+      "pid": 19254,
+      "device": "cuda:1",
+      "max_rss_bytes": 1791631360,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.5029947200005154,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13618040700021083,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12324461500020334,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12182961000007708,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12174008800002412,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 2,
+      "pid": 19257,
+      "device": "cuda:2",
+      "max_rss_bytes": 1794846720,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.5103867349998836,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13783279100016443,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12477743499994176,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12393718499970419,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12383932400007325,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 3,
+      "pid": 19260,
+      "device": "cuda:3",
+      "max_rss_bytes": 1791414272,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.4974942229996486,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13404544099967097,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12240382199979649,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12061958799995409,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12042537200022707,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    }
+  ],
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 19251,
+      "device": "cuda:0",
+      "max_rss_bytes": 1792245760,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1385715712,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.492298455999844,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13381250400016143,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12043532100005905,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.11930959299979804,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.1187410379998255,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 1,
+      "pid": 19254,
+      "device": "cuda:1",
+      "max_rss_bytes": 1791631360,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1385715712,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.5029947200005154,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13618040700021083,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12324461500020334,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12182961000007708,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12174008800002412,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 2,
+      "pid": 19257,
+      "device": "cuda:2",
+      "max_rss_bytes": 1795239936,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1385715712,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.5103867349998836,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13783279100016443,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12477743499994176,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12393718499970419,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12383932400007325,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 3,
+      "pid": 19260,
+      "device": "cuda:3",
+      "max_rss_bytes": 1791414272,
+      "allocated_bytes": 1379823616,
+      "reserved_bytes": 3829399552,
+      "peak_allocated_bytes": 1385715712,
+      "peak_reserved_bytes": 3829399552,
+      "graph_count": 4,
+      "graph_capture_s": 0.4974942229996486,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.13404544099967097,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12240382199979649,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12061958799995409,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            1024,
+            49
+          ],
+          "capture_s": 0.12042537200022707,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Matched graphDP1 is graph scaling reference; nativeEB4 is a tuning control with different member batching.",
+    "All three full65536 prediction repeats inspected; prior2048 B256 overlap is a different query batch-shape diagnostic, not a parity requirement.",
+    "Parent gathered wall includes input/output IPC, CPU ordered gather, H2D/D2H and prediction, but excludes startup/fit/warmup.",
+    "Graph counts and capture event lists unchanged across timed prediction.",
+    "Process RSS high-water values are not additive unique host RAM; allocator peaks are not whole-device physical peaks."
+  ]
+}
