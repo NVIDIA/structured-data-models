@@ -42,7 +42,7 @@ def test_forward() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
-def test_preprocess_freezes_running_statistics(
+def test_preprocess_embeds_current_and_known_next_patches(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
@@ -55,52 +55,7 @@ def test_preprocess_freezes_running_statistics(
         device=device,
         dtype=dtype,
     )
-    values = torch.tensor(
-        [[[[1.0, 3.0], [10.0, 14.0], [100.0, 200.0]]]],
-        device=device,
-    )
-    masks = torch.zeros_like(values, dtype=torch.bool)
-    patch_is_target = torch.ones(1, 1, 3, dtype=torch.bool, device=device)
-
-    embeddings, patch_features, patch_mask, stats = model._preprocess(
-        values, masks, patch_is_target, freeze_after=0
-    )
-
-    counts, running_mean, running_std = stats
-    assert patch_features.shape == (1, 1, 3, 12)
-    assert patch_features.dtype == dtype
-    assert embeddings.shape == (1, 1, 3, 8)
-    assert embeddings.dtype == dtype
-    assert embeddings.isfinite().all()
-    assert not patch_mask.any()
-    torch.testing.assert_close(
-        running_mean, torch.tensor([[[2.0, 2.0, 2.0]]], device=device)
-    )
-    torch.testing.assert_close(
-        running_std, torch.tensor([[[1.0, 1.0, 1.0]]], device=device)
-    )
-    torch.testing.assert_close(
-        counts, torch.tensor([[[2, 4, 6]]], device=device)
-    )
-    torch.testing.assert_close(
-        patch_features[0, 0, 1, :2], patch_features.new_tensor([8.0, 12.0])
-    )
-    assert not patch_features[..., 2:6].bool().any()
-
-
-@withCUDA
-def test_preprocess_masks_targets_but_keeps_future_covariates(
-    device: torch.device,
-) -> None:
-    model = _TimesFM3(
-        input_patch_len=2,
-        output_patch_len=4,
-        channels=8,
-        num_layers=1,
-        num_heads=2,
-        device=device,
-    )
-    values = torch.tensor(
+    x = torch.tensor(
         [
             [
                 [[0.0, 2.0], [4.0, 6.0], [8.0, 10.0]],
@@ -109,24 +64,29 @@ def test_preprocess_masks_targets_but_keeps_future_covariates(
         ],
         device=device,
     )
-    masks = torch.zeros_like(values, dtype=torch.bool)
-    masks[0, 1, 1, 1] = True
-    patch_is_target = torch.tensor([[[True] * 3, [False] * 3]], device=device)
-    cpm_mask = torch.tensor([[False, True, False]], device=device)
+    mask = torch.zeros_like(x, dtype=torch.bool)
+    mask[0, 0, 2] = True
+    mask[0, 1, 1, 1] = True
+    context_only = torch.tensor([[[True] * 3, [False] * 3]], device=device)
 
-    _, patch_features, patch_mask, stats = model._preprocess(
-        values, masks, patch_is_target, cpm_mask=cpm_mask
+    embeddings, patch_features, empty_patch_mask, (count, mean, std) = (
+        model._preprocess(x=x, mask=mask, context_only=context_only)
     )
 
-    counts, running_mean, _ = stats
-    assert running_mean[0, 0, 1] == 3.0
-    assert counts[0, 0, 1] == 4
-    assert counts[0, 1, 1] == 3
-    assert not patch_features[0, 0, 1, :6].bool().any()
+    assert embeddings.shape == (1, 2, 3, 8)
+    assert embeddings.dtype == dtype
+    assert embeddings.isfinite().all()
+    assert patch_features.shape == (1, 2, 3, 12)
+    assert patch_features.dtype == dtype
+    assert (count[0, 0] == torch.tensor([2, 4, 4], device=device)).all()
+    assert mean[0, 0, 1] == 3.0
+    assert std.isfinite().all()
+    assert patch_features[0, 0, 1, :2].abs().sum() > 0
     assert not patch_features[0, 0, :, 2:6].bool().any()
+    assert patch_features[0, 0, :, 8:12].bool().all()
     torch.testing.assert_close(
         patch_features[0, 1, 0, 2:6],
-        torch.tensor([3.0, 0.0, 7.0, 9.0], device=device),
+        torch.tensor([3.0, 0.0, 7.0, 9.0], device=device, dtype=dtype),
     )
     assert torch.equal(
         patch_features[0, 1, 0, 8:12].bool(),
@@ -135,9 +95,58 @@ def test_preprocess_masks_targets_but_keeps_future_covariates(
     assert patch_features[0, 1, 1, 10:12].bool().all()
     assert patch_features[0, 1, 2, 8:12].bool().all()
     assert torch.equal(
-        patch_mask,
+        empty_patch_mask,
         torch.tensor(
-            [[[False, True, False], [False, False, False]]],
+            [[[False, False, True], [False, False, False]]],
             device=device,
         ),
     )
+
+
+def test_preprocess_preserves_input_gradients() -> None:
+    model = _TimesFM3(
+        input_patch_len=2,
+        output_patch_len=4,
+        channels=8,
+        num_layers=1,
+        num_heads=2,
+    )
+    values = torch.tensor(
+        [[[[1.0, 3.0], [2.0, 6.0], [5.0, 7.0]]]],
+        requires_grad=True,
+    )
+    masks = torch.zeros_like(values, dtype=torch.bool)
+    context_only = torch.ones_like(values[..., 0], dtype=torch.bool)
+
+    embeddings, *_ = model._preprocess(
+        x=values, mask=masks, context_only=context_only
+    )
+    (grad,) = torch.autograd.grad(embeddings.square().sum(), values)
+
+    assert grad.isfinite().all()
+
+
+def test_preprocess_accepts_leading_batch_dimensions() -> None:
+    model = _TimesFM3(
+        input_patch_len=2,
+        output_patch_len=4,
+        channels=8,
+        num_layers=1,
+        num_heads=2,
+    )
+    x = torch.tensor([[[[1.0, 3.0], [10.0, 14.0], [100.0, 200.0]]]]).expand(
+        2, 3, -1, -1, -1
+    )
+    mask = torch.zeros_like(x, dtype=torch.bool)
+    context_only = torch.ones_like(x[..., 0], dtype=torch.bool)
+
+    embeddings, patch_features, empty_patch_mask, (count, mean, std) = (
+        model._preprocess(x=x, mask=mask, context_only=context_only)
+    )
+
+    assert embeddings.shape == (2, 3, 1, 3, 8)
+    assert patch_features.shape == (2, 3, 1, 3, 12)
+    assert empty_patch_mask.shape == (2, 3, 1, 3)
+    assert not empty_patch_mask.any()
+    assert (count[..., 2] == 6).all()
+    assert mean.shape == std.shape == count.shape
