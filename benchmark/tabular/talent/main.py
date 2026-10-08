@@ -52,9 +52,7 @@ parser.add_argument(
     action="store_true",
     help="Full fine-tune the model on each dataset's training split.",
 )
-parser.add_argument(
-    "--finetune-epochs", type=int, default=FINETUNE_EPOCHS
-)
+parser.add_argument("--finetune-epochs", type=int, default=FINETUNE_EPOCHS)
 parser.add_argument(
     "--finetune-iters-per-epoch", type=int, default=FINETUNE_ITERS_PER_EPOCH
 )

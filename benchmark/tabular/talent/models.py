@@ -31,7 +31,16 @@ from TALENT.model.method_registry import (
 from TALENT.model.methods.base import Method
 
 import sdm
-from benchmark.tabular.finetune import full_finetune, kumo_small_binary_epochs
+from benchmark.tabular.finetune import (
+    FINETUNE_CONTEXT_FRAC,
+    FINETUNE_EPOCHS,
+    FINETUNE_ITERS_PER_EPOCH,
+    FINETUNE_LR,
+    FINETUNE_TRAIN_SIZE,
+    FINETUNE_VAL_FRAC,
+    full_finetune,
+    kumo_small_binary_epochs,
+)
 
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
@@ -175,12 +184,20 @@ class SDMMethod(Method):
             self._config.num_estimators,
         )
         self._finetune = general.get("finetune", False)
-        self._finetune_epochs = general["finetune_epochs"]
-        self._finetune_iters_per_epoch = general["finetune_iters_per_epoch"]
-        self._finetune_lr = general["finetune_lr"]
-        self._finetune_train_size = general["finetune_train_size"]
-        self._finetune_context_frac = general["finetune_context_frac"]
-        self._finetune_val_frac = general["finetune_val_frac"]
+        self._finetune_epochs = general.get("finetune_epochs", FINETUNE_EPOCHS)
+        self._finetune_iters_per_epoch = general.get(
+            "finetune_iters_per_epoch", FINETUNE_ITERS_PER_EPOCH
+        )
+        self._finetune_lr = general.get("finetune_lr", FINETUNE_LR)
+        self._finetune_train_size = general.get(
+            "finetune_train_size", FINETUNE_TRAIN_SIZE
+        )
+        self._finetune_context_frac = general.get(
+            "finetune_context_frac", FINETUNE_CONTEXT_FRAC
+        )
+        self._finetune_val_frac = general.get(
+            "finetune_val_frac", FINETUNE_VAL_FRAC
+        )
         self._low_cardinality = general.get(
             "low_cardinality",
             self._config.low_cardinality,
