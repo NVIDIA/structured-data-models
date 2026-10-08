@@ -1,0 +1,58 @@
+{
+  "rates": {
+    "strong-mixed-g2-q65536": 6238.818523528632,
+    "strong-mixed-g4-q65536": 12433.51945923876,
+    "strong-mixed-g8-q65536": 24770.03112818247,
+    "strong-mixed-g8-weighted-q65536": 31877.39465271119,
+    "weak-mixed-g2-q16384": 6215.239302067617,
+    "weak-mixed-g4-q32768": 12415.49180651829
+  },
+  "balanced8_vs2_speedup": 3.9703080053966233,
+  "balanced8_vs2_efficiency": 0.9925770013491558,
+  "weighted_vs_balanced8_speedup": 1.2869339762937244,
+  "weak_rows_per_gpu_per_s": [
+    3107.6196510338086,
+    3103.8729516295725,
+    3096.2538910228086
+  ],
+  "weak8_vs2_efficiency": 0.996342615478307,
+  "weighted_capacity_weights_verified_against_referenced_local4gpu_results": true,
+  "weighted_vs_balanced_predictions": {
+    "shape": [
+      65536,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.007026970386505127,
+    "mean_abs": 0.00009103564131217894,
+    "rms": 0.00032271304208734,
+    "p99_abs": 0.0015884029865264881,
+    "relative_l2": 0.0010530533074193276,
+    "within_tolerance": true,
+    "failing_entries": 0,
+    "rows_with_failures": 0
+  },
+  "weighted_vs_balanced_class_flips": 12,
+  "weighted_vs_balanced_paired_loss": {
+    "candidate_minus_reference": -0.000011158537745359354,
+    "ci95": [
+      -0.000023831301550814032,
+      0.0000011998757196707235
+    ],
+    "groups": 65536,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "notes": [
+    "Weighted output differences arise from intentional row hardware-family reassignment; every output remains exactly its assigned-family oracle.",
+    "Balanced8 strong arm is also weak8 (8192rows perGPU), not an extra independent run.",
+    "Strongscale reference is mixed2, not a fabricated homogeneousoneGPU baseline.",
+    "Single weakrepeatladder establishes measured behavior, not a multi-trial confidence interval for performance."
+  ]
+}

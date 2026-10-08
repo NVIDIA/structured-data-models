@@ -1,0 +1,31 @@
+{
+  "equal_plan2_4_8_family_ownership_identical": true,
+  "weak_mixed_family_ownership_matches_strong_common_prefix": true,
+  "weighted_rows_changing_family": 28672,
+  "hardware_family_output_comparison": {
+    "shape": [
+      65536,
+      7
+    ],
+    "reference_dtype": "float32",
+    "candidate_dtype": "float32",
+    "finite": true,
+    "bitwise_equal": false,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "compute_dtype": "bfloat16",
+    "max_abs": 0.010062932968139648,
+    "mean_abs": 0.00020800405155461298,
+    "rms": 0.0004878110630359988,
+    "p99_abs": 0.002076951861381529,
+    "relative_l2": 0.0015917913137781633,
+    "within_tolerance": true,
+    "failing_entries": 0,
+    "rows_with_failures": 0
+  },
+  "ohio_localpipe_vs_frankfurt_origin_l40s_predictions_bitwise_equal": true,
+  "notes": [
+    "L40S output equivalence across coordinator locations does not make their network-inclusive timing identical.",
+    "Rowwise family-oracle exactness is the correctness requirement; raw L4-vsL40S differences are separately diagnostic."
+  ]
+}

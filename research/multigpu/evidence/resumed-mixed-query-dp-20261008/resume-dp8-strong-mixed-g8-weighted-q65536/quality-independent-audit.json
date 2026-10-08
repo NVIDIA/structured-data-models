@@ -1,0 +1,354 @@
+{
+  "reference": "Assembled rowwise from fixed full65536 same-family native4GPU oracles according to recorded batch ownership",
+  "oracle_paths": {
+    "NVIDIA L4": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536",
+    "NVIDIA L40S": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536"
+  },
+  "all_repeats": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": true,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          65536,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "original_validation_ids_all_query_shard_hashes_and_train_context_hashes_verified": true,
+  "unique_physical_gpu_uuids_verified": true,
+  "assignments_cover_each_query_batch_exactly_once": true,
+  "workers": [
+    {
+      "name": "frankfurt-l4-0",
+      "actual_family": "NVIDIA L4",
+      "gpu_uuid": "e82c3d68-ca84-a200-5c1d-0801aaeb3c41",
+      "query_rows": 5120
+    },
+    {
+      "name": "ohio-l40s-0",
+      "actual_family": "NVIDIA L40S",
+      "gpu_uuid": "47c9df02-5b76-1992-bb6b-1966ef27896a",
+      "query_rows": 11264
+    },
+    {
+      "name": "frankfurt-l4-1",
+      "actual_family": "NVIDIA L4",
+      "gpu_uuid": "f3672172-c320-8c21-744e-da9f2bfb5231",
+      "query_rows": 5120
+    },
+    {
+      "name": "ohio-l40s-1",
+      "actual_family": "NVIDIA L40S",
+      "gpu_uuid": "f58c5d08-7064-5e7a-f27e-0a698f54acd4",
+      "query_rows": 11264
+    },
+    {
+      "name": "frankfurt-l4-2",
+      "actual_family": "NVIDIA L4",
+      "gpu_uuid": "99ae6715-04b8-a0db-fc37-f4c603a6430f",
+      "query_rows": 5120
+    },
+    {
+      "name": "ohio-l40s-2",
+      "actual_family": "NVIDIA L40S",
+      "gpu_uuid": "614c5f72-a984-6f33-8bac-340d03a045cb",
+      "query_rows": 11264
+    },
+    {
+      "name": "frankfurt-l4-3",
+      "actual_family": "NVIDIA L4",
+      "gpu_uuid": "80862bec-2893-5bbf-8b2a-ec9d1ae7c27e",
+      "query_rows": 5120
+    },
+    {
+      "name": "ohio-l40s-3",
+      "actual_family": "NVIDIA L40S",
+      "gpu_uuid": "d8d042f3-c42b-6085-b1e7-d1fbf22e3048",
+      "query_rows": 11264
+    }
+  ],
+  "family_row_counts": {
+    "NVIDIA L4": 20480,
+    "NVIDIA L40S": 45056
+  },
+  "family_assignment_sha256": "948222a3af5b4dd8cc8cdc4e1abcfc3524ee5241e5700561ec94beed71bcb198",
+  "quality_each_repeat": [
+    {
+      "rows": 65536,
+      "accuracy": 0.7590179443359375,
+      "log_loss": 0.5810373797754302,
+      "brier_multiclass": 0.3417028626488503,
+      "auroc_by_class": [
+        0.8904616894249117,
+        0.8814713253849603,
+        0.9860004331673813,
+        0.9953059844274892,
+        0.9449896819816123,
+        0.9666850432601634,
+        0.9834400583988708
+      ],
+      "auroc_macro_present_classes": 0.9497648880064841,
+      "max_probability_sum_error": 1.8101127352565527e-7
+    },
+    {
+      "rows": 65536,
+      "accuracy": 0.7590179443359375,
+      "log_loss": 0.5810373797754302,
+      "brier_multiclass": 0.3417028626488503,
+      "auroc_by_class": [
+        0.8904616894249117,
+        0.8814713253849603,
+        0.9860004331673813,
+        0.9953059844274892,
+        0.9449896819816123,
+        0.9666850432601634,
+        0.9834400583988708
+      ],
+      "auroc_macro_present_classes": 0.9497648880064841,
+      "max_probability_sum_error": 1.8101127352565527e-7
+    },
+    {
+      "rows": 65536,
+      "accuracy": 0.7590179443359375,
+      "log_loss": 0.5810373797754302,
+      "brier_multiclass": 0.3417028626488503,
+      "auroc_by_class": [
+        0.8904616894249117,
+        0.8814713253849603,
+        0.9860004331673813,
+        0.9953059844274892,
+        0.9449896819816123,
+        0.9666850432601634,
+        0.9834400583988708
+      ],
+      "auroc_macro_present_classes": 0.9497648880064841,
+      "max_probability_sum_error": 1.8101127352565527e-7
+    }
+  ],
+  "median_rows_per_second_recomputed": 31877.39465271119,
+  "predict_repeats_s": [
+    2.057578152000133,
+    2.0558769220001523,
+    2.0555981570000768
+  ],
+  "startup_load_fit_s": 5.768178464999892,
+  "timing": "single_coordinator_monotonic_wall_dispatch_network_decode_ordered_gather",
+  "input_residency": "preloaded_CPU_fixed_batches_per_worker",
+  "memory_prediction": [
+    {
+      "event": "MEMORY",
+      "memory": {
+        "allocated_bytes": 865092608,
+        "reserved_bytes": 2973761536,
+        "peak_allocated_bytes": 2391328768,
+        "peak_reserved_bytes": 2973761536,
+        "max_rss_bytes": 2114342912
+      }
+    },
+    {
+      "event": "MEMORY",
+      "memory": {
+        "allocated_bytes": 865092608,
+        "reserved_bytes": 3321888768,
+        "peak_allocated_bytes": 2601428992,
+        "peak_reserved_bytes": 3321888768,
+        "max_rss_bytes": 2108235776
+      }
+    },
+    {
+      "event": "MEMORY",
+      "memory": {
+        "allocated_bytes": 865092608,
+        "reserved_bytes": 2973761536,
+        "peak_allocated_bytes": 2391328768,
+        "peak_reserved_bytes": 2973761536,
+        "max_rss_bytes": 2114469888
+      }
+    },
+    {
+      "event": "MEMORY",
+      "memory": {
+        "allocated_bytes": 865092608,
+        "reserved_bytes": 3321888768,
+        "peak_allocated_bytes": 2601428992,
+        "peak_reserved_bytes": 3321888768,
+        "max_rss_bytes": 2108211200
+      }
+    },
+    {
+      "event": "MEMORY",
+      "memory": {
+        "allocated_bytes": 865092608,
+        "reserved_bytes": 2973761536,
+        "peak_allocated_bytes": 2391328768,
+        "peak_reserved_bytes": 2973761536,
+        "max_rss_bytes": 2114011136
+      }
+    },
+    {
+      "event": "MEMORY",
+      "memory": {
+        "allocated_bytes": 865092608,
+        "reserved_bytes": 3321888768,
+        "peak_allocated_bytes": 2601428992,
+        "peak_reserved_bytes": 3321888768,
+        "max_rss_bytes": 2108268544
+      }
+    },
+    {
+      "event": "MEMORY",
+      "memory": {
+        "allocated_bytes": 865092608,
+        "reserved_bytes": 2973761536,
+        "peak_allocated_bytes": 2391328768,
+        "peak_reserved_bytes": 2973761536,
+        "max_rss_bytes": 2112643072
+      }
+    },
+    {
+      "event": "MEMORY",
+      "memory": {
+        "allocated_bytes": 865092608,
+        "reserved_bytes": 3321888768,
+        "peak_allocated_bytes": 2601428992,
+        "peak_reserved_bytes": 3321888768,
+        "max_rss_bytes": 2109440000
+      }
+    }
+  ],
+  "notes": [
+    "Prediction oracle follows actual reported physical GPU family for every original query row, not a single-family or relabeled baseline.",
+    "Single coordinator monotonic wall includes dispatch/network/output decoding/ordered gather; query data is preloaded outside timing.",
+    "Mixed hardware spans Frankfurt L4 and Ohio L40S, not homogeneous eightGPU scaling.",
+    "Weak cohorts differ in size; compare commonprefix predictions, not aggregate task metrics across different cohorts.",
+    "Weighted assignment intentionally changes row hardware family and is not the same-plan strong-scaling arm.",
+    "Effective worker count is len(workers)/READY/unique UUIDs; args.workers is a retained default overridden by worker_indices."
+  ],
+  "effective_worker_count": 8
+}

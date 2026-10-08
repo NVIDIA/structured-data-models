@@ -1,0 +1,1035 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:53:23.493021+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "resume-dp8-smoke-l4-g1-q2048",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-smoke-l4-g1-q2048",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-smoke-l4-g1-q2048/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "54e1f280c3543f5ba6cc755a09695ccf32c3140551eb236ee900b358bafa4b43",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-smoke-l4-g1-q2048/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "54e1f280c3543f5ba6cc755a09695ccf32c3140551eb236ee900b358bafa4b43",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-smoke-l4-g1-q2048/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "54e1f280c3543f5ba6cc755a09695ccf32c3140551eb236ee900b358bafa4b43",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-smoke-l4-g1-q2048/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "54e1f280c3543f5ba6cc755a09695ccf32c3140551eb236ee900b358bafa4b43",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-smoke-l4-g1-q2048/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 7105,
+          "sha256": "9bad5073c3ecc714ea7d37a65de2e3811d06445d4a08870b4396d62315449dc2",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-smoke-l4-g1-q2048/quality-independent-audit.json",
+          "archived_path": "resume-dp8-smoke-l4-g1-q2048/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-smoke-l4-g1-q2048/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 28429,
+          "sha256": "1a61436e21f7c07ba74d7b9c245288fc917dacda55cd2b4fc7ecffac034ee832",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-smoke-l4-g1-q2048/result.json",
+          "archived_path": "resume-dp8-smoke-l4-g1-q2048/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-strong-l4-g1-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g1-q65536",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g1-q65536/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6ca4ac8b429e9bbbc77ffc6d9cafd8d2f4c5955dc43626a8415f52cbbcf241a0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g1-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6ca4ac8b429e9bbbc77ffc6d9cafd8d2f4c5955dc43626a8415f52cbbcf241a0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g1-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6ca4ac8b429e9bbbc77ffc6d9cafd8d2f4c5955dc43626a8415f52cbbcf241a0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g1-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6ca4ac8b429e9bbbc77ffc6d9cafd8d2f4c5955dc43626a8415f52cbbcf241a0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g1-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 7130,
+          "sha256": "4641b326eff1a6711fb94172f760ff37b15b59b96840f23b601468925176dfdd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g1-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-strong-l4-g1-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g1-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 783406,
+          "sha256": "900dc4aa7772058509e8806ca5926823a1f3e7809bffb5b2ed155581970f449e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g1-q65536/result.json",
+          "archived_path": "resume-dp8-strong-l4-g1-q65536/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-strong-l4-g4-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/frankfurt-l4-1.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-2.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/frankfurt-l4-2.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-3.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/frankfurt-l4-3.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6ca4ac8b429e9bbbc77ffc6d9cafd8d2f4c5955dc43626a8415f52cbbcf241a0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6ca4ac8b429e9bbbc77ffc6d9cafd8d2f4c5955dc43626a8415f52cbbcf241a0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6ca4ac8b429e9bbbc77ffc6d9cafd8d2f4c5955dc43626a8415f52cbbcf241a0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6ca4ac8b429e9bbbc77ffc6d9cafd8d2f4c5955dc43626a8415f52cbbcf241a0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 8412,
+          "sha256": "63bc987a5f362560d26d7af4666a3da87833ecbe453ac27134833c3ddc92da0a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-strong-l4-g4-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 787002,
+          "sha256": "638644c4c8f0be1018a6949b7c2f7d10c1035cc81ca2dd9542ab7865f9677811",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l4-g4-q65536/result.json",
+          "archived_path": "resume-dp8-strong-l4-g4-q65536/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-strong-l40s-g1-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g1-q65536",
+      "artifacts": [
+        {
+          "name": "ohio-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g1-q65536/ohio-l40s-0.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g1-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g1-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g1-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g1-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 7128,
+          "sha256": "66d2d7622bcd04c4cdb68b2e2b019f29ce551b0f389b69b6046e22ec016574c6",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g1-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-strong-l40s-g1-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g1-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 783411,
+          "sha256": "fc7f075cb18a478eb94a87c464f0aea622bb570fcce39d7528d959dfee8edad3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g1-q65536/result.json",
+          "archived_path": "resume-dp8-strong-l40s-g1-q65536/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-strong-l40s-g4-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536",
+      "artifacts": [
+        {
+          "name": "ohio-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/ohio-l40s-0.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/ohio-l40s-1.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-2.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/ohio-l40s-2.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-3.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/ohio-l40s-3.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "6b074c0ea4d877931d9f293c8f499b74685c7866661e00bfe68acea33ded6ce8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 8409,
+          "sha256": "22c24968249bd4a52518340f9e0f9f47830ad771bee265e85e7929fd584aaf59",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-strong-l40s-g4-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 787046,
+          "sha256": "2ba2762f48e9db4bc32bbf341cb36bbd43a2ffe3f730d30df92a5dd843c63cbd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-l40s-g4-q65536/result.json",
+          "archived_path": "resume-dp8-strong-l40s-g4-q65536/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-strong-mixed-g2-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536/ohio-l40s-0.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 7557,
+          "sha256": "f17c3b25f03a6252133c6e2aa0b6bccaed3610d8fb7b399a8002a948fa66e212",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-strong-mixed-g2-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 784616,
+          "sha256": "83d987c219c2c7cb73d6b56aca3d4950616860b8c7636f59a319c30d9cfd2675",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g2-q65536/result.json",
+          "archived_path": "resume-dp8-strong-mixed-g2-q65536/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-strong-mixed-g4-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/frankfurt-l4-1.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/ohio-l40s-0.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/ohio-l40s-1.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 8408,
+          "sha256": "19fb9bfccacc1c78e1fa6140ad4b881d05bb4151f112e7d5fbc219452b4e5e1f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-strong-mixed-g4-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 787019,
+          "sha256": "193c0c78be211223367dcfc68443ba7e5873ee006df9d3355c1e2bf4766d84d5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g4-q65536/result.json",
+          "archived_path": "resume-dp8-strong-mixed-g4-q65536/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-strong-mixed-g8-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/frankfurt-l4-1.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-2.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/frankfurt-l4-2.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-3.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/frankfurt-l4-3.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/ohio-l40s-0.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/ohio-l40s-1.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-2.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/ohio-l40s-2.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-3.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/ohio-l40s-3.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "99c9d8651ead381882798ed92ed6e23832b79e6ff5b778b9c6eb3c7b0b6162a5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 10113,
+          "sha256": "3c279a8f5df92c84c13aa646679387a5a82459cf5e3c96375ea31979d66c6914",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-strong-mixed-g8-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 791857,
+          "sha256": "1227d3e52d370d444cfeaec57c9d4d9af741ff505384d5514cd124badce3ce73",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-q65536/result.json",
+          "archived_path": "resume-dp8-strong-mixed-g8-q65536/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-strong-mixed-g8-weighted-q65536",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/frankfurt-l4-1.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-2.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/frankfurt-l4-2.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-3.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/frankfurt-l4-3.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/ohio-l40s-0.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/ohio-l40s-1.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-2.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/ohio-l40s-2.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-3.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/ohio-l40s-3.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "fd0c413c038ed738293a43252b404d4e2ece45cf0ae1e6402b84d0b1298ab865",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "fd0c413c038ed738293a43252b404d4e2ece45cf0ae1e6402b84d0b1298ab865",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "fd0c413c038ed738293a43252b404d4e2ece45cf0ae1e6402b84d0b1298ab865",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 1835136,
+          "sha256": "fd0c413c038ed738293a43252b404d4e2ece45cf0ae1e6402b84d0b1298ab865",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 10126,
+          "sha256": "64f64e7349e8b733d32e86a919802122f822a7a3f9fe67e03c2333ecf21bae2d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/quality-independent-audit.json",
+          "archived_path": "resume-dp8-strong-mixed-g8-weighted-q65536/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 524416,
+          "sha256": "5175c8e5f0952ceda4e95cc671fac073cccbdac4b8d69f5b298be78380cbcb24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 792602,
+          "sha256": "4e2f5b2fbcf8fbf2c614f103c142ea594890f4153edeefcc5747f1fc120c8fc4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-strong-mixed-g8-weighted-q65536/result.json",
+          "archived_path": "resume-dp8-strong-mixed-g8-weighted-q65536/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-weak-l4-g1-q8192",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l4-g1-q8192",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l4-g1-q8192/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "d65a321e3ec1e538500a477727ff74f77ee7f7c1feb341e0df8108096e4a2308",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l4-g1-q8192/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "d65a321e3ec1e538500a477727ff74f77ee7f7c1feb341e0df8108096e4a2308",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l4-g1-q8192/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "d65a321e3ec1e538500a477727ff74f77ee7f7c1feb341e0df8108096e4a2308",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l4-g1-q8192/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "d65a321e3ec1e538500a477727ff74f77ee7f7c1feb341e0df8108096e4a2308",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l4-g1-q8192/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 7099,
+          "sha256": "0f43c55a8aa5713e16eea38858b1390e6dee10be21cd3f811b6fe326d08c39d8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l4-g1-q8192/quality-independent-audit.json",
+          "archived_path": "resume-dp8-weak-l4-g1-q8192/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l4-g1-q8192/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 101522,
+          "sha256": "08089eeff03868cdbbef9eb269a8f28b69664722da57f5258feada104f1a7bc2",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l4-g1-q8192/result.json",
+          "archived_path": "resume-dp8-weak-l4-g1-q8192/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-weak-l40s-g1-q8192",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l40s-g1-q8192",
+      "artifacts": [
+        {
+          "name": "ohio-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l40s-g1-q8192/ohio-l40s-0.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "01b27789f6683482706995d1efc94a3896ac52625be063a9aa895caea144cb29",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l40s-g1-q8192/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "01b27789f6683482706995d1efc94a3896ac52625be063a9aa895caea144cb29",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l40s-g1-q8192/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "01b27789f6683482706995d1efc94a3896ac52625be063a9aa895caea144cb29",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l40s-g1-q8192/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "01b27789f6683482706995d1efc94a3896ac52625be063a9aa895caea144cb29",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l40s-g1-q8192/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 7111,
+          "sha256": "4a7e0f4ee5ce99258b8f5fc0c18ffd940b536cce40eb2e52be0d8f8f1559d744",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l40s-g1-q8192/quality-independent-audit.json",
+          "archived_path": "resume-dp8-weak-l40s-g1-q8192/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l40s-g1-q8192/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 101534,
+          "sha256": "78d858dd0d9260425d3d4cfba465648a612064d0000def4cd0b7e6626cb44a2c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-l40s-g1-q8192/result.json",
+          "archived_path": "resume-dp8-weak-l40s-g1-q8192/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-weak-mixed-g2-q16384",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384/ohio-l40s-0.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 458880,
+          "sha256": "6e6e8e1bd21e0152053af080409e0a28911d9d69a3e7786fb6202db9a8a07110",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 458880,
+          "sha256": "6e6e8e1bd21e0152053af080409e0a28911d9d69a3e7786fb6202db9a8a07110",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 458880,
+          "sha256": "6e6e8e1bd21e0152053af080409e0a28911d9d69a3e7786fb6202db9a8a07110",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 458880,
+          "sha256": "6e6e8e1bd21e0152053af080409e0a28911d9d69a3e7786fb6202db9a8a07110",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 7553,
+          "sha256": "c8847969fbf7e49250f9e640ac4fcbd2116a0c0b23c63b499f8aebae11e0044f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384/quality-independent-audit.json",
+          "archived_path": "resume-dp8-weak-mixed-g2-q16384/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 131200,
+          "sha256": "271ed964a667367ea5515ab532997c38753a851a194d0b841523b21db76007c7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 200160,
+          "sha256": "a51d9dd35c556ba5a61b2a870b6400baa676e40f1df51f237ac3f2d384b7b53d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g2-q16384/result.json",
+          "archived_path": "resume-dp8-weak-mixed-g2-q16384/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resume-dp8-weak-mixed-g4-q32768",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768",
+      "artifacts": [
+        {
+          "name": "frankfurt-l4-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/frankfurt-l4-0.stderr.log"
+        },
+        {
+          "name": "frankfurt-l4-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/frankfurt-l4-1.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-0.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/ohio-l40s-0.stderr.log"
+        },
+        {
+          "name": "ohio-l40s-1.stderr.log",
+          "role": "log",
+          "bytes": 674,
+          "sha256": "a8b85fbd0680e1b3b7172ae60e82cda9950d0eddeb59c71503412a2b0af90ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/ohio-l40s-1.stderr.log"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 917632,
+          "sha256": "8fee00a8461aa7e4334e122beb3cf11ed21e817fb86c45829be4a2a132ab1188",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 917632,
+          "sha256": "8fee00a8461aa7e4334e122beb3cf11ed21e817fb86c45829be4a2a132ab1188",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 917632,
+          "sha256": "8fee00a8461aa7e4334e122beb3cf11ed21e817fb86c45829be4a2a132ab1188",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 917632,
+          "sha256": "8fee00a8461aa7e4334e122beb3cf11ed21e817fb86c45829be4a2a132ab1188",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 8403,
+          "sha256": "d8b5267c766827c3f4d3b1b8be06a2ead6ae06829b80ed3f76d65c0e2e51f43c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/quality-independent-audit.json",
+          "archived_path": "resume-dp8-weak-mixed-g4-q32768/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 262272,
+          "sha256": "0d0c529b497b0d56ef1fbfd980d26b83da16d1350d7843e3408d9e101d5f3e01",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 397461,
+          "sha256": "c03657776fc1dbde9be45b9c711eed6625a6270fa93c65fb807bd6cab015496a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/resume-dp8-weak-mixed-g4-q32768/result.json",
+          "archived_path": "resume-dp8-weak-mixed-g4-q32768/result.json"
+        }
+      ]
+    }
+  ]
+}

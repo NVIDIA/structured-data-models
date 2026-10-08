@@ -97,6 +97,8 @@ These rankings concern the measured PCIe L40S/L4 hosts and selected workload siz
 
 Build the process-DP guidance on the existing `examples/kumo/relational/multi_gpu.py` rather than introducing a second orchestration stack. Add explicit fixed-batch identities, the relational complete-neighborhood contract, a tabular local-batching example, failure propagation, and gathered-output timing. Keep the reusable contract at the model/fit/predict boundary: a process factory can remain example-specific without requiring every future SDM model family to implement a serving protocol.
 
+The completed heterogeneous cross-region controls reinforce that boundary. Balanced mixed2→8 query DP scales 3.970× with fixed per-row GPU-family ownership. Capacity-weighted assignment adds 28.7% at eight GPUs, but changes ownership and therefore some floating-point outputs; every row must be checked against its assigned-family reference. Preloaded input, network output and coordinator location are explicit benchmark policies. Keep fleet discovery, SSH transport and weighted host scheduling in examples/research, not inside `KumoTabular`, `KumoRelational` or a mandatory SDM distributed runtime.
+
 ## Recommended progression
 
 1. Establish fixed-input one-GPU public, batched-estimator, and executor baselines, including cache residency and model-core RNG parity.

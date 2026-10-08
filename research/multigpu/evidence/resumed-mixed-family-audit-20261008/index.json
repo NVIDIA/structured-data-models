@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:53:23.578427+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "family-oracle",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp",
+      "artifacts": [
+        {
+          "name": "quality-mixed-family-oracle-audit.json",
+          "role": "record",
+          "bytes": 1049,
+          "sha256": "41bda3cdac82e678f86837b72eaa345d79e5dc0c41d60199ce16af3ef25593a6",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/multihost-dp/quality-mixed-family-oracle-audit.json",
+          "archived_path": "family-oracle/quality-mixed-family-oracle-audit.json"
+        }
+      ]
+    }
+  ]
+}
