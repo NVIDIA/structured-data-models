@@ -50,6 +50,7 @@ class GradientExplainer(
         x, related_tables = callbacks[1].inputs[0]
 
         scores = prediction.numerical
+
         leaves = [x.numerical]
         if related_tables is not None:
             leaves.extend(
