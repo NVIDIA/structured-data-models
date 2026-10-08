@@ -101,8 +101,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     requested_config = {
-        k: str(v) if isinstance(v, Path) else v
-        for k, v in vars(args).items()
+        k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
     }
     rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(rank)
@@ -360,6 +359,7 @@ def main() -> None:
                 max(record["pass_seconds"][i] for record in gathered)
                 for i in range(args.repeats)
             ]
+            cuda_backend = torch.backends.cuda
             result = {
                 "status": "complete",
                 "input_identity": input_identity,
@@ -371,6 +371,22 @@ def main() -> None:
                 "world": world,
                 "gpu": torch.cuda.get_device_name(),
                 "torch": torch.__version__,
+                "numeric_backend": {
+                    "parameter_dtypes": sorted(
+                        {str(p.dtype) for p in model.parameters()}
+                    ),
+                    "cache_dtypes": sorted(
+                        {str(t.dtype) for t in cache._tensors()}
+                    )
+                    if isinstance(cache, Cache)
+                    else [],
+                    "matmul_precision": torch.get_float32_matmul_precision(),
+                    "cuda_matmul_allow_tf32": cuda_backend.matmul.allow_tf32,
+                    "cudnn_allow_tf32": torch.backends.cudnn.allow_tf32,
+                    "flash_sdp_enabled": cuda_backend.flash_sdp_enabled(),
+                    "efficient_sdp": cuda_backend.mem_efficient_sdp_enabled(),
+                    "math_sdp_enabled": cuda_backend.math_sdp_enabled(),
+                },
                 "revision": args.source_commit
                 or subprocess.run(
                     ["git", "rev-parse", "HEAD"],
