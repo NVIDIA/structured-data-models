@@ -1,0 +1,297 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/tabular-v2-profile-graph4-large-e4-c1024-q2048",
+    "source_commit": "c0fb64fcc",
+    "task": "classification",
+    "size": "large",
+    "mode": "adapter",
+    "adapter": "research.multigpu.graph_ensemble:factory",
+    "gpus": 4,
+    "replicas": null,
+    "placement": "layers",
+    "estimators": 4,
+    "estimator_batch_size": 1,
+    "context": 1024,
+    "queries": 2048,
+    "batch_size": 256,
+    "repeats": 1,
+    "warmups": 1,
+    "seed": 1729,
+    "precision": "bfloat16",
+    "profile": false,
+    "nvtx": true,
+    "query_residency": "gpu"
+  },
+  "runtime": {
+    "pid": 12422,
+    "timezone": [
+      "UTC",
+      "UTC"
+    ],
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "python": "3.12.3",
+    "host": "ip-172-31-5-130",
+    "gpu_names": [
+      "NVIDIA L40S",
+      "NVIDIA L40S",
+      "NVIDIA L40S",
+      "NVIDIA L40S"
+    ],
+    "git_revision": "c0fb64fcc",
+    "runner_sha256": "e65535a13fa59d526e8ed30b475bc43e436cd29497fe2aa98920e0c4f68ef9d3"
+  },
+  "data_load_s": 0.0020957149999958347,
+  "input_shape": {
+    "context": [
+      1024,
+      54
+    ],
+    "query": [
+      2048,
+      54
+    ]
+  },
+  "input_sha256": {
+    "x_context": "aa6c609a60537d90279e5b8c41c6a71c0897f6e65364e4a70b2c2e0001741b3f",
+    "y_context": "aaf3d5c9ad264bc677041d87b707f8cd89d021f73d878af8335004aa5d0d7098",
+    "x_query": "a7a892a42bf3a6636d895433e667e64979b2e6264500dcdee9d4b4d3d35f84b2"
+  },
+  "input_transfer_s": 0.03394546499998796,
+  "load_start_unix_s": 1791425375.006508,
+  "load_s": 1.9929537420000543,
+  "load_end_unix_s": 1791425376.9995606,
+  "memory_after_load": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 855375360,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 855375360,
+      "peak_reserved_bytes": 868220928
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 854693888,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 854693888,
+      "peak_reserved_bytes": 868220928
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 854693888,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 854693888,
+      "peak_reserved_bytes": 868220928
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 854693888,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 854693888,
+      "peak_reserved_bytes": 868220928
+    }
+  ],
+  "fit_start_unix_s": 1791425377.0011432,
+  "fit_s": 2.078577616999837,
+  "fit_end_unix_s": 1791425379.079928,
+  "memory_after_fit": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 993964032,
+      "reserved_bytes": 1461714944,
+      "peak_allocated_bytes": 1252215296,
+      "peak_reserved_bytes": 1461714944
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 992452096,
+      "reserved_bytes": 1457520640,
+      "peak_allocated_bytes": 1266089984,
+      "peak_reserved_bytes": 1457520640
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 992452096,
+      "reserved_bytes": 1453326336,
+      "peak_allocated_bytes": 1250073600,
+      "peak_reserved_bytes": 1453326336
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 992452096,
+      "reserved_bytes": 1451229184,
+      "peak_allocated_bytes": 1250073600,
+      "peak_reserved_bytes": 1451229184
+    }
+  ],
+  "cache_storage_bytes_after_fit": {
+    "cuda:0": 128188717,
+    "cuda:1": 128188717,
+    "cuda:2": 128188717,
+    "cuda:3": 128188717
+  },
+  "executor_cache_bytes": [
+    89653549,
+    89653549,
+    89653549,
+    89653549
+  ],
+  "member_seeds": [
+    1729,
+    1730,
+    1731,
+    1732
+  ],
+  "warmup_s": 0.609031153999922,
+  "memory_after_warmup": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 994023424,
+      "reserved_bytes": 1145044992,
+      "peak_allocated_bytes": 1252215296,
+      "peak_reserved_bytes": 1461714944
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1145044992,
+      "peak_allocated_bytes": 1266089984,
+      "peak_reserved_bytes": 1457520640
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1140850688,
+      "peak_allocated_bytes": 1250073600,
+      "peak_reserved_bytes": 1453326336
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1140850688,
+      "peak_allocated_bytes": 1250073600,
+      "peak_reserved_bytes": 1451229184
+    }
+  ],
+  "graph_count_after_warmup": 4,
+  "prediction_windows_unix_s": [
+    [
+      1791425379.6942403,
+      1791425379.932289
+    ]
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "memory_after_prediction": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 994023424,
+      "reserved_bytes": 1145044992,
+      "peak_allocated_bytes": 995449344,
+      "peak_reserved_bytes": 1145044992
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1145044992,
+      "peak_allocated_bytes": 992570368,
+      "peak_reserved_bytes": 1145044992
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1140850688,
+      "peak_allocated_bytes": 992570368,
+      "peak_reserved_bytes": 1140850688
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1140850688,
+      "peak_allocated_bytes": 992570368,
+      "peak_reserved_bytes": 1140850688
+    }
+  ],
+  "graph_count_after_prediction": 4,
+  "graph_capture_s": 2.232827492000297,
+  "graph_capture_events": [
+    {
+      "worker": 2,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.5525817170000664,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    },
+    {
+      "worker": 0,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.5600316530001237,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    },
+    {
+      "worker": 3,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.5599096410001039,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    },
+    {
+      "worker": 1,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.5603044810000029,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    }
+  ],
+  "capture_occurred_during_timing": false,
+  "predict_repeats_s": [
+    0.23795268900016708
+  ],
+  "batch_times_s": [
+    [
+      0.03121303199986869,
+      0.030174003999945853,
+      0.02954642800000329,
+      0.029473067000026276,
+      0.029662481000059415,
+      0.028290095000102156,
+      0.029401163999864366,
+      0.02916980799977864
+    ]
+  ],
+  "throughput_rows_s": [
+    8606.752916326834
+  ],
+  "batch_p50_s": 0.029509747500014782,
+  "batch_p95_s": 0.030849372199895697,
+  "repeat_max_abs_difference": 0.0,
+  "quality": {
+    "log_loss": 0.5760445594787598,
+    "accuracy": 0.76416015625,
+    "auroc_ovr": 0.9474149901961447
+  },
+  "prediction_sha256": "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+  "status": "complete",
+  "max_cpu_rss_bytes": 3950682112
+}

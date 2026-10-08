@@ -20,9 +20,9 @@ The coordinator independently reran `collect_evidence.verify(..., external=True)
 
 | Check | Result |
 |---|---:|
-| Evidence snapshots | 31 |
-| Archived-file references checked | 357 |
-| Original-artifact references checked | 836 |
+| Evidence snapshots | 35 |
+| Archived-file references checked | 411 |
+| Original-artifact references checked | 930 |
 | Missing/mismatched references | 0 |
 | External references left unchecked | 0 |
 
@@ -33,6 +33,8 @@ After access resumed, the report owner independently reran external verification
 The subsequent [resumed tabular executor snapshot](evidence/resumed-tabular-executors-l40s-20261008/index.json) adds 19 small records and 82 artifact references from nine completed fresh-host arms. Independent audits check all saved repeats, full input/query/target identities, matched timing denominators, graph capture counts and separate allocator/physical-memory accounting. The table above includes that addition; original snapshots remain unchanged.
 
 Further additive snapshots retain [native relational process EP](evidence/resumed-relational-process-ep-l40s-20261008/index.json), [full-FP32 F1 CP isolation](evidence/resumed-context-fp32-l4-20261008/index.json), [six resident CP collective controls](evidence/resumed-context-collectives-l4-20261008/index.json), and [replacement runtime/checkpoint verification](evidence/resumed-runtime-20261008/index.json). All benchmark cohorts include independently audited per-repeat output evidence; no model weights or raw datasets are imported into Git.
+
+The latest additions preserve [all blocked-GNN CUDA case receipts and failures](evidence/blocked-gnn-gpu-review-20261008/index.json), an [exploratory H&M full-model pair](evidence/blocked-gnn-hm16k-l4-20261008/index.json), [three graph-replay traces](evidence/resumed-graph-profiles-l40s-20261008/index.json), and their [independent SQL scope audit](evidence/resumed-graph-profile-sql-audit-l40s-20261008/index.json). Raw SQLite/NSight files stay outside Git and are checksum-bound; small analyses, original commands/probe source and numerical records are retained.
 
 The original cuDF results saved repeat-zero arrays but scored the last repeat. Original evidence remains unchanged; additive independent audits score the archived arrays. The runner now archives every repeat and uses the same first repeat for NPY, PT, and reported reference quality. A deliberately nondeterministic CPU fixture tests this contract.
 
@@ -83,7 +85,9 @@ Any replacement execution needs a new attempt directory, exact runtime/source re
 
 The user's subsequent literature request is documented in [literature.md](literature.md) and four linked primary-source reviews. Published measurements are kept separate from SDM results. The review prioritizes exact execution/caching, bounded upstream fit allocations, and only then approximate context selection or distillation.
 
-The research-only [destination-block GNN](blocked-gnn.md) is integrated, with optional `--gnn-block-size` benchmark selection and independent reduction/cache/RNG/empty-segment review. Its target is the observed 6.10 GiB statistics allocation, not a new distributed-serving framework. The coordinator's combined synthetic/scoring/protocol suite passed 119 tests, and the evidence collector's four tests passed. The actual-checkpoint CPU screen was independently rerun: 29 passed, two FP32 singleton-block cases failed the unchanged gate. All 30 checkpoint-case receipts, including failures, are archived and verified in the new CPU-only evidence snapshot. Ruff and `git diff --check` passed. No CUDA, full-model quality, measured memory or performance claim is made for this prototype.
+The research-only [destination-block GNN](blocked-gnn.md) is integrated, with optional `--gnn-block-size` benchmark selection and independent reduction/cache/RNG/empty-segment review. Its target is the observed 6.10 GiB statistics allocation, not a new distributed-serving framework. The coordinator's combined synthetic/scoring/protocol suite passed 119 tests, and the evidence collector's four tests passed. The actual-checkpoint CPU screen was independently rerun: 29 passed, two FP32 singleton-block cases failed the unchanged gate. All 30 checkpoint-case receipts, including failures, are archived and verified in the CPU-only evidence snapshot. Ruff and `git diff --check` passed. At that earlier handoff there was no CUDA, full-model quality, measured memory or performance evidence for this prototype.
+
+Subsequent CUDA evidence supersedes only that earlier lack of measurement, not its historical CPU results: 57 low-level fixtures pass, but 23 of 30 actual-checkpoint GPU cases fail their original gates. Adding the threshold-policy test yields 8 passed/23 failed. The exact projection probe and all case receipts are retained; independent verification reconciles logs/scalars, not unsaved hidden tensors. A separate full-model E8/C16k H&M pair reduces fit allocation from 4.326 to 3.107 GiB and passes the final probability gate, with 0.985× throughput and no established quality gain. It remains exploratory because module gates fail. Larger-context capacity is not inferred from this pair.
 
 ## Historical access interruption
 

@@ -1,0 +1,2 @@
+{"precision": "fp32", "statistics_equal": true, "statistics_max_error": 0.0, "first_projection_max_error": 4.7206878662109375e-05, "first_projection_mean_error": 1.7246599099962623e-06, "projection_dtype": "torch.float32", "allow_tf32": false}
+{"precision": "autocast_bf16", "statistics_equal": true, "statistics_max_error": 0.0, "first_projection_max_error": 0.125, "first_projection_mean_error": 0.0034898899029940367, "projection_dtype": "torch.bfloat16", "allow_tf32": false}

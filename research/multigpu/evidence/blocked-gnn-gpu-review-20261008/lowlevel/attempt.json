@@ -1,0 +1,22 @@
+{
+  "command": [
+    "/opt/pytorch/bin/python",
+    "-m",
+    "pytest",
+    "--import-mode=prepend",
+    "test/research/test_blocked_gnn_cuda.py",
+    "-q",
+    "-o",
+    "addopts=",
+    "--junitxml=/home/ubuntu/kumo-multigpu/results/blocked-gnn-lowlevel-b721583a9-v1/junit.xml"
+  ],
+  "timeout_s": 240.0,
+  "started_utc": "2026-10-08T02:05:43.693478+00:00",
+  "wrapper_sha256": "86334fef3b9c87b245be1912d79273edeb4ed366b37d94324d2df3334f797d34",
+  "finished_utc": "2026-10-08T02:05:49.319840+00:00",
+  "elapsed_s": 5.626319851999938,
+  "returncode": 0,
+  "status": "complete",
+  "oom_reported": false,
+  "output_tail": null
+}

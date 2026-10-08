@@ -77,9 +77,13 @@ A reusable core abstraction is warranted only once it has at least two real user
 
 The initial small-context measurements favor tuning existing estimator batching before adding a new default execution mode. They do not justify enabling EP or CP automatically. Explicit opt-in research modes allow capacity and workload-dependent benefits to be evaluated without burdening every model-family wrapper.
 
-The resumed pretrained ladder adds a useful research result: graph replay reaches 6,398 rows/s on one L40S and 11,146 on four, with exact native-batch1 outputs; four GPUs scale 1.742× over graph1. Process EP scales 2.724× but is only 1.109× tuned native. Graph execution also changes class-metadata synchronization, so paired profiles are needed before assigning the whole gain to fewer launches. Keep static-shape capture, warmup, output lifetime, refit invalidation and memory controls explicit. Neither adapter is included in the published minimal candidate.
+The resumed pretrained ladder adds a useful research result: graph replay reaches 6,398 rows/s on one L40S and 11,146 on four, with exact native-batch1 outputs; four GPUs scale 1.742× over graph1. Process EP scales 2.724× but is only 1.109× tuned native. Graph execution also changes class-metadata synchronization, so the whole gain cannot be assigned to fewer launches alone. Keep static-shape capture, warmup, output lifetime, refit invalidation and memory controls explicit. Neither adapter is included in the published minimal candidate.
+
+Those paired profiles now show direct `cudaLaunchKernel` calls dropping from 39,832 to 944 for graph1, while executed kernels increase. This supports dispatch amortization, not less GPU arithmetic or a GIL-only conclusion. Profile-derived kernel-active fractions are not hardware occupancy; use uninstrumented timings for throughput.
 
 Native relational process EP subsequently scales 1.944× from one to four workers on its fresh same-host, final-gather-included workload, preserving every output repeat. Full-model FP32 resolves the tested F1 CP numerical screen but is not faster than its FP32 native reference; all-gather remains slower than single-rank resident attention on the tested 16k workload. These additions support keeping throughput, precision policy and retained-cache capacity as separate decisions. They do not justify automatically selecting CP or a process executor.
+
+Destination-block GNN is not ready for default integration: 23 actual-checkpoint GPU cases fail hidden-output gates, even though its exploratory E8/C16k H&M final probabilities pass the looser task-level screen. A 28.2% fit-peak reduction with essentially unchanged/slightly slower throughput is a measured memory–numerics tradeoff, not an exact replacement. Keep native execution default and retain both levels of validation.
 
 ### What the measured results prioritize
 

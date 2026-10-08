@@ -1,0 +1,223 @@
+{
+  "reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c16384-e8-native-gnn0",
+  "same_workload_source_seed_environment_columns": true,
+  "original_validation_labels_order_verified": true,
+  "source": "ae4e5e549",
+  "runner_sha256": "0b278da0c889f93f0f26d420997e597d2585ef49ede8db6426c99cb53712de11",
+  "all_repeats": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": false,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          4096,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.010768353939056396,
+        "mean_abs": 0.0015817768862689263,
+        "rms": 0.002175144051673949,
+        "p99_abs": 0.00612618014216423,
+        "relative_l2": 0.0036950800955314854,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          4096,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.010768353939056396,
+        "mean_abs": 0.0015817768862689263,
+        "rms": 0.002175144051673949,
+        "p99_abs": 0.00612618014216423,
+        "relative_l2": 0.0036950800955314854,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          4096,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.010768353939056396,
+        "mean_abs": 0.0015817768862689263,
+        "rms": 0.002175144051673949,
+        "p99_abs": 0.00612618014216423,
+        "relative_l2": 0.0036950800955314854,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          4096,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          4096,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          4096,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "quality_each_repeat": [
+    {
+      "rows": 4096,
+      "accuracy": 0.80810546875,
+      "log_loss": 0.4630774161940546,
+      "brier_multiclass": 0.29394044958531995,
+      "auroc_by_class": [
+        0.6659788365889471,
+        0.66597749129402
+      ],
+      "auroc_macro_present_classes": 0.6659781639414835,
+      "max_probability_sum_error": 8.568167686462402e-8
+    },
+    {
+      "rows": 4096,
+      "accuracy": 0.80810546875,
+      "log_loss": 0.4630774161940546,
+      "brier_multiclass": 0.29394044958531995,
+      "auroc_by_class": [
+        0.6659788365889471,
+        0.66597749129402
+      ],
+      "auroc_macro_present_classes": 0.6659781639414835,
+      "max_probability_sum_error": 8.568167686462402e-8
+    },
+    {
+      "rows": 4096,
+      "accuracy": 0.80810546875,
+      "log_loss": 0.4630774161940546,
+      "brier_multiclass": 0.29394044958531995,
+      "auroc_by_class": [
+        0.6659788365889471,
+        0.66597749129402
+      ],
+      "auroc_macro_present_classes": 0.6659781639414835,
+      "max_probability_sum_error": 8.568167686462402e-8
+    }
+  ],
+  "positive_class": 1,
+  "positive_class_column": 0,
+  "class_flips_each_repeat": [
+    0,
+    0,
+    0
+  ],
+  "paired_entity_loss_interval": {
+    "candidate_minus_reference": -0.00010929538257187232,
+    "ci95": [
+      -0.00026321811330944913,
+      0.00004790568968928705
+    ],
+    "groups": 4096,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "median_rows_per_second_recomputed": 549.8762917624987,
+  "fit_seconds_single_measurement": 24.83168943999999,
+  "memory_after_fit": {
+    "cuda:0": {
+      "allocated": 134133248,
+      "reserved": 6526337024,
+      "peak_allocated": 3335792640,
+      "peak_reserved": 6526337024
+    }
+  },
+  "memory_prediction": {
+    "cuda:0": {
+      "allocated": 134133248,
+      "reserved": 7363100672,
+      "peak_allocated": 1498615296,
+      "peak_reserved": 7363100672
+    }
+  },
+  "final_gather_included": false,
+  "notes": [
+    "Prototype still fails actual-checkpoint hidden-output numerical gates; final probability screen does not overturn those failures.",
+    "Block16384 genuinely splits context fitting, while each query graph fits in one block.",
+    "Context16k and64k query graphs differ; compare B0/B16384 only within same context.",
+    "Task metric changes are observed paired differences, not a quality improvement claim."
+  ]
+}

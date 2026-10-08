@@ -1,0 +1,17 @@
+{
+  "evidence_kind": "first-hop checkpoint projection diagnostic, not a performance benchmark",
+  "execution": "probe.py exact contents sent to remote /opt/pytorch/bin/python via stdin; stdout.jsonl copied from completed tool stdout",
+  "host": "ubuntu@18.195.223.18",
+  "source_directory": "/home/ubuntu/kumo-multigpu/source-b721583a9",
+  "source_commit": "b721583a9",
+  "checkpoint_revision": "2bd603d3d8f25f67a7aaa8579908595e20567e22",
+  "checkpoint": "classifier",
+  "torch": "2.9.1+cu130",
+  "gpu": "NVIDIA L4",
+  "nodes": 257,
+  "channels": 512,
+  "block_size": 64,
+  "edge_seed": 1729,
+  "exit_code": 0,
+  "timing_claim": false
+}

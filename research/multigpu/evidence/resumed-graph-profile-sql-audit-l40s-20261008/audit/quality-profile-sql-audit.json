@@ -1,0 +1,153 @@
+{
+  "arms": {
+    "resident1": {
+      "range_start_ns": 6129395869,
+      "range_end_ns": 7680870531,
+      "nvtx_global_tid": 281668803898657,
+      "kernel_process_ids": [
+        281668803887104
+      ],
+      "wall_seconds": 1.551474662,
+      "kernel_devices": {
+        "0": {
+          "kernel_count": 42624,
+          "kernel_sum_ms": 210.683115,
+          "kernel_union_ms": 210.683115,
+          "kernel_active_fraction": 0.13579539528438653
+        }
+      },
+      "launch_apis": [
+        {
+          "name": "cuLaunchKernel",
+          "count": 456,
+          "summed_cpu_ms": 3.371388
+        },
+        {
+          "name": "cuLaunchKernelEx",
+          "count": 2336,
+          "summed_cpu_ms": 22.364224
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 39832,
+          "summed_cpu_ms": 271.01833
+        }
+      ],
+      "concurrent_kernel_fraction": {
+        "0": 0.8642046047156134,
+        "1": 0.13579539528438653
+      },
+      "analysis_sha256": "7b7b216177439380c93b289d49e9e0b8bfed6b9f4d6ed352c4ae96f80126d073",
+      "kernel_boundary_crossings": 0
+    },
+    "graph1": {
+      "range_start_ns": 6654210825,
+      "range_end_ns": 7052010330,
+      "nvtx_global_tid": 281676924071685,
+      "kernel_process_ids": [
+        281676924059648
+      ],
+      "wall_seconds": 0.397799505,
+      "kernel_devices": {
+        "0": {
+          "kernel_count": 48536,
+          "kernel_sum_ms": 222.601332,
+          "kernel_union_ms": 222.600852,
+          "kernel_active_fraction": 0.5595805153151209
+        }
+      },
+      "launch_apis": [
+        {
+          "name": "cuLaunchKernel",
+          "count": 8,
+          "summed_cpu_ms": 0.053761
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 32,
+          "summed_cpu_ms": 58.274379
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 944,
+          "summed_cpu_ms": 8.364757
+        }
+      ],
+      "concurrent_kernel_fraction": {
+        "0": 0.4404194846848791,
+        "1": 0.5595805153151209
+      },
+      "analysis_sha256": "6eeaf7ab30f759cc9cb99003653859c120804869846df9cb3451369a902d0e27",
+      "kernel_boundary_crossings": 0
+    },
+    "graph4": {
+      "range_start_ns": 8084127028,
+      "range_end_ns": 8322154798,
+      "nvtx_global_tid": 281683383300230,
+      "kernel_process_ids": [
+        281683383287808
+      ],
+      "wall_seconds": 0.23802777,
+      "kernel_devices": {
+        "0": {
+          "kernel_count": 12848,
+          "kernel_sum_ms": 57.903063,
+          "kernel_union_ms": 57.852727,
+          "kernel_active_fraction": 0.24305032559856357
+        },
+        "1": {
+          "kernel_count": 11912,
+          "kernel_sum_ms": 54.593769,
+          "kernel_union_ms": 54.593769,
+          "kernel_active_fraction": 0.2293588222920376
+        },
+        "2": {
+          "kernel_count": 11912,
+          "kernel_sum_ms": 54.498351,
+          "kernel_union_ms": 54.498351,
+          "kernel_active_fraction": 0.22895795309933795
+        },
+        "3": {
+          "kernel_count": 11912,
+          "kernel_sum_ms": 54.815048,
+          "kernel_union_ms": 54.815048,
+          "kernel_active_fraction": 0.23028845751905336
+        }
+      },
+      "launch_apis": [
+        {
+          "name": "cuLaunchKernel",
+          "count": 8,
+          "summed_cpu_ms": 0.053643
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 32,
+          "summed_cpu_ms": 74.284874
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 992,
+          "summed_cpu_ms": 9.425691
+        }
+      ],
+      "concurrent_kernel_fraction": {
+        "0": 0.6120536229869313,
+        "1": 0.15104559438589876,
+        "2": 0.01584476886877527,
+        "3": 0.13530362864803547,
+        "4": 0.08575238511035918
+      },
+      "analysis_sha256": "1c94a907c7a3ae44b44b5f519b85d97979092a7b43d0ebcaf46808b5a3bcc1f4",
+      "kernel_boundary_crossings": 0
+    }
+  },
+  "notes": [
+    "Read-only independent SQL audit; all prediction-range kernel events come from one process in each trace.",
+    "No kernel interval crosses selected prediction-range boundaries, so contained-only kernel filter loses no partially overlapping kernel here.",
+    "CUDA API durations sum across threads and are not critical-path wall time.",
+    "Kernel-active fraction is time with at least one traced kernel, not SM utilization or achieved hardware occupancy.",
+    "Profiles are instrumented diagnostic runs, not clean throughput denominators.",
+    "Nsight warns that legacy software instrumentation is used and contains child-process no-events/incomplete-NVTX diagnostics; retain diagnostics, no claim of complete CPU-trace coverage."
+  ]
+}

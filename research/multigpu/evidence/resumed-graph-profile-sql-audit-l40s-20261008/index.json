@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:16:40.314030+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "audit",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure",
+      "artifacts": [
+        {
+          "name": "quality-profile-sql-audit.json",
+          "role": "record",
+          "bytes": 4759,
+          "sha256": "a77913333f2eec9efc8c2388e44c76675085acd649a4b2a171f77e54093852bc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/quality-profile-sql-audit.json",
+          "archived_path": "audit/quality-profile-sql-audit.json"
+        }
+      ]
+    }
+  ]
+}

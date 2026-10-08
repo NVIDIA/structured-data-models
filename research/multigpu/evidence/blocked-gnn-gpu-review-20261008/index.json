@@ -1,0 +1,369 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:15:34.424138+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "audit",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review",
+      "artifacts": [
+        {
+          "name": "blocked-gnn-checkpoint-b721583a9-v1-wrapper.log",
+          "role": "log",
+          "bytes": 17645,
+          "sha256": "ded3cc09a17d239da8c9feec066f8539ca17b75f739e6e611867b23ef6bda4b9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1-wrapper.log"
+        },
+        {
+          "name": "blocked-gnn-lowlevel-b721583a9-v1-wrapper.log",
+          "role": "log",
+          "bytes": 627,
+          "sha256": "608c0c898e59f696ee7a2dffe22427e360f556b1bac69d2c5576fc51ea22b408",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-lowlevel-b721583a9-v1-wrapper.log"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 50896,
+          "sha256": "e7c47da9531529fd2b292362dc6748b6e1e207b6c0d074888dc4e54870b8b64a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/quality-independent-audit.json",
+          "archived_path": "audit/quality-independent-audit.json"
+        }
+      ]
+    },
+    {
+      "label": "cases",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence",
+      "artifacts": [
+        {
+          "name": "cuda-classifier-autocast_bf16-n257-b128.json",
+          "role": "record",
+          "bytes": 1388,
+          "sha256": "ab9ea43d7fdbbb56474284708f288b4c12623b7b7a69c95440d5c1f1c8dadcd0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-autocast_bf16-n257-b128.json",
+          "archived_path": "cases/cuda-classifier-autocast_bf16-n257-b128.json"
+        },
+        {
+          "name": "cuda-classifier-autocast_bf16-n257-b64.json",
+          "role": "record",
+          "bytes": 1387,
+          "sha256": "5cb9c50f5931c0f008267d763f6250aea87c3544278afb3adedc656cbb7f9d73",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-autocast_bf16-n257-b64.json",
+          "archived_path": "cases/cuda-classifier-autocast_bf16-n257-b64.json"
+        },
+        {
+          "name": "cuda-classifier-autocast_bf16-n64-b1.json",
+          "role": "record",
+          "bytes": 1380,
+          "sha256": "22bd719d927ccea2f56b01604dcfe2442c3deb9f273b06648a1d11b3c23573b9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-autocast_bf16-n64-b1.json",
+          "archived_path": "cases/cuda-classifier-autocast_bf16-n64-b1.json"
+        },
+        {
+          "name": "cuda-classifier-autocast_bf16-n64-b17.json",
+          "role": "record",
+          "bytes": 1382,
+          "sha256": "41d8317597443be7d293e4cbe5a3ca5f14fe0938610380c4964977b004d0bdda",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-autocast_bf16-n64-b17.json",
+          "archived_path": "cases/cuda-classifier-autocast_bf16-n64-b17.json"
+        },
+        {
+          "name": "cuda-classifier-autocast_bf16-n64-b256.json",
+          "role": "record",
+          "bytes": 1307,
+          "sha256": "956c87b861a12f8c093d97001d8aff2b676fa3ab6cdd4202b8a94bdb3a960efe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-autocast_bf16-n64-b256.json",
+          "archived_path": "cases/cuda-classifier-autocast_bf16-n64-b256.json"
+        },
+        {
+          "name": "cuda-classifier-bf16-n257-b128.json",
+          "role": "record",
+          "bytes": 1355,
+          "sha256": "6b7ce843b79b59ee623d3e0425a006070621e8eb4a279e370ddec0fe321158fe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-bf16-n257-b128.json",
+          "archived_path": "cases/cuda-classifier-bf16-n257-b128.json"
+        },
+        {
+          "name": "cuda-classifier-bf16-n257-b64.json",
+          "role": "record",
+          "bytes": 1354,
+          "sha256": "d77e49627dcee8a0e60d421e2ec0150b557892d0d3f108f59500df296d1ce184",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-bf16-n257-b64.json",
+          "archived_path": "cases/cuda-classifier-bf16-n257-b64.json"
+        },
+        {
+          "name": "cuda-classifier-bf16-n64-b1.json",
+          "role": "record",
+          "bytes": 1351,
+          "sha256": "34cc180d51b706d5837e721b3c8a11c6c03539f4efacf6ddb9f7ea3167c21e86",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-bf16-n64-b1.json",
+          "archived_path": "cases/cuda-classifier-bf16-n64-b1.json"
+        },
+        {
+          "name": "cuda-classifier-bf16-n64-b17.json",
+          "role": "record",
+          "bytes": 1356,
+          "sha256": "295e50504847385b9a1a908b70211bedbb83423d6a3f9dd2f50ef6278999b4c2",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-bf16-n64-b17.json",
+          "archived_path": "cases/cuda-classifier-bf16-n64-b17.json"
+        },
+        {
+          "name": "cuda-classifier-bf16-n64-b256.json",
+          "role": "record",
+          "bytes": 1298,
+          "sha256": "0a6642f7ffe439c9a0aa11953729968990907eef5d3a0926d49decf762e54ef6",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-bf16-n64-b256.json",
+          "archived_path": "cases/cuda-classifier-bf16-n64-b256.json"
+        },
+        {
+          "name": "cuda-classifier-fp32-n257-b128.json",
+          "role": "record",
+          "bytes": 1391,
+          "sha256": "430dd3c641b4c2cff4d477e363594376c113c5d0245d6d1dec3e751053d50c56",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-fp32-n257-b128.json",
+          "archived_path": "cases/cuda-classifier-fp32-n257-b128.json"
+        },
+        {
+          "name": "cuda-classifier-fp32-n257-b64.json",
+          "role": "record",
+          "bytes": 1390,
+          "sha256": "122d6cb5c06f3fb82d50d046da78f25d297701d4f5f86b8115e904abb514a2f9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-fp32-n257-b64.json",
+          "archived_path": "cases/cuda-classifier-fp32-n257-b64.json"
+        },
+        {
+          "name": "cuda-classifier-fp32-n64-b1.json",
+          "role": "record",
+          "bytes": 1380,
+          "sha256": "8044a3c7af7533a2eb7b09427158467bc1e03f3918a7e65fbe7a4dbb98c0ba49",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-fp32-n64-b1.json",
+          "archived_path": "cases/cuda-classifier-fp32-n64-b1.json"
+        },
+        {
+          "name": "cuda-classifier-fp32-n64-b17.json",
+          "role": "record",
+          "bytes": 1383,
+          "sha256": "06b99715c416678571a38a516019c0a21b83c26911ea280f62034d41db26979d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-fp32-n64-b17.json",
+          "archived_path": "cases/cuda-classifier-fp32-n64-b17.json"
+        },
+        {
+          "name": "cuda-classifier-fp32-n64-b256.json",
+          "role": "record",
+          "bytes": 1300,
+          "sha256": "cea49103f5615df46b62a66c2aad4b3a64a3684cd33545d2ee571ac0e8673eda",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-classifier-fp32-n64-b256.json",
+          "archived_path": "cases/cuda-classifier-fp32-n64-b256.json"
+        },
+        {
+          "name": "cuda-regressor-autocast_bf16-n257-b128.json",
+          "role": "record",
+          "bytes": 1385,
+          "sha256": "a89e3b7d1f3012316252da918bbe5a25fb5bda62ab968ccf8fc1f3e3e87cfb96",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-autocast_bf16-n257-b128.json",
+          "archived_path": "cases/cuda-regressor-autocast_bf16-n257-b128.json"
+        },
+        {
+          "name": "cuda-regressor-autocast_bf16-n257-b64.json",
+          "role": "record",
+          "bytes": 1384,
+          "sha256": "2a0f8c75c516c53e5e79396d3050358d97d9ff39c6009bb158acbbf7b9ca46cb",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-autocast_bf16-n257-b64.json",
+          "archived_path": "cases/cuda-regressor-autocast_bf16-n257-b64.json"
+        },
+        {
+          "name": "cuda-regressor-autocast_bf16-n64-b1.json",
+          "role": "record",
+          "bytes": 1376,
+          "sha256": "2726d5a0fbb20d4e5de72bf9f5524e458ff7e4fd163a7c064dc4fa5891633373",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-autocast_bf16-n64-b1.json",
+          "archived_path": "cases/cuda-regressor-autocast_bf16-n64-b1.json"
+        },
+        {
+          "name": "cuda-regressor-autocast_bf16-n64-b17.json",
+          "role": "record",
+          "bytes": 1378,
+          "sha256": "626405577db99bc5b315d55c641a81f730e09864915e0f2ff40871b6a03d24f9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-autocast_bf16-n64-b17.json",
+          "archived_path": "cases/cuda-regressor-autocast_bf16-n64-b17.json"
+        },
+        {
+          "name": "cuda-regressor-autocast_bf16-n64-b256.json",
+          "role": "record",
+          "bytes": 1306,
+          "sha256": "4658c930e333a434601086a15e403984f4eaeec59bbd80c838cb5d825f4f7a35",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-autocast_bf16-n64-b256.json",
+          "archived_path": "cases/cuda-regressor-autocast_bf16-n64-b256.json"
+        },
+        {
+          "name": "cuda-regressor-bf16-n257-b128.json",
+          "role": "record",
+          "bytes": 1354,
+          "sha256": "d8ee1fdaab2a9e8df7738cd2016a1e80f412854ba4d00055ee8392b39b0f2646",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-bf16-n257-b128.json",
+          "archived_path": "cases/cuda-regressor-bf16-n257-b128.json"
+        },
+        {
+          "name": "cuda-regressor-bf16-n257-b64.json",
+          "role": "record",
+          "bytes": 1353,
+          "sha256": "480072b864f8f7e9fde3e76cfc61c1edf7d537df7b58668ad09ce83033d9a91a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-bf16-n257-b64.json",
+          "archived_path": "cases/cuda-regressor-bf16-n257-b64.json"
+        },
+        {
+          "name": "cuda-regressor-bf16-n64-b1.json",
+          "role": "record",
+          "bytes": 1343,
+          "sha256": "50708410eed435da5e655b523563fc9716f90138cbf21a1f1e03a2c7c7a7fcec",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-bf16-n64-b1.json",
+          "archived_path": "cases/cuda-regressor-bf16-n64-b1.json"
+        },
+        {
+          "name": "cuda-regressor-bf16-n64-b17.json",
+          "role": "record",
+          "bytes": 1343,
+          "sha256": "129d239dee5ea2e801cfcd831c46363530c1e7895e0788479d3331f3d08c0b19",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-bf16-n64-b17.json",
+          "archived_path": "cases/cuda-regressor-bf16-n64-b17.json"
+        },
+        {
+          "name": "cuda-regressor-bf16-n64-b256.json",
+          "role": "record",
+          "bytes": 1297,
+          "sha256": "ec9d03e8c9614b7858ac0ebadf83b97500c76ef5cccc9d73b1a8bef8512d7f63",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-bf16-n64-b256.json",
+          "archived_path": "cases/cuda-regressor-bf16-n64-b256.json"
+        },
+        {
+          "name": "cuda-regressor-fp32-n257-b128.json",
+          "role": "record",
+          "bytes": 1380,
+          "sha256": "56575ca30da1988eb79cdb9b46549e3c5a7c42410c8d47857f35a46cf248be28",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-fp32-n257-b128.json",
+          "archived_path": "cases/cuda-regressor-fp32-n257-b128.json"
+        },
+        {
+          "name": "cuda-regressor-fp32-n257-b64.json",
+          "role": "record",
+          "bytes": 1379,
+          "sha256": "596095b749ebccdc08361ce697798a9cdfa83b4389337539a23f69937c88622c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-fp32-n257-b64.json",
+          "archived_path": "cases/cuda-regressor-fp32-n257-b64.json"
+        },
+        {
+          "name": "cuda-regressor-fp32-n64-b1.json",
+          "role": "record",
+          "bytes": 1372,
+          "sha256": "dbcaf994bebb248755c78f513885e9704725e886a3c0f5974f42ca6f554b4c92",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-fp32-n64-b1.json",
+          "archived_path": "cases/cuda-regressor-fp32-n64-b1.json"
+        },
+        {
+          "name": "cuda-regressor-fp32-n64-b17.json",
+          "role": "record",
+          "bytes": 1369,
+          "sha256": "67e9476a9ef53e5e3546e9bd316d6e6231179a029ef35d4e26db80837e34913c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-fp32-n64-b17.json",
+          "archived_path": "cases/cuda-regressor-fp32-n64-b17.json"
+        },
+        {
+          "name": "cuda-regressor-fp32-n64-b256.json",
+          "role": "record",
+          "bytes": 1299,
+          "sha256": "34160da2a4fca589838d6c17c1d9f0cf2628b2e8ea13a8e5e2f69221dba9a198",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/evidence/cuda-regressor-fp32-n64-b256.json",
+          "archived_path": "cases/cuda-regressor-fp32-n64-b256.json"
+        }
+      ]
+    },
+    {
+      "label": "checkpoint",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1",
+      "artifacts": [
+        {
+          "name": "attempt.json",
+          "role": "record",
+          "bytes": 17645,
+          "sha256": "ded3cc09a17d239da8c9feec066f8539ca17b75f739e6e611867b23ef6bda4b9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/attempt.json",
+          "archived_path": "checkpoint/attempt.json"
+        },
+        {
+          "name": "junit.xml",
+          "role": "record",
+          "bytes": 166132,
+          "sha256": "8eccb46bd687452b7d0589a96f97c1fd1821ee707f05c8bbf3a52b4fc6ae88d0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/junit.xml",
+          "archived_path": "checkpoint/junit.xml"
+        },
+        {
+          "name": "stdout.log",
+          "role": "log",
+          "bytes": 159234,
+          "sha256": "c4eed5f9e43b4ad8bcca3c368c6a865fc1027459d38eb96ff968a896dde6d2b6",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-checkpoint-b721583a9-v1/stdout.log"
+        }
+      ]
+    },
+    {
+      "label": "lowlevel",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-lowlevel-b721583a9-v1",
+      "artifacts": [
+        {
+          "name": "attempt.json",
+          "role": "record",
+          "bytes": 627,
+          "sha256": "608c0c898e59f696ee7a2dffe22427e360f556b1bac69d2c5576fc51ea22b408",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-lowlevel-b721583a9-v1/attempt.json",
+          "archived_path": "lowlevel/attempt.json"
+        },
+        {
+          "name": "junit.xml",
+          "role": "record",
+          "bytes": 7642,
+          "sha256": "a1a2d431707588812a14912dfc576b6378a5655566f6c52191301a12cfce9406",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-lowlevel-b721583a9-v1/junit.xml",
+          "archived_path": "lowlevel/junit.xml"
+        },
+        {
+          "name": "stdout.log",
+          "role": "log",
+          "bytes": 666,
+          "sha256": "29740935280a37cc9cbb960dfe329932bef43020d35d8e3d65dd2520b18db9ce",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-lowlevel-b721583a9-v1/stdout.log"
+        }
+      ]
+    },
+    {
+      "label": "projection",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-projection-probe-b721583a9-v1",
+      "artifacts": [
+        {
+          "name": "probe.py",
+          "role": "command",
+          "bytes": 1976,
+          "sha256": "4a693173875a4ed14f7754ce258390e5b282a59c4d2be6a551e006da6f98c53a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-projection-probe-b721583a9-v1/probe.py",
+          "archived_path": "projection/probe.py"
+        },
+        {
+          "name": "provenance.json",
+          "role": "record",
+          "bytes": 637,
+          "sha256": "1466dd1c5df8ba3ac4d3cc626f11a18ecabf8e693d35e0818549ca9ec88e9bbd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-projection-probe-b721583a9-v1/provenance.json",
+          "archived_path": "projection/provenance.json"
+        },
+        {
+          "name": "stdout.jsonl",
+          "role": "record",
+          "bytes": 480,
+          "sha256": "3c06409ce1a0a606235ec002c2178a446c8591cf3c62502881d1fb005a9a9049",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/blocked-gnn-gpu-review/blocked-gnn-projection-probe-b721583a9-v1/stdout.jsonl",
+          "archived_path": "projection/stdout.jsonl"
+        }
+      ]
+    }
+  ]
+}

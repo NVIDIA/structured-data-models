@@ -1,0 +1,1005 @@
+{
+  "groups": {
+    "lowlevel": {
+      "tests": 57,
+      "failures": 0,
+      "passed": 57,
+      "skipped": 0,
+      "failing_cases": [],
+      "attempt": {
+        "command": [
+          "/opt/pytorch/bin/python",
+          "-m",
+          "pytest",
+          "--import-mode=prepend",
+          "test/research/test_blocked_gnn_cuda.py",
+          "-q",
+          "-o",
+          "addopts=",
+          "--junitxml=/home/ubuntu/kumo-multigpu/results/blocked-gnn-lowlevel-b721583a9-v1/junit.xml"
+        ],
+        "timeout_s": 240,
+        "started_utc": "2026-10-08T02:05:43.693478+00:00",
+        "wrapper_sha256": "86334fef3b9c87b245be1912d79273edeb4ed366b37d94324d2df3334f797d34",
+        "finished_utc": "2026-10-08T02:05:49.319840+00:00",
+        "elapsed_s": 5.626319851999938,
+        "returncode": 0,
+        "status": "complete",
+        "oom_reported": false,
+        "output_tail": null
+      },
+      "evidence": [],
+      "files_sha256": {
+        "attempt.json": "608c0c898e59f696ee7a2dffe22427e360f556b1bac69d2c5576fc51ea22b408",
+        "stdout.log": "29740935280a37cc9cbb960dfe329932bef43020d35d8e3d65dd2520b18db9ce",
+        "junit.xml": "a1a2d431707588812a14912dfc576b6378a5655566f6c52191301a12cfce9406"
+      }
+    },
+    "checkpoint": {
+      "tests": 31,
+      "failures": 23,
+      "passed": 8,
+      "skipped": 0,
+      "failing_cases": [
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-1-fp32-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-1-fp32-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-1-bf16-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-1-bf16-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-1-autocast_bf16-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-1-autocast_bf16-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-17-fp32-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-17-bf16-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-17-bf16-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-17-autocast_bf16-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[64-17-autocast_bf16-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-64-fp32-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-64-fp32-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-64-bf16-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-64-bf16-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-64-autocast_bf16-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-64-autocast_bf16-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-128-fp32-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-128-fp32-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-128-bf16-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-128-bf16-regressor]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-128-autocast_bf16-classifier]",
+        "test_actual_checkpoint_gnn_and_frozen_cache[257-128-autocast_bf16-regressor]"
+      ],
+      "attempt": {
+        "command": [
+          "/opt/pytorch/bin/python",
+          "-m",
+          "pytest",
+          "--import-mode=prepend",
+          "research/multigpu/test_blocked_gnn_review.py",
+          "-q",
+          "-o",
+          "addopts=",
+          "--junitxml=/home/ubuntu/kumo-multigpu/results/blocked-gnn-checkpoint-b721583a9-v1/junit.xml"
+        ],
+        "timeout_s": 240,
+        "started_utc": "2026-10-08T02:06:33.613708+00:00",
+        "wrapper_sha256": "86334fef3b9c87b245be1912d79273edeb4ed366b37d94324d2df3334f797d34",
+        "finished_utc": "2026-10-08T02:06:41.043171+00:00",
+        "elapsed_s": 7.429423802999963,
+        "returncode": 1,
+        "status": "error",
+        "oom_reported": false,
+        "output_tail": "         pytest.skip(\"Set SDM_RELATIONAL_CHECKPOINT_ROOT for offline weights\")\n        device = torch.device(os.environ.get(\"SDM_GNN_REVIEW_DEVICE\", \"cpu\"))\n        if device.type == \"cuda\" and not torch.cuda.is_available():\n            pytest.skip(\"CUDA review requested without a CUDA device\")\n        state = torch.load(\n            Path(root) / f\"{checkpoint}.pt\", map_location=\"cpu\", weights_only=True\n        )\n        gnn_state = {\n            key.removeprefix(\"gnn.\"): value\n            for key, value in state.items()\n            if key.startswith(\"gnn.\")\n        }\n        model = InvariantGNN(512).eval()\n        model.load_state_dict(gnn_state)\n        model.to(device)\n        if precision == \"bf16\":\n            model.bfloat16()\n        candidate = BlockedInvariantGNN(model, block_size=block_size)\n        degrees = torch.tensor([0, 1, 3, 17]).repeat((nodes + 3) // 4)[:nodes]\n        graph = graph_from_degrees(degrees)\n        graph = replace(\n            graph,\n            row=graph.row.to(device),\n            col=graph.col.to(device),\n            colptr=graph.colptr.to(device),\n            edge_type=graph.edge_type.to(device),\n        )\n        x = torch.arange(nodes * 512).reshape(nodes, 512).float().mul(0.01).sin()\n        if precision == \"bf16\":\n            x = x.bfloat16()\n        x = x.to(device)\n        readout_index = torch.tensor([nodes - 3, 0, 13, 0, 39], device=device)\n        if device.type == \"cuda\":\n            # CPU historical screen remains unchanged; CUDA covers every target.\n            readout_index = torch.cat(\n                [torch.arange(nodes - 2, device=device), readout_index]\n            )\n        kwargs = {\n            \"graph\": graph,\n            \"readout_table\": \"readout\",\n            \"readout_index\": readout_index,\n            \"num_hops\": 2,\n        }\n        tolerance = (\n            {\"rtol\": 1e-5, \"atol\": 2e-6}\n            if precision == \"fp32\"\n            else {\"rtol\": 2e-2, \"atol\": 2e-2}\n        )\n        baseline_cache, candidate_cache = Cache(), Cache()\n        with (\n            torch.inference_mode(),\n            torch.autocast(\n                device.type,\n                dtype=torch.bfloat16,\n                enabled=precision == \"autocast_bf16\",\n            ),\n        ):\n            expected = model(\n                x,\n                **kwargs,\n                cache=baseline_cache,\n                generator=torch.Generator(device=device).manual_seed(1729),\n            )\n            actual = candidate(\n                x,\n                **kwargs,\n                cache=candidate_cache,\n                generator=torch.Generator(device=device).manual_seed(1729),\n            )\n            comparisons = [(\"fit\", actual.clone(), expected.clone())]\n            torch.testing.assert_close(\n                candidate_cache[\"edge_type_emb\"],\n                baseline_cache[\"edge_type_emb\"],\n                rtol=0,\n                atol=0,\n            )\n            baseline_cache.freeze()\n            candidate_cache.freeze()\n            expected = model(x.flip(0), **kwargs, cache=baseline_cache)\n            actual = candidate(x.flip(0), **kwargs, cache=candidate_cache)\n            comparisons.append((\"frozen_query\", actual, expected))\n        record = {\n            \"evidence_kind\": (\n                f\"{device.type.upper()} GNN-only, synthetic inputs, actual weights\"\n            ),\n            \"device\": str(device),\n            \"gpu_name\": torch.cuda.get_device_name(device)\n            if device.type == \"cuda\"\n            else None,\n            \"cuda_version\": torch.version.cuda,\n            \"allow_tf32\": torch.backends.cuda.matmul.allow_tf32,\n            \"torch_version\": torch.__version__,\n            \"checkpoint\": checkpoint,\n            \"checkpoint_revision\": \"2bd603d3d8f25f67a7aaa8579908595e20567e22\",\n            \"checkpoint_sha256\": file_sha256(str(Path(root) / f\"{checkpoint}.pt\")),\n            \"adapter_source_sha256\": file_sha256(\n                inspect.getfile(BlockedInvariantGNN)\n            ),\n            \"test_source_sha256\": file_sha256(__file__),\n            \"nodes\": nodes,\n            \"edges\": graph.num_edges,\n            \"channels\": 512,\n            \"degree_pattern\": [0, 1, 3, 17],\n            \"feature_formula\": \"sin(arange(nodes*512)*0.01)\",\n            \"edge_rng_seed\": 1729,\n            \"num_hops\": 2,\n            \"readout_rows\": readout_index.numel(),\n            \"block_size\": block_size,\n            \"precision\": precision,\n            \"tolerance\": tolerance,\n            \"comparisons\": {},\n        }\n        for phase, actual, expected in comparisons:\n            difference = (actual.float() - expected.float()).abs()\n            accepted = difference <= (\n                tolerance[\"atol\"] + tolerance[\"rtol\"] * expected.float().abs()\n            )\n            record[\"comparisons\"][phase] = {\n                \"max_abs_error\": float(difference.max()),\n                \"mean_abs_error\": float(difference.mean()),\n                \"mismatched_elements\": int((~accepted).sum()),\n                \"elements\": actual.numel(),\n                \"pass\": bool(accepted.all()),\n                \"bitwise_equal\": bool(torch.equal(actual, expected)),\n            }\n        output = os.environ.get(\"SDM_GNN_REVIEW_OUTPUT\")\n        if output is not None:\n            destination = Path(output)\n            destination.mkdir(parents=True, exist_ok=True)\n            prefix = \"cuda-\" if device.type == \"cuda\" else \"\"\n            name = f\"{prefix}{checkpoint}-{precision}-n{nodes}-b{block_size}.json\"\n            (destination / name).write_text(json.dumps(record, indent=2) + \"\\n\")\n        for _, actual, expected in comparisons:\n>           torch.testing.assert_close(actual, expected, **tolerance)\nE           AssertionError: Tensor-likes are not close!\nE           \nE           Mismatched elements: 1701 / 133120 (1.3%)\nE           Greatest absolute difference: 0.12739872932434082 at index (27, 421) (up to 0.02 allowed)\nE           Greatest relative difference: 111.48561096191406 at index (87, 98) (up to 0.02 allowed)\n\nresearch/multigpu/test_blocked_gnn_review.py:215: AssertionError\n_ test_actual_checkpoint_gnn_and_frozen_cache[257-128-autocast_bf16-regressor] _\n\ncheckpoint = 'regressor', precision = 'autocast_bf16', nodes = 257\nblock_size = 128\n\n    @pytest.mark.parametrize(\"checkpoint\", [\"classifier\", \"regressor\"])\n    @pytest.mark.parametrize(\"precision\", [\"fp32\", \"bf16\", \"autocast_bf16\"])\n    @pytest.mark.parametrize(\n        (\"nodes\", \"block_size\"),\n        [(64, 1), (64, 17), (64, 256), (257, 64), (257, 128)],\n    )\n    def test_actual_checkpoint_gnn_and_frozen_cache(\n        checkpoint: str, precision: str, nodes: int, block_size: int\n    ) -> None:\n        root = os.environ.get(\"SDM_RELATIONAL_CHECKPOINT_ROOT\")\n        if root is None:\n            pytest.skip(\"Set SDM_RELATIONAL_CHECKPOINT_ROOT for offline weights\")\n        device = torch.device(os.environ.get(\"SDM_GNN_REVIEW_DEVICE\", \"cpu\"))\n        if device.type == \"cuda\" and not torch.cuda.is_available():\n            pytest.skip(\"CUDA review requested without a CUDA device\")\n        state = torch.load(\n            Path(root) / f\"{checkpoint}.pt\", map_location=\"cpu\", weights_only=True\n        )\n        gnn_state = {\n            key.removeprefix(\"gnn.\"): value\n            for key, value in state.items()\n            if key.startswith(\"gnn.\")\n        }\n        model = InvariantGNN(512).eval()\n        model.load_state_dict(gnn_state)\n        model.to(device)\n        if precision == \"bf16\":\n            model.bfloat16()\n        candidate = BlockedInvariantGNN(model, block_size=block_size)\n        degrees = torch.tensor([0, 1, 3, 17]).repeat((nodes + 3) // 4)[:nodes]\n        graph = graph_from_degrees(degrees)\n        graph = replace(\n            graph,\n            row=graph.row.to(device),\n            col=graph.col.to(device),\n            colptr=graph.colptr.to(device),\n            edge_type=graph.edge_type.to(device),\n        )\n        x = torch.arange(nodes * 512).reshape(nodes, 512).float().mul(0.01).sin()\n        if precision == \"bf16\":\n            x = x.bfloat16()\n        x = x.to(device)\n        readout_index = torch.tensor([nodes - 3, 0, 13, 0, 39], device=device)\n        if device.type == \"cuda\":\n            # CPU historical screen remains unchanged; CUDA covers every target.\n            readout_index = torch.cat(\n                [torch.arange(nodes - 2, device=device), readout_index]\n            )\n        kwargs = {\n            \"graph\": graph,\n            \"readout_table\": \"readout\",\n            \"readout_index\": readout_index,\n            \"num_hops\": 2,\n        }\n        tolerance = (\n            {\"rtol\": 1e-5, \"atol\": 2e-6}\n            if precision == \"fp32\"\n            else {\"rtol\": 2e-2, \"atol\": 2e-2}\n        )\n        baseline_cache, candidate_cache = Cache(), Cache()\n        with (\n            torch.inference_mode(),\n            torch.autocast(\n                device.type,\n                dtype=torch.bfloat16,\n                enabled=precision == \"autocast_bf16\",\n            ),\n        ):\n            expected = model(\n                x,\n                **kwargs,\n                cache=baseline_cache,\n                generator=torch.Generator(device=device).manual_seed(1729),\n            )\n            actual = candidate(\n                x,\n                **kwargs,\n                cache=candidate_cache,\n                generator=torch.Generator(device=device).manual_seed(1729),\n            )\n            comparisons = [(\"fit\", actual.clone(), expected.clone())]\n            torch.testing.assert_close(\n                candidate_cache[\"edge_type_emb\"],\n                baseline_cache[\"edge_type_emb\"],\n                rtol=0,\n                atol=0,\n            )\n            baseline_cache.freeze()\n            candidate_cache.freeze()\n            expected = model(x.flip(0), **kwargs, cache=baseline_cache)\n            actual = candidate(x.flip(0), **kwargs, cache=candidate_cache)\n            comparisons.append((\"frozen_query\", actual, expected))\n        record = {\n            \"evidence_kind\": (\n                f\"{device.type.upper()} GNN-only, synthetic inputs, actual weights\"\n            ),\n            \"device\": str(device),\n            \"gpu_name\": torch.cuda.get_device_name(device)\n            if device.type == \"cuda\"\n            else None,\n            \"cuda_version\": torch.version.cuda,\n            \"allow_tf32\": torch.backends.cuda.matmul.allow_tf32,\n            \"torch_version\": torch.__version__,\n            \"checkpoint\": checkpoint,\n            \"checkpoint_revision\": \"2bd603d3d8f25f67a7aaa8579908595e20567e22\",\n            \"checkpoint_sha256\": file_sha256(str(Path(root) / f\"{checkpoint}.pt\")),\n            \"adapter_source_sha256\": file_sha256(\n                inspect.getfile(BlockedInvariantGNN)\n            ),\n            \"test_source_sha256\": file_sha256(__file__),\n            \"nodes\": nodes,\n            \"edges\": graph.num_edges,\n            \"channels\": 512,\n            \"degree_pattern\": [0, 1, 3, 17],\n            \"feature_formula\": \"sin(arange(nodes*512)*0.01)\",\n            \"edge_rng_seed\": 1729,\n            \"num_hops\": 2,\n            \"readout_rows\": readout_index.numel(),\n            \"block_size\": block_size,\n            \"precision\": precision,\n            \"tolerance\": tolerance,\n            \"comparisons\": {},\n        }\n        for phase, actual, expected in comparisons:\n            difference = (actual.float() - expected.float()).abs()\n            accepted = difference <= (\n                tolerance[\"atol\"] + tolerance[\"rtol\"] * expected.float().abs()\n            )\n            record[\"comparisons\"][phase] = {\n                \"max_abs_error\": float(difference.max()),\n                \"mean_abs_error\": float(difference.mean()),\n                \"mismatched_elements\": int((~accepted).sum()),\n                \"elements\": actual.numel(),\n                \"pass\": bool(accepted.all()),\n                \"bitwise_equal\": bool(torch.equal(actual, expected)),\n            }\n        output = os.environ.get(\"SDM_GNN_REVIEW_OUTPUT\")\n        if output is not None:\n            destination = Path(output)\n            destination.mkdir(parents=True, exist_ok=True)\n            prefix = \"cuda-\" if device.type == \"cuda\" else \"\"\n            name = f\"{prefix}{checkpoint}-{precision}-n{nodes}-b{block_size}.json\"\n            (destination / name).write_text(json.dumps(record, indent=2) + \"\\n\")\n        for _, actual, expected in comparisons:\n>           torch.testing.assert_close(actual, expected, **tolerance)\nE           AssertionError: Tensor-likes are not close!\nE           \nE           Mismatched elements: 23 / 133120 (0.0%)\nE           Greatest absolute difference: 0.03490215539932251 at index (231, 151) (up to 0.02 allowed)\nE           Greatest relative difference: 1.766749382019043 at index (53, 326) (up to 0.02 allowed)\n\nresearch/multigpu/test_blocked_gnn_review.py:215: AssertionError\n=============================== warnings summary ===============================\n../../../../opt/pytorch/lib/python3.12/site-packages/torch/cuda/__init__.py:63\n  /opt/pytorch/lib/python3.12/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.\n    import pynvml  # type: ignore[import]\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-1-fp32-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-1-fp32-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-1-bf16-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-1-bf16-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-1-autocast_bf16-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-1-autocast_bf16-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-17-fp32-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-17-bf16-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-17-bf16-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-17-autocast_bf16-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[64-17-autocast_bf16-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-64-fp32-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-64-fp32-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-64-bf16-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-64-bf16-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-64-autocast_bf16-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-64-autocast_bf16-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-128-fp32-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-128-fp32-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-128-bf16-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-128-bf16-regressor]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-128-autocast_bf16-classifier]\nFAILED research/multigpu/test_blocked_gnn_review.py::test_actual_checkpoint_gnn_and_frozen_cache[257-128-autocast_bf16-regressor]\n23 failed, 8 passed, 1 warning in 6.56s\n"
+      },
+      "evidence": [
+        {
+          "file": "cuda-classifier-autocast_bf16-n257-b128.json",
+          "sha256": "ab9ea43d7fdbbb56474284708f288b4c12623b7b7a69c95440d5c1f1c8dadcd0",
+          "nodes": 257,
+          "block": 128,
+          "precision": "autocast_bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.12739872932434082,
+              "mean_abs_error": 0.006014738231897354,
+              "mismatched_elements": 1701,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.12840008735656738,
+              "mean_abs_error": 0.005811148788779974,
+              "mismatched_elements": 1362,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-autocast_bf16-n257-b64.json",
+          "sha256": "5cb9c50f5931c0f008267d763f6250aea87c3544278afb3adedc656cbb7f9d73",
+          "nodes": 257,
+          "block": 64,
+          "precision": "autocast_bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.12739872932434082,
+              "mean_abs_error": 0.006014738231897354,
+              "mismatched_elements": 1701,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.12840008735656738,
+              "mean_abs_error": 0.005811148788779974,
+              "mismatched_elements": 1362,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-autocast_bf16-n64-b1.json",
+          "sha256": "22bd719d927ccea2f56b01604dcfe2442c3deb9f273b06648a1d11b3c23573b9",
+          "nodes": 64,
+          "block": 1,
+          "precision": "autocast_bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.07804203033447266,
+              "mean_abs_error": 0.005804095417261124,
+              "mismatched_elements": 265,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.10212862491607666,
+              "mean_abs_error": 0.0059463889338076115,
+              "mismatched_elements": 354,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-autocast_bf16-n64-b17.json",
+          "sha256": "41d8317597443be7d293e4cbe5a3ca5f14fe0938610380c4964977b004d0bdda",
+          "nodes": 64,
+          "block": 17,
+          "precision": "autocast_bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.07872414588928223,
+              "mean_abs_error": 0.0033712447620928288,
+              "mismatched_elements": 191,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.08982396125793457,
+              "mean_abs_error": 0.0031354937236756086,
+              "mismatched_elements": 149,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-autocast_bf16-n64-b256.json",
+          "sha256": "956c87b861a12f8c093d97001d8aff2b676fa3ab6cdd4202b8a94bdb3a960efe",
+          "nodes": 64,
+          "block": 256,
+          "precision": "autocast_bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            },
+            "frozen_query": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-bf16-n257-b128.json",
+          "sha256": "6b7ce843b79b59ee623d3e0425a006070621e8eb4a279e370ddec0fe321158fe",
+          "nodes": 257,
+          "block": 128,
+          "precision": "bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.125,
+              "mean_abs_error": 0.0062514920718967915,
+              "mismatched_elements": 1949,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.09375,
+              "mean_abs_error": 0.0062461113557219505,
+              "mismatched_elements": 1782,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-bf16-n257-b64.json",
+          "sha256": "d77e49627dcee8a0e60d421e2ec0150b557892d0d3f108f59500df296d1ce184",
+          "nodes": 257,
+          "block": 64,
+          "precision": "bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.125,
+              "mean_abs_error": 0.0062514920718967915,
+              "mismatched_elements": 1949,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.09375,
+              "mean_abs_error": 0.0062461113557219505,
+              "mismatched_elements": 1782,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-bf16-n64-b1.json",
+          "sha256": "34cc180d51b706d5837e721b3c8a11c6c03539f4efacf6ddb9f7ea3167c21e86",
+          "nodes": 64,
+          "block": 1,
+          "precision": "bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.078125,
+              "mean_abs_error": 0.005738519597798586,
+              "mismatched_elements": 262,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.087890625,
+              "mean_abs_error": 0.006427922286093235,
+              "mismatched_elements": 437,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-bf16-n64-b17.json",
+          "sha256": "295e50504847385b9a1a908b70211bedbb83423d6a3f9dd2f50ef6278999b4c2",
+          "nodes": 64,
+          "block": 17,
+          "precision": "bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.095703125,
+              "mean_abs_error": 0.0036316325422376394,
+              "mismatched_elements": 266,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.12890625,
+              "mean_abs_error": 0.0037471121177077293,
+              "mismatched_elements": 326,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-bf16-n64-b256.json",
+          "sha256": "0a6642f7ffe439c9a0aa11953729968990907eef5d3a0926d49decf762e54ef6",
+          "nodes": 64,
+          "block": 256,
+          "precision": "bf16",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            },
+            "frozen_query": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-fp32-n257-b128.json",
+          "sha256": "430dd3c641b4c2cff4d477e363594376c113c5d0245d6d1dec3e751053d50c56",
+          "nodes": 257,
+          "block": 128,
+          "precision": "fp32",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.0016870498657226562,
+              "mean_abs_error": 0.000020000872609671205,
+              "mismatched_elements": 16830,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.0012483596801757812,
+              "mean_abs_error": 0.000014819591342529748,
+              "mismatched_elements": 14636,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-fp32-n257-b64.json",
+          "sha256": "122d6cb5c06f3fb82d50d046da78f25d297701d4f5f86b8115e904abb514a2f9",
+          "nodes": 257,
+          "block": 64,
+          "precision": "fp32",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.0016870498657226562,
+              "mean_abs_error": 0.000020000872609671205,
+              "mismatched_elements": 16830,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.0012483596801757812,
+              "mean_abs_error": 0.000014819591342529748,
+              "mismatched_elements": 14636,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-fp32-n64-b1.json",
+          "sha256": "8044a3c7af7533a2eb7b09427158467bc1e03f3918a7e65fbe7a4dbb98c0ba49",
+          "nodes": 64,
+          "block": 1,
+          "precision": "fp32",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.000980764627456665,
+              "mean_abs_error": 0.00001542293102829717,
+              "mismatched_elements": 5115,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.0012707710266113281,
+              "mean_abs_error": 0.000015585515939164907,
+              "mismatched_elements": 4246,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-fp32-n64-b17.json",
+          "sha256": "06b99715c416678571a38a516019c0a21b83c26911ea280f62034d41db26979d",
+          "nodes": 64,
+          "block": 17,
+          "precision": "fp32",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.0011038780212402344,
+              "mean_abs_error": 0.000015231632460199762,
+              "mismatched_elements": 4569,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.0015859603881835938,
+              "mean_abs_error": 0.000015339946912718005,
+              "mismatched_elements": 3699,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-classifier-fp32-n64-b256.json",
+          "sha256": "cea49103f5615df46b62a66c2aad4b3a64a3684cd33545d2ee571ac0e8673eda",
+          "nodes": 64,
+          "block": 256,
+          "precision": "fp32",
+          "checkpoint": "classifier",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            },
+            "frozen_query": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-autocast_bf16-n257-b128.json",
+          "sha256": "a89e3b7d1f3012316252da918bbe5a25fb5bda62ab968ccf8fc1f3e3e87cfb96",
+          "nodes": 257,
+          "block": 128,
+          "precision": "autocast_bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.041783928871154785,
+              "mean_abs_error": 0.003615552792325616,
+              "mismatched_elements": 23,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.04293316602706909,
+              "mean_abs_error": 0.0036468561738729477,
+              "mismatched_elements": 22,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-autocast_bf16-n257-b64.json",
+          "sha256": "2a0f8c75c516c53e5e79396d3050358d97d9ff39c6009bb158acbbf7b9ca46cb",
+          "nodes": 257,
+          "block": 64,
+          "precision": "autocast_bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.041783928871154785,
+              "mean_abs_error": 0.003615552792325616,
+              "mismatched_elements": 23,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.04293316602706909,
+              "mean_abs_error": 0.0036468561738729477,
+              "mismatched_elements": 22,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-autocast_bf16-n64-b1.json",
+          "sha256": "2726d5a0fbb20d4e5de72bf9f5524e458ff7e4fd163a7c064dc4fa5891633373",
+          "nodes": 64,
+          "block": 1,
+          "precision": "autocast_bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.03314924240112305,
+              "mean_abs_error": 0.0034932957496494055,
+              "mismatched_elements": 9,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.031201720237731934,
+              "mean_abs_error": 0.003525585401803255,
+              "mismatched_elements": 5,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-autocast_bf16-n64-b17.json",
+          "sha256": "626405577db99bc5b315d55c641a81f730e09864915e0f2ff40871b6a03d24f9",
+          "nodes": 64,
+          "block": 17,
+          "precision": "autocast_bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.02766682580113411,
+              "mean_abs_error": 0.0018156979931518435,
+              "mismatched_elements": 2,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.028109915554523468,
+              "mean_abs_error": 0.0018650628626346588,
+              "mismatched_elements": 1,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-autocast_bf16-n64-b256.json",
+          "sha256": "4658c930e333a434601086a15e403984f4eaeec59bbd80c838cb5d825f4f7a35",
+          "nodes": 64,
+          "block": 256,
+          "precision": "autocast_bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            },
+            "frozen_query": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-bf16-n257-b128.json",
+          "sha256": "d8ee1fdaab2a9e8df7738cd2016a1e80f412854ba4d00055ee8392b39b0f2646",
+          "nodes": 257,
+          "block": 128,
+          "precision": "bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.046875,
+              "mean_abs_error": 0.0038295884151011705,
+              "mismatched_elements": 35,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.0390625,
+              "mean_abs_error": 0.003839328186586499,
+              "mismatched_elements": 49,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-bf16-n257-b64.json",
+          "sha256": "480072b864f8f7e9fde3e76cfc61c1edf7d537df7b58668ad09ce83033d9a91a",
+          "nodes": 257,
+          "block": 64,
+          "precision": "bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.046875,
+              "mean_abs_error": 0.0038295884151011705,
+              "mismatched_elements": 35,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.0390625,
+              "mean_abs_error": 0.003839328186586499,
+              "mismatched_elements": 49,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-bf16-n64-b1.json",
+          "sha256": "50708410eed435da5e655b523563fc9716f90138cbf21a1f1e03a2c7c7a7fcec",
+          "nodes": 64,
+          "block": 1,
+          "precision": "bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.03125,
+              "mean_abs_error": 0.003741277614608407,
+              "mismatched_elements": 6,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.046875,
+              "mean_abs_error": 0.0037301499396562576,
+              "mismatched_elements": 7,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-bf16-n64-b17.json",
+          "sha256": "129d239dee5ea2e801cfcd831c46363530c1e7895e0788479d3331f3d08c0b19",
+          "nodes": 64,
+          "block": 17,
+          "precision": "bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.046875,
+              "mean_abs_error": 0.001957198139280081,
+              "mismatched_elements": 1,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.03125,
+              "mean_abs_error": 0.002027612878009677,
+              "mismatched_elements": 1,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-bf16-n64-b256.json",
+          "sha256": "ec9d03e8c9614b7858ac0ebadf83b97500c76ef5cccc9d73b1a8bef8512d7f63",
+          "nodes": 64,
+          "block": 256,
+          "precision": "bf16",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.02,
+            "atol": 0.02
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            },
+            "frozen_query": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-fp32-n257-b128.json",
+          "sha256": "56575ca30da1988eb79cdb9b46549e3c5a7c42410c8d47857f35a46cf248be28",
+          "nodes": 257,
+          "block": 128,
+          "precision": "fp32",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.00000476837158203125,
+              "mean_abs_error": 4.822751975552819e-7,
+              "mismatched_elements": 51,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.00000476837158203125,
+              "mean_abs_error": 4.890082436759258e-7,
+              "mismatched_elements": 41,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-fp32-n257-b64.json",
+          "sha256": "596095b749ebccdc08361ce697798a9cdfa83b4389337539a23f69937c88622c",
+          "nodes": 257,
+          "block": 64,
+          "precision": "fp32",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.00000476837158203125,
+              "mean_abs_error": 4.822751975552819e-7,
+              "mismatched_elements": 51,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.00000476837158203125,
+              "mean_abs_error": 4.890082436759258e-7,
+              "mismatched_elements": 41,
+              "elements": 133120,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-fp32-n64-b1.json",
+          "sha256": "dbcaf994bebb248755c78f513885e9704725e886a3c0f5974f42ca6f554b4c92",
+          "nodes": 64,
+          "block": 1,
+          "precision": "fp32",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.0000034570693969726562,
+              "mean_abs_error": 3.9635892790101934e-7,
+              "mismatched_elements": 1,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.000003814697265625,
+              "mean_abs_error": 4.044004242587107e-7,
+              "mismatched_elements": 2,
+              "elements": 34304,
+              "pass": false,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-fp32-n64-b17.json",
+          "sha256": "67e9476a9ef53e5e3546e9bd316d6e6231179a029ef35d4e26db80837e34913c",
+          "nodes": 64,
+          "block": 17,
+          "precision": "fp32",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0.00000286102294921875,
+              "mean_abs_error": 3.63301808192773e-7,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": false
+            },
+            "frozen_query": {
+              "max_abs_error": 0.00000286102294921875,
+              "mean_abs_error": 3.689481786750548e-7,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": false
+            }
+          }
+        },
+        {
+          "file": "cuda-regressor-fp32-n64-b256.json",
+          "sha256": "34160da2a4fca589838d6c17c1d9f0cf2628b2e8ea13a8e5e2f69221dba9a198",
+          "nodes": 64,
+          "block": 256,
+          "precision": "fp32",
+          "checkpoint": "regressor",
+          "tolerance": {
+            "rtol": 0.00001,
+            "atol": 0.000002
+          },
+          "comparisons": {
+            "fit": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            },
+            "frozen_query": {
+              "max_abs_error": 0,
+              "mean_abs_error": 0,
+              "mismatched_elements": 0,
+              "elements": 34304,
+              "pass": true,
+              "bitwise_equal": true
+            }
+          }
+        }
+      ],
+      "files_sha256": {
+        "attempt.json": "ded3cc09a17d239da8c9feec066f8539ca17b75f739e6e611867b23ef6bda4b9",
+        "stdout.log": "c4eed5f9e43b4ad8bcca3c368c6a865fc1027459d38eb96ff968a896dde6d2b6",
+        "junit.xml": "8eccb46bd687452b7d0589a96f97c1fd1821ee707f05c8bbf3a52b4fc6ae88d0"
+      }
+    }
+  },
+  "notes": [
+    "Independent read-only reconciliation of retained attempt metadata, pytest XML and per-case numerical records.",
+    "No saved hidden-output arrays: errors are runner-recorded, not independently recomputed from full tensors.",
+    "Low-level passing fixtures do not supersede actual-checkpoint failures.",
+    "Synthetic graph inputs with pretrained GNN weights, not end-to-end task predictions."
+  ]
+}

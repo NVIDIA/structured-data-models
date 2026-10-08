@@ -1,0 +1,50 @@
+{
+  "evidence_kind": "CUDA GNN-only, synthetic inputs, actual weights",
+  "device": "cuda",
+  "gpu_name": "NVIDIA L4",
+  "cuda_version": "13.0",
+  "allow_tf32": false,
+  "torch_version": "2.9.1+cu130",
+  "checkpoint": "regressor",
+  "checkpoint_revision": "2bd603d3d8f25f67a7aaa8579908595e20567e22",
+  "checkpoint_sha256": "f863b3632f738e1444fb83a8cea5746f298889b5c96953a000c4720d202ae4cf",
+  "adapter_source_sha256": "bc3e6fe5d32f70f17cddbab7c27c8bae3fc6cbf2610ab755d946df217e28a0a5",
+  "test_source_sha256": "9eecf539b226c025aa8b05480fa2ec26b8538f25d037466f597b3ad55f5e0f20",
+  "nodes": 64,
+  "edges": 336,
+  "channels": 512,
+  "degree_pattern": [
+    0,
+    1,
+    3,
+    17
+  ],
+  "feature_formula": "sin(arange(nodes*512)*0.01)",
+  "edge_rng_seed": 1729,
+  "num_hops": 2,
+  "readout_rows": 67,
+  "block_size": 17,
+  "precision": "fp32",
+  "tolerance": {
+    "rtol": 1e-05,
+    "atol": 2e-06
+  },
+  "comparisons": {
+    "fit": {
+      "max_abs_error": 2.86102294921875e-06,
+      "mean_abs_error": 3.63301808192773e-07,
+      "mismatched_elements": 0,
+      "elements": 34304,
+      "pass": true,
+      "bitwise_equal": false
+    },
+    "frozen_query": {
+      "max_abs_error": 2.86102294921875e-06,
+      "mean_abs_error": 3.689481786750548e-07,
+      "mismatched_elements": 0,
+      "elements": 34304,
+      "pass": true,
+      "bitwise_equal": false
+    }
+  }
+}

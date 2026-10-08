@@ -43,12 +43,15 @@ def artifact_role(name: str) -> str | None:
         "topology.txt",
         "gpu.csv",
         "model-verification.json",
+        "provenance.json",
+        "stdout.jsonl",
+        "junit.xml",
     }:
         return "record"
     if re.fullmatch(r"(?:rank|error-rank)\d+\.json", name):
         return "record"
     if re.fullmatch(
-        r"(?:classifier|regressor)-(?:fp32|bf16|autocast_bf16)"
+        r"(?:cuda-)?(?:classifier|regressor)-(?:fp32|bf16|autocast_bf16)"
         r"-n\d+-b\d+\.json",
         name,
     ):
@@ -57,7 +60,7 @@ def artifact_role(name: str) -> str | None:
         r"quality-[A-Za-z0-9_-]+-audit\.json", name
     ):
         return "record"
-    if name == "command.txt":
+    if name in {"command.txt", "probe.py"}:
         return "command"
     if name.startswith("predictions") and Path(name).suffix in {".npy", ".pt"}:
         return "predictions"

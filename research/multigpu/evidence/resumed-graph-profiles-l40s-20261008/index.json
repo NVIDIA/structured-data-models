@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:15:34.535562+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "graph1",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph1-large-e4-c1024-q2048",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 5269,
+          "sha256": "3d3d192889cfaeec3f8918972b0732f7a6bbddff7a60560d189b1195f0a6f229",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph1-large-e4-c1024-q2048/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "3e531d2d060cadb70e09bcbf839d41f322423d35dadaf83ff8816bd09e9afc21",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph1-large-e4-c1024-q2048/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "3e531d2d060cadb70e09bcbf839d41f322423d35dadaf83ff8816bd09e9afc21",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph1-large-e4-c1024-q2048/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 3459,
+          "sha256": "7556dcc39968b093a10447244a51434d3ba60232f791ca6bda2ea730760ebebc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph1-large-e4-c1024-q2048/quality-independent-audit.json",
+          "archived_path": "graph1/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph1-large-e4-c1024-q2048/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 4766,
+          "sha256": "8b650d192f2df6c47bf22ab95a0a0889222d0f0b8affebd6bee2ada8c1fdf3d5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph1-large-e4-c1024-q2048/result.json",
+          "archived_path": "graph1/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "fb9208b947dfc0e6b2c4cd68c90074d59cf9ec88c7cf4b6eefd7f04030800dcc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph1-large-e4-c1024-q2048/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "graph4",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph4-large-e4-c1024-q2048",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 6963,
+          "sha256": "8ab2db66662ea479390eb471e92086e4978244e748127126e0fe9a8b1b255f0b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph4-large-e4-c1024-q2048/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "3e531d2d060cadb70e09bcbf839d41f322423d35dadaf83ff8816bd09e9afc21",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph4-large-e4-c1024-q2048/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "3e531d2d060cadb70e09bcbf839d41f322423d35dadaf83ff8816bd09e9afc21",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph4-large-e4-c1024-q2048/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 4033,
+          "sha256": "4871175a7b99e264ba24b8ce9111d6d0f1cbcc95eb30d9def8adb3beb57257ef",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph4-large-e4-c1024-q2048/quality-independent-audit.json",
+          "archived_path": "graph4/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph4-large-e4-c1024-q2048/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 7246,
+          "sha256": "48efc943f3898d5212fcdec8983b07f72f4ed052c42e2db4a5b1e94ba42c7beb",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph4-large-e4-c1024-q2048/result.json",
+          "archived_path": "graph4/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "fb9208b947dfc0e6b2c4cd68c90074d59cf9ec88c7cf4b6eefd7f04030800dcc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-graph4-large-e4-c1024-q2048/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "resident1",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-resident1-large-e4-c1024-q2048",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 6014,
+          "sha256": "5b12c772757b4d97407d573b1170dc3effa83b8d86813db14d5e69fb8550944e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-resident1-large-e4-c1024-q2048/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "3e531d2d060cadb70e09bcbf839d41f322423d35dadaf83ff8816bd09e9afc21",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-resident1-large-e4-c1024-q2048/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 57472,
+          "sha256": "3e531d2d060cadb70e09bcbf839d41f322423d35dadaf83ff8816bd09e9afc21",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-resident1-large-e4-c1024-q2048/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 3469,
+          "sha256": "c278117acbd7d20ad347241549eee864e0f6b100ca3af0c6a37f024c70af3aa7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-resident1-large-e4-c1024-q2048/quality-independent-audit.json",
+          "archived_path": "resident1/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "2b7cfc83186d0549c800c4c277afb769e1436f1b25a084a725f001eb836843bd",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-resident1-large-e4-c1024-q2048/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 3739,
+          "sha256": "7a154bd728fe5c20c151612c09ebdfb34401b2a824765abc8a5d449c1577e2b4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-resident1-large-e4-c1024-q2048/result.json",
+          "archived_path": "resident1/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 16512,
+          "sha256": "fb9208b947dfc0e6b2c4cd68c90074d59cf9ec88c7cf4b6eefd7f04030800dcc",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-profile-resident1-large-e4-c1024-q2048/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "traces",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure",
+      "artifacts": [
+        {
+          "name": "tabular-v2-nsys-graph1-analysis.json",
+          "role": "record",
+          "bytes": 41225,
+          "sha256": "6eeaf7ab30f759cc9cb99003653859c120804869846df9cb3451369a902d0e27",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-graph1-analysis.json",
+          "archived_path": "traces/tabular-v2-nsys-graph1-analysis.json"
+        },
+        {
+          "name": "tabular-v2-nsys-graph1.log",
+          "role": "log",
+          "bytes": 7341,
+          "sha256": "eaba090293da69098c0afec65abc99033bffa2838481fbd13bc1646337cf7fd5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-graph1.log"
+        },
+        {
+          "name": "tabular-v2-nsys-graph1.nsys-rep",
+          "role": "profile",
+          "bytes": 5096228,
+          "sha256": "ffe941efab6826ceb48230f0529cfd0eab10d39630ab8af9bdce36fd71bcbbdb",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-graph1.nsys-rep"
+        },
+        {
+          "name": "tabular-v2-nsys-graph1.sqlite",
+          "role": "profile",
+          "bytes": 15466496,
+          "sha256": "d589e6606ae0611e354a8fa1ed1ed964b28151b4488bcd0c25ddfdf4f94c8cd8",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-graph1.sqlite"
+        },
+        {
+          "name": "tabular-v2-nsys-graph4-analysis.json",
+          "role": "record",
+          "bytes": 49860,
+          "sha256": "1c94a907c7a3ae44b44b5f519b85d97979092a7b43d0ebcaf46808b5a3bcc1f4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-graph4-analysis.json",
+          "archived_path": "traces/tabular-v2-nsys-graph4-analysis.json"
+        },
+        {
+          "name": "tabular-v2-nsys-graph4.log",
+          "role": "log",
+          "bytes": 9960,
+          "sha256": "a79b5d0faabf88f5755ced79b1bdfabde64cc911f42d03abf350d3fa1161fd90",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-graph4.log"
+        },
+        {
+          "name": "tabular-v2-nsys-graph4.nsys-rep",
+          "role": "profile",
+          "bytes": 7111224,
+          "sha256": "c0f1ba3518517c8008bc051d92eb7e47c5510ce9810e5f89fbbe04f83122f732",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-graph4.nsys-rep"
+        },
+        {
+          "name": "tabular-v2-nsys-graph4.sqlite",
+          "role": "profile",
+          "bytes": 26587136,
+          "sha256": "9faaa024ee68bed6fde3dea2bdd7c0f043a5f1481d92a29fc0487507e5ba3ba7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-graph4.sqlite"
+        },
+        {
+          "name": "tabular-v2-nsys-resident1-analysis.json",
+          "role": "record",
+          "bytes": 41390,
+          "sha256": "7b7b216177439380c93b289d49e9e0b8bfed6b9f4d6ed352c4ae96f80126d073",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-resident1-analysis.json",
+          "archived_path": "traces/tabular-v2-nsys-resident1-analysis.json"
+        },
+        {
+          "name": "tabular-v2-nsys-resident1.log",
+          "role": "log",
+          "bytes": 6458,
+          "sha256": "87b02bb88f2539d89d0155b1c5bb658d788030769f9a08d68d2b50c34f0bda20",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-resident1.log"
+        },
+        {
+          "name": "tabular-v2-nsys-resident1.nsys-rep",
+          "role": "profile",
+          "bytes": 5049399,
+          "sha256": "bd5096410e4c567d1110010b4f484484759456d7e130d5980b156963f7bafe7d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-resident1.nsys-rep"
+        },
+        {
+          "name": "tabular-v2-nsys-resident1.sqlite",
+          "role": "profile",
+          "bytes": 14520320,
+          "sha256": "982a8c97f6a884a9d6bbcd846c1cfa9e8124d0325c106f839e9b8d182e987359",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-nsys-resident1.sqlite"
+        }
+      ]
+    }
+  ]
+}
