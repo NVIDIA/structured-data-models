@@ -7,9 +7,11 @@ Plan updated 2026-10-08. Runtime source frozen by the coordinator: `c0fb64fcc`. 
 | Family | Data and preparation | Members / query batches | Arms |
 |---|---|---|---|
 | KumoTabular large | Existing frozen Covertype train/validation split, context 1,024, queries 2,048, seed 1729 | E4, query batch256, local estimator batch1, BF16 | Native1, tuned native batch4, residentEP1, processEP1/2/4, graphEP1/2/4 |
-| KumoRelational | Existing frozen H&M user-churn two-hop `[16,16]` workload, context1,024, queries2,000, seed1729 | E4, query batch250, native per-member execution, BF16 | Matched residentEP1 and processEP1/2/4 |
+| KumoRelational | Fresh H&M user-churn two-hop `[16,16]` workload, context1,024, queries2,000, seed1729; prepared once and reused | E4, query batch250, native per-member execution, BF16 | Matched residentEP1 and processEP1/2/4 |
 
 All arms use three measured prediction passes after one warmup, matching the existing study protocol. Startup/model loading, context fit, warmup/capture, and prediction are separate. Baseline execution on a replacement host is required; old host timings provide context only. No graph-relational arm is supported.
+
+The historical small H&M workload retained its metadata but not serialized sampled graphs. The closure therefore prepares a new workload from the verified raw data in a fresh directory, records its hashes, compares table/relationship identities with the historical metadata, and reuses its graph file across every new control. Historical timings are not treated as matched fresh-workload controls.
 
 Tabular command template, with `SOURCE`, `DATA`, and a fresh `OUTPUT` replaced by the operator's explicit paths:
 
