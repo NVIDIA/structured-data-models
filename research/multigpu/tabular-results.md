@@ -70,8 +70,28 @@ Holding an outer autocast context open on each worker retained approximately 267
 
 Compacting retained cache views reduced unique resident storage from 512.75 MB to 358.61 MB and prediction peak allocation from 1.716 GB to 1.561 GB. It took 3.23 ms during fit and preserved prediction bytes. Throughput was 1,816.92 rows/s, but the modest difference from the earlier resident reference requires interleaved repetitions before attribution. Inspection identifies value views into fused column-attention KV buffers as the retained storage; the reduced ICL KV-head selection was already contiguous and was not the cause.
 
-## Remaining experiment boundaries
+## Pretrained process and CUDA-graph ensemble closure
 
-Process-based ensemble and CUDA-graph ensemble prototypes passed their one- and two-GPU CUDA correctness tests, including changed queries and output lifetime. These tests are not pretrained-model performance evidence. Their planned one-/four-GPU pretrained Covertype pairs were not launched before network access became unavailable; no throughput, quality, or capacity claim is made for either prototype. This limitation does not apply to the separately measured process-based query/data-parallel executor.
+After network access resumed, a replacement four-L40S Spot host ran source `c0fb64fcc` with the same checkpoint hashes, Torch 2.9.1+cu130, Covertype E4/C1024/Q2048/B256, BF16, seed 1729, and GPU-resident query boundary. Fresh native and resident controls avoid comparing different hosts. Each arm ran three timed prediction passes, retained every repeat array, and was downloaded immediately after completion.
 
-At the interruption, the tabular queue had completed and relinquished the GPU lease. A subsequent relational queue was last known to have launched; its current process state could not be revalidated because SSH returned `Operation not permitted`. Any resumed experiment must first verify live processes and obtain an explicit lease, then preserve separate process startup or graph-capture timing and memory before the steady-state comparison.
+| Execution | GPUs | Local estimator batch | Median rows/s | Prediction peak allocated, GB/device |
+|---|---:|---:|---:|---|
+| Native | 1 | 1 | 1,802.80 | 1.379 |
+| Native, tuned | 1 | 4 | 4,006.46 | 1.767 |
+| Resident threaded ensemble | 1 | 1 | 1,849.81 | 1.716 |
+| Process ensemble | 1 | 1 | 1,631.39 | 1.715 child + 0.003 parent |
+| Process ensemble | 2 | 1 | 2,900.90 | 1.457 each child + 0.003 parent on GPU0 |
+| Process ensemble | 4 | 1 | 4,444.76 | 1.260 each child + 0.003 parent on GPU0 |
+| CUDA-graph ensemble | 1 | 1 | 6,398.19 | 1.381 |
+| CUDA-graph ensemble | 2 | 1 | 9,134.14 | 1.124, 1.121 |
+| CUDA-graph ensemble | 4 | 1 | 11,145.61 | 0.995, 0.993, 0.993, 0.993 |
+
+Process ensemble strong scaling is 1.778× on two GPUs and 2.724× on four, compared with its one-GPU executor. Its four-GPU throughput exceeds tuned native by only 1.109×. Process/model startup takes 4.72/8.16/14.99 seconds for one/two/four GPUs, separately from fit and steady prediction. Child workers use one CPU intra-op thread while the parent uses eight; differences from threaded execution combine scheduling, thread policy, IPC, transfers, and process placement. They do not isolate a GIL effect. Child RSS values are lifetime high-water measurements that include startup/shared pages, not additive host-memory usage. GPU parent and child allocator peaks are reported separately; their sum is not a simultaneously sampled total.
+
+CUDA-graph ensemble is faster even on one GPU: 1.597× the tuned native throughput. Two/four-GPU graph execution scales by 1.428×/1.742× over graph one GPU, and four GPUs reach 2.782× tuned native. All native-EB1, resident, process, and graph predictions have identical SHA256 `92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116`; native EB4 remains a distinct, tolerance-passing numerical batching control. The resident reference has a slower third pass (1,849.81/1,851.63/1,673.83 rows/s), so small differences against that reference should not be overinterpreted.
+
+All graph arms capture exactly four member graphs during warmup and retain four throughout all timed passes: no timed recapture occurred. Synchronized warmup wall time is 0.525/0.466/0.540 seconds for one/two/four GPUs. The recorded `graph_capture_s` sums worker durations that can overlap and is not wall latency. Per-device cumulative fit-plus-warmup allocation high-water is 1.900 GB for graph one GPU, approximately 1.641 GB for two, and at most 1.266 GB for four; this is not an isolated capture-only peak. Prediction peaks reset afterward. Graphs specialize to member cache, prepared query shape, dtype, and autocast precision; a new shape requires new capture and retained graph storage. Separate CUDA tests cover changed values, remainder shapes, output lifetime, and refit clearing, but these throughput measurements cover one fixed full-batch shape only.
+
+Fresh native EB1 fit again incurs a first-use penalty (103.21 seconds), versus 1.245 seconds for native EB4 and roughly 1.05–1.56 seconds for subsequent fits. Cold fit is not a parallel speedup denominator. Core ensemble CUDA caller-stream/autocast tests passed again on the frozen source (two tests, 1.47 seconds).
+
+Raw arrays, result JSON, telemetry, and independent audit sidecars are under `.kumo-multigpu-20261008/results/pretrained-closure/tabular-v2-{native1,native4,resident1,process1,process2,process4,graph1,graph2,graph4}-large-e4-c1024-q2048`. Paired graph-versus-resident Nsight profiling is a separate follow-up, excluded from clean timing. These results close the earlier unmeasured pretrained-prototype gap; they do not establish arbitrary-shape performance, relational graph capture, or capacity scaling.
