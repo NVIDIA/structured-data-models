@@ -1,0 +1,41 @@
+{
+  "status": "fit_OOM",
+  "prediction_or_quality_available": false,
+  "requested_gpus": 4,
+  "source": "ae4e5e549",
+  "operation": "segment_multi_reduce output allocation",
+  "allocation_requested_gib": 6.1,
+  "memory_at_failure": {
+    "cuda:0": {
+      "allocated": 11130822656,
+      "reserved": 17460887552,
+      "peak_allocated": 17381440512,
+      "peak_reserved": 20208156672
+    },
+    "cuda:1": {
+      "allocated": 11130822656,
+      "reserved": 17460887552,
+      "peak_allocated": 17381440512,
+      "peak_reserved": 20208156672
+    },
+    "cuda:2": {
+      "allocated": 11130822656,
+      "reserved": 17460887552,
+      "peak_allocated": 17381440512,
+      "peak_reserved": 20208156672
+    },
+    "cuda:3": {
+      "allocated": 11130822656,
+      "reserved": 17460887552,
+      "peak_allocated": 17381440512,
+      "peak_reserved": 20208156672
+    }
+  },
+  "failure_json_sha256": "a84a0fd8dc49d3442761dcc4bd0b070db700d2c41597b84c37b1ba66870a18cd",
+  "notes": [
+    "All four GPU allocator snapshots have matching failed-fit allocation counters.",
+    "The full per-member GNN fit allocation is not sharded by ensemble parallelism.",
+    "Requested new allocator key was ineffective in separate same-runtime probe; see group correction.",
+    "No implication that a verified different allocator or fit policy could not fit."
+  ]
+}

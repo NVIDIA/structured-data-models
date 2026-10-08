@@ -1,0 +1,26 @@
+{
+  "status": "fit_OOM",
+  "prediction_or_quality_available": false,
+  "source": "ae4e5e549",
+  "block_size": 16384,
+  "allocator_expandable_verified_same_process": true,
+  "provenance_sha256": "08670cb913f740097ea3e319c61deb0234cae473e56db67f80aeaa55a640c6b5",
+  "failure_sha256": "9fbefca9e62835058588585dd97aadcdc364306cbf4adae1390cfa8d20623551",
+  "failing_operation": "full-node LayerNorm activation",
+  "allocation_requested_gib": 2.44,
+  "error": "CUDA out of memory. Tried to allocate 2.44 GiB. GPU 0 has a total capacity of 22.04 GiB of which 2.19 GiB is free. Including non-PyTorch memory, this process has 19.83 GiB memory in use. Of the allocated memory 19.43 GiB is allocated by PyTorch, and 157.92 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)",
+  "memory_at_failure": {
+    "cuda:0": {
+      "allocated": 18206843904,
+      "reserved": 21030240256,
+      "peak_allocated": 21878415872,
+      "peak_reserved": 23060283392
+    }
+  },
+  "notes": [
+    "Unlike original retries, actual expandable_segments=True is measured in the benchmark process before model work.",
+    "Both residentEP1 attempts still fail; no stage2 exact-placement oracle is produced.",
+    "Post-exception current allocations differ from error-time values and do not measure required successful peak.",
+    "The lower allocation request in this later failing operation does not establish a capacity fix."
+  ]
+}

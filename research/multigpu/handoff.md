@@ -1,6 +1,6 @@
 # Local integration and access-boundary handoff
 
-Initial audit: 2026-10-07 UTC / 2026-10-08 Asia/Seoul. **The overall goal is not complete.** Permitted networking has subsequently returned. The original instances and their task-tagged EBS volumes are no longer present; results retained only on their deleted disks are unrecoverable. Replacement execution is being arranged separately. Missing scientific controls, final resource closure and publication status remain explicit below.
+Initial audit: 2026-10-07 UTC / 2026-10-08 Asia/Seoul; updated during resumed execution on2026-10-08 UTC. **The overall goal is not complete.** Networking was restored, replacement-host tabular/relational/CP/capacity controls are retained, and mixed eight-GPU execution is now running. Original instances/task-tagged disks are absent; original disk-only artifacts remain lost. The research and minimal feature branches are published. Final cross-host validation, resource closure and cost reconciliation remain open. Historical blocked-state paragraphs below are explicitly historical, not current access status.
 
 ## Delivered locally
 
@@ -20,9 +20,9 @@ The coordinator independently reran `collect_evidence.verify(..., external=True)
 
 | Check | Result |
 |---|---:|
-| Evidence snapshots | 42 |
-| Archived-file references checked | 451 |
-| Original-artifact references checked | 1,070 |
+| Evidence snapshots | 43 |
+| Archived-file references checked | 465 |
+| Original-artifact references checked | 1,093 |
 | Missing/mismatched references | 0 |
 | External references left unchecked | 0 |
 
@@ -41,6 +41,8 @@ The [graph-backed process query-DP snapshot](evidence/resumed-graph-query-dp-l40
 The [larger-batch snapshot](evidence/resumed-graph-query-dp-b1024-l40s-20261008/index.json) extends the same fully gathered IPC boundary to query65,536/batch1,024. Native1/4 achieves 7,521/29,545 rows/s; graph1/4 achieves 11,207/41,649 (3.716× graph scaling, 1.410× graph4/native4). Each backend is repeat/GPU-count byte-exact; graph versus native has 50 label flips while passing BF16 screening, with no quality improvement established. Graph lowers steady-state allocated peak but increases reserved peak. Separate [local-pipe controls](evidence/resumed-dp-local-pipe-l40s-20261008/index.json) use preloaded CPU inputs and are not network measurements; their [cross-transport audit](evidence/resumed-dp-b1024-transport-audit-20261008/index.json) proves output agreement, not timing equivalence.
 
 The [H&M64k CPU-offload snapshot](evidence/blocked-gnn-hm64k-offload-l4-20261008/index.json) proves native E8/context65,536 fits a single L4. **Allocator correction:** these new arms requested the unrecognized `PYTORCH_ALLOC_CONF` name. A subsequent same-runtime fresh-process probe observed default behavior, not expandable allocation. Labeling earlier new arms effective-default is an inference, not per-run telemetry; the [additive correction receipt](evidence/resumed-allocator-correction-l4-20261008/index.json) preserves that limitation and supersedes earlier prose. Historical legacy-key runs are unchanged. The blocked variant lowers fit allocation from 16.737 to 11.865 GiB, but reservation rises slightly and strict module-level failures remain. Both new resident EP1 variants instead [fail during fit](evidence/resumed-resident-hm64k-oom-l4-20261008/index.json), with no prediction result; verified allocator retries and stage placement remain distinct controls. Do not call the offload result multi-GPU-only feasibility or an accepted exact GNN replacement.
+
+The [final resident controls](evidence/resumed-resident-capacity-l4-20261008/index.json) now preserve stage2 success at512.93 rows/s, EP4 OOM and both same-process-verified expandable EP1 OOM retries. All10 resumed relational arms are downloaded: five successes and five failures. Stage2 has stable repeated outputs and independently checked absolute quality, but no successful same-policy resident1 oracle. Its fit peaks16.130/12.891 GiB and prediction peaks0.502/12.150 GiB are separate per-device values, not summed simultaneous peaks. This is a resident-policy capacity benefit, while native CPU offload remains single-GPU feasible.
 
 The original cuDF results saved repeat-zero arrays but scored the last repeat. Original evidence remains unchanged; additive independent audits score the archived arrays. The runner now archives every repeat and uses the same first repeat for NPY, PT, and reported reference quality. A deliberately nondeterministic CPU fixture tests this contract.
 
@@ -74,10 +76,10 @@ A subsequent research-only scorer fix (`f13e29828`) preserves the full predictio
 | H&M C16k/E8 native, EP1/2/4, hybrid queue on original L40S | Launched before access restriction; outputs were not downloaded | Original remote-only outputs lost with disk deletion; no completion, speed or quality claim |
 | H&M C64k/E8 capacity on original L4 | EP1 stdout showed OOM; wrapper finished | Undownloaded stage2 outcome/raw receipts lost; visible EP1 failure is not a recovered complete comparison |
 | Original placement Nsight captures | Captured remotely but not downloaded | Remote-only captures lost; no trace-derived conclusion |
-| Native CPU-offload E8 capacity control | Never launched | No multi-GPU-only feasibility claim |
+| Native CPU-offload E8 capacity control | Replacement L4 C16k/C64k pairs completed and audited | Native C64k fits one L4; no intrinsic multi-GPU-only feasibility claim |
 | Pretrained tabular process-EP and graph-EP ladders | Replacement-host nine-arm ladder completed and independently audited | Process EP4 2.724× its EP1; graph EP4 1.742× its graph1; all repeats exact native-batch1 |
 | Native relational process-EP ladder | Replacement-host resident/process1/2/4 completed and independently audited | Process EP4 1.944× process1 with exact repeats; fresh graph workload and final-gather timer prevent unqualified comparisons to historical runs |
-| Mixed eight-GPU query DP | Staged, never launched | No eight-GPU scaling result |
+| Mixed eight-GPU query DP | Original attempt never launched; replacement Ohio/Frankfurt execution now running | No accepted eight-GPU result until full output/identity/timing audit; heterogeneous cross-region hosts are not homogeneous eight-GPU scaling |
 | Full-model FP32 F1 CP | Replacement-host four-arm precision comparison audited | Strict all-999-quantile gate passes CP2; no speedup and no repair of original BF16 failures |
 | GPU all-gather CP | Replacement-host six-arm resident16k comparison audited | Gates pass, but no native/single-rank crossover; nominal ~2.5% collective differences are not robust independent trials |
 | C32k MHA CP | Staged, not yet measured | No long-MHA crossover claim |
@@ -109,8 +111,8 @@ Both original task hosts were last verified reachable at 16:27:25 UTC, without a
 
 With permitted networking restored, the sole cloud operator's checks beginning **2026-10-08 01:34:46 UTC**, before replacement launch, found both original instance IDs absent and no remaining task-tagged EBS volumes. The retained L40S Spot request reports `instance-terminated-by-user` at 2026-10-07 23:23:31 UTC. The L4 request has already been purged, so its exact termination time and cause are unavailable. The local receipt is [old-host-lifecycle-resume-20261008.json](../../../.kumo-multigpu-20261008/ops/old-host-lifecycle-resume-20261008.json). These facts establish original-host closure and loss of undownloaded disk artifacts; they do not identify final cost or certify removal of every access resource.
 
-The coordinator has authorized two replacement homogeneous L40S Spot hosts with three-hour shutdown guards. The operator reports first replacement `i-0fa5c18a88d2eb124` launched in us-east-2a at 2026-10-08 01:38:13 UTC; second-host capacity was still being sought at this update. Their subsequent runtime state and identifiers belong in the operator's live [operations record](operations.md); this handoff does not assume readiness or termination. Original security groups/imported keys are retained for reuse; stale cross-host ingress rule `sgr-028d1b8e6657ba968` was revoked. These access resources and replacements must be reconciled before final cleanup is declared. No original remote-only result is marked a numerical failure simply because it was lost.
+The initial replacement request sought two homogeneous L40S hosts, but acquired hosts are **heterogeneous**: Ohio `i-0fa5c18a88d2eb124`, four L40S, launched01:38:13 UTC; Frankfurt `i-03ea6eecfa001b1a6`, four L4, launched01:49:47 UTC. Both completed runtime/model-hash verification and ran separately controlled workloads. Mixed cross-region query-DP execution is now underway; no eight-GPU result is inferred from launch or local-pipe controls. Live state/guards/cost belong in the operator's [operations record](operations.md); this handoff does not assume termination. Original security groups/imported keys were retained for reuse; stale cross-host ingress rule `sgr-028d1b8e6657ba968` was revoked. These access resources and replacements must be reconciled before final cleanup is declared. No original remote-only result is marked a numerical failure simply because it was lost.
 
-The coordinator confirmed the branch's first push at `af55e434b`; the remote is `git@github.com:NVIDIA/structured-data-models.git`. The subsequent lifecycle follow-up integrated as `46f05c2cb` was still local at that confirmation. Publication does not close final resource teardown, actual cost accounting or remaining scientific controls.
+The coordinator confirmed the branch's first push at `af55e434b` and a later push at `886f0daf2`; the remote is `git@github.com:NVIDIA/structured-data-models.git`. Subsequent local commits are not assumed published without confirmation. Publication does not close final resource teardown, actual cost accounting or remaining scientific controls.
 
 A separate minimal [`feature/ensemble-parallel`](https://github.com/NVIDIA/structured-data-models/tree/feature/ensemble-parallel) branch was subsequently confirmed pushed at `75bd74af21d7541e7ef042871af5e3f076203a17`, based directly on `842c408fe`. It contains four files and 599 additions: core threaded resident executor/export, focused tests and usage documentation. Its core/test bytes match the tested frozen source. Process/graph adapters and their larger performance gains remain research-only and are not included in that candidate. See [integration.md](integration.md) for the scoped contract; no PR has been opened.
