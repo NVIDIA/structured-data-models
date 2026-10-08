@@ -314,3 +314,29 @@ The replacement L4 host also completed the previously missing full-FP32 F1 isola
 Rates are 377.43 rows/s for BF16 native, 303.73 for FP32 native, 299.96 for FP32 LSE1 and 300.31 for FP32 CP2. Thus full precision resolves this numerical discrepancy at a precision cost, without a CP throughput win. The separate BF16-to-FP32 change affects predictions and task quality and must not be attributed to distributed execution.
 
 The same L4 host completed matched resident Covertype context-16k collective controls. Native/LSE1 are exact; all-reduce and all-gather variants pass the unchanged BF16 gate on all repeats. All-gather2 is bitwise identical to all-reduce2; at four ranks the collective change has maximum error 0.002825916 and mean error 0.0000155401. Recomputed throughput is 1,853.19 native, 1,807.12 LSE1, 1,500.81/1,489.72 all-reduce2/4 and 1,541.44/1,525.77 all-gather2/4. Nominal 2.71%/2.42% all-gather gains do not cross the native baseline and are not supported by independent repeated trial runs. Ten new CP sidecars preserve every-repeat, per-rank hash, original validation identity, quality and strict tolerance checks. Earlier failed arms remain unchanged.
+
+## Graph replay composed with process query parallelism
+
+The fresh L40S Covertype E4/C1024/Q8192/B256 composition runs pass all six real-CUDA contracts (1/2/4 GPUs, regular and remainder shapes at batch 256/1024). Every full-model arm retains three repeats. GraphDP2/4 outputs are bitwise identical to GraphDP1 over all 8,192 rows, and their first 2,048 rows are identical to the earlier GraphEP1 policy. Native estimator-batch-four DP1/2/4 are independently bitwise identical, including the earlier native-batch-four prefix control.
+
+| Backend | One GPU rows/s | Two GPU rows/s | Four GPU rows/s | Four/one scaling |
+|---|---:|---:|---:|---:|
+| Native estimator batch four + process DP | 3,744.04 | 7,505.81 | 14,341.62 | 3.831x |
+| Per-member graph replay + process DP | 6,074.73 | 12,072.97 | 22,667.07 | 3.731x |
+
+These are fully gathered parent wall times including IPC, transfers and ordered CPU output collection, excluding setup/fit/warmup. The four-GPU graph composition is 1.581x the matched four-GPU native control. Each worker retains exactly four graphs, and capture counts plus event lists remain unchanged throughout measured prediction. Graph versus native batching is not bitwise equivalent: maximum probability difference 0.006434143, mean 0.000253580, six class changes and one fewer correct prediction among 8,192 rows. It passes the unchanged BF16 screen; loss difference -0.0000138 has paired 95% interval [-0.0000792, 0.0000494], not evidence of improved task quality. Six new sidecars preserve every-repeat, prefix, graph-count and memory checks.
+
+Independent read-only SQLite review also reconciles all three resident/graph profiling exports: one prediction NVTX range and one kernel process per trace, no boundary-straddling kernels, and exact derived kernel counts/union times and launch API counts. Specifically `cudaLaunchKernel_v7000` falls from 39,832 to 944 for GraphEP1, with 32 `cudaGraphLaunch_v10000` calls. Including separate driver launch variants changes total ordinary-launch counts to 42,624 and 952; these different count scopes must not be interchanged. Kernel-active time rises from 13.58% to 55.96% of the instrumented one-GPU range; this is not SM utilization or occupancy. Diagnostics remain preserved. Profiling outputs are exact, but instrumented timing is not an extra clean-throughput replicate.
+
+## Bounded GNN: reduced fit allocation, failed module correctness gates
+
+Independent XML/log/evidence reconciliation verifies 57 low-level CUDA tests pass, while the actual-checkpoint synthetic-input GNN suite has 23 failures and eight passes. All 30 checkpoint numerical records match the test outcomes; six one-block controls are bitwise exact. Genuine 257-node blocks of 64/128 fail for both classifier/regressor checkpoints in FP32, BF16 and BF16 autocast. For example, classifier FP32 fit has maximum hidden-output difference 0.00168705 and 16,830 failing entries out of 133,120 at the original module gate. Frozen-query output also fails. Hidden arrays were not saved, so the independent audit reconciles retained numerical records rather than recomputing those errors from raw tensors. Passing low-level fixtures does not override these actual-weight failures.
+
+Exploratory matched native E8 H&M end-to-end pairs use the same context-specific graph bytes, source, seeds, allocator settings and original 4,096 validation labels. All three repeats are stable. Block 16,384 genuinely divides context fitting, while query graphs fit within one block. At context 16,384, final probability maximum/mean errors are 0.010768354/0.001581777; at context 65,536 they are 0.008892119/0.000949429. Both pass the final BF16 screen with zero label changes, but remain numerical variants with failed hidden-output gates. Paired loss intervals include zero in both cohorts.
+
+| Context | Native / blocked rows/s | Native / blocked fit peak allocated GiB | Interpretation |
+|---|---:|---:|---|
+| 16,384 | 558.20 / 549.88 | 4.326 / 3.107 | Less fit allocation, no speed gain |
+| 65,536 | 435.78 / 433.44 | 16.737 / 11.865 | Less fit allocation, no speed gain; native already fits |
+
+At context 65,536 peak reserved memory increases from 19.342 to 19.592 GiB despite the allocated-peak reduction. Public native ensemble CPU cache offload already fits this E8 workload on one L4, so this pair alone does not establish a capacity unlock. Query graph bytes differ between the context-size cohorts; only within-context B0/B16384 pairs are controlled comparisons. Four full-model sidecars and the separate module-test audit retain these distinctions and failures.
