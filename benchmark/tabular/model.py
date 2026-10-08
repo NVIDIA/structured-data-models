@@ -506,9 +506,11 @@ class _FinetunedMixin:
         self.params["finetune"] = True
 
 
-class SDMKumoTabularFinetunedModel(_FinetunedMixin, SDMKumoTabularLargeModel):
-    ag_key = "SDM-KUMO-TABULAR-FT"
-    ag_name = "SDMKumoTabularFT"
+class SDMKumoTabularLargeFinetunedModel(
+    _FinetunedMixin, SDMKumoTabularLargeModel
+):
+    ag_key = "SDM-KUMO-TABULAR-LARGE-FT"
+    ag_name = "SDMKumoTabularLargeFT"
     # Own a deep copy per fold instead of mutating the shared network.
     shared_weights: ClassVar[SharedWeights] = replace(
         SDMKumoTabularModel.shared_weights, copy_per_fit=True
@@ -584,19 +586,15 @@ MODEL_CONFIGS = {
         name="KumoTabular-Large",
         model_cls=SDMKumoTabularLargeModel,
     ),
-    "kumo-tabular-ft": ModelConfig(
-        name="KumoTabularFT",
-        model_cls=SDMKumoTabularFinetunedModel,
+    "kumo-tabular-large-ft": ModelConfig(
+        name="KumoTabularLargeFT",
+        model_cls=SDMKumoTabularLargeFinetunedModel,
     ),
     "tabiclv2-ft": ModelConfig(
         name="TabICLv2FT",
         model_cls=SDMTabICLv2FinetunedModel,
     ),
-    "kumo-small": ModelConfig(
-        name="KumoTabularSmall",
-        model_cls=SDMKumoTabularSmallModel,
-    ),
-    "kumo-small-ft": ModelConfig(
+    "kumo-tabular-small-ft": ModelConfig(
         name="KumoTabularSmallFT",
         model_cls=SDMKumoTabularSmallFinetunedModel,
     ),

@@ -16,7 +16,6 @@ MODEL_NAMES = (
     "kumo-tabular-small",
     "kumo-tabular-medium",
     "kumo-tabular-large",
-    "kumo-small",
 )
 
 
