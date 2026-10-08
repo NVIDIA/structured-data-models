@@ -13,7 +13,11 @@ from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import MODEL_CONFIGS
+from benchmark.tabular.model import (
+    MODEL_CONFIGS,
+    add_finetune_args,
+    finetune_config_overrides,
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -46,6 +50,7 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+add_finetune_args(parser)
 parser.add_argument(
     "--enable-kv-cache",
     action="store_true",
@@ -63,7 +68,6 @@ result_dir = (
     / model_config.name
     / "outer_model"
 )
-result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
     "max_context_size": args.max_context_size,
@@ -72,6 +76,19 @@ config = {
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
+finetune_overrides = finetune_config_overrides(args)
+config.update(finetune_overrides)
+
+if finetune_overrides:
+    # tabarena caches results by a positional "_c{i}" config index, not by
+    # hyperparameter content, so distinct fine-tune configs (e.g. different
+    # learning rates) for the same model/dataset would otherwise silently
+    # collide on the same cache path and read back each other's results.
+    variant = "_".join(
+        f"{key}={value}" for key, value in sorted(config.items())
+    )
+    result_dir = result_dir / variant
+result_dir.mkdir(parents=True, exist_ok=True)
 
 generator = ConfigGenerator(
     search_space={},
