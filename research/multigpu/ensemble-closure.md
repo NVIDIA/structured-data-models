@@ -9,7 +9,7 @@ Plan updated 2026-10-08. Runtime source frozen by the coordinator: `c0fb64fcc`. 
 | KumoTabular large | Existing frozen Covertype train/validation split, context 1,024, queries 2,048, seed 1729 | E4, query batch256, local estimator batch1, BF16 | Native1, tuned native batch4, residentEP1, processEP1/2/4, graphEP1/2/4 |
 | KumoRelational | Existing frozen H&M user-churn two-hop `[16,16]` workload, context1,024, queries2,000, seed1729 | E4, query batch250, native per-member execution, BF16 | Matched residentEP1 and processEP1/2/4 |
 
-All arms use five measured prediction passes after one warmup. Startup/model loading, context fit, warmup/capture, and prediction are separate. Baseline execution on a replacement host is required; old host timings provide context only. No graph-relational arm is supported.
+All arms use three measured prediction passes after one warmup, matching the existing study protocol. Startup/model loading, context fit, warmup/capture, and prediction are separate. Baseline execution on a replacement host is required; old host timings provide context only. No graph-relational arm is supported.
 
 Tabular command template, with `SOURCE`, `DATA`, and a fresh `OUTPUT` replaced by the operator's explicit paths:
 
@@ -18,7 +18,7 @@ python -m research.multigpu.tabular_bench \
   --data DATA/covertype --output OUTPUT --source-commit c0fb64fcc \
   --task classification --size large --estimators 4 \
   --context 1024 --queries 2048 --batch-size 256 \
-  --repeats 5 --warmups 1 --seed 1729 --precision bfloat16 \
+  --repeats 3 --warmups 1 --seed 1729 --precision bfloat16 \
   --estimator-batch-size 1 --mode adapter --gpus 4 \
   --adapter research.multigpu.process_ensemble:factory
 ```
@@ -31,7 +31,7 @@ Relational command template:
 python -m research.multigpu.relational_bench run \
   --workload PREPARED_HM1024 --output OUTPUT --source-commit c0fb64fcc \
   --mode process-ensemble --gpus 4 --estimators 4 \
-  --repeats 5 --warmups 1 --threads 8 --dtype bf16 --seed 1729 \
+  --repeats 3 --warmups 1 --threads 8 --dtype bf16 --seed 1729 \
   --include-final-gather
 ```
 
