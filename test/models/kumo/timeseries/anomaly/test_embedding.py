@@ -17,6 +17,7 @@ def test_diffusion_embedding(
     dtype: torch.dtype,
     out_channels: int | None,
 ) -> None:
+    """Match the released lookup and projections across devices and dtypes."""
     module = DiffusionEmbedding(
         num_steps=1000,
         channels=128,
@@ -59,6 +60,7 @@ def test_diffusion_embedding(
 
 @withCUDA
 def test_embedding_dtype_conversion(device: torch.device) -> None:
+    """Move the lookup table and projections together when converting dtype."""
     module = DiffusionEmbedding(num_steps=10, channels=8).to(
         device=device, dtype=torch.float64
     )
@@ -69,5 +71,6 @@ def test_embedding_dtype_conversion(device: torch.device) -> None:
 
 @pytest.mark.parametrize("channels", [1, 2, 3, 7])
 def test_invalid_embedding_width(channels: int) -> None:
+    """Reject widths that cannot form paired sine and cosine features."""
     with pytest.raises(ValueError, match="even and at least four"):
         DiffusionEmbedding(num_steps=10, channels=channels)
