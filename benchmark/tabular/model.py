@@ -7,7 +7,7 @@ import abc
 import argparse
 import copy
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, ClassVar, Literal, cast
 
 import numpy as np
@@ -497,31 +497,38 @@ class SDMKumoTabularLargeModel(SDMKumoTabularModel):
     size = "large"
 
 
-class SDMKumoTabularFinetunedModel(SDMKumoTabularLargeModel):
+class _FinetunedMixin:
+    """Mixin for a model's `-ft` variant: fine-tuning on by default."""
+
+    def _set_default_params(self) -> None:
+        super()._set_default_params()
+        self.params["finetune"] = True
+
+
+class SDMKumoTabularFinetunedModel(_FinetunedMixin, SDMKumoTabularLargeModel):
     ag_key = "SDM-KUMO-TABULAR-FT"
     ag_name = "SDMKumoTabularFT"
+    # Fine-tuning mutates the network in place, so each fold needs its own
+    # copy of the shared pretrained network rather than the same instance
+    # every other bagged fold trains on top of.
+    shared_weights: ClassVar[SharedWeights] = replace(
+        SDMKumoTabularModel.shared_weights, copy_per_fit=True
+    )
 
-    def _set_default_params(self) -> None:
-        super()._set_default_params()
-        self.params["finetune"] = True
 
-
-class SDMKumoTabularSmallFinetunedModel(SDMKumoTabularSmallModel):
+class SDMKumoTabularSmallFinetunedModel(
+    _FinetunedMixin, SDMKumoTabularSmallModel
+):
     ag_key = "SDM-KUMO-TABULAR-SMALL-FT"
     ag_name = "SDMKumoTabularSmallFT"
+    shared_weights: ClassVar[SharedWeights] = replace(
+        SDMKumoTabularModel.shared_weights, copy_per_fit=True
+    )
 
-    def _set_default_params(self) -> None:
-        super()._set_default_params()
-        self.params["finetune"] = True
 
-
-class SDMTabICLv2FinetunedModel(SDMTabICLv2Model):
+class SDMTabICLv2FinetunedModel(_FinetunedMixin, SDMTabICLv2Model):
     ag_key = "SDM-TABICLV2-FT"
     ag_name = "SDMTabICLv2FT"
-
-    def _set_default_params(self) -> None:
-        super()._set_default_params()
-        self.params["finetune"] = True
 
 
 class SDMTabFMModel(SDMModel):
@@ -542,13 +549,9 @@ class SDMTabFMModel(SDMModel):
         )
 
 
-class SDMTabFMFinetunedModel(SDMTabFMModel):
+class SDMTabFMFinetunedModel(_FinetunedMixin, SDMTabFMModel):
     ag_key = "SDM-TABFM-FT"
     ag_name = "SDMTabFMFT"
-
-    def _set_default_params(self) -> None:
-        super()._set_default_params()
-        self.params["finetune"] = True
 
 
 @dataclass(frozen=True)

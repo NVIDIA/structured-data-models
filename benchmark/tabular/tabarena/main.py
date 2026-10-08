@@ -77,6 +77,12 @@ config = {
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
 finetune_overrides = finetune_config_overrides(args)
+if finetune_overrides and not args.model.endswith("-ft"):
+    raise ValueError(
+        f"--finetune_* flags were passed but --model {args.model!r} isn't "
+        "a '-ft' variant, so fine-tuning is disabled and the flags would "
+        "silently have no effect; pass the matching '-ft' model instead."
+    )
 config.update(finetune_overrides)
 
 if finetune_overrides:

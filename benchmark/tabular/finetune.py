@@ -36,7 +36,7 @@ def kumo_small_binary_epochs(
     is_kumo_small: bool,
     is_binary: bool,
 ) -> int:
-    """Epoch count for fine-tuning, with a kumo-small binary-classification override.
+    """Epoch count for fine-tuning, with a kumo-small binary override.
 
     Empirically found to need fewer epochs than the shared default to avoid
     overfitting on binary classification.
@@ -152,7 +152,6 @@ def full_finetune(
         )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-    quantile_levels = torch.linspace(0.001, 0.999, 999, device=device)
     higher_is_better = task == "classification"
 
     def current_metric() -> float:
@@ -200,13 +199,23 @@ def full_finetune(
                 )
                 loss = F.nll_loss(scores.clamp_min(_EPS).log(), indices)
             else:
-                # Pinball loss over the model's 999 fixed quantile levels,
-                # already back in the target's original scale.
+                # Pinball loss over the model's quantile output columns,
+                # already back in the target's original scale; a model with
+                # a single point-estimate column (e.g. TabFM) has no
+                # quantiles to score against, so this reduces to squared
+                # error instead.
                 diff = y_query.numerical - out.numerical
-                loss = torch.maximum(
-                    quantile_levels * diff,
-                    (quantile_levels - 1) * diff,
-                ).mean()
+                n_quantiles = out.numerical.size(-1)
+                if n_quantiles > 1:
+                    levels = torch.linspace(
+                        0.001, 0.999, n_quantiles, device=device
+                    )
+                    loss = torch.maximum(
+                        levels * diff,
+                        (levels - 1) * diff,
+                    ).mean()
+                else:
+                    loss = diff.pow(2).mean()
             loss.backward()
             optimizer.step()
 

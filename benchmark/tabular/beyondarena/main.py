@@ -65,7 +65,6 @@ result_dir = (
     / model_config.name
     / "outer_model"
 )
-result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
     "max_context_size": args.max_context_size,
@@ -74,7 +73,25 @@ config = {
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
-config.update(finetune_config_overrides(args))
+finetune_overrides = finetune_config_overrides(args)
+if finetune_overrides and not args.model.endswith("-ft"):
+    raise ValueError(
+        f"--finetune_* flags were passed but --model {args.model!r} isn't "
+        "a '-ft' variant, so fine-tuning is disabled and the flags would "
+        "silently have no effect; pass the matching '-ft' model instead."
+    )
+config.update(finetune_overrides)
+
+if finetune_overrides:
+    # tabarena caches results by a positional "_c{i}" config index, not by
+    # hyperparameter content, so distinct fine-tune configs (e.g. different
+    # learning rates) for the same model/dataset would otherwise silently
+    # collide on the same cache path and read back each other's results.
+    variant = "_".join(
+        f"{key}={value}" for key, value in sorted(config.items())
+    )
+    result_dir = result_dir / variant
+result_dir.mkdir(parents=True, exist_ok=True)
 
 generator = ConfigGenerator(
     search_space={},

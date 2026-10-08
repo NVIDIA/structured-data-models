@@ -161,6 +161,17 @@ def main() -> None:
         **finetune_kwargs,
     )
     method_name = model_config.method + ("_finetuned" if args.finetune else "")
+    if finetune_kwargs:
+        # ScoringBench's runner treats an existing cached row as complete by
+        # model_name+fold alone, with no config comparison, so a rerun with
+        # different fine-tuning hyperparameters (e.g. a different LR) would
+        # otherwise silently report the first run's stale result under the
+        # new config instead of recomputing. Fold the config into the name
+        # so distinct configs are distinct models to the runner.
+        variant = "_".join(
+            f"{key}={value}" for key, value in sorted(finetune_kwargs.items())
+        )
+        method_name = f"{method_name}_{variant}"
     runner_module.run_benchmark(
         datasets_config=datasets,
         model_factories={method_name: factory},
