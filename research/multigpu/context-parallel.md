@@ -160,7 +160,9 @@ The prototype distributes only fitted-cache replay. Fit attention could also sha
 
 Query/data parallelism can wrap CP groups: split independent query batches across groups while sharing each group's context shards. Ensemble parallelism can assign distinct estimator groups similarly. These hybrids trade less cross-GPU replication against collective traffic. A useful next decision is whether long-context attention dominates total model time after the replicated preprocessing/row/GNN stages; the full-model trace determines that.
 
-## Verified completion boundary
+## Historical interruption boundary
+
+This subsection records the first session's evidence boundary. The resumed measurements below supersede its CUDA-correctness, FP32, and all-gather deferrals; they do not retroactively change the earlier BF16 failures.
 
 The final proposed GPU block was staged as `run-context-final.sh` against source `4e1c5c33d`, but **was not launched**. Before its GPU lease began, the environment changed to network-restricted execution; a read-only SSH check failed with `Operation not permitted`. No alternate network route or permission bypass was attempted. Therefore the following remain unmeasured, not failed benchmark results:
 
@@ -173,3 +175,48 @@ The final proposed GPU block was staged as `run-context-final.sh` against source
 The local evidence contains 21 completed pretrained full-model arms plus two random-weight microprobes, with result JSON and saved predictions, and the completed Nsight report/SQLite/log/derived analysis. The last CP GPU profiling process exited successfully, and all corresponding downloads completed before the restriction. No final-block CP process was started. Subsequent remote process state and instance teardown cannot be verified from this restricted session; cloud ownership and cleanup remain with the coordinating operator.
 
 Current integration recommendation: keep context sharding experimental. It provides measured resident-cache and prediction-peak memory relief on both Kumo families, but no convincing throughput improvement in the measured matrix. BF16 relational regression fails the declared all-quantile screen, and the FP32-partial alternative does not repair it. Ensemble/data parallelism or placement may be preferable depending on the workload; context fitting, graph encoding, and preprocessing are still replicated here.
+
+## Resumed full-FP32 isolation
+
+After access was restored, source `c0fb64fcc` ran on a newly provisioned four-L4 Spot host in Frankfurt, with PyTorch 2.9.1+cu130. Models and the retained F1 graph were independently SHA-verified before execution. The four added CUDA cases—2/4-rank `efficient_fp32` and 2/4-rank Flash `all_gather`—passed in 110.15 seconds, including their uneven/empty shard and model tests. This closes the earlier CUDA-testing deferral for these variants. Each completed benchmark directory was downloaded before starting the next timed arm.
+
+The F1 experiment uses the same native C1024 graph, all 499 validation queries, batch125, E4, seed1729, public CPU-cache offloading, and three saved prediction passes. Its graph SHA256 is `23c439d0ff2771af5fcaed8735607d1fe762ee2236bb5451eceda7cfdf1adcb2`. FP32 applies to the complete model, not just partial attention; parameters and fitted floating caches are FP32, matmul precision is `highest`, and CUDA matmul TF32 is disabled. cuDNN TF32 remains enabled as recorded; this was not a blanket backend-disable experiment. Native and LSE1 use the same hardware/runtime and partial kernel control.
+
+| Precision / arm | Unique rows/s | MAE | RMSE | Prediction peak/rank | ICL cache/rank (CPU) |
+|---|---:|---:|---:|---:|---:|
+| BF16 native | 377.43 | 3.414711 | 4.214993 | 338.86 MiB | 96 MiB |
+| FP32 native | 303.73 | 3.401794 | 4.201006 | 416.39 MiB | 192 MiB |
+| FP32 efficient LSE1 | 299.96 | 3.401794 | 4.201006 | 416.39 MiB | 192 MiB |
+| FP32 efficient CP2 | 300.31 | 3.401794 | 4.201006 | 367.39 MiB | 96 MiB |
+
+The complete FP32 CP2 output passes the original FP32 gate (`atol=1e-5, rtol=1e-4`) across all 498,501 quantile entries: maximum absolute difference is 1.335144e-5 and mean absolute difference is 8.991849e-7. Native versus LSE1 is byte-identical. This supports the distributed algorithm's numerical validity under full FP32 for this workload; it does not make the failed BF16 or partial-FP32 results pass. CP2 delivers 0.989x FP32-native throughput and 0.796x BF16-native throughput. Full-model FP32 therefore restores this numerical gate at a substantial precision-policy cost, without a demonstrated latency gain. Single cold-fit timings are retained but not interpreted as steady-state fit speedups because startup/compiler cache state differs across first uses.
+
+Evidence: `cp-resume-20261008-a1/f1-c1024-e4-{bfloat16-native1,float32-native1,float32-lse1,float32-context2}`, including all three prediction arrays, effective configuration, numeric-backend flags, and per-rank wall/memory records. This is a new-host matched comparison; the earlier L4 measurements remain historical, not cross-host controls.
+
+| F1 arm | Cold load | Cold fit | Fit allocated peak/rank | Total fitted cache/rank (CPU) |
+|---|---:|---:|---:|---:|
+| BF16 native | 3.203 s | 13.407 s | 779.24 MiB | 129.81 MiB |
+| FP32 native | 0.770 s | 4.977 s | 1,100.21 MiB | 259.63 MiB |
+| FP32 LSE1 | 0.780 s | 3.320 s | 1,100.21 MiB | 259.63 MiB |
+| FP32 CP2 | 0.794 s | 3.308 s | 1,100.21 MiB | 163.63 MiB |
+
+These startup observations are maxima across ranks and include first-use effects; the first BF16 arm's longer fit does not establish that FP32 is faster at fitting. FP32-native doubles the fitted floating cache and raises fit peak 41.2% and prediction peak 22.9% relative to BF16-native. FP32 CP2 halves ICL cache relative to FP32-native, but total CPU cache still exceeds BF16-native because replicated non-ICL tensors remain FP32. The quality audit independently confirmed the strict gate and repeat/rank consistency for all three prediction passes.
+
+## Resumed one-collective comparison
+
+On the same new four-L4 host and source, the complete Covertype large C16k/E4/Q2048/B256 resident-cache ladder compares native SDPA, single-rank Flash LSE, and Flash CP2/CP4 with either default two-all-reduce merging or packed all-gather. Each arm has three saved prediction passes; each pass uses the slowest rank and counts validation rows only once.
+
+| Arm | Unique rows/s | Slowest-rank pass range | Prediction peak/rank | ICL GPU cache/rank |
+|---|---:|---:|---:|---:|
+| Native SDPA | 1,853.19 | 1.1041–1.1059 s | 2,242.03 MiB | 768 MiB |
+| Flash LSE1 | 1,807.12 | 1.1279–1.1345 s | 2,242.03 MiB | 768 MiB |
+| CP2 all-reduce | 1,500.81 | 1.3636–1.3702 s | 1,860.03 MiB | 384 MiB |
+| CP2 all-gather | 1,541.44 | 1.3201–1.3289 s | 1,860.03 MiB | 384 MiB |
+| CP4 all-reduce | 1,489.72 | 1.3689–1.3758 s | 1,667.53 MiB | 192 MiB |
+| CP4 all-gather | 1,525.77 | 1.3383–1.3456 s | 1,667.53 MiB | 192 MiB |
+
+All-gather's nominal throughput changes are +2.71% at CP2 and +2.42% at CP4 relative to the corresponding default merge. These three-pass ranges do not overlap within this ordered run, but there are no randomized arm-order or independent run replications: treat the differences as small measured changes, not a robust general speedup. Neither approach beats native or LSE1. All-gather CP4 remains only 0.823x native throughput. Its larger temporary does not raise this workload's whole-prediction peak because other allocations dominate; that observation does not remove its world-size-scaled temporary or higher communication volume.
+
+All six arms have accuracy 0.91455078. Native and LSE1 are byte-identical. CP2's reduction variants are also byte-identical, while CP4 all-gather differs from CP4 all-reduce by at most 0.002825916; changing floating-point reduction order is not guaranteed bitwise invariant. Versus native, all CP arms pass the fixed BF16 numerical screen and change two class decisions. Maximum probability differences are 0.009093225 (both CP2 arms), 0.008518979 (CP4 all-reduce), and 0.008754194 (CP4 all-gather). Log losses are 0.22567126 native/LSE1, 0.22553590 CP2, 0.22554731 CP4 all-reduce, and 0.22554880 CP4 all-gather; these negligible differences are not evidence of improved predictive quality.
+
+Evidence: `cp-resume-20261008-a1/covertype-large-c16384-e4-resident-flash-{native1,lse1,all_reduce2,all_gather2,all_reduce4,all_gather4}`. All ten resumed pretrained arms and added CUDA test logs were retrieved locally before releasing the GPU lease; a final remote process check found no CP worker or GPU compute process. The implementation remains experimental. Long-MHA C32k, CP8, and NVLink/NVSwitch measurements remain unperformed; full context/graph fit sharding remains future work rather than an implemented capability.
