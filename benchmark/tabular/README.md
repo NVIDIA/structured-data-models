@@ -36,8 +36,6 @@ ______________________________________________________________________
   python -m benchmark.tabular.tabarena.main --model kumo-tabular-small
   ```
 
-  `--model kumo-small` is the same small model, under the name its `-ft` pair uses.
-
 - **`TabFM`:**
 
   ```bash
@@ -54,7 +52,7 @@ python -m benchmark.tabular.tabarena.main \
 
 ### Fine-tuning
 
-`--model tabiclv2-ft`, `--model kumo-tabular-ft`, `--model kumo-small-ft`, and `--model tabfm-ft` full fine-tune every parameter of the model on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`), as opposed to the zero-shot `tabiclv2`/`kumo-tabular-large`/`kumo-small`/`tabfm` baselines above:
+`--model tabiclv2-ft`, `--model kumo-tabular-large-ft`, `--model kumo-tabular-small-ft`, and `--model tabfm-ft` full fine-tune every parameter of the model on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`):
 
 ```bash
 python -m benchmark.tabular.tabarena.main \
@@ -91,8 +89,6 @@ ______________________________________________________________________
   python -m benchmark.tabular.beyondarena.main --model kumo-tabular-small
   ```
 
-  `--model kumo-small` is the same small model, under the name its `-ft` pair uses.
-
 - **`TabFM`:**
 
   ```bash
@@ -126,7 +122,7 @@ Available subset filters include problem types (`classification`, `regression`),
 Same `-ft` model variants and `--finetune_*` flags as TabArena above:
 
 ```bash
-python -m benchmark.tabular.beyondarena.main --model kumo-small-ft --subset lite
+python -m benchmark.tabular.beyondarena.main --model kumo-tabular-small-ft --subset lite
 ```
 
 ### Evaluate

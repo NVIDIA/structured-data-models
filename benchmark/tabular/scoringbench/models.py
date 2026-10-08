@@ -81,13 +81,6 @@ MODEL_CONFIGS = {
         autocast_dtype=torch.float16,
         num_estimators=16,
     ),
-    "kumo-small": ModelConfig(
-        name="KumoTabularSmall",
-        method="sdm_kumo_tabular_small",
-        factory=partial(_create_kumo_tabular, size="small"),
-        autocast_dtype=torch.float16,
-        num_estimators=8,
-    ),
 }
 
 
@@ -214,15 +207,9 @@ class SDMKumoTabularLargeWrapper(SDMQuantileWrapper):
     config = MODEL_CONFIGS["kumo-tabular-large"]
 
 
-# Alias kept for continuity with results already keyed `"kumo-small"`.
-class SDMKumoTabularSmallAliasWrapper(SDMQuantileWrapper):
-    config = MODEL_CONFIGS["kumo-small"]
-
-
 WRAPPERS: dict[str, type[SDMQuantileWrapper]] = {
     "tabiclv2": SDMTabICLv2Wrapper,
     "kumo-tabular-small": SDMKumoTabularSmallWrapper,
     "kumo-tabular-medium": SDMKumoTabularMediumWrapper,
     "kumo-tabular-large": SDMKumoTabularLargeWrapper,
-    "kumo-small": SDMKumoTabularSmallAliasWrapper,
 }

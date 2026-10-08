@@ -29,8 +29,6 @@ Download and extract the datasets from the [official TALENT dataset page](https:
   python -m benchmark.tabular.talent.main --model kumo-tabular-small --dataset-path /path/to/talent/data
   ```
 
-  `--model kumo-small` is the same small model, under the name its `-ft` pair uses.
-
 - **`TabFM`:**
 
   ```bash
@@ -52,11 +50,11 @@ python -m benchmark.tabular.talent.main \
 
 ## Fine-tuning
 
-Add `--finetune` to full fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`) — unlike TabArena/BeyondArena's dedicated `-ft` model choices, `--finetune` here applies to whichever model you picked, including `kumo-tabular-large` and `tabfm`:
+Add `--finetune` to full fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`). Unlike TabArena/BeyondArena's dedicated `-ft` model choices, this is a flag applied to whichever model you picked. `--model kumo-tabular-small-ft` is `kumo-tabular-small` capped at 10 classes, for fine-tuning stability on multiclass datasets:
 
 ```bash
 python -m benchmark.tabular.talent.main \
-  --model kumo-small \
+  --model kumo-tabular-small-ft \
   --dataset-path /path/to/talent/data \
   --finetune \
   --finetune-epochs 75 \

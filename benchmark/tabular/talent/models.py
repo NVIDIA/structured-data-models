@@ -121,8 +121,8 @@ MODEL_CONFIGS = {
         autocast_dtype=torch.float16,
         low_cardinality="infer",
     ),
-    "kumo-small": ModelConfig(
-        name="KumoTabularSmall",
+    "kumo-tabular-small-ft": ModelConfig(
+        name="KumoTabularSmallFT",
         factory=partial(_create_kumo_tabular, size="small"),
         num_estimators=8,
         autocast_dtype=torch.float16,
@@ -360,7 +360,8 @@ class SDMMethod(Method):
         if self._finetune:
             finetune_epochs = kumo_small_binary_epochs(
                 self._finetune_epochs,
-                is_kumo_small=self._config is MODEL_CONFIGS["kumo-small"],
+                is_kumo_small=self._config
+                is MODEL_CONFIGS["kumo-tabular-small-ft"],
                 is_binary=self.is_binclass,
             )
             full_finetune(
