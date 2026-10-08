@@ -1,0 +1,209 @@
+{
+  "reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1",
+  "same_workload_graphs_labels_and_member_seeds": true,
+  "original_validation_order_and_labels_verified": true,
+  "graphs_sha256": "072a81055e967d50438f85b1d054ea55fae81c9f7312b93b2512237389059fbd",
+  "source": "c0fb64fcc",
+  "runner_sha256": "1cf9f7756b276199982143cf5a511b1461d379603c14b037cd7f209a2fcf71e2",
+  "all_repeats": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": true,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          2000,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2000,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2000,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          2000,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2000,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2000,
+          2
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "quality_each_repeat": [
+    {
+      "rows": 2000,
+      "accuracy": 0.8085,
+      "log_loss": 0.4653589799152213,
+      "brier_multiclass": 0.29562865209160843,
+      "auroc_by_class": [
+        0.6635163916029265,
+        0.6635341532767867
+      ],
+      "auroc_macro_present_classes": 0.6635252724398566,
+      "max_probability_sum_error": 8.940696716308594e-8
+    },
+    {
+      "rows": 2000,
+      "accuracy": 0.8085,
+      "log_loss": 0.4653589799152213,
+      "brier_multiclass": 0.29562865209160843,
+      "auroc_by_class": [
+        0.6635163916029265,
+        0.6635341532767867
+      ],
+      "auroc_macro_present_classes": 0.6635252724398566,
+      "max_probability_sum_error": 8.940696716308594e-8
+    },
+    {
+      "rows": 2000,
+      "accuracy": 0.8085,
+      "log_loss": 0.4653589799152213,
+      "brier_multiclass": 0.29562865209160843,
+      "auroc_by_class": [
+        0.6635163916029265,
+        0.6635341532767867
+      ],
+      "auroc_macro_present_classes": 0.6635252724398566,
+      "max_probability_sum_error": 8.940696716308594e-8
+    }
+  ],
+  "positive_class": 1,
+  "positive_class_column": 0,
+  "median_rows_per_second_recomputed": 1411.865254607169,
+  "times_seconds": [
+    1.422870082999907,
+    1.4165657759999704,
+    1.4107788329999948
+  ],
+  "fit_seconds_single_measurement": 6.862184894999928,
+  "load_seconds": 0.7962236930000017,
+  "warmup_seconds": 1.5653804989999571,
+  "parent_memory_prediction": {
+    "cuda:0": {
+      "allocated": 264785408,
+      "reserved": 1195376640,
+      "peak_allocated": 532426240,
+      "peak_reserved": 1195376640
+    }
+  },
+  "child_memory_prediction": null,
+  "notes": [
+    "All three saved repeats inspected, including predictions.npy alias to repeat0.",
+    "Shared fresh two-hop sampled graphs. Historical query graph bytes differ; historical results are not this ladder denominator.",
+    "CPU recipe/member seed plan is shared with residentEP1; no comparison to sequential native member RNG.",
+    "Timing includes final gather and process IPC/transfers. Parent and child peaks are distinct; neither alone is whole-device physical memory.",
+    "Child RSS is process high-water RSS with shared pages; do not sum as unique host memory."
+  ]
+}

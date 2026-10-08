@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:04:09.236857+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "l4",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host2-runtime",
+      "artifacts": [
+        {
+          "name": "gpu.csv",
+          "role": "record",
+          "bytes": 272,
+          "sha256": "44b2423afb7e3e1e1fc63142d5820948dbe39e69b67f041970f9e43fd411c4d0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host2-runtime/gpu.csv",
+          "archived_path": "l4/gpu.csv"
+        },
+        {
+          "name": "model-verification.json",
+          "role": "record",
+          "bytes": 202,
+          "sha256": "afa6e92f8f7f195ff23ece8dadb97d5bc99858668e8bb45852ac9b08f697449c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host2-runtime/model-verification.json",
+          "archived_path": "l4/model-verification.json"
+        },
+        {
+          "name": "pip-freeze.txt",
+          "role": "record",
+          "bytes": 5564,
+          "sha256": "ab1b55a425d09593042f1a2e483a92d8f4e45253bcfd1b6dfaf6eedbabc7a7d3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host2-runtime/pip-freeze.txt",
+          "archived_path": "l4/pip-freeze.txt"
+        },
+        {
+          "name": "runtime.txt",
+          "role": "record",
+          "bytes": 362,
+          "sha256": "469529c249a1ef4fc03bb20f07c9e9a951369594f2c15dfccaadcf6e17dbead9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host2-runtime/runtime.txt",
+          "archived_path": "l4/runtime.txt"
+        },
+        {
+          "name": "topology.txt",
+          "role": "record",
+          "bytes": 746,
+          "sha256": "5654ca5f0b5d638ea176c0be2fece56c0053c2de473dfd442e4ade9563429298",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host2-runtime/topology.txt",
+          "archived_path": "l4/topology.txt"
+        }
+      ]
+    },
+    {
+      "label": "l40s",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host1-runtime",
+      "artifacts": [
+        {
+          "name": "gpu.csv",
+          "role": "record",
+          "bytes": 280,
+          "sha256": "77e04163fce268c75a1adc46241c2d1e796f117c734d5825e1ebf0c7a13c6979",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host1-runtime/gpu.csv",
+          "archived_path": "l40s/gpu.csv"
+        },
+        {
+          "name": "model-verification.json",
+          "role": "record",
+          "bytes": 202,
+          "sha256": "afa6e92f8f7f195ff23ece8dadb97d5bc99858668e8bb45852ac9b08f697449c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host1-runtime/model-verification.json",
+          "archived_path": "l40s/model-verification.json"
+        },
+        {
+          "name": "pip-freeze.txt",
+          "role": "record",
+          "bytes": 5564,
+          "sha256": "ab1b55a425d09593042f1a2e483a92d8f4e45253bcfd1b6dfaf6eedbabc7a7d3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host1-runtime/pip-freeze.txt",
+          "archived_path": "l40s/pip-freeze.txt"
+        },
+        {
+          "name": "runtime.txt",
+          "role": "record",
+          "bytes": 362,
+          "sha256": "469529c249a1ef4fc03bb20f07c9e9a951369594f2c15dfccaadcf6e17dbead9",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host1-runtime/runtime.txt",
+          "archived_path": "l40s/runtime.txt"
+        },
+        {
+          "name": "topology.txt",
+          "role": "record",
+          "bytes": 746,
+          "sha256": "5654ca5f0b5d638ea176c0be2fece56c0053c2de473dfd442e4ade9563429298",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/resume-host1-runtime/topology.txt",
+          "archived_path": "l40s/topology.txt"
+        }
+      ]
+    }
+  ]
+}

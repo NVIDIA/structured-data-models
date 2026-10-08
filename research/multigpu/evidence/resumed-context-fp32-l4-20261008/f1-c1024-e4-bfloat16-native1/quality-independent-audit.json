@@ -1,0 +1,226 @@
+{
+  "reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-resume-20261008-a1/f1-c1024-e4-float32-native1",
+  "input_identity_equal": true,
+  "query_ids_equal_original_validation_order": true,
+  "full_quantile_columns_verified": true,
+  "rank_repeat_hashes_verified": true,
+  "source": "c0fb64fcc",
+  "numeric_backend": {
+    "parameter_dtypes": [
+      "torch.float32"
+    ],
+    "cache_dtypes": [
+      "torch.bfloat16",
+      "torch.bool"
+    ],
+    "matmul_precision": "highest",
+    "cuda_matmul_allow_tf32": false,
+    "cudnn_allow_tf32": true,
+    "flash_sdp_enabled": true,
+    "efficient_sdp": true,
+    "math_sdp_enabled": true
+  },
+  "comparison_role": "BF16 vs FP32 precision change diagnostic, not multi-GPU parity",
+  "repeats": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": false,
+    "all_repeats_bitwise_equal_reference": false,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          499,
+          999
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.4388408660888672,
+        "mean_abs": 0.05023326329191223,
+        "rms": 0.06527737124474961,
+        "p99_abs": 0.19063186645507812,
+        "relative_l2": 0.005747062027898491,
+        "within_tolerance": false,
+        "failing_entries": 2683,
+        "rows_with_failures": 464
+      },
+      {
+        "shape": [
+          499,
+          999
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.4388408660888672,
+        "mean_abs": 0.05023326329191223,
+        "rms": 0.06527737124474961,
+        "p99_abs": 0.19063186645507812,
+        "relative_l2": 0.005747062027898491,
+        "within_tolerance": false,
+        "failing_entries": 2683,
+        "rows_with_failures": 464
+      },
+      {
+        "shape": [
+          499,
+          999
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.4388408660888672,
+        "mean_abs": 0.05023326329191223,
+        "rms": 0.06527737124474961,
+        "p99_abs": 0.19063186645507812,
+        "relative_l2": 0.005747062027898491,
+        "within_tolerance": false,
+        "failing_entries": 2683,
+        "rows_with_failures": 464
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          499,
+          999
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          499,
+          999
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          499,
+          999
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "quality_each_repeat": [
+    {
+      "rmse": 4.214992795342967,
+      "mae": 3.414711076510932,
+      "crossing_pairs": 0,
+      "rows_with_crossings": 0,
+      "max_crossing": 0,
+      "mean_pinball_loss": 1.1934352839202111,
+      "coverage_q050_q950": 0.9539078156312625
+    },
+    {
+      "rmse": 4.214992795342967,
+      "mae": 3.414711076510932,
+      "crossing_pairs": 0,
+      "rows_with_crossings": 0,
+      "max_crossing": 0,
+      "mean_pinball_loss": 1.1934352839202111,
+      "coverage_q050_q950": 0.9539078156312625
+    },
+    {
+      "rmse": 4.214992795342967,
+      "mae": 3.414711076510932,
+      "crossing_pairs": 0,
+      "rows_with_crossings": 0,
+      "max_crossing": 0,
+      "mean_pinball_loss": 1.1934352839202111,
+      "coverage_q050_q950": 0.9539078156312625
+    }
+  ],
+  "paired_driver_mae_interval": {
+    "candidate_minus_reference": 0.01291665419309077,
+    "ci95": [
+      0.003276769726932262,
+      0.0245445517753577
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "paired_driver_mse_interval": {
+    "candidate_minus_reference": 0.11771566475944027,
+    "ci95": [
+      0.029442563165324148,
+      0.2241143457113943
+    ],
+    "groups": 47,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "median_rows_per_second_recomputed": 377.4258743638196,
+  "slowest_rank_pass_seconds_recomputed": [
+    1.3221139139999423,
+    1.4132736609999483,
+    1.3089206199999808
+  ],
+  "sha256": [
+    "9928fe210328d5242e0bd12b1409c6d8a6c84c9471cd8754c17eb3e2456a9867",
+    "9928fe210328d5242e0bd12b1409c6d8a6c84c9471cd8754c17eb3e2456a9867",
+    "9928fe210328d5242e0bd12b1409c6d8a6c84c9471cd8754c17eb3e2456a9867"
+  ],
+  "notes": [
+    "All 499 validation rows, 47 driver clusters; no TEST data.",
+    "Saved arrays are rank0 output; every other rank independently reports matching hashes.",
+    "Strict float32 gate is atol 1e-5 + rtol 1e-4 times absolute reference, unchanged.",
+    "BF16-to-FP32 quality difference is a precision change, not CP quality improvement."
+  ]
+}

@@ -1,0 +1,367 @@
+{
+  "reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-resume-20261008-a1/covertype-large-c16384-e4-resident-flash-native1",
+  "input_identity_and_original_validation_ids_equal": true,
+  "columns": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "source": "c0fb64fcc",
+  "repeats": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": false,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.008754193782806396,
+        "mean_abs": 0.00017300099639742838,
+        "rms": 0.0006333282270181126,
+        "p99_abs": 0.003268644213676452,
+        "relative_l2": 0.001801089178494607,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.008754193782806396,
+        "mean_abs": 0.00017300099639742838,
+        "rms": 0.0006333282270181126,
+        "p99_abs": 0.003268644213676452,
+        "relative_l2": 0.001801089178494607,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.008754193782806396,
+        "mean_abs": 0.00017300099639742838,
+        "rms": 0.0006333282270181126,
+        "p99_abs": 0.003268644213676452,
+        "relative_l2": 0.001801089178494607,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "rank_repeat_hashes_verified": true,
+  "quality_each_repeat": [
+    {
+      "rows": 2048,
+      "accuracy": 0.91455078125,
+      "log_loss": 0.22554880389582924,
+      "brier_multiclass": 0.12666786193601978,
+      "auroc_by_class": [
+        0.981010330716082,
+        0.9808856816361444,
+        0.9981978444806533,
+        0.9985831834777397,
+        0.9928770142594111,
+        0.9972409594784334,
+        0.9991143724696356
+      ],
+      "auroc_macro_present_classes": 0.9925584837883,
+      "max_probability_sum_error": 2.0167118464087253e-7
+    },
+    {
+      "rows": 2048,
+      "accuracy": 0.91455078125,
+      "log_loss": 0.22554880389582924,
+      "brier_multiclass": 0.12666786193601978,
+      "auroc_by_class": [
+        0.981010330716082,
+        0.9808856816361444,
+        0.9981978444806533,
+        0.9985831834777397,
+        0.9928770142594111,
+        0.9972409594784334,
+        0.9991143724696356
+      ],
+      "auroc_macro_present_classes": 0.9925584837883,
+      "max_probability_sum_error": 2.0167118464087253e-7
+    },
+    {
+      "rows": 2048,
+      "accuracy": 0.91455078125,
+      "log_loss": 0.22554880389582924,
+      "brier_multiclass": 0.12666786193601978,
+      "auroc_by_class": [
+        0.981010330716082,
+        0.9808856816361444,
+        0.9981978444806533,
+        0.9985831834777397,
+        0.9928770142594111,
+        0.9972409594784334,
+        0.9991143724696356
+      ],
+      "auroc_macro_present_classes": 0.9925584837883,
+      "max_probability_sum_error": 2.0167118464087253e-7
+    }
+  ],
+  "class_flips_each_repeat": [
+    2,
+    2,
+    2
+  ],
+  "paired_loss_interval": {
+    "candidate_minus_reference": -0.0001224527950398624,
+    "ci95": [
+      -0.00024842024386728667,
+      -8.183534099275047e-8
+    ],
+    "groups": 2048,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "median_rows_per_second_recomputed": 1525.771727554414,
+  "slowest_rank_pass_seconds_recomputed": [
+    1.3422715620000645,
+    1.338264759000026,
+    1.3455966620000481
+  ],
+  "notes": [
+    "Every saved repeat and each rank hash checked.",
+    "Three timing repeats are not three independent trial runs; small all_gather differences should not be claimed robust.",
+    "The declared BF16 numerical screen is unchanged; no sorting, renormalization or column dropping."
+  ],
+  "same_world_all_reduce_reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-resume-20261008-a1/covertype-large-c16384-e4-resident-flash-all_reduce4",
+  "against_same_world_all_reduce": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": false,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.002825915813446045,
+        "mean_abs": 0.000015540091757713925,
+        "rms": 0.00010643703288125059,
+        "p99_abs": 0.00043783634901046667,
+        "relative_l2": 0.0003026869915171405,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.002825915813446045,
+        "mean_abs": 0.000015540091757713925,
+        "rms": 0.00010643703288125059,
+        "p99_abs": 0.00043783634901046667,
+        "relative_l2": 0.0003026869915171405,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.002825915813446045,
+        "mean_abs": 0.000015540091757713925,
+        "rms": 0.00010643703288125059,
+        "p99_abs": 0.00043783634901046667,
+        "relative_l2": 0.0003026869915171405,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  }
+}

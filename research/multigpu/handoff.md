@@ -20,9 +20,9 @@ The coordinator independently reran `collect_evidence.verify(..., external=True)
 
 | Check | Result |
 |---|---:|
-| Evidence snapshots | 27 |
-| Archived-file references checked | 296 |
-| Original-artifact references checked | 711 |
+| Evidence snapshots | 31 |
+| Archived-file references checked | 357 |
+| Original-artifact references checked | 836 |
 | Missing/mismatched references | 0 |
 | External references left unchecked | 0 |
 
@@ -31,6 +31,8 @@ Counts are references, not unique artifacts or independent trials. Large outputs
 After access resumed, the report owner independently reran external verification at integrated source `bd7e1ba40`: all 26 snapshots, 277 archived references and 629 original-artifact references passed again, with zero unchecked external references. This verifies the surviving local evidence, not any undownloaded remote result.
 
 The subsequent [resumed tabular executor snapshot](evidence/resumed-tabular-executors-l40s-20261008/index.json) adds 19 small records and 82 artifact references from nine completed fresh-host arms. Independent audits check all saved repeats, full input/query/target identities, matched timing denominators, graph capture counts and separate allocator/physical-memory accounting. The table above includes that addition; original snapshots remain unchanged.
+
+Further additive snapshots retain [native relational process EP](evidence/resumed-relational-process-ep-l40s-20261008/index.json), [full-FP32 F1 CP isolation](evidence/resumed-context-fp32-l4-20261008/index.json), [six resident CP collective controls](evidence/resumed-context-collectives-l4-20261008/index.json), and [replacement runtime/checkpoint verification](evidence/resumed-runtime-20261008/index.json). All benchmark cohorts include independently audited per-repeat output evidence; no model weights or raw datasets are imported into Git.
 
 The original cuDF results saved repeat-zero arrays but scored the last repeat. Original evidence remains unchanged; additive independent audits score the archived arrays. The runner now archives every repeat and uses the same first repeat for NPY, PT, and reported reference quality. A deliberately nondeterministic CPU fixture tests this contract.
 
@@ -65,9 +67,12 @@ A subsequent research-only scorer fix (`f13e29828`) preserves the full predictio
 | H&M C64k/E8 capacity on original L4 | EP1 stdout showed OOM; wrapper finished | Undownloaded stage2 outcome/raw receipts lost; visible EP1 failure is not a recovered complete comparison |
 | Original placement Nsight captures | Captured remotely but not downloaded | Remote-only captures lost; no trace-derived conclusion |
 | Native CPU-offload E8 capacity control | Never launched | No multi-GPU-only feasibility claim |
-| Pretrained tabular process-EP and graph-EP ladders | Replacement-host nine-arm ladder completed and independently audited | Process EP4 2.724× its EP1; graph EP4 1.742× its graph1; all repeats exact native-batch1; relational process/graph scope remains separate |
+| Pretrained tabular process-EP and graph-EP ladders | Replacement-host nine-arm ladder completed and independently audited | Process EP4 2.724× its EP1; graph EP4 1.742× its graph1; all repeats exact native-batch1 |
+| Native relational process-EP ladder | Replacement-host resident/process1/2/4 completed and independently audited | Process EP4 1.944× process1 with exact repeats; fresh graph workload and final-gather timer prevent unqualified comparisons to historical runs |
 | Mixed eight-GPU query DP | Staged, never launched | No eight-GPU scaling result |
-| Full-model FP32 F1 CP, GPU all-gather, C32k MHA | Staged, never launched | CPU-only all-gather validation; diagnostics unmeasured |
+| Full-model FP32 F1 CP | Replacement-host four-arm precision comparison audited | Strict all-999-quantile gate passes CP2; no speedup and no repair of original BF16 failures |
+| GPU all-gather CP | Replacement-host six-arm resident16k comparison audited | Gates pass, but no native/single-rank crossover; nominal ~2.5% collective differences are not robust independent trials |
+| C32k MHA CP | Staged, not yet measured | No long-MHA crossover claim |
 | cuDF graph repeatability diagnostic | Prepared, never executed | Nondeterminism cause unresolved |
 
 These limitations supplement the objective-by-objective completion checklist in README. No additional parallelism method needs to be invented to resolve the operational interruption.

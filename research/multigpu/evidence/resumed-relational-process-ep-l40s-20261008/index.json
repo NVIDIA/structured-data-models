@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:07:13.459941+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "process1",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 399,
+          "sha256": "b233d5d55e9ddf73aae20d323e4e70cc7703e9e292fec2941f8ba596d9ab8927",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1/command.txt",
+          "archived_path": "process1/command.txt"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 14336,
+          "sha256": "3acc4e720c6901b3126028c42b23697ba2b3ba92e46b66f0a572bdd70e7f6f3d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1/predictions.npy"
+        },
+        {
+          "name": "predictions.pt",
+          "role": "predictions",
+          "bytes": 18821,
+          "sha256": "9c9f1261aa2f07dd5b9af6b7c5aa4d9f5a24491aee681c143772f366e34106af",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1/predictions.pt"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 6139,
+          "sha256": "fb19804c498553f8f8d5f92d7cdaaffd121f9af127dac4d04bf8c43d9238ce34",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1/quality-independent-audit.json",
+          "archived_path": "process1/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 14276,
+          "sha256": "4933a6d6aa455b5437cc03a4f9ec314c3c9c5286967e9ae6d0bfe93d34c5efe3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process1/result.json",
+          "archived_path": "process1/result.json"
+        }
+      ]
+    },
+    {
+      "label": "process2",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 399,
+          "sha256": "aeec2daceb6adc2841dcc1b7919ca0c03bc6619063d355db32837a27e77786df",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2/command.txt",
+          "archived_path": "process2/command.txt"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 15374,
+          "sha256": "df618d099aa06efb07dd564daf076f48d0d7dc85cb705ab8c323b8fd9d48659b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2/predictions.npy"
+        },
+        {
+          "name": "predictions.pt",
+          "role": "predictions",
+          "bytes": 18821,
+          "sha256": "9c9f1261aa2f07dd5b9af6b7c5aa4d9f5a24491aee681c143772f366e34106af",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2/predictions.pt"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 6544,
+          "sha256": "ca2e8a303cd4c4f74f18f575173fd230ea8c6807db6c56d8855a181b753ab8d1",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2/quality-independent-audit.json",
+          "archived_path": "process2/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 15935,
+          "sha256": "deb1e6fd01e41d619ce483aff55c0a795eea5dc600413af54e73f284cf648ad0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process2/result.json",
+          "archived_path": "process2/result.json"
+        }
+      ]
+    },
+    {
+      "label": "process4",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 399,
+          "sha256": "febda6986dee407f957a1b62391430f55c1e00f7a9f9ce0d3bc3a94b5baea2c6",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4/command.txt",
+          "archived_path": "process4/command.txt"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 21863,
+          "sha256": "1fbe1312a40c75be6867ab79ca7b81fd521ddec8e41d11c6a38f0f1f4cbbae24",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4/predictions.npy"
+        },
+        {
+          "name": "predictions.pt",
+          "role": "predictions",
+          "bytes": 18821,
+          "sha256": "9c9f1261aa2f07dd5b9af6b7c5aa4d9f5a24491aee681c143772f366e34106af",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4/predictions.pt"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 7365,
+          "sha256": "e23d2d342ee5a4ffa28de556e601f4587dd8c90c6d553cbe425193a853a95632",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4/quality-independent-audit.json",
+          "archived_path": "process4/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 19276,
+          "sha256": "551e2857010d950fe4aa0ec72cad286bd86fa209254a3f8b284735f0b09f4701",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-process4/result.json",
+          "archived_path": "process4/result.json"
+        }
+      ]
+    },
+    {
+      "label": "resident1",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 392,
+          "sha256": "d991795bf1d6ac8d1fa02f42f5620fbb13597176f7436211fbbfcc95e28bbb9a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1/command.txt",
+          "archived_path": "resident1/command.txt"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 14781,
+          "sha256": "ced8dc3749ab43463e76291cc6a5b70e6cdf847344d9ab07d2c819969632d02d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 16128,
+          "sha256": "9ba932447cd98e7e1957e837424d534b34917aff4e29293c26ff90693442844e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1/predictions.npy"
+        },
+        {
+          "name": "predictions.pt",
+          "role": "predictions",
+          "bytes": 18821,
+          "sha256": "9c9f1261aa2f07dd5b9af6b7c5aa4d9f5a24491aee681c143772f366e34106af",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1/predictions.pt"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 5882,
+          "sha256": "350a46e7d4da27c531bbaa30f98a0f7d110c5e85703c83841c2885133eb7c28d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1/quality-independent-audit.json",
+          "archived_path": "resident1/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 13205,
+          "sha256": "afa3f2ba4c39fc3affd9d7ce3af30888a02ae123a89d8e242b167572dd534481",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-process-closure/relational-closure-v2-resident1/result.json",
+          "archived_path": "resident1/result.json"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,230 @@
+{
+  "reference": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/cp-resume-20261008-a1/covertype-large-c16384-e4-resident-flash-native1",
+  "input_identity_and_original_validation_ids_equal": true,
+  "columns": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "source": "c0fb64fcc",
+  "repeats": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": false,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.008518978953361511,
+        "mean_abs": 0.00017169685228902204,
+        "rms": 0.0006271231033222553,
+        "p99_abs": 0.003268644213676452,
+        "relative_l2": 0.0017834427502082053,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.008518978953361511,
+        "mean_abs": 0.00017169685228902204,
+        "rms": 0.0006271231033222553,
+        "p99_abs": 0.003268644213676452,
+        "relative_l2": 0.0017834427502082053,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": false,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0.008518978953361511,
+        "mean_abs": 0.00017169685228902204,
+        "rms": 0.0006271231033222553,
+        "p99_abs": 0.003268644213676452,
+        "relative_l2": 0.0017834427502082053,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "rank_repeat_hashes_verified": true,
+  "quality_each_repeat": [
+    {
+      "rows": 2048,
+      "accuracy": 0.91455078125,
+      "log_loss": 0.22554731235888695,
+      "brier_multiclass": 0.1266624735977636,
+      "auroc_by_class": [
+        0.9810154525386313,
+        0.9808904549650735,
+        0.9981978444806533,
+        0.9985831834777397,
+        0.9928635746636741,
+        0.9972409594784334,
+        0.9991143724696356
+      ],
+      "auroc_macro_present_classes": 0.9925579774391201,
+      "max_probability_sum_error": 2.0167118464087253e-7
+    },
+    {
+      "rows": 2048,
+      "accuracy": 0.91455078125,
+      "log_loss": 0.22554731235888695,
+      "brier_multiclass": 0.1266624735977636,
+      "auroc_by_class": [
+        0.9810154525386313,
+        0.9808904549650735,
+        0.9981978444806533,
+        0.9985831834777397,
+        0.9928635746636741,
+        0.9972409594784334,
+        0.9991143724696356
+      ],
+      "auroc_macro_present_classes": 0.9925579774391201,
+      "max_probability_sum_error": 2.0167118464087253e-7
+    },
+    {
+      "rows": 2048,
+      "accuracy": 0.91455078125,
+      "log_loss": 0.22554731235888695,
+      "brier_multiclass": 0.1266624735977636,
+      "auroc_by_class": [
+        0.9810154525386313,
+        0.9808904549650735,
+        0.9981978444806533,
+        0.9985831834777397,
+        0.9928635746636741,
+        0.9972409594784334,
+        0.9991143724696356
+      ],
+      "auroc_macro_present_classes": 0.9925579774391201,
+      "max_probability_sum_error": 2.0167118464087253e-7
+    }
+  ],
+  "class_flips_each_repeat": [
+    2,
+    2,
+    2
+  ],
+  "paired_loss_interval": {
+    "candidate_minus_reference": -0.00012394424993544817,
+    "ci95": [
+      -0.0002497082585538379,
+      -0.0000033863779176358568
+    ],
+    "groups": 2048,
+    "repetitions": 2000,
+    "seed": 0
+  },
+  "median_rows_per_second_recomputed": 1489.7167150111363,
+  "slowest_rank_pass_seconds_recomputed": [
+    1.375780017000011,
+    1.3689317930000016,
+    1.374758019000069
+  ],
+  "notes": [
+    "Every saved repeat and each rank hash checked.",
+    "Three timing repeats are not three independent trial runs; small all_gather differences should not be claimed robust.",
+    "The declared BF16 numerical screen is unchanged; no sorting, renormalization or column dropping."
+  ]
+}

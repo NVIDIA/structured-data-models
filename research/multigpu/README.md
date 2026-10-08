@@ -99,7 +99,7 @@ Predicted class labels are unchanged for all 2,048 rows. Estimator-batched BF16 
 
 ### Resumed pretrained process and graph ensemble comparison
 
-The replacement host runs frozen source `c0fb64fcc`, Torch 2.9.1+cu130 and the same verified KumoTabular-large checkpoint. Covertype remains E4, 1,024 TRAIN context rows, 2,048 VAL queries, batch256, BF16 and seed1729. All nine arms have fresh controls on that host, three timed passes, saved per-repeat arrays and independent quality audits. The public runner starts from GPU-resident queries and returns CPU-complete outputs; process-adapter serialization and gathering are included inside its prediction call. Detailed setup/capture costs are in [tabular-results.md](tabular-results.md).
+The replacement host runs frozen source `c0fb64fcc`, Torch 2.9.1+cu130 and the same verified KumoTabular-large checkpoint. Covertype remains E4, 1,024 TRAIN context rows, 2,048 VAL queries, batch 256, BF16 and seed 1729. All nine arms have fresh controls on that host, three timed passes, saved per-repeat arrays and independent quality audits. The public runner starts from GPU-resident queries and returns CPU-complete outputs; process-adapter serialization and gathering are included inside its prediction call. Detailed setup/capture costs are in [tabular-results.md](tabular-results.md).
 
 | Arm | GPUs | Median rows/s | Matched executor scaling | Max prediction allocation per GPU, GiB |
 |---|---:|---:|---:|---:|
@@ -113,11 +113,11 @@ The replacement host runs frozen source `c0fb64fcc`, Torch 2.9.1+cu130 and the s
 | Graph EP | 2 | 9,134.14 | 1.428× | 1.047 |
 | Graph EP | 4 | 11,145.61 | 1.742× | 0.927 |
 
-Every resident/process/graph prediction repeat is byte-identical to native batch1, with accuracy0.764160, log loss0.576045 and macro AUROC0.947415. Tuned native batch4 changes arithmetic, passes the existing BF16 screen and has the same accuracy, but is not byte-identical; retain it as the stronger practical tuning control. Graph EP1 is already 1.597× tuned native; graph EP4's 2.782× native ratio combines that optimization with multi-GPU scaling. Process EP4's corresponding native ratio is only 1.109×. Three repetitions share one fitted state; these are not independent-fit trials. Resident1 has a slower third pass and 4.81% timing CV.
+Every resident/process/graph prediction repeat is byte-identical to native batch1, with accuracy 0.764160, log loss 0.576045 and macro AUROC 0.947415. Tuned native batch4 changes arithmetic, passes the existing BF16 screen and has the same accuracy, but is not byte-identical; retain it as the stronger practical tuning control. Graph EP1 is already 1.597× tuned native; graph EP4's 2.782× native ratio combines that optimization with multi-GPU scaling. Process EP4's corresponding native ratio is only 1.109×. Three repetitions share one fitted state; these are not independent-fit trials. Resident1 has a slower third pass and 4.81% timing CV.
 
 Process parent allocation adds a separately measured 2.80 MiB peak on GPU0; child peaks in the table are not whole-device usage and must not be summed as simultaneous peaks. Prediction-window physical telemetry maxima are 2,946/2,726/2,396 MiB for process1/2/4 and 2,383/1,989/1,645 MiB for graph1/2/4. Sampling can miss brief peaks, especially the three/four telemetry samples during graph runs. Child RSS is lifetime high-water and may include shared pages, not additive unique host RAM.
 
-Graph counts stay four before and after timing: no measured pass captures another graph. Synchronized warmup wall time including capture is 0.525/0.466/0.540 seconds; summing overlapping worker capture durations is not wall latency. Fit-plus-warmup memory high-water was not reset between those phases, so it is not an isolated capture peak. Prediction peaks were reset. Process load/spawn takes 4.72/8.16/14.99 seconds separately from fit. Initial native fit103.21 seconds includes cold-start effects; no parallel fit-speedup claim uses it. These graph results cover one fixed numerical full-batch shape, not arbitrary shapes or relational graph capture. Paired Nsight attribution remains pending.
+Graph counts stay four before and after timing: no measured pass captures another graph. Synchronized warmup wall time including capture is 0.525/0.466/0.540 seconds; summing overlapping worker capture durations is not wall latency. Fit-plus-warmup memory high-water was not reset between those phases, so it is not an isolated capture peak. Prediction peaks were reset. Process load/spawn takes 4.72/8.16/14.99 seconds separately from fit. Initial native fit takes 103.21 seconds and includes cold-start effects; no parallel fit-speedup claim uses it. These graph results cover one fixed numerical full-batch shape, not arbitrary shapes or relational graph capture. Paired Nsight attribution remains pending.
 
 The [additive resumed evidence snapshot](evidence/resumed-tabular-executors-l40s-20261008/index.json) retains 19 small records, all nine independent per-run audits and the group timing/memory audit, with 82 externally verified artifact references. No historical result was overwritten.
 
@@ -258,6 +258,19 @@ Persistent-process DP improves the **same native H&M workload** without changing
 
 The four-GPU result is 2.981× public native (1,294.66 rows/s), with 81.3% process scaling efficiency. Every process output is byte-identical to native, including class order, and complete workload hashes match. Churn-positive AUC remains 0.661948, accuracy 0.808, and log loss 0.466849. Whole graph batches travel through IPC; no related-table slicing or graph partition is used. As in the tabular process run, final CPU concatenation is outside this timer and preprocessing uses the existing Arrow/CPU fallback runtime.
 
+### Resumed relational process ensemble comparison
+
+On the replacement L40S host, frozen source `c0fb64fcc` compares resident thread EP1 with process EP1/2/4 using E4, context 1,024, 2,000 H&M validation queries, batch 250 and native temporal two-hop `[16,16]` graphs. These newly prepared query graphs differ from the historical run; all four new arms share their exact graph and member identities. The CPU-input prediction timer includes final CPU concatenation, IPC and transfers. Arrow joins remain the reference; cuDF is absent.
+
+| Arm | GPUs | Median rows/s | Scaling vs process EP1 | Max child prediction allocation, MiB |
+|---|---:|---:|---:|---:|
+| Resident thread EP1 | 1 | 1,411.87 | — | 507.76 in parent |
+| Process EP1 | 1 | 1,232.49 | 1.000× | 507.23 |
+| Process EP2 | 2 | 1,916.98 | 1.555× | 445.25 |
+| Process EP4 | 4 | 2,396.15 | 1.944× | 380.22 |
+
+All three repeats in every arm are byte-identical to the fresh resident control; original VAL targets and churn-positive class mapping were independently checked (AUROC 0.663516). Process EP4 is 1.697× resident EP1, not a comparison against historical native or query-DP timings. Total member-cache backing storage stays 126,631,968 bytes, distributed across workers. Process parent GPU allocation is zero here; worker allocation/RSS remains separate from whole-device memory and shared host pages. Load/spawn rises from 3.53 seconds at one worker to 11.31 seconds at four; warm prediction is not cold invocation latency. The [four-arm snapshot](evidence/resumed-relational-process-ep-l40s-20261008/index.json) retains exact commands, raw results, all-repeat audits and output hashes. This validates native relational process EP, not CUDA graph capture for relational inputs.
+
 ### Relational Arrow versus cuDF control
 
 Six matched runs test the CPU-fallback hypothesis on H&M E4/context-1,024/query-2,000/batch-250. Both modes run inside the **same cuDF 26.6 overlay environment** with unchanged Torch 2.9.1+cu130. An explicit harness switch controls cuDF discovery; receipts record actual backend checks. The native switch also changes string preprocessing availability, so that comparison is not join-only. These are backend controls, not new parallelism methods.
@@ -319,7 +332,7 @@ The attempted correction keeps BF16 model inputs but computes local attention ou
 | CP2 | 365.78 | 3.414638 | 792 | 98 | 0.057785 |
 | CP4 | 369.30 | 3.414847 | 786 | 93 | 0.086674 |
 
-The higher-precision single-rank kernel itself changes results versus original native (maximum difference 0.144457), so it cannot be silently substituted as an identical control. Even against that new matching LSE1, both distributed arms fail the unchanged tolerance. All outputs remain finite and monotone, and paired MAE intervals span zero. This is a failed numerical-fix attempt, not an accepted speedup; a full-FP32 model/native-versus-CP control is queued to isolate remaining BF16 propagation effects.
+The higher-precision single-rank kernel itself changes results versus original native (maximum difference 0.144457), so it cannot be silently substituted as an identical control. Even against that new matching LSE1, both distributed arms fail the unchanged tolerance. All outputs remain finite and monotone, and paired MAE intervals span zero. This remains a failed numerical-fix attempt. The full-FP32 control below subsequently isolates the precision issue without changing or erasing these BF16 results.
 
 The resident native H&M comparison uses **actual context 16,384, queries 4,096, batch 512**, E4, and two-hop `[16,16]` graphs. These sizes come from the input identity manifest; the runner's unused CLI defaults still display 1,024/2,048/256 and must not be mistaken for executed shapes.
 
@@ -330,6 +343,32 @@ The resident native H&M comparison uses **actual context 16,384, queries 4,096, 
 | CP4 | 4 | 1,048.54 | 384 MiB | 1.245 GiB | 0.016804 |
 
 CP4 passes the unchanged BF16 probability tolerance and changes no class labels, but is 1.25% slower than native. Its mean probability error is 0.002624, and paired log-loss change is +0.0000328 with 95% interval [−0.0002254, +0.0003025]. Peak prediction allocation falls 47.5%; fit peak remains about 4.471 GiB. All rank/repeat hashes, workloads, row IDs, and slowest-rank timings were independently checked. This supports retained-cache capacity, not a throughput win. These native RNG/preprocessing controls are separate from the resident-member policy in the placement table; do not compare their different quality values as a GPU-count effect.
+
+### Resumed CP precision and collective controls on L4
+
+The replacement Frankfurt L4 host runs `c0fb64fcc` with newly measured same-host controls. Full-model FP32 disables autocast, retains FP32 parameters and caches, uses highest matmul precision with CUDA matmul TF32 disabled, and uses the FP32 efficient attention backend. The runner separately records the cuDNN TF32 flag; this is not a blanket assertion that every library flag is disabled. Native F1 remains E4, context 1,024, all 499 VAL queries, batch 125 and the same complete sampled graphs; default CPU cache offload and GPU-resident prepared inputs are shared across these four arms.
+
+| Arm | GPUs | Median rows/s | Max prediction allocation, MiB | Full 499 × 999 output comparison |
+|---|---:|---:|---:|---|
+| BF16 native | 1 | 377.43 | 338.86 | Precision reference only |
+| FP32 native | 1 | 303.73 | 416.39 | FP32 reference |
+| FP32 LSE1 | 1 | 299.96 | 416.39 | Byte-identical to FP32 native |
+| FP32 CP2 | 2 | 300.31 | 367.39 | Strict FP32 gate passes; not byte-identical |
+
+Every CP repeat passes the unchanged strict `atol=1e-5, rtol=1e-4` gate with zero failed quantiles, maximum error 0.0000133514 and mean error 0.000000899185. Outputs are finite, monotone and repeat-stable; other ranks report matching output hashes. This is **numerical isolation, not a throughput win**: CP2 is essentially tied with FP32 LSE1, slower than FP32 native, and about 20% slower than BF16 native. FP32 fit peak is approximately 1,100 MiB in all three arms versus 779 MiB for BF16. Quality changes between FP32 and BF16 are a precision effect, not a benefit of distributing attention. Original BF16/FP32-partial failures remain unchanged. See the [precision-isolation evidence](evidence/resumed-context-fp32-l4-20261008/index.json).
+
+A second same-host ladder tests resident Covertype-large E4, context 16,384, 2,048 queries and batch 256, using Flash local attention and either two all-reduces or an all-gather of partial statistics:
+
+| Arm | GPUs | Median rows/s | Max prediction allocation, GiB |
+|---|---:|---:|---:|
+| Native | 1 | 1,853.19 | 2.189 |
+| Flash LSE1 | 1 | 1,807.12 | 2.189 |
+| All-reduce CP2 | 2 | 1,500.81 | 1.816 |
+| All-reduce CP4 | 4 | 1,489.72 | 1.628 |
+| All-gather CP2 | 2 | 1,541.44 | 1.816 |
+| All-gather CP4 | 4 | 1,525.77 | 1.628 |
+
+All repeats/rank hashes and unchanged BF16 gates pass. Native/LSE1 are identical; two-rank gather/reduce are identical, while four-rank gather differs from reduce by up to 0.002826. Accuracy is 0.914551 in every arm. The nominal gather gain is 2.71% at two ranks and 2.42% at four, from one non-randomized ladder—not established robust acceleration. Neither collective crosses the native or single-rank LSE baseline. Both retain the same 768→384→192 MiB ICL-cache reduction. The [collective evidence snapshot](evidence/resumed-context-collectives-l4-20261008/index.json) preserves all six arms and their independent audits.
 
 ### Sequential model placement on L4
 
@@ -393,10 +432,10 @@ This checklist follows the [study questions and completion evidence](study-plan.
 | Original objective | Evidence delivered | Remaining gap / explicit limit |
 |---|---|---|
 | Support and compare both model families | Real KumoTabular Covertype/California and native KumoRelational H&M/F1, including all regression quantiles | Validation prefixes and one fitted context per arm, not full model-quality rankings |
-| Test viable multi-GPU decompositions | GPU-measured EP, thread/process query DP, cached CP, stages/layers, threaded 2DP×2EP, plus audited pretrained process/graph EP1/2/4 on the replacement host | Graph throughput covers one numerical full-batch shape; relational process EP and graph-vs-resident profile attribution remain separate controls |
+| Test viable multi-GPU decompositions | GPU-measured EP, thread/process query DP, cached CP, stages/layers, threaded 2DP×2EP, plus audited pretrained tabular process/graph and native relational process EP1/2/4 | Graph throughput covers one numerical full-batch shape, not relational graph capture; graph-vs-resident profile attribution remains separate |
 | Proper strong and weak scaling | Fixed-work 1/2/4-GPU ladders; tuned and fully gathered process controls; weak 4k/8k/16k queries with full16k equivalence audit | Homogeneous eight-GPU and NVLink unavailable; mixed-eight results are not locally verified and must not be inferred |
 | Separate native tuning from parallel gains | Native estimator batching, resident-one-GPU controls, fixed local batch-two EP, reverse-order repetitions, explicit input/gather boundaries | Not every method has an identical complete invocation boundary; claim warm execution only where measured |
-| Prediction quality and correctness | Fixed row/graph/member identities, positive-class correction, byte comparisons, unchanged BF16 gates, paired metrics and full999 quantiles | CP BF16 and FP32-partial F1 failures remain; full-model FP32 diagnostic was staged but never launched |
+| Prediction quality and correctness | Fixed row/graph/member identities, positive-class correction, byte comparisons, unchanged BF16 gates, paired metrics and full999 quantiles; resumed full-FP32 F1 CP2 passes its strict gate | Original CP BF16 and FP32-partial F1 failures remain; passing FP32 does not repair or accelerate the default BF16 path |
 | Memory and feasible workload capacity | Per-device allocator peaks/cache/RSS, compact-cache control, contexts up to64k, retained OOMs and successful allocator retries | No proof yet of multi-GPU-only feasibility; E8 partial remote status is not accepted evidence, and a native CPU-offload capacity control is absent |
 | Profile and explain successes/failures | Separate Nsight EP/CP traces, device overlap, kernel counts, cache traffic, collective waiting, tested autocast/compaction interventions | Full frontend/ICL phase attribution and some pending traces are unavailable; no GIL-only or pure-bandwidth causal claim |
 | Native relational setup and pipeline costs | Fixed complete temporal graphs, sampling/load/fit timing, matched Arrow/cuDF arms audited and slower with cuDF | Whole-pipeline one-shot latency and service-tail latency are not uniformly measured; cuDF first-saved/last-scored repeat mismatch is retained explicitly |
@@ -405,13 +444,13 @@ This checklist follows the [study questions and completion evidence](study-plan.
 | Reproducibility and failures | Raw small records, exact commands where recorded, hashes for local predictions/profiles, hardware/runtime/checkpoint receipts, failures retained; all 26 snapshot indexes pass archived and external verification | Final remote-run/source reconciliation remains unavailable; remote-only artifacts are not retained merely because mentioned |
 | Resource closure | Task-owned Spot hosts and resource/capacity failures documented by the sole operator | Final instance/resource teardown confirmation and actual elapsed-cost receipt are required; shutdown timers alone are not verification |
 
-The CP owner confirms that full-FP32 F1, alternative-collective, and 32k MHA diagnostic scripts were staged but **never launched** before the original access restriction; these remain unmeasured until fresh result receipts arrive. The resumed tabular process/graph EP ladder is now measured above; mixed-host performance still has no accepted local result. Original E8 capacity has partial owner-reported remote status but no complete local attempt/result receipt, so no feasibility conclusion is accepted. Any rerun uses fresh attempts and controls. Operational cleanup and local evidence verification remain separate obligations.
+Full-FP32 F1 and alternative-collective CP diagnostics were never launched on the original hosts, but now have independently audited replacement-host results above. The 32k MHA diagnostic and mixed-host performance still have no accepted local results. Original E8 capacity has partial owner-reported remote status but no complete local attempt/result receipt, so no feasibility conclusion is accepted. Any rerun uses fresh attempts and controls. Operational cleanup and local evidence verification remain separate obligations.
 
 **Resumed lifecycle:** checks beginning 2026-10-08 01:34:46 UTC verified the original instances and task-tagged disks absent. Undownloaded original result/trace artifacts are therefore lost, not recoverable pending runs and not numerical failures. Replacement L40S execution requires fresh attempts and same-host controls; no new performance or eight-GPU result is implied. The [handoff](handoff.md) records the receipt, surviving evidence, resumed CPU validation and still-open publication/cleanup obligations.
 
 ## Retained evidence
 
-The latest local verification sweep on 2026-10-08 passed **all 27 snapshot indexes: 296 archived-file references and 711 original-artifact references, zero mismatches or missing files**. This includes the separately labeled CPU GNN follow-up and the nine-arm resumed tabular executor ladder. Counts include references repeated across additive snapshots, not necessarily unique physical files. This verifies the retained local evidence, not remote host state, cloud cleanup, or never-downloaded attempts.
+The latest local verification sweep on 2026-10-08 passed **all 31 snapshot indexes: 357 archived-file references and 836 original-artifact references, zero mismatches or missing files**. New snapshots add resumed tabular/relational executors, CP precision/collective controls and [both replacement runtimes](evidence/resumed-runtime-20261008/index.json); the earlier CPU GNN follow-up remains labeled CPU-only. Runtime collection allowlists just five safe files per host: software inventory, GPU identity/topology and verified model-file hashes, not weights or data. Counts include references repeated across additive snapshots, not necessarily unique physical files. This verifies retained local evidence, not current cloud state, final cleanup or never-downloaded attempts.
 
 The [initial tabular evidence index](evidence/initial-tabular-20261008/index.json) archives all seven small raw result JSON files in the repository. It binds predictions, row/target identity arrays, and available telemetry to SHA-256 hashes and their original local paths. The index and all 34 original artifacts passed verification at collection; weights and raw datasets are excluded. Large artifacts must remain in the local `.kumo-multigpu-20261008` result store or be copied to a durable user-selected location before that local store is removed. EC2 teardown does not remove these downloaded local files.
 
