@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import copy
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -30,9 +31,20 @@ from TALENT.model.method_registry import (
 from TALENT.model.methods.base import Method
 
 import sdm
+from benchmark.tabular.finetune import full_finetune, kumo_small_binary_epochs
 
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
+
+# `MODEL_CONFIGS[...].factory` is `@lru_cache`d, so `SDMMethod.fit` sees the
+# same model instance across every seed/dataset in a process. Fine-tuning
+# must not leak from one seed/dataset into the next, so each model's
+# pretrained weights are snapshotted onto the model instance itself (an
+# `id(model)`-keyed dict would collide once `lru_cache` evicts and frees an
+# entry, since CPython can reuse the freed address for an unrelated model)
+# the first time it's used, and restored before every `fit()` call so a
+# zero-shot run never inherits weights left over from a fine-tuned one.
+_PRISTINE_STATE_ATTR = "_sdm_pristine_state"
 
 
 class UnsupportedDatasetError(RuntimeError):
@@ -106,6 +118,13 @@ MODEL_CONFIGS = {
         autocast_dtype=torch.float16,
         low_cardinality="infer",
     ),
+    "kumo-small": ModelConfig(
+        name="KumoTabularSmall",
+        factory=partial(_create_kumo_tabular, size="small"),
+        num_estimators=8,
+        autocast_dtype=torch.float16,
+        max_classes=10,
+    ),
     "tabfm": ModelConfig(
         name="TabFM",
         factory=_create_tabfm,
@@ -155,6 +174,13 @@ class SDMMethod(Method):
             "num_estimators",
             self._config.num_estimators,
         )
+        self._finetune = general.get("finetune", False)
+        self._finetune_epochs = general["finetune_epochs"]
+        self._finetune_iters_per_epoch = general["finetune_iters_per_epoch"]
+        self._finetune_lr = general["finetune_lr"]
+        self._finetune_train_size = general["finetune_train_size"]
+        self._finetune_context_frac = general["finetune_context_frac"]
+        self._finetune_val_frac = general["finetune_val_frac"]
         self._low_cardinality = general.get(
             "low_cardinality",
             self._config.low_cardinality,
@@ -312,7 +338,35 @@ class SDMMethod(Method):
             self.args.seed
         )
 
+        # See _PRISTINE_STATE_ATTR above: reset before every fit() call.
+        pristine_state = getattr(self.model, _PRISTINE_STATE_ATTR, None)
+        if pristine_state is None:
+            pristine_state = copy.deepcopy(self.model.state_dict())
+            setattr(self.model, _PRISTINE_STATE_ATTR, pristine_state)
+        self.model.load_state_dict(pristine_state)
+
         tic = time.perf_counter()
+        if self._finetune:
+            finetune_epochs = kumo_small_binary_epochs(
+                self._finetune_epochs,
+                is_kumo_small=self._config is MODEL_CONFIGS["kumo-small"],
+                is_binary=self.is_binclass,
+            )
+            full_finetune(
+                self.model,
+                x_train,
+                y_train,
+                task=task,
+                max_epochs=finetune_epochs,
+                iters_per_epoch=self._finetune_iters_per_epoch,
+                train_size=self._finetune_train_size,
+                context_frac=self._finetune_context_frac,
+                val_frac=self._finetune_val_frac,
+                lr=self._finetune_lr,
+                num_estimators=self._num_estimators,
+                generator=generator,
+            )
+
         with torch.amp.autocast(
             self._device.type,
             self._config.autocast_dtype,
@@ -361,7 +415,7 @@ class SDMMethod(Method):
         else:
             columns = [str(value) for value in self.y_info["classes"]]
             prediction = out.to_pandas()[columns].to_numpy()
-            probabilities = torch.as_tensor(prediction)
+            probabilities = torch.as_tensor(prediction.copy())
             loss = self.criterion(
                 probabilities.clamp_min(
                     torch.finfo(probabilities.dtype).tiny
