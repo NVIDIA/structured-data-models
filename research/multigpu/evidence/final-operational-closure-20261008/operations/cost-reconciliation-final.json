@@ -1,0 +1,48 @@
+{
+  "method": "Piecewise public Spot quote integration, not invoiced usage. Excludes EBS, transfer, taxes and rounding; historical terminal bounds explicitly preserved.",
+  "hosts": [
+    {
+      "instance": "i-0f247930321bbf67e",
+      "history": "ohio",
+      "launch": "2026-10-07T15:16:48Z",
+      "end_lower": "2026-10-07T16:27:25Z",
+      "end_upper": "2026-10-07T23:23:31Z",
+      "guard": "2026-10-07T23:15:34Z",
+      "status": "closed Spot record; update time is terminal upper bound, not invoice timestamp",
+      "compute_quote_usd_lower_bound": 6.23294,
+      "compute_quote_usd_upper_bound": 42.933306,
+      "compute_quote_usd_if_guard_fired_at_scheduled_time_NOT_ACTUAL": 42.230672
+    },
+    {
+      "instance": "i-05cea203a4e1895fd",
+      "history": "virginia",
+      "launch": "2026-10-07T15:28:23Z",
+      "end_lower": "2026-10-07T16:27:25Z",
+      "end_upper": "2026-10-08T01:38:13Z",
+      "guard": "2026-10-07T19:28:00Z",
+      "status": "instance/disk absent before replacement launch; exact termination unknown, Spot record purged",
+      "compute_quote_usd_lower_bound": 4.030894,
+      "compute_quote_usd_upper_bound": 41.706281,
+      "compute_quote_usd_if_guard_fired_at_scheduled_time_NOT_ACTUAL": 16.361425
+    },
+    {
+      "instance": "i-0fa5c18a88d2eb124",
+      "history": "ohio",
+      "launch": "2026-10-08T01:38:13Z",
+      "observed_end": "2026-10-08T03:01:54Z",
+      "status": "terminated: quote integration through first observed terminal state, an upper time bound rather than invoiced billed duration",
+      "compute_quote_usd_through_observation": 7.396357
+    },
+    {
+      "instance": "i-03ea6eecfa001b1a6",
+      "history": "frankfurt",
+      "launch": "2026-10-08T01:49:47Z",
+      "observed_end": "2026-10-08T03:02:21Z",
+      "status": "terminated: quote integration through first observed terminal state, an upper time bound rather than invoiced billed duration",
+      "compute_quote_usd_through_observation": 3.350151
+    }
+  ],
+  "old_hosts_guard_based_estimate_NOT_ACTUAL": 58.592097,
+  "old_hosts_conservative_compute_upper_bound": 84.639587,
+  "replacement_hosts_quote_projection": 10.746508
+}

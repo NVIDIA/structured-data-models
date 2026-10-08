@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T03:05:39.370872+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "operations",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops",
+      "artifacts": [
+        {
+          "name": "cost-reconciliation-final.json",
+          "role": "record",
+          "bytes": 2156,
+          "sha256": "e5b4702bd6ce158f06d01cadafc2273da112238dd483f52894ef96f87c7cbddf",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/cost-reconciliation-final.json",
+          "archived_path": "operations/cost-reconciliation-final.json"
+        },
+        {
+          "name": "final-teardown-receipt.json",
+          "role": "record",
+          "bytes": 3594,
+          "sha256": "a4d483072b248321e6d086366a12c4bfcea5d761a7cf761f2f489de26e2ed3e0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/ops/final-teardown-receipt.json",
+          "archived_path": "operations/final-teardown-receipt.json"
+        }
+      ]
+    }
+  ]
+}

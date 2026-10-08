@@ -1,6 +1,6 @@
 # Local integration and access-boundary handoff
 
-Initial audit: 2026-10-07 UTC / 2026-10-08 Asia/Seoul; updated after resumed science completed on 2026-10-08 UTC. **Final operational closure remains open.** Replacement-host tabular/relational/CP/capacity and mixed eight-GPU results are downloaded and independently audited. Original instances/task-tagged disks are absent; original disk-only artifacts remain lost. The research and minimal feature branches are published. Final integrated tests/publication checks, resource closure and cost reconciliation are tracked separately. Historical blocked-state paragraphs below are historical, not current access status.
+Initial audit: 2026-10-07 UTC / 2026-10-08 Asia/Seoul; final closure:2026-10-08 UTC. **Scientific execution and operational cleanup are complete.** Replacement-host tabular/relational/CP/capacity and mixed eight-GPU results are downloaded and independently audited. Final integrated tests and publication scans pass; research and minimal feature branches are published. Both replacement instances are terminated and task-resource inventories are empty. Original disk-only artifacts remain lost and optional unmeasured diagnostics remain explicit limitations. Historical blocked-state paragraphs below are superseded history, not current access or cleanup blockers.
 
 ## Delivered locally
 
@@ -20,9 +20,9 @@ The coordinator independently reran `collect_evidence.verify(..., external=True)
 
 | Check | Result |
 |---|---:|
-| Evidence snapshots | 46 |
-| Archived-file references checked | 493 |
-| Original-artifact references checked | 1,227 |
+| Evidence snapshots | 47 |
+| Archived-file references checked | 495 |
+| Original-artifact references checked | 1,229 |
 | Missing/mismatched references | 0 |
 | External references left unchecked | 0 |
 
@@ -49,6 +49,33 @@ The [13 mixed-host attempts](evidence/resumed-mixed-query-dp-20261008/index.json
 The original cuDF results saved repeat-zero arrays but scored the last repeat. Original evidence remains unchanged; additive independent audits score the archived arrays. The runner now archives every repeat and uses the same first repeat for NPY, PT, and reported reference quality. A deliberately nondeterministic CPU fixture tests this contract.
 
 ## Validation scope
+
+After scientific execution finished, the coordinator's final integrated rerun at `802442e75` passed **230 tests with 101 CUDA-only skips in 31.24 seconds** on the local CPU host. Runtime source matches `9eb50e04f`; the earlier identical suite also passed in33.99 seconds. These overlapping runs are not summed. Subsequent report/formatting changes do not replace each benchmark's measured revision. This is not331 passing tests or a fresh local GPU rerun. Actual-checkpoint blocked-GNN failures remain separately retained and are not part of this passing suite. Exact command:
+
+```sh
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+  /Users/ardrianw/repositories/sdm-tabfm-multigpu-inference/.venv/bin/python -m pytest -q \
+  research/multigpu/test_quality.py \
+  research/multigpu/test_scoring_class_support.py \
+  research/multigpu/test_relational_scoring.py \
+  research/multigpu/test_multihost_query_bench.py \
+  research/multigpu/test_query_shards.py \
+  research/multigpu/test_query_parallel.py \
+  research/multigpu/test_graph_query_parallel.py \
+  test/models/test_ensemble_parallel.py \
+  test/models/test_batched_ensemble.py \
+  test/models/test_process_ensemble.py \
+  test/models/test_graph_ensemble.py \
+  test/models/test_persistent_autocast.py \
+  test/models/test_compact_ensemble.py \
+  test/research/test_blocked_gnn.py \
+  test/research/test_blocked_gnn_cuda.py \
+  test/research/test_collect_evidence.py \
+  test/research/test_icl_placement.py \
+  test/nn/test_context_parallel.py -o addopts=''
+```
+
+Source lint passes after `802442e75` scopes an exclusion to immutable archived Python evidence. Original executed probe bytes remain untouched; runnable research/core/test source is still checked. The evidence collector's separate four-test rerun also passes after final receipt allowlisting. Neither formatting nor local test counts erase the archived numerical failures.
 
 Historical actual-GPU checks are recorded with their source in the method documents: core EP tests, 36 placement CPU/CUDA tests, and nine original CP Gloo/NCCL tests passed. Process-EP CUDA tests used a synthetic cache model; graph-EP CUDA tests used reduced KumoTabular. Neither establishes pretrained benchmark performance.
 
@@ -84,8 +111,8 @@ A subsequent research-only scorer fix (`f13e29828`) preserves the full predictio
 | Mixed eight-GPU query DP | Original attempt never launched; replacement13-run matrix completed and independently audited | Fixed-family mixed2→8 scales3.970×; weighted8 adds28.7% with changed row-family assignment; heterogeneous cross-region, not homogeneous eight-GPU scaling |
 | Full-model FP32 F1 CP | Replacement-host four-arm precision comparison audited | Strict all-999-quantile gate passes CP2; no speedup and no repair of original BF16 failures |
 | GPU all-gather CP | Replacement-host six-arm resident16k comparison audited | Gates pass, but no native/single-rank crossover; nominal ~2.5% collective differences are not robust independent trials |
-| C32k MHA CP | Staged, not yet measured | No long-MHA crossover claim |
-| cuDF graph repeatability diagnostic | Prepared, never executed | Nondeterminism cause unresolved |
+| C32k MHA CP | Optional diagnostic staged but not pursued in the completed study | Unmeasured; no long-MHA crossover claim or queued continuation |
+| cuDF graph repeatability diagnostic | Optional cause-isolation diagnostic prepared but not pursued | Backend comparisons were measured; the nondeterminism cause remains unresolved, with no queued continuation |
 
 These limitations supplement the objective-by-objective completion checklist in README. No additional parallelism method needs to be invented to resolve the operational interruption.
 
@@ -101,6 +128,8 @@ Subsequent CUDA evidence supersedes only that earlier lack of measurement, not i
 
 ## Historical access interruption
 
+**Superseded historical record:** the paragraphs in this section describe the blocked handoff on 2026-10-07 UTC. Networking subsequently returned, branches were pushed and replacement-host science completed. References below to required restoration, unachieved work or unknown lifecycle are not current blockers; current closure is recorded after this section.
+
 At 16:30:55 UTC the session's network restrictions denied SSH to both hosts and AWS EC2 endpoint access. Approval policy is `never`; no alternative route or bypass was attempted. User authorization to use `al` does not remove this execution restriction. This is not an observed expired-login error.
 
 Fresh read-only probes at 16:44:41–16:44:51 UTC produced the same SSH `Operation not permitted` and regional EC2 endpoint connection failures. No new instance/process state was obtained. Academic-paper browsing remains available through the separate web tool; that does not establish SSH or EC2 access.
@@ -115,6 +144,19 @@ With permitted networking restored, the sole cloud operator's checks beginning *
 
 The initial replacement request sought two homogeneous L40S hosts, but acquired hosts are **heterogeneous**: Ohio `i-0fa5c18a88d2eb124`, four L40S, launched 01:38:13 UTC; Frankfurt `i-03ea6eecfa001b1a6`, four L4, launched 01:49:47 UTC. Both completed runtime/model-hash verification, separately controlled workloads and the audited mixed cross-region matrix. Science is finished and leases released; live state/guards/cost belong in the operator's [operations record](operations.md), and this handoff does not assume termination. Original security groups/imported keys were retained for reuse; stale cross-host ingress rule `sgr-028d1b8e6657ba968` was revoked. These access resources and replacements must be reconciled before final cleanup is declared. No original remote-only result is marked a numerical failure simply because it was lost.
 
-The coordinator confirmed the branch's first push at `af55e434b` and a later push at `886f0daf2`; the remote is `git@github.com:NVIDIA/structured-data-models.git`. Subsequent local commits are not assumed published without confirmation. Publication does not close final resource teardown, actual cost accounting or remaining scientific controls.
+The coordinator confirmed the branch's first push at `af55e434b` and its scientific-report push at [`802442e7596798893c6b06751fb181dc3d7dcbfc`](https://github.com/NVIDIA/structured-data-models/commit/802442e7596798893c6b06751fb181dc3d7dcbfc); the remote is `git@github.com:NVIDIA/structured-data-models.git`. The independent publication scan passes, retained at `ops/publication-audit-802442e75.json`. Later operational-closure commits are not assumed published without confirmation. Publication does not itself prove resource teardown or invoice reconciliation.
 
 A separate minimal [`feature/ensemble-parallel`](https://github.com/NVIDIA/structured-data-models/tree/feature/ensemble-parallel) branch was subsequently confirmed pushed at `75bd74af21d7541e7ef042871af5e3f076203a17`, based directly on `842c408fe`. It contains four files and 599 additions: core threaded resident executor/export, focused tests and usage documentation. Its core/test bytes match the tested frozen source. Process/graph adapters and their larger performance gains remain research-only and are not included in that candidate. See [integration.md](integration.md) for the scoped contract; no PR has been opened.
+
+## Final verified operational closure
+
+The sole operator's immutable [teardown/cost snapshot](evidence/final-operational-closure-20261008/index.json) supersedes earlier live-state caveats. Ohio termination was requested02:54:24 UTC and first observed terminal03:01:54; Frankfurt was requested02:54:26 and observed terminal03:02:21. Both exact root-volume queries return empty. At03:03:04 UTC, task inventories in `us-west-2`, `us-east-1`, `us-east-2` and `eu-central-1` contain no nonterminal task instances, task-tagged EBS volumes/security groups or task-named imported keys. Cross-host ingress was revoked; Ohio Spot request is closed and Frankfurt's was explicitly cancelled after instance termination. Unrelated controller/resources and user local SSH keys were preserved. Remote ephemeral disks are no longer recoverable; required results/profiles were downloaded first.
+
+Receipt SHA-256 values, independently checked before collection:
+
+- `final-teardown-receipt.json`: `a4d483072b248321e6d086366a12c4bfcea5d761a7cf761f2f489de26e2ed3e0`.
+- `cost-reconciliation-final.json`: `e5b4702bd6ce158f06d01cadafc2273da112238dd483f52894ef96f87c7cbddf`.
+
+Costs are piecewise public Spot-quote integration, **not invoiced usage**. Replacement hosts total$10.746508 through their first observed terminal-state times, which are time upper bounds rather than exact billed durations. Original hosts have a conservative compute upper bound$84.639587 because the original Virginia/L4 exact end is unavailable; the separate$58.592097 guard-based scenario is explicitly not observed actual spend. Combined conservative compute upper bound is approximately$95.39. EBS, cross-region transfer, taxes and billing rounding are excluded. No remaining compute resource is inferred solely from these estimates: terminal/resource checks above establish cleanup independently.
+
+The scientific study is delivered with known numerical failures and unmeasured architectural proposals retained. There is no queued requirement to implement additional methods or rerun optional diagnostics. Production adoption still requires review of the deliberately small candidate interfaces; completion of the investigation is not a claim that the whole research branch is production-ready.

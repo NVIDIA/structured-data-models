@@ -1,0 +1,59 @@
+{
+  "task": "kumo-multigpu-20261008",
+  "status": "complete",
+  "scientific_precondition": "All owners released; required raw outcomes, all prediction repeats and profiles downloaded; independent quality audits passed before teardown authorization.",
+  "replacement_hosts": [
+    {
+      "region": "us-east-2",
+      "instance_id": "i-0fa5c18a88d2eb124",
+      "launch_time_utc": "2026-10-08T01:38:13Z",
+      "terminate_cli_started_utc": "2026-10-08T02:54:24Z",
+      "ec2_state_transition_reason_time_utc": "2026-10-08T02:54:26Z",
+      "first_waiter_observed_terminated_utc": "2026-10-08T03:01:54Z",
+      "verified_state": "terminated",
+      "root_volume": "vol-0b520325b4fe69eb9",
+      "root_volume_query_result": {"Volumes": []},
+      "security_group_deleted": "sg-01bcb7f6ec49e2c71",
+      "imported_key_pair_deleted": "kumo-multigpu-20261008",
+      "peer_ingress_rule_revoked": "sgr-01052243ff6022566",
+      "spot_request": "sir-syqqmdzk",
+      "spot_request_final_state": "closed",
+      "spot_request_status": "instance-terminated-by-user"
+    },
+    {
+      "region": "eu-central-1",
+      "instance_id": "i-03ea6eecfa001b1a6",
+      "launch_time_utc": "2026-10-08T01:49:47Z",
+      "terminate_cli_started_utc": "2026-10-08T02:54:26Z",
+      "ec2_state_transition_reason_time_utc": "2026-10-08T02:54:27Z",
+      "first_waiter_observed_terminated_utc": "2026-10-08T03:02:21Z",
+      "verified_state": "terminated",
+      "root_volume": "vol-01945fa8550ea4acb",
+      "root_volume_query_result": {"Volumes": []},
+      "security_group_deleted": "sg-0cbbda7359a565f35",
+      "imported_key_pair_deleted": "kumo-multigpu-20261008",
+      "task_private_identity_deleted_with_root_volume": true,
+      "spot_request": "sir-qsh7q4rg",
+      "spot_request_final_state": "cancelled",
+      "spot_request_status": "instance-terminated-by-user",
+      "spot_cancellation_note": "The one-time request still reported active after its instance was verified terminated; it was explicitly cancelled and terminal status verified."
+    }
+  ],
+  "four_region_inventory_checked_at_utc": "2026-10-08T03:03:04.005252Z",
+  "regions_verified_empty": ["us-west-2", "us-east-1", "us-east-2", "eu-central-1"],
+  "inventory_result_in_each_region": {
+    "task_nonterminal_instances": [],
+    "task_tagged_ebs_volumes": [],
+    "task_tagged_security_groups": [],
+    "task_named_imported_key_pairs": []
+  },
+  "original_hosts": {
+    "receipt": "old-host-lifecycle-resume-20261008.json",
+    "ohio": "Absent with no surviving task disk; Spot closed status updated2026-10-07T23:23:31Z, a terminal upper bound rather than an exact billing timestamp.",
+    "virginia": "Absent with no surviving task disk before replacement launch; Spot request purged, exact termination timestamp and cause not independently recoverable."
+  },
+  "preserved": ["all local scientific evidence and profiles", "user local SSH private/public keys", "unrelated controller i-0b28859ef0eb6bba0", "unrelated AWS resources"],
+  "destructive_scope": "Only two authorized replacement task instances, their encrypted delete-on-termination root volumes and task access resources. Remote ephemeral disks are no longer recoverable; all required evidence was retained locally first.",
+  "raw_receipts": ["terminated-ohio-instance.json", "terminated-frankfurt-instance.json", "final-ohio-root-volume.json", "final-frankfurt-root-volume.json", "final-resource-inventory.json", "final-ohio-spot-request.json", "final-frankfurt-spot-request.json", "final-cancel-frankfurt-spot-request.json"],
+  "cost_receipt": "cost-reconciliation-final.json"
+}

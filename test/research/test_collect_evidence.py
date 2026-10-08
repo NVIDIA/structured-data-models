@@ -60,13 +60,15 @@ def test_retains_failures_and_additive_audits(tmp_path: Path) -> None:
         "stdout.jsonl",
         "junit.xml",
         "resume-graphdp-gpu-contracts.xml",
+        "final-teardown-receipt.json",
+        "cost-reconciliation-final.json",
         "probe.py",
     ):
         (run / name).write_text("{}\n")
     index_path = collect([f"attempt={run}"], tmp_path / "evidence")
     assert verify(index_path, external=True) == {
-        "archived_files": 11,
-        "external_files": 11,
+        "archived_files": 13,
+        "external_files": 13,
         "external_unchecked": 0,
     }
 
