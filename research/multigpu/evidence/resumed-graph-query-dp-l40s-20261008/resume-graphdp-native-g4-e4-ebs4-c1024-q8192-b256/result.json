@@ -1,0 +1,310 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256",
+    "source_commit": "ae4e5e549",
+    "task": "classification",
+    "size": "large",
+    "gpus": 4,
+    "backend": "native",
+    "context": 1024,
+    "queries": 8192,
+    "batch_size": 256,
+    "estimators": 4,
+    "estimator_batch_size": 4,
+    "seed": 1729,
+    "threads": 1,
+    "warmups": 1,
+    "repeats": 3,
+    "precision": "bfloat16"
+  },
+  "runtime": {
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "git_revision": "ae4e5e549",
+    "runner_sha256": "bbc25b1a06a7c02826b95d50201b2e1bac9232c6b873eb112ed1c4c97608ce35"
+  },
+  "mode": "process-data",
+  "effective_estimator_batch_size": 4,
+  "input_residency": "prepared_CPU_batches",
+  "timing": "parent_wall_including_input_IPC_H2D_predict_D2H_output_IPC",
+  "batch_times_kind": "worker_service_time_excluding_queue_and_ipc",
+  "query_ids_sha256": "be46ed1d1633b1ef4b6a431a739f80b0af52298042fd7807fc4435cd525de331",
+  "query_values_sha256": "cb84135e7eb619eff6132759e925ff0bd9c8be8ef0679a037ef9639833b97a10",
+  "spawn_load_fit_s": 5.4708870969998316,
+  "memory_after_fit": [
+    {
+      "worker": 0,
+      "pid": 15715,
+      "device": "cuda:0",
+      "max_rss_bytes": 2175463424,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 2942304256,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 2942304256
+    },
+    {
+      "worker": 1,
+      "pid": 15718,
+      "device": "cuda:1",
+      "max_rss_bytes": 2176987136,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 2942304256,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 2942304256
+    },
+    {
+      "worker": 2,
+      "pid": 15721,
+      "device": "cuda:2",
+      "max_rss_bytes": 2175021056,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 2942304256,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 2942304256
+    },
+    {
+      "worker": 3,
+      "pid": 15724,
+      "device": "cuda:3",
+      "max_rss_bytes": 2175377408,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 2942304256,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 2942304256
+    }
+  ],
+  "warmup_s": 0.6276810620001925,
+  "memory_after_warmup": [
+    {
+      "worker": 0,
+      "pid": 15715,
+      "device": "cuda:0",
+      "max_rss_bytes": 2217250816,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 3321888768
+    },
+    {
+      "worker": 1,
+      "pid": 15718,
+      "device": "cuda:1",
+      "max_rss_bytes": 2218729472,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 3321888768
+    },
+    {
+      "worker": 2,
+      "pid": 15721,
+      "device": "cuda:2",
+      "max_rss_bytes": 2216808448,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 3321888768
+    },
+    {
+      "worker": 3,
+      "pid": 15724,
+      "device": "cuda:3",
+      "max_rss_bytes": 2217136128,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 2378395136,
+      "peak_reserved_bytes": 3321888768
+    }
+  ],
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 15715,
+      "device": "cuda:0",
+      "max_rss_bytes": 2217250816,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    },
+    {
+      "worker": 1,
+      "pid": 15718,
+      "device": "cuda:1",
+      "max_rss_bytes": 2218729472,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    },
+    {
+      "worker": 2,
+      "pid": 15721,
+      "device": "cuda:2",
+      "max_rss_bytes": 2216808448,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    },
+    {
+      "worker": 3,
+      "pid": 15724,
+      "device": "cuda:3",
+      "max_rss_bytes": 2217136128,
+      "allocated_bytes": 865092608,
+      "reserved_bytes": 3321888768,
+      "peak_allocated_bytes": 1508045312,
+      "peak_reserved_bytes": 3321888768
+    }
+  ],
+  "predict_repeats_s": [
+    0.5702612219997718,
+    0.5710271660000217,
+    0.5699630109997997
+  ],
+  "gathered_output_repeats_s": [
+    0.5712047759998313,
+    0.5717829160003021,
+    0.5707248319999962
+  ],
+  "gathered_rows_per_s": [
+    14341.616779482983,
+    14327.115712557723,
+    14353.677185015236
+  ],
+  "rows_per_s": [
+    14365.346413127278,
+    14346.07753845408,
+    14372.86252248197
+  ],
+  "batch_times_s": [
+    [
+      0.06755625699997836,
+      0.06946851700013212,
+      0.06817854400014767,
+      0.06826830599993627,
+      0.06657562200007305,
+      0.06899619499972687,
+      0.06849908200001664,
+      0.06742424399999436,
+      0.06789280600014536,
+      0.06911098799992033,
+      0.06833022800037725,
+      0.06739871299987499,
+      0.06683386799977598,
+      0.06810201100006452,
+      0.06743146400003752,
+      0.06657230099972367,
+      0.06642521699995996,
+      0.06787562499994237,
+      0.06715985699975136,
+      0.06703762400002233,
+      0.06586331300013626,
+      0.06747942499987403,
+      0.06684392899978775,
+      0.06544938200022443,
+      0.0658492219999971,
+      0.06759577799994076,
+      0.06679472799987707,
+      0.06574796899985813,
+      0.06570066799986307,
+      0.06750281600034214,
+      0.06675315699976636,
+      0.06530963800014433
+    ],
+    [
+      0.06782398399991507,
+      0.06931876399994508,
+      0.06854186300006404,
+      0.06616751999990811,
+      0.06679614699987724,
+      0.06961071199975777,
+      0.06866708699999435,
+      0.06790736599987213,
+      0.06703208399994764,
+      0.06866408599989882,
+      0.06796208800005843,
+      0.0666546530001142,
+      0.06742305300031148,
+      0.06838751899977069,
+      0.06761201900008018,
+      0.06531226800007062,
+      0.06603903699988223,
+      0.06839341999966564,
+      0.06768200100032118,
+      0.06533391899984053,
+      0.06585035599982803,
+      0.0687143120003384,
+      0.06742281800006822,
+      0.06492122100007691,
+      0.06590991799976109,
+      0.06804722499964555,
+      0.06746914999985165,
+      0.06510223699979178,
+      0.06583868600000642,
+      0.06749337000019295,
+      0.06723273299985522,
+      0.06504102500002773
+    ],
+    [
+      0.06772231600007217,
+      0.06904118100010237,
+      0.06726744299976417,
+      0.06791043100020033,
+      0.0669654459998128,
+      0.06798134299970116,
+      0.06754119100014577,
+      0.06730678499980058,
+      0.06672367999999551,
+      0.06765698399976827,
+      0.06919162499980303,
+      0.06755899199970372,
+      0.06779701799996474,
+      0.06864306999977998,
+      0.06761234399982641,
+      0.0657725749997553,
+      0.06666501800009428,
+      0.06733712599998398,
+      0.06706551900015256,
+      0.06503063499985728,
+      0.0667686510000749,
+      0.06709766999983913,
+      0.06863716999987446,
+      0.06743073799998456,
+      0.06661099699977058,
+      0.0670125370002097,
+      0.06704796799976975,
+      0.06590509799980282,
+      0.06639243099971281,
+      0.06712198000013814,
+      0.06629320799993366,
+      0.06587009700024282
+    ]
+  ],
+  "repeat_max_abs_difference": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "prediction_sha256": "336b4714fdd02280fccad532a388d0fe829bca0bce4a68c2d199192178dcca19",
+  "prediction_repeat_sha256": [
+    "336b4714fdd02280fccad532a388d0fe829bca0bce4a68c2d199192178dcca19",
+    "336b4714fdd02280fccad532a388d0fe829bca0bce4a68c2d199192178dcca19",
+    "336b4714fdd02280fccad532a388d0fe829bca0bce4a68c2d199192178dcca19"
+  ],
+  "quality": {
+    "log_loss": 0.5902259349822998,
+    "accuracy": 0.7532958984375
+  }
+}

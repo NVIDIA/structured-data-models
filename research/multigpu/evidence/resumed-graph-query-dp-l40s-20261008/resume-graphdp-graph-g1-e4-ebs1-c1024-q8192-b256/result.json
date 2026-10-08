@@ -1,0 +1,311 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256",
+    "source_commit": "ae4e5e549",
+    "task": "classification",
+    "size": "large",
+    "gpus": 1,
+    "backend": "graph",
+    "context": 1024,
+    "queries": 8192,
+    "batch_size": 256,
+    "estimators": 4,
+    "estimator_batch_size": 1,
+    "seed": 1729,
+    "threads": 1,
+    "warmups": 1,
+    "repeats": 3,
+    "precision": "bfloat16"
+  },
+  "runtime": {
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "git_revision": "ae4e5e549",
+    "runner_sha256": "bbc25b1a06a7c02826b95d50201b2e1bac9232c6b873eb112ed1c4c97608ce35"
+  },
+  "mode": "process-data-graph",
+  "effective_estimator_batch_size": 1,
+  "input_residency": "prepared_CPU_batches",
+  "timing": "parent_wall_including_input_IPC_H2D_predict_D2H_output_IPC",
+  "batch_times_kind": "worker_service_time_excluding_queue_and_ipc",
+  "query_ids_sha256": "be46ed1d1633b1ef4b6a431a739f80b0af52298042fd7807fc4435cd525de331",
+  "query_values_sha256": "cb84135e7eb619eff6132759e925ff0bd9c8be8ef0679a037ef9639833b97a10",
+  "spawn_load_fit_s": 4.783447590000151,
+  "memory_after_fit": [
+    {
+      "worker": 0,
+      "pid": 14660,
+      "device": "cuda:0",
+      "max_rss_bytes": 1715736576,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    }
+  ],
+  "warmup_s": 1.8532913100000314,
+  "memory_after_warmup": [
+    {
+      "worker": 0,
+      "pid": 14660,
+      "device": "cuda:0",
+      "max_rss_bytes": 1801666560,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 4,
+      "graph_capture_s": 0.45609499900024275,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.13955865200000517,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10552007600017532,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10557822700002362,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10543804400003864,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    }
+  ],
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 14660,
+      "device": "cuda:0",
+      "max_rss_bytes": 1801666560,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1380609536,
+      "peak_reserved_bytes": 1889533952,
+      "graph_count": 4,
+      "graph_capture_s": 0.45609499900024275,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.13955865200000517,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10552007600017532,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10557822700002362,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10543804400003864,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    }
+  ],
+  "predict_repeats_s": [
+    1.3540266749998864,
+    1.3477445690000422,
+    1.3472036049997769
+  ],
+  "gathered_output_repeats_s": [
+    1.3550968530000773,
+    1.3485375600002953,
+    1.3480245359996843
+  ],
+  "gathered_rows_per_s": [
+    6045.3243484873865,
+    6074.728834396134,
+    6077.0407223521925
+  ],
+  "rows_per_s": [
+    6050.102373352938,
+    6078.303106113087,
+    6080.743823426272
+  ],
+  "batch_times_s": [
+    [
+      0.04090673599989714,
+      0.04073959199990895,
+      0.040769722999812075,
+      0.04089479599997503,
+      0.040680711000049996,
+      0.04043500399984623,
+      0.04064919999996164,
+      0.04093832700004896,
+      0.040438574000063454,
+      0.04095661799988193,
+      0.040597678000040105,
+      0.04064038899991829,
+      0.04087057500009905,
+      0.040416563000007955,
+      0.040957857999956104,
+      0.040761412999927416,
+      0.04070457099987834,
+      0.040854335000176434,
+      0.04038011300008293,
+      0.04086062500027765,
+      0.040454344999943714,
+      0.04085715499968501,
+      0.04040809399975842,
+      0.040648339000199485,
+      0.04038141299997733,
+      0.0409319069999583,
+      0.04070637099994201,
+      0.040638539000156015,
+      0.040827924000041094,
+      0.04042994400015232,
+      0.04070799100009026,
+      0.040490124999905674
+    ],
+    [
+      0.04073709200019948,
+      0.04049728599966329,
+      0.0408616049999182,
+      0.04045819500015568,
+      0.040751431999979104,
+      0.040400892999969074,
+      0.040927876999830914,
+      0.04034017100002529,
+      0.04046808500015686,
+      0.0406267889998162,
+      0.0407248320002509,
+      0.040594768000119075,
+      0.04056923799998913,
+      0.04047599400018953,
+      0.040304301000105625,
+      0.04047912499981976,
+      0.04073043200014581,
+      0.04037542200012467,
+      0.04086645500001396,
+      0.04035175099988919,
+      0.04045172399992225,
+      0.04067222000003312,
+      0.04062319899958311,
+      0.040620739000132744,
+      0.04057649800006402,
+      0.04055684799959636,
+      0.040806854000038584,
+      0.040512326000225585,
+      0.040695460999813804,
+      0.040477823999935936,
+      0.040684220000002824,
+      0.040346371000396175
+    ],
+    [
+      0.04070261099968775,
+      0.04051965700000437,
+      0.040622299000006024,
+      0.040291870000146446,
+      0.04067275999977937,
+      0.04034550100004708,
+      0.04065144000014698,
+      0.04031181000027573,
+      0.04074553200007358,
+      0.040425474000130635,
+      0.040711470999667654,
+      0.04049407599995902,
+      0.04062373900023886,
+      0.04027546999986953,
+      0.040618358999836346,
+      0.040458074000071065,
+      0.04081251399975372,
+      0.04038291200004096,
+      0.040664619999915885,
+      0.040468555000188644,
+      0.040564996999819414,
+      0.04039277199990465,
+      0.040524277000258735,
+      0.04057236699964051,
+      0.04069487000015215,
+      0.04051291600035256,
+      0.04062360900024942,
+      0.040649918999861256,
+      0.04067102100043485,
+      0.040531166000164376,
+      0.04071068099983677,
+      0.040291119999892544
+    ]
+  ],
+  "repeat_max_abs_difference": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "prediction_sha256": "f002b7c51d1785babb530a27e0f6049550eaa3834023777288c5c239c3b929b5",
+  "prediction_repeat_sha256": [
+    "f002b7c51d1785babb530a27e0f6049550eaa3834023777288c5c239c3b929b5",
+    "f002b7c51d1785babb530a27e0f6049550eaa3834023777288c5c239c3b929b5",
+    "f002b7c51d1785babb530a27e0f6049550eaa3834023777288c5c239c3b929b5"
+  ],
+  "quality": {
+    "log_loss": 0.5902121663093567,
+    "accuracy": 0.753173828125
+  }
+}

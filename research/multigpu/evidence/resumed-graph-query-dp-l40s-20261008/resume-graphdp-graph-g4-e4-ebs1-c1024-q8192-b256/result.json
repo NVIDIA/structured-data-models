@@ -1,0 +1,674 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256",
+    "source_commit": "ae4e5e549",
+    "task": "classification",
+    "size": "large",
+    "gpus": 4,
+    "backend": "graph",
+    "context": 1024,
+    "queries": 8192,
+    "batch_size": 256,
+    "estimators": 4,
+    "estimator_batch_size": 1,
+    "seed": 1729,
+    "threads": 1,
+    "warmups": 1,
+    "repeats": 3,
+    "precision": "bfloat16"
+  },
+  "runtime": {
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "git_revision": "ae4e5e549",
+    "runner_sha256": "bbc25b1a06a7c02826b95d50201b2e1bac9232c6b873eb112ed1c4c97608ce35"
+  },
+  "mode": "process-data-graph",
+  "effective_estimator_batch_size": 1,
+  "input_residency": "prepared_CPU_batches",
+  "timing": "parent_wall_including_input_IPC_H2D_predict_D2H_output_IPC",
+  "batch_times_kind": "worker_service_time_excluding_queue_and_ipc",
+  "query_ids_sha256": "be46ed1d1633b1ef4b6a431a739f80b0af52298042fd7807fc4435cd525de331",
+  "query_values_sha256": "cb84135e7eb619eff6132759e925ff0bd9c8be8ef0679a037ef9639833b97a10",
+  "spawn_load_fit_s": 5.282944945000054,
+  "memory_after_fit": [
+    {
+      "worker": 0,
+      "pid": 16366,
+      "device": "cuda:0",
+      "max_rss_bytes": 1711013888,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    },
+    {
+      "worker": 1,
+      "pid": 16369,
+      "device": "cuda:1",
+      "max_rss_bytes": 1712680960,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    },
+    {
+      "worker": 2,
+      "pid": 16372,
+      "device": "cuda:2",
+      "max_rss_bytes": 1717039104,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    },
+    {
+      "worker": 3,
+      "pid": 16375,
+      "device": "cuda:3",
+      "max_rss_bytes": 1714327552,
+      "allocated_bytes": 1378900992,
+      "reserved_bytes": 2044723200,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 0,
+      "graph_capture_s": 0,
+      "graph_capture_events": []
+    }
+  ],
+  "warmup_s": 0.8460952730001736,
+  "memory_after_warmup": [
+    {
+      "worker": 0,
+      "pid": 16366,
+      "device": "cuda:0",
+      "max_rss_bytes": 1796534272,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 4,
+      "graph_capture_s": 0.44902290200025163,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.13952151000012236,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10307651899984194,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10318311099990751,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10324176200037982,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 1,
+      "pid": 16369,
+      "device": "cuda:1",
+      "max_rss_bytes": 1798201344,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 4,
+      "graph_capture_s": 0.44834978400012915,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.13587312300023768,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10283138199974928,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10475838299998941,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10488689600015277,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 2,
+      "pid": 16372,
+      "device": "cuda:2",
+      "max_rss_bytes": 1802530816,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 4,
+      "graph_capture_s": 0.4588505709994024,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.13991357999975662,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10637241599988556,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10629569299999275,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10626888199976747,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 3,
+      "pid": 16375,
+      "device": "cuda:3",
+      "max_rss_bytes": 1799794688,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1899481600,
+      "peak_reserved_bytes": 2044723200,
+      "graph_count": 4,
+      "graph_capture_s": 0.4783556749998752,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.14559944999973595,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.11105901800010543,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.1107790420001038,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.11091816499993001,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    }
+  ],
+  "memory_after_prediction": [
+    {
+      "worker": 0,
+      "pid": 16366,
+      "device": "cuda:0",
+      "max_rss_bytes": 1796964352,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1380609536,
+      "peak_reserved_bytes": 1889533952,
+      "graph_count": 4,
+      "graph_capture_s": 0.44902290200025163,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.13952151000012236,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10307651899984194,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10318311099990751,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10324176200037982,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 1,
+      "pid": 16369,
+      "device": "cuda:1",
+      "max_rss_bytes": 1798201344,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1380609536,
+      "peak_reserved_bytes": 1889533952,
+      "graph_count": 4,
+      "graph_capture_s": 0.44834978400012915,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.13587312300023768,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10283138199974928,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10475838299998941,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10488689600015277,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 2,
+      "pid": 16372,
+      "device": "cuda:2",
+      "max_rss_bytes": 1802530816,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1380609536,
+      "peak_reserved_bytes": 1889533952,
+      "graph_count": 4,
+      "graph_capture_s": 0.4588505709994024,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.13991357999975662,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10637241599988556,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10629569299999275,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.10626888199976747,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    },
+    {
+      "worker": 3,
+      "pid": 16375,
+      "device": "cuda:3",
+      "max_rss_bytes": 1799794688,
+      "allocated_bytes": 1379135488,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1380609536,
+      "peak_reserved_bytes": 1889533952,
+      "graph_count": 4,
+      "graph_capture_s": 0.4783556749998752,
+      "graph_capture_events": [
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.14559944999973595,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.11105901800010543,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.1107790420001038,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        },
+        {
+          "worker": 0,
+          "query_shape": [
+            256,
+            49
+          ],
+          "capture_s": 0.11091816499993001,
+          "autocast_enabled": true,
+          "autocast_dtype": "torch.bfloat16"
+        }
+      ]
+    }
+  ],
+  "predict_repeats_s": [
+    0.36045145599973694,
+    0.3717336939998859,
+    0.35592604600014965
+  ],
+  "gathered_output_repeats_s": [
+    0.3614053410001361,
+    0.3724110319999454,
+    0.3566467850000663
+  ],
+  "gathered_rows_per_s": [
+    22667.06954946998,
+    21997.20012591142,
+    22969.504687946304
+  ],
+  "rows_per_s": [
+    22727.05481873814,
+    22037.281344753523,
+    23016.017209363083
+  ],
+  "batch_times_s": [
+    [
+      0.04152141499980644,
+      0.04165498900010789,
+      0.041621028000008664,
+      0.041543146000094566,
+      0.04044013600014296,
+      0.04077494500006651,
+      0.040749463999873115,
+      0.04059202999997069,
+      0.040493057999810844,
+      0.04097098100010044,
+      0.04054618899999696,
+      0.04068251299986514,
+      0.04188304399986009,
+      0.0405705900002431,
+      0.04028776299992387,
+      0.040557548999913706,
+      0.0409983210001883,
+      0.04155254599982072,
+      0.04090975899998739,
+      0.04136635000031674,
+      0.0406648020002649,
+      0.04086581799992928,
+      0.04026938200013319,
+      0.0404736270002104,
+      0.04088574899969899,
+      0.04068339300010848,
+      0.04005139600030816,
+      0.0403829849997237,
+      0.04092266899988317,
+      0.040580371000032756,
+      0.040089106999857904,
+      0.04029064299993479
+    ],
+    [
+      0.04094923999991806,
+      0.040586320999864256,
+      0.04678051399969263,
+      0.04723200599983102,
+      0.040403614999831916,
+      0.040772435999770096,
+      0.04684721499961597,
+      0.04722489499999938,
+      0.04036953499962692,
+      0.04037095500007126,
+      0.04632037200008199,
+      0.04656515899978331,
+      0.040302171999883285,
+      0.04029832300011549,
+      0.04472921900014626,
+      0.04543759799980762,
+      0.04037565499993434,
+      0.04022270099994785,
+      0.04047768800000995,
+      0.04095528000016202,
+      0.04018166000014389,
+      0.040362983999784774,
+      0.04026618200032317,
+      0.04077605600014067,
+      0.0404370769997513,
+      0.04047094699990339,
+      0.04001867499982836,
+      0.04067749299974821,
+      0.04021248099979857,
+      0.04030083299994658,
+      0.040381814999818744,
+      0.04052259899981436
+    ],
+    [
+      0.040580189999673166,
+      0.04071637399965766,
+      0.040454776999922615,
+      0.04088856799990026,
+      0.040395455000179936,
+      0.04085647700003392,
+      0.04048408799962999,
+      0.04077463599969633,
+      0.0409690699998464,
+      0.04072721399961665,
+      0.040182350000122824,
+      0.04083255600016855,
+      0.04029130200024156,
+      0.04065819299967188,
+      0.04116150599975299,
+      0.041059302000121534,
+      0.040482798000084586,
+      0.04060565099962332,
+      0.04066998300004343,
+      0.04108570400012468,
+      0.040499657999589544,
+      0.04049737899958927,
+      0.040795756000079564,
+      0.04096825099986745,
+      0.04058067999994819,
+      0.040594810000129655,
+      0.04078600499997265,
+      0.0409720800003015,
+      0.04043290600020555,
+      0.04057545099976778,
+      0.04082967700014706,
+      0.04062705099977393
+    ]
+  ],
+  "repeat_max_abs_difference": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "prediction_sha256": "f002b7c51d1785babb530a27e0f6049550eaa3834023777288c5c239c3b929b5",
+  "prediction_repeat_sha256": [
+    "f002b7c51d1785babb530a27e0f6049550eaa3834023777288c5c239c3b929b5",
+    "f002b7c51d1785babb530a27e0f6049550eaa3834023777288c5c239c3b929b5",
+    "f002b7c51d1785babb530a27e0f6049550eaa3834023777288c5c239c3b929b5"
+  ],
+  "quality": {
+    "log_loss": 0.5902121663093567,
+    "accuracy": 0.753173828125
+  }
+}

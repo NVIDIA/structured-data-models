@@ -1,0 +1,454 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:24:18.876962+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "gpu-contracts",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp",
+      "artifacts": [
+        {
+          "name": "resume-graphdp-ae4e5e549.stdout.log",
+          "role": "log",
+          "bytes": 28233,
+          "sha256": "0a2c2c412e8af2fe24f1b08bd2804db9586260a110374bf8bcd15dc0611e5f8a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-ae4e5e549.stdout.log"
+        },
+        {
+          "name": "resume-graphdp-gpu-contracts.xml",
+          "role": "record",
+          "bytes": 1131,
+          "sha256": "4b07101960f0b0319e2217333d75d2c8afce58d2f3e711d2cc430dbace291561",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-gpu-contracts.xml",
+          "archived_path": "gpu-contracts/resume-graphdp-gpu-contracts.xml"
+        }
+      ]
+    },
+    {
+      "label": "resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 12610,
+          "sha256": "9d90b3a35e5f3dbe1dcaf523e781b4ff4757dfae941708af7070fdf5ddb2238c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 13305,
+          "sha256": "e93cdd14d6cfe9e1b7d91ac96631cad3189d150fd4b46b66e790b769cf728142",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/quality-independent-audit.json",
+          "archived_path": "resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 8036,
+          "sha256": "361c3267e607ef0af386cf6b404d14dd15289f553d40e8e6b465c69129a6184b",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/result.json",
+          "archived_path": "resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g1-e4-ebs1-c1024-q8192-b256/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 10768,
+          "sha256": "bfcf31cee76d85704c07f15f5b9483aa1141c3264995bbf21527581a64f6140c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 16338,
+          "sha256": "c87bb6bb7274b71d8f4dd01187fd5df239dc92dbca83046be88ac595b916be62",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/quality-independent-audit.json",
+          "archived_path": "resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 11061,
+          "sha256": "f0a9f8f02211f5053628a754389aef51e594c4eaa13d3738ce55194b4fd67576",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/result.json",
+          "archived_path": "resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g2-e4-ebs1-c1024-q8192-b256/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 11371,
+          "sha256": "834a75a92bbb686daa9a47031db20df123c1a4656f83b4bccb79a87a5e2c2d87",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "75641e931b5a7ab9810035dfe4bc5d5313a531a6bae2d512fce4baa05642c084",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 22413,
+          "sha256": "f3763b4dd6277a373bb3dbf3b7e91d3b39f6c0ce49ef000bcfa458ead6f759a3",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/quality-independent-audit.json",
+          "archived_path": "resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 17127,
+          "sha256": "3f19efc65723333de7586b530ffa9fc7fb25ef59e0413b7d9da2bdc76b6026d0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/result.json",
+          "archived_path": "resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-graph-g4-e4-ebs1-c1024-q8192-b256/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 16096,
+          "sha256": "b04fb9d83cd0b6def86c1742de73470eed99fa59e275fb683ffe5069796165d0",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 10706,
+          "sha256": "e150ac2894522529ca51a013beca4e675bd4a460801a7db15b3b0115a8fbd40f",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/quality-independent-audit.json",
+          "archived_path": "resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 5746,
+          "sha256": "ad5e1f7d217f86fa6a86a95a04071d1ba8533e2bb602e0ebd501f955ac259715",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/result.json",
+          "archived_path": "resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g1-e4-ebs4-c1024-q8192-b256/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 12558,
+          "sha256": "1cce416e97aae92ad66249c6eb967580845f29a65ac400de182234a24dc71e9c",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 11508,
+          "sha256": "3047e25f875a3b67b24b788ad79f726e180a7a27ed431a3e589abebbad64e7f2",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/quality-independent-audit.json",
+          "archived_path": "resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 6540,
+          "sha256": "67af05821209b549114d348f6a4d03992e15dbf74d36673fed158a1afc59006d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/result.json",
+          "archived_path": "resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g2-e4-ebs4-c1024-q8192-b256/targets.npy"
+        }
+      ]
+    },
+    {
+      "label": "resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256",
+      "artifacts": [
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 12518,
+          "sha256": "a8e4ccb64908776b84d71f66e896c613a06cf13452c67a1563f0eb3a54c48759",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 229504,
+          "sha256": "033dbaf861bd6d4a7d54afb1adae7b59b101775c39ecdbcccd6ecacca543b39e",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/predictions.npy"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 13113,
+          "sha256": "3ab943e80c1dac463f7e81fb102b5002d5f2895d84e0c4a707cb1a477c419b15",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/quality-independent-audit.json",
+          "archived_path": "resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/quality-independent-audit.json"
+        },
+        {
+          "name": "query_ids.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "c52fba40c143ff05ce4dd123c6ce65559a9e9346cac54bcf784c7306344ad8d7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/query_ids.npy"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 8161,
+          "sha256": "76ad72f5e4fd560c9ebfbd48ae22ab1ec321ad62ff3a61dcab2c91ff7a134727",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/result.json",
+          "archived_path": "resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/result.json"
+        },
+        {
+          "name": "targets.npy",
+          "role": "row-or-target-identity",
+          "bytes": 65664,
+          "sha256": "d8592fa5aea0790a263ce4e3ae8c3e1b03332831805f8d2c324dba4143fb9346",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/graph-dp/resume-graphdp-native-g4-e4-ebs4-c1024-q8192-b256/targets.npy"
+        }
+      ]
+    }
+  ]
+}

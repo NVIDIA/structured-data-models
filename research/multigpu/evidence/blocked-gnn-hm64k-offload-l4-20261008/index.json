@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-08T02:24:18.925348+00:00",
+  "scope": "Small raw benchmark records are archived; model weights and raw datasets are excluded. Larger outputs remain at recorded local paths and are bound by content hashes.",
+  "runs": [
+    {
+      "label": "relational-resume-l4-hm-c65536-e8-native-gnn0",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 390,
+          "sha256": "05c99bcf7959445c1701bac273c9e49cfd7bd5d788352d850e00d8ae87845505",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0/command.txt",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-native-gnn0/command.txt"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 154047,
+          "sha256": "ed865df18a8d32139e43c891b8fdd6fa6f39d0f3502f512354ee09630cbc601d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "a6680444176bb421fd69db8bd78a3169ae8a4df9d6723508c8621cac789be052",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "a6680444176bb421fd69db8bd78a3169ae8a4df9d6723508c8621cac789be052",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "a6680444176bb421fd69db8bd78a3169ae8a4df9d6723508c8621cac789be052",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "a6680444176bb421fd69db8bd78a3169ae8a4df9d6723508c8621cac789be052",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0/predictions.npy"
+        },
+        {
+          "name": "predictions.pt",
+          "role": "predictions",
+          "bytes": 35589,
+          "sha256": "e2601c901ca79abdc2ea11daa849d7c9ec3e9d1241e4ed7953b75437ff009cd4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0/predictions.pt"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 5890,
+          "sha256": "31d18e51d8f9876d1683f4ed180d4a1bdc36afe8a840b8257df3b177f5537876",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0/quality-independent-audit.json",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-native-gnn0/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 13143,
+          "sha256": "1dfbb8e4e9e9f758daf5105733fbde7c6c569f50822f01ded52728363b922ca4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn0/result.json",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-native-gnn0/result.json"
+        }
+      ]
+    },
+    {
+      "label": "relational-resume-l4-hm-c65536-e8-native-gnn16384",
+      "source_directory": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384",
+      "artifacts": [
+        {
+          "name": "command.txt",
+          "role": "command",
+          "bytes": 398,
+          "sha256": "6feed1c751072a78f4d6f25cd273e9cb8ffedc66df107173f215f7e8d393249a",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384/command.txt",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-native-gnn16384/command.txt"
+        },
+        {
+          "name": "nvidia-smi.csv",
+          "role": "telemetry",
+          "bytes": 154226,
+          "sha256": "d30670b91565d9eac3d04b12015b6d3062ad63b592218b00f5cc4dd26eef478d",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384/nvidia-smi.csv"
+        },
+        {
+          "name": "predictions-repeat-0.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "cc372e0957e5f25c4b9afaa7a737101eb8054a2314e7d53d5db5a496ac8275fe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384/predictions-repeat-0.npy"
+        },
+        {
+          "name": "predictions-repeat-1.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "cc372e0957e5f25c4b9afaa7a737101eb8054a2314e7d53d5db5a496ac8275fe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384/predictions-repeat-1.npy"
+        },
+        {
+          "name": "predictions-repeat-2.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "cc372e0957e5f25c4b9afaa7a737101eb8054a2314e7d53d5db5a496ac8275fe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384/predictions-repeat-2.npy"
+        },
+        {
+          "name": "predictions.npy",
+          "role": "predictions",
+          "bytes": 32896,
+          "sha256": "cc372e0957e5f25c4b9afaa7a737101eb8054a2314e7d53d5db5a496ac8275fe",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384/predictions.npy"
+        },
+        {
+          "name": "predictions.pt",
+          "role": "predictions",
+          "bytes": 35589,
+          "sha256": "29e78d63e06a550285d158d54495e38588bc7bc1cf8f93fffbea6d4df1721be4",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384/predictions.pt"
+        },
+        {
+          "name": "quality-independent-audit.json",
+          "role": "record",
+          "bytes": 6251,
+          "sha256": "1618f872207328f2a390d8225f89b491a45d1bcda30374fe4b0506554da796c7",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384/quality-independent-audit.json",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-native-gnn16384/quality-independent-audit.json"
+        },
+        {
+          "name": "result.json",
+          "role": "record",
+          "bytes": 13153,
+          "sha256": "91e65b1af2eda2d328f41b1c59f15cdad84aa48838c33e1783125ac6fb56afd5",
+          "source_path": "/Users/ardrianw/repositories/.kumo-multigpu-20261008/results/relational-resume/relational-resume-l4-hm-c65536-e8-native-gnn16384/result.json",
+          "archived_path": "relational-resume-l4-hm-c65536-e8-native-gnn16384/result.json"
+        }
+      ]
+    }
+  ]
+}

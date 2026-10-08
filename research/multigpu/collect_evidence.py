@@ -46,6 +46,7 @@ def artifact_role(name: str) -> str | None:
         "provenance.json",
         "stdout.jsonl",
         "junit.xml",
+        "resume-graphdp-gpu-contracts.xml",
     }:
         return "record"
     if re.fullmatch(r"(?:rank|error-rank)\d+\.json", name):

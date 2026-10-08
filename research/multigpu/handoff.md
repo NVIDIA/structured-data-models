@@ -20,9 +20,9 @@ The coordinator independently reran `collect_evidence.verify(..., external=True)
 
 | Check | Result |
 |---|---:|
-| Evidence snapshots | 35 |
-| Archived-file references checked | 411 |
-| Original-artifact references checked | 930 |
+| Evidence snapshots | 37 |
+| Archived-file references checked | 430 |
+| Original-artifact references checked | 1,004 |
 | Missing/mismatched references | 0 |
 | External references left unchecked | 0 |
 
@@ -35,6 +35,10 @@ The subsequent [resumed tabular executor snapshot](evidence/resumed-tabular-exec
 Further additive snapshots retain [native relational process EP](evidence/resumed-relational-process-ep-l40s-20261008/index.json), [full-FP32 F1 CP isolation](evidence/resumed-context-fp32-l4-20261008/index.json), [six resident CP collective controls](evidence/resumed-context-collectives-l4-20261008/index.json), and [replacement runtime/checkpoint verification](evidence/resumed-runtime-20261008/index.json). All benchmark cohorts include independently audited per-repeat output evidence; no model weights or raw datasets are imported into Git.
 
 The latest additions preserve [all blocked-GNN CUDA case receipts and failures](evidence/blocked-gnn-gpu-review-20261008/index.json), an [exploratory H&M full-model pair](evidence/blocked-gnn-hm16k-l4-20261008/index.json), [three graph-replay traces](evidence/resumed-graph-profiles-l40s-20261008/index.json), and their [independent SQL scope audit](evidence/resumed-graph-profile-sql-audit-l40s-20261008/index.json). Raw SQLite/NSight files stay outside Git and are checksum-bound; small analyses, original commands/probe source and numerical records are retained.
+
+The [graph-backed process query-DP snapshot](evidence/resumed-graph-query-dp-l40s-20261008/index.json) adds six independently audited 1/2/4-GPU controls and the six passing fixed/irregular-shape CUDA contract tests at source `ae4e5e549`. Fully gathered graph throughput is 6,075/12,073/22,667 rows/s, 3.731× matched four-GPU scaling on this batch256 numerical-tabular workload. Native-DP4 is 14,342 rows/s; graph versus native batch4 passes the unchanged BF16 gate but has six label flips, while every within-backend GPU-count/repeat comparison is byte-exact. Larger-batch saturation controls are distinct ongoing experiments, not replaceable denominators.
+
+The [H&M64k CPU-offload snapshot](evidence/blocked-gnn-hm64k-offload-l4-20261008/index.json) proves native E8/context65,536 fits a single L4 with expandable allocation. The exploratory blocked variant lowers fit allocation from 16.737 to 11.865 GiB, but reservation rises slightly and strict module-level failures remain. Do not call this multi-GPU-only feasibility or an accepted exact GNN replacement. Resident-cache attempts have a separate policy and evidence boundary.
 
 The original cuDF results saved repeat-zero arrays but scored the last repeat. Original evidence remains unchanged; additive independent audits score the archived arrays. The runner now archives every repeat and uses the same first repeat for NPY, PT, and reported reference quality. A deliberately nondeterministic CPU fixture tests this contract.
 
