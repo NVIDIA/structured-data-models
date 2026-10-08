@@ -18,6 +18,8 @@ The measured capacity workload `results/relational/workload-hm-c65536-b512/workl
 
 Full node states, transformed source states, skip/output states, graph indices, row-encoder buffers, ICL caches, and GEMM workspace remain resident. Overall memory is still O(ND + E); the adapter only bounds the five-statistic workspace and avoids the full projected-output-plus-skip overlap by writing back into the skip buffer. CUDA latency may worsen from multiple reducer/GEMM launches and smaller GEMMs. Small block GEMMs may produce different floating-point rounding; semantic preservation is not a bitwise-parity promise.
 
+In particular, the blocked path retains the full transformed source matrix until every destination block has been reduced, while the native one-shot reduction can release it before the full statistics projection. The net peak reduction is therefore not simply the difference between the two statistics-buffer sizes; tensor lifetimes and overlapping allocations must be measured in the actual model.
+
 The adapter shares the supplied module's parameter objects. Install it only after loading a checkpoint and before fit, for example `install_blocked_gnn(model.models[task], block_size=16384)`. It rejects gradient-enabled execution and nonpositive block sizes. The nested research wrapper changes state-dict names; do not serialize it as a replacement checkpoint format. It is not claimed to support compilation, training, or a non-Triton CUDA backend.
 
 ## Numerical gates and local validation
