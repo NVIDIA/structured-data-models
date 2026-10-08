@@ -45,14 +45,8 @@ from benchmark.tabular.finetune import (
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
 
-# `MODEL_CONFIGS[...].factory` is `@lru_cache`d, so `SDMMethod.fit` sees the
-# same model instance across every seed/dataset in a process. Fine-tuning
-# must not leak from one seed/dataset into the next, so each model's
-# pretrained weights are snapshotted onto the model instance itself (an
-# `id(model)`-keyed dict would collide once `lru_cache` evicts and frees an
-# entry, since CPython can reuse the freed address for an unrelated model)
-# the first time it's used, and restored before every `fit()` call so a
-# zero-shot run never inherits weights left over from a fine-tuned one.
+# `factory` is `@lru_cache`d, so fine-tuning would leak across shared
+# instances without resetting pristine weights before every fit().
 _PRISTINE_STATE_ATTR = "_sdm_pristine_state"
 
 

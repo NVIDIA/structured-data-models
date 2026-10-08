@@ -83,10 +83,8 @@ if finetune_overrides and not args.model.endswith("-ft"):
 config.update(finetune_overrides)
 
 if finetune_overrides:
-    # tabarena caches results by a positional "_c{i}" config index, not by
-    # hyperparameter content, so distinct fine-tune configs (e.g. different
-    # learning rates) for the same model/dataset would otherwise silently
-    # collide on the same cache path and read back each other's results.
+    # tabarena's cache key is positional, not content-based; key by
+    # hyperparameters so different LRs don't silently collide.
     variant = "_".join(
         f"{key}={value}" for key, value in sorted(config.items())
     )
