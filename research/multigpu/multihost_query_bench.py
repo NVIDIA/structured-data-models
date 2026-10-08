@@ -278,6 +278,11 @@ def run(args: argparse.Namespace) -> None:
         report["prediction_sha256"] = hashlib.sha256(
             arrays[0].tobytes()
         ).hexdigest()
+        report["prediction_repeat_sha256"] = [
+            hashlib.sha256(array.tobytes()).hexdigest() for array in arrays
+        ]
+        for repeat, array in enumerate(arrays):
+            np.save(args.output / f"predictions-repeat-{repeat}.npy", array)
         np.save(args.output / "predictions.npy", arrays[0])
         np.save(args.output / "query_ids.npy", ids)
         targets = np.load(data / "y_val.npy", mmap_mode="r")[

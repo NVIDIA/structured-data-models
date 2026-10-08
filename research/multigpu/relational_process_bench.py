@@ -134,6 +134,11 @@ def run(args: argparse.Namespace) -> None:
         stats["prediction_sha256"] = hashlib.sha256(
             arrays[0].tobytes()
         ).hexdigest()
+        stats["prediction_repeat_sha256"] = [
+            hashlib.sha256(array.tobytes()).hexdigest() for array in arrays
+        ]
+        for repeat, array in enumerate(arrays):
+            np.save(args.output / f"predictions-repeat-{repeat}.npy", array)
         stats["prediction_columns"] = list(pred.columns[Stype.numerical])
         np.save(args.output / "predictions.npy", arrays[0])
         torch.save(pred, args.output / "predictions.pt")

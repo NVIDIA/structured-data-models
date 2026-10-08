@@ -142,6 +142,14 @@ def test_barrier_transport_and_ordered_gather(
         np.load(args.output / "query_ids.npy"), np.arange(9)
     )
     assert np.load(args.output / "predictions.npy").shape == (9, class_count)
+    for repeat in range(args.repeats):
+        saved = np.load(args.output / f"predictions-repeat-{repeat}.npy")
+        np.testing.assert_array_equal(
+            saved, np.load(args.output / "predictions.npy")
+        )
+        assert result["prediction_repeat_sha256"][repeat] == hashlib.sha256(
+            saved.tobytes()
+        ).hexdigest()
     assert result["quality"]["log_loss"] == pytest.approx(-np.log(0.9))
     if class_count == 2:
         assert result["quality"]["positive_class"] == 1
