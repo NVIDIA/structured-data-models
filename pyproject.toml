@@ -16,9 +16,17 @@ license-files = [
     "sdm/models/tabfm/LICENSE",
     "sdm/models/timesfm3/LICENSE",
     "sdm/models/kumo/relational/NOTICE",
+    "sdm/models/kumo/timeseries/LICENSE",
+    "sdm/models/kumo/timeseries/NOTICE",
     "third_party/contributor-covenant/LICENSE",
+    "third_party/csdi/LICENSE",
+    "third_party/diffwave/NOTICE",
+    "third_party/dpm-solver/LICENSE",
+    "third_party/moment/LICENSE",
     "third_party/pytorch/LICENSE",
+    "third_party/revin/LICENSE",
     "third_party/tabpfn-extensions/LICENSE",
+    "third_party/transformers/NOTICE",
 ]
 authors = [
     { name = "NVIDIA" },
