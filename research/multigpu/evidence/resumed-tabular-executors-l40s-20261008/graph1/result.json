@@ -1,0 +1,236 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/tabular-v2-graph1-large-e4-c1024-q2048",
+    "source_commit": "c0fb64fcc",
+    "task": "classification",
+    "size": "large",
+    "mode": "adapter",
+    "adapter": "research.multigpu.graph_ensemble:factory",
+    "gpus": 1,
+    "replicas": null,
+    "placement": "layers",
+    "estimators": 4,
+    "estimator_batch_size": 1,
+    "context": 1024,
+    "queries": 2048,
+    "batch_size": 256,
+    "repeats": 3,
+    "warmups": 1,
+    "seed": 1729,
+    "precision": "bfloat16",
+    "profile": false,
+    "nvtx": false,
+    "query_residency": "gpu"
+  },
+  "runtime": {
+    "pid": 7647,
+    "timezone": [
+      "UTC",
+      "UTC"
+    ],
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "python": "3.12.3",
+    "host": "ip-172-31-5-130",
+    "gpu_names": [
+      "NVIDIA L40S"
+    ],
+    "git_revision": "c0fb64fcc",
+    "runner_sha256": "e65535a13fa59d526e8ed30b475bc43e436cd29497fe2aa98920e0c4f68ef9d3"
+  },
+  "data_load_s": 0.002038493000100061,
+  "input_shape": {
+    "context": [
+      1024,
+      54
+    ],
+    "query": [
+      2048,
+      54
+    ]
+  },
+  "input_sha256": {
+    "x_context": "aa6c609a60537d90279e5b8c41c6a71c0897f6e65364e4a70b2c2e0001741b3f",
+    "y_context": "aaf3d5c9ad264bc677041d87b707f8cd89d021f73d878af8335004aa5d0d7098",
+    "x_query": "a7a892a42bf3a6636d895433e667e64979b2e6264500dcdee9d4b4d3d35f84b2"
+  },
+  "input_transfer_s": 0.028578878999951485,
+  "load_start_unix_s": 1791424554.930731,
+  "load_s": 0.9706503859999884,
+  "load_end_unix_s": 1791424555.9014027,
+  "memory_after_load": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 855375360,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 855375360,
+      "peak_reserved_bytes": 868220928
+    }
+  ],
+  "fit_start_unix_s": 1791424555.9018,
+  "fit_s": 1.0591082160001406,
+  "fit_end_unix_s": 1791424556.9610765,
+  "memory_after_fit": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 1379582464,
+      "reserved_bytes": 2046820352,
+      "peak_allocated_bytes": 1899916288,
+      "peak_reserved_bytes": 2046820352
+    }
+  ],
+  "cache_storage_bytes_after_fit": {
+    "cuda:0": 512754868
+  },
+  "executor_cache_bytes": [
+    358614196
+  ],
+  "member_seeds": [
+    1729,
+    1730,
+    1731,
+    1732
+  ],
+  "warmup_s": 0.5251776420000169,
+  "memory_after_warmup": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 1379816960,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1899916288,
+      "peak_reserved_bytes": 2046820352
+    }
+  ],
+  "graph_count_after_warmup": 4,
+  "prediction_windows_unix_s": [
+    [
+      1791424557.4893453,
+      1791424557.809529
+    ],
+    [
+      1791424557.8095744,
+      1791424558.1296854
+    ],
+    [
+      1791424558.129727,
+      1791424558.449543
+    ]
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "memory_after_prediction": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 1379816960,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1381242880,
+      "peak_reserved_bytes": 1889533952
+    }
+  ],
+  "graph_count_after_prediction": 4,
+  "graph_capture_s": 0.46617042700040656,
+  "graph_capture_events": [
+    {
+      "worker": 0,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.1438735170002019,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    },
+    {
+      "worker": 0,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.10728932600000007,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    },
+    {
+      "worker": 0,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.10733201700008976,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    },
+    {
+      "worker": 0,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.10767556700011482,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    }
+  ],
+  "capture_occurred_during_timing": false,
+  "predict_repeats_s": [
+    0.3201660869999614,
+    0.32009035500004757,
+    0.3197984880000604
+  ],
+  "batch_times_s": [
+    [
+      0.040611274999946545,
+      0.03986853500009602,
+      0.03974771299999702,
+      0.03979548400002386,
+      0.03987056500000108,
+      0.039907595999920886,
+      0.03991281699995852,
+      0.03988229599985971
+    ],
+    [
+      0.03993360700019366,
+      0.0398892270000033,
+      0.039972558000044955,
+      0.039893116000030204,
+      0.03990201600004184,
+      0.04002322999986063,
+      0.039890097000125024,
+      0.040070870999898034
+    ],
+    [
+      0.03980816400007825,
+      0.0398332649999702,
+      0.0398869560001458,
+      0.03998172799992972,
+      0.0399037770000632,
+      0.03992989700009275,
+      0.039974207999875944,
+      0.039957978000074945
+    ]
+  ],
+  "throughput_rows_s": [
+    6396.679983162136,
+    6398.193410106642,
+    6404.0327795408875
+  ],
+  "batch_p50_s": 0.03990289650005252,
+  "batch_p95_s": 0.04006372484989242,
+  "repeat_max_abs_difference": 0.0,
+  "quality": {
+    "log_loss": 0.5760445594787598,
+    "accuracy": 0.76416015625,
+    "auroc_ovr": 0.9474149901961447
+  },
+  "prediction_sha256": "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+  "status": "complete",
+  "max_cpu_rss_bytes": 1801428992
+}

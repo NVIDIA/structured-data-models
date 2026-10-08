@@ -1,0 +1,329 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/tabular-v2-graph4-large-e4-c1024-q2048",
+    "source_commit": "c0fb64fcc",
+    "task": "classification",
+    "size": "large",
+    "mode": "adapter",
+    "adapter": "research.multigpu.graph_ensemble:factory",
+    "gpus": 4,
+    "replicas": null,
+    "placement": "layers",
+    "estimators": 4,
+    "estimator_batch_size": 1,
+    "context": 1024,
+    "queries": 2048,
+    "batch_size": 256,
+    "repeats": 3,
+    "warmups": 1,
+    "seed": 1729,
+    "precision": "bfloat16",
+    "profile": false,
+    "nvtx": false,
+    "query_residency": "gpu"
+  },
+  "runtime": {
+    "pid": 8163,
+    "timezone": [
+      "UTC",
+      "UTC"
+    ],
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "python": "3.12.3",
+    "host": "ip-172-31-5-130",
+    "gpu_names": [
+      "NVIDIA L40S",
+      "NVIDIA L40S",
+      "NVIDIA L40S",
+      "NVIDIA L40S"
+    ],
+    "git_revision": "c0fb64fcc",
+    "runner_sha256": "e65535a13fa59d526e8ed30b475bc43e436cd29497fe2aa98920e0c4f68ef9d3"
+  },
+  "data_load_s": 0.00200863300005949,
+  "input_shape": {
+    "context": [
+      1024,
+      54
+    ],
+    "query": [
+      2048,
+      54
+    ]
+  },
+  "input_sha256": {
+    "x_context": "aa6c609a60537d90279e5b8c41c6a71c0897f6e65364e4a70b2c2e0001741b3f",
+    "y_context": "aaf3d5c9ad264bc677041d87b707f8cd89d021f73d878af8335004aa5d0d7098",
+    "x_query": "a7a892a42bf3a6636d895433e667e64979b2e6264500dcdee9d4b4d3d35f84b2"
+  },
+  "input_transfer_s": 0.029342804999942018,
+  "load_start_unix_s": 1791424637.2826138,
+  "load_s": 1.9287335880001137,
+  "load_end_unix_s": 1791424639.2113814,
+  "memory_after_load": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 855375360,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 855375360,
+      "peak_reserved_bytes": 868220928
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 854693888,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 854693888,
+      "peak_reserved_bytes": 868220928
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 854693888,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 854693888,
+      "peak_reserved_bytes": 868220928
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 854693888,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 854693888,
+      "peak_reserved_bytes": 868220928
+    }
+  ],
+  "fit_start_unix_s": 1791424639.2128682,
+  "fit_s": 1.2939248930001668,
+  "fit_end_unix_s": 1791424640.5069535,
+  "memory_after_fit": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 993964032,
+      "reserved_bytes": 1461714944,
+      "peak_allocated_bytes": 1252215296,
+      "peak_reserved_bytes": 1461714944
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 992452096,
+      "reserved_bytes": 1453326336,
+      "peak_allocated_bytes": 1250073600,
+      "peak_reserved_bytes": 1453326336
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 992452096,
+      "reserved_bytes": 1457520640,
+      "peak_allocated_bytes": 1266089984,
+      "peak_reserved_bytes": 1457520640
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 992452096,
+      "reserved_bytes": 1453326336,
+      "peak_allocated_bytes": 1250073600,
+      "peak_reserved_bytes": 1453326336
+    }
+  ],
+  "cache_storage_bytes_after_fit": {
+    "cuda:0": 128188717,
+    "cuda:1": 128188717,
+    "cuda:2": 128188717,
+    "cuda:3": 128188717
+  },
+  "executor_cache_bytes": [
+    89653549,
+    89653549,
+    89653549,
+    89653549
+  ],
+  "member_seeds": [
+    1729,
+    1730,
+    1731,
+    1732
+  ],
+  "warmup_s": 0.5395025739999255,
+  "memory_after_warmup": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 994023424,
+      "reserved_bytes": 1147142144,
+      "peak_allocated_bytes": 1252215296,
+      "peak_reserved_bytes": 1461714944
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1140850688,
+      "peak_allocated_bytes": 1250073600,
+      "peak_reserved_bytes": 1453326336
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1145044992,
+      "peak_allocated_bytes": 1266089984,
+      "peak_reserved_bytes": 1457520640
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1140850688,
+      "peak_allocated_bytes": 1250073600,
+      "peak_reserved_bytes": 1453326336
+    }
+  ],
+  "graph_count_after_warmup": 4,
+  "prediction_windows_unix_s": [
+    [
+      1791424641.0517068,
+      1791424641.2355013
+    ],
+    [
+      1791424641.2355626,
+      1791424641.4194872
+    ],
+    [
+      1791424641.41953,
+      1791424641.602351
+    ]
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "memory_after_prediction": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 994023424,
+      "reserved_bytes": 1147142144,
+      "peak_allocated_bytes": 995449344,
+      "peak_reserved_bytes": 1147142144
+    },
+    {
+      "device": "cuda:1",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1140850688,
+      "peak_allocated_bytes": 992570368,
+      "peak_reserved_bytes": 1140850688
+    },
+    {
+      "device": "cuda:2",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1145044992,
+      "peak_allocated_bytes": 992570368,
+      "peak_reserved_bytes": 1145044992
+    },
+    {
+      "device": "cuda:3",
+      "allocated_bytes": 992511488,
+      "reserved_bytes": 1140850688,
+      "peak_allocated_bytes": 992570368,
+      "peak_reserved_bytes": 1140850688
+    }
+  ],
+  "graph_count_after_prediction": 4,
+  "graph_capture_s": 1.9919283060003181,
+  "graph_capture_events": [
+    {
+      "worker": 1,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.49390119100007723,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    },
+    {
+      "worker": 3,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.4963648660000217,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    },
+    {
+      "worker": 2,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.4989555950000977,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    },
+    {
+      "worker": 0,
+      "query_shape": [
+        256,
+        49
+      ],
+      "capture_s": 0.5027066540001215,
+      "autocast_enabled": true,
+      "autocast_dtype": "torch.bfloat16"
+    }
+  ],
+  "capture_occurred_during_timing": false,
+  "predict_repeats_s": [
+    0.18374953500006086,
+    0.18388100799984386,
+    0.1827796490001674
+  ],
+  "batch_times_s": [
+    [
+      0.023538971000107267,
+      0.023024307000014232,
+      0.022768581000036647,
+      0.023011945999996897,
+      0.02270844899999247,
+      0.022716529000035734,
+      0.022282236999899396,
+      0.02293777499994576
+    ],
+    [
+      0.02345336899998074,
+      0.022582346000035614,
+      0.023226083000054132,
+      0.022862382000084835,
+      0.022814061999952173,
+      0.022661528000071485,
+      0.022509882999884212,
+      0.02301508699997612
+    ],
+    [
+      0.022727449000058186,
+      0.022712758999887228,
+      0.02310579899994991,
+      0.022204945000112275,
+      0.022316158999956315,
+      0.023027346999924703,
+      0.023092649000091114,
+      0.02283122199992249
+    ]
+  ],
+  "throughput_rows_s": [
+    11145.60643649695,
+    11137.637444328884,
+    11204.748511132791
+  ],
+  "batch_p50_s": 0.022822641999937332,
+  "batch_p95_s": 0.023419276099991747,
+  "repeat_max_abs_difference": 0.0,
+  "quality": {
+    "log_loss": 0.5760445594787598,
+    "accuracy": 0.76416015625,
+    "auroc_ovr": 0.9474149901961447
+  },
+  "prediction_sha256": "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+  "status": "complete",
+  "max_cpu_rss_bytes": 2274484224
+}

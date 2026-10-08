@@ -1,0 +1,374 @@
+{
+  "rows": [
+    {
+      "arm": "native1",
+      "run": "tabular-v2-native1-large-e4-c1024-q2048",
+      "median_rows_s": 1802.8002477238515,
+      "prediction_repeats_s": [
+        1.1378077819999817,
+        1.134083832999977,
+        1.1360104939999474
+      ],
+      "timing_cv": 0.0013385961924700942,
+      "all_repeats_bitwise_reference": true,
+      "all_repeats_within_gate": true,
+      "parent_prediction_peak_allocated_bytes": [
+        1379129344
+      ],
+      "child_prediction_peak_allocated_bytes": [],
+      "child_max_rss_bytes": [],
+      "sampled_device_peak_memory_mib": {
+        "0": 2341,
+        "1": 3,
+        "2": 3,
+        "3": 3
+      },
+      "prediction_window_samples": {
+        "0": 17,
+        "1": 17,
+        "2": 17,
+        "3": 17
+      },
+      "load_s": 11.609608785000091,
+      "fit_s": 103.21028441700003,
+      "warmup_wall_s": 2.076601408999977,
+      "matched_executor_reference": "resident1",
+      "matched_executor_speedup": 0.9745883042873383,
+      "speed_ratio_vs_tuned_native_eb4": 0.449972795761966
+    },
+    {
+      "arm": "native4",
+      "run": "tabular-v2-native4-large-e4-c1024-q2048",
+      "median_rows_s": 4006.464979001811,
+      "prediction_repeats_s": [
+        0.5132858550000492,
+        0.5111738180000884,
+        0.5111132470000257
+      ],
+      "timing_cv": 0.001973601890589353,
+      "all_repeats_bitwise_reference": false,
+      "all_repeats_within_gate": true,
+      "parent_prediction_peak_allocated_bytes": [
+        1767074304
+      ],
+      "child_prediction_peak_allocated_bytes": [],
+      "child_max_rss_bytes": [],
+      "sampled_device_peak_memory_mib": {
+        "0": 3709,
+        "1": 3,
+        "2": 3,
+        "3": 3
+      },
+      "prediction_window_samples": {
+        "0": 8,
+        "1": 8,
+        "2": 8,
+        "3": 8
+      },
+      "load_s": 0.9780274930000132,
+      "fit_s": 1.2445717330000434,
+      "warmup_wall_s": 0.10796743000003062,
+      "matched_executor_reference": "resident1",
+      "matched_executor_speedup": 2.1658827232811024,
+      "speed_ratio_vs_tuned_native_eb4": 1
+    },
+    {
+      "arm": "resident1",
+      "run": "tabular-v2-resident1-large-e4-c1024-q2048",
+      "median_rows_s": 1849.8069798222523,
+      "prediction_repeats_s": [
+        1.1071425410000302,
+        1.1060505210000429,
+        1.2235443039999154
+      ],
+      "timing_cv": 0.048125450594443515,
+      "all_repeats_bitwise_reference": true,
+      "all_repeats_within_gate": true,
+      "parent_prediction_peak_allocated_bytes": [
+        1716191744
+      ],
+      "child_prediction_peak_allocated_bytes": [],
+      "child_max_rss_bytes": [],
+      "sampled_device_peak_memory_mib": {
+        "0": 2493,
+        "1": 3,
+        "2": 3,
+        "3": 3
+      },
+      "prediction_window_samples": {
+        "0": 17,
+        "1": 17,
+        "2": 17,
+        "3": 17
+      },
+      "load_s": 0.9683019029999969,
+      "fit_s": 1.0519353169999022,
+      "warmup_wall_s": 0.1737625929999922,
+      "matched_executor_reference": "resident1",
+      "matched_executor_speedup": 1,
+      "speed_ratio_vs_tuned_native_eb4": 0.46170551583933267
+    },
+    {
+      "arm": "process1",
+      "run": "tabular-v2-process1-large-e4-c1024-q2048",
+      "median_rows_s": 1631.3902787933232,
+      "prediction_repeats_s": [
+        1.260006954000005,
+        1.2553709719999233,
+        1.25150037100002
+      ],
+      "timing_cv": 0.0027695191275620124,
+      "all_repeats_bitwise_reference": true,
+      "all_repeats_within_gate": true,
+      "parent_prediction_peak_allocated_bytes": [
+        2937856
+      ],
+      "child_prediction_peak_allocated_bytes": [
+        1714963456
+      ],
+      "child_max_rss_bytes": [
+        2613915648
+      ],
+      "sampled_device_peak_memory_mib": {
+        "0": 2946,
+        "1": 3,
+        "2": 3,
+        "3": 3
+      },
+      "prediction_window_samples": {
+        "0": 19,
+        "1": 19,
+        "2": 19,
+        "3": 19
+      },
+      "load_s": 4.717196977999947,
+      "fit_s": 1.563953445999914,
+      "warmup_wall_s": 0.19420937999996113,
+      "matched_executor_reference": "process1",
+      "matched_executor_speedup": 1,
+      "speed_ratio_vs_tuned_native_eb4": 0.40718945188428307
+    },
+    {
+      "arm": "process2",
+      "run": "tabular-v2-process2-large-e4-c1024-q2048",
+      "median_rows_s": 2900.898931212319,
+      "prediction_repeats_s": [
+        0.712834947000033,
+        0.7051917659999845,
+        0.7059880570000132
+      ],
+      "timing_cv": 0.004845699283787943,
+      "all_repeats_bitwise_reference": true,
+      "all_repeats_within_gate": true,
+      "parent_prediction_peak_allocated_bytes": [
+        2937856,
+        0
+      ],
+      "child_prediction_peak_allocated_bytes": [
+        1457141760,
+        1457141760
+      ],
+      "child_max_rss_bytes": [
+        3556487168,
+        4410552320
+      ],
+      "sampled_device_peak_memory_mib": {
+        "0": 2726,
+        "1": 2628,
+        "2": 3,
+        "3": 3
+      },
+      "prediction_window_samples": {
+        "0": 11,
+        "1": 11,
+        "2": 11,
+        "3": 11
+      },
+      "load_s": 8.162285212999905,
+      "fit_s": 1.3140886439999804,
+      "warmup_wall_s": 0.1250023019999844,
+      "matched_executor_reference": "process1",
+      "matched_executor_speedup": 1.7781759330808338,
+      "speed_ratio_vs_tuned_native_eb4": 0.7240544835450083
+    },
+    {
+      "arm": "process4",
+      "run": "tabular-v2-process4-large-e4-c1024-q2048",
+      "median_rows_s": 4444.75645515904,
+      "prediction_repeats_s": [
+        0.46241781700007323,
+        0.46076765299994804,
+        0.45722065899997233
+      ],
+      "timing_cv": 0.004712360896227576,
+      "all_repeats_bitwise_reference": true,
+      "all_repeats_within_gate": true,
+      "parent_prediction_peak_allocated_bytes": [
+        2937856,
+        0,
+        0,
+        0
+      ],
+      "child_prediction_peak_allocated_bytes": [
+        1259827712,
+        1259827712,
+        1259827712,
+        1259827712
+      ],
+      "child_max_rss_bytes": [
+        5439987712,
+        6294052864,
+        7148904448,
+        8004149248
+      ],
+      "sampled_device_peak_memory_mib": {
+        "0": 2396,
+        "1": 2298,
+        "2": 2298,
+        "3": 2298
+      },
+      "prediction_window_samples": {
+        "0": 7,
+        "1": 7,
+        "2": 7,
+        "3": 7
+      },
+      "load_s": 14.993673288999958,
+      "fit_s": 1.2837994599999547,
+      "warmup_wall_s": 0.09045527700004641,
+      "matched_executor_reference": "process1",
+      "matched_executor_speedup": 2.7245206208085633,
+      "speed_ratio_vs_tuned_native_eb4": 1.1093960582344655
+    },
+    {
+      "arm": "graph1",
+      "run": "tabular-v2-graph1-large-e4-c1024-q2048",
+      "median_rows_s": 6398.193410106642,
+      "prediction_repeats_s": [
+        0.3201660869999614,
+        0.32009035500004757,
+        0.3197984880000604
+      ],
+      "timing_cv": 0.0004952298933953288,
+      "all_repeats_bitwise_reference": true,
+      "all_repeats_within_gate": true,
+      "parent_prediction_peak_allocated_bytes": [
+        1381242880
+      ],
+      "child_prediction_peak_allocated_bytes": [],
+      "child_max_rss_bytes": [],
+      "sampled_device_peak_memory_mib": {
+        "0": 2383,
+        "1": 3,
+        "2": 3,
+        "3": 3
+      },
+      "prediction_window_samples": {
+        "0": 4,
+        "1": 4,
+        "2": 4,
+        "3": 4
+      },
+      "load_s": 0.9706503859999884,
+      "fit_s": 1.0591082160001406,
+      "warmup_wall_s": 0.5251776420000169,
+      "graph_count_before_timing": 4,
+      "graph_count_after_timing": 4,
+      "sum_overlapping_worker_capture_s": 0.46617042700040656,
+      "matched_executor_reference": "graph1",
+      "matched_executor_speedup": 1,
+      "speed_ratio_vs_tuned_native_eb4": 1.5969672625718836
+    },
+    {
+      "arm": "graph2",
+      "run": "tabular-v2-graph2-large-e4-c1024-q2048",
+      "median_rows_s": 9134.136326193653,
+      "prediction_repeats_s": [
+        0.22563721199981046,
+        0.22421386400014853,
+        0.22339094299991302
+      ],
+      "timing_cv": 0.004134730568674874,
+      "all_repeats_bitwise_reference": true,
+      "all_repeats_within_gate": true,
+      "parent_prediction_peak_allocated_bytes": [
+        1123697664,
+        1120818688
+      ],
+      "child_prediction_peak_allocated_bytes": [],
+      "child_max_rss_bytes": [],
+      "sampled_device_peak_memory_mib": {
+        "0": 1989,
+        "1": 1981,
+        "2": 3,
+        "3": 3
+      },
+      "prediction_window_samples": {
+        "0": 3,
+        "1": 3,
+        "2": 3,
+        "3": 3
+      },
+      "load_s": 1.368421742999999,
+      "fit_s": 1.1061707410001418,
+      "warmup_wall_s": 0.46646383199981756,
+      "graph_count_before_timing": 4,
+      "graph_count_after_timing": 4,
+      "sum_overlapping_worker_capture_s": 0.8381995910001478,
+      "matched_executor_reference": "graph1",
+      "matched_executor_speedup": 1.4276117867530063,
+      "speed_ratio_vs_tuned_native_eb4": 2.279849287106304
+    },
+    {
+      "arm": "graph4",
+      "run": "tabular-v2-graph4-large-e4-c1024-q2048",
+      "median_rows_s": 11145.60643649695,
+      "prediction_repeats_s": [
+        0.18374953500006086,
+        0.18388100799984386,
+        0.1827796490001674
+      ],
+      "timing_cv": 0.0026769422882374425,
+      "all_repeats_bitwise_reference": true,
+      "all_repeats_within_gate": true,
+      "parent_prediction_peak_allocated_bytes": [
+        995449344,
+        992570368,
+        992570368,
+        992570368
+      ],
+      "child_prediction_peak_allocated_bytes": [],
+      "child_max_rss_bytes": [],
+      "sampled_device_peak_memory_mib": {
+        "0": 1645,
+        "1": 1637,
+        "2": 1641,
+        "3": 1637
+      },
+      "prediction_window_samples": {
+        "0": 3,
+        "1": 3,
+        "2": 3,
+        "3": 3
+      },
+      "load_s": 1.9287335880001137,
+      "fit_s": 1.2939248930001668,
+      "warmup_wall_s": 0.5395025739999255,
+      "graph_count_before_timing": 4,
+      "graph_count_after_timing": 4,
+      "sum_overlapping_worker_capture_s": 1.9919283060003181,
+      "matched_executor_reference": "graph1",
+      "matched_executor_speedup": 1.7419927348384394,
+      "speed_ratio_vs_tuned_native_eb4": 2.781905369175052
+    }
+  ],
+  "notes": [
+    "All nine arms ran on the replacement L40S host with identical context/query identities; all candidate repeats were independently compared.",
+    "Native estimator batch4 changes local arithmetic and passes BF16 comparison, but is not byte-identical to native1. Resident/process/graph predictions are byte-identical on every saved repeat.",
+    "Parent and child allocator peaks are separate high-water counters, not a simultaneous whole-device peak. Device telemetry is sampled during actual prediction windows and includes driver/context/allocator overhead; sample maxima are lower bounds on physical peak.",
+    "Child maximum RSS is lifetime high-water and can count shared pages; do not sum as unique host RAM.",
+    "Warmup memory peaks include fit because reset occurs before fit and again after warmup. Graph worker capture durations overlap, so their sum is not capture wall time. Warmup wall time includes capture.",
+    "No new graph is captured during measured prediction, as graph count remains4. Pretrained workload has no remainder batch; reduced-model tests cover remainder and retained-output lifetime.",
+    "Initial native1 fit103.21s includes cold-start effects, unlike subsequent runs; fit speedup is not inferred. Resident1 third pass slowdown yields4.81% timing CV."
+  ]
+}

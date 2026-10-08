@@ -1,0 +1,181 @@
+{
+  "config": {
+    "data": "/home/ubuntu/kumo-multigpu/data/covertype",
+    "output": "/home/ubuntu/kumo-multigpu/results/tabular-v2-native1-large-e4-c1024-q2048",
+    "source_commit": "c0fb64fcc",
+    "task": "classification",
+    "size": "large",
+    "mode": "native",
+    "adapter": null,
+    "gpus": 1,
+    "replicas": null,
+    "placement": "layers",
+    "estimators": 4,
+    "estimator_batch_size": 1,
+    "context": 1024,
+    "queries": 2048,
+    "batch_size": 256,
+    "repeats": 3,
+    "warmups": 1,
+    "seed": 1729,
+    "precision": "bfloat16",
+    "profile": false,
+    "nvtx": false,
+    "query_residency": "gpu"
+  },
+  "runtime": {
+    "pid": 4620,
+    "timezone": [
+      "UTC",
+      "UTC"
+    ],
+    "torch": "2.9.1+cu130",
+    "cuda": "13.0",
+    "python": "3.12.3",
+    "host": "ip-172-31-5-130",
+    "gpu_names": [
+      "NVIDIA L40S"
+    ],
+    "git_revision": "c0fb64fcc",
+    "runner_sha256": "e65535a13fa59d526e8ed30b475bc43e436cd29497fe2aa98920e0c4f68ef9d3"
+  },
+  "data_load_s": 0.005508216000066568,
+  "input_shape": {
+    "context": [
+      1024,
+      54
+    ],
+    "query": [
+      2048,
+      54
+    ]
+  },
+  "input_sha256": {
+    "x_context": "aa6c609a60537d90279e5b8c41c6a71c0897f6e65364e4a70b2c2e0001741b3f",
+    "y_context": "aaf3d5c9ad264bc677041d87b707f8cd89d021f73d878af8335004aa5d0d7098",
+    "x_query": "a7a892a42bf3a6636d895433e667e64979b2e6264500dcdee9d4b4d3d35f84b2"
+  },
+  "input_transfer_s": 1.4013906440000028,
+  "load_start_unix_s": 1791424182.3385098,
+  "load_s": 11.609608785000091,
+  "load_end_unix_s": 1791424193.9481542,
+  "memory_after_load": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 855375360,
+      "reserved_bytes": 868220928,
+      "peak_allocated_bytes": 855375360,
+      "peak_reserved_bytes": 868220928
+    }
+  ],
+  "fit_start_unix_s": 1791424193.9485846,
+  "fit_s": 103.21028441700003,
+  "fit_end_unix_s": 1791424297.1591618,
+  "memory_after_fit": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 865774080,
+      "reserved_bytes": 1692401664,
+      "peak_allocated_bytes": 1512136704,
+      "peak_reserved_bytes": 1692401664
+    }
+  ],
+  "cache_storage_bytes_after_fit": {
+    "cpu": 358614196
+  },
+  "warmup_s": 2.076601408999977,
+  "memory_after_warmup": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 1129863680,
+      "reserved_bytes": 1887436800,
+      "peak_allocated_bytes": 1512136704,
+      "peak_reserved_bytes": 1887436800
+    }
+  ],
+  "prediction_windows_unix_s": [
+    [
+      1791424299.2392368,
+      1791424300.3770669
+    ],
+    [
+      1791424300.3771257,
+      1791424301.5112295
+    ],
+    [
+      1791424301.5112708,
+      1791424302.647299
+    ]
+  ],
+  "prediction_columns": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "memory_after_prediction": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 1129863680,
+      "reserved_bytes": 1887436800,
+      "peak_allocated_bytes": 1379129344,
+      "peak_reserved_bytes": 1887436800
+    }
+  ],
+  "predict_repeats_s": [
+    1.1378077819999817,
+    1.134083832999977,
+    1.1360104939999474
+  ],
+  "batch_times_s": [
+    [
+      0.1430134969999699,
+      0.14194064900004832,
+      0.14214675400000942,
+      0.14202242099997875,
+      0.14216313399992941,
+      0.14167921199998545,
+      0.1419915400000491,
+      0.14218353499995828
+    ],
+    [
+      0.14182980600003248,
+      0.14168983299998672,
+      0.14196706999996422,
+      0.1414667559999998,
+      0.14144604599994182,
+      0.14151054800004204,
+      0.141853416999993,
+      0.14171188199998141
+    ],
+    [
+      0.14186046600002555,
+      0.141512548000037,
+      0.14194420799992713,
+      0.14192945900003906,
+      0.142259258000081,
+      0.14183426699992197,
+      0.14213848500003223,
+      0.1419403790000615
+    ]
+  ],
+  "throughput_rows_s": [
+    1799.952533634572,
+    1805.8629709784793,
+    1802.8002477238515
+  ],
+  "batch_p50_s": 0.14193491900005029,
+  "batch_p95_s": 0.1422478995500626,
+  "repeat_max_abs_difference": 0.0,
+  "quality": {
+    "log_loss": 0.5760445594787598,
+    "accuracy": 0.76416015625,
+    "auroc_ovr": 0.9474149901961447
+  },
+  "prediction_sha256": "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+  "status": "complete",
+  "max_cpu_rss_bytes": 2308087808
+}

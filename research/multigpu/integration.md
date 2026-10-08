@@ -50,7 +50,9 @@ for task in ("classification", "regression"):
 
 Keep inference placement independent of model construction and preprocessing recipes. Use the existing `ICLModel.fit` / `predict` contracts and explicit replicas or process groups. Avoid introducing a cluster manager, service scheduler, mandatory configuration schema, or cloud dependency into SDM.
 
-The study branch contains experimental executors, adapters, cloud-operation notes, runners, profilers, and evidence retention. Their combined size is not a proposed production API. Any upstream change should be a separately reviewable extraction of a small reusable capability with behavior tests, rather than a wholesale merge of the investigation harness. The local study branch remains the integration point; no GitHub/PR publication is implied by these recommendations.
+The study branch contains experimental executors, adapters, cloud-operation notes, runners, profilers, and evidence retention. Their combined size is not a proposed production API. Any upstream change should be a separately reviewable extraction of a small reusable capability with behavior tests, rather than a wholesale merge of the investigation harness.
+
+The coordinator has published a separate scoped candidate, [`feature/ensemble-parallel`](https://github.com/NVIDIA/structured-data-models/tree/feature/ensemble-parallel), at [`75bd74af2`](https://github.com/NVIDIA/structured-data-models/commit/75bd74af21d7541e7ef042871af5e3f076203a17), directly based on `842c408fe`. Its four files contain the generic resident threaded executor, export, focused tests and usage documentation—not CP, process/graph adapters, cloud orchestration or the full study. The caller constructs distinct identical evaluation replicas; preprocessing/reduction run once, member cache ownership is stable, calls are synchronous and must not overlap on one executor. This is an experimental opt-in contract, not automatic native estimator batching or a guarantee of speedup. Process/graph benchmark gains must not be attributed to this smaller branch. No PR is implied by the confirmed branch push.
 
 | Boundary | Proposed responsibility | Must remain independent |
 |---|---|---|
@@ -74,6 +76,8 @@ A reusable core abstraction is warranted only once it has at least two real user
 | Benchmark runners, EC2 launch operations, result collector and raw evidence | Research/benchmark documentation and scripts | Remain optional and out of import-time model code; preserve reproduction and failure history |
 
 The initial small-context measurements favor tuning existing estimator batching before adding a new default execution mode. They do not justify enabling EP or CP automatically. Explicit opt-in research modes allow capacity and workload-dependent benefits to be evaluated without burdening every model-family wrapper.
+
+The resumed pretrained ladder adds a useful research result: graph replay reaches 6,398 rows/s on one L40S and 11,146 on four, with exact native-batch1 outputs; four GPUs scale 1.742× over graph1. Process EP scales 2.724× but is only 1.109× tuned native. Graph execution also changes class-metadata synchronization, so paired profiles are needed before assigning the whole gain to fewer launches. Keep static-shape capture, warmup, output lifetime, refit invalidation and memory controls explicit. Neither adapter is included in the published minimal candidate.
 
 ### What the measured results prioritize
 

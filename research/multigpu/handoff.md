@@ -20,15 +20,17 @@ The coordinator independently reran `collect_evidence.verify(..., external=True)
 
 | Check | Result |
 |---|---:|
-| Evidence snapshots | 26 |
-| Archived-file references checked | 277 |
-| Original-artifact references checked | 629 |
+| Evidence snapshots | 27 |
+| Archived-file references checked | 296 |
+| Original-artifact references checked | 711 |
 | Missing/mismatched references | 0 |
 | External references left unchecked | 0 |
 
 Counts are references, not unique artifacts or independent trials. Large outputs remain under `/Users/ardrianw/repositories/.kumo-multigpu-20261008`; do not remove that local store without relocating and verifying them. Models and raw datasets are not committed. Exact verification commands are in the report.
 
 After access resumed, the report owner independently reran external verification at integrated source `bd7e1ba40`: all 26 snapshots, 277 archived references and 629 original-artifact references passed again, with zero unchecked external references. This verifies the surviving local evidence, not any undownloaded remote result.
+
+The subsequent [resumed tabular executor snapshot](evidence/resumed-tabular-executors-l40s-20261008/index.json) adds 19 small records and 82 artifact references from nine completed fresh-host arms. Independent audits check all saved repeats, full input/query/target identities, matched timing denominators, graph capture counts and separate allocator/physical-memory accounting. The table above includes that addition; original snapshots remain unchanged.
 
 The original cuDF results saved repeat-zero arrays but scored the last repeat. Original evidence remains unchanged; additive independent audits score the archived arrays. The runner now archives every repeat and uses the same first repeat for NPY, PT, and reported reference quality. A deliberately nondeterministic CPU fixture tests this contract.
 
@@ -47,6 +49,8 @@ PYTHONPATH=. /Users/ardrianw/repositories/sdm-kumotabular-stream-main-20261001/.
   research/multigpu/test_multihost_query_bench.py -q
 ```
 
+At `534c3e4d1`, the independent integrated CPU review passed **204 tests with six CUDA-only skips**, plus six runner `--help` import checks. The exact command and scope are retained in [integrated-cpu-review-534c3e4d1.json](../../../.kumo-multigpu-20261008/ops/integrated-cpu-review-534c3e4d1.json). That suite deliberately excludes the actual-checkpoint GNN singleton failures; they remain unresolved evidence, not passing cases. Fresh core EP CUDA stream/autocast validation on frozen source `c0fb64fcc` also passed: two tests in 1.47 seconds. Overlapping suite counts are not summed.
+
 After the repeat-provenance fix, the coordinator reran evidence-collector, relational-scoring/archive, and query-sharding tests: **32 passed**. Ruff passed on these changed files and the graph diagnostic. A separate multihost protocol run exposed a stale integer-column test fixture incompatible with SDM's string prediction-column contract; its correction is tracked separately rather than hidden as an environment failure.
 
 The fixture correction is integrated as `a886c2223`. The coordinator reran protocol and relational scoring tests: **11 passed**, including binary/seven-class cases across 1/2/4 fake workers and reordered semantic classes. Ruff passed. These overlap four tests in the preceding count; counts must not be summed as unique tests. Fake-worker timings are not GPU benchmark results.
@@ -61,7 +65,7 @@ A subsequent research-only scorer fix (`f13e29828`) preserves the full predictio
 | H&M C64k/E8 capacity on original L4 | EP1 stdout showed OOM; wrapper finished | Undownloaded stage2 outcome/raw receipts lost; visible EP1 failure is not a recovered complete comparison |
 | Original placement Nsight captures | Captured remotely but not downloaded | Remote-only captures lost; no trace-derived conclusion |
 | Native CPU-offload E8 capacity control | Never launched | No multi-GPU-only feasibility claim |
-| Pretrained process-EP and graph-EP ladders | Never measured | Fixture correctness only |
+| Pretrained tabular process-EP and graph-EP ladders | Replacement-host nine-arm ladder completed and independently audited | Process EP4 2.724× its EP1; graph EP4 1.742× its graph1; all repeats exact native-batch1; relational process/graph scope remains separate |
 | Mixed eight-GPU query DP | Staged, never launched | No eight-GPU scaling result |
 | Full-model FP32 F1 CP, GPU all-gather, C32k MHA | Staged, never launched | CPU-only all-gather validation; diagnostics unmeasured |
 | cuDF graph repeatability diagnostic | Prepared, never executed | Nondeterminism cause unresolved |
@@ -93,3 +97,5 @@ With permitted networking restored, the sole cloud operator's checks beginning *
 The coordinator has authorized two replacement homogeneous L40S Spot hosts with three-hour shutdown guards. The operator reports first replacement `i-0fa5c18a88d2eb124` launched in us-east-2a at 2026-10-08 01:38:13 UTC; second-host capacity was still being sought at this update. Their subsequent runtime state and identifiers belong in the operator's live [operations record](operations.md); this handoff does not assume readiness or termination. Original security groups/imported keys are retained for reuse; stale cross-host ingress rule `sgr-028d1b8e6657ba968` was revoked. These access resources and replacements must be reconciled before final cleanup is declared. No original remote-only result is marked a numerical failure simply because it was lost.
 
 The coordinator confirmed the branch's first push at `af55e434b`; the remote is `git@github.com:NVIDIA/structured-data-models.git`. The subsequent lifecycle follow-up integrated as `46f05c2cb` was still local at that confirmation. Publication does not close final resource teardown, actual cost accounting or remaining scientific controls.
+
+A separate minimal [`feature/ensemble-parallel`](https://github.com/NVIDIA/structured-data-models/tree/feature/ensemble-parallel) branch was subsequently confirmed pushed at `75bd74af21d7541e7ef042871af5e3f076203a17`, based directly on `842c408fe`. It contains four files and 599 additions: core threaded resident executor/export, focused tests and usage documentation. Its core/test bytes match the tested frozen source. Process/graph adapters and their larger performance gains remain research-only and are not included in that candidate. See [integration.md](integration.md) for the scoped contract; no PR has been opened.

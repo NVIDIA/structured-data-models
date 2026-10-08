@@ -1,0 +1,249 @@
+{
+  "run": "tabular-v2-graph1-large-e4-c1024-q2048",
+  "reference": "tabular-v2-resident1-large-e4-c1024-q2048",
+  "source_commit": "c0fb64fcc",
+  "checks": {
+    "all_requested_repeats_retained": true,
+    "saved_first_repeat": true,
+    "input_hashes": true,
+    "columns": true,
+    "query_ids": true,
+    "targets": true,
+    "query_ids_original_val": true,
+    "targets_original_val": true,
+    "prediction_sha": true,
+    "reported_throughput": true
+  },
+  "prediction_sha256": "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+  "prediction_repeat_sha256": [
+    "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+    "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116",
+    "92cb62ec8b153a01ae11dbfaaa07475ed58b3e44702911c281856df582b65116"
+  ],
+  "repeat_comparison": {
+    "repeat_count": 3,
+    "all_repeats_within_tolerance": true,
+    "all_repeats_bitwise_equal_reference": true,
+    "bitwise_repeatable": true,
+    "against_reference": [
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ],
+    "against_first_candidate": [
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      },
+      {
+        "shape": [
+          2048,
+          7
+        ],
+        "reference_dtype": "float32",
+        "candidate_dtype": "float32",
+        "finite": true,
+        "bitwise_equal": true,
+        "atol": 0.01,
+        "rtol": 0.05,
+        "compute_dtype": "bfloat16",
+        "max_abs": 0,
+        "mean_abs": 0,
+        "rms": 0,
+        "p99_abs": 0,
+        "relative_l2": 0,
+        "within_tolerance": true,
+        "failing_entries": 0,
+        "rows_with_failures": 0
+      }
+    ]
+  },
+  "class_changes_per_repeat": [
+    0,
+    0,
+    0
+  ],
+  "quality_per_repeat": [
+    {
+      "rows": 2048,
+      "accuracy": 0.76416015625,
+      "log_loss": 0.5760446019729857,
+      "brier_multiclass": 0.3375792160360528,
+      "auroc_by_class": [
+        0.8933421428681182,
+        0.8867785471323272,
+        0.988213353226408,
+        0.9946596915699417,
+        0.9262972569785101,
+        0.9682268500790401,
+        0.9743870895186685
+      ],
+      "auroc_macro_present_classes": 0.9474149901961447,
+      "max_probability_sum_error": 1.6590638551861048e-7
+    },
+    {
+      "rows": 2048,
+      "accuracy": 0.76416015625,
+      "log_loss": 0.5760446019729857,
+      "brier_multiclass": 0.3375792160360528,
+      "auroc_by_class": [
+        0.8933421428681182,
+        0.8867785471323272,
+        0.988213353226408,
+        0.9946596915699417,
+        0.9262972569785101,
+        0.9682268500790401,
+        0.9743870895186685
+      ],
+      "auroc_macro_present_classes": 0.9474149901961447,
+      "max_probability_sum_error": 1.6590638551861048e-7
+    },
+    {
+      "rows": 2048,
+      "accuracy": 0.76416015625,
+      "log_loss": 0.5760446019729857,
+      "brier_multiclass": 0.3375792160360528,
+      "auroc_by_class": [
+        0.8933421428681182,
+        0.8867785471323272,
+        0.988213353226408,
+        0.9946596915699417,
+        0.9262972569785101,
+        0.9682268500790401,
+        0.9743870895186685
+      ],
+      "auroc_macro_present_classes": 0.9474149901961447,
+      "max_probability_sum_error": 1.6590638551861048e-7
+    }
+  ],
+  "recomputed_median_rows_s": 6398.193410106642,
+  "reference_median_rows_s": 1849.8069798222523,
+  "ratio_to_reference": 3.458843803649959,
+  "fit_s": 1.0591082160001406,
+  "load_s": 0.9706503859999884,
+  "warmup_s": 0.5251776420000169,
+  "query_residency": "gpu",
+  "member_seeds": [
+    1729,
+    1730,
+    1731,
+    1732
+  ],
+  "reference_member_seeds": [
+    1729,
+    1730,
+    1731,
+    1732
+  ],
+  "parent_memory_after_prediction": [
+    {
+      "device": "cuda:0",
+      "allocated_bytes": 1379816960,
+      "reserved_bytes": 1889533952,
+      "peak_allocated_bytes": 1381242880,
+      "peak_reserved_bytes": 1889533952
+    }
+  ],
+  "child_memory_after_fit": null,
+  "child_memory_after_prediction": null,
+  "graph_count_after_warmup": 4,
+  "note": "Historical native1 comparison verifies reproduction, not same-host scaling. New native4 changes local batching and is a tuning control. Resident/process/graph comparisons require fixed member policy; parent GPU counters do not measure child GPU allocation. Initial cold fit is recorded separately, not claimed as placement speedup."
+}
