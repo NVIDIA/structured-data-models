@@ -40,8 +40,8 @@ class Recipe:
         features: Steps applied to model inputs before model execution.
         target: Steps applied to labels before model execution.
         output: Steps applied to stacked model outputs. If ``None``, use
-            :class:`~sdm.processing.InvertTarget`. An explicit pipeline only
-            performs target inversion when it includes that step.
+            :class:`~sdm.processing.Identity`. Target inversion requires an
+            explicit :class:`~sdm.processing.InvertTarget` step.
     """
 
     _features: EnsembleProcessor
@@ -106,7 +106,7 @@ class Recipe:
         processor: Processor | Iterable[Processor] | None,
     ) -> None:
         if processor is None:
-            processor = sp.InvertTarget()
+            processor = sp.Identity()
         self._output = EnsembleProcessor.as_processor(processor)
 
         if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):

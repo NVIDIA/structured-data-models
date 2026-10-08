@@ -10,11 +10,10 @@ from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 
 
 class InvertTarget(EnsembleProcessor):
-    """Invert the fitted target pipeline at this output processing step.
+    """Invert the fitted target pipeline.
 
     Bound to ``Recipe.target`` during model execution. Member assignments must
-    remain compatible with its fitted state. Classification predictions pass
-    through unchanged.
+    remain compatible with its fitted state.
     """
 
     handles_stypes = frozenset({Stype.numerical})

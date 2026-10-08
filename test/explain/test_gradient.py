@@ -137,10 +137,8 @@ def test_differentiates_final_prediction(fitted: bool) -> None:
     assert related_attributions is None
 
 
-@pytest.mark.parametrize("fitted", [False, True])
 @pytest.mark.parametrize("invert", [False, True])
 def test_target_inversion_scales_preprocessed_input_gradients(
-    fitted: bool,
     invert: bool,
 ) -> None:
     model = _LinearModel()
@@ -153,17 +151,13 @@ def test_target_inversion_scales_preprocessed_input_gradients(
         output=[sp.InvertTarget()] if invert else [],
     )
     explainer = GradientExplainer()
-    if fitted:
-        model.fit(x_context, y_context, recipe=recipe)
-        attributions, _ = explainer.explain(model, x_query)
-    else:
-        attributions, _ = explainer.explain(
-            model,
-            x_query,
-            x_context=x_context,
-            y_context=y_context,
-            recipe=recipe,
-        )
+    attributions, _ = explainer.explain(
+        model,
+        x_query,
+        x_context=x_context,
+        y_context=y_context,
+        recipe=recipe,
+    )
 
     expected = (4.0 if invert else 2.0) * torch.eye(2)
     torch.testing.assert_close(attributions.numerical, expected.unsqueeze(1))

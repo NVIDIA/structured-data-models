@@ -70,11 +70,7 @@ class RecipeExecution:
         self._y_locations = y._locations
         for module in self.recipe.output.modules():
             if isinstance(module, sp.InvertTarget):
-                module._target = (
-                    self.recipe.target
-                    if y[0].numerical.size(-1) > 0
-                    else EnsembleProcessor.as_processor(sp.Identity())
-                )
+                module._target = self.recipe.target
                 module._locations = y._locations
                 module._ndim = y[0].dim()
 
