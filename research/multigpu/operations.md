@@ -12,7 +12,7 @@ Initial local AWS identity check on 2026-10-08 failed because the AWS SSO sessio
 
 Authentication succeeded via the user's `al` shell function (ordinary browser-based `aws sso login`).
 
-## Active host
+## Initial host (historical)
 
 | Field | Observed value |
 |---|---|
@@ -92,3 +92,18 @@ The cross-region SSH rule `sgr-028d1b8e6657ba968` belongs to the us-east-2 task 
 ## Evidence
 
 Provisioning records will include current Spot quotes, selected availability zone, instance and volume identifiers, GPU topology, driver/runtime versions, capacity failures, and teardown status. Benchmarks must record the exact source revision, command, workload, GPU selection, synchronization-aware timing, peak memory, and prediction comparison.
+
+## Restored access and replacement capacity (2026-10-08)
+
+Network access was restored at approximately 01:34 UTC, after both original shutdown deadlines. Read-only EC2 checks found neither original instance and no task-tagged EBS volumes in either region. The Ohio Spot request was closed with `instance-terminated-by-user` and update time 2026-10-07 23:23:31 UTC. The Virginia request had already been purged, so its exact termination time/cause cannot be independently reconstructed. Remote-only evidence from the interrupted queues is not recoverable from surviving task disks; previously downloaded evidence remains valid. The authoritative receipt is `ops/old-host-lifecycle-resume-20261008.json`. The obsolete cross-region SSH ingress rule was revoked.
+
+Two fresh Spot hosts were acquired for explicitly new attempts:
+
+| Role | Instance / type | Zone | GPUs | Launch UTC | Compute quote | Shutdown guard |
+|---|---|---|---|---|---|---|
+| Pretrained EP and relational controls | `i-0fa5c18a88d2eb124`, `g6e.12xlarge` | us-east-2a | 4 L40S | 01:38:13 | $5.3029/hour | 04:38 UTC |
+| CP/GNN gates, then joint query DP | `i-03ea6eecfa001b1a6`, `g6.12xlarge` | eu-central-1b | 4 L4 | 01:49:47 | $2.7675/hour | two hours after boot |
+
+All eligible Virginia L40S/L4/A10 and Oregon L40S/L4/A10 fallback pools returned insufficient capacity. Frankfurt L4 capacity succeeded within the existing 64-vCPU quota. No denied P-family launch was retried, no quota increase was requested, and no On-Demand instance was used. Any joint eight-GPU result is therefore heterogeneous and cross-Atlantic, not homogeneous single-host scaling. Both hosts use encrypted 200 GB gp3 root volumes with delete-on-termination and shutdown-to-terminate behavior. Combined quoted compute rate is $8.0704/hour; the original $100 was an initial planning envelope, not a user-imposed cap.
+
+The replacement Ohio runtime is verified as PyTorch 2.9.1+cu130 with pyg-lib 0.7.0+pt29cu130; all 15 checkpoint-manifest files passed SHA-256 verification. Immutable `source-c0fb64fcc` and exact prepared data/graphs were independently verified before handoff. Later source revisions use separate directories. Each runner must download evidence after individual arms rather than defer recovery until a full queue ends. Replacement runtime receipts are stored separately under `ops/resume-host1-runtime` and, when ready, `ops/resume-host2-runtime`.
