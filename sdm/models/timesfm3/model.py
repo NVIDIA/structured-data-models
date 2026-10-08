@@ -26,20 +26,55 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
-from sdm import Recipe, RelatedTables, Stype, StypeLike, TableTensor, Task
+from sdm import (
+    ColumnarTensor,
+    Recipe,
+    RelatedTables,
+    Stype,
+    StypeLike,
+    TableTensor,
+    Task,
+)
 from sdm.cache import Cache
+from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.base import ICLModel
+from sdm.models.callback import Callback
 from sdm.models.timesfm3.block import ResidualBlock
 from sdm.models.timesfm3.ckpt import remap_ckpt
 from sdm.models.timesfm3.icl import ICLBlock
-from sdm.models.timesfm3.recipe import default_recipe
+from sdm.models.timesfm3.recipe import TIME_COLUMN, default_recipe
 from sdm.models.timesfm3.util import (
     gather_future_patches,
     get_running_stats,
     revin,
 )
+from sdm.processing.execution import MemberContext
 from sdm.tensor.table import TableSchema
+
+
+def _with_time_column(table: TableTensor, start: int) -> TableTensor:
+    time_steps = torch.arange(
+        start, start + table.size(-2), device=table.device
+    ).expand(*table.size()[:-2], -1)
+    return cast(
+        TableTensor,
+        torch.cat(
+            (
+                table,
+                TableTensor(
+                    columns={Stype.id: [TIME_COLUMN]},
+                    id=ColumnarTensor((time_steps,)),
+                ),
+            ),
+            dim=-1,
+        ),
+    )
+
+
+def _drop_time_column(table: TableTensor) -> TableTensor:
+    if TIME_COLUMN in table.columns[Stype.id]:
+        return table.drop_columns(TIME_COLUMN)
+    return table
 
 
 class TimesFM3(ICLModel):
@@ -149,58 +184,84 @@ class TimesFM3(ICLModel):
 
         return self
 
-    def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
+    def forward(
+        self,
+        x_context: Tensor | TableTensor,
+        y_context: Tensor | TableTensor,
+        x_query: Tensor | TableTensor,
+        *args: Any,
+        **kwargs: Any,
+    ) -> TableTensor:
         r""":meta private:"""  # noqa: D415
-        x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
-        kwargs["_x_context_schema"] = x_context.schema
-
-        x_query = kwargs["x_query"] if "x_query" in kwargs else args[2]
+        if not isinstance(y_context, TableTensor):
+            y_context = TableTensor.from_tensor(y_context)
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
-        kwargs["_x_query_schema"] = x_query.schema
 
+        context_length = x_context.size(-2)
         x_query = expand_query(x_context.schema, x_query)
 
-        if "x_query" in kwargs:
-            kwargs["x_query"] = x_query
-        else:
-            args = (*args[:2], x_query, *args[3:])
+        out = super().forward(
+            _with_time_column(x_context, 0),
+            _with_time_column(y_context, 0),
+            _with_time_column(x_query, context_length),
+            *args,
+            **kwargs,
+        )
+        return _drop_time_column(out)
 
-        return super().forward(*args, **kwargs)  # type: ignore
-
-    def fit(self, *args: Any, **kwargs: Any) -> None:
+    def fit(
+        self,
+        x: Tensor | TableTensor,
+        y: Tensor | TableTensor,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         r""":meta private:"""  # noqa: D415
-        x = kwargs["x"] if "x" in kwargs else args[0]
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
+        if not isinstance(y, TableTensor):
+            y = TableTensor.from_tensor(y)
+
         kwargs["_x_context_schema"] = x.schema
+        kwargs["_context_length"] = x.size(-2)
+        super().fit(
+            _with_time_column(x, 0), _with_time_column(y, 0), *args, **kwargs
+        )
 
-        super().fit(*args, **kwargs)
-
-    def predict(self, *args: Any, **kwargs: Any) -> TableTensor:
+    def predict(
+        self,
+        x: Tensor | TableTensor,
+        *args: Any,
+        **kwargs: Any,
+    ) -> TableTensor:
         r""":meta private:"""  # noqa: D415
         if self._cache is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} not yet fitted. Make sure to "
                 f"call '{self.__class__.__name__}.fit()' before."
             )
-
-        x = kwargs["x"] if "x" in kwargs else args[0]
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
 
         cached_kwargs = cast(dict[str, Any], self._cache["kwargs"])
-        cached_kwargs["_x_query_schema"] = x.schema
         x = expand_query(cached_kwargs["_x_context_schema"], x)
+        out = super().predict(
+            _with_time_column(x, cached_kwargs["_context_length"]),
+            *args,
+            **kwargs,
+        )
+        return _drop_time_column(out)
 
-        if "x" in kwargs:
-            kwargs["x"] = x
-        else:
-            args = (x, *args[1:])
-
-        return super().predict(*args, **kwargs)
+    def _prepare_context(
+        self,
+        context: MemberContext,
+        callbacks: Sequence[Callback],
+    ) -> MemberContext:
+        context = context._replace(y=_drop_time_column(context.y))
+        return super()._prepare_context(context, callbacks)
 
     def _forward(
         self,
@@ -212,7 +273,7 @@ class TimesFM3(ICLModel):
         cache: Cache | None,
         generator: torch.Generator | None,
         **kwargs: Any,
-    ) -> TableTensor:  # [..., R_query, Y * 9]
+    ) -> TableTensor:  # [..., R_query, T * Q]
 
         if y_context is not None:
             columns = y_context.columns[Stype.numerical]
@@ -227,18 +288,26 @@ class TimesFM3(ICLModel):
             assert x_context is not None
             size = (*x_context.size()[:-2], 0)
 
-        return TableTensor(
+        out = TableTensor(
             columns={
                 Stype.numerical: [
-                    f"{name}__q{i}"
-                    for name, i in product(columns, range(10, 100, 10))
+                    f"{name}__q{int(100 * q)}"
+                    for name, q in product(columns, self.model.quantiles)
                 ]
             },
             numerical=torch.zeros(
-                (*size, len(columns) * 9),
+                (*size, len(columns) * len(self.model.quantiles)),
                 device=next(self.parameters()).device,
             ),
         )
+        if x_query is None:
+            return out
+        context_length = (
+            x_context.size(-2)
+            if x_context is not None
+            else kwargs["_context_length"]
+        )
+        return _with_time_column(out, context_length)
 
 
 class _TimesFM3(torch.nn.Module):
@@ -310,7 +379,9 @@ class _TimesFM3(torch.nn.Module):
         count, mean, std = get_running_stats(x, mask)
 
         # Gather the prediction patches and hide unavailable values
-        horizon_x, past_end = gather_future_patches(x, self.num_horizon_patches)
+        horizon_x, past_end = gather_future_patches(
+            x, self.num_horizon_patches
+        )
         horizon_mask, _ = gather_future_patches(mask, self.num_horizon_patches)
         horizon_mask.logical_or_(context_only[..., None])
         horizon_mask.logical_or_(past_end)

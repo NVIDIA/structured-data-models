@@ -13,6 +13,7 @@ from sdm.processing.numerical.power import PowerTransform
 from sdm.processing.numerical.quantile import QuantileTransform
 from sdm.processing.numerical.rank_gaussian import RankGaussian
 from sdm.processing.numerical.standardize import Standardize
+from sdm.processing.numerical.linear_detrend import LinearDetrend
 from sdm.processing.numerical.robust_scale import RobustScale
 from sdm.processing.numerical.flip_sign import FlipSign
 from sdm.processing.numerical.constant import DropConstantColumns
@@ -30,6 +31,7 @@ __all__ = [
     "QuantileTransform",
     "RankGaussian",
     "Standardize",
+    "LinearDetrend",
     "RobustScale",
     "FlipSign",
     "DropConstantColumns",
