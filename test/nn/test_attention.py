@@ -231,6 +231,26 @@ def test_sdpa_scale(device: torch.device) -> None:
     torch.testing.assert_close(out, expected)
 
 
+@withCUDA
+@pytest.mark.parametrize("value_channels", [8, 4])
+def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
+    # Empty key/value batches should give empty results, even with queries.
+    module = SDPA(num_query_heads=2)
+    query = torch.randn(3, 2, 8, dtype=torch.bfloat16, device=device)
+    key = torch.randn(0, 5, 2, 8, dtype=torch.bfloat16, device=device)
+    value = torch.randn(
+        0, 5, 2, value_channels, dtype=torch.bfloat16, device=device
+    )
+    for tensor in (query, key, value):
+        tensor.requires_grad_()
+
+    out = module(query=query, key=key, value=value)
+    assert out.size() == (0, 3, 2, value_channels)
+    out.sum().backward()
+    for tensor in (query, key, value):
+        torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
+
+
 def test_sdpa_errors() -> None:
     channels = 3
     num_heads = 2
@@ -657,7 +677,12 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     torch.testing.assert_close(out1, out3)
 
 
-def test_transformer_block_chunked_noncontiguous_out() -> None:
+@pytest.mark.parametrize(
+    "dtype", [torch.bfloat16, torch.float16, torch.float32, torch.float64]
+)
+def test_transformer_block_chunked_noncontiguous_out(
+    dtype: torch.dtype,
+) -> None:
     channels = 8
     module = TransformerBlock(
         channels=channels,
@@ -667,7 +692,8 @@ def test_transformer_block_chunked_noncontiguous_out() -> None:
 
     base = torch.randn(2, 3, 4, channels)
     query = base.transpose(-2, -3)
-    buffer = torch.empty_like(base).transpose(-2, -3)
+    # Under autocast, outputs can differ in dtype from a preallocated buffer.
+    buffer = torch.empty_like(base, dtype=dtype).transpose(-2, -3)
 
     assert not query.is_contiguous()
     assert not buffer.is_contiguous()
@@ -681,7 +707,7 @@ def test_transformer_block_chunked_noncontiguous_out() -> None:
         )
 
     assert actual is buffer
-    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(actual, expected.to(dtype))
 
 
 def test_transformer_block_kv_cache() -> None:

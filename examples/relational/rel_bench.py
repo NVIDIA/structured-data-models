@@ -12,6 +12,7 @@ import torchmetrics
 from tqdm import tqdm
 
 import sdm
+import sdm.processing as sp
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
@@ -21,7 +22,10 @@ parser.add_argument("--batch_size", type=int, default=1000)
 parser.add_argument("--max_test_steps", type=int, default=None)
 parser.add_argument("--num_neighbors", type=int, nargs="*", default=[16, 16])
 parser.add_argument("--num_estimators", type=int, default=1)
+parser.add_argument("--num_lags", type=int, default=20)
 parser.add_argument("--seed", type=int, default=0)
+parser.add_argument("--text", action="store_true")
+parser.add_argument("--text_dim", type=int, default=64)
 args = parser.parse_args()
 
 torch.manual_seed(args.seed)
@@ -41,7 +45,11 @@ data = sdm.RelationalData(
                     cast(str, table.pkey_col): "id",
                     **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
                 },
-                text="drop",
+                text=(
+                    "infer"
+                    if args.text and name == task.entity_table
+                    else "drop"
+                ),
                 unsupported="drop",
             ),
         )
@@ -78,14 +86,56 @@ dfs = [
     task.get_table(split, mask_input_cols=False).df
     for split in ["train", "val", "test"]
 ]
+df = pd.concat(dfs, ignore_index=True)
+
+# Add lag target features to task table:
+right = df.sort_values(task.time_col)
+left = pd.DataFrame(
+    {
+        task.entity_col: df[task.entity_col],
+        "__lookup_time__": df[task.time_col],
+        "__row__": range(len(df)),
+    }
+)
+for lag in range(1, args.num_lags + 1):
+    column = f"{task.target_col}_lag_{lag}"
+    if task.task_type == relbench.base.TaskType.REGRESSION:
+        df[column] = float("NaN")
+    else:
+        df[column] = pd.Series(pd.NA, index=df.index, dtype="object")
+
+    merged = pd.merge_asof(
+        left.sort_values("__lookup_time__"),
+        right,
+        by=task.entity_col,
+        left_on="__lookup_time__",
+        right_on=task.time_col,
+        direction="backward",
+        allow_exact_matches=False,
+    )
+    mask = merged[task.time_col].notna()
+    rows = merged.loc[mask, "__row__"].to_numpy()
+    df.loc[rows, column] = merged.loc[mask, task.target_col].to_numpy()
+
+    # Find the next lag strictly before the previous observation.
+    left = merged.loc[mask, [task.entity_col, "__row__", task.time_col]]
+    left = left.rename(columns={task.time_col: "__lookup_time__"})
+
+if task.task_type == relbench.base.TaskType.REGRESSION:
+    target_stype = "numerical"
+else:
+    target_stype = "categorical"
+
 task_table = sdm.TableTensor.from_pandas(
-    df=pd.concat(dfs, ignore_index=True),
+    df=df,
     stypes={
         task.entity_col: "id",
         task.time_col: "datetime",
-        task.target_col: "numerical"
-        if task.task_type == relbench.base.TaskType.REGRESSION
-        else "categorical",
+        task.target_col: target_stype,
+        **{
+            f"{task.target_col}_lag_{lag}": target_stype
+            for lag in range(1, args.num_lags + 1)
+        },
     },
 )
 context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
@@ -102,6 +152,18 @@ if len(context) > args.context_size:  # Sample different context per estimator:
 
 # Execute Model ###############################################################
 model = sdm.models.KumoRelational(device=device)
+recipe = model.default_recipe()
+if args.text:
+    recipe = recipe.prepend_features(
+        sp.StypeDispatch(
+            text=[
+                sp.SentenceTransformer(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2",
+                ),
+                sp.PCA(args.text_dim),
+            ],
+        )
+    )
 kwargs: dict[str, Any] = {
     "task_link": {
         "task_column": task.entity_col,
@@ -119,6 +181,7 @@ with torch.amp.autocast(device.type, torch.float16, enabled=True):
         y=context[task.target_col],
         related_tables=related_tables,
         num_estimators=num_estimators,
+        recipe=recipe,
     )
 
 if task.task_type == relbench.base.TaskType.REGRESSION:
