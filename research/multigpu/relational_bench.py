@@ -83,6 +83,30 @@ def runtime_environment() -> dict[str, str | None]:
     }
 
 
+def failure_record(
+    args: argparse.Namespace, original_traceback: str
+) -> dict[str, Any]:
+    """Preserve the original failure and best-effort allocator evidence."""
+    result: dict[str, Any] = {
+        "args": vars(args),
+        "runtime_environment": runtime_environment(),
+        "traceback": original_traceback,
+    }
+    if args.command == "run" and torch.cuda.is_initialized():
+        try:
+            result["memory_at_failure"] = memory(
+                [f"cuda:{index}" for index in range(args.gpus)]
+            )
+            result["memory_peak_scope"] = (
+                "Since latest runner peak reset; use traceback to identify "
+                "load, fit, or prediction phase. Current allocation is "
+                "sampled after exception unwinding."
+            )
+        except Exception:  # noqa: BLE001 - diagnostics must not mask failure
+            result["memory_inspection_error"] = traceback.format_exc()
+    return result
+
+
 def max_rss_kib() -> float:
     value = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return value / 1024 if sys.platform == "darwin" else value
@@ -838,11 +862,7 @@ def main() -> None:
         if args.output.is_dir():
             write_json(
                 args.output / "failure.json",
-                {
-                    "args": vars(args),
-                    "runtime_environment": runtime_environment(),
-                    "traceback": traceback.format_exc(),
-                },
+                failure_record(args, traceback.format_exc()),
             )
         raise
 

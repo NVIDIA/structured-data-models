@@ -1,6 +1,7 @@
 # ruff: noqa: D103
 """Check explicit churn-positive scoring with reversed prediction columns."""
 
+from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -11,6 +12,7 @@ from research.multigpu.relational_bench import (
     archive_prediction_repeats,
     cache_sizes,
     configure_gnn_blocks,
+    failure_record,
     runtime_environment,
     score,
 )
@@ -132,3 +134,32 @@ def test_runtime_environment_records_allocator_without_credentials() -> None:
     assert receipt["PYTORCH_CUDA_ALLOC_CONF"] is None
     assert receipt["OMP_NUM_THREADS"] == "8"
     assert "AWS_SECRET_ACCESS_KEY" not in receipt
+
+
+def test_failure_memory_keeps_original_error_when_inspection_fails() -> None:
+    args = Namespace(command="run", gpus=2)
+    with (
+        patch("torch.cuda.is_initialized", return_value=True),
+        patch(
+            "research.multigpu.relational_bench.memory",
+            side_effect=RuntimeError("memory inspection failed"),
+        ),
+    ):
+        record = failure_record(args, "original CUDA out-of-memory traceback")
+    assert record["traceback"] == "original CUDA out-of-memory traceback"
+    assert "memory inspection failed" in record["memory_inspection_error"]
+
+
+def test_failure_memory_captures_all_participating_devices() -> None:
+    args = Namespace(command="run", gpus=2)
+    expected = {"cuda:0": {"peak_allocated": 123}}
+    with (
+        patch("torch.cuda.is_initialized", return_value=True),
+        patch(
+            "research.multigpu.relational_bench.memory", return_value=expected
+        ) as capture,
+    ):
+        record = failure_record(args, "failure")
+    capture.assert_called_once_with(["cuda:0", "cuda:1"])
+    assert record["memory_at_failure"] == expected
+    assert record["traceback"] == "failure"
