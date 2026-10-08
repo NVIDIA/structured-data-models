@@ -57,7 +57,7 @@ class ICLBlock(torch.nn.Module):
             for _ in range(num_layers)
         )
 
-        # The final layer has no context queries to calibrate FP8 scales.
+        # Keep final attention on SDPA to avoid FP8 overhead on small batches.
         for layer in self.layers[:-1]:
             cast(
                 TabFMTransformerBlock, layer
