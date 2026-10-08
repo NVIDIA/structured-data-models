@@ -295,3 +295,22 @@ Process EP child prediction peaks fall from approximately 1.597 to 1.357 to 1.17
 The graph warmup memory high-water also includes fit, because peak counters reset before fit and again only after warmup. It is not an isolated capture peak. The first native fit takes 103.210 seconds on the new host and is retained as a cold-start observation; later roughly one-second fits cannot be called a placement speedup. Resident EP1's third measured pass is 10.6% slower than its fastest pass (timing coefficient of variation 4.81%), cautioning against interpreting small improvements over that particular control.
 
 Nine per-arm `quality-independent-audit.json` files and an additive `quality-ladder-audit.json` retain every-repeat checks, matched denominators, capture counts, and the parent/child/physical-memory distinctions. Older evidence remains unchanged. Pretrained relational process-ensemble, CP precision diagnostics, bounded-GNN full-model checks and cross-host scaling are separate outstanding groups until their actual outputs are audited.
+
+## Resumed relational process ensemble and CP precision closure
+
+Fresh H&M context 1,024, 2,000 validation queries, two-hop neighbors 16/16 and batch 250 were sampled once on the replacement four-L40S host. The four resident/process arms share those exact downloaded graph bytes, labels, recipe, member seeds and runner source. All three saved repeats from every arm are bitwise identical. Original ordered validation labels and the semantic positive-class column (`1`, at index zero) are independently verified: AUROC 0.663516392, log loss 0.465358980 and accuracy 0.8085. Historical query graphs differ and are not a speedup denominator.
+
+| Fresh relational executor | Rows/s | Ratio to Process EP1 | Ratio to resident EP1 |
+|---|---:|---:|---:|
+| Resident EP1 | 1,411.87 | Separate execution policy | 1.000x |
+| Process EP1 | 1,232.49 | 1.000x | 0.873x |
+| Process EP2 | 1,916.98 | 1.555x | 1.358x |
+| Process EP4 | 2,396.15 | 1.944x | 1.697x |
+
+Parent wall timing includes process transfers and final ordered CPU gather. Parent allocator counters are zero after process construction in this relational ladder; worker allocator counters remain nonzero and must be reported separately. Neither parent nor child alone measures whole-device physical memory, and worker high-water RSS values are not additive unique host RAM. Four new numerical sidecars retain every-repeat checks and separate counters.
+
+The replacement L4 host also completed the previously missing full-FP32 F1 isolation. All 499 rows and 999 quantiles are checked on every repeat, with identical graph identities and every rank reporting the saved rank-zero hashes. FP32 native and one-rank LSE are bitwise identical. FP32 CP2 passes the unchanged strict `atol=1e-5, rtol=1e-4` gate with zero failing entries, maximum absolute error 0.0000133514 and mean absolute error 0.000000899185. Outputs are finite with no quantile crossings. Median-target MAE changes by -0.0000000134, with driver-cluster bootstrap 95% interval [-0.0000000895, 0.0000000669]. This is numerical closure for full FP32, not a retroactive pass for retained BF16 or partial-FP32 failures.
+
+Rates are 377.43 rows/s for BF16 native, 303.73 for FP32 native, 299.96 for FP32 LSE1 and 300.31 for FP32 CP2. Thus full precision resolves this numerical discrepancy at a precision cost, without a CP throughput win. The separate BF16-to-FP32 change affects predictions and task quality and must not be attributed to distributed execution.
+
+The same L4 host completed matched resident Covertype context-16k collective controls. Native/LSE1 are exact; all-reduce and all-gather variants pass the unchanged BF16 gate on all repeats. All-gather2 is bitwise identical to all-reduce2; at four ranks the collective change has maximum error 0.002825916 and mean error 0.0000155401. Recomputed throughput is 1,853.19 native, 1,807.12 LSE1, 1,500.81/1,489.72 all-reduce2/4 and 1,541.44/1,525.77 all-gather2/4. Nominal 2.71%/2.42% all-gather gains do not cross the native baseline and are not supported by independent repeated trial runs. Ten new CP sidecars preserve every-repeat, per-rank hash, original validation identity, quality and strict tolerance checks. Earlier failed arms remain unchanged.
