@@ -354,3 +354,24 @@ Under the original resumed settings, resident EP1 fails at a 6.10-GiB segment-st
 Both final legacy-key resident EP1 retries retain same-process, post-CUDA-allocation snapshots verifying `expandable_segments=true`, but still fail fitting. Unblocked execution now fails at a 1.22-GiB skip-linear allocation with 585 MiB free; blocked execution fails at a 2.44-GiB LayerNorm allocation with 2.19 GiB free. Neither produces predictions or a same-policy stage-placement oracle. Their new failure-audit sidecars preserve the actual allocator proof and distinguish error-time memory from post-unwind counters.
 
 Successful Stage2 has asymmetric per-device fit peaks of 16.130/12.891 GiB and prediction peaks of 0.502/12.150 GiB. GPU1 retains 12 GiB of enumerated cache, while GPU0 retains approximately 49.5 MiB. These are separate device-phase peaks, not a measured simultaneous aggregate. Placement makes this resident configuration feasible where the tested one-GPU resident attempts fail, but public native CPU cache offload also fits on one L4. No exact-placement claim is established at this E8/64k frontier because every matching resident reference fails.
+
+## Completed heterogeneous cross-host scaling audit
+
+The final native E4/C1024/B1024 ladder uses four Frankfurt L4 GPUs and four Ohio L40S GPUs, coordinated from Frankfurt. Every one of 13 new runs retains three prediction repeats. Independent checks validate original validation IDs, all query-shard and TRAIN-context hashes, exactly-once batch coverage, actual reported GPU family and unique physical UUIDs. Effective worker count comes from the selected worker/READY lists, not `args.workers`, whose default four is overridden by explicit worker indices.
+
+Every saved output is bitwise identical to a rowwise oracle assembled from the full-65,536-row reference for that row's actual hardware family. L4 and L40S reference outputs themselves differ (maximum probability difference 0.010062933, passing BF16 screening), so comparing a mixed output to only one family would conflate hardware precision behavior with distribution errors. Equal-plan mixed2/4/8 retain the same family for every row, and all weak-cohort prefixes preserve that ownership. Weighted8 intentionally changes hardware family for 28,672 rows; every reassigned row still matches its own family oracle exactly.
+
+| Coordinator-visible execution | GPUs | Fixed 65,536-query rows/s |
+|---|---:|---:|
+| Frankfurt-local L4 | 1 / 4 | 3,114.87 / 12,411.89 |
+| Frankfurt-origin Ohio L40S | 1 / 4 | 7,040.60 / 24,095.59 |
+| Equal mixed-family ownership | 2 / 4 / 8 | 6,238.82 / 12,433.52 / 24,770.03 |
+| Capacity-weighted mixed ownership | 8 | 31,877.39 |
+
+Balanced mixed8 versus mixed2 scales 3.9703x, or 99.26% of ideal for that fourfold worker increase. Weak workloads use 8,192 queries per GPU: per-GPU rates are 3,107.62/3,103.87/3,096.25 on 2/4/8 GPUs, yielding 99.63% relative efficiency. The fixed-Q strong8 run is also the weak8 endpoint, not an additional independent measurement. These results establish this heterogeneous, cross-region protocol only, not homogeneous eight-GPU or NVLink scaling.
+
+Weighted scheduling uses the recorded local four-GPU family rates divided by four, independently checked against its provenance. Whole-batch assignments become five batches per L4 and eleven per L40S, improving throughput 28.69% over equal mixed8. Its changed family ownership changes 12 predicted labels versus equal mixed8; loss delta -0.0000112 has paired 95% interval [-0.0000238, 0.00000120], so no task-quality gain is established. This is a different scheduling policy, not another unchanged-plan scaling point.
+
+Timing is a single coordinator monotonic wall around dispatch, network responses, decoding and ordered gather; query batches are preloaded before timing. No unsynchronized worker-clock arithmetic contributes to the end-to-end rate. Both balanced and weighted8 show per-worker prediction allocation peaks of 2.227 GiB on L4 and 2.423 GiB on L40S, with reserved peaks 2.770/3.094 GiB. Startup/load/fit is separately 5.73/5.77 seconds. Worker high-water RSS is approximately 1.96--1.97 GiB per process and is not summed as unique host memory.
+
+Thirteen per-arm numerical sidecars, `quality-mixed-family-oracle-audit.json` and `quality-mixed-scaling-audit.json` retain all-repeat correctness, effective worker counts, physical-family ownership, weighted provenance and the performance denominators. Raw results remain unchanged.
