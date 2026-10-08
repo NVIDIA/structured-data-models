@@ -55,6 +55,7 @@ def run(args: argparse.Namespace) -> None:
         seed=args.seed,
         precision=args.precision,
         estimator_batch_size=args.estimator_batch_size,
+        backend=args.backend,
     )
     dtype = torch.bfloat16 if args.precision == "bfloat16" else None
     report = {
@@ -67,7 +68,12 @@ def run(args: argparse.Namespace) -> None:
                 Path(__file__).read_bytes()
             ).hexdigest(),
         },
-        "mode": "process-data",
+        "mode": "process-data"
+        if args.backend == "native"
+        else "process-data-graph",
+        "effective_estimator_batch_size": (
+            1 if args.backend == "graph" else args.estimator_batch_size
+        ),
         "input_residency": "prepared_CPU_batches",
         "timing": "parent_wall_including_input_IPC_H2D_predict_D2H_output_IPC",
         "batch_times_kind": "worker_service_time_excluding_queue_and_ipc",
@@ -100,7 +106,7 @@ def run(args: argparse.Namespace) -> None:
             for _ in range(args.warmups):
                 executor.predict(batches)
             report["warmup_s"] = time.perf_counter() - start
-            executor.memory(reset_peak=True)
+            report["memory_after_warmup"] = executor.memory(reset_peak=True)
             elapsed, gathered_elapsed, durations, arrays = [], [], [], []
             for _ in range(args.repeats):
                 start = time.perf_counter()
@@ -119,6 +125,15 @@ def run(args: argparse.Namespace) -> None:
                 gathered_elapsed.append(time.perf_counter() - start)
                 arrays.append(prediction.numerical.float().numpy().copy())
             report["memory_after_prediction"] = executor.memory()
+            if args.backend == "graph" and [
+                item["graph_count"] for item in report["memory_after_warmup"]
+            ] != [
+                item["graph_count"]
+                for item in report["memory_after_prediction"]
+            ]:
+                raise RuntimeError(
+                    "New CUDA graph capture entered timed passes"
+                )
         report["predict_repeats_s"] = elapsed
         report["gathered_output_repeats_s"] = gathered_elapsed
         report["gathered_rows_per_s"] = [
@@ -188,6 +203,9 @@ def main() -> None:
         "--size", choices=["small", "medium", "large"], default="large"
     )
     parser.add_argument("--gpus", type=int, default=1)
+    parser.add_argument(
+        "--backend", choices=["native", "graph"], default="native"
+    )
     parser.add_argument("--context", type=int, default=1024)
     parser.add_argument("--queries", type=int, default=2048)
     parser.add_argument("--batch-size", type=int, default=256)

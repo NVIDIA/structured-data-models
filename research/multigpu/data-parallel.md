@@ -64,6 +64,14 @@ The runnable adapter is `data_parallel_adapter.py:hybrid_factory(args, replicas)
 
 Set `args.recipe_device="cpu"` and pass a CPU fit generator when comparing against a CPU-preprocessed resident EP reference. The adapter then preserves CPU recipe execution while explicitly propagating CUDA autocast into both nested worker levels. The default keeps preprocessing on the group's first GPU and requires a CUDA generator. Changing CPU/CUDA recipe backends can change sampling or preprocessing numerics, so those configurations are separate references, not pure placement comparisons.
 
+### Optional graph replay inside process DP
+
+`tabular_process_bench.py --backend graph` composes the existing one-GPU `GraphEnsembleParallel` with each persistent query worker; `native` remains the default. Each worker fits the same complete resident ensemble and member seed. Graph replay executes one member at a time, so the report explicitly sets its effective estimator batch size to 1 rather than pretending that a native `--estimator-batch-size 4` flag batches graph members. Compare against both matching graph-one-GPU execution and the best tuned native baseline.
+
+All fixed batches, including an irregular final batch, run during warmup. Child reports retain graph count, cumulative capture time/events and allocator peaks. The runner rejects any new capture during timed prediction passes. Worker shutdown explicitly closes the nested graph executor before ending the process, and output gathering retains the same CPU-complete timing boundary and all-repeat archives as native process DP. The optional backend is a separate source revision and does not change the frozen native eight-GPU study.
+
+CPU validation passes the existing process contracts and explicit nested-executor cleanup. CUDA tests cover 1/2/4 devices with batches 256/1024 plus a partial final batch, prediction tolerance against the same native member plan, stable graph counts across three repeats and ownership of already-returned outputs. These CUDA cases are skipped on CPU-only machines; their presence is not a measured graph-DP scaling result.
+
 ## Memory and timing expectations
 
 Let `W` denote one model's weights, `C(E)` the total fitted cache for E members, and `A(B)` the active workspace for a fixed query batch B. These are conceptual live-data terms, not allocator peak predictions.

@@ -22,7 +22,7 @@ from concurrent.futures import (
     wait,
 )
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 import torch
 
@@ -228,10 +228,10 @@ def _process_predict(batch: QueryBatch | None) -> QueryResult | None:
     return _predict_batch(model, batch, worker, device, dtype)
 
 
-def _process_memory(reset_peak: bool) -> dict[str, int | str]:
+def _process_memory(reset_peak: bool) -> dict[str, Any]:
     assert _process_state is not None
-    _, worker, device, _ = _process_state
-    out: dict[str, int | str] = {
+    model, worker, device, _ = _process_state
+    out: dict[str, Any] = {
         "worker": worker,
         "pid": os.getpid(),
         "device": str(device),
@@ -250,7 +250,23 @@ def _process_memory(reset_peak: bool) -> dict[str, int | str]:
         )
         if reset_peak:
             torch.cuda.reset_peak_memory_stats(device)
+    if hasattr(model, "graph_count"):
+        out.update(
+            graph_count=model.graph_count,
+            graph_capture_s=model.graph_capture_s,
+            graph_capture_events=list(model.capture_events),
+        )
     return out
+
+
+def _process_close() -> None:
+    """Release optional nested executors before ending their owning process."""
+    global _process_state
+    if _process_state is not None:
+        close = getattr(_process_state[0], "close", None)
+        if callable(close):
+            close()
+        _process_state = None
 
 
 class ProcessQueryParallel:
@@ -279,6 +295,7 @@ class ProcessQueryParallel:
     ) -> None:
         if not devices:
             raise ValueError("Provide at least one worker device")
+        self._closed = False
         self._pools = [
             ProcessPoolExecutor(
                 max_workers=1,
@@ -301,9 +318,7 @@ class ProcessQueryParallel:
         for future in futures:
             future.result()
 
-    def memory(
-        self, *, reset_peak: bool = False
-    ) -> list[dict[str, int | str]]:
+    def memory(self, *, reset_peak: bool = False) -> list[dict[str, Any]]:
         """Read child allocator memory and optionally reset its peak."""
         futures = [
             pool.submit(_process_memory, reset_peak) for pool in self._pools
@@ -324,8 +339,16 @@ class ProcessQueryParallel:
 
     def close(self) -> None:
         """Drain pending work and stop each worker process."""
-        for pool in self._pools:
-            pool.shutdown(wait=True)
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            futures = [pool.submit(_process_close) for pool in self._pools]
+            for future in futures:
+                future.result()
+        finally:
+            for pool in self._pools:
+                pool.shutdown(wait=True)
 
     def __enter__(self) -> ProcessQueryParallel:
         return self

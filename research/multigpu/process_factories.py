@@ -3,12 +3,15 @@
 
 """Picklable factories for real Kumo workers using prepared training data."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
 import torch
+from research.multigpu.graph_ensemble import GraphEnsembleParallel
 
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import KumoRelational, KumoTabular
@@ -42,9 +45,16 @@ class TabularProcessFactory:
     precision: str = "bfloat16"
     estimator_batch_size: int | None = 1
     pretrained: bool = True
+    backend: Literal["native", "graph"] = "native"
 
-    def __call__(self, worker: int, device: torch.device) -> KumoTabular:
+    def __call__(
+        self, worker: int, device: torch.device
+    ) -> KumoTabular | GraphEnsembleParallel:
         """Construct weights and fit TRAIN context in the child process."""
+        if self.backend not in {"native", "graph"}:
+            raise ValueError(f"Unknown process backend: {self.backend}")
+        if self.backend == "graph" and device.type != "cuda":
+            raise ValueError("Graph process backend requires CUDA")
         torch.manual_seed(self.seed)
         model = KumoTabular(
             task=self.task,
@@ -52,6 +62,12 @@ class TabularProcessFactory:
             pretrained=self.pretrained,
             device=device,
         )
+        fit_kwargs = {"estimator_batch_size": self.estimator_batch_size}
+        if self.backend == "graph":
+            model = GraphEnsembleParallel([model])
+            # GraphEP is per-member resident execution, not native estimator
+            # batching. Keep the member plan identical across DP ranks.
+            fit_kwargs = {"member_seed": self.seed}
         x = TableTensor.from_tensor(
             torch.from_numpy(
                 np.load(self.data / "x_train.npy", mmap_mode="r")[
@@ -91,10 +107,10 @@ class TabularProcessFactory:
                 x,
                 y,
                 num_estimators=self.estimators,
-                estimator_batch_size=self.estimator_batch_size,
                 generator=torch.Generator(device=device).manual_seed(
                     self.seed
                 ),
+                **fit_kwargs,
             )
         return model
 
