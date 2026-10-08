@@ -50,6 +50,7 @@ def test_process_ensemble_preserves_member_plan(
         states = parallel.memory()
         assert len({state["pid"] for state in states}) == workers
         assert all(state["cache_storage_bytes"] > 0 for state in states)
+        assert all(state["max_cpu_rss_bytes"] > 0 for state in states)
         parallel.clear()
         with pytest.raises(RuntimeError, match="fit"):
             parallel.predict(x[:3])

@@ -383,7 +383,12 @@ def run(args: argparse.Namespace) -> None:
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / "command.txt").write_text(shlex.join(sys.argv) + "\n")
     devices = [f"cuda:{i}" for i in range(args.gpus)]
-    ensemble_mode = args.mode in {"ensemble", "stage", "layers"}
+    ensemble_mode = args.mode in {
+        "ensemble",
+        "process-ensemble",
+        "stage",
+        "layers",
+    }
     dtype = {
         "bf16": torch.bfloat16,
         "fp16": torch.float16,
@@ -418,6 +423,7 @@ def run(args: argparse.Namespace) -> None:
         stdout=telemetry,
         stderr=subprocess.DEVNULL,
     )
+    model, query_executor = None, None
     try:
         synchronize(devices)
         start = time.perf_counter()
@@ -439,6 +445,16 @@ def run(args: argparse.Namespace) -> None:
             from sdm.models.ensemble_parallel import EnsembleParallel
 
             model = EnsembleParallel(replicas)
+        elif args.mode == "process-ensemble":
+            from research.multigpu.process_ensemble import (
+                ProcessEnsembleParallel,
+            )
+
+            model = ProcessEnsembleParallel(
+                replicas,
+                dtype=None if dtype == torch.float32 else dtype,
+                member_seed=args.seed,
+            )
         elif args.mode == "hybrid":
             from research.multigpu.data_parallel_adapter import hybrid_factory
 
@@ -450,8 +466,12 @@ def run(args: argparse.Namespace) -> None:
         stats["load_s"] = time.perf_counter() - start
         stats["placement_setup_s"] = stats["load_s"] - stats["replica_load_s"]
         stats["memory_after_load"] = memory(devices)
+        if callable(getattr(model, "memory", None)):
+            stats["worker_memory_after_load"] = model.memory()
         for device in devices:
             torch.cuda.reset_peak_memory_stats(device)
+        if callable(getattr(model, "memory", None)):
+            model.memory(reset_peak=True)
         x = context.task_table.drop_columns(workload["target"])
         y = context.task_table[workload["target"]]
         synchronize(devices)
@@ -496,6 +516,8 @@ def run(args: argparse.Namespace) -> None:
         synchronize(devices)
         stats["fit_s"] = time.perf_counter() - start
         stats["memory_after_fit"] = memory(devices)
+        if callable(getattr(model, "memory", None)):
+            stats["worker_memory_after_fit"] = model.memory()
         cache_measurement = cache_sizes([model, *replicas])
         stats["cache_logical_bytes_after_fit"] = cache_measurement[
             "logical_bytes"
@@ -508,7 +530,8 @@ def run(args: argparse.Namespace) -> None:
             for replica in replicas
         ]
         if ensemble_mode:
-            stats["ensemble_cache_bytes_per_gpu"] = model.cache_bytes
+            if hasattr(model, "cache_bytes"):
+                stats["ensemble_cache_bytes_per_gpu"] = model.cache_bytes
             stats["member_seeds"] = model.member_seeds
         if args.mode == "hybrid":
             stats["ensemble_cache_bytes_per_group"] = [
@@ -575,8 +598,13 @@ def run(args: argparse.Namespace) -> None:
             predict()
         synchronize(devices)
         stats["warmup_s"] = time.perf_counter() - start
+        stats["memory_after_warmup"] = memory(devices)
+        if callable(getattr(model, "memory", None)):
+            stats["worker_memory_after_warmup"] = model.memory()
         for device in devices:
             torch.cuda.reset_peak_memory_stats(device)
+        if callable(getattr(model, "memory", None)):
+            model.memory(reset_peak=True)
         elapsed, batch_times, arrays, windows = [], [], [], []
         prediction_tables = []
         for repetition in range(args.repeats):
@@ -585,12 +613,18 @@ def run(args: argparse.Namespace) -> None:
             torch.cuda.nvtx.range_push(f"timed_prediction_{repetition}")
             start = time.perf_counter()
             predictions, durations = predict()
+            pred = (
+                torch.cat(predictions, dim=0)
+                if args.include_final_gather
+                else None
+            )
             synchronize(devices)
             elapsed.append(time.perf_counter() - start)
             torch.cuda.nvtx.range_pop()
             windows.append([wall_start, time.time()])
             batch_times.append(durations)
-            pred = torch.cat(predictions, dim=0)
+            if pred is None:
+                pred = torch.cat(predictions, dim=0)
             prediction_tables.append(pred)
             arrays.append(pred.numerical.numpy().copy())
         pred = archive_prediction_repeats(prediction_tables, args.output)
@@ -606,6 +640,11 @@ def run(args: argparse.Namespace) -> None:
             workload["queries"] / seconds for seconds in elapsed
         ]
         stats["memory_prediction"] = memory(devices)
+        if callable(getattr(model, "memory", None)):
+            stats["worker_memory_prediction"] = model.memory()
+        stats["prediction_timing_includes_final_gather"] = (
+            args.include_final_gather
+        )
         stats["repeat_max_abs_difference"] = [
             float(np.max(np.abs(array - arrays[0]))) for array in arrays
         ]
@@ -712,10 +751,6 @@ def run(args: argparse.Namespace) -> None:
             score(table, labels, task) for table in prediction_tables
         ]
         stats["quality_reference_repeat"] = 0
-        if query_executor is not None:
-            query_executor.close()
-        if ensemble_mode or args.mode == "hybrid":
-            model.close()
         write_json(args.output / "result.json", stats)
         print(
             json.dumps(
@@ -728,6 +763,10 @@ def run(args: argparse.Namespace) -> None:
             flush=True,
         )
     finally:
+        if query_executor is not None:
+            query_executor.close()
+        if callable(getattr(model, "close", None)):
+            model.close()
         monitor.terminate()
         monitor.wait(timeout=5)
         telemetry.close()
@@ -756,7 +795,15 @@ def main() -> None:
     bench.add_argument("--workload", type=Path, required=True)
     bench.add_argument(
         "--mode",
-        choices=["native", "ensemble", "data", "stage", "layers", "hybrid"],
+        choices=[
+            "native",
+            "ensemble",
+            "process-ensemble",
+            "data",
+            "stage",
+            "layers",
+            "hybrid",
+        ],
         default="native",
     )
     bench.add_argument("--gpus", type=int, default=1)
@@ -775,6 +822,11 @@ def main() -> None:
     )
     bench.add_argument("--profile", action="store_true")
     bench.add_argument("--phase-profile", action="store_true")
+    bench.add_argument(
+        "--include-final-gather",
+        action="store_true",
+        help="Include final CPU output concatenation in prediction timing",
+    )
     bench.add_argument("--source-commit", required=True)
     for command in [prep, bench]:
         command.add_argument("--seed", type=int, default=1729)

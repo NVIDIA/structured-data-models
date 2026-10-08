@@ -339,6 +339,8 @@ def main() -> None:
             fit_kwargs["member_seed"] = args.seed
         for device in devices:
             torch.cuda.reset_peak_memory_stats(device)
+        if callable(getattr(model, "memory", None)):
+            model.memory(reset_peak=True)
         report["fit_start_unix_s"] = time.time()
         with phase("context_fit"), torch.inference_mode(), dtype_context():
             _, report["fit_s"] = timed(
@@ -453,6 +455,11 @@ def main() -> None:
                 predictions[0].tobytes()
             ).hexdigest()
             np.save(args.output / "predictions.npy", predictions[0])
+            for repetition, prediction in enumerate(predictions):
+                np.save(
+                    args.output / f"predictions-repeat-{repetition}.npy",
+                    prediction,
+                )
             if args.profile:
                 with (
                     torch.profiler.profile(

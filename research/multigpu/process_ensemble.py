@@ -8,6 +8,8 @@ from __future__ import annotations
 import copy
 import multiprocessing
 import os
+import resource
+import sys
 from argparse import Namespace
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor, wait
@@ -63,6 +65,8 @@ def _memory(reset_peak: bool = False) -> dict[str, Any]:
         "pid": os.getpid(),
         "device": str(_device),
         "cache_storage_bytes": cache_bytes,
+        "max_cpu_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        * (1 if sys.platform == "darwin" else 1024),
     }
     if _device.type == "cuda":
         torch.cuda.synchronize(_device)
