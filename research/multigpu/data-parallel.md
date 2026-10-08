@@ -88,13 +88,28 @@ These are medians of fully gathered throughput, not worker-service sums. GraphDP
 
 Each graph worker captured exactly four graphs during warmup; capture counts and event lists remained unchanged through all timed passes. Capture took 0.439–0.478 seconds per worker and overlapped across workers. Spawn/import/checkpoint/fit took 4.78–5.28 seconds for graph DP versus 4.98–5.47 seconds for native DP on already staged, warm hosts. Cold graph capture therefore remains an explicit startup cost rather than hidden warm inference work.
 
-| Per-worker memory on this workload | Native estimator batch 4 | Graph resident member execution |
+| Per-worker steady-state prediction memory | Native estimator batch 4 | Graph resident member execution |
 | --- | ---: | ---: |
 | Peak allocated GPU memory | 1438.18 MiB | 1316.65 MiB |
 | Peak reserved GPU memory | 3168 MiB | 1802 MiB |
 | Lifetime host peak RSS | 2114–2119 MiB | 1714–1719 MiB |
 
 The graph configuration also changes cache residency and executes members individually instead of native estimator batching. Its improvement must not be attributed solely to fewer kernel launches from this pair alone; earlier matched resident eager/graph measurements provide that isolation. Every graph-DP worker still duplicates the full fitted resident ensemble, so this small-context memory result does not establish improved large-context capacity. Raw outputs, every repeat, independent audit sidecars and CUDA-test XML are retained under `.kumo-multigpu-20261008/results/graph-dp/`.
+
+The table resets GPU peak counters after warmup. Across startup plus warmup, allocated high-water was 2268.21 MiB for native and 1811.49 MiB for graph; reserved high-water was 3168 and 1950 MiB respectively. These full-phase values must accompany steady-state peaks when reasoning about whether a deployment fits in memory.
+
+### Larger-query-batch saturation control
+
+A final matched control kept the same source, host, TRAIN context, ensemble, precision and CPU-IPC/final-gather contract while using query batch 1024 and the same full 65536-row validation cohort at each GPU count. This prevents treating the batch-256 result as a globally tuned throughput ceiling.
+
+| GPUs | Native estimator-batch-4 rows/s | Graph process DP rows/s | Graph/native speedup |
+| --- | ---: | ---: | ---: |
+| 1 | 7520.65 | 11207.14 | 1.490× |
+| 4 | 29545.50 | 41649.49 | 1.410× |
+
+GraphDP4 scaled 3.716× from GraphDP1 (92.91% efficiency); native scaled 3.929×. All three repeats at four GPUs were bitwise equal to their own one-GPU method reference. Native CPU-IPC predictions additionally matched the same-batch Ohio-local preloaded-pipe reference exactly, confirming transport equivalence without conflating those timing contracts. Graph versus native had maximum probability difference 0.010723293 and mean absolute difference 0.000251088; the combined BF16 absolute/relative gate passed. Fifty argmax labels changed, with a net four fewer correct graph predictions among 65536 rows. Native accuracy/log loss were 0.7591094970703125/0.5810317993164062; graph values were 0.7590484619140625/0.5810284614562988. The independent paired log-loss confidence interval included zero. Different cohort sizes prohibit comparing these aggregate quality metrics directly against the earlier 8192-row cohort as a GPU-induced change.
+
+Graph workers again captured exactly four graphs each before timing and never recaptured during prediction. Steady-state allocated peaks were 1321.52 MiB graph versus 2234.49 MiB native. However, **reserved** peaks were higher for graph: 3652 versus 3168 MiB. Startup-plus-warmup allocated high-water remained 1811.49 versus 2268.21 MiB. Thus this result supports faster warm inference with lower active allocation on this workload, not an unconditional reduction in memory reservation or a universal capacity advantage. All four new runs and their all-repeat audit sidecars use the `resume-graphdp-b1024-*` prefix under the same local raw-results directory.
 
 ## Memory and timing expectations
 
