@@ -11,6 +11,7 @@ from research.multigpu.relational_bench import (
     archive_prediction_repeats,
     cache_sizes,
     configure_gnn_blocks,
+    runtime_environment,
     score,
 )
 
@@ -114,3 +115,20 @@ def test_gnn_blocks_installed_on_all_replica_cores() -> None:
     for call, core in zip(install.call_args_list, cores, strict=True):
         assert call.args == (core,)
         assert call.kwargs == {"block_size": 17}
+
+
+def test_runtime_environment_records_allocator_without_credentials() -> None:
+    with patch.dict(
+        "os.environ",
+        {
+            "PYTORCH_ALLOC_CONF": "expandable_segments:True",
+            "OMP_NUM_THREADS": "8",
+            "AWS_SECRET_ACCESS_KEY": "must-not-be-collected",
+        },
+        clear=True,
+    ):
+        receipt = runtime_environment()
+    assert receipt["PYTORCH_ALLOC_CONF"] == "expandable_segments:True"
+    assert receipt["PYTORCH_CUDA_ALLOC_CONF"] is None
+    assert receipt["OMP_NUM_THREADS"] == "8"
+    assert "AWS_SECRET_ACCESS_KEY" not in receipt

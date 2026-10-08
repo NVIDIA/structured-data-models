@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import resource
 import shlex
 import subprocess
@@ -60,6 +61,26 @@ def graph_identity(sample: Any) -> dict[str, Any]:
 
 def write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, default=str) + "\n")
+
+
+def runtime_environment() -> dict[str, str | None]:
+    """Record relevant runtime controls without collecting credentials."""
+    return {
+        key: os.environ.get(key)
+        for key in [
+            "PYTORCH_ALLOC_CONF",
+            "PYTORCH_CUDA_ALLOC_CONF",
+            "CUDA_VISIBLE_DEVICES",
+            "CUDA_DEVICE_MAX_CONNECTIONS",
+            "CUDA_MODULE_LOADING",
+            "CUBLAS_WORKSPACE_CONFIG",
+            "NVIDIA_TF32_OVERRIDE",
+            "OMP_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "HF_HUB_OFFLINE",
+            "HF_HUB_CACHE",
+        ]
+    }
 
 
 def max_rss_kib() -> float:
@@ -376,6 +397,7 @@ def run(args: argparse.Namespace) -> None:
     torch.set_num_threads(args.threads)
     stats: dict[str, Any] = {
         "args": vars(args),
+        "runtime_environment": runtime_environment(),
         "workload": workload,
         "torch": torch.__version__,
         "cuda": torch.version.cuda,
@@ -766,6 +788,7 @@ def main() -> None:
                 args.output / "failure.json",
                 {
                     "args": vars(args),
+                    "runtime_environment": runtime_environment(),
                     "traceback": traceback.format_exc(),
                 },
             )
