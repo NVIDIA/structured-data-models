@@ -1,0 +1,5 @@
+# Executed source archived here is immutable, checksum-bound evidence.
+# Lint and format maintained implementations outside this directory instead.
+extend = "../../../pyproject.toml"
+extend-exclude = ["*.py"]
+force-exclude = true
