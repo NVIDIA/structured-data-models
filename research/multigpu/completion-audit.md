@@ -1,5 +1,11 @@
 # Independent completion audit
 
+## Final closure
+
+The pending items in the historical audit below are now resolved. The mixed eight-GPU matrix and verified-allocator retries completed with independently audited successes and failures; all 47 evidence snapshots verify against 495 archived and 1,229 external references. The final integrated CPU suite passed 230 tests with 101 CUDA-only skips; known checkpoint GNN failures remain separate. Both Spot hosts are verified terminated, their disks and task access resources removed, and all four regional task inventories empty. See the final [handoff](handoff.md), [results](README.md), and [operational receipts](evidence/final-operational-closure-20261008/index.json). Scientific results and cleanup are complete; branch publication is verified separately against the remote, not inferred from this historical snapshot.
+
+## Historical audit snapshot
+
 Audit snapshot: 2026-10-08, integration branch at `a39365a48`. This is a scope/claim audit of the study documentation, local branch inventory, and retained result/audit pointers, not a fresh cloud-state query or another GPU experiment. Later result commits and teardown receipts supersede the pending states below.
 
 ## What the user actually requested
