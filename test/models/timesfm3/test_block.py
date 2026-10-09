@@ -34,9 +34,7 @@ def test_mixing_transformer_block(
     )
 
     x = torch.randn(2, 3, 4, 8, device=device)
-    patch_mask = None
-    if masked:
-        patch_mask = torch.randn(2, 3, 4, device=device) >= 0
+    patch_mask = torch.randn(2, 3, 4, device=device) >= 0 if masked else None
 
     out = block(x, patch_mask)
     assert out.size() == x.size()
