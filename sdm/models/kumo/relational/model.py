@@ -590,13 +590,11 @@ class _KumoRelational(torch.nn.Module):
                 rel_time.nanmean(dim=-2, keepdim=True).nan_to_num(0.0),
                 rel_time,
             )
-            rel_time = standardizer.fit_transform(
-                TableTensor.from_tensor(rel_time)
-            ).numerical
+            standardizer._fit_tensor(rel_time)
+            standardizer._set_fitted(rel_time.device)
+            rel_time = standardizer._transform_tensor(rel_time)
         else:
-            rel_time = standardizer.transform(
-                TableTensor.from_tensor(rel_time)
-            ).numerical
+            rel_time = standardizer._transform_tensor(rel_time)
             rel_time[na_mask] = 0.0
 
         return rel_time
