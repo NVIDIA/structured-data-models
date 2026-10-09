@@ -13,6 +13,13 @@ from pathlib import Path
 import TALENT
 import torch
 
+from benchmark.tabular.finetune import (
+    FINETUNE_CONTEXT_FRAC,
+    FINETUNE_ITERS_PER_EPOCH,
+    FINETUNE_LR,
+    FINETUNE_TRAIN_SIZE,
+    FINETUNE_VAL_FRAC,
+)
 from benchmark.tabular.talent.models import (
     MODEL_CONFIGS,
     UnsupportedDatasetError,
@@ -39,6 +46,25 @@ parser.add_argument("--dataset")
 parser.add_argument(
     "--output-dir", type=Path, default=BENCHMARK_DIR / "talent_out"
 )
+parser.add_argument(
+    "--finetune",
+    action="store_true",
+    help="Full fine-tune the model on each dataset's training split.",
+)
+parser.add_argument("--finetune-epochs", type=int)
+parser.add_argument(
+    "--finetune-iters-per-epoch", type=int, default=FINETUNE_ITERS_PER_EPOCH
+)
+parser.add_argument("--finetune-lr", type=float, default=FINETUNE_LR)
+parser.add_argument(
+    "--finetune-train-size", type=int, default=FINETUNE_TRAIN_SIZE
+)
+parser.add_argument(
+    "--finetune-context-frac", type=float, default=FINETUNE_CONTEXT_FRAC
+)
+parser.add_argument(
+    "--finetune-val-frac", type=float, default=FINETUNE_VAL_FRAC
+)
 args = parser.parse_args()
 
 register_sdm_method()
@@ -56,7 +82,8 @@ if not datasets:
     raise FileNotFoundError(f"No TALENT datasets found under {root}")
 
 model = MODEL_CONFIGS[args.model]
-method = f"[SDM] {model.name}"
+model_label = args.model + ("-finetuned" if args.finetune else "")
+method = f"[SDM] {model.name}" + ("-FT" if args.finetune else "")
 config = {
     "model": {},
     "training": {"n_bins": 2},
@@ -64,21 +91,32 @@ config = {
         "model": args.model,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "num_estimators": model.num_estimators,
+        "finetune": args.finetune,
+        "finetune_epochs": args.finetune_epochs,
+        "finetune_iters_per_epoch": args.finetune_iters_per_epoch,
+        "finetune_lr": args.finetune_lr,
+        "finetune_train_size": args.finetune_train_size,
+        "finetune_context_frac": args.finetune_context_frac,
+        "finetune_val_frac": args.finetune_val_frac,
         "low_cardinality": model.low_cardinality,
     },
 }
 
 failed = False
 for dataset in datasets:
-    path = args.output_dir / args.model / dataset / "result.json"
+    path = args.output_dir / model_label / dataset / "result.json"
     cached = json.loads(path.read_text()) if path.is_file() else {}
     if (
         cached.get("status") in {"success", "unsupported"}
         and cached.get("config") == config
         and cached.get("seed_num") == SEED_NUM
     ):
-        if cached.get("method") != method:
+        if (
+            cached.get("method") != method
+            or cached.get("model") != model_label
+        ):
             cached["method"] = method
+            cached["model"] = model_label
             _write(path, cached)
         print(f"{dataset}: cached")
         continue
@@ -98,7 +136,7 @@ for dataset in datasets:
         record = {
             "status": "success",
             "dataset": dataset,
-            "model": args.model,
+            "model": model_label,
             "method": method,
             "config": config,
             "seed_num": SEED_NUM,
@@ -108,7 +146,7 @@ for dataset in datasets:
         record = {
             "status": "unsupported",
             "dataset": dataset,
-            "model": args.model,
+            "model": model_label,
             "method": method,
             "config": config,
             "seed_num": SEED_NUM,
