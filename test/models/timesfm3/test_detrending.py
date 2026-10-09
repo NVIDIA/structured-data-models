@@ -5,7 +5,6 @@ import torch
 
 from sdm import ColumnarTensor, TableTensor
 from sdm.models.timesfm3 import TimesFM3
-from sdm.models.timesfm3.recipe import TIME_COLUMN
 from sdm.processing.execution import RecipeExecution
 from sdm.testing import withCUDA
 
@@ -15,7 +14,7 @@ def test_restores_each_target_trend_across_quantiles(
     device: torch.device,
 ) -> None:
     context = TableTensor(
-        columns={"numerical": ["a", "b"], "id": [TIME_COLUMN]},
+        columns={"numerical": ["a", "b"], "id": ["__timesfm3_id__"]},
         numerical=torch.tensor(
             [[1.0, 10.0], [5.0, 20.0], [9.0, 30.0]], device=device
         ),
@@ -36,7 +35,7 @@ def test_restores_each_target_trend_across_quantiles(
                 for name in ("a", "b")
                 for q in quantiles
             ],
-            "id": [TIME_COLUMN],
+            "id": ["__timesfm3_id__"],
         },
         numerical=residual.flatten(-2),
         id=ColumnarTensor((torch.arange(3, 5, device=device),)),

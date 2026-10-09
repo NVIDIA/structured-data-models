@@ -42,7 +42,7 @@ from sdm.models.callback import Callback
 from sdm.models.timesfm3.block import ResidualBlock
 from sdm.models.timesfm3.ckpt import remap_ckpt
 from sdm.models.timesfm3.icl import ICLBlock
-from sdm.models.timesfm3.recipe import TIME_COLUMN, default_recipe
+from sdm.models.timesfm3.recipe import default_recipe
 from sdm.models.timesfm3.util import (
     gather_future_patches,
     get_running_stats,
@@ -52,7 +52,7 @@ from sdm.processing.execution import MemberContext
 from sdm.tensor.table import TableSchema
 
 
-def _with_time_column(table: TableTensor, start: int) -> TableTensor:
+def _with_id_column(table: TableTensor, start: int) -> TableTensor:
     time_steps = torch.arange(
         start, start + table.size(-2), device=table.device
     ).expand(*table.size()[:-2], -1)
@@ -62,7 +62,7 @@ def _with_time_column(table: TableTensor, start: int) -> TableTensor:
             (
                 table,
                 TableTensor(
-                    columns={Stype.id: [TIME_COLUMN]},
+                    columns={Stype.id: ["__timesfm3_id__"]},
                     id=ColumnarTensor((time_steps,)),
                 ),
             ),
@@ -71,9 +71,9 @@ def _with_time_column(table: TableTensor, start: int) -> TableTensor:
     )
 
 
-def _drop_time_column(table: TableTensor) -> TableTensor:
-    if TIME_COLUMN in table.columns[Stype.id]:
-        return table.drop_columns(TIME_COLUMN)
+def _drop_id_column(table: TableTensor) -> TableTensor:
+    if "__timesfm3_id__" in table.columns[Stype.id]:
+        return table.drop_columns("__timesfm3_id__")
     return table
 
 
@@ -204,13 +204,13 @@ class TimesFM3(ICLModel):
         x_query = expand_query(x_context.schema, x_query)
 
         out = super().forward(
-            _with_time_column(x_context, 0),
-            _with_time_column(y_context, 0),
-            _with_time_column(x_query, context_length),
+            _with_id_column(x_context, 0),
+            _with_id_column(y_context, 0),
+            _with_id_column(x_query, context_length),
             *args,
             **kwargs,
         )
-        return _drop_time_column(out)
+        return _drop_id_column(out)
 
     def fit(
         self,
@@ -228,7 +228,7 @@ class TimesFM3(ICLModel):
         kwargs["_x_context_schema"] = x.schema
         kwargs["_context_length"] = x.size(-2)
         super().fit(
-            _with_time_column(x, 0), _with_time_column(y, 0), *args, **kwargs
+            _with_id_column(x, 0), _with_id_column(y, 0), *args, **kwargs
         )
 
     def predict(
@@ -249,18 +249,18 @@ class TimesFM3(ICLModel):
         cached_kwargs = cast(dict[str, Any], self._cache["kwargs"])
         x = expand_query(cached_kwargs["_x_context_schema"], x)
         out = super().predict(
-            _with_time_column(x, cached_kwargs["_context_length"]),
+            _with_id_column(x, cached_kwargs["_context_length"]),
             *args,
             **kwargs,
         )
-        return _drop_time_column(out)
+        return _drop_id_column(out)
 
     def _prepare_context(
         self,
         context: MemberContext,
         callbacks: Sequence[Callback],
     ) -> MemberContext:
-        context = context._replace(y=_drop_time_column(context.y))
+        context = context._replace(y=_drop_id_column(context.y))
         return super()._prepare_context(context, callbacks)
 
     def _forward(
@@ -307,7 +307,7 @@ class TimesFM3(ICLModel):
             if x_context is not None
             else kwargs["_context_length"]
         )
-        return _with_time_column(out, context_length)
+        return _with_id_column(out, context_length)
 
 
 class _TimesFM3(torch.nn.Module):

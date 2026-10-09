@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
-from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
@@ -11,13 +10,13 @@ from sdm.processing import InvertibleMixin, Processor
 class LinearDetrend(Processor, InvertibleMixin):
     """Remove a linear trend fitted to observed numerical values.
 
-    The ``time_column`` contains numerical step coordinates stored as an ID
+    The ``id_column`` contains numerical step coordinates stored as an ID
     column. Non-finite values are ignored when fitting and preserved during
     transformation. For predictions with multiple outputs per fitted column,
     the outputs for each column must be adjacent.
 
     Args:
-        time_column: Column containing the step coordinate for each row.
+        id_column: Column containing the step coordinate for each row.
         threshold: Detrend only when the residual standard deviation is less
             than this fraction of the original standard deviation. ``None``
             always applies the fitted trend.
@@ -28,19 +27,16 @@ class LinearDetrend(Processor, InvertibleMixin):
 
     def __init__(
         self,
-        time_column: str,
+        id_column: str,
         *,
         threshold: float | None = None,
     ) -> None:
         super().__init__()
-        self.time_column = time_column
+        self.id_column = id_column
         self.threshold = threshold
         self.register_buffer("origin", torch.empty(0, dtype=torch.long))
         self.register_buffer("slope", torch.empty(0))
         self.register_buffer("intercept", torch.empty(0))
-
-    def _time(self, table: TableTensor) -> Tensor:
-        return table[self.time_column].id[..., 0]
 
     def _fit(
         self,
@@ -51,7 +47,7 @@ class LinearDetrend(Processor, InvertibleMixin):
         values = table.numerical.to(
             dtype=torch.promote_types(table.numerical.dtype, torch.float32)
         )
-        time = self._time(table)
+        time = table[self.id_column].id[..., 0]
         self.origin = time[..., -1:].clone()
         time = (time - self.origin).to(dtype=values.dtype).unsqueeze(-1)
         valid = values.isfinite()
@@ -80,16 +76,10 @@ class LinearDetrend(Processor, InvertibleMixin):
             self.slope.masked_fill_(~apply, 0.0)
             self.intercept.masked_fill_(~apply, 0.0)
 
-    def _trend(self, table: TableTensor) -> Tensor:
-        time = (
-            (self._time(table) - self.origin)
-            .to(dtype=self.slope.dtype)
-            .unsqueeze(-1)
-        )
-        return self.slope * time + self.intercept
-
     def _transform(self, table: TableTensor) -> TableTensor:
-        time = (self._time(table) - self.origin).to(dtype=self.slope.dtype)
+        time = (table[self.id_column].id[..., 0] - self.origin).to(
+            dtype=self.slope.dtype
+        )
         numerical = table.numerical - self.intercept
         numerical.addcmul_(self.slope, time.unsqueeze(-1), value=-1)
         return table.replace_blocks(
@@ -97,7 +87,12 @@ class LinearDetrend(Processor, InvertibleMixin):
         )
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        trend = self._trend(table)  # [..., F, T]
+        time = (
+            (table[self.id_column].id[..., 0] - self.origin)
+            .to(dtype=self.slope.dtype)
+            .unsqueeze(-1)
+        )
+        trend = self.slope * time + self.intercept  # [..., F, T]
         values = table.numerical.unflatten(-1, (trend.size(-1), -1))
         numerical = (values + trend.unsqueeze(-1)).flatten(-2)
         return table.replace_blocks(
@@ -107,5 +102,5 @@ class LinearDetrend(Processor, InvertibleMixin):
     def __repr__(self, *, indent: int = 0) -> str:
         return (
             f"{' ' * indent}{self.__class__.__name__}("
-            f"time_column={self.time_column!r}, threshold={self.threshold})"
+            f"id_column={self.id_column!r}, threshold={self.threshold})"
         )
