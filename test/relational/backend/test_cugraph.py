@@ -385,15 +385,17 @@ def test_cugraph_temporal_sampler_uses_bounded_uniform_fanout(
 
 
 @onlyCUDA
+@pytest.mark.parametrize("num_neighbors", [[-1, -1], [3, 3]])
 def test_cugraph_sampler_uses_original_cutoff(
     temporal_data: RelationalData,
+    num_neighbors: list[int],
 ) -> None:
     _require_rapids()
     data = temporal_data.cuda()
     task_table = _table(
         {
-            "entity": [0, 0],
-            "cutoff": pd.to_datetime([2, 10], unit="s").tolist(),
+            "entity": [0, 0, 0],
+            "cutoff": pd.to_datetime([0, 2, 10], unit="s").tolist(),
         },
         {"entity": Stype.id, "cutoff": Stype.datetime},
     )
@@ -405,19 +407,22 @@ def test_cugraph_sampler_uses_original_cutoff(
             "table": "roots",
             "table_column": "root_id",
         },
-        num_neighbors=[-1, -1],
+        num_neighbors=num_neighbors,
         task_time_column="cutoff",
         temporal_strategy="uniform",
     )
 
     assert _rows(
         output.related_tables.tables["first"], EXAMPLE_ID, "first_id"
-    ) == [(0, 11), (0, 12), (1, 10), (1, 11), (1, 12)]
+    ) == [(1, 11), (1, 12), (2, 10), (2, 11), (2, 12)]
     # The second-hop time (8) is newer than the first-hop time (3), but is
     # valid because every hop uses the task cutoff (10).
     assert _rows(
         output.related_tables.tables["second"], EXAMPLE_ID, "second_id"
-    ) == [(1, 20), (1, 21)]
+    ) == [(2, 20), (2, 21)]
+    assert _rows(
+        output.related_tables.tables["roots"], EXAMPLE_ID, "root_id"
+    ) == [(0, 0), (1, 0), (2, 0)]
 
 
 @onlyCUDA
