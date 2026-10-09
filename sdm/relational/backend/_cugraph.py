@@ -196,7 +196,8 @@ class CuGraphRelationalSampler:
         dst = torch.cat(dsts)
         self._num_edges = src.numel()
         edge_type = torch.cat(edge_types)
-        # Reverse time so the task cutoff is a lower bound, including NaT.
+        # Reverse integer time: ~t = -t - 1.
+        # This maps t <= cutoff to ~t >= ~cutoff.
         edge_time = (
             torch.cat(edge_times).bitwise_not() if self.time_columns else None
         )
