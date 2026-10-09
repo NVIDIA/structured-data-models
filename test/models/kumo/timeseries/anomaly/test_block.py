@@ -61,6 +61,7 @@ def reference_block(
     ("features", "length"), [(3, 5), (1, 5), (3, 1), (1, 1)]
 )
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("embedding_channels", [8, 12])
 @pytest.mark.parametrize(
     ("diffusion_batch", "strategy_batch"), [(1, 2), (2, 1)]
 )
@@ -70,15 +71,15 @@ def test_residual_block(
     features: int,
     length: int,
     dtype: torch.dtype,
+    embedding_channels: int,
     diffusion_batch: int,
     strategy_batch: int,
     training: bool,
 ) -> None:
-    """Match reference outputs, singleton bypasses, and shared conditioning."""
     block = ResidualBlock(
         channels=8,
         side_channels=6,
-        embedding_channels=8,
+        embedding_channels=embedding_channels,
         num_heads=2,
         dropout=1.0,
         device=device,
@@ -86,8 +87,12 @@ def test_residual_block(
     ).train(training)
     x = torch.randn(2, 8, features, length, device=device, dtype=dtype)
     side = torch.randn(2, 6, features, length, device=device, dtype=dtype)
-    diffusion = torch.randn(diffusion_batch, 8, device=device, dtype=dtype)
-    strategy = torch.randn(strategy_batch, 8, device=device, dtype=dtype)
+    diffusion = torch.randn(
+        diffusion_batch, embedding_channels, device=device, dtype=dtype
+    )
+    strategy = torch.randn(
+        strategy_batch, embedding_channels, device=device, dtype=dtype
+    )
     with torch.inference_mode():
         actual = block(x, side, diffusion, strategy)
         expected = reference_block(block, x, side, diffusion, strategy)
@@ -99,12 +104,11 @@ def test_residual_block(
 
 
 @withCUDA
-def test_residual_block_backward_and_state_dict(device: torch.device) -> None:
-    """Propagate gradients through conditioning and preserve saved outputs."""
+def test_residual_block_grad_and_state_dict(device: torch.device) -> None:
     block = ResidualBlock(
         channels=8,
         side_channels=6,
-        embedding_channels=8,
+        embedding_channels=12,
         num_heads=2,
         device=device,
         dtype=torch.float64,
@@ -113,7 +117,7 @@ def test_residual_block_backward_and_state_dict(device: torch.device) -> None:
         torch.randn(
             *shape, device=device, dtype=torch.float64
         ).requires_grad_()
-        for shape in [(2, 8, 3, 5), (2, 6, 3, 5), (2, 8), (2, 8)]
+        for shape in [(2, 8, 3, 5), (2, 6, 3, 5), (2, 12), (2, 12)]
     ]
     residual, skip = block(*inputs)
     (residual.square().mean() + skip.square().mean()).backward()
@@ -127,7 +131,7 @@ def test_residual_block_backward_and_state_dict(device: torch.device) -> None:
     restored = ResidualBlock(
         channels=8,
         side_channels=6,
-        embedding_channels=8,
+        embedding_channels=12,
         num_heads=2,
         device=device,
         dtype=torch.float64,
