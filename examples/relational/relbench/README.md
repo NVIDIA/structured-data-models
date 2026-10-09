@@ -6,8 +6,8 @@ This example evaluates `KumoRelational` on the
 ## Run
 
 ```bash
-python rel_bench.py --dataset=rel-amazon --task=user-churn
-python rel_bench.py --dataset=rel-stack --task=user-engagement --text
+python main.py --dataset=rel-amazon --task=user-churn
+python main.py --dataset=rel-stack --task=user-engagement --text
 ```
 
 Use `--text` to encode text features from the task entity table. The example

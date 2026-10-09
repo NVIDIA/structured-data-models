@@ -207,6 +207,39 @@ def test_max_seq_length_truncates(
     assert torch.allclose(output, reference, atol=1e-5)
 
 
+@onlyCUDA
+def test_gpu_max_seq_length_truncates() -> None:
+    st = pytest.importorskip("sentence_transformers")
+    pytest.importorskip("cudf")
+
+    device = torch.device("cuda:0")
+    model = st.SentenceTransformer(MODEL_NAME)
+    cap = min(8, model.max_seq_length)
+    text = "word " * (model.max_seq_length + 10)
+    processor = SentenceTransformer(
+        MODEL_NAME,
+        max_seq_length=cap,
+    ).to(device)
+    output = processor(
+        TableTensor(
+            columns={"text": ("col",)},
+            text=StringTensor.from_list([[text]], device=device),
+        )
+    ).numerical
+
+    model.max_seq_length = cap
+    model.eval()
+    with torch.inference_mode():
+        reference = model.encode(
+            [text],
+            convert_to_tensor=True,
+            show_progress_bar=False,
+            device=str(device),
+        )
+
+    assert torch.allclose(output, reference, atol=1e-5)
+
+
 @withCUDA
 def test_forward(device: torch.device) -> None:
     pytest.importorskip("sentence_transformers")
