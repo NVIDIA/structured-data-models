@@ -15,7 +15,6 @@ import torch
 
 from benchmark.tabular.finetune import (
     FINETUNE_CONTEXT_FRAC,
-    FINETUNE_EPOCHS,
     FINETUNE_ITERS_PER_EPOCH,
     FINETUNE_LR,
     FINETUNE_TRAIN_SIZE,
@@ -52,7 +51,7 @@ parser.add_argument(
     action="store_true",
     help="Full fine-tune the model on each dataset's training split.",
 )
-parser.add_argument("--finetune-epochs", type=int, default=FINETUNE_EPOCHS)
+parser.add_argument("--finetune-epochs", type=int)
 parser.add_argument(
     "--finetune-iters-per-epoch", type=int, default=FINETUNE_ITERS_PER_EPOCH
 )
@@ -83,8 +82,8 @@ if not datasets:
     raise FileNotFoundError(f"No TALENT datasets found under {root}")
 
 model = MODEL_CONFIGS[args.model]
-method = f"[SDM] {model.name}"
-model_label = args.model + ("-ft" if args.finetune else "")
+model_label = args.model + ("-finetuned" if args.finetune else "")
+method = f"[SDM] {model.name}" + ("-FT" if args.finetune else "")
 config = {
     "model": {},
     "training": {"n_bins": 2},
@@ -112,8 +111,12 @@ for dataset in datasets:
         and cached.get("config") == config
         and cached.get("seed_num") == SEED_NUM
     ):
-        if cached.get("method") != method:
+        if (
+            cached.get("method") != method
+            or cached.get("model") != model_label
+        ):
             cached["method"] = method
+            cached["model"] = model_label
             _write(path, cached)
         print(f"{dataset}: cached")
         continue
@@ -133,7 +136,7 @@ for dataset in datasets:
         record = {
             "status": "success",
             "dataset": dataset,
-            "model": args.model,
+            "model": model_label,
             "method": method,
             "config": config,
             "seed_num": SEED_NUM,
@@ -143,7 +146,7 @@ for dataset in datasets:
         record = {
             "status": "unsupported",
             "dataset": dataset,
-            "model": args.model,
+            "model": model_label,
             "method": method,
             "config": config,
             "seed_num": SEED_NUM,

@@ -104,7 +104,22 @@ def _select_datasets(
 
 
 def main() -> None:
-    args = _parser().parse_args()
+    parser = _parser()
+    args = parser.parse_args()
+    finetune_kwargs = {
+        key: value
+        for key, value in (
+            ("finetune_epochs", args.finetune_epochs),
+            ("finetune_iters_per_epoch", args.finetune_iters_per_epoch),
+            ("finetune_lr", args.finetune_lr),
+            ("finetune_train_size", args.finetune_train_size),
+            ("finetune_context_frac", args.finetune_context_frac),
+            ("finetune_val_frac", args.finetune_val_frac),
+        )
+        if value is not None
+    }
+    if finetune_kwargs and not args.finetune:
+        parser.error("--finetune-* options require --finetune")
     _add_source_path(args.scoringbench_path)
 
     config_module = importlib.import_module("scoringbench.univariate.config")
@@ -140,18 +155,6 @@ def main() -> None:
         else args.n_repeats_cv
     )
     n_folds = 2 if args.lite else config_module.N_FOLDS
-    finetune_kwargs = {
-        key: value
-        for key, value in (
-            ("finetune_epochs", args.finetune_epochs),
-            ("finetune_iters_per_epoch", args.finetune_iters_per_epoch),
-            ("finetune_lr", args.finetune_lr),
-            ("finetune_train_size", args.finetune_train_size),
-            ("finetune_context_frac", args.finetune_context_frac),
-            ("finetune_val_frac", args.finetune_val_frac),
-        )
-        if value is not None
-    }
     factory = partial(
         wrapper,
         seed=seed,

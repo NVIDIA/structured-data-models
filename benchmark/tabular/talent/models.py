@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import copy
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -33,11 +32,11 @@ from TALENT.model.methods.base import Method
 import sdm
 from benchmark.tabular.finetune import (
     FINETUNE_CONTEXT_FRAC,
-    FINETUNE_EPOCHS,
     FINETUNE_ITERS_PER_EPOCH,
     FINETUNE_LR,
     FINETUNE_TRAIN_SIZE,
     FINETUNE_VAL_FRAC,
+    cpu_state_dict,
     full_finetune,
     kumo_small_binary_epochs,
 )
@@ -127,6 +126,7 @@ MODEL_CONFIGS = {
         num_estimators=8,
         autocast_dtype=torch.float16,
         max_classes=10,
+        low_cardinality="infer",
     ),
     "tabfm": ModelConfig(
         name="TabFM",
@@ -178,7 +178,7 @@ class SDMMethod(Method):
             self._config.num_estimators,
         )
         self._finetune = general.get("finetune", False)
-        self._finetune_epochs = general.get("finetune_epochs", FINETUNE_EPOCHS)
+        self._finetune_epochs = general.get("finetune_epochs")
         self._finetune_iters_per_epoch = general.get(
             "finetune_iters_per_epoch", FINETUNE_ITERS_PER_EPOCH
         )
@@ -349,12 +349,13 @@ class SDMMethod(Method):
             self.args.seed
         )
 
-        # See _PRISTINE_STATE_ATTR above: reset before every fit() call.
         pristine_state = getattr(self.model, _PRISTINE_STATE_ATTR, None)
-        if pristine_state is None:
-            pristine_state = copy.deepcopy(self.model.state_dict())
+        if pristine_state is not None:
+            self.model.load_state_dict(pristine_state)
+        elif self._finetune:
+            # Cached models need an untouched CPU copy before training.
+            pristine_state = cpu_state_dict(self.model)
             setattr(self.model, _PRISTINE_STATE_ATTR, pristine_state)
-        self.model.load_state_dict(pristine_state)
 
         tic = time.perf_counter()
         if self._finetune:

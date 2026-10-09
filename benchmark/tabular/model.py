@@ -27,7 +27,6 @@ import sdm
 import sdm.processing as sp
 from benchmark.tabular.finetune import (
     FINETUNE_CONTEXT_FRAC,
-    FINETUNE_EPOCHS,
     FINETUNE_ITERS_PER_EPOCH,
     FINETUNE_LR,
     FINETUNE_TRAIN_SIZE,
@@ -101,7 +100,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._set_default_param_value("kv_cache", False)
         self._set_default_param_value("estimator_batch_size", "auto")
         self._set_default_param_value("finetune", False)
-        self._set_default_param_value("finetune_epochs", FINETUNE_EPOCHS)
+        self._set_default_param_value("finetune_epochs", None)
         self._set_default_param_value(
             "finetune_iters_per_epoch", FINETUNE_ITERS_PER_EPOCH
         )
@@ -123,6 +122,16 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         **_: Any,
     ) -> None:
         del num_cpus
+        params = self._get_model_params()
+        if (
+            params["finetune"]
+            and isinstance(self, SDMKumoTabularModel)
+            and not self.shared_weights.copy_per_fit
+        ):
+            raise ValueError(
+                "Use a Kumo -ft variant to fine-tune without changing "
+                "shared pretrained weights."
+            )
         self._device = torch.device(
             self._resolve_fit_device(num_gpus=num_gpus)
         )
@@ -160,7 +169,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             device=self._device,
         )
 
-        params = self._get_model_params()
         self._num_estimators = params["num_estimators"]
         max_context_size = params["max_context_size"]
 

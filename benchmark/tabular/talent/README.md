@@ -61,6 +61,8 @@ python -m benchmark.tabular.talent.main \
   --finetune-lr 1e-6
 ```
 
+Fine-tuned results use `<model>-finetuned` as their output folder and model label, keeping them separate from baseline results and the capped `kumo-tabular-small-ft` variant.
+
 ## Evaluate
 
 Evaluate all available model results with:

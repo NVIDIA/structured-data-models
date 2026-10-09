@@ -9,7 +9,7 @@ descent, generic over ``x``/``y`` :class:`TableTensor` pools so
 """
 
 import copy
-from typing import Literal
+from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
@@ -27,18 +27,32 @@ FINETUNE_CONTEXT_FRAC = 0.8
 FINETUNE_VAL_FRAC = 0.2
 
 
+def cpu_state_dict(model: torch.nn.Module) -> dict[str, Any]:
+    """Copy weights to CPU while preserving extra state and metadata."""
+    state = model.state_dict()
+    for name, value in state.items():
+        state[name] = (
+            value.to(device="cpu", copy=True)
+            if isinstance(value, torch.Tensor)
+            else copy.deepcopy(value)
+        )
+    return state
+
+
 def kumo_small_binary_epochs(
-    default: int,
+    epochs: int | None,
     *,
     is_kumo_small: bool,
     is_binary: bool,
 ) -> int:
-    """Epoch count for fine-tuning, with a kumo-small binary override.
+    """Respect explicit epochs; otherwise use the model-specific default.
 
     Empirically found to need fewer epochs than the shared default to avoid
     overfitting on binary classification.
     """
-    return 50 if is_kumo_small and is_binary else default
+    if epochs is not None:
+        return epochs
+    return 50 if is_kumo_small and is_binary else FINETUNE_EPOCHS
 
 
 def evaluate(
@@ -97,7 +111,7 @@ def full_finetune(
     epoch trains on resampled context/query batches from the rest, then
     checkpoints if validation improves. Leaves ``model`` in eval mode
     holding its best-validation-metric weights and returns that metric
-    (accuracy for classification, pinball loss for regression -- lower is
+    (accuracy for classification, RMSE for regression -- lower is
     better for regression).
     """
     device = x_pool.device
@@ -158,7 +172,7 @@ def full_finetune(
         )
 
     best_metric = current_metric()
-    best_state = copy.deepcopy(model.state_dict())
+    best_state = cpu_state_dict(model)
 
     for _epoch in range(max_epochs):
         model.train()
@@ -215,8 +229,9 @@ def full_finetune(
         )
         if improved:
             best_metric = metric_value
-            best_state = copy.deepcopy(model.state_dict())
+            best_state = cpu_state_dict(model)
 
     model.load_state_dict(best_state)
+    model.zero_grad(set_to_none=True)
     model.eval()
     return best_metric
