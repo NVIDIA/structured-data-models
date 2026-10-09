@@ -98,6 +98,19 @@ ordered = frames[0].sort_values(
 
 
 def context_rows(available: pd.DataFrame) -> pd.DataFrame:
+    """Select recent context rows containing both target classes.
+
+    Args:
+        available: Eligible labeled rows sorted by timestamp and entity.
+            The caller restricts these rows to the available history.
+
+    Returns:
+        Up to ``args.context_size`` rows with both target classes represented,
+        retaining the original indices for indexing the task tensor.
+
+    Raises:
+        ValueError: The available history does not contain both target classes.
+    """
     rows = available.tail(args.context_size)
     if rows[target].nunique() == 2:
         return rows
@@ -131,6 +144,16 @@ task_link = {
 def sample(
     table: sdm.TableTensor,
 ) -> tuple[sdm.TableTensor, sdm.RelatedTables[sdm.TableTensor]]:
+    """Sample temporal relational neighborhoods on the model device.
+
+    Args:
+        table: Task rows defining neighborhood entities and timestamp cutoffs.
+
+    Returns:
+        The task table and its related tables, linked separately for each task
+        row and moved to the model device. Timestamped related records do not
+        exceed the corresponding task row's timestamp.
+    """
     return sampler(
         task_table=table,
         task_link=task_link,
@@ -155,6 +178,17 @@ def evaluate(
     query: sdm.TableTensor,
     related_context: sdm.RelatedTables[sdm.TableTensor],
 ) -> float:
+    """Evaluate binary AUROC over all query rows using a cached context.
+
+    Args:
+        context: Labeled task rows available before the query period.
+        query: Task rows with labels used only for scoring predictions.
+        related_context: Sampled relational neighborhoods for the context rows.
+
+    Returns:
+        AUROC for positive class ``1`` across all query batches. The context
+        cache is cleared afterward to release it before training resumes.
+    """
     model.eval()
     generator = torch.Generator(device=device).manual_seed(args.seed)
     scores: list[torch.Tensor] = []
@@ -185,8 +219,9 @@ def evaluate(
     return float(roc_auc_score(torch.cat(labels), torch.cat(scores)))
 
 
-val_auc = evaluate(val_context, val_table, val_related_context)
-print(f"epoch=0/{args.max_epochs} val_auroc={val_auc:.4f}")
+best_val_auc = evaluate(val_context, val_table, val_related_context)
+print(f"epoch=0/{args.max_epochs} val_auroc={best_val_auc:.4f}")
+# Keep the initial weights if no training epoch improves validation AUROC.
 torch.save(model.state_dict(), args.checkpoint)
 
 optimizer = torch.optim.AdamW(
@@ -238,14 +273,14 @@ for epoch in range(1, args.max_epochs + 1):
         loss.backward()
         optimizer.step()
         total_loss += float(loss.detach())
-    metric = evaluate(val_context, val_table, val_related_context)
+    val_auc = evaluate(val_context, val_table, val_related_context)
     print(
         f"epoch={epoch}/{args.max_epochs} "
-        f"val_auroc={metric:.4f} "
+        f"val_auroc={val_auc:.4f} "
         f"train_loss={total_loss / args.steps_per_epoch:.4f}"
     )
-    if metric > val_auc:
-        val_auc = metric
+    if val_auc > best_val_auc:
+        best_val_auc = val_auc
         torch.save(model.state_dict(), args.checkpoint)
 
 model.load_state_dict(
