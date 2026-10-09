@@ -37,7 +37,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 dataset = relbench.load_dataset("stanford-star/relbench-v1/rel-f1")
 task = dataset.load_task("driver-top3")
-db = dataset.get_db()
+db = task.get_db(upto_test_timestamp=False)
 
 data = sdm.RelationalData(
     tables={
