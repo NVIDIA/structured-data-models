@@ -694,6 +694,157 @@ def test_view_ops() -> None:
     assert out.categorical.size() == (3, 2, 1)
 
 
+@pytest.mark.parametrize("create_inference", [False, True])
+@pytest.mark.parametrize("inference_mode", [False, True])
+def test_unflatten_context(
+    create_inference: bool,
+    inference_mode: bool,
+) -> None:
+    with torch.inference_mode(create_inference):
+        features = TableTensor(
+            columns={"numerical": ["a", "b"], "categorical": ["kind"]},
+            numerical=torch.arange(12, dtype=torch.float32).view(6, 2),
+            categorical=CategoricalTensor(
+                code=torch.tensor([[0], [1], [0], [1], [0], [1]]),
+                categories=(StringTensor.from_list(["x", "y"]),),
+            ),
+        )
+        labels = TableTensor.from_tensor(
+            torch.arange(6, dtype=torch.float32).view(6, 1)
+        )
+    indices = torch.tensor([[5, 1, 1], [0, 4, 2]])
+
+    with torch.inference_mode(inference_mode):
+        gathered = features[indices.flatten()]
+        out = cast(TableTensor, gathered.unflatten(0, indices.shape))
+        out_labels = cast(
+            TableTensor,
+            labels[indices.flatten()].unflatten(0, indices.shape),
+        )
+
+    assert out.size() == (2, 3, 3)
+    assert out_labels.size() == (2, 3, 1)
+    assert out.columns == features.columns
+    assert out.stypes == features.stypes
+    assert out.numerical.equal(features.numerical[indices])
+    assert out.categorical.code.equal(features.categorical.code[indices])
+    assert out_labels.numerical.equal(labels.numerical[indices])
+    assert out_labels.columns == labels.columns
+    assert out.categorical.categories[0].equal(
+        features.categorical.categories[0]
+    )
+    assert out.is_inference() == gathered.is_inference()
+    assert out.numerical.data_ptr() == gathered.numerical.data_ptr()
+    assert out.categorical.code.data_ptr() == (
+        gathered.categorical.code.data_ptr()
+    )
+
+
+@pytest.mark.parametrize("create_inference", [False, True])
+@pytest.mark.parametrize("inference_mode", [False, True])
+@pytest.mark.parametrize("dim", [0, -2])
+def test_unflatten_view(
+    create_inference: bool,
+    inference_mode: bool,
+    dim: int,
+) -> None:
+    with torch.inference_mode(create_inference):
+        tensor = TableTensor.from_pandas(
+            df=pd.DataFrame(
+                {
+                    "value": range(6),
+                    "kind": ["x", "y", "x", "y", "x", "y"],
+                    "time": pd.date_range("2026-01-01", periods=6),
+                    "text": ["a", "b", "c", "d", "e", "f"],
+                    "id": range(10, 16),
+                }
+            ),
+            stypes={
+                "value": Stype.numerical,
+                "kind": Stype.categorical,
+                "time": Stype.datetime,
+                "text": Stype.text,
+                "id": Stype.id,
+            },
+        )
+
+    with torch.inference_mode(inference_mode):
+        out = cast(TableTensor, tensor.unflatten(dim, (2, -1)))
+
+    assert out.size() == (2, 3, 5)
+    assert out.columns == tensor.columns
+    assert out.stypes == tensor.stypes
+    assert out.flatten(0, 1).equal(tensor)
+    assert out.is_inference() == tensor.is_inference()
+    for stype, block in out.items():
+        assert block.is_inference() == tensor.blocks[stype].is_inference()
+    assert out.numerical.data_ptr() == tensor.numerical.data_ptr()
+    assert out.categorical.code.data_ptr() == (
+        tensor.categorical.code.data_ptr()
+    )
+    assert out.datetime.data_ptr() == tensor.datetime.data_ptr()
+    assert out.text.data_offset[0].data_ptr() == (
+        tensor.text.data_offset[0].data_ptr()
+    )
+
+
+@pytest.mark.parametrize("inference_mode", [False, True])
+def test_unflatten_noncontiguous(inference_mode: bool) -> None:
+    data = torch.arange(24, dtype=torch.float32).view(6, 2, 2).transpose(0, 1)
+    tensor = TableTensor.from_tensor(data)
+
+    with torch.inference_mode(inference_mode):
+        out = cast(TableTensor, tensor.unflatten(1, (2, 3)))
+        expected = data.unflatten(1, (2, 3))
+
+    assert out.size() == (2, 2, 3, 2)
+    assert out.numerical.equal(expected)
+    assert out.numerical.stride() == expected.stride()
+    assert out.numerical.data_ptr() == data.data_ptr()
+
+
+def test_unflatten_grad() -> None:
+    data = torch.arange(12, dtype=torch.float32).requires_grad_()
+    tensor = TableTensor.from_tensor(data.view(6, 2))
+    out = cast(TableTensor, tensor.unflatten(0, (2, 3)))
+    weights = torch.arange(12, dtype=torch.float32).view(2, 3, 2)
+    (out.numerical * weights).sum().backward()
+
+    reference = data.detach().clone().requires_grad_()
+    expected = reference.view(6, 2).unflatten(0, (2, 3))
+    (expected * weights).sum().backward()
+    assert data.grad is not None
+    assert reference.grad is not None
+    assert data.grad.equal(reference.grad)
+
+
+@pytest.mark.parametrize("inference_mode", [False, True])
+@pytest.mark.parametrize(
+    ("dim", "sizes", "error", "match"),
+    [
+        (0, (2, 2), RuntimeError, "don't multiply up to the size of dim"),
+        (0, (-1, -1), RuntimeError, "only one dimension can be inferred"),
+        (0, (-2, 3), RuntimeError, "invalid shape dimension -2"),
+        (-3, (2, 3), IndexError, "Dimension out of range"),
+        (2, (2, 3), IndexError, "Dimension out of range"),
+        (-1, (2, 2), RuntimeError, "Can't reshape"),
+    ],
+)
+def test_unflatten_invalid(
+    inference_mode: bool,
+    dim: int,
+    sizes: tuple[int, ...],
+    error: type[Exception],
+    match: str,
+) -> None:
+    tensor = TableTensor.from_tensor(torch.arange(24).view(6, 4))
+    with (
+        torch.inference_mode(inference_mode),
+        pytest.raises(error, match=match),
+    ):
+        tensor.unflatten(dim, sizes)
+
+
 def test_slicing_ops() -> None:
     tensor = TableTensor(
         columns={
