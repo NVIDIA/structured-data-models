@@ -36,18 +36,12 @@ Its weights are not bundled with this project and may be downloaded only after t
 
 ## Kumo Time-Series
 
-Licensing materials for the planned Kumo-Forecast and Kumo-Anomaly integrations are retained here ahead of the model implementations.
-These notices do not add model code, pretrained weights, or runtime dependencies to SDM.
-Kumo-TS is an NVIDIA project; this entry preserves the license files declared in its upstream repository.
+The Kumo-Forecast and Kumo-Anomaly implementations in [`sdm/models/kumo/timeseries/`](sdm/models/kumo/timeseries/) are based on NVIDIA's Kumo-TS project.
 
 - Source reference: [NVIDIA/Kumo-TS at `af74798bbf7d020d3298f545fb9be383560a18ce`](https://github.com/NVIDIA/Kumo-TS/tree/af74798bbf7d020d3298f545fb9be383560a18ce)
-- NVIDIA-authored source license: Apache License 2.0
-- Upstream license and redistribution notices: [`sdm/models/kumo/timeseries/LICENSE`](sdm/models/kumo/timeseries/LICENSE) and [`sdm/models/kumo/timeseries/NOTICE`](sdm/models/kumo/timeseries/NOTICE)
-- DPM-Solver: MIT License, Copyright (c) 2022 Cheng Lu. License copied from [Kumo-TS's declared third-party license](https://github.com/NVIDIA/Kumo-TS/blob/af74798bbf7d020d3298f545fb9be383560a18ce/third_party/dpm-solver/LICENSE) to [`third_party/dpm-solver/LICENSE`](third_party/dpm-solver/LICENSE).
-
-The retained Kumo-TS license and notice describe the upstream distribution, including its DPM-Solver component.
-They do not imply that every upstream component is bundled with SDM.
-The solver implementation is not bundled with SDM by this license-only change.
+- NVIDIA-authored source license: Apache License 2.0, provided in the repository root [`LICENSE`](LICENSE).
+- Redistribution notices: [`sdm/models/kumo/timeseries/NOTICE`](sdm/models/kumo/timeseries/NOTICE).
+- DPM-Solver: MIT License, Copyright (c) 2022 Cheng Lu. [Upstream license in Kumo-TS](https://github.com/NVIDIA/Kumo-TS/blob/af74798bbf7d020d3298f545fb9be383560a18ce/third_party/dpm-solver/LICENSE); full terms: [`third_party/dpm-solver/LICENSE`](third_party/dpm-solver/LICENSE).
 
 ### Pretrained weights
 
