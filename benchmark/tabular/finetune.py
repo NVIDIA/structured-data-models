@@ -9,6 +9,7 @@ descent, generic over ``x``/``y`` :class:`TableTensor` pools so
 """
 
 import copy
+import math
 from typing import Literal
 
 import torch
@@ -25,6 +26,7 @@ FINETUNE_LR = 1e-6
 FINETUNE_TRAIN_SIZE = 10_000
 FINETUNE_CONTEXT_FRAC = 0.8
 FINETUNE_VAL_FRAC = 0.2
+FINETUNE_LR_SCHEDULE: Literal["none", "cosine"] = "none"
 
 
 def kumo_small_binary_epochs(
@@ -87,6 +89,7 @@ def full_finetune(
     context_frac: float = FINETUNE_CONTEXT_FRAC,
     val_frac: float = FINETUNE_VAL_FRAC,
     lr: float = FINETUNE_LR,
+    lr_schedule: Literal["none", "cosine"] = FINETUNE_LR_SCHEDULE,
     num_estimators: int,
     max_val_context_size: int | None = None,
     generator: torch.Generator | None,
@@ -98,7 +101,8 @@ def full_finetune(
     checkpoints if validation improves. Leaves ``model`` in eval mode
     holding its best-validation-metric weights and returns that metric
     (accuracy for classification, pinball loss for regression -- lower is
-    better for regression).
+    better for regression). ``lr_schedule="cosine"`` ramps ``lr`` up over
+    the first 10% of steps, then decays it to 1% of ``lr`` by the last step.
     """
     device = x_pool.device
     n = x_pool.size(0)
@@ -143,6 +147,24 @@ def full_finetune(
         )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    scheduler = None
+    if lr_schedule == "cosine":
+        total_steps = max_epochs * iters_per_epoch
+        warmup_steps = max(1, total_steps // 10)
+
+        def lr_lambda(step: int) -> float:
+            if step < warmup_steps:
+                return (step + 1) / warmup_steps
+            progress = (step - warmup_steps) / max(
+                total_steps - warmup_steps, 1
+            )
+            return 0.01 + 0.99 * 0.5 * (1 + math.cos(math.pi * progress))
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    elif lr_schedule != "none":
+        raise ValueError(
+            f"lr_schedule must be 'none' or 'cosine', got {lr_schedule!r}."
+        )
     higher_is_better = task == "classification"
 
     def current_metric() -> float:
@@ -206,6 +228,8 @@ def full_finetune(
                     loss = diff.pow(2).mean()
             loss.backward()
             optimizer.step()
+            if scheduler is not None:
+                scheduler.step()
 
         metric_value = current_metric()
         improved = (

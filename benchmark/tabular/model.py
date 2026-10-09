@@ -30,6 +30,7 @@ from benchmark.tabular.finetune import (
     FINETUNE_EPOCHS,
     FINETUNE_ITERS_PER_EPOCH,
     FINETUNE_LR,
+    FINETUNE_LR_SCHEDULE,
     FINETUNE_TRAIN_SIZE,
     FINETUNE_VAL_FRAC,
     full_finetune,
@@ -44,6 +45,11 @@ _FINETUNE_ARGS: dict[str, tuple[type, str]] = {
     "finetune_epochs": (int, "Fine-tuning epochs (only for '-ft' variants)."),
     "finetune_iters_per_epoch": (int, "Fine-tuning iterations per epoch."),
     "finetune_lr": (float, "Fine-tuning learning rate."),
+    "finetune_lr_schedule": (
+        str,
+        "Fine-tuning LR schedule: 'none' or 'cosine' (10% warmup, "
+        "then decay to 1% of the base LR).",
+    ),
     "finetune_train_size": (int, "Rows resampled per fine-tuning iteration."),
     "finetune_context_frac": (float, "Context fraction of each sample."),
     "finetune_val_frac": (float, "Held-out validation fraction of the pool."),
@@ -106,6 +112,9 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             "finetune_iters_per_epoch", FINETUNE_ITERS_PER_EPOCH
         )
         self._set_default_param_value("finetune_lr", FINETUNE_LR)
+        self._set_default_param_value(
+            "finetune_lr_schedule", FINETUNE_LR_SCHEDULE
+        )
         self._set_default_param_value(
             "finetune_train_size", FINETUNE_TRAIN_SIZE
         )
@@ -181,6 +190,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 context_frac=params["finetune_context_frac"],
                 val_frac=params["finetune_val_frac"],
                 lr=params["finetune_lr"],
+                lr_schedule=params["finetune_lr_schedule"],
                 num_estimators=self._num_estimators,
                 # Reuse the same cap as fit()/predict()'s context.
                 max_val_context_size=max_context_size,
@@ -188,6 +198,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             )
             print(
                 f"[finetune] ag_key={self.ag_key} lr={params['finetune_lr']} "
+                f"lr_schedule={params['finetune_lr_schedule']} "
                 f"best_val_metric={val_metric}"
             )
 
