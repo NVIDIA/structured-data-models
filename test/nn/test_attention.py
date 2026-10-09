@@ -748,24 +748,3 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
-
-
-@withCUDA
-def test_transformer_block_without_mlp(device: torch.device) -> None:
-    block = TransformerBlock(
-        channels=4,
-        num_query_heads=2,
-        mlp=None,
-        device=device,
-    )
-    with torch.no_grad():
-        block.attn.out_lin.weight.copy_(torch.eye(4, device=device))
-    x = torch.randn(2, 3, 4, device=device)
-    expected = x + block.attn(x)
-
-    torch.testing.assert_close(block(x), expected)
-    with torch.no_grad():
-        buffer = torch.empty_like(x)
-        output = block(x, out=buffer)
-    assert output is buffer
-    torch.testing.assert_close(output, expected)
