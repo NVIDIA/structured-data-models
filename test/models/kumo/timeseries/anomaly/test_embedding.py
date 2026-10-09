@@ -19,7 +19,6 @@ def test_diffusion_embedding(
     out_channels: int | None,
     channels: int,
 ) -> None:
-    """Match the released lookup and projections across devices and dtypes."""
     module = DiffusionEmbedding(
         num_steps=1000,
         channels=channels,
@@ -28,8 +27,7 @@ def test_diffusion_embedding(
         dtype=dtype,
     )
     step = torch.tensor([0, 3, 999], device=device)
-    # The released table concatenates sine then cosine, with frequencies
-    # increasing from 1 to 10,000 rather than a standard positional encoding.
+    # Upstream concatenates sin/cos with frequencies from 1 to 10,000.
     frequencies = 10.0 ** (
         torch.arange(channels // 2, dtype=torch.float32)
         / (channels // 2 - 1)
@@ -65,8 +63,7 @@ def test_diffusion_embedding(
 
 
 @withCUDA
-def test_embedding_dtype_conversion(device: torch.device) -> None:
-    """Move the lookup table and projections together when converting dtype."""
+def test_diffusion_embedding_dtype_conversion(device: torch.device) -> None:
     module = DiffusionEmbedding(num_steps=10, channels=8).to(
         device=device, dtype=torch.float64
     )
@@ -76,7 +73,6 @@ def test_embedding_dtype_conversion(device: torch.device) -> None:
 
 
 @pytest.mark.parametrize("channels", [1, 2, 3, 7])
-def test_invalid_embedding_width(channels: int) -> None:
-    """Reject widths that cannot form paired sine and cosine features."""
+def test_diffusion_embedding_invalid_channels(channels: int) -> None:
     with pytest.raises(ValueError, match="even and at least four"):
         DiffusionEmbedding(num_steps=10, channels=channels)

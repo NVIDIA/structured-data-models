@@ -11,6 +11,9 @@ from torch import Tensor
 class DiffusionEmbedding(torch.nn.Module):
     """Embed discrete Kumo-Anomaly diffusion steps.
 
+    The sinusoidal lookup is computed in float32 before conversion to the
+    requested device and dtype.
+
     Args:
         num_steps: Number of diffusion steps in the lookup table.
         channels: Even sinusoidal embedding width, at least four.
@@ -45,8 +48,7 @@ class DiffusionEmbedding(torch.nn.Module):
         torch.nn.init.xavier_uniform_(self.projection1.weight, gain=0.5)
         torch.nn.init.xavier_uniform_(self.projection2.weight, gain=0.5)
 
-        # Build once in float32 on CPU, as in Kumo-TS. Computing large phases
-        # in reduced precision or with accelerator math changes the lookup.
+        # Compute phases in float32 on CPU to preserve upstream lookup values.
         steps = torch.arange(num_steps, device="cpu", dtype=torch.float32)
         frequencies = torch.arange(
             channels // 2, device="cpu", dtype=torch.float32
@@ -63,6 +65,14 @@ class DiffusionEmbedding(torch.nn.Module):
         )
 
     def forward(self, step: Tensor) -> Tensor:
-        """Map integer step indices ``[...]`` to embeddings ``[..., C]``."""
+        """Embed discrete diffusion steps.
+
+        Args:
+            step: Integer indices with shape ``[...]`` in ``[0, num_steps)``.
+
+        Returns:
+            Embeddings with shape ``[..., C]``, where ``C`` is ``out_channels``
+            (defaults to ``channels``).
+        """
         x = F.silu(self.projection1(self.embedding[step]))
         return F.silu(self.projection2(x))
