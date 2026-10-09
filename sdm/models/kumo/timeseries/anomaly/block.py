@@ -137,11 +137,13 @@ class ResidualBlock(torch.nn.Module):
         y = y + self.diffusion_projection(diffusion_embedding)[:, None, None]
         y = y + self.strategy_projection(strategy_embedding)[:, None, None]
         if length > 1:
-            y = y.reshape(batch * features, length, channels)
+            y = y.reshape(batch * features, length, channels)  # [B * K, L, C]
             y = self.norm_after_time(self.time_layer(y))
             y = y.reshape(batch, features, length, channels)
         if features > 1:
-            y = y.transpose(1, 2).reshape(batch * length, features, channels)
+            y = y.transpose(1, 2).reshape(
+                batch * length, features, channels
+            )  # [B * L, K, C]
             y = self.norm_after_feature(self.feature_layer(y))
             y = y.reshape(batch, length, features, channels).transpose(1, 2)
 
