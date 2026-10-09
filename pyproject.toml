@@ -109,7 +109,6 @@ torch = false
 triton = false
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
 addopts = [
     "--capture=no",
     "--color=yes",
