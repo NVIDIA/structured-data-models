@@ -48,6 +48,23 @@ python -m benchmark.tabular.talent.main \
   --dataset Bank_Customer_Churn_Dataset
 ```
 
+## Fine-tuning
+
+Add `--finetune` to full fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`). Unlike TabArena/BeyondArena's dedicated `-ft` model choices, this is a flag applied to whichever model you picked. `--model kumo-tabular-small-ft` is `kumo-tabular-small` capped at 10 classes, for fine-tuning stability on multiclass datasets:
+
+```bash
+python -m benchmark.tabular.talent.main \
+  --model kumo-tabular-small-ft \
+  --dataset-path /path/to/talent/data \
+  --finetune \
+  --finetune-epochs 75 \
+  --finetune-lr 1e-6
+```
+
+Fine-tuned results use `<model>-finetuned` as their output folder and model label, keeping them separate from baseline results and the capped `kumo-tabular-small-ft` variant.
+
+## Evaluate
+
 Evaluate all available model results with:
 
 ```bash

@@ -30,9 +30,23 @@ from TALENT.model.method_registry import (
 from TALENT.model.methods.base import Method
 
 import sdm
+from benchmark.tabular.finetune import (
+    FINETUNE_CONTEXT_FRAC,
+    FINETUNE_ITERS_PER_EPOCH,
+    FINETUNE_LR,
+    FINETUNE_TRAIN_SIZE,
+    FINETUNE_VAL_FRAC,
+    cpu_state_dict,
+    full_finetune,
+    kumo_small_binary_epochs,
+)
 
 Task = Literal["classification", "regression"]
 ModelFactory = Callable[[Task, torch.device], sdm.models.ICLModel]
+
+# `factory` is `@lru_cache`d, so fine-tuning would leak across shared
+# instances without resetting pristine weights before every fit().
+_PRISTINE_STATE_ATTR = "_sdm_pristine_state"
 
 
 class UnsupportedDatasetError(RuntimeError):
@@ -106,6 +120,14 @@ MODEL_CONFIGS = {
         autocast_dtype=torch.float16,
         low_cardinality="infer",
     ),
+    "kumo-tabular-small-ft": ModelConfig(
+        name="KumoTabularSmallFT",
+        factory=partial(_create_kumo_tabular, size="small"),
+        num_estimators=8,
+        autocast_dtype=torch.float16,
+        max_classes=10,
+        low_cardinality="infer",
+    ),
     "tabfm": ModelConfig(
         name="TabFM",
         factory=_create_tabfm,
@@ -154,6 +176,21 @@ class SDMMethod(Method):
         self._num_estimators = general.get(
             "num_estimators",
             self._config.num_estimators,
+        )
+        self._finetune = general.get("finetune", False)
+        self._finetune_epochs = general.get("finetune_epochs")
+        self._finetune_iters_per_epoch = general.get(
+            "finetune_iters_per_epoch", FINETUNE_ITERS_PER_EPOCH
+        )
+        self._finetune_lr = general.get("finetune_lr", FINETUNE_LR)
+        self._finetune_train_size = general.get(
+            "finetune_train_size", FINETUNE_TRAIN_SIZE
+        )
+        self._finetune_context_frac = general.get(
+            "finetune_context_frac", FINETUNE_CONTEXT_FRAC
+        )
+        self._finetune_val_frac = general.get(
+            "finetune_val_frac", FINETUNE_VAL_FRAC
         )
         self._low_cardinality = general.get(
             "low_cardinality",
@@ -312,7 +349,37 @@ class SDMMethod(Method):
             self.args.seed
         )
 
+        pristine_state = getattr(self.model, _PRISTINE_STATE_ATTR, None)
+        if pristine_state is not None:
+            self.model.load_state_dict(pristine_state)
+        elif self._finetune:
+            # Cached models need an untouched CPU copy before training.
+            pristine_state = cpu_state_dict(self.model)
+            setattr(self.model, _PRISTINE_STATE_ATTR, pristine_state)
+
         tic = time.perf_counter()
+        if self._finetune:
+            finetune_epochs = kumo_small_binary_epochs(
+                self._finetune_epochs,
+                is_kumo_small=self._config
+                is MODEL_CONFIGS["kumo-tabular-small-ft"],
+                is_binary=self.is_binclass,
+            )
+            full_finetune(
+                self.model,
+                x_train,
+                y_train,
+                task=task,
+                max_epochs=finetune_epochs,
+                iters_per_epoch=self._finetune_iters_per_epoch,
+                train_size=self._finetune_train_size,
+                context_frac=self._finetune_context_frac,
+                val_frac=self._finetune_val_frac,
+                lr=self._finetune_lr,
+                num_estimators=self._num_estimators,
+                generator=generator,
+            )
+
         with torch.amp.autocast(
             self._device.type,
             self._config.autocast_dtype,
@@ -361,7 +428,7 @@ class SDMMethod(Method):
         else:
             columns = [str(value) for value in self.y_info["classes"]]
             prediction = out.to_pandas()[columns].to_numpy()
-            probabilities = torch.as_tensor(prediction)
+            probabilities = torch.as_tensor(prediction.copy())
             loss = self.criterion(
                 probabilities.clamp_min(
                     torch.finfo(probabilities.dtype).tiny
