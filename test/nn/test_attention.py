@@ -232,6 +232,122 @@ def test_sdpa_scale(device: torch.device) -> None:
 
 
 @withCUDA
+@pytest.mark.parametrize("num_key_value_heads", [1, 2])
+@pytest.mark.parametrize("mask_kind", [None, "mask", "lengths"])
+@pytest.mark.parametrize("bias_heads", [1, 2])
+@pytest.mark.parametrize("bias_query_len", [1, 4])
+@pytest.mark.parametrize(
+    "dtype", [torch.float32, torch.float16, torch.bfloat16]
+)
+def test_sdpa_additive_bias(
+    device: torch.device,
+    num_key_value_heads: int,
+    mask_kind: str | None,
+    bias_heads: int,
+    bias_query_len: int,
+    dtype: torch.dtype,
+) -> None:
+    """Match broadcast additive-bias attention and preserve bias gradients."""
+    if (
+        device.type == "cuda"
+        and dtype == torch.bfloat16
+        and not torch.cuda.is_bf16_supported()
+    ):
+        pytest.skip("CUDA bfloat16 not supported")
+    module = SDPA(
+        num_query_heads=2, num_key_value_heads=num_key_value_heads, scale=1.0
+    )
+    # Deterministic, non-constant fixtures without changing global RNG state.
+    query = (
+        torch.arange(128, device=device, dtype=dtype).view(2, 4, 2, 8).sin()
+    )
+    key = (
+        torch.arange(40 * num_key_value_heads, device=device, dtype=dtype)
+        .view(5, num_key_value_heads, 8)
+        .cos()
+    )
+    value = key.sin()
+    # The bias contributes a batch dimension, independent of query/KV batches.
+    bias = (
+        torch.arange(
+            15 * bias_heads * bias_query_len, device=device, dtype=dtype
+        )
+        .view(3, 1, bias_heads, bias_query_len, 5)
+        .sin()
+    )
+    bias.requires_grad_()
+    lengths = torch.tensor([0, 3], dtype=torch.int32, device=device)
+    mask = torch.arange(5, device=device) < lengths[:, None, None]
+    out = module(
+        query=query,
+        key=key,
+        value=value,
+        attn_bias=bias,
+        attn_mask=mask if mask_kind == "mask" else None,
+        seqused_key_value=lengths if mask_kind == "lengths" else None,
+    )
+
+    expected_bias = bias.expand(3, 2, 2, 4, 5)
+    if mask_kind is not None:
+        expected_bias = expected_bias.masked_fill(
+            ~mask.unsqueeze(-3), -torch.inf
+        )
+    expected = F.scaled_dot_product_attention(
+        query=query.transpose(-3, -2).expand(3, -1, -1, -1, -1),
+        key=key.repeat_interleave(2 // num_key_value_heads, dim=-2)
+        .transpose(-3, -2)
+        .expand(3, 2, -1, -1, -1),
+        value=value.repeat_interleave(2 // num_key_value_heads, dim=-2)
+        .transpose(-3, -2)
+        .expand(3, 2, -1, -1, -1),
+        attn_mask=expected_bias,
+        scale=1.0,
+    ).transpose(-3, -2)
+    torch.testing.assert_close(out, expected)
+    out.float().square().sum().backward()
+    assert bias.grad is not None
+    assert bias.grad.isfinite().all()
+    assert bias.grad.abs().sum() > 0
+
+
+@withCUDA
+def test_sdpa_dropout(device: torch.device) -> None:
+    """Apply attention dropout in training and disable it for evaluation."""
+    module = SDPA(num_query_heads=2, dropout=1.0)
+    query = torch.randn(3, 2, 4, device=device)
+    key = torch.randn(5, 2, 4, device=device)
+    value = torch.randn_like(key)
+    torch.testing.assert_close(
+        module(query, key, value), torch.zeros_like(query)
+    )
+    module.eval()
+    torch.testing.assert_close(
+        module(query, key, value), reference_sdpa(query, key, value)
+    )
+
+
+@withCUDA
+@pytest.mark.parametrize(("key_len", "bias_batch"), [(0, 1), (5, 0)])
+def test_sdpa_bias_empty_inputs(
+    device: torch.device, key_len: int, bias_batch: int
+) -> None:
+    """Preserve output shape and zero gradients for empty biased attention."""
+    module = SDPA(num_query_heads=2)
+    query = torch.randn(3, 2, 8, device=device, requires_grad=True)
+    key = torch.randn(key_len, 2, 8, device=device, requires_grad=True)
+    value = torch.randn(key_len, 2, 4, device=device, requires_grad=True)
+    bias = torch.randn(
+        bias_batch, 2, 3, key_len, device=device, requires_grad=True
+    )
+    out = module(query=query, key=key, value=value, attn_bias=bias)
+    assert out.shape == (bias_batch, 3, 2, 4)
+    torch.testing.assert_close(out, torch.zeros_like(out))
+    out.sum().backward()
+    for tensor in (query, key, value, bias):
+        torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
+
+
+@withCUDA
 @pytest.mark.parametrize("value_channels", [8, 4])
 def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
     # Empty key/value batches should give empty results, even with queries.
@@ -252,6 +368,7 @@ def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
 
 
 def test_sdpa_errors() -> None:
+    """Reject incompatible heads, mask arguments, and mask or bias dtypes."""
     channels = 3
     num_heads = 2
     module = SDPA(num_query_heads=num_heads)
@@ -290,6 +407,14 @@ def test_sdpa_errors() -> None:
             key=key,
             value=value,
             attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
+        )
+
+    with pytest.raises(ValueError, match="floating-point dtype"):
+        module(
+            query=query,
+            key=key,
+            value=value,
+            attn_bias=torch.ones(1, num_heads, 2, 2, dtype=torch.bool),
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
