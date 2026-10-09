@@ -32,7 +32,6 @@ class ResidualBlock(torch.nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -40,77 +39,71 @@ class ResidualBlock(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.mlp = Sequential(
-            Linear(in_channels, out_channels, bias=bias, **factory_kwargs),
+            Linear(in_channels, out_channels, bias=False, **factory_kwargs),
             ReLU(),
-            Linear(out_channels, out_channels, bias=bias, **factory_kwargs),
+            Linear(out_channels, out_channels, bias=False, **factory_kwargs),
         )
-        self.res = Linear(in_channels, out_channels, bias, **factory_kwargs)
+        self.res = Linear(in_channels, out_channels, False, **factory_kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.mlp(x) + self.res(x)
 
 
-class _AttentionBlock(TransformerBlock):
+class TimesFM3TransformerBlock(TransformerBlock):
     def __init__(
         self,
         channels: int,
         num_heads: int,
         mlp: torch.nn.Module | None,
-        rope: RotaryEmbedding | None,
-        bias: bool = False,
+        rope: RotaryEmbedding | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        head_dim = channels // num_heads
-        query_transforms = Sequential(
-            RMSNorm(head_dim, **factory_kwargs),
+
+        query_transforms: list[torch.nn.Module] = [
+            RMSNorm(channels // num_heads, **factory_kwargs),
             SoftplusScale(
-                head_dim,
+                channels=channels // num_heads,
                 multiplier=1 / math.log(2),
                 **factory_kwargs,
             ),
-        )
-        key_transform = Sequential(RMSNorm(head_dim, **factory_kwargs))
+        ]
+        key_transforms: list[torch.nn.Module] = [
+            RMSNorm(channels // num_heads, **factory_kwargs)
+        ]
         if rope is not None:
-            query_transforms.insert(0, rope)
-            key_transform.insert(0, rope)
+            query_transforms = [rope, *query_transforms]
+            key_transforms = [rope, *key_transforms]
 
+        norm = RMSNorm(channels, **factory_kwargs)
         super().__init__(
             channels=channels,
             num_query_heads=num_heads,
             mlp=mlp,
-            query_norm=RMSNorm(channels, **factory_kwargs),
+            query_norm=norm,
+            key_value_norm=norm,
             post_attn_norm=RMSNorm(channels, **factory_kwargs),
-            query_transform=query_transforms,
-            key_transform=key_transform,
+            query_transform=Sequential(*query_transforms),
+            key_transform=Sequential(*key_transforms),
             scale=1.0,
-            bias=bias,
+            bias=False,
             **factory_kwargs,
         )
 
 
-class TimesFM3TransformerBlock(torch.nn.Module):
-    """TimesFM-3 transformer block from Jain and Sen (2026).
-
-    Args:
-        channels: Input, output, and feed-forward width.
-        num_heads: Number of heads in each attention layer.
-        device: Device on which to create parameters and buffers.
-        dtype: Data type of the parameters.
-    """
-
+class MixingTransformerBlock(torch.nn.Module):
     def __init__(
         self,
         channels: int,
         num_heads: int,
-        bias: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        self.time = _AttentionBlock(
+
+        self.time = TimesFM3TransformerBlock(
             channels=channels,
             num_heads=num_heads,
             mlp=None,
@@ -119,13 +112,11 @@ class TimesFM3TransformerBlock(torch.nn.Module):
                 layout="split_half",
                 theta=10_000,
                 requires_grad=False,
-                device=device,
-                dtype=torch.float32,
+                **factory_kwargs,
             ),
-            bias=bias,
             **factory_kwargs,
         )
-        self.var = _AttentionBlock(
+        self.var = TimesFM3TransformerBlock(
             channels=channels,
             num_heads=num_heads,
             mlp=Sequential(
@@ -135,42 +126,32 @@ class TimesFM3TransformerBlock(torch.nn.Module):
                 Linear(channels, channels, bias=False, **factory_kwargs),
                 RMSNorm(channels, **factory_kwargs),
             ),
-            rope=None,
-            bias=bias,
             **factory_kwargs,
         )
 
     def forward(
         self,
-        x: Tensor,  # [..., V, N, C]
-        patch_mask: Tensor | None = None,  # [..., V, N]
-    ) -> Tensor:  # [..., V, N, C]
-        """Apply causal time attention, variate attention, and an FFN.
+        x: Tensor,  # [..., C, N, D]
+        patch_mask: Tensor | None = None,  # [..., C, N]
+    ) -> Tensor:  # [..., C, N, D]
 
-        Args:
-            x: Patch embeddings with shape ``[..., V, N, C]``.
-            patch_mask: Boolean mask with shape ``[..., V, N]``. ``True``
-                excludes a patch from attention keys. ``None`` means that
-                no patches are excluded.
-
-        Returns:
-            Updated embeddings with shape ``[..., V, N, C]``.
-        """
         if patch_mask is None:
             time_attn_mask = var_attn_mask = None
         else:
-            N = x.size(-2)
-            causal = torch.ones(
-                (N, N), device=x.device, dtype=torch.bool
-            ).tril()
-            time_attn_mask = causal & ~patch_mask.unsqueeze(-2)
-            var_attn_mask = (~patch_mask).transpose(-2, -1).unsqueeze(-2)
+            time_attn_mask = torch.ones(
+                (x.size(-2), x.size(-2)),
+                device=x.device,
+                dtype=torch.bool,
+            ).tril() & ~patch_mask.unsqueeze(-2)
+            var_attn_mask = ~patch_mask.transpose(-2, -1).unsqueeze(-2)
 
-        hidden = self.time(
+        out = self.time(
             query=x,
             attn_mask=time_attn_mask,
             is_causal=patch_mask is None,
         )
+
         return self.var(
-            query=hidden.transpose(-3, -2), attn_mask=var_attn_mask
+            query=out.transpose(-3, -2),
+            attn_mask=var_attn_mask,
         ).transpose(-3, -2)
