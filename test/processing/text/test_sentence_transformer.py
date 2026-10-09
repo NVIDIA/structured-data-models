@@ -178,6 +178,35 @@ def test_gpu_routes_word_length_mismatches(
         )
 
 
+def test_max_seq_length_truncates(
+    sentence_transformer_model: Any,
+) -> None:
+    model = sentence_transformer_model
+    cap = min(8, model.max_seq_length)
+    text = "word " * (model.max_seq_length + 10)
+    processor = SentenceTransformer(MODEL_NAME, max_seq_length=cap)
+    output = processor(
+        TableTensor(
+            columns={"text": ("col",)},
+            text=StringTensor.from_list([[text]]),
+        )
+    ).numerical
+
+    original = model.max_seq_length
+    model.max_seq_length = cap
+    try:
+        with torch.inference_mode():
+            reference = model.encode(
+                [text],
+                convert_to_tensor=True,
+                show_progress_bar=False,
+                device="cpu",
+            )
+    finally:
+        model.max_seq_length = original
+    assert torch.allclose(output, reference, atol=1e-5)
+
+
 @withCUDA
 def test_forward(device: torch.device) -> None:
     pytest.importorskip("sentence_transformers")

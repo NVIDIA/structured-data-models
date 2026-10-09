@@ -14,6 +14,94 @@ from tqdm import tqdm
 import sdm
 import sdm.processing as sp
 
+
+def embed_entity_text(
+    entity: sdm.TableTensor,
+    task_ids: pd.Series,
+    pkey: str,
+    *,
+    model_name: str,
+    device: torch.device,
+) -> tuple[torch.Tensor, tuple[str, ...], torch.Tensor] | None:
+    """Embed task entities and return CPU embeddings."""
+    if len(entity.columns[sdm.Stype.text]) == 0:
+        return None
+    entity_ids = entity.select_columns(pkey).to_pandas()[pkey]
+    in_task = torch.from_numpy(
+        entity_ids.isin(pd.unique(task_ids)).to_numpy(dtype=bool)
+    )
+    text = entity.select_stypes(sdm.Stype.text)[in_task]
+    if text.size(0) == 0:
+        return None
+    encoder = sp.SentenceTransformer(
+        model_name=model_name,
+        batch_size=32,
+        max_seq_length=2048,
+    )
+    row_chunk = 1024
+    parts = []
+    columns: tuple[str, ...] = ()
+    with torch.inference_mode():
+        for start in range(0, text.size(0), row_chunk):
+            embedded = encoder(text[start : start + row_chunk].to(device))
+            columns = embedded.columns[sdm.Stype.numerical]
+            parts.append(embedded.numerical.cpu())
+    del encoder, embedded, text
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    return torch.cat(parts, dim=0), columns, in_task
+
+
+def attach_text(
+    entity: sdm.TableTensor,
+    embeddings: torch.Tensor,
+    columns: tuple[str, ...],
+    in_task: torch.Tensor,
+    context_ids: pd.Series,
+    pkey: str,
+    text_dim: int,
+) -> sdm.TableTensor:
+    """Project embeddings with a PCA fit on the context entities."""
+    entity_ids = entity.select_columns(pkey).to_pandas()[pkey]
+    in_context = torch.from_numpy(
+        entity_ids.isin(pd.unique(context_ids)).to_numpy(dtype=bool)
+    )
+    pca = sp.PCA(text_dim)
+    pca.fit(
+        sdm.TableTensor(
+            columns={"numerical": columns},
+            numerical=embeddings[in_context[in_task]],
+        )
+    )
+    reduced = pca.transform(
+        sdm.TableTensor(
+            columns={"numerical": columns},
+            numerical=embeddings,
+        )
+    )
+    values = torch.full(
+        (entity.size(0), reduced.numerical.size(-1)),
+        torch.nan,
+        dtype=reduced.numerical.dtype,
+    )
+    values[in_task] = reduced.numerical
+    return cast(
+        sdm.TableTensor,
+        torch.cat(
+            [
+                entity.drop_stypes(sdm.Stype.text),
+                sdm.TableTensor(
+                    columns={
+                        "numerical": reduced.columns[sdm.Stype.numerical],
+                    },
+                    numerical=values,
+                ),
+            ],
+            dim=-1,
+        ),
+    )
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
 parser.add_argument("--task", type=str, required=True)
@@ -35,26 +123,25 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 dataset = relbench.load_dataset(args.dataset)
 task = dataset.load_task(args.task)
 db = task.get_db(upto_test_timestamp=False)
-data = sdm.RelationalData(
-    tables={
-        name: sdm.TableTensor.from_pandas(
-            df=table.df,
-            stypes=sdm.infer_stypes(
-                table.df.head(10_000),
-                overrides={
-                    cast(str, table.pkey_col): "id",
-                    **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
-                },
-                text=(
-                    "infer"
-                    if args.text and name == task.entity_table
-                    else "drop"
-                ),
-                unsupported="drop",
+tables = {
+    name: sdm.TableTensor.from_pandas(
+        df=table.df,
+        stypes=sdm.infer_stypes(
+            table.df.head(10_000),
+            overrides={
+                cast(str, table.pkey_col): "id",
+                **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
+            },
+            text=(
+                "infer" if args.text and name == task.entity_table else "drop"
             ),
-        )
-        for name, table in db.table_dict.items()
-    },
+            unsupported="drop",
+        ),
+    )
+    for name, table in db.table_dict.items()
+}
+data = sdm.RelationalData(
+    tables=tables,
     relationships=[
         {
             "left_table": left_table,
@@ -66,13 +153,11 @@ data = sdm.RelationalData(
         for left_column, right_table in table.fkey_col_to_pkey_table.items()
     ],
 )
-sampler = data.sampler(
-    time_columns={
-        name: table.time_col
-        for name, table in db.table_dict.items()
-        if table.time_col is not None
-    }
-)
+time_columns = {
+    name: table.time_col
+    for name, table in db.table_dict.items()
+    if table.time_col is not None
+}
 
 # Collect Task Table ##########################################################
 if task.task_type not in {
@@ -151,19 +236,34 @@ if len(context) > args.context_size:  # Sample different context per estimator:
         num_estimators = None
 
 # Execute Model ###############################################################
+if args.text:
+    entity_pkey = cast(str, db.table_dict[task.entity_table].pkey_col)
+    entity = tables[task.entity_table]
+    encoded = embed_entity_text(
+        entity=entity,
+        task_ids=df[task.entity_col],
+        pkey=entity_pkey,
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        device=device,
+    )
+    if encoded is not None:
+        embeddings, columns, in_task = encoded
+        tables[task.entity_table] = attach_text(
+            entity=entity,
+            embeddings=embeddings,
+            columns=columns,
+            in_task=in_task,
+            context_ids=pd.concat(
+                [dfs[0][task.entity_col], dfs[1][task.entity_col]],
+                ignore_index=True,
+            ),
+            pkey=entity_pkey,
+            text_dim=args.text_dim,
+        )
+
+sampler = data.sampler(time_columns=time_columns)
 model = sdm.models.KumoRelational(device=device)
 recipe = model.default_recipe()
-if args.text:
-    recipe = recipe.prepend_features(
-        sp.StypeDispatch(
-            text=[
-                sp.SentenceTransformer(
-                    model_name="sentence-transformers/all-MiniLM-L6-v2",
-                ),
-                sp.PCA(args.text_dim),
-            ],
-        )
-    )
 kwargs: dict[str, Any] = {
     "task_link": {
         "task_column": task.entity_col,
