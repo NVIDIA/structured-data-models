@@ -3,7 +3,7 @@
 
 import abc
 import copy
-from collections.abc import Hashable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -14,7 +14,6 @@ from sdm import (
     Recipe,
     RelatedTables,
     Stype,
-    StypeLike,
     TableTensor,
     Task,
     TaskLike,
@@ -22,6 +21,14 @@ from sdm import (
 from sdm._inference import inference_mode
 from sdm._warnings import warn_once
 from sdm.cache import Cache
+from sdm.models._batching import (
+    _batch_slices,
+    _categorical_mask,
+    _class_values,
+    _stack_context,
+    _stack_query,
+    _unstack,
+)
 from sdm.models.callback import Callback
 from sdm.processing.execution import (
     MemberContext,
@@ -443,7 +450,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     with torch.cuda.stream(transfer_stream):
                         next_cache = next_cache.to(x.device, non_blocking=True)
 
-                outs += self._forward_batch(
+                outs += self._run_estimators(
                     contexts=None,
                     queries=batch_queries,
                     cache=cache,
@@ -621,7 +628,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
             class_values=class_values,
             estimator_batch_size=estimator_batch_size,
         ):
-            outs += self._forward_batch(
+            outs += self._run_estimators(
                 contexts=contexts[batch],
                 queries=queries[batch],
                 cache=None,
@@ -673,7 +680,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         )
         return query
 
-    def _forward_batch(
+    def _run_estimators(
         self,
         contexts: Sequence[MemberContext] | None,
         queries: Sequence[MemberQuery],
@@ -689,11 +696,18 @@ class ICLModel(torch.nn.Module, abc.ABC):
         # Stacking inside the autograd region keeps callback-captured leaves
         # attached to the graph.
         with inference_mode("grad" if requires_grad else "inference"):
-            context = None if contexts is None else _stack_context(contexts)
+            if len(queries) == 1:
+                context = None if contexts is None else contexts[0]
+                query = queries[0]
+            else:
+                context = (
+                    None if contexts is None else _stack_context(contexts)
+                )
+                query = _stack_query(queries)
+
             if categorical_mask is None:
                 assert contexts is not None
                 categorical_mask = _categorical_mask(contexts)
-            query = _stack_query(queries)
             out = self._forward(
                 x_context=None if context is None else context.x,
                 y_context=None if context is None else context.y,
@@ -806,161 +820,3 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     "Expected related context and query tables to share the "
                     "same schema"
                 )
-
-
-def _stack(tables: Sequence[TableTensor]) -> TableTensor:
-    ref = tables[0]
-    if len(tables) == 1:
-        return ref
-    # torch.stack aligns columns by name, which would undo per-estimator column
-    # shuffles; renaming to the first member's names stacks blocks by position.
-    columns = cast(Mapping[StypeLike, Sequence[str]], ref.columns)
-    renamed: list[Tensor] = [
-        ref,
-        *(
-            table.__class__(columns=columns, **dict(table.items()))
-            for table in tables[1:]
-        ),
-    ]
-    return cast(TableTensor, torch.stack(renamed))
-
-
-def _stack_context(members: Sequence[MemberContext]) -> MemberContext:
-    if len(members) == 1:
-        return members[0]
-    return MemberContext(
-        x=_stack([member.x for member in members]),
-        y=_stack([member.y for member in members]),
-        related_tables=None,
-        input_stypes=members[0].input_stypes,
-    )
-
-
-def _stack_query(members: Sequence[MemberQuery]) -> MemberQuery:
-    if len(members) == 1:
-        return members[0]
-    return MemberQuery(
-        x=_stack([member.x for member in members]), related_tables=None
-    )
-
-
-def _batch_slices(
-    contexts: Sequence[MemberContext],
-    queries: Sequence[MemberQuery] | None,
-    class_values: Sequence[tuple[Any, ...] | None],
-    estimator_batch_size: int | None,
-) -> list[slice]:
-    # Consecutive estimators that can go through one `_forward` together,
-    # split when shapes/dtypes or the target class set change, or the
-    # batch is full.
-    related = any(context.related_tables is not None for context in contexts)
-    if queries is not None:
-        related = related or any(
-            query.related_tables is not None for query in queries
-        )
-    if related:
-        return [slice(i, i + 1) for i in range(len(contexts))]
-
-    batches: list[slice] = []
-    start = 0
-    key: Hashable = None
-    # Stack when table shapes/dtypes match and the target class set matches.
-    for i, context in enumerate(contexts):
-        query = None if queries is None else queries[i]
-        tables = (
-            [context.x, context.y]
-            if query is None
-            else [context.x, context.y, query.x]
-        )
-        classes = class_values[i]
-        member_key = (
-            tuple(
-                (
-                    tuple(
-                        (stype, block.size(), block.dtype)
-                        for stype, block in table.items()
-                    ),
-                    tuple(c.numel() for c in table.categorical.categories),
-                )
-                for table in tables
-            ),
-            None if classes is None else frozenset(classes),
-        )
-        if i > start and (
-            member_key != key
-            or (
-                estimator_batch_size is not None
-                and i - start == estimator_batch_size
-            )
-        ):
-            batches.append(slice(start, i))
-            start = i
-        key = member_key
-    batches.append(slice(start, len(contexts)))
-    return batches
-
-
-def _categorical_mask(members: Sequence[MemberContext]) -> Tensor:
-    x = members[0].x
-    mask = torch.tensor(
-        [
-            [
-                member.input_stypes.get(column) == Stype.categorical
-                for column in member.x.columns[Stype.numerical]
-            ]
-            for member in members
-        ],
-        dtype=torch.bool,
-        device=x.device,
-    )  # [E, C]
-    if len(members) == 1:
-        return mask[0]
-    # Insert the member's batch dimensions so the mask broadcasts over them:
-    return mask.view(len(members), *(1,) * (x.dim() - 2), -1)  # [E, 1, ..., C]
-
-
-def _class_values(
-    contexts: Sequence[MemberContext],
-    estimator_batch_size: int | None,
-) -> list[tuple[Any, ...] | None]:
-    # Class labels per estimator, used to group and relabel stacked batches.
-    # Unused when each estimator already has its own ``_forward``.
-    if (
-        estimator_batch_size == 1
-        or contexts[0].related_tables is not None
-        or contexts[0].y.categorical.size(-1) == 0
-    ):
-        return [None] * len(contexts)
-    return [
-        tuple(context.y.categorical.categories[0].tolist())
-        for context in contexts
-    ]
-
-
-def _unstack(
-    out: TableTensor,
-    class_values: Sequence[tuple[Any, ...] | None] | None,
-    num_members: int,
-) -> list[TableTensor]:
-    outs = (
-        [out]
-        if num_members == 1
-        else list(cast(tuple[TableTensor, ...], out.unbind(0)))
-    )
-    if class_values is None or len(class_values) == 1:
-        return outs
-    first = class_values[0]
-    if first is None:
-        return outs
-    # The model labels columns in the first member's class order; member `e`'s
-    # column `j` holds class `class_values[e][j]`.
-    labels = out.columns[Stype.numerical]
-    index = {value: i for i, value in enumerate(first)}
-    stacked = cast(Sequence[tuple[Any, ...]], class_values)
-    return [
-        TableTensor(
-            columns={Stype.numerical: [labels[index[v]] for v in classes]},
-            numerical=member_out.numerical,
-        )
-        for member_out, classes in zip(outs, stacked, strict=True)
-    ]
