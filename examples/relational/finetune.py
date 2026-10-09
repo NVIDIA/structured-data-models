@@ -37,6 +37,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 dataset = relbench.load_dataset("stanford-star/relbench-v1/rel-f1")
 task = dataset.load_task("driver-top3")
+# Keep later test history; the sampler enforces each query's timestamp cutoff.
 db = task.get_db(upto_test_timestamp=False)
 
 data = sdm.RelationalData(
@@ -162,24 +163,25 @@ def evaluate(
         torch.inference_mode(),
         torch.autocast(device.type, enabled=device.type == "cuda"),
     ):
-        for start in range(0, len(query), args.eval_batch_size):
-            batch, related_query = sample(
-                query[start : start + args.eval_batch_size]
-            )
-            out = model(
-                x_context=context.drop_columns(target),
-                y_context=context[target],
-                x_query=batch.drop_columns(target),
-                related_context_tables=related_context,
-                related_query_tables=related_query,
-                num_hops=len(args.num_neighbors),
-                generator=generator,
+        model.fit(
+            x=context.drop_columns(target),
+            y=context[target],
+            related_tables=related_context,
+            num_hops=len(args.num_neighbors),
+            generator=generator,
+        )
+        for batch in query.split(args.eval_batch_size, dim=-2):
+            batch, related_query = sample(batch)
+            out = model.predict(
+                x=batch.drop_columns(target),
+                related_tables=related_query,
             )
             score, label = sdm.evaluation.to_binary_class(
                 out, batch[target], positive_class=1
             )
             scores.append(score.cpu())
             labels.append(label.cpu())
+    model.clear()
     return float(roc_auc_score(torch.cat(labels), torch.cat(scores)))
 
 
