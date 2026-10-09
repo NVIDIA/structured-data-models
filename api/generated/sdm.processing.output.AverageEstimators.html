@@ -226,14 +226,14 @@ data-aria-dark="Switch to auto color mode">
 <h1>AverageEstimators<a class="headerlink" href="#averageestimators" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.processing.output.AverageEstimators">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.output.</span></span><span class="sig-name descname"><span class="pre">AverageEstimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">trim_fraction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.output.AverageEstimators" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.output.</span></span><span class="sig-name descname"><span class="pre">AverageEstimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">trim_fraction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.output.AverageEstimators" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a></p>
 <p>Reduce the leading ensemble dimension of model outputs.</p>
 <p>Inputs must be a numerical output table with shape <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...]</span></code>, where
 <code class="docutils literal notranslate"><span class="pre">E</span></code> is the non-empty leading ensemble dimension.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>trim_fraction</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Fraction of estimators discarded from each tail after
+<dd class="field-odd"><p><strong>trim_fraction</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Fraction of estimators discarded from each tail after
 sorting each output coordinate, in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">0.5)</span></code>. This can make the
 aggregation less sensitive to outlying estimator predictions.</p>
 </dd>
@@ -281,7 +281,7 @@ aggregation less sensitive to outlying estimator predictions.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=786d6cfd"></script>
+      <script src="../../_static/documentation_options.js?v=b1f65fa6"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
