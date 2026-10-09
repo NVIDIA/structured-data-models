@@ -106,6 +106,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
 parser.add_argument("--task", type=str, required=True)
 parser.add_argument("--context_size", type=int, default=10_000)
+parser.add_argument(
+    "--context_mode", choices=("latest", "random"), default="latest"
+)
 parser.add_argument("--batch_size", type=int, default=1000)
 parser.add_argument("--max_test_steps", type=int, default=None)
 parser.add_argument("--num_neighbors", type=int, nargs="*", default=[16, 16])
@@ -227,9 +230,13 @@ context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
 
 num_estimators = args.num_estimators
 if len(context) > args.context_size:  # Sample different context per estimator:
-    repeats = math.ceil(args.context_size * num_estimators / len(context))
+    width = args.context_size * num_estimators
+    if args.context_mode == "latest" and len(context) > width:
+        order = context.datetime.reshape(-1).argsort(descending=True)
+        context = context[order[:width]]
+    repeats = math.ceil(width / len(context))
     perm = torch.cat([torch.randperm(len(context)) for _ in range(repeats)])
-    context = context[perm[: args.context_size * num_estimators]]
+    context = context[perm[:width]]
     if num_estimators > 1:
         context = context.unflatten(0, (num_estimators, args.context_size))
         query = query.expand(num_estimators, *query.size())
