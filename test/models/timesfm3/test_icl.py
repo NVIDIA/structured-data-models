@@ -12,6 +12,25 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
+@pytest.mark.parametrize("masked", [False, True])
+def test_mixing_transformer_block(
+    device: torch.device,
+    masked: bool,
+) -> None:
+    block = MixingTransformerBlock(
+        channels=8,
+        num_heads=2,
+        device=device,
+    )
+
+    x = torch.randn(2, 3, 4, 8, device=device)
+    patch_mask = torch.randn(2, 3, 4, device=device) >= 0 if masked else None
+
+    out = block(x, patch_mask)
+    assert out.size() == x.size()
+
+
+@withCUDA
 def test_icl_block_applies_all_layers_and_head(device: torch.device) -> None:
     block = ICLBlock(4, 1, 2, 1, device=device)
     with torch.no_grad():
