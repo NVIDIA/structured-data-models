@@ -73,6 +73,38 @@ Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls wh
 
 Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.predict` does not support gradient-based fine-tuning and raises if the model is in train mode.
 
+### Pinned host memory for fitted caches
+
+For CUDA fits with multiple estimators, SDM can store fitted state in pinned host memory, which supports asynchronous transfers to the GPU.
+PyTorch normally rounds individual pinned allocations up to a power of two.
+For example, a 3 MiB tensor can occupy a 4 MiB allocation.
+
+With PyTorch 2.13 or later, SDM automatically sets `pinned_max_round_threshold_mb:1` before offloading a fitted cache.
+Allocations above 1 MiB then use exact sizes.
+SDM preserves the current allocator options, including settings applied after CUDA initialization.
+An explicit rounding threshold takes precedence over SDM's default.
+Older PyTorch versions keep their existing allocation behavior.
+
+To select a different threshold, configure PyTorch before starting Python:
+
+```bash
+PYTORCH_ALLOC_CONF=pinned_max_round_threshold_mb:128 python inference.py
+```
+
+Replace `inference.py` with your inference script.
+If you already configure the allocator, add or edit the threshold in that configuration while keeping your other options.
+Older PyTorch versions can reject this option.
+
+The setting applies to all pinned allocations in the process.
+It changes allocation capacity without changing tensor contents or model arithmetic.
+Exact sizes can reduce buffer reuse when allocation sizes vary, so compare fit time, prediction time, and host memory on your workload.
+
+This setting does not limit how much freed pinned memory PyTorch retains for reuse.
+Keep `pinned_max_cached_size_mb` unchanged when evaluating rounding alone.
+Reducing that separate limit can require expensive pinned allocations during later fits.
+The live cache still needs space for its full tensor payload.
+See [PyTorch's pinned-memory allocator options](https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage) for details.
+
 ## Model Concepts
 
 Structured data foundation models are not bound to a specific task type.
