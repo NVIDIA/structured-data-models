@@ -277,10 +277,17 @@ class _TimesFM3(torch.nn.Module):
         mask: Tensor,  # [..., V, N, P]
         context_only: Tensor,  # [..., V, N]
     ) -> tuple[Tensor, Tensor, Tensor, tuple[Tensor, Tensor, Tensor]]:
-        """Embed each patch using its own values and available horizon values.
+        """Build one token per variate and patch position.
 
-        The horizon contains the next ``num_horizon_patches`` patches.
-        Horizon values are hidden for targets and past-only covariates.
+        For targets and past-only covariates, token ``i`` uses patch ``i``.
+        For future-known covariates, it uses the concatenation of patches
+        ``i, i + 1, ..., i + num_horizon_patches``.
+
+        All tokens have the same input width: future patch slots are masked
+        and zero-filled for targets and past-only covariates. Missing values
+        and slots beyond the sequence are also masked and zero-filled.
+        Values are normalized using cumulative statistics through patch
+        ``i``, concatenated with their masks, and embedded by a residual block.
 
         Args:
             x: Patch values with shape ``[..., V, N, P]``, where ``V`` is the
@@ -288,33 +295,39 @@ class _TimesFM3(torch.nn.Module):
                 the patch length.
             mask: ``True`` for missing or padded values, with the same shape
                 as ``x``.
-            context_only: ``True`` for targets and past-only covariates, with
-                shape ``[..., V, N]``.
+            context_only: ``True`` when token ``i`` must use only patch ``i``
+                (targets and past-only covariates), with shape ``[..., V, N]``.
 
         Returns:
             Patch embeddings, features ordered as
-            ``[x, horizon_x, mask, horizon_mask]``, flags for patches with
-            no available values, and running ``(count, mean, std)``.
+            ``[x, horizon_x, mask, horizon_mask]`` after normalization and
+            zero-filling, flags where both current and horizon values are
+            fully masked, and cumulative ``(count, mean, std)``.
         """
-        # Compute statistics from values observed up to each patch
         count, mean, std = get_running_stats(x, mask)
 
-        # Gather the prediction patches and hide unavailable values
+        # Gather patches i + 1 through i + num_horizon_patches for each patch i
         horizon_x, past_end = gather_future_patches(
             x, self.num_horizon_patches
         )
+
+        # Hide future patches for targets and past-only covariates,
+        # and hide positions beyond the end of the sequence
         horizon_mask, _ = gather_future_patches(mask, self.num_horizon_patches)
         horizon_mask.logical_or_(context_only[..., None])
         horizon_mask.logical_or_(past_end)
         empty_patch_mask = mask.all(dim=-1) & horizon_mask.all(dim=-1)
 
-        # Normalize values and clear masked positions
+        # Normalize current and future values with the mean and std at patch i.
         x = revin(x, mean, std)
-        x.masked_fill_(mask, 0.0)
         horizon_x = revin(horizon_x, mean, std)
+
+        # Set masked values to zero
+        x.masked_fill_(mask, 0.0)
         horizon_x.masked_fill_(horizon_mask, 0.0)
 
-        # Pack current and horizon values, followed by their masks
+        # Build each token's input: [current values, future values,
+        # current mask, future mask]. Masks mark which values are unavailable.
         P = x.size(-1)
         value_width = P + horizon_x.size(-1)
         patch_features = x.new_empty(
@@ -326,7 +339,6 @@ class _TimesFM3(torch.nn.Module):
         patch_features[..., value_width : value_width + P] = mask
         patch_features[..., value_width + P :] = horizon_mask
 
-        # Embed each patch with a residual block
         embeddings = self.patch_embedding(patch_features)
 
         return embeddings, patch_features, empty_patch_mask, (count, mean, std)
