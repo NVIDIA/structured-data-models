@@ -93,6 +93,7 @@ class TimesFM3(ICLModel):
     )
     supports_multi_target: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
+    supports_seqused: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -144,6 +145,9 @@ class TimesFM3(ICLModel):
 
     def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
         r""":meta private:"""  # noqa: D415
+        self._validate_seqused(
+            kwargs.get("seqused_train"), kwargs.get("seqused_cols")
+        )
         x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
@@ -165,6 +169,9 @@ class TimesFM3(ICLModel):
 
     def fit(self, *args: Any, **kwargs: Any) -> None:
         r""":meta private:"""  # noqa: D415
+        self._validate_seqused(
+            kwargs.get("seqused_train"), kwargs.get("seqused_cols")
+        )
         x = kwargs["x"] if "x" in kwargs else args[0]
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
