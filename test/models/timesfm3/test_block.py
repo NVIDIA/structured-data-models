@@ -1,9 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import math
 
-import pytest
 import torch
 from torch.nn import Linear, Sequential
 
@@ -17,7 +15,6 @@ def test_residual_block(device: torch.device) -> None:
     block = ResidualBlock(
         in_channels=3,
         out_channels=2,
-        bias=False,
         device=device,
     )
 

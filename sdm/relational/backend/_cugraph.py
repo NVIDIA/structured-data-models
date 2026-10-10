@@ -196,7 +196,11 @@ class CuGraphRelationalSampler:
         dst = torch.cat(dsts)
         self._num_edges = src.numel()
         edge_type = torch.cat(edge_types)
-        edge_time = torch.cat(edge_times) if self.time_columns else None
+        # Reverse integer time: ~t = -t - 1.
+        # This maps t <= cutoff to ~t >= ~cutoff.
+        edge_time = (
+            torch.cat(edge_times).bitwise_not() if self.time_columns else None
+        )
         self._has_outgoing = torch.zeros(
             self._num_vertices,
             dtype=torch.bool,
@@ -484,13 +488,14 @@ class CuGraphRelationalSampler:
         for table_name in possible_source_tables:
             fanout[self._outgoing_edge_types[table_name]] = count
 
+        # Temporal disjoint sampling uses cuGraph's version-specific default.
         result = (
             self._pylibcugraph.heterogeneous_uniform_temporal_neighbor_sample(
                 self._resource_handle,
                 self._graph,
                 "edge_start_time",
                 cp.from_dlpack(frontier_node),
-                cp.from_dlpack(seed_time[frontier_example]),
+                cp.from_dlpack(seed_time[frontier_example].bitwise_not()),
                 cp.from_dlpack(label_offsets),
                 cp.from_dlpack(self._vertex_offsets),
                 fanout,
@@ -499,14 +504,13 @@ class CuGraphRelationalSampler:
                 do_expensive_check=False,
                 prior_sources_behavior=None,
                 deduplicate_sources=True,
-                disjoint_sampling=False,
                 return_hops=False,
                 renumber=False,
                 retain_seeds=False,
                 compression="COO",
                 compress_per_hop=False,
                 random_state=self._next_random_state(),
-                temporal_sampling_comparison="monotonically_decreasing",
+                temporal_sampling_comparison="monotonically_increasing",
             )
         )
         minor = self._as_tensor(result["minors"])
