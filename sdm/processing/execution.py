@@ -12,7 +12,7 @@ from torch import Tensor
 
 import sdm.processing as sp
 from sdm import EnsembleTable, Recipe, RelatedTables, Stype, TableTensor
-from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing import EnsembleProcessor
 
 
 class MemberContext(NamedTuple):
@@ -68,6 +68,11 @@ class RecipeExecution:
 
         self._num_estimators = num_members
         self._y_locations = y._locations
+        for module in self.recipe.output.modules():
+            if isinstance(module, sp.InvertTarget):
+                module._target = self.recipe.target
+                module._locations = y._locations
+                module._ndim = y[0].dim()
 
         task_dispatchers = tuple(
             module
@@ -214,42 +219,6 @@ class RecipeExecution:
             )
 
         return tuple(members)
-
-    def inverse_transform_target(
-        self,
-        outputs: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
-        """Invert fitted target transforms on member outputs."""
-        assert len(outputs) == self.num_members
-
-        # Reconstruct the group layout of the transformed target:
-        assert self._y_locations is not None
-        num_groups = max(group for group, _ in self._y_locations) + 1
-        groups: list[list[TableTensor | None]] = [
-            [] for _ in range(num_groups)
-        ]
-        for group_id, _ in self._y_locations:
-            groups[group_id].append(None)
-        for i, (group_id, position) in enumerate(self._y_locations):
-            groups[group_id][position] = outputs[i]
-
-        table = EnsembleTable(
-            groups=[
-                cast(
-                    TableTensor,
-                    group[0].unsqueeze(0)  # type: ignore
-                    if len(group) == 1
-                    else torch.stack(group, dim=0),  # type: ignore
-                )
-                for group in groups
-            ],
-            locations=self._y_locations,
-        )
-
-        if not isinstance(self.recipe.target, EnsembleInvertibleMixin):
-            raise RuntimeError("Target recipe is not invertible")
-        table = self.recipe.target.inverse_transform_ensemble(table)
-        return tuple(table[i] for i in range(len(table)))
 
     def transform_output(
         self,

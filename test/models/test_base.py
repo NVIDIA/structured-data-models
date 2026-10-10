@@ -728,6 +728,60 @@ def test_estimator_batching_aligns_shuffled_class_columns(
     _check(model.predict(x))
 
 
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        (None, 0.5),
+        ([sp.InvertTarget(), sp.Clip(-1.0, 1.0)], 1.0),
+        ([sp.Clip(-1.0, 1.0), sp.InvertTarget()], 11.0),
+    ],
+)
+def test_target_inversion_follows_output_order(
+    output: list[Processor] | None,
+    expected: float,
+) -> None:
+    model = _RecordingModel()
+    recipe = sp.Recipe(target=sp.Standardize(), output=output)
+    x_context = torch.zeros(2, 1)
+    y_context = torch.tensor([[8.0], [12.0]])
+    x_query = torch.tensor([[0.5]])
+
+    prediction = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=recipe,
+    )
+
+    torch.testing.assert_close(
+        prediction.numerical,
+        torch.tensor([[[expected]]]),
+    )
+
+
+@pytest.mark.parametrize("separate", [False, True])
+def test_target_inversion_uses_each_members_fitted_state(
+    separate: bool,
+) -> None:
+    model = _RecordingModel()
+    recipe = sp.Recipe(target=sp.Standardize(), output=sp.InvertTarget())
+    x_context = torch.zeros(2, 2, 1)
+    y_context = torch.tensor([[[8.0], [12.0]], [[20.0], [28.0]]])
+    if separate:
+        y_context = EnsembleTable.from_tables(
+            tables=tuple(TableTensor.from_tensor(y) for y in y_context),
+            member_table_ids=(0, 1),
+        )
+    x_query = torch.ones(2, 1, 1)
+
+    model.fit(x_context, y_context, recipe=recipe)
+    prediction = model.predict(x_query)
+
+    torch.testing.assert_close(
+        prediction.numerical, torch.tensor([[[12.0]], [[28.0]]])
+    )
+
+
 def test_estimator_batching_does_not_stack_related_tables() -> None:
     model = _RecordingModel()
     x_context = _table([0.0, 2.0], [1, 2], value_column="feature")
