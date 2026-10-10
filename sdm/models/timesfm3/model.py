@@ -284,7 +284,7 @@ class _TimesFM3(torch.nn.Module):
         *B, R_test, C = x_query.size()
         *_, R_train, C_only = x_context_only.size()
         P = self.input_patch_size
-        O = self.output_patch_size
+        O = self.output_patch_size  # noqa E741
 
         # Create patched input tensor:
         left_pad = -R_train % P
@@ -308,7 +308,7 @@ class _TimesFM3(torch.nn.Module):
         # Gather future patches and normalize:
         mask = x.isnan()
         x[mask] = 0.0
-        count, mean, std = get_running_stats(x, mask)
+        _, mean, std = get_running_stats(x, mask)
 
         future_x, past_end = gather_future_patches(x, num_patches=O // P)
         future_mask, _ = gather_future_patches(mask, num_patches=O // P)
