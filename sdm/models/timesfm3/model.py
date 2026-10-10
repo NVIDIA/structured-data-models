@@ -247,20 +247,19 @@ class _TimesFM3(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.patch_embedding = ResidualBlock(
             in_channels=2 * (input_patch_size + output_patch_size),
             out_channels=channels,
-            device=device,
-            dtype=dtype,
+            **factory_kwargs,
         )
         self.icl_block = ICLBlock(
             channels=channels,
             out_channels=output_patch_size * num_quantiles,
             num_layers=num_layers,
             num_heads=num_heads,
-            device=device,
-            dtype=dtype,
+            **factory_kwargs,
         )
 
 
