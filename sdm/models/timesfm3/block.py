@@ -91,67 +91,40 @@ class TimesFM3TransformerBlock(TransformerBlock):
             **factory_kwargs,
         )
 
-
-class MixingTransformerBlock(torch.nn.Module):
-    def __init__(
+    def peak_bytes_per_example(
         self,
-        channels: int,
-        num_heads: int,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        element_size: int,
+        query_length: int,
+        key_value_length: int | None = None,
+    ) -> int:
+        r""":meta private:"""  # noqa: D415
+        length = max(query_length, key_value_length or 0)
+        factor = 13 if element_size <= 2 else 8
+        return factor * length * element_size * self.attn.q_dim
 
-        self.time = TimesFM3TransformerBlock(
+
+if __name__ == "__main__":
+    from sdm.testing.memory import benchmark_transformer_block_memory_peak
+
+    benchmark_transformer_block_memory_peak(
+        block=lambda channels, num_heads: TimesFM3TransformerBlock(
             channels=channels,
             num_heads=num_heads,
             mlp=None,
-            rope=RotaryEmbedding(
-                channels=channels // num_heads,
-                layout="split_half",
-                theta=10_000,
-                requires_grad=False,
-                **factory_kwargs,
-            ),
-            **factory_kwargs,
-        )
-        self.var = TimesFM3TransformerBlock(
+        ),
+        channels_and_heads=[(1280, 16)],
+    )
+    benchmark_transformer_block_memory_peak(
+        block=lambda channels, num_heads: TimesFM3TransformerBlock(
             channels=channels,
             num_heads=num_heads,
             mlp=Sequential(
-                RMSNorm(channels, **factory_kwargs),
-                Linear(channels, channels, bias=False, **factory_kwargs),
+                RMSNorm(channels),
+                Linear(channels, channels, bias=False),
                 ReLU(),
-                Linear(channels, channels, bias=False, **factory_kwargs),
-                RMSNorm(channels, **factory_kwargs),
+                Linear(channels, channels, bias=False),
+                RMSNorm(channels),
             ),
-            **factory_kwargs,
-        )
-
-    def forward(
-        self,
-        x: Tensor,  # [..., C, N, D]
-        patch_mask: Tensor | None = None,  # [..., C, N]
-    ) -> Tensor:  # [..., C, N, D]
-
-        if patch_mask is None:
-            time_attn_mask = var_attn_mask = None
-        else:
-            time_attn_mask = torch.ones(
-                (x.size(-2), x.size(-2)),
-                device=x.device,
-                dtype=torch.bool,
-            ).tril() & ~patch_mask.unsqueeze(-2)
-            var_attn_mask = ~patch_mask.transpose(-2, -1).unsqueeze(-2)
-
-        out = self.time(
-            query=x,
-            attn_mask=time_attn_mask,
-            is_causal=patch_mask is None,
-        )
-
-        return self.var(
-            query=out.transpose(-3, -2),
-            attn_mask=var_attn_mask,
-        ).transpose(-3, -2)
+        ),
+        channels_and_heads=[(1280, 16)],
+    )
