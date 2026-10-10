@@ -132,10 +132,12 @@ class TableTensor(Tensor):
     while exposing a single tensor-shaped table interface.
     The last dimension represents named columns.
 
-    .. testcode:: drop_stypes, select_columns, drop_columns
+    .. testcode:: drop_stypes, select_columns, drop_columns, add_columns
 
         import torch
-        from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+        from sdm import (
+            CategoricalTensor, ColumnarTensor, StringTensor, Stype, TableTensor
+        )
 
         table = TableTensor(
             columns={
@@ -180,7 +182,7 @@ class TableTensor(Tensor):
         # Column-wise cat extends the schema:
         wide = torch.cat([table[["age"]], table[["country"]]], dim=-1)
 
-    .. testoutput:: drop_stypes, select_columns, drop_columns
+    .. testoutput:: drop_stypes, select_columns, drop_columns, add_columns
         :hide:
         :options: +ELLIPSIS
 
@@ -1038,6 +1040,49 @@ class TableTensor(Tensor):
                 )
 
         return self.__class__(columns=columns_dict, **blocks)
+
+    def add_columns(
+        self,
+        columns: Mapping[StypeLike, Sequence[str]],
+        *,
+        numerical: Tensor | None = None,
+        categorical: CategoricalTensor | None = None,
+        datetime: Tensor | None = None,
+        text: StringTensor | None = None,
+        id: ColumnarTensor | None = None,
+    ) -> Self:
+        r"""Return a table with named columns appended by semantic type.
+
+        .. testcode:: add_columns
+
+            ids = torch.arange(10)
+            table = table.add_columns(
+                columns={Stype.numerical: ["score"], Stype.id: ["row_id"]},
+                numerical=torch.ones(10, 1),
+                id=ColumnarTensor((ids,)),
+            )
+            assert table.size() == (10, 6)
+            assert table.id[:, 0].equal(ids)
+
+        Args:
+            columns: Names of the new columns grouped by semantic type.
+            numerical: New numerical block with shape ``[..., C_num]``.
+            categorical: New categorical block with shape ``[..., C_cat]``.
+            datetime: New datetime block with shape ``[..., C_dt]``.
+            text: New text block with shape ``[..., C_text]``.
+            id: New identifier block with shape ``[..., C_id]``.
+        """
+        added = self.__class__(
+            size=self.size()[:-1],
+            columns=columns,
+            numerical=numerical,
+            categorical=categorical,
+            datetime=datetime,
+            text=text,
+            id=id,
+            device=self.device,
+        )
+        return cast(Self, torch.cat((self, added), dim=-1))
 
     def drop_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table with ``columns`` removed.

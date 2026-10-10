@@ -367,6 +367,92 @@ def test_replace_blocks_validates_replacement_shape() -> None:
         tensor.replace_blocks(numerical=torch.ones(2, 3))
 
 
+def test_add_columns() -> None:
+    table = TableTensor(
+        columns={"numerical": ["age"], "id": ["user_id"]},
+        numerical=torch.tensor([[20.0], [30.0]]),
+        id=ColumnarTensor((torch.tensor([1, 2]),)),
+    )
+    categorical = CategoricalTensor(
+        code=torch.tensor([[0], [1]], dtype=torch.int32),
+        categories=(StringTensor.from_list(["A", "B"]),),
+    )
+    added = table.add_columns(
+        columns={
+            "numerical": ["income", "score"],
+            "categorical": ["group"],
+            "datetime": ["created_at"],
+            "text": ["note"],
+            "id": ["session_id"],
+        },
+        numerical=torch.tensor([[100.0, 0.5], [200.0, 0.8]]),
+        categorical=categorical,
+        datetime=torch.tensor([[10], [20]], dtype=torch.int64),
+        text=StringTensor.from_list([["first"], ["second"]]),
+        id=ColumnarTensor((torch.tensor([3, 4]),)),
+    )
+
+    assert added.columns == {
+        Stype.numerical: ("age", "income", "score"),
+        Stype.categorical: ("group",),
+        Stype.datetime: ("created_at",),
+        Stype.text: ("note",),
+        Stype.id: ("user_id", "session_id"),
+    }
+    assert added.numerical.equal(
+        torch.tensor([[20.0, 100.0, 0.5], [30.0, 200.0, 0.8]])
+    )
+    assert added.categorical.equal(categorical)
+    assert added.datetime.equal(torch.tensor([[10], [20]], dtype=torch.int64))
+    assert added.text.equal(StringTensor.from_list([["first"], ["second"]]))
+    assert added.id[:, 0].equal(table.id[:, 0])
+    assert added.id[:, 1].equal(torch.tensor([3, 4]))
+    assert table.columns[Stype.numerical] == ("age",)
+    assert table.columns[Stype.id] == ("user_id",)
+    assert added.drop_columns(
+        ["income", "score", "group", "created_at", "note", "session_id"]
+    ).equal(table)
+
+
+def test_add_columns_to_empty_table() -> None:
+    table = TableTensor(size=(2,))
+    added = table.add_columns(
+        columns={"id": ["user_id", "session_id"]},
+        id=ColumnarTensor((torch.tensor([1, 2]), torch.tensor([3, 4]))),
+    )
+
+    assert added.size() == (2, 2)
+    assert added.columns[Stype.id] == ("user_id", "session_id")
+    assert added.id[:, 0].equal(torch.tensor([1, 2]))
+    assert added.id[:, 1].equal(torch.tensor([3, 4]))
+
+
+def test_add_columns_validates_schema_shape_and_device() -> None:
+    table = TableTensor.from_tensor(torch.ones(2, 1), columns=["age"])
+
+    with pytest.raises(ValueError, match="column names to be unique"):
+        table.add_columns(
+            columns={"id": ["age"]}, id=ColumnarTensor((torch.arange(2),))
+        )
+    with pytest.raises(ValueError, match="column names to be unique"):
+        table.add_columns(
+            columns={"numerical": ["x", "x"]}, numerical=torch.ones(2, 2)
+        )
+    with pytest.raises(ValueError, match="hold 2 columns"):
+        table.add_columns(
+            columns={"numerical": ["x", "y"]}, numerical=torch.ones(2, 1)
+        )
+    with pytest.raises(ValueError, match="block size"):
+        table.add_columns(
+            columns={"numerical": ["x"]}, numerical=torch.ones(3, 1)
+        )
+    with pytest.raises(ValueError, match="to be on device"):
+        table.add_columns(
+            columns={"numerical": ["x"]},
+            numerical=torch.ones(2, 1, device="meta"),
+        )
+
+
 def test_select_stypes() -> None:
     tensor = TableTensor(
         columns={
