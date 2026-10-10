@@ -34,6 +34,26 @@ Its weights are not bundled with this project and may be downloaded only after t
 The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
 Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
+## Kumo Time-Series
+
+The Kumo-Forecast and Kumo-Anomaly implementations in [`sdm/models/kumo/timeseries/`](sdm/models/kumo/timeseries/) are based on NVIDIA's Kumo-TS project.
+
+- Source reference: [NVIDIA/Kumo-TS at `af74798bbf7d020d3298f545fb9be383560a18ce`](https://github.com/NVIDIA/Kumo-TS/tree/af74798bbf7d020d3298f545fb9be383560a18ce)
+- NVIDIA-authored source license: Apache License 2.0, provided in the repository root [`LICENSE`](LICENSE).
+- Redistribution notices: [`sdm/models/kumo/timeseries/NOTICE`](sdm/models/kumo/timeseries/NOTICE).
+- DPM-Solver: MIT License, Copyright (c) 2022 Cheng Lu. [Upstream license in Kumo-TS](https://github.com/NVIDIA/Kumo-TS/blob/af74798bbf7d020d3298f545fb9be383560a18ce/third_party/dpm-solver/LICENSE); full terms: [`third_party/dpm-solver/LICENSE`](third_party/dpm-solver/LICENSE).
+
+### Pretrained weights
+
+Source-code notices do not replace the terms attached to pretrained weights.
+The following model cards identify Apache License 2.0 as the governing terms and also describe the models as intended for research and development:
+
+- Kumo-Forecast: [model card at `abff20a58834638b28227ff4ab934f26206e4b09`](https://huggingface.co/nvidia/Kumo-Forecast/blob/abff20a58834638b28227ff4ab934f26206e4b09/README.md).
+- Kumo-Anomaly: [model card at `226c5003b0582adc1cac433123f47324bfae39f2`](https://huggingface.co/nvidia/Kumo-Anomaly/blob/226c5003b0582adc1cac433123f47324bfae39f2/README.md).
+
+Pretrained weights are not bundled with this project.
+Refer to the corresponding model card and license when downloading or using them.
+
 ## TabPFN Extensions
 
 - Source: https://github.com/PriorLabs/tabpfn-extensions

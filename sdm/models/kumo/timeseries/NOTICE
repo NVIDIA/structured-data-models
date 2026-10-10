@@ -1,0 +1,15 @@
+Kumo-TS
+
+Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This product includes software licensed under the Apache License, Version 2.0.
+See the repository root LICENSE file for the full Apache 2.0 license text.
+
+This product includes third-party software governed by the MIT License:
+
+  DPM-Solver — Copyright (c) 2022 Cheng Lu
+  https://github.com/LuChengTHU/dpm-solver
+
+The full MIT license text for DPM-Solver is preserved in this repository at:
+
+  third_party/dpm-solver/LICENSE
