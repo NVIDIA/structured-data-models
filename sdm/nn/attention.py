@@ -396,7 +396,6 @@ class TransformerBlock(torch.nn.Module):
         channels: The number of input and output channels.
         num_query_heads: The number of query attention heads.
         mlp: Feedforward module applied after the attention residual.
-            If None, the block applies only the attention residual.
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         query_norm: Normalization applied to query inputs before attention.
@@ -726,16 +725,7 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             attn_out = self.post_attn_norm(attn_out)
 
-        if self.mlp is None:
-            if (
-                out is not None
-                and torch.compiler.is_compiling()
-                and not out.is_contiguous()
-            ):
-                out.copy_(attn_out + query)
-            else:
-                out = torch.add(attn_out, query, out=out)
-        elif (
+        if (
             out is not None
             and torch.compiler.is_compiling()
             and not out.is_contiguous()
