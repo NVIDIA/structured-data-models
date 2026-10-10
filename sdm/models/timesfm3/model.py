@@ -30,6 +30,8 @@ from sdm import Recipe, RelatedTables, Stype, StypeLike, TableTensor, Task
 from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
+from sdm.models.timesfm3.block import ResidualBlock
+from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
 from sdm.tensor.table import TableSchema
 
@@ -235,13 +237,30 @@ class TimesFM3(ICLModel):
 class _TimesFM3(torch.nn.Module):
     def __init__(
         self,
+        input_patch_size: int = 32,
+        output_patch_size: int = 64,
+        num_quantiles: int = 9,
+        channels: int = 1280,
+        num_layers: int = 20,
+        num_heads: int = 16,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.lin = torch.nn.Linear(1, 1, **factory_kwargs)  # Dummy.
+        self.patch_embedding = ResidualBlock(
+            in_channels=2 * (input_patch_size + output_patch_size),
+            out_channels=channels,
+            **factory_kwargs,
+        )
+        self.icl_block = ICLBlock(
+            channels=channels,
+            out_channels=output_patch_size * num_quantiles,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            **factory_kwargs,
+        )
 
 
 def expand_query(x_context: TableSchema, x_query: TableTensor) -> TableTensor:
