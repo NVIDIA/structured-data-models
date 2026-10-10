@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from itertools import product
 from typing import Any, ClassVar, cast
@@ -34,6 +35,7 @@ from sdm.models.timesfm3.block import ResidualBlock
 from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
 from sdm.models.timesfm3.util import (
+    crossfade_patches,
     gather_future_patches,
     get_running_stats,
     revin,
@@ -271,65 +273,79 @@ class _TimesFM3(torch.nn.Module):
             **factory_kwargs,
         )
 
-    def _preprocess(
+    def forward(
         self,
-        x: Tensor,  # [..., V, N, P]
-        mask: Tensor,  # [..., V, N, P]
-        context_only: Tensor,  # [..., V, N]
-    ) -> tuple[Tensor, Tensor, Tensor, tuple[Tensor, Tensor, Tensor]]:
-        """Embed each patch using its own values and available horizon values.
+        x_context: Tensor,  # [..., R_train, C]
+        x_query: Tensor,  # [..., R_test, C]
+        x_context_only: Tensor,  # [..., R_train, *]
+        y: Tensor,  # [..., R_train, *]
+    ) -> Tensor:  # [..., R_test, out_channels or num_classes]
 
-        The horizon contains the next ``num_horizon_patches`` patches.
-        Horizon values are hidden for targets and past-only covariates.
+        *B, R_test, C = x_query.size()
+        *_, R_train, C_only = x_context_only.size()
+        P = self.input_patch_size
+        O = self.output_patch_size
 
-        Args:
-            x: Patch values with shape ``[..., V, N, P]``, where ``V`` is the
-                number of variates, ``N`` the number of patches, and ``P``
-                the patch length.
-            mask: ``True`` for missing or padded values, with the same shape
-                as ``x``.
-            context_only: ``True`` for targets and past-only covariates, with
-                shape ``[..., V, N]``.
+        # Create patched input tensor:
+        left_pad = -R_train % P
+        mid = left_pad + R_train
+        right_pad = -R_test % P
 
-        Returns:
-            Patch embeddings, features ordered as
-            ``[x, horizon_x, mask, horizon_mask]``, flags for patches with
-            no available values, and running ``(count, mean, std)``.
-        """
-        # Compute statistics from values observed up to each patch
+        x = x_context.new_full(
+            (
+                *B,
+                x_query.size(-1) + x_context_only.size(-1) + y.size(-1),
+                left_pad + R_train + R_test + right_pad,
+            ),
+            fill_value=torch.nan,
+        )
+        x[..., :C, left_pad:mid] = x_context.transpose(-2, -1)
+        x[..., C : C + C_only, left_pad:mid] = x_context_only.transpose(-2, -1)
+        x[..., C + C_only :, left_pad:mid] = y.transpose(-2, -1)
+        x[..., :C, mid : mid + R_test] = x_query.transpose(-2, -1)
+        x = x.unflatten(-1, (-1, P))  # [..., C, N, P]
+
+        # Gather future patches and normalize:
+        mask = x.isnan()
+        x[mask] = 0.0
         count, mean, std = get_running_stats(x, mask)
 
-        # Gather the prediction patches and hide unavailable values
-        horizon_x, past_end = gather_future_patches(
-            x, self.num_horizon_patches
-        )
-        horizon_mask, _ = gather_future_patches(mask, self.num_horizon_patches)
-        horizon_mask.logical_or_(context_only[..., None])
-        horizon_mask.logical_or_(past_end)
-        empty_patch_mask = mask.all(dim=-1) & horizon_mask.all(dim=-1)
+        future_x, past_end = gather_future_patches(x, num_patches=O // P)
+        future_mask, _ = gather_future_patches(mask, num_patches=O // P)
+        future_mask |= past_end
+        # Exclude future information for context only features and targets:
+        future_mask[..., C:, :, :] = True
 
-        # Normalize values and clear masked positions
         x = revin(x, mean, std)
-        x.masked_fill_(mask, 0.0)
-        horizon_x = revin(horizon_x, mean, std)
-        horizon_x.masked_fill_(horizon_mask, 0.0)
+        future_x = revin(future_x, mean, std)
+        x[mask] = 0.0
+        future_x[future_mask] = 0.0
+        x = torch.cat(
+            [x, future_x, mask.to(x.dtype), future_mask.to(x.dtype)],
+            dim=-1,
+        )  # [..., C, N, *]
 
-        # Pack current and horizon values, followed by their masks
-        P = x.size(-1)
-        value_width = P + horizon_x.size(-1)
-        patch_features = x.new_empty(
-            (*x.shape[:-1], 2 * value_width),
-            dtype=self.patch_embedding.res.weight.dtype,
-        )
-        patch_features[..., :P] = x
-        patch_features[..., P:value_width] = horizon_x
-        patch_features[..., value_width : value_width + P] = mask
-        patch_features[..., value_width + P :] = horizon_mask
+        # Run the model (assume no empty leading patches):
+        x = self.patch_embedding(x)  # [..., C, N, D]
+        out = self.icl_block(x)  # [..., C, N, O * Q]
+        out = out.unflatten(-1, (self.output_patch_size, -1))
+        out = revin(out, mean, std, reverse=True)
 
-        # Embed each patch with a residual block
-        embeddings = self.patch_embedding(patch_features)
+        # Narrow target output patches:
+        first = mid // P - 1
+        overlap = min(2 * P, O) - P
+        num_readouts = max(math.ceil((R_test - overlap) / P), 1)
+        out = out[
+            ...,
+            C + C_only :,
+            first : first + num_readouts,
+            : min(2 * P, O),
+            :,
+        ]
 
-        return embeddings, patch_features, empty_patch_mask, (count, mean, std)
+        # Stitch overlapping predictions together:
+        out = crossfade_patches(out, step=P, dim=-3)
+        return out[..., :R_test, :].transpose(-3, -2)  # [..., R_test, *, Q]
 
 
 def expand_query(x_context: TableSchema, x_query: TableTensor) -> TableTensor:
