@@ -30,7 +30,7 @@ def update_running_stats(
 
     Args:
         count: Count of valid values with shape ``[..., C]``, where ``C`` is
-            the number of channels.
+            the number of columns.
         mean: Running mean with shape ``[..., C]``.
         std: Running standard deviation with shape ``[..., C]``.
         x: New input with shape ``[..., C, P]``, where ``P`` is the patch size.
@@ -69,7 +69,7 @@ def get_running_stats(
 
     Args:
         x: Input with shape ``[..., C, N, P]``, where ``C`` is the number of
-            channels, ``N`` is the number of patches, and ``P`` is the patch
+            columns, ``N`` is the number of patches, and ``P`` is the patch
             size.
         mask: Invalid-value mask with shape ``[..., C, N, P]``.
 
