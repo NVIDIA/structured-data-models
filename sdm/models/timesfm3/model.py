@@ -31,7 +31,6 @@ from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
 from sdm.models.timesfm3.block import ResidualBlock
-from sdm.models.timesfm3.ckpt import remap_ckpt
 from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
 from sdm.models.timesfm3.util import (
@@ -246,9 +245,9 @@ class _TimesFM3(torch.nn.Module):
 
     def __init__(
         self,
-        input_patch_len: int = 32,
-        output_patch_len: int = 64,
-        quantiles: Sequence[float] | None = None,
+        input_patch_size: int = 32,
+        output_patch_size: int = 64,
+        num_quantiles: int = 9,
         channels: int = 1280,
         num_layers: int = 20,
         num_heads: int = 16,
@@ -256,29 +255,21 @@ class _TimesFM3(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        self.input_patch_len = input_patch_len
-        self.output_patch_len = output_patch_len
+        self.input_patch_len = input_patch_size
+        self.output_patch_len = output_patch_size
         self.num_horizon_patches = output_patch_len // input_patch_len
 
-        if quantiles is None:
-            quantiles = tuple(i / 10 for i in range(1, 10))
-        self.quantiles = tuple(quantiles)
-
         self.patch_embedding = ResidualBlock(
-            in_channels=2 * (input_patch_len + output_patch_len),
+            in_channels=2 * (input_patch_size + output_patch_size),
             out_channels=channels,
-            bias=False,
-            device=device,
-            dtype=dtype,
+            **factory_kwargs,
         )
-
         self.icl_block = ICLBlock(
             channels=channels,
-            out_channels=output_patch_len * len(self.quantiles),
+            out_channels=output_patch_size * num_quantiles,
             num_layers=num_layers,
             num_heads=num_heads,
-            device=device,
-            dtype=dtype,
+            **factory_kwargs,
         )
 
     def _preprocess(
