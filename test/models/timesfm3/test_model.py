@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from sdm import TableTensor
+from sdm import Stype, TableTensor
 from sdm.models.timesfm3 import TimesFM3
 from sdm.models.timesfm3.model import _TimesFM3
 from sdm.testing import withCUDA
@@ -36,8 +36,10 @@ def test_forward() -> None:
     assert "y3__q90" in out.columns["numerical"]
 
     model.fit(x_context, y_context)
-    out = model.predict(x_query)
-    assert out.allclose(model.predict(x_query))
+    prediction = model.predict(x_query)
+    assert out.allclose(prediction)
+    assert prediction.allclose(model.predict(x_query))
+    assert prediction.columns[Stype.id] == ()
 
 
 @withCUDA

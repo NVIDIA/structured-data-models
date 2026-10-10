@@ -126,6 +126,7 @@ PROCESSOR_CASES = (
         sp.QuantileTransform(n_quantiles=4, subsample=None),
     ),
     ProcessorCase(sp.Standardize()),
+    ProcessorCase(sp.LinearDetrend("id_0")),
     ProcessorCase(sp.RankGaussian()),
     ProcessorCase(sp.RobustScale()),
     ProcessorCase(sp.FlipSign()),
