@@ -143,8 +143,7 @@ class TimesFM3(ICLModel):
             filename="model.safetensors",
             license_prompt=None if accept_license else TIMESFM_LICENSE_PROMPT,
         )
-        ckpt = load_file(path, device=str(device))
-        self.model.load_state_dict(remap_ckpt(ckpt, self.model), assign=True)
+        ckpt = load_file(path, device=str(device))  # noqa: F841
 
         return self
 
@@ -241,8 +240,6 @@ class TimesFM3(ICLModel):
 
 
 class _TimesFM3(torch.nn.Module):
-    """Assemble the TimesFM-3 patch embedding and prediction layers."""
-
     def __init__(
         self,
         input_patch_size: int = 32,
@@ -255,9 +252,11 @@ class _TimesFM3(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        self.input_patch_len = input_patch_size
-        self.output_patch_len = output_patch_size
-        self.num_horizon_patches = output_patch_len // input_patch_len
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        assert output_patch_size % input_patch_size == 0
+        self.input_patch_size = input_patch_size
+        self.output_patch_size = output_patch_size
 
         self.patch_embedding = ResidualBlock(
             in_channels=2 * (input_patch_size + output_patch_size),
@@ -301,7 +300,9 @@ class _TimesFM3(torch.nn.Module):
         count, mean, std = get_running_stats(x, mask)
 
         # Gather the prediction patches and hide unavailable values
-        horizon_x, past_end = gather_future_patches(x, self.num_horizon_patches)
+        horizon_x, past_end = gather_future_patches(
+            x, self.num_horizon_patches
+        )
         horizon_mask, _ = gather_future_patches(mask, self.num_horizon_patches)
         horizon_mask.logical_or_(context_only[..., None])
         horizon_mask.logical_or_(past_end)
