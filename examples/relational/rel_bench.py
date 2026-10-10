@@ -212,7 +212,7 @@ for batch in tqdm(query.split(args.batch_size, -2)[: args.max_test_steps]):
     metric.update(pred, target)
 
 if task.task_type == relbench.base.TaskType.REGRESSION:
-    print(f"MAE: {metric.compute():.4f}")
+    print(f"nMAE: {metric.compute() / task.nmae_std:.4f}")
 elif task.task_type == relbench.base.TaskType.BINARY_CLASSIFICATION:
     print(f"AUROC: {metric.compute():.4f}")
 else:

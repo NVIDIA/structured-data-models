@@ -740,12 +740,15 @@ class TransformerBlock(torch.nn.Module):
             and torch.compiler.is_compiling()
             and not out.is_contiguous()
         ):
-            # Match eager out= rounding before the MLP.
             tmp = (attn_out + query).to(out.dtype)
-            out.copy_(tmp + self.mlp(tmp))
+            if self.mlp is not None:
+                tmp += self.mlp(tmp)
+            out.copy_(tmp)
         else:
             tmp = torch.add(attn_out, query, out=out)
-            out = torch.add(tmp, self.mlp(tmp), out=out)
+            if self.mlp is not None:
+                tmp = torch.add(tmp, self.mlp(tmp), out=out)
+            out = tmp
 
         return (out, kv) if return_key_value else out
 
