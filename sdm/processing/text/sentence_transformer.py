@@ -188,6 +188,7 @@ class _CuDFTokenizer:
         vocab_tokens = [
             token for token, _ in sorted(vocab.items(), key=lambda x: x[1])
         ]
+        assert model.max_seq_length is not None
         return cls(
             vocabulary=WordPieceVocabulary(cudf.Series(vocab_tokens)),
             normalizer=CharacterNormalizer(
@@ -197,7 +198,7 @@ class _CuDFTokenizer:
             cls_token_id=tokenizer.cls_token_id,
             sep_token_id=tokenizer.sep_token_id,
             pad_token_id=tokenizer.pad_token_id,
-            max_length=tokenizer.model_max_length,
+            max_length=model.max_seq_length,
             max_input_chars_per_word=wordpiece.max_input_chars_per_word,
         )
 
@@ -392,6 +393,10 @@ class SentenceTransformer(Processor):
             Adjusting the batch size can significantly improve processing
             speed. The optimal value depends on your hardware, model size,
             precision, and input length.
+        max_seq_length: Maximum number of tokens per text, including
+            special tokens. Longer inputs are truncated. When omitted,
+            the model's own limit is used, and a larger value is not
+            raised above that limit.
     """
 
     requires_fit = False
@@ -402,12 +407,20 @@ class SentenceTransformer(Processor):
         model_name: str,
         *,
         batch_size: int = 32,
+        max_seq_length: int | None = None,
     ) -> None:
         super().__init__()
         import sentence_transformers
 
         self.batch_size = batch_size
         model = sentence_transformers.SentenceTransformer(model_name)
+        if max_seq_length is not None:
+            model_max_seq_length = model.max_seq_length
+            assert model_max_seq_length is not None
+            model.max_seq_length = min(
+                max_seq_length,
+                model_max_seq_length,
+            )
         embedding_dim = model.get_embedding_dimension()
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim
