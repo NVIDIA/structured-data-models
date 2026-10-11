@@ -57,7 +57,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
     #: Whether this model supports multi-target predictions.
     supports_multi_target: ClassVar[bool]
 
-    #: Whether this model supports features available only in context.
+    #: Whether this model supports features available only in the context.
     supports_context_only_features: ClassVar[bool]
 
     #: Whether this model supports additional related context.
