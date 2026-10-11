@@ -10,7 +10,6 @@ import torch
 from torch import Tensor
 
 from sdm import (
-    EnsembleTable,
     Recipe,
     RelatedTables,
     Stype,
@@ -98,9 +97,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def forward(
         self,
-        x_context: Tensor | TableTensor | EnsembleTable,  # [..., R_context, D]
-        y_context: Tensor | TableTensor | EnsembleTable,  # [..., R_context, 1]
-        x_query: Tensor | TableTensor | EnsembleTable,  # [..., R_query, D]
+        x_context: Tensor | TableTensor,  # [..., R_context, D]
+        y_context: Tensor | TableTensor,  # [..., R_context, 1]
+        x_query: Tensor | TableTensor,  # [..., R_query, D]
         related_context_tables: RelatedTables | None = None,
         related_query_tables: RelatedTables | None = None,
         *,
@@ -208,8 +207,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def fit(
         self,
-        x: Tensor | TableTensor | EnsembleTable,  # [..., R, D]
-        y: Tensor | TableTensor | EnsembleTable,  # [..., R, 1]
+        x: Tensor | TableTensor,  # [..., R, D]
+        y: Tensor | TableTensor,  # [..., R, 1]
         related_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
@@ -333,7 +332,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
 
     def predict(
         self,
-        x: Tensor | TableTensor | EnsembleTable,  # [..., R, D]
+        x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
         *,
         callbacks: Sequence[Callback] | None = None,

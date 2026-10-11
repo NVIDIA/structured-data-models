@@ -11,7 +11,6 @@ import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
-    EnsembleTable,
     RelatedTables,
     Stype,
     TableTensor,
@@ -776,120 +775,43 @@ def test_estimator_batching_groups_by_layout_not_names(
 ) -> None:
     # Same positional layout can share a call even when column names differ.
     model = _ClassFrequencyModel()
-    tables = [
-        TableTensor(
-            columns={Stype.numerical: ("a", "b")},
-            numerical=torch.randn(3, 2),
-        ),
-        TableTensor(
-            columns={Stype.numerical: columns},
-            numerical=torch.randn(3, len(columns)),
-        ),
-    ]
-    x = EnsembleTable.from_tables(tables=tables, member_table_ids=(0, 1))
+    x = TableTensor.from_tensor(torch.randn(2, 3, 3), columns=("a", "b", "c"))
     y = TableTensor(
         categorical=CategoricalTensor(
-            code=torch.tensor([[0], [1], [0]]),
+            code=torch.tensor([0, 1, 0, 0, 1, 0]).view(2, 3, 1),
             categories=(torch.tensor([10, 20]),),
         ),
     )
-    x_query = EnsembleTable.from_tables(
-        tables=[table[:1] for table in tables],
-        member_table_ids=(0, 1),
+    recipe = sp.Recipe(
+        features=sp.Choice(
+            lambda table: table.select_columns(("a", "b")),
+            lambda table: table.select_columns(columns),
+            method="round_robin",
+        ),
     )
 
-    expected = model(x, y, x_query, num_estimators=2, estimator_batch_size=1)
+    expected = model(
+        x_context=x,
+        y_context=y,
+        x_query=x,
+        recipe=recipe,
+        estimator_batch_size=1,
+    )
     model.num_calls = 0
-    out = model(x, y, x_query, num_estimators=2, estimator_batch_size=None)
+    out = model(
+        x_context=x,
+        y_context=y,
+        x_query=x,
+        recipe=recipe,
+        estimator_batch_size=None,
+    )
     torch.testing.assert_close(out.numerical, expected.numerical)
     assert model.num_calls == num_calls
 
-    model.fit(x, y, num_estimators=2, estimator_batch_size=None)
-    torch.testing.assert_close(
-        model.predict(x_query).numerical, expected.numerical
-    )
-
-
-def test_estimator_batching_requires_shared_classes() -> None:
-    model = _ClassFrequencyModel()
-    x = torch.randn(3, 2)
-    y = EnsembleTable.from_tables(
-        tables=[
-            TableTensor(
-                categorical=CategoricalTensor(
-                    code=torch.tensor([[0], [1], [0]]),
-                    categories=(torch.tensor(categories),),
-                ),
-            )
-            for categories in ([10, 20], [10, 30])
-        ],
-        member_table_ids=(0, 1),
-    )
-    for estimator_batch_size in (1, None):
-        with pytest.raises(ValueError, match="same set of classes"):
-            model(
-                x,
-                y,
-                x,
-                num_estimators=2,
-                estimator_batch_size=estimator_batch_size,
-            )
-
-
-@pytest.mark.parametrize("estimator_batch_size", [1, None])
-def test_estimator_batching_requires_matching_query_schema(
-    estimator_batch_size: int | None,
-) -> None:
-    model = _RecordingModel()
-    context = TableTensor(
-        columns={Stype.numerical: ("a", "b")},
-        numerical=torch.ones(3, 2),
-    )
-    x = EnsembleTable.from_tables(
-        tables=[
-            context,
-            TableTensor(
-                columns={Stype.numerical: ("b", "a")},
-                numerical=torch.ones(3, 2),
-            ),
-        ],
-        member_table_ids=(0, 1),
-    )
-    y = torch.zeros(2, 3, 1)
-    query = EnsembleTable.from_tables(
-        tables=[context[:1]],
-        member_table_ids=(0, 0),
-    )
-    with pytest.raises(ValueError, match="share the same schema"):
-        model(x, y, query, estimator_batch_size=estimator_batch_size)
-
-
-@pytest.mark.parametrize("change", ["category_counts", "dtype"])
-def test_estimator_batching_separates_mismatched_layouts(
-    change: str,
-) -> None:
-    def table(i: int) -> TableTensor:
-        if change == "dtype":
-            dtype = (torch.float32, torch.float64)[i]
-            return TableTensor(numerical=torch.ones(3, 2, dtype=dtype))
-        return TableTensor(
-            categorical=CategoricalTensor(
-                code=torch.zeros(3, 1, dtype=torch.long),
-                categories=(torch.arange(2 + i),),
-            ),
-        )
-
-    model = _RecordingModel()
-    x = EnsembleTable.from_tables(
-        tables=[table(0), table(1)],
-        member_table_ids=(0, 1),
-    )
-
-    model(
-        x_context=x,
-        y_context=torch.zeros(2, 3, 1),
-        x_query=x,
+    model.fit(
+        x=x,
+        y=y,
+        recipe=recipe,
         estimator_batch_size=None,
     )
-
-    assert len(model.calls) == 2
+    torch.testing.assert_close(model.predict(x).numerical, expected.numerical)

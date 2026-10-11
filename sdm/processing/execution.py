@@ -54,8 +54,8 @@ class RecipeExecution:
 
     def fit_transform(
         self,
-        x: Tensor | TableTensor | EnsembleTable,
-        y: Tensor | TableTensor | EnsembleTable,
+        x: Tensor | TableTensor,
+        y: Tensor | TableTensor,
         related_tables: RelatedTables | None,
         *,
         num_members: int | None = None,
@@ -65,7 +65,7 @@ class RecipeExecution:
         """Fit and transform context data."""
         # Transform target first to be able to resolve task type. Inverse
         # target transforms require distinct member assignment:
-        y = _to_ensemble_table(y, num_members, expand=True)
+        y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
         y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
 
         self._num_estimators = num_members
@@ -148,7 +148,7 @@ class RecipeExecution:
             x = x.drop_columns(context_only_columns)
 
         inputs = _to_ensemble_table(x, num_members)
-        x = self.recipe.features.fit_transform_ensemble(
+        x: EnsembleTable = self.recipe.features.fit_transform_ensemble(
             inputs,
             generator=generator,
         )
@@ -185,11 +185,11 @@ class RecipeExecution:
 
     def transform(
         self,
-        x: Tensor | TableTensor | EnsembleTable,
+        x: Tensor | TableTensor,
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
-        x = _to_ensemble_table(x, self._num_estimators)
+        x: EnsembleTable = _to_ensemble_table(x, self._num_estimators)
         x = self.recipe.features.transform_ensemble(x)
         if len(x) != self.num_members:
             raise ValueError(
