@@ -63,14 +63,11 @@ class RecipeExecution:
         """Fit and transform context data."""
         # Transform target first to be able to resolve task type. Inverse
         # target transforms require distinct member assignment:
-        targets = _to_ensemble_table(y, num_members, expand=True)
-        targets = self.recipe.target.fit_transform_ensemble(
-            targets,
-            generator=generator,
-        )
+        y = _to_ensemble_table(y, num_members, expand=True)
+        y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
 
         self._num_estimators = num_members
-        self._y_locations = targets._locations
+        self._y_locations = y._locations
 
         task_dispatchers = tuple(
             module
@@ -79,20 +76,18 @@ class RecipeExecution:
             if isinstance(module, sp.TaskDispatch)
         )
         if len(task_dispatchers) > 0:
-            if any(group.size(-1) != 1 for group in targets._iter_groups()):
+            if any(group.size(-1) != 1 for group in y._iter_groups()):
                 raise ValueError(
                     "Expected the transformed target to contain exactly one "
                     "column"
                 )
 
             if all(
-                group.numerical.size(-1) == 1
-                for group in targets._iter_groups()
+                group.numerical.size(-1) == 1 for group in y._iter_groups()
             ):
                 task = "regression"
             elif all(
-                group.categorical.size(-1) == 1
-                for group in targets._iter_groups()
+                group.categorical.size(-1) == 1 for group in y._iter_groups()
             ):
                 task = "classification"
             else:
@@ -132,11 +127,11 @@ class RecipeExecution:
                 module._route = "task"
 
         inputs = _to_ensemble_table(x, num_members)
-        features = self.recipe.features.fit_transform_ensemble(
+        x = self.recipe.features.fit_transform_ensemble(
             inputs,
             generator=generator,
         )
-        if len(features) != self.num_members:
+        if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
             )
@@ -155,8 +150,8 @@ class RecipeExecution:
                 )
             members.append(
                 MemberContext(
-                    x=features[member_id],
-                    y=targets[member_id],
+                    x=x[member_id],
+                    y=y[member_id],
                     related_tables=related_tables_i,
                     input_stypes=inputs[member_id].stypes,
                 )
@@ -170,9 +165,9 @@ class RecipeExecution:
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
-        inputs = _to_ensemble_table(x, self._num_estimators)
-        features = self.recipe.features.transform_ensemble(inputs)
-        if len(features) != self.num_members:
+        x = _to_ensemble_table(x, self._num_estimators)
+        x = self.recipe.features.transform_ensemble(x)
+        if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
             )
@@ -213,7 +208,7 @@ class RecipeExecution:
                 )
             members.append(
                 MemberQuery(
-                    x=features[member_id],
+                    x=x[member_id],
                     related_tables=related_tables_i,
                 )
             )
