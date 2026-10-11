@@ -115,9 +115,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         Args:
             x_context: The feature tensor of in-context examples with shape
                 ``[..., R_context, D]`` with ``R_context`` rows and ``D``
-                columns. For models supporting context-only columns,
-                :class:`~sdm.TableTensor` columns absent from ``x_query`` are
-                processed independently when both inputs are table tensors.
+                columns.
             y_context: The targets of in-context examples with shape
                 ``[..., R_context, 1]``.
             x_query: The feature tensor of query examples with shape
@@ -149,6 +147,16 @@ class ICLModel(torch.nn.Module, abc.ABC):
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
+        context_only_columns = None
+        if self.supports_context_only_columns:
+            query_columns = x_query.column_names
+            context_only_columns = tuple(
+                column
+                for columns in x_context.columns.values()
+                for column in columns
+                if column not in query_columns
+            )
+
         if (related_context_tables is None) != (related_query_tables is None):
             raise ValueError(
                 "Expected 'related_context_tables' and 'related_query_tables' "
@@ -164,20 +172,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
-        context_only_columns = None
-        if (
-            self.supports_context_only_columns
-            and isinstance(x_context, TableTensor)
-            and isinstance(x_query, TableTensor)
-        ):
-            if not x_query.column_names.issubset(x_context.column_names):
-                raise ValueError(
-                    "Expected query features to be a subset of context "
-                    "features"
-                )
-            context_only_columns = tuple(
-                x_context.column_names - x_query.column_names
-            )
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
             inference_mode("no_grad" if requires_grad else "inference"),
@@ -544,6 +538,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
     def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
+        x_context_only: TableTensor | None,  # [..., R_context, D_only]
         y_context: TableTensor | None,  # [..., R_context, Y]
         x_query: TableTensor | None,  # [..., R_query, D]
         related_context_tables: RelatedTables[TableTensor] | None,
@@ -551,7 +546,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         cache: Cache | None,
         generator: torch.Generator | None,
         *,
-        x_context_only: TableTensor | None,
         categorical_mask: Tensor,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
@@ -565,11 +559,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
         Args:
             x_context: The feature tensor of in-context examples, or ``None``
                 when replaying a cache.
+            x_context_only: Features available only in context, or ``None``
+                when absent or replaying a cache.
             y_context: The targets of in-context examples, or ``None`` when
                 replaying a cache.
-            x_context_only: Features available only in context, or ``None``
-                when absent or replaying a cache. Models record any required
-                context-only state in ``cache`` during fitting.
             x_query: The feature tensor of query examples, or ``None`` when
                 recording a cache.
             related_context_tables: Related context for in-context examples.
