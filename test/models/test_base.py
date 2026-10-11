@@ -775,14 +775,13 @@ def test_estimator_batching_groups_by_layout_not_names(
 ) -> None:
     # Same positional layout can share a call even when column names differ.
     model = _ClassFrequencyModel()
-    x = TableTensor.from_tensor(torch.randn(3, 3), columns=("a", "b", "c"))
+    x = TableTensor.from_tensor(torch.randn(2, 3, 3), columns=("a", "b", "c"))
     y = TableTensor(
         categorical=CategoricalTensor(
-            code=torch.tensor([[0], [1], [0]]),
+            code=torch.tensor([0, 1, 0, 0, 1, 0]).view(2, 3, 1),
             categories=(torch.tensor([10, 20]),),
         ),
     )
-    x_query = x[:1]
     recipe = sp.Recipe(
         features=sp.Choice(
             lambda table: table.select_columns(("a", "b")),
@@ -794,18 +793,16 @@ def test_estimator_batching_groups_by_layout_not_names(
     expected = model(
         x_context=x,
         y_context=y,
-        x_query=x_query,
+        x_query=x,
         recipe=recipe,
-        num_estimators=2,
         estimator_batch_size=1,
     )
     model.num_calls = 0
     out = model(
         x_context=x,
         y_context=y,
-        x_query=x_query,
+        x_query=x,
         recipe=recipe,
-        num_estimators=2,
         estimator_batch_size=None,
     )
     torch.testing.assert_close(out.numerical, expected.numerical)
@@ -815,9 +812,6 @@ def test_estimator_batching_groups_by_layout_not_names(
         x=x,
         y=y,
         recipe=recipe,
-        num_estimators=2,
         estimator_batch_size=None,
     )
-    torch.testing.assert_close(
-        model.predict(x_query).numerical, expected.numerical
-    )
+    torch.testing.assert_close(model.predict(x).numerical, expected.numerical)
