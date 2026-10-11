@@ -6,7 +6,7 @@
    :members:
    :show-inheritance:
 {%- if objname != "ICLModel" %}
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_features, supports_related_tables
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables
 {%- endif %}
 
 {% if objname != "ICLModel" %}
@@ -30,8 +30,8 @@ Capabilities
        {%- endfor %}
    * - **Multi-Target Support**
      - {{ "✅" if cls.supports_multi_target else "❌" }}
-   * - **Context-only Feature Support**
-     - {{ "✅" if cls.supports_context_only_features else "❌" }}
+   * - **Context-only Column Support**
+     - {{ "✅" if cls.supports_context_only_columns else "❌" }}
    * - **Related Table Support**
      - {{ "✅" if cls.supports_related_tables else "❌" }}
 

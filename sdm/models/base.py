@@ -56,8 +56,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
     #: Whether this model supports multi-target predictions.
     supports_multi_target: ClassVar[bool]
 
-    #: Whether this model supports features available only in the context.
-    supports_context_only_features: ClassVar[bool]
+    #: Whether this model supports columns available only in the context.
+    supports_context_only_columns: ClassVar[bool]
 
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
@@ -115,7 +115,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
         Args:
             x_context: The feature tensor of in-context examples with shape
                 ``[..., R_context, D]`` with ``R_context`` rows and ``D``
-                columns.
+                columns. For models supporting context-only columns,
+                :class:`~sdm.TableTensor` columns absent from ``x_query`` are
+                processed independently when both inputs are table tensors.
             y_context: The targets of in-context examples with shape
                 ``[..., R_context, 1]``.
             x_query: The feature tensor of query examples with shape
@@ -162,6 +164,20 @@ class ICLModel(torch.nn.Module, abc.ABC):
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
+        context_only_columns = None
+        if (
+            self.supports_context_only_columns
+            and isinstance(x_context, TableTensor)
+            and isinstance(x_query, TableTensor)
+        ):
+            if not x_query.column_names.issubset(x_context.column_names):
+                raise ValueError(
+                    "Expected query features to be a subset of context "
+                    "features"
+                )
+            context_only_columns = tuple(
+                x_context.column_names - x_query.column_names
+            )
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
             inference_mode("no_grad" if requires_grad else "inference"),
@@ -171,6 +187,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 y=y_context,
                 related_tables=related_context_tables,
                 num_members=num_estimators,
+                context_only_columns=context_only_columns,
                 generator=generator,
             )
         with (
@@ -213,6 +230,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int | None = None,
+        context_only_columns: Sequence[str] | None = None,
         estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
@@ -235,6 +253,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 used as the estimator dimension, allowing input data to be
                 customized per estimator (*e.g.*, different in-context examples
                 per estimator).
+            context_only_columns: Feature column names available only in
+                context and omitted from prediction inputs. Requires a
+                :class:`~sdm.TableTensor` input and support for context-only
+                columns.
             estimator_batch_size: Maximum number of consecutive estimators run
                 through the model in one call. ``1`` (default) runs estimators
                 one by one; ``None`` batches as many as possible. Estimators
@@ -249,6 +271,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
         """
         callbacks = () if callbacks is None else callbacks
 
+        if context_only_columns and not self.supports_context_only_columns:
+            raise ValueError(
+                f"{self.__class__.__name__!r} does not support context-only "
+                "columns"
+            )
         self.clear()
 
         recipe_execution = RecipeExecution(
@@ -263,6 +290,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 y=y,
                 related_tables=related_tables,
                 num_members=num_estimators,
+                context_only_columns=context_only_columns,
                 generator=generator,
             )
 
@@ -304,6 +332,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 self._forward(
                     x_context=context.x,
                     y_context=context.y,
+                    x_context_only=context.x_context_only,
                     x_query=None,
                     related_context_tables=context.related_tables,
                     related_query_tables=None,
@@ -522,6 +551,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         cache: Cache | None,
         generator: torch.Generator | None,
         *,
+        x_context_only: TableTensor | None,
         categorical_mask: Tensor,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
@@ -537,6 +567,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 when replaying a cache.
             y_context: The targets of in-context examples, or ``None`` when
                 replaying a cache.
+            x_context_only: Features available only in context, or ``None``
+                when absent or replaying a cache. Models record any required
+                context-only state in ``cache`` during fitting.
             x_query: The feature tensor of query examples, or ``None`` when
                 recording a cache.
             related_context_tables: Related context for in-context examples.
@@ -642,16 +675,25 @@ class ICLModel(torch.nn.Module, abc.ABC):
         callbacks: Sequence[Callback],
     ) -> MemberContext:
         for callback in callbacks:
-            x, y, related_tables = callback.on_context_preprocessing_end(
-                self,
-                context.x,
-                context.y,
-                context.related_tables,
+            x, y, x_context_only, related_tables = (
+                callback.on_context_preprocessing_end(
+                    model=self,
+                    x=context.x,
+                    y=context.y,
+                    x_context_only=context.x_context_only,
+                    related_tables=context.related_tables,
+                )
             )
-            context = context._replace(x=x, y=y, related_tables=related_tables)
+            context = context._replace(
+                x=x,
+                y=y,
+                x_context_only=x_context_only,
+                related_tables=related_tables,
+            )
         self._validate_context(
             x=context.x,
             y=context.y,
+            x_context_only=context.x_context_only,
             related_tables=context.related_tables,
         )
         return context
@@ -699,6 +741,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
             out = self._forward(
                 x_context=None if context is None else context.x,
                 y_context=None if context is None else context.y,
+                x_context_only=None
+                if context is None
+                else context.x_context_only,
                 x_query=query.x,
                 related_context_tables=(
                     None if context is None else context.related_tables
@@ -719,6 +764,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         self,
         x: TableTensor,
         y: TableTensor,
+        x_context_only: TableTensor | None,
         related_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
@@ -733,7 +779,15 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 f"dimensions (got {tuple(x.size()[:-1])} and "
                 f"{tuple(y.size()[:-1])})"
             )
-        invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
+        feature_stypes = x.active_stypes
+        if x_context_only is not None:
+            if x_context_only.size()[:-1] != y.size()[:-1]:
+                raise ValueError(
+                    "Expected context-only features and targets to have "
+                    "matching row dimensions"
+                )
+            feature_stypes = feature_stypes | x_context_only.active_stypes
+        invalid = feature_stypes - self.supported_feature_stypes - {Stype.id}
         if len(invalid) > 0:
             stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
             warn_once(

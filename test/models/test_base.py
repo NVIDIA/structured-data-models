@@ -33,7 +33,7 @@ class _RecordingModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_multi_target = False
-    supports_context_only_features = False
+    supports_context_only_columns = False
     supports_related_tables = True
 
     def __init__(self) -> None:
@@ -50,6 +50,8 @@ class _RecordingModel(ICLModel):
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
         generator: torch.Generator | None,
+        *,
+        x_context_only: TableTensor | None,
         **kwargs: Any,
     ) -> TableTensor:
         self.calls.append(
@@ -75,7 +77,7 @@ class _ClassFrequencyModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.categorical})
     supports_multi_target = False
-    supports_context_only_features = False
+    supports_context_only_columns = False
     supports_related_tables = False
 
     def __init__(self) -> None:
@@ -122,8 +124,43 @@ class _UnsupportedRecordingModel(_RecordingModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_multi_target = False
-    supports_context_only_features = False
+    supports_context_only_columns = False
     supports_related_tables = False
+
+
+class _ContextOnlyModel(_RecordingModel):
+    supports_context_only_columns = True
+
+    def _forward(
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        *,
+        x_context_only: TableTensor | None,
+        **kwargs: Any,
+    ) -> TableTensor:
+        if cache is not None and cache.is_replaying:
+            offset = cast(torch.Tensor, cache["offset"])
+        else:
+            assert x_context is not None
+            offset = x_context.numerical[..., -1:, :].sum(-1, keepdim=True)
+            if x_context_only is not None:
+                offset = offset + x_context_only.numerical[..., -1:, :].sum(
+                    -1, keepdim=True
+                )
+            if cache is not None:
+                cache["offset"] = offset
+        table = x_query if x_query is not None else x_context
+        assert table is not None
+        return TableTensor(
+            columns={Stype.numerical: ("prediction",)},
+            numerical=table.numerical.sum(-1, keepdim=True) + offset,
+        )
 
 
 class MyCallback(Callback):
@@ -149,10 +186,13 @@ class MyCallback(Callback):
         model: torch.nn.Module,
         x: TableTensor,
         y: TableTensor,
+        x_context_only: TableTensor | None,
         related_tables: RelatedTables[TableTensor] | None,
-    ) -> tuple[TableTensor, TableTensor, RelatedTables | None]:
+    ) -> tuple[
+        TableTensor, TableTensor, TableTensor | None, RelatedTables | None
+    ]:
         self._record("context_preprocessing_end")
-        return x, y, related_tables
+        return x, y, x_context_only, related_tables
 
     def on_query_preprocessing_end(
         self,
@@ -815,3 +855,141 @@ def test_estimator_batching_groups_by_layout_not_names(
         estimator_batch_size=None,
     )
     torch.testing.assert_close(model.predict(x).numerical, expected.numerical)
+
+
+@pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
+@pytest.mark.parametrize("fitted", [False, True])
+def test_context_only_columns(
+    estimator_batch_size: int | None,
+    fitted: bool,
+) -> None:
+    x = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [[0.0, 10.0, 20.0], [2.0, 14.0, 26.0], [4.0, 18.0, 32.0]],
+                [[1.0, 20.0, 30.0], [4.0, 26.0, 34.0], [7.0, 32.0, 38.0]],
+            ]
+        ),
+        columns=["known", "past_a", "past_b"],
+    )
+    y = torch.zeros(2, 3, 1)
+    query = TableTensor.from_tensor(
+        torch.tensor([[[6.0], [8.0]], [[10.0], [13.0]]]),
+        columns=["known"],
+    )
+    model = _ContextOnlyModel()
+    recipe = sp.Recipe(features=sp.Standardize())
+    if fitted:
+        model.fit(
+            x=x,
+            y=y,
+            context_only_columns=["past_a", "past_b"],
+            recipe=recipe,
+            estimator_batch_size=estimator_batch_size,
+        )
+        out = model.predict(query)
+        torch.testing.assert_close(
+            out.numerical, model.predict(query).numerical
+        )
+    else:
+        out = model(
+            x_context=x,
+            y_context=y,
+            x_query=query,
+            recipe=recipe,
+            estimator_batch_size=estimator_batch_size,
+        )
+
+    expected = []
+    for i in range(2):
+        features = sp.Standardize().fit(x[i].select_columns(["known"]))
+        known = features.transform(x[i].select_columns(["known"]))
+        past = sp.Standardize().fit_transform(
+            x[i].select_columns(["past_a", "past_b"])
+        )
+        offset = known.numerical[-1:].sum(-1, keepdim=True)
+        offset = offset + past.numerical[-1:].sum(-1, keepdim=True)
+        expected.append(features.transform(query[i]).numerical + offset)
+    torch.testing.assert_close(out.numerical, torch.stack(expected))
+
+
+def test_context_only_columns_require_table_tensor() -> None:
+    model = _ContextOnlyModel()
+    with pytest.raises(TypeError, match="requires a 'TableTensor'"):
+        model.fit(
+            x=torch.zeros(3, 2),
+            y=torch.zeros(3, 1),
+            context_only_columns=["1"],
+        )
+
+
+def test_context_only_columns_require_model_support() -> None:
+    model = _RecordingModel()
+    with pytest.raises(ValueError, match="does not support context-only"):
+        model.fit(
+            x=TableTensor.from_tensor(torch.zeros(3, 2)),
+            y=torch.zeros(3, 1),
+            context_only_columns=["1"],
+        )
+
+
+def test_context_only_columns_require_query_subset() -> None:
+    model = _ContextOnlyModel()
+    with pytest.raises(ValueError, match="subset of context"):
+        model(
+            x_context=TableTensor.from_tensor(
+                torch.zeros(3, 1), columns=["a"]
+            ),
+            y_context=torch.zeros(3, 1),
+            x_query=TableTensor.from_tensor(torch.zeros(1, 1), columns=["b"]),
+        )
+
+
+@pytest.mark.parametrize("fitted", [False, True])
+def test_context_only_columns_reach_callbacks(fitted: bool) -> None:
+    class ScalePast(Callback):
+        def on_context_preprocessing_end(
+            self,
+            model: torch.nn.Module,
+            x: TableTensor,
+            y: TableTensor,
+            x_context_only: TableTensor | None,
+            related_tables: RelatedTables[TableTensor] | None,
+        ) -> tuple[
+            TableTensor,
+            TableTensor,
+            TableTensor | None,
+            RelatedTables[TableTensor] | None,
+        ]:
+            assert x_context_only is not None
+            return (
+                x,
+                y,
+                x_context_only.replace_blocks(
+                    numerical=x_context_only.numerical * 2
+                ),
+                related_tables,
+            )
+
+    x = TableTensor.from_tensor(
+        torch.arange(6.0).reshape(3, 2),
+        columns=["known", "past"],
+    )
+    query = TableTensor.from_tensor(torch.ones(1, 1), columns=["known"])
+    model = _ContextOnlyModel()
+    if fitted:
+        model.fit(
+            x=x,
+            y=torch.zeros(3, 1),
+            context_only_columns=["past"],
+            callbacks=[ScalePast()],
+        )
+        out = model.predict(query)
+    else:
+        out = model(
+            x_context=x,
+            y_context=torch.zeros(3, 1),
+            x_query=query,
+            callbacks=[ScalePast()],
+        )
+    torch.testing.assert_close(out.numerical, torch.tensor([[[15.0]]]))

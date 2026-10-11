@@ -20,14 +20,13 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
 from itertools import product
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import Recipe, RelatedTables, Stype, StypeLike, TableTensor, Task
+from sdm import Recipe, RelatedTables, Stype, TableTensor, Task
 from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
@@ -75,6 +74,8 @@ class TimesFM3(ICLModel):
     ``x_context`` contains historical covariates, ``y_context`` contains one or
     more past target series, and ``x_query`` contains future-known covariates
     (which must also be present in ``x_context``).
+    For :meth:`fit`, specify historical-only covariates with
+    ``context_only_columns`` and omit them from :meth:`predict` inputs.
 
     .. note::
         :class:`TimesFM` model weights are distributed under the
@@ -99,7 +100,7 @@ class TimesFM3(ICLModel):
         {Stype.numerical}
     )
     supports_multi_target: ClassVar[bool] = True
-    supports_context_only_features: ClassVar[bool] = True
+    supports_context_only_columns: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -150,59 +151,6 @@ class TimesFM3(ICLModel):
 
         return self
 
-    def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
-        x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
-        if not isinstance(x_context, TableTensor):
-            x_context = TableTensor.from_tensor(x_context)
-        kwargs["_x_context_schema"] = x_context.schema
-
-        x_query = kwargs["x_query"] if "x_query" in kwargs else args[2]
-        if not isinstance(x_query, TableTensor):
-            x_query = TableTensor.from_tensor(x_query)
-        kwargs["_x_query_schema"] = x_query.schema
-
-        x_query = expand_query(x_context.schema, x_query)
-
-        if "x_query" in kwargs:
-            kwargs["x_query"] = x_query
-        else:
-            args = (*args[:2], x_query, *args[3:])
-
-        return super().forward(*args, **kwargs)  # type: ignore
-
-    def fit(self, *args: Any, **kwargs: Any) -> None:
-        r""":meta private:"""  # noqa: D415
-        x = kwargs["x"] if "x" in kwargs else args[0]
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        kwargs["_x_context_schema"] = x.schema
-
-        super().fit(*args, **kwargs)
-
-    def predict(self, *args: Any, **kwargs: Any) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
-        if self._cache is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} not yet fitted. Make sure to "
-                f"call '{self.__class__.__name__}.fit()' before."
-            )
-
-        x = kwargs["x"] if "x" in kwargs else args[0]
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-
-        cached_kwargs = cast(dict[str, Any], self._cache["kwargs"])
-        cached_kwargs["_x_query_schema"] = x.schema
-        x = expand_query(cached_kwargs["_x_context_schema"], x)
-
-        if "x" in kwargs:
-            kwargs["x"] = x
-        else:
-            args = (x, *args[1:])
-
-        return super().predict(*args, **kwargs)
-
     def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
@@ -212,6 +160,8 @@ class TimesFM3(ICLModel):
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
+        *,
+        x_context_only: TableTensor | None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, Y * 9]
 
@@ -347,44 +297,3 @@ class _TimesFM3(torch.nn.Module):
         # Stitch overlapping predictions together:
         out = crossfade_patches(out, step=P, dim=-3)
         return out[..., :R_test, :].transpose(-3, -2)  # [..., R_test, *, Q]
-
-
-def expand_query(x_context: TableSchema, x_query: TableTensor) -> TableTensor:
-    """Expand the query by dummy past covariates."""
-    if x_context == x_query.schema:
-        return x_query
-
-    blocks: dict[Stype, Tensor] = {}
-    for stype, block in x_query.items():
-        query_columns = x_query.columns[stype]
-        context_columns = x_context.columns[stype]
-
-        if query_columns == context_columns:
-            blocks[stype] = block
-            continue
-
-        if not set(query_columns).issubset(context_columns):
-            raise ValueError(
-                "Expected query features to be a subset of context features"
-            )
-
-        if stype == Stype.numerical:
-            dummy = block.new_full((*x_query.size()[:-1], 1), float("NaN"))
-        else:
-            raise NotImplementedError
-
-        query_index = {column: i for i, column in enumerate(query_columns)}
-        blocks[stype] = torch.cat(
-            [
-                dummy
-                if (i := query_index.get(column)) is None
-                else block.narrow(-1, i, 1)
-                for column in context_columns
-            ],
-            dim=-1,
-        )
-
-    return TableTensor(
-        columns=cast(Mapping[StypeLike, Sequence[str]], x_context.columns),
-        **blocks,
-    )

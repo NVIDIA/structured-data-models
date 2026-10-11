@@ -19,8 +19,14 @@ class Callback:
         model: torch.nn.Module,
         x: TableTensor,
         y: TableTensor,
+        x_context_only: TableTensor | None,
         related_tables: RelatedTables[TableTensor] | None,
-    ) -> tuple[TableTensor, TableTensor, RelatedTables[TableTensor] | None]:
+    ) -> tuple[
+        TableTensor,
+        TableTensor,
+        TableTensor | None,
+        RelatedTables[TableTensor] | None,
+    ]:
         r"""Run after context preprocessing.
 
         Args:
@@ -28,9 +34,11 @@ class Callback:
             x: The feature tensor of in-context examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
             y: The targets of in-context examples with shape ``[..., R, 1]``.
+            x_context_only: Features available only in context with shape
+                ``[..., R, D_only]``, or ``None`` when absent.
             related_tables: Related context for in-context examples.
         """
-        return x, y, related_tables
+        return x, y, x_context_only, related_tables
 
     def on_query_preprocessing_end(
         self,

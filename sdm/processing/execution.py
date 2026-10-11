@@ -59,7 +59,7 @@ class RecipeExecution:
         related_tables: RelatedTables | None,
         *,
         num_members: int | None = None,
-        context_only_columns: Sequence[str] | Sequence[int] | None = None,
+        context_only_columns: Sequence[str] | None = None,
         generator: torch.Generator | None = None,
     ) -> tuple[MemberContext, ...]:
         """Fit and transform context data."""
@@ -131,8 +131,9 @@ class RecipeExecution:
         x_context_only: EnsembleTable | None = None
         if context_only_columns:
             if not isinstance(x, TableTensor):
-                x = TableTensor.from_tensor(cast(Tensor, x))
-            context_only_columns = [str(col) for col in context_only_columns]
+                raise TypeError(
+                    "'context_only_columns' requires a 'TableTensor' input"
+                )
             processor = copy.deepcopy(self.recipe.features)
             x_context_only = processor.fit_transform_ensemble(
                 _to_ensemble_table(
