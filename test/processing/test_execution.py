@@ -380,3 +380,71 @@ def test_member_context_exposes_input_stypes() -> None:
 
     assert context.input_stypes == x.stypes
     assert context.x.columns[Stype.numerical] == ("n", "c")
+    assert context.x_context_only is None
+
+
+@pytest.mark.parametrize("num_members", [1, 2])
+@pytest.mark.parametrize("named", [False, True])
+def test_context_only_features_use_independent_fit(
+    num_members: int,
+    named: bool,
+) -> None:
+    x = torch.tensor([[0.0], [2.0], [4.0]])
+    x_context_only = torch.tensor([[10.0, 20.0], [14.0, 26.0], [18.0, 32.0]])
+    query = torch.tensor([[6.0]])
+    execution = RecipeExecution(Recipe(features=sp.Standardize()))
+    columns = ["known", "past_a", "past_b"] if named else ["0", "1", "2"]
+    inputs = TableTensor.from_tensor(
+        torch.cat([x, x_context_only], dim=-1),
+        columns=columns,
+    )
+
+    contexts = execution.fit_transform(
+        x=inputs if named else inputs.numerical,
+        y=torch.zeros(3, 1),
+        related_tables=None,
+        context_only_columns=columns[1:] if named else [1, 2],
+        num_members=num_members,
+    )
+    query_table = TableTensor.from_tensor(query, columns=columns[:1])
+    queries = execution.transform(x=query_table, related_tables=None)
+
+    paired = inputs.select_columns(columns[:1])
+    features = sp.Standardize().fit(paired)
+    context_only = sp.Standardize().fit_transform(
+        inputs.select_columns(columns[1:])
+    )
+    expected_query = features.transform(query_table)
+    assert len(contexts) == len(queries) == num_members
+    for context, transformed_query in zip(contexts, queries):
+        assert context.x.equal(features.transform(paired))
+        assert context.x_context_only is not None
+        assert context.x_context_only.equal(context_only)
+        assert transformed_query.x.equal(expected_query)
+
+
+def test_context_only_columns_with_batched_inputs() -> None:
+    x = torch.arange(18.0).reshape(2, 3, 3)
+    y = torch.zeros(2, 3, 1)
+    execution = RecipeExecution(Recipe(features=sp.Standardize()))
+    contexts = execution.fit_transform(
+        x=x,
+        y=y,
+        related_tables=None,
+        context_only_columns=["1"],
+    )
+    query = TableTensor.from_tensor(x[:, :1, [0, 2]], columns=["0", "2"])
+    queries = execution.transform(x=query, related_tables=None)
+
+    assert len(contexts) == len(queries) == 2
+    for i, (context, transformed_query) in enumerate(zip(contexts, queries)):
+        table = TableTensor.from_tensor(x[i])
+        paired = table.drop_columns(["1"])
+        features = sp.Standardize().fit(paired)
+        assert context.x.equal(features.transform(paired))
+        assert context.y.equal(TableTensor.from_tensor(y[i]))
+        assert context.x_context_only is not None
+        assert context.x_context_only.equal(
+            sp.Standardize().fit_transform(table.select_columns(["1"]))
+        )
+        assert transformed_query.x.equal(features.transform(query[i]))

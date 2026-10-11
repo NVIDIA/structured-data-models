@@ -834,6 +834,11 @@ def _stack_context(members: Sequence[MemberContext]) -> MemberContext:
     return MemberContext(
         x=_stack([member.x for member in members]),
         y=_stack([member.y for member in members]),
+        x_context_only=None
+        if members[0].x_context_only is None
+        else _stack(
+            [cast(TableTensor, member.x_context_only) for member in members]
+        ),
         related_tables=None,
         input_stypes=members[0].input_stypes,
     )
@@ -875,6 +880,8 @@ def _batch_slices(
             if query is None
             else [context.x, context.y, query.x]
         )
+        if context.x_context_only is not None:
+            tables.append(context.x_context_only)
         classes = class_values[i]
         member_key = (
             tuple(

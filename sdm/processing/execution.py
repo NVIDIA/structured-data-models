@@ -20,6 +20,7 @@ class MemberContext(NamedTuple):
 
     x: TableTensor
     y: TableTensor
+    x_context_only: TableTensor | None
     related_tables: RelatedTables[TableTensor] | None
     #: Semantic types of the raw context columns before ``recipe.features``.
     input_stypes: Mapping[str, Stype]
@@ -58,6 +59,7 @@ class RecipeExecution:
         related_tables: RelatedTables | None,
         *,
         num_members: int | None = None,
+        context_only_columns: Sequence[str] | Sequence[int] | None = None,
         generator: torch.Generator | None = None,
     ) -> tuple[MemberContext, ...]:
         """Fit and transform context data."""
@@ -126,6 +128,25 @@ class RecipeExecution:
             if isinstance(module, sp.TableDispatch):
                 module._route = "task"
 
+        x_context_only: EnsembleTable | None = None
+        if context_only_columns:
+            if not isinstance(x, TableTensor):
+                x = TableTensor.from_tensor(cast(Tensor, x))
+            context_only_columns = [str(col) for col in context_only_columns]
+            processor = copy.deepcopy(self.recipe.features)
+            x_context_only = processor.fit_transform_ensemble(
+                _to_ensemble_table(
+                    x.select_columns(context_only_columns), num_members
+                ),
+                generator=generator,
+            )
+            if len(x_context_only) != self.num_members:
+                raise ValueError(
+                    "Expected inputs to map to the same number of "
+                    "ensemble members"
+                )
+            x = x.drop_columns(context_only_columns)
+
         inputs = _to_ensemble_table(x, num_members)
         x = self.recipe.features.fit_transform_ensemble(
             inputs,
@@ -152,6 +173,9 @@ class RecipeExecution:
                 MemberContext(
                     x=x[member_id],
                     y=y[member_id],
+                    x_context_only=x_context_only[member_id]
+                    if x_context_only is not None
+                    else None,
                     related_tables=related_tables_i,
                     input_stypes=inputs[member_id].stypes,
                 )
