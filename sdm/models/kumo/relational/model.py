@@ -310,7 +310,7 @@ class _KumoRelational(torch.nn.Module):
     ) -> Tensor:  # [..., R_query, *]
 
         num_classes: int | None = None  # Extract `y` as tensor:
-        if y_context is not None and y_context.categorical.size(-1) > 0:
+        if y_context is not None and y_context.categorical.code.size(-1) > 0:
             y = y_context.categorical.code.squeeze(-1)
             num_classes = len(y_context.categorical.categories[0])
         elif y_context is not None and y_context.numerical.size(-1) > 0:
