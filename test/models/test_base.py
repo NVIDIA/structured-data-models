@@ -34,6 +34,7 @@ class _RecordingModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_multi_target = False
+    supports_context_only_features = False
     supports_related_tables = True
 
     def __init__(self) -> None:
@@ -75,6 +76,7 @@ class _ClassFrequencyModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.categorical})
     supports_multi_target = False
+    supports_context_only_features = False
     supports_related_tables = False
 
     def __init__(self) -> None:
@@ -121,6 +123,7 @@ class _UnsupportedRecordingModel(_RecordingModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_multi_target = False
+    supports_context_only_features = False
     supports_related_tables = False
 
 

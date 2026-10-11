@@ -17,6 +17,7 @@ class _LinearModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical})
     supports_multi_target = False
+    supports_context_only_features = False
     supports_related_tables = True
 
     def __init__(self) -> None:

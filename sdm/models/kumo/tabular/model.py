@@ -109,6 +109,7 @@ class KumoTabular(ICLModel):
         {Stype.numerical, Stype.categorical}
     )
     supports_multi_target: ClassVar[bool] = False
+    supports_context_only_features: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(

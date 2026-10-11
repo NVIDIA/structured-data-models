@@ -99,6 +99,7 @@ class TimesFM3(ICLModel):
         {Stype.numerical}
     )
     supports_multi_target: ClassVar[bool] = True
+    supports_context_only_features: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
