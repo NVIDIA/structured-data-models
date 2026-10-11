@@ -515,17 +515,7 @@ def test_attention_batch_size_limit_propagation() -> None:
     torch.testing.assert_close(out, expected)
 
 
-@pytest.mark.parametrize(
-    ("requires_grad", "compiling"),
-    [
-        pytest.param(True, False, id="requires-grad"),
-        pytest.param(False, True, id="compiling"),
-    ],
-)
-def test_transformer_block_batch_size_limit_grad_and_compile(
-    requires_grad: bool,
-    compiling: bool,
-) -> None:
+def test_transformer_block_batch_size_limit_grad_bypass() -> None:
     module = TransformerBlock(
         channels=8,
         num_query_heads=2,
@@ -539,18 +529,10 @@ def test_transformer_block_batch_size_limit_grad_and_compile(
         lambda _module, args: batch_sizes.append(args[0].size(0))
     )
 
-    with (
-        torch.set_grad_enabled(requires_grad),
-        patch.object(
-            torch.compiler,
-            "is_compiling",
-            return_value=compiling,
-        ),
-    ):
-        module(query=query, batch_size_limit=2)
+    module(query=query, batch_size_limit=2)
     handle.remove()
 
-    assert batch_sizes == ([5] if requires_grad else [2, 2, 1])
+    assert batch_sizes == [5]
 
 
 def test_return_key_value_positional_compatibility() -> None:

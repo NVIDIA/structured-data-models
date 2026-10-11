@@ -138,8 +138,9 @@ class InducedTransformerBlock(torch.nn.Module):
                 projections for the final attention site alongside the output.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
-            chunk_memory_bytes: Pre-resolved memory budget for automatic
-                chunking. If omitted, the budget is read from the device.
+            chunk_memory_bytes: Pre-resolved CUDA memory budget for automatic
+                chunking. If omitted, eager execution reads the device budget
+                and compiled execution skips automatic chunking.
             out: The output tensor.
 
         Returns:
