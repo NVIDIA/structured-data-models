@@ -148,7 +148,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
         context_only_columns = None
-        if self.supports_context_only_columns:
+        if (
+            self.supports_context_only_columns
+            and isinstance(x_context, TableTensor)
+            and isinstance(x_query, TableTensor)
+        ):
             query_columns = x_query.column_names
             context_only_columns = tuple(
                 column
