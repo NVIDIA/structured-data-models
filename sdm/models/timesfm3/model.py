@@ -74,6 +74,11 @@ class TimesFM3(ICLModel):
     ``x_context`` contains historical covariates, ``y_context`` contains one or
     more past target series, and ``x_query`` contains future-known covariates
     (which must also be present in ``x_context``).
+    Historical-only covariates are columns present in ``x_context`` but absent
+    from ``x_query``. For :meth:`fit`, specify them with
+    ``context_only_columns`` and omit them from :meth:`predict` inputs.
+    Fitting stores the processed history; prediction recomputes the model for
+    the supplied future covariates.
 
     .. note::
         :class:`TimesFM` model weights are distributed under the
@@ -162,18 +167,44 @@ class TimesFM3(ICLModel):
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, Y * 9]
 
-        if y_context is not None:
-            columns = y_context.columns[Stype.numerical]
-        else:
-            assert cache is not None
+        if cache is not None and cache.is_replaying:
+            x = cast(Tensor, cache["x_context"])
+            y = cast(Tensor, cache["y_context"])
+            x_only = cast(Tensor, cache["x_context_only"])
             y_schema = cast(TableSchema, cache["y_schema"])
             columns = y_schema.columns[Stype.numerical]
-
-        if x_query is not None:
-            size = x_query.size()[:-1]
         else:
             assert x_context is not None
-            size = (*x_context.size()[:-2], 0)
+            assert y_context is not None
+            x = x_context.numerical
+            y = y_context.numerical
+            x_only = (
+                y.new_empty((*y.size()[:-1], 0))
+                if x_context_only is None
+                else x_context_only.numerical
+            )
+            columns = y_context.columns[Stype.numerical]
+
+        dtype = next(self.model.parameters()).dtype
+        recording = cache is not None and cache.is_recording
+        x = x.to(dtype=dtype, copy=recording)
+        y = y.to(dtype=dtype, copy=recording)
+        x_only = x_only.to(dtype=dtype, copy=recording)
+        if recording:
+            assert cache is not None
+            cache["x_context"] = x
+            cache["y_context"] = y
+            cache["x_context_only"] = x_only
+
+        if x_query is None:
+            out = y.new_empty((*y.size()[:-2], 0, y.size(-1) * 9))
+        else:
+            out = self.model(
+                x_context=x,
+                x_query=x_query.numerical.to(dtype=dtype),
+                x_context_only=x_only,
+                y=y,
+            ).flatten(-2)  # [..., R_query, Y * 9]
 
         return TableTensor(
             columns={
@@ -182,10 +213,7 @@ class TimesFM3(ICLModel):
                     for name, i in product(columns, range(10, 100, 10))
                 ]
             },
-            numerical=torch.zeros(
-                (*size, len(columns) * 9),
-                device=next(self.parameters()).device,
-            ),
+            numerical=out,
         )
 
 
@@ -227,7 +255,7 @@ class _TimesFM3(torch.nn.Module):
         x_query: Tensor,  # [..., R_test, C]
         x_context_only: Tensor,  # [..., R_train, *]
         y: Tensor,  # [..., R_train, *]
-    ) -> Tensor:  # [..., R_test, out_channels or num_classes]
+    ) -> Tensor:  # [..., R_test, Y, Q]
 
         *B, R_test, C = x_query.size()
         *_, R_train, C_only = x_context_only.size()
