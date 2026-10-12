@@ -89,6 +89,7 @@ class _ClassFrequencyModel(ICLModel):
         x_context: TableTensor | None,
         y_context: TableTensor | None,
         x_query: TableTensor | None,
+        x_context_only: TableTensor | None,
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,

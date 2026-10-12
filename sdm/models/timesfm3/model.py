@@ -74,8 +74,6 @@ class TimesFM3(ICLModel):
     ``x_context`` contains historical covariates, ``y_context`` contains one or
     more past target series, and ``x_query`` contains future-known covariates
     (which must also be present in ``x_context``).
-    For :meth:`fit`, specify historical-only covariates with
-    ``context_only_columns`` and omit them from :meth:`predict` inputs.
 
     .. note::
         :class:`TimesFM` model weights are distributed under the
