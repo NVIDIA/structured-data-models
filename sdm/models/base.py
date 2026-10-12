@@ -732,10 +732,10 @@ class ICLModel(torch.nn.Module, abc.ABC):
             out = self._forward(
                 x_context=None if context is None else context.x,
                 y_context=None if context is None else context.y,
+                x_query=query.x,
                 x_context_only=None
                 if context is None
                 else context.x_context_only,
-                x_query=query.x,
                 related_context_tables=(
                     None if context is None else context.related_tables
                 ),

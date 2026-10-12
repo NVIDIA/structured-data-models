@@ -156,12 +156,11 @@ class TimesFM3(ICLModel):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, Y]
         x_query: TableTensor | None,  # [..., R_query, D]
+        x_context_only: TableTensor | None,  # [..., R_context, D_only]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
-        *,
-        x_context_only: TableTensor | None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, Y * 9]
 
