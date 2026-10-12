@@ -189,21 +189,12 @@ class TimesFM3(ICLModel):
         if x_query is None:
             out = y.new_empty((*y.size()[:-2], 0, y.size(-1) * 9))
         else:
-            query = x_query.numerical
-            horizon = query.size(-2)
-            # Upstream rounds requests without future-known covariates before
-            # stitching, then crops the forecast to the requested horizon.
-            if query.size(-1) == 0:
-                padding = -horizon % self.model.output_patch_size
-                query = query.new_empty(
-                    (*query.size()[:-2], horizon + padding, 0)
-                )
             out = self.model(
                 x_context=x_context,
-                x_query=query,
+                x_query=x_query.numerical,
                 x_context_only=x_context_only,
                 y=y,
-            )[..., :horizon, :, :].flatten(-2)  # [..., R_query, Y * 9]
+            ).flatten(-2)  # [..., R_query, Y * 9]
 
         return TableTensor(
             columns={
@@ -263,11 +254,14 @@ class _TimesFM3(torch.nn.Module):
         *_, R_train, C_only = x_context_only.size()
         P = self.input_patch_size
         O = self.output_patch_size  # noqa E741
+        # Upstream rounds requests without future-known covariates before
+        # stitching, then crops the forecast to the requested horizon.
+        horizon = R_test + (-R_test % O) if C == 0 else R_test
 
         # Create patched input tensor:
         left_pad = -R_train % P
         mid = left_pad + R_train
-        right_pad = -R_test % P
+        right_pad = horizon - R_test + (-horizon % P)
 
         x = x_context.new_full(
             (
@@ -312,7 +306,7 @@ class _TimesFM3(torch.nn.Module):
         # Narrow target output patches:
         first = mid // P - 1
         overlap = min(2 * P, O) - P
-        num_readouts = max(math.ceil((R_test - overlap) / P), 1)
+        num_readouts = max(math.ceil((horizon - overlap) / P), 1)
         out = out[
             ...,
             C + C_only :,
