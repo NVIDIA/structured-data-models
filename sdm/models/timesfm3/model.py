@@ -254,8 +254,6 @@ class _TimesFM3(torch.nn.Module):
         *_, R_train, C_only = x_context_only.size()
         P = self.input_patch_size
         O = self.output_patch_size  # noqa E741
-        # Upstream rounds requests without future-known covariates before
-        # stitching, then crops the forecast to the requested horizon.
         horizon = R_test + (-R_test % O) if C == 0 else R_test
 
         # Create patched input tensor:
