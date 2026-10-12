@@ -37,9 +37,8 @@ from sdm.models.tabfm.row_embedding import RowEmbedding
 
 
 class TabFM(ICLModel):
-    r"""The tabular foundation model from `"Introducing TabFM: A Zero-shot
-    Foundation Model for Tabular Data" <https://research.google/blog/
-    introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
+    r"""The tabular foundation model from `"TabFM: A Zero-Shot Foundation Model
+    for Tabular Data" <https://arxiv.org/abs/2609.37959>`__.
 
     .. figure:: /images/tabfm_light.png
         :figclass: light-only
