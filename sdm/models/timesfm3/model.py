@@ -31,6 +31,7 @@ from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
 from sdm.models.timesfm3.block import ResidualBlock
+from sdm.models.timesfm3.ckpt import remap_ckpt
 from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
 from sdm.models.timesfm3.util import (
@@ -145,7 +146,9 @@ class TimesFM3(ICLModel):
             filename="model.safetensors",
             license_prompt=None if accept_license else TIMESFM_LICENSE_PROMPT,
         )
-        ckpt = load_file(path, device=str(device))  # noqa: F841
+        ckpt = load_file(path, device=str(device))
+        ckpt = remap_ckpt(ckpt)
+        self.model.load_state_dict(ckpt, assign=True)
 
         return self
 
@@ -251,11 +254,12 @@ class _TimesFM3(torch.nn.Module):
         *_, R_train, C_only = x_context_only.size()
         P = self.input_patch_size
         O = self.output_patch_size  # noqa E741
+        horizon = R_test + (-R_test % O) if C == 0 else R_test
 
         # Create patched input tensor:
         left_pad = -R_train % P
         mid = left_pad + R_train
-        right_pad = -R_test % P
+        right_pad = horizon - R_test + (-horizon % P)
 
         x = x_context.new_full(
             (
@@ -300,7 +304,7 @@ class _TimesFM3(torch.nn.Module):
         # Narrow target output patches:
         first = mid // P - 1
         overlap = min(2 * P, O) - P
-        num_readouts = max(math.ceil((R_test - overlap) / P), 1)
+        num_readouts = max(math.ceil((horizon - overlap) / P), 1)
         out = out[
             ...,
             C + C_only :,
