@@ -17,7 +17,7 @@ def test_fp8_dispatch(device: torch.device, channels: int, grad: bool) -> None:
         device
     ) not in {(8, 9), (9, 0), (12, 0)}:
         pytest.skip("FP8 dispatch requires Ada, Hopper, or RTX Blackwell")
-    x = torch.ones(1, 17, 2, channels, device=device, dtype=torch.float16)
+    x = torch.ones(1, 8193, 2, channels, device=device, dtype=torch.float16)
     with torch.set_grad_enabled(grad):
         result = fp8_attention(x, x, x)
         if device.type == "cpu" or grad or channels == 48:
