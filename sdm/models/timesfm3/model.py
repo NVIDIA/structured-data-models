@@ -146,7 +146,8 @@ class TimesFM3(ICLModel):
             filename="model.safetensors",
             license_prompt=None if accept_license else TIMESFM_LICENSE_PROMPT,
         )
-        ckpt = remap_ckpt(load_file(path, device=str(device)))
+        ckpt = load_file(path, device=str(device))
+        ckpt = remap_ckpt(ckpt)
         self.model.load_state_dict(ckpt, assign=True)
 
         return self

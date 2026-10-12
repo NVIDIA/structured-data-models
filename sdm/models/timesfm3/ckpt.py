@@ -5,12 +5,7 @@ import torch
 from torch import Tensor
 
 
-def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:
-    """Map upstream TimesFM3 weights to the SDM architecture.
-
-    Args:
-        ckpt: The upstream PyTorch checkpoint.
-    """
+def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:  # noqa: D103
     out = {
         "patch_embedding.mlp.0.weight": ckpt[
             "pre_transformer_resblock.hidden_layer.weight"

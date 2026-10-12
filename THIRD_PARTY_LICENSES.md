@@ -26,11 +26,9 @@ Its weights are not bundled with this project and may be downloaded only after t
 ## TimesFM 3.0
 
 - Source: https://github.com/google-research/timesfm
-- Source revision: [`e51928e27119cb17bebc005be2696b75e0a9e688`](https://github.com/google-research/timesfm/tree/e51928e27119cb17bebc005be2696b75e0a9e688)
 - Code license: Apache License 2.0
 - License terms: [`sdm/models/timesfm3/LICENSE`](sdm/models/timesfm3/LICENSE)
 - Optional pretrained weights: https://huggingface.co/google/timesfm-3.0-pytorch
-- Weights revision: [`43046b85ec22d584a13f8098c2ed39c889e129c2`](https://huggingface.co/google/timesfm-3.0-pytorch/tree/43046b85ec22d584a13f8098c2ed39c889e129c2)
 - Weights license: [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE)
 
 The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
