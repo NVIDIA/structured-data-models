@@ -14,6 +14,153 @@ from sdm import (
     TableTensor,
 )
 from sdm.processing.execution import RecipeExecution
+from sdm.testing import withCUDA
+
+
+class _SubtractPositions(sp.SeriesProcessor, sp.EnsembleInvertibleMixin):
+    handles_stypes = frozenset({Stype.numerical})
+    requires_fit = False
+
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        assert self._offset is not None
+        return ensemble_table.replace_groups(
+            [
+                group.replace_blocks(
+                    numerical=group.numerical
+                    - (
+                        torch.arange(group.size(-2), device=group.device)
+                        + self._offset
+                    ).unsqueeze(-1),
+                )
+                for group in ensemble_table._iter_groups()
+            ]
+        )
+
+    def _inverse_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        assert self._offset is not None
+        return ensemble_table.replace_groups(
+            [
+                group.replace_blocks(
+                    numerical=group.numerical
+                    + (
+                        torch.arange(group.size(-2), device=group.device)
+                        + self._offset
+                    ).unsqueeze(-1),
+                )
+                for group in ensemble_table._iter_groups()
+            ]
+        )
+
+
+@withCUDA
+@pytest.mark.parametrize("num_members", [1, 3])
+def test_series_positions_follow_fitted_context(
+    device: torch.device,
+    num_members: int,
+) -> None:
+    execution = RecipeExecution(
+        Recipe(
+            features=sp.Sequential(_SubtractPositions()),
+            target=sp.Sequential(_SubtractPositions()),
+            output=sp.AverageEstimators(),
+        )
+    )
+    for context_size in (3, 5):
+        x = TableTensor.from_tensor(
+            torch.zeros(context_size, 2, device=device),
+            columns=["x", "past"],
+        )
+        y = TableTensor.from_tensor(
+            torch.zeros(context_size, 1, device=device)
+        )
+        contexts = execution.fit_transform(
+            x=x,
+            y=y,
+            related_tables=None,
+            num_members=num_members,
+            context_only_columns=["past"],
+        )
+        expected = -torch.arange(context_size, device=device).unsqueeze(-1)
+        for context in contexts:
+            torch.testing.assert_close(context.x.numerical, expected.float())
+            torch.testing.assert_close(context.y.numerical, expected.float())
+            assert context.x_context_only is not None
+            torch.testing.assert_close(
+                context.x_context_only.numerical,
+                expected.float(),
+            )
+
+        for query_size in (2, 1, 2):
+            query = TableTensor.from_tensor(
+                torch.zeros(query_size, 1, device=device),
+                columns=["x"],
+            )
+            queries = execution.transform(x=query, related_tables=None)
+            positions = (
+                torch.arange(
+                    context_size,
+                    context_size + query_size,
+                    device=device,
+                )
+                .unsqueeze(-1)
+                .float()
+            )
+            for member in queries:
+                torch.testing.assert_close(member.x.numerical, -positions)
+            outputs = execution.inverse_transform_target(
+                [TableTensor.from_tensor(query.numerical)] * num_members,
+            )
+            for output in outputs:
+                torch.testing.assert_close(output.numerical, positions)
+
+
+@withCUDA
+def test_related_series_use_their_own_context_length(
+    device: torch.device,
+) -> None:
+    execution = RecipeExecution(
+        Recipe(
+            features=sp.TableDispatch(
+                task=_SubtractPositions(),
+                related=_SubtractPositions(),
+            )
+        )
+    )
+    context = TableTensor.from_tensor(torch.zeros(3, 1, device=device))
+    related_context = TableTensor.from_tensor(torch.zeros(7, 1, device=device))
+    execution.fit_transform(
+        x=context,
+        y=context,
+        related_tables=RelatedTables(
+            tables={"series": related_context},
+            relationships=[],
+            task_links=[],
+        ),
+    )
+    query = TableTensor.from_tensor(torch.zeros(2, 1, device=device))
+    (member,) = execution.transform(
+        x=query,
+        related_tables=RelatedTables(
+            tables={"series": query},
+            relationships=[],
+            task_links=[],
+        ),
+    )
+    torch.testing.assert_close(
+        member.x.numerical,
+        torch.tensor([[-3.0], [-4.0]], device=device),
+    )
+    assert member.related_tables is not None
+    torch.testing.assert_close(
+        member.related_tables.tables["series"].numerical,
+        torch.tensor([[-7.0], [-8.0]], device=device),
+    )
 
 
 def test_sequence_uses_batched_fit_states_for_shared_query() -> None:

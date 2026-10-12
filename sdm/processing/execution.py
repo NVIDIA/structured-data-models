@@ -66,7 +66,11 @@ class RecipeExecution:
         # Transform target first to be able to resolve task type. Inverse
         # target transforms require distinct member assignment:
         y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
+        _set_series_offset(self.recipe.target)
+        target_context = y
         y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
+        _set_series_offset(self.recipe.target, target_context)
+        _set_series_offset(self.recipe.output, target_context)
 
         self._num_estimators = num_members
         self._y_locations = y._locations
@@ -114,10 +118,12 @@ class RecipeExecution:
                 self._related_processors[name] = processor
                 ensemble_table = _to_ensemble_table(table, num_members)
                 self._related_locations[name] = ensemble_table._locations
+                _set_series_offset(processor)
                 related_ensembles[name] = processor.fit_transform_ensemble(
                     ensemble_table,
                     generator=generator,
                 )
+                _set_series_offset(processor, ensemble_table)
                 if len(related_ensembles[name]) != self.num_members:
                     raise ValueError(
                         "Expected inputs to map to the same number of "
@@ -127,6 +133,7 @@ class RecipeExecution:
         for module in self.recipe.features.modules():
             if isinstance(module, sp.TableDispatch):
                 module._route = "task"
+        _set_series_offset(self.recipe.features)
 
         x_context_only: EnsembleTable | None = None
         if context_only_columns:
@@ -152,6 +159,7 @@ class RecipeExecution:
             inputs,
             generator=generator,
         )
+        _set_series_offset(self.recipe.features, inputs)
         if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
@@ -295,6 +303,31 @@ class RecipeExecution:
             out = torch.stack(list(outputs), dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
+
+
+def _set_series_offset(
+    processor: EnsembleProcessor,
+    context: EnsembleTable | None = None,
+) -> None:
+    series_processors = tuple(
+        module
+        for module in processor.modules()
+        if isinstance(module, sp.SeriesProcessor)
+    )
+    if not series_processors:
+        return
+
+    offset = 0
+    if context is not None:
+        lengths = {group.size(-2) for group in context._iter_groups()}
+        if len(lengths) != 1:
+            raise ValueError(
+                "Series processors require equal context lengths across "
+                "ensemble members"
+            )
+        offset = lengths.pop()
+    for module in series_processors:
+        module._offset = offset
 
 
 def _align_to_fitted_groups(

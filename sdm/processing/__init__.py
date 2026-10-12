@@ -8,6 +8,7 @@ from sdm.processing.ensemble import (
     EnsembleProcessor,
     EnsembleInvertibleMixin,
 )
+from sdm.processing.series import SeriesProcessor
 from sdm.processing.common import (
     Identity,
     Callable,
@@ -53,7 +54,9 @@ from sdm.processing.recipe import Recipe
 __all__ = [
     "Processor",
     "InvertibleMixin",
+    "EnsembleProcessor",
     "EnsembleInvertibleMixin",
+    "SeriesProcessor",
     "EnsembleProcessorAdapter",
     "Identity",
     "Callable",
@@ -62,7 +65,6 @@ __all__ = [
     "StypeDispatch",
     "TaskDispatch",
     "TableDispatch",
-    "EnsembleProcessor",
     "Choice",
     "ToNumerical",
     "ShuffleColumns",
