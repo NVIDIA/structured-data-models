@@ -701,18 +701,18 @@ class TableTensor(Tensor):
 
         if isinstance(tensor, StringTensor):
             return cls(
-                columns={Stype.text: columns},
+                columns={"text": columns},
                 text=tensor,
             )
 
         if not tensor.is_floating_point():
             return cls(
-                columns={Stype.categorical: columns},
+                columns={"categorical": columns},
                 categorical=CategoricalTensor.from_tensor(tensor),
             )
 
         return cls(
-            columns={Stype.numerical: columns},
+            columns={"numerical": columns},
             numerical=tensor,
         )
 
@@ -1082,6 +1082,34 @@ class TableTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = ["numerical", "categorical", "datetime", "text"]
+        # Empty ID containers have no tensor payload to flatten.
+        if self._id._columns:
+            attrs.append("id")
+        columns = tuple(
+            (str(stype), names) for stype, names in self._columns.items()
+        )
+        return attrs, (self.__class__, columns)
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> TableTensor:
+        cls, columns = ctx
+        return cls(
+            size=outer_size[:-1],
+            columns=dict(columns),
+            numerical=inner_tensors["numerical"],
+            categorical=inner_tensors["categorical"],
+            datetime=inner_tensors["datetime"],
+            text=inner_tensors["text"],
+            id=inner_tensors.get("id"),
+        )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (

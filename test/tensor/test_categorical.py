@@ -12,6 +12,27 @@ from sdm import CategoricalTensor, StringTensor
 from sdm.testing import onlyCUDA, withCUDA
 
 
+def test_compile_constructor_preserves_views() -> None:
+    categories = (torch.arange(4), torch.arange(4))
+
+    def create(
+        code: torch.Tensor,
+    ) -> tuple[CategoricalTensor, torch.Tensor]:
+        tensor = CategoricalTensor(code, categories)
+        return tensor, tensor.code + 1
+
+    compiled = torch.compile(create, backend="eager", fullgraph=True)
+    base = torch.arange(24).reshape(6, 4).remainder(4)
+    for code in (base[:, :2], base[1:4, ::2]):
+        out, result = compiled(code)
+        torch.testing.assert_close(out.code, code)
+        torch.testing.assert_close(result, code + 1)
+        assert out.stride() == code.stride()
+        assert out.storage_offset() == code.storage_offset()
+        for category, expected in zip(out.categories, categories):
+            torch.testing.assert_close(category, expected)
+
+
 def test_to_copy_string_categories() -> None:
     data = torch.randint(0, 2, size=(10, 2))
     categories = (
