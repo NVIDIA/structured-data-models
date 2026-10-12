@@ -109,7 +109,7 @@ parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument(
     "--context_mode", choices=("latest", "random"), default="latest"
 )
-parser.add_argument("--batch_size", type=int, default=1000)
+parser.add_argument("--batch_size", type=int, default=10_000)
 parser.add_argument("--max_test_steps", type=int, default=None)
 parser.add_argument("--num_neighbors", type=int, nargs="*", default=[16, 16])
 parser.add_argument("--num_estimators", type=int, default=1)
