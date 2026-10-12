@@ -38,8 +38,8 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 **Tabular Foundation Models:**
 
 - **[`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2)** from Qu *et al.*: [TabICLv2: A Better, Faster, Scalable, and Open Tabular Foundation Model](https://arxiv.org/abs/2602.11139) (ICML '26)
-- **[`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular)** from Qu *et al.*: [NVIDIA Kumo Tabular Sets a New Accuracy-Efficiency Frontier for Tabular Prediction](https://huggingface.co/blog/nvidia/kumo-tabular) ('26)
 - **[`TabFM`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabFM)** from Kong *et al.*: [TabFM: A Zero-Shot Foundation Model for Tabular Data](https://arxiv.org/abs/2609.37959) (CoRR '26)
+- **[`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular)** from Qu *et al.*: [NVIDIA Kumo Tabular Sets a New Accuracy-Efficiency Frontier for Tabular Prediction](https://huggingface.co/blog/nvidia/kumo-tabular) ('26)
 
 **Relational Foundation Models:**
 
