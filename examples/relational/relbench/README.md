@@ -12,7 +12,7 @@ python main.py --dataset=rel-f1 --task=driver-dnf
 
 - `--context_size`: Maximum number of context rows (default: `10_000`).
 - `--context_mode`: Context selection strategy, either `latest` or `random` (default: `latest`).
-- `--num_neighbors`: The number of neighbors to sample for each hop (default: `16 16`).
+- `--num_neighbors`: The number of neighbors to sample for each hop (default: `[16 16]`).
 - `--text`: Include text embeddings from the task entity table.
 - `--text_dim`: Final text embedding dimension after PCA (default: `64`).
 
