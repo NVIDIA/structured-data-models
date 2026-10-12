@@ -23,9 +23,12 @@ pytestmark = [
 
 
 @pytest.mark.parametrize(
-    ("batch", "queries", "context"), [(2, 129, 513), (1, 129, 8192)]
+    ("batch", "queries", "context", "context_splits"),
+    [(2, 129, 513, 1), (1, 129, 8192, 1), (2, 17, 513, 16)],
 )
-def test_fp8_partial_tiles(batch: int, queries: int, context: int) -> None:
+def test_fp8_partial_tiles(
+    batch: int, queries: int, context: int, context_splits: int
+) -> None:
     with torch.inference_mode():
         q = torch.randn(
             batch, 8, queries, 64, device="cuda", dtype=torch.float16
@@ -37,15 +40,19 @@ def test_fp8_partial_tiles(batch: int, queries: int, context: int) -> None:
         q8, qs = quantize(q)
         k8, ks = quantize(k)
         v8, vs = quantize(v)
+        if context_splits > 1:
+            k8 = k8.transpose(1, 2).contiguous().transpose(1, 2)
+            v8 = v8.transpose(1, 2).contiguous().transpose(1, 2)
         actual = quantized_attention(
             q8,
             k8,
-            v8.transpose(-1, -2).contiguous(),
+            v8.transpose(-1, -2),
             qs,
             ks,
             vs,
             q.dtype,
             128,
+            context_splits=context_splits,
         )
         expected = torch.nn.functional.scaled_dot_product_attention(q, k, v)
         assert actual.isfinite().all()
@@ -84,6 +91,7 @@ def test_grouped_query_attention_and_model_scale(
             128,
             scale,
             context_tile=context_tile,
+            context_splits=4,
         )
         expected = torch.nn.functional.scaled_dot_product_attention(
             q, k, v, enable_gqa=True, scale=scale

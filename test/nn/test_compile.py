@@ -246,7 +246,7 @@ def test_attention_compile_fp8_cache() -> None:
     ).eval()
     module._supports_quantized_attention = True
     torch.nn.init.normal_(module.out_lin.weight, std=0.05)
-    context = torch.randn(1, 8193, 128, device="cuda", dtype=dtype)
+    context = torch.randn(1, 32769, 128, device="cuda", dtype=dtype)
     compiled = torch.compile(module, fullgraph=True, dynamic=False)
     with torch.inference_mode(), optimize(attention="fp8"):
         expected, eager_cache = module(context, return_key_value=True)

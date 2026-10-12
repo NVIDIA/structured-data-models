@@ -20,6 +20,16 @@ def _attention_kernel(
     k_scale_ptr,
     v_scale_ptr,
     out_ptr,
+    lse_ptr,
+    n_splits: tl.constexpr,
+    stride_kb: tl.constexpr,
+    stride_kh: tl.constexpr,
+    stride_kr: tl.constexpr,
+    stride_kc: tl.constexpr,
+    stride_vb: tl.constexpr,
+    stride_vh: tl.constexpr,
+    stride_vc: tl.constexpr,
+    stride_vr: tl.constexpr,
     n_q_heads: tl.constexpr,
     n_kv_heads: tl.constexpr,
     n_queries: tl.constexpr,
@@ -34,9 +44,8 @@ def _attention_kernel(
 ) -> None:
     """Write attention outputs for one query tile and head per program.
 
-    Each program keeps a ``[block_q, head_dim]`` query tile and loops over
-    context tiles of ``block_kv`` rows. Both matrix multiplications use
-    the full head width.
+    Each program scans its context partition in ``block_kv`` tiles for a
+    ``[block_q, head_dim]`` query tile. Both matmuls use the full head width.
 
     """
     query_block, batch_query_head = tl.program_id(0), tl.program_id(1)
@@ -46,6 +55,24 @@ def _attention_kernel(
     batch_kv_head = batch * n_kv_heads + query_head // (
         n_q_heads // n_kv_heads
     )
+    kv_head = batch_kv_head % n_kv_heads
+    split = tl.program_id(2) if n_splits > 1 else 0
+    n_tiles = tl.cdiv(n_context, block_kv)  # ty: ignore[invalid-argument-type]
+    first_tile = split * n_tiles // n_splits
+    last_tile = (split + 1) * n_tiles // n_splits
+    k_head_offset = batch * stride_kb + kv_head * stride_kh
+    v_head_offset = batch * stride_vb + kv_head * stride_vh
+    # Flatten packed heads directly; honor batch/head strides after slicing.
+    if (
+        stride_kb == n_kv_heads * n_context * head_dim
+        and stride_kh == n_context * head_dim
+    ):
+        k_head_offset = batch_kv_head * n_context * head_dim
+    if (
+        stride_vb == n_kv_heads * n_context * head_dim
+        and stride_vh == n_context * head_dim
+    ):
+        v_head_offset = batch_kv_head * n_context * head_dim
     rows = query_block * block_q + tl.arange(0, block_q)
     cols = tl.arange(0, block_kv)
     dims = tl.arange(0, head_dim)
@@ -71,14 +98,14 @@ def _attention_kernel(
     if acc_flush_tiles > 0:
         outer_acc = tl.full((block_q, head_dim), 0, tl.float32)
         outer_max = tl.full((block_q,), -float("inf"), tl.float32)
-    for start in range(tl.cdiv(n_context, block_kv)):  # ty: ignore[invalid-argument-type]
+    for start in range(first_tile, last_tile):
         # 1. Tiled QK^T: reduce over channels to get [block_q, block_kv].
         indices = start * block_kv + cols
         k = tl.load(
             k_ptr
-            + batch_kv_head * n_context * head_dim
-            + indices[None, :] * head_dim
-            + dims[:, None],
+            + k_head_offset
+            + indices[None, :] * stride_kr
+            + dims[:, None] * stride_kc,
             mask=indices[None, :] < n_context,
             other=0.0,
         )
@@ -108,9 +135,13 @@ def _attention_kernel(
         acc *= correction[:, None]
 
         # 3. Tiled weights-V: reduce over context to get [block_q, head_dim].
-        v_offsets = indices[:, None] + dims[None, :] * n_context
+        v_offsets = (
+            v_head_offset
+            + indices[:, None] * stride_vr
+            + dims[None, :] * stride_vc
+        )
         v = tl.load(
-            v_ptr + batch_kv_head * n_context * head_dim + v_offsets,
+            v_ptr + v_offsets,
             mask=indices[:, None] < n_context,
             other=0.0,
         )
@@ -124,8 +155,8 @@ def _attention_kernel(
         )
         # Periodically flush the dot accumulator to FP32 for long L4 contexts.
         if acc_flush_tiles > 0:  # noqa: SIM102 - constexpr guard avoids modulo zero.
-            if ((start + 1) % acc_flush_tiles == 0) | (  # ty: ignore[unsupported-operator]
-                start + 1 == tl.cdiv(n_context, block_kv)  # ty: ignore[invalid-argument-type]
+            if ((start + 1 - first_tile) % acc_flush_tiles == 0) | (
+                start + 1 == last_tile
             ):
                 outer_acc = (
                     outer_acc * tl.exp2(outer_max - new_max)[:, None] + acc
@@ -139,14 +170,53 @@ def _attention_kernel(
     out = acc * value_scale / weight_sum[:, None]
     if not scale_weights_in_exp:
         out *= 1.0 / 256.0
+    output_head = batch_query_head * n_splits + split
+    if n_splits > 1:
+        # Preserve each partition's softmax mass for the final reduction.
+        logsum = row_max + tl.log2(weight_sum)
+        if scale_weights_in_exp:
+            logsum -= 8.0
+        tl.store(
+            lse_ptr + output_head * n_queries + rows,
+            logsum,
+            mask=rows < n_queries,
+        )
     tl.store(
         out_ptr
-        + batch_query_head * n_queries * head_dim
+        + output_head * n_queries * head_dim
         + rows[:, None] * head_dim
         + dims[None, :],
         out,
         mask=rows[:, None] < n_queries,
     )
+
+
+@triton.jit
+def _combine_attention_kernel(
+    partial_ptr,
+    lse_ptr,
+    out_ptr,
+    n_queries: tl.constexpr,
+    head_dim: tl.constexpr,
+    n_splits: tl.constexpr,
+    block_splits: tl.constexpr,
+) -> None:
+    """Combine partition outputs, weighted by their softmax masses."""
+    row, head = tl.program_id(0), tl.program_id(1)
+    splits = tl.arange(0, block_splits)
+    dims = tl.arange(0, head_dim)
+    offset = (head * n_splits + splits) * n_queries + row
+    logsum = tl.load(
+        lse_ptr + offset, mask=splits < n_splits, other=-float("inf")
+    )
+    weights = tl.exp2(logsum - tl.max(logsum, 0))  # ty: ignore[invalid-argument-type]
+    partial = tl.load(
+        partial_ptr + offset[:, None] * head_dim + dims[None, :],
+        mask=splits[:, None] < n_splits,
+        other=0.0,
+    )
+    out = tl.sum(partial * weights[:, None], 0) / tl.sum(weights, 0)  # ty: ignore[invalid-argument-type]
+    tl.store(out_ptr + (head * n_queries + row) * head_dim + dims, out)
 
 
 @triton.jit
@@ -234,13 +304,15 @@ def quantized_attention(
     accumulation_chunk: int = 0,
     scale_weights_in_exp: bool = False,
     fuse_score_scale: bool = False,
+    context_splits: int = 1,
 ) -> Tensor:
     """Run tiled attention on per-head scaled FP8 inputs.
 
     Args:
         q: Contiguous FP8 queries shaped ``[batch, query_heads, queries, D]``.
-        k: Contiguous FP8 keys shaped ``[batch, kv_heads, context, D]``.
-        v: Contiguous FP8 values shaped ``[batch, kv_heads, D, context]``.
+        k: FP8 keys shaped ``[batch, kv_heads, context, D]``.
+        v: FP8 values shaped ``[batch, kv_heads, D, context]``.
+            K/V may be strided, including views of selected cache heads.
         qs: Query scales shaped ``[batch, query_heads, 1, 1]``.
         ks: Key scales shaped ``[batch, kv_heads, 1, 1]``.
         vs: Value scales shaped ``[batch, kv_heads, 1, 1]``.
@@ -254,6 +326,9 @@ def quantized_attention(
         scale_weights_in_exp: Apply the weight factor 256 inside exp2 instead
             of before the weighted-value multiplication.
         fuse_score_scale: Permit fused score scaling and maximum subtraction.
+        context_splits: Maximum number of context partitions per query tile.
+            One scans the entire context; larger counts combine partial
+            outputs using FP32 softmax masses.
 
     Returns:
         Attention output with the query shape and requested dtype.
@@ -268,10 +343,18 @@ def quantized_attention(
             raise ValueError(f"{name} must be a positive power of two")
     if k.size(1) == 0 or h % k.size(1):
         raise ValueError("The number of K/V heads must divide the query heads")
+    if context_splits < 1:
+        raise ValueError("context_splits must be positive")
     n = k.size(-2)
+    splits = min(context_splits, triton.cdiv(n, context_tile))  # ty: ignore[invalid-argument-type]
     # Q/K are [batch, heads, sequence, channels]; V is transposed.
     output = q.new_empty(q.shape, dtype=dtype)
-    grid = (triton.cdiv(m, query_tile), b * h)  # ty: ignore[invalid-argument-type]
+    partial = output
+    lse = None
+    if splits > 1:
+        partial = q.new_empty((b, h, splits, m, d), dtype=torch.float32)
+        lse = q.new_empty((b, h, splits, m), dtype=torch.float32)
+    grid = (triton.cdiv(m, query_tile), b * h, splits)  # ty: ignore[invalid-argument-type]
     with torch.cuda.device(q.device):
         cast(Any, _attention_kernel)[grid](
             q,
@@ -280,7 +363,17 @@ def quantized_attention(
             qs,
             ks,
             vs,
-            output,
+            partial,
+            lse,
+            n_splits=splits,
+            stride_kb=k.stride(0),
+            stride_kh=k.stride(1),
+            stride_kr=k.stride(2),
+            stride_kc=k.stride(3),
+            stride_vb=v.stride(0),
+            stride_vh=v.stride(1),
+            stride_vc=v.stride(2),
+            stride_vr=v.stride(3),
             n_q_heads=h,
             n_kv_heads=k.size(1),
             n_queries=m,
@@ -295,6 +388,16 @@ def quantized_attention(
             num_warps=warps,
             num_stages=stages,
         )
+        if splits > 1:
+            cast(Any, _combine_attention_kernel)[(m, b * h)](
+                partial,
+                lse,
+                output,
+                n_queries=m,
+                head_dim=d,
+                n_splits=splits,
+                block_splits=triton.next_power_of_2(splits),  # ty: ignore[invalid-argument-type]
+            )
     return output
 
 
@@ -333,9 +436,10 @@ def _fp8_attention(
         qs = qs.clamp_min(1e-12) / 448.0
         k, ks = quantize(heads(key))
         v, vs = quantize(heads(value))
+        v = v.transpose(-1, -2).contiguous()
     else:
-        k = heads(cache.key).contiguous()
-        v = heads(cache.value).contiguous()
+        k = heads(cache.key)
+        v = heads(cache.value).transpose(-1, -2)
         ks, vs, qs = (
             heads(t).contiguous()
             for t in (cache.key_scale, cache.value_scale, cache.query_scale)
@@ -347,15 +451,27 @@ def _fp8_attention(
     blackwell = head_dim == 64 and torch.cuda.get_device_capability(
         query.device
     ) == (12, 0)
+    query_tile = 64 if head_dim == 256 else 128
+    context_splits = 1
+    if cache is not None and k.size(-2) >= 32768:
+        programs = triton.cdiv(q.size(-2), query_tile) * q.size(0) * q.size(1)  # ty: ignore[invalid-argument-type]
+        sm_count = torch.cuda.get_device_properties(
+            query.device
+        ).multi_processor_count
+        # Target four programs per SM, with at most 16 scratch partitions.
+        context_splits = min(
+            16,
+            triton.next_power_of_2(triton.cdiv(4 * sm_count, programs)),  # ty: ignore[invalid-argument-type]
+        )
     result = quantized_attention(
         q,
         k,
-        v.transpose(-1, -2).contiguous(),
+        v,
         qs,
         ks,
         vs,
         dtype=query.dtype,
-        query_tile=64 if head_dim == 256 else 128,
+        query_tile=query_tile,
         scale=scale,
         context_tile=64 if wide or blackwell or k.size(-2) < 32768 else 128,
         warps=8 if wide else 4,
@@ -363,11 +479,13 @@ def _fp8_attention(
         accumulation_chunk=0 if blackwell else 16,
         scale_weights_in_exp=blackwell,
         fuse_score_scale=blackwell,
+        context_splits=context_splits,
     )
     if cache is None:
         cache = QuantizedKVCacheEntry(
             key=rows(k),
-            value=rows(v),
+            # Keep the logical cache shape while retaining the kernel layout.
+            value=rows(v.transpose(-1, -2)),
             key_scale=rows(ks),
             value_scale=rows(vs),
             query_scale=rows(qs),
