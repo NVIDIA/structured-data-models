@@ -33,6 +33,26 @@ def test_fp8_small_context_fallback(device: torch.device) -> None:
 
 
 @onlyCUDA
+def test_fp8_causal_attention_fallback() -> None:
+    module = Attention(64, 1, device="cuda")
+    torch.nn.init.normal_(module.out_lin.weight, std=0.05)
+    module._supports_quantized_attention = True
+    query = torch.randn(1, 8193, 64, device="cuda")
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        expected = module(query, is_causal=True)
+        with optimize(attention="fp8"):
+            actual, cache = module(
+                query, is_causal=True, return_key_value=True
+            )
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+            assert not isinstance(cache, QuantizedKVCacheEntry)
+            _, cache = module(query, return_key_value=True)
+            assert isinstance(cache, QuantizedKVCacheEntry)
+            with pytest.raises(ValueError, match="attention masks"):
+                module(query[:, :1], cache, is_causal=True)
+
+
+@onlyCUDA
 @pytest.mark.parametrize(
     "dtype", [torch.float16, torch.bfloat16, torch.float32]
 )

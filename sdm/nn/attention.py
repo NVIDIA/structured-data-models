@@ -399,9 +399,14 @@ class Attention(torch.nn.Module):
             and query.size(-3) >= key.size(-3)
             and seqused_key_value is None
             and attn_mask is None
+            and not is_causal
         )
         if quantized_cache is not None:
-            if attn_mask is not None or seqused_key_value is not None:
+            if (
+                attn_mask is not None
+                or seqused_key_value is not None
+                or is_causal
+            ):
                 raise ValueError(
                     "Fitted FP8 attention does not support attention masks"
                 )
