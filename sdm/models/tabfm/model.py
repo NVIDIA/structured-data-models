@@ -37,9 +37,8 @@ from sdm.models.tabfm.row_embedding import RowEmbedding
 
 
 class TabFM(ICLModel):
-    r"""The tabular foundation model from `"Introducing TabFM: A Zero-shot
-    Foundation Model for Tabular Data" <https://research.google/blog/
-    introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__.
+    r"""The tabular foundation model from the `"TabFM: A Zero-Shot Foundation
+    Model for Tabular Data" <https://arxiv.org/abs/2609.37959>`__ paper.
 
     .. figure:: /images/tabfm_light.png
         :figclass: light-only
@@ -81,6 +80,7 @@ class TabFM(ICLModel):
         {Stype.numerical, Stype.categorical}
     )
     supports_multi_target: ClassVar[bool] = False
+    supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -151,6 +151,7 @@ class TabFM(ICLModel):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
+        x_context_only: TableTensor | None,  # [..., R_context, D_only]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
