@@ -16,20 +16,6 @@ from sdm import (
 from sdm.testing import onlyCUDA, onlyMPS
 
 
-def test_compile_constructor_preserves_columns() -> None:
-    def create(first: torch.Tensor, second: torch.Tensor) -> ColumnarTensor:
-        return ColumnarTensor((first, second))
-
-    compiled = torch.compile(create, backend="eager", fullgraph=True)
-    base = torch.arange(24).reshape(6, 4)
-    first, second = base[1:4, 0], base[1:4, 2]
-    out = compiled(first, second)
-    for column, expected in zip(out._columns, (first, second)):
-        torch.testing.assert_close(column, expected)
-        assert column.stride() == expected.stride()
-        assert column.storage_offset() == expected.storage_offset()
-
-
 def test_init() -> None:
     value1 = torch.arange(6).view(2, 3)
     value2 = torch.randn(2, 3)

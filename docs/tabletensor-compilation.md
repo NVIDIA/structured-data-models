@@ -24,6 +24,8 @@ The change is separate from PR 1068 and is based on main. It does not change mod
 
 All checks used the source on this branch. Native compiler checks used `fullgraph=True`, `dynamic=True`, and the Inductor backend.
 
+The suite counts below include four compilation test cases used during validation and subsequently removed from the branch. The production implementation is unchanged.
+
 | Check                                                     | PyTorch 2.7.1                               | PyTorch 2.14.0         |
 | --------------------------------------------------------- | ------------------------------------------- | ---------------------- |
 | Numerical table construction and numerical access         | 24/24 pass                                  | 24/24 pass             |

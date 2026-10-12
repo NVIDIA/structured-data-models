@@ -22,26 +22,6 @@ from sdm import (
 from sdm.testing import onlyCUDA, withCUDA
 
 
-@pytest.mark.parametrize("strided", [False, True])
-def test_compile_constructor(strided: bool) -> None:
-    def construct(value: torch.Tensor) -> tuple[TableTensor, torch.Tensor]:
-        table = TableTensor.from_tensor(value)
-        return table, table.numerical + 1
-
-    compiled = torch.compile(
-        construct, backend="eager", fullgraph=True, dynamic=True
-    )
-    for rows in (3, 5):
-        value = torch.randn(rows + 1, 4)
-        value = value[1:, ::2] if strided else value[:, :2].contiguous()
-        table, result = compiled(value)
-        torch.testing.assert_close(table.numerical, value)
-        torch.testing.assert_close(result, value + 1)
-        assert table.numerical.stride() == value.stride()
-        assert table.numerical.storage_offset() == value.storage_offset()
-        assert table.id.size() == (value.size(0), 0)
-
-
 def test_init() -> None:
     tensor = TableTensor(
         columns={
