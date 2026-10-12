@@ -390,36 +390,22 @@ class Attention(torch.nn.Module):
         quantized_cache = (
             key_value if isinstance(key_value, QuantizedKVCacheEntry) else None
         )
-        masked = (
-            attn_mask is not None or seqused_key_value is not None or is_causal
-        )
-        if quantized_cache is not None and masked:
-            raise ValueError(
-                "Fitted FP8 attention does not support attention masks"
-            )
-        # New caches need unmasked context queries to calibrate Q scales.
-        can_quantize = (
-            self._supports_quantized_attention
-            and not isinstance(key_value, KVCacheEntry)
-            and key.size(-3) > 8192
-            and query.size(-3) >= key.size(-3)
-            and not masked
-        )
         result = None
         if _attention_quantization.get() == "fp8" and (
-            quantized_cache is not None or can_quantize
+            self._supports_quantized_attention or quantized_cache is not None
         ):
-            scaled_query = query
-            if query.numel() > 0 and self.sdpa.query_scaling is not None:
-                scaled_query = self.sdpa.query_scaling(
-                    query, key_len=key.size(-3)
-                )
             result = fp8_attention(
-                query=scaled_query,
+                query=query,
                 key=key,
                 value=value,
-                cache=quantized_cache,
+                cache=key_value
+                if isinstance(key_value, KVCacheEntry)
+                else None,
                 scale=self.sdpa.scale,
+                query_scaling=self.sdpa.query_scaling,
+                seqused_key_value=seqused_key_value,
+                attn_mask=attn_mask,
+                is_causal=is_causal,
             )
         if result is None:
             out = self.sdpa(
