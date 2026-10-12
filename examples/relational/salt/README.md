@@ -15,6 +15,15 @@ python main.py --task=SHIPPINGPOINT
 python main.py --task=ITEMINCOTERMSCLASSIFICATION
 ```
 
+## Options
+
+- `--num_estimators`: Number of estimators (default: `1`).
+- `--context_size`: Maximum number of context rows (default: `10_000`).
+- `--context_mode`: Context selection strategy, either `latest` or `random` (default: `latest`).
+- `--num_neighbors`: The number of neighbors to sample for each hop (default: `[16, 16]`).
+- `--text`: Include text embeddings from the task entity table.
+- `--text_dim`: Final text embedding dimension after PCA (default: `64`).
+
 ## Results
 
 | Task               | KumoRFM-1 | KumoRFM-2 | 1 estimator<br>50K context | 8 estimators<br>50K context | 1 estimator<br>100K context | 8 estimators<br>100K context |

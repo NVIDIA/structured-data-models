@@ -10,6 +10,7 @@ python main.py --dataset=rel-f1 --task=driver-dnf
 
 ## Options
 
+- `--num_estimators`: Number of estimators (default: `1`).
 - `--context_size`: Maximum number of context rows (default: `10_000`).
 - `--context_mode`: Context selection strategy, either `latest` or `random` (default: `latest`).
 - `--num_neighbors`: The number of neighbors to sample for each hop (default: `[16, 16]`).
@@ -37,15 +38,15 @@ Optimal hyperparameters found via the [RelArena-α](../../../benchmark/relationa
 
 | Dataset      | Task              | Val nMAE | Test nMAE |  Size | Mode     | Neighbors  | Text Model | Text Dim |
 | :----------- | :---------------- | -------: | --------: | ----: | :------- | :--------- | :--------- | -------: |
-| `rel-amazon` | `user-ltv`        |   0.2160 |    0.2501 | `20K` | `random` | `[64, 64]` |            |          |
-| `rel-amazon` | `item-ltv`        |   0.0738 |    0.0756 | `20K` | `random` | `[]`       |            |          |
-| `rel-avito`  | `ad-ctr`          |   0.3240 |    0.3295 |  `2K` | `latest` | `[64, 64]` |            |          |
-| `rel-event`  | `user-attendance` |   0.3125 |    0.3170 | `20K` | `random` | `[64, 64]` |            |          |
-| `rel-f1`     | `driver-position` |   0.4463 |    0.4355 | `20K` | `latest` | `[8, 8]`   |            |          |
-| `rel-hm`     | `item-sales`      |   0.0981 |    0.0800 | `20K` | `random` | `[]`       |            |          |
-| `rel-stack`  | `post-votes`      |   0.1136 |    0.1249 | `20K` | `random` | `[]`       |            |          |
-| `rel-trial`  | `study-adverse`   |   0.1021 |    0.0942 | `20K` | `latest` | `[]`       | `mini`[^1] |     `32` |
-| `rel-trial`  | `site-success`    |   0.8790 |    0.8431 | `10K` | `latest` | `[8, 8]`   | `mini`[^1] |     `32` |
+| `rel-amazon` | `user-ltv`        |   21.60 |    25.01 | `20K` | `random` | `[64, 64]` |            |          |
+| `rel-amazon` | `item-ltv`        |    7.38 |     7.56 | `20K` | `random` | `[]`       |            |          |
+| `rel-avito`  | `ad-ctr`          |   32.40 |    32.95 |  `2K` | `latest` | `[64, 64]` |            |          |
+| `rel-event`  | `user-attendance` |   31.25 |    31.70 | `20K` | `random` | `[64, 64]` |            |          |
+| `rel-f1`     | `driver-position` |   44.63 |    43.55 | `20K` | `latest` | `[8, 8]`   |            |          |
+| `rel-hm`     | `item-sales`      |    9.81 |     8.00 | `20K` | `random` | `[]`       |            |          |
+| `rel-stack`  | `post-votes`      |   11.36 |    12.49 | `20K` | `random` | `[]`       |            |          |
+| `rel-trial`  | `study-adverse`   |   10.21 |     9.42 | `20K` | `latest` | `[]`       | `mini`[^1] |     `32` |
+| `rel-trial`  | `site-success`    |   87.90 |    84.31 | `10K` | `latest` | `[8, 8]`   | `mini`[^1] |     `32` |
 
 [^1]: `sentence-transformers/all-MiniLM-L6-v2`
 
