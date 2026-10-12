@@ -7,7 +7,7 @@ from typing import TypeAlias
 import torch
 from torch import Tensor
 
-from sdm.cache import QuantizedKVCacheEntry
+from sdm.cache import KVCacheEntry, QuantizedKVCacheEntry
 
 _FP8Attention: TypeAlias = Callable[
     [Tensor, Tensor, Tensor, QuantizedKVCacheEntry | None, float | None],
@@ -29,8 +29,13 @@ def fp8_attention(
     query: Tensor,
     key: Tensor,
     value: Tensor,
-    cache: QuantizedKVCacheEntry | None = None,
+    cache: KVCacheEntry | None = None,
     scale: float | None = None,
+    *,
+    query_scaling: Callable[..., Tensor] | None = None,
+    seqused_key_value: Tensor | None = None,
+    attn_mask: Tensor | None = None,
+    is_causal: bool = False,
 ) -> tuple[Tensor, QuantizedKVCacheEntry] | None:
     """Compute FP8 attention and create or reuse a quantized context cache.
 
@@ -43,6 +48,11 @@ def fp8_attention(
             them from the supplied context.
         scale: Attention score multiplier; defaults to inverse square-root
             head width.
+        query_scaling: Optional query transformation applied before FP8
+            attention, called with ``query`` and ``key_len``.
+        seqused_key_value: Valid context lengths; require regular attention.
+        attn_mask: Attention mask; requires regular attention.
+        is_causal: Causal attention; requires regular attention.
 
     Returns:
         The attention output and its quantized context cache, or ``None``
@@ -50,8 +60,22 @@ def fp8_attention(
 
     Raises:
         ValueError: A fitted quantized cache cannot be used with the current
-            device, head width, backend, or execution mode.
+            device, head width, backend, execution mode, or attention mask.
     """
+    if cache is not None and not isinstance(cache, QuantizedKVCacheEntry):
+        return None
+    if attn_mask is not None or seqused_key_value is not None or is_causal:
+        if cache is not None:
+            raise ValueError(
+                "Fitted FP8 attention does not support attention masks"
+            )
+        return None
+    # New caches need enough context work to offset quantization overhead,
+    # and leading context queries to calibrate Q scales.
+    if cache is None and (
+        key.size(-3) <= 8192 or query.size(-3) < key.size(-3)
+    ):
+        return None
     if (
         _triton_fp8_attention is not None
         and not torch.is_grad_enabled()
@@ -64,6 +88,8 @@ def fp8_attention(
     ):
         if cache is not None and query.numel() == 0:
             return query, cache
+        if query_scaling is not None:
+            query = query_scaling(query, key_len=key.size(-3))
         return _triton_fp8_attention(query, key, value, cache, scale)
     if cache is not None:
         raise ValueError(
