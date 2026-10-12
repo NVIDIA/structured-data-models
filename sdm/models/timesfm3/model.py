@@ -31,6 +31,7 @@ from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
 from sdm.models.timesfm3.block import ResidualBlock
+from sdm.models.timesfm3.ckpt import remap_ckpt
 from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
 from sdm.models.timesfm3.util import (
@@ -145,7 +146,8 @@ class TimesFM3(ICLModel):
             filename="model.safetensors",
             license_prompt=None if accept_license else TIMESFM_LICENSE_PROMPT,
         )
-        ckpt = load_file(path, device=str(device))  # noqa: F841
+        ckpt = remap_ckpt(load_file(path, device=str(device)))
+        self.model.load_state_dict(ckpt, assign=True)
 
         return self
 
@@ -186,12 +188,21 @@ class TimesFM3(ICLModel):
         if x_query is None:
             out = y.new_empty((*y.size()[:-2], 0, y.size(-1) * 9))
         else:
+            query = x_query.numerical
+            horizon = query.size(-2)
+            # Upstream rounds requests without future-known covariates before
+            # stitching, then crops the forecast to the requested horizon.
+            if query.size(-1) == 0:
+                padding = -horizon % self.model.output_patch_size
+                query = query.new_empty(
+                    (*query.size()[:-2], horizon + padding, 0)
+                )
             out = self.model(
                 x_context=x_context,
-                x_query=x_query.numerical,
+                x_query=query,
                 x_context_only=x_context_only,
                 y=y,
-            ).flatten(-2)  # [..., R_query, Y * 9]
+            )[..., :horizon, :, :].flatten(-2)  # [..., R_query, Y * 9]
 
         return TableTensor(
             columns={
