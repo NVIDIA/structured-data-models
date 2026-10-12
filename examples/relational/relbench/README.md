@@ -22,7 +22,7 @@ python main.py --dataset=rel-f1 --task=driver-dnf
 Optimal hyperparameters found via the [RelArena-α](../../../benchmark/relational/relarena) evaluation protocol, using 8 estimators:
 
 | Dataset      | Task              | Val AUROC | Test AUROC |  Size | Mode     | Neighbors  | Text Model  | Text Dim |
-| :----------- | :---------------- | --------: | ---------: | ----: | :------- | :--------- | :---------- | -------: |
+| :----------- | :---------------- | --------: | ---------: | ----: | :------- | ---------: | :---------- | -------: |
 | `rel-amazon` | `user-churn`      |    0.6935 |     0.6947 | `20K` | `latest` | `[8, 8]`   |             |          |
 | `rel-amazon` | `item-churn`      |    0.8215 |     0.8254 | `20K` | `latest` | `[32, 32]` |             |          |
 | `rel-avito`  | `user-visits`     |    0.6956 |     0.6711 | `20K` | `latest` | `[32, 32]` |             |          |
@@ -37,7 +37,7 @@ Optimal hyperparameters found via the [RelArena-α](../../../benchmark/relationa
 | `rel-trial`  | `study-outcome`   |    0.6636 |     0.7393 | `20K` | `latest` | `[8, 8]`   | `mini`[^1]  |     `32` |
 
 | Dataset      | Task              | Val nMAE | Test nMAE |  Size | Mode     | Neighbors  | Text Model | Text Dim |
-| :----------- | :---------------- | -------: | --------: | ----: | :------- | :--------- | :--------- | -------: |
+| :----------- | :---------------- | -------: | --------: | ----: | :------- | ---------: | :--------- | -------: |
 | `rel-amazon` | `user-ltv`        |    21.60 |     25.01 | `20K` | `random` | `[64, 64]` |            |          |
 | `rel-amazon` | `item-ltv`        |     7.38 |      7.56 | `20K` | `random` | `[]`       |            |          |
 | `rel-avito`  | `ad-ctr`          |    32.40 |     32.95 |  `2K` | `latest` | `[64, 64]` |            |          |

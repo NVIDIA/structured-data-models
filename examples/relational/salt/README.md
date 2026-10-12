@@ -18,11 +18,8 @@ python main.py --task=ITEMINCOTERMSCLASSIFICATION
 ## Options
 
 - `--num_estimators`: Number of estimators (default: `1`).
-- `--context_size`: Maximum number of context rows (default: `10_000`).
-- `--context_mode`: Context selection strategy, either `latest` or `random` (default: `latest`).
-- `--num_neighbors`: The number of neighbors to sample for each hop (default: `[16, 16]`).
-- `--text`: Include text embeddings from the task entity table.
-- `--text_dim`: Final text embedding dimension after PCA (default: `64`).
+- `--context_size`: Maximum number of context rows (default: `50_000`).
+- `--num_neighbors`: The number of neighbors to sample for each hop (default: `[4, 4]`).
 
 ## Results
 
