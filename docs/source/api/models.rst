@@ -18,7 +18,7 @@ Overview
        | 28.54M (regression)
      - `BSD-3-Clause <https://github.com/soda-inria/tabicl/blob/main/LICENSE>`__
      - `BSD-3-Clause <https://huggingface.co/jingang/TabICL>`__
-   * - :class:`~sdm.models.TabFM` (`Blog <https://research.google/blog/introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data>`__)
+   * - :class:`~sdm.models.TabFM` (`Paper <https://arxiv.org/abs/2609.37959>`__)
      - 2026-06-30
      - | 1.64B (classification)
        | 1.65B (regression)
@@ -40,6 +40,11 @@ Overview
        | 30.94M (regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `OpenMDW-1.1, with BSD-3-Clause third-party notice <https://huggingface.co/nvidia/Kumo-Relational>`__
+   * - :class:`~sdm.models.TimesFM3` (`Blog <https://arxiv.org/abs/2609.37959>`__)
+     - 2026-08-31
+     - | 330.71M
+     - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
+     - `timesfm-non-commercial-v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
 
 Model API
 ---------

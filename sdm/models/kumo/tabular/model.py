@@ -109,6 +109,7 @@ class KumoTabular(ICLModel):
         {Stype.numerical, Stype.categorical}
     )
     supports_multi_target: ClassVar[bool] = False
+    supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -171,6 +172,7 @@ class KumoTabular(ICLModel):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
+        x_context_only: TableTensor | None,  # [..., R_context, D_only]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,

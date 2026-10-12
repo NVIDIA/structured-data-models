@@ -15,6 +15,12 @@ python main.py --task=SHIPPINGPOINT
 python main.py --task=ITEMINCOTERMSCLASSIFICATION
 ```
 
+## Options
+
+- `--num_estimators`: Number of estimators (default: `1`).
+- `--context_size`: Maximum number of context rows (default: `50_000`).
+- `--num_neighbors`: The number of neighbors to sample for each hop (default: `[4, 4]`).
+
 ## Results
 
 | Task               | KumoRFM-1 | KumoRFM-2 | 1 estimator<br>50K context | 8 estimators<br>50K context | 1 estimator<br>100K context | 8 estimators<br>100K context |
