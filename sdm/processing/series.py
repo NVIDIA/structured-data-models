@@ -2,11 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from torch import Tensor
+
 from sdm.processing import EnsembleProcessor
 
 
-class SeriesProcessor(EnsembleProcessor):
+class SeriesEnsembleProcessor(EnsembleProcessor):
     r"""Base processor for consecutive, equally spaced time-series data."""
+
+    _offset: Tensor | None
 
     def __init__(self) -> None:
         super().__init__()
