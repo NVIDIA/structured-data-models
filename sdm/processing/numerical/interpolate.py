@@ -14,8 +14,7 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
     """Interpolate missing feature values along the row dimension.
 
     Args:
-        fill_value: Value used for columns with no observations and undefined
-            interpolation results.
+        fill_value: Value used for columns with no observations.
     """
 
     handles_stypes = frozenset({Stype.numerical})
@@ -105,9 +104,7 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
             numerical = numerical.where(low != high, low)  # Restore infinities
             numerical = numerical.where(missing, x)  # Restore finite values.
             numerical = numerical[..., 1:, :]  # Remove context anchor.
-            numerical = numerical.masked_fill(
-                numerical.isnan(), self.fill_value
-            )
+            numerical[numerical.isnan()] = self.fill_value
 
             groups.append(group.replace_blocks(numerical=numerical))
 
