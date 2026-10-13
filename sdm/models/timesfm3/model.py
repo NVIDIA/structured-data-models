@@ -91,8 +91,6 @@ class TimesFM3(ICLModel):
             v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/
             LICENSE>`__ without showing the interactive license prompt.
         device: The device.
-        refinement: Whether to refine forecast normalization statistics using
-            predicted median values, matching upstream inference.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -110,14 +108,10 @@ class TimesFM3(ICLModel):
         pretrained: bool = True,
         accept_license: bool = False,
         device: torch.device | str | None = None,
-        refinement: bool = True,
     ) -> None:
         super().__init__(task=Task.regression)
 
-        self.model = _TimesFM3(
-            refinement=refinement,
-            device="meta" if pretrained else device,
-        )
+        self.model = _TimesFM3(device="meta" if pretrained else device)
 
         if pretrained:
             self._load_from_pretrained(accept_license, device=device)
@@ -226,7 +220,7 @@ class _TimesFM3(torch.nn.Module):
         num_heads: int = 16,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        refinement: bool = False,
+        refinement: bool = True,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
