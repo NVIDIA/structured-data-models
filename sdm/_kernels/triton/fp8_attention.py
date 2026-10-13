@@ -453,7 +453,13 @@ def _fp8_attention(
     ) == (12, 0)
     query_tile = 64 if head_dim == 256 else 128
     context_splits = 1
-    if cache is not None and k.size(-2) >= 64 * 1024:
+    # Measured cutoffs depend on V alignment and the query batch size.
+    min_context = 64 * 1024
+    if v.stride(-1) == 1 and v.stride(-2) % 4:
+        min_context = 48 * 1024
+        if v.stride(-2) % 2 == 0 or q.size(-2) >= 1024:
+            min_context = 32 * 1024
+    if cache is not None and k.size(-2) >= min_context:
         programs = triton.cdiv(q.size(-2), query_tile) * q.size(0) * q.size(1)  # ty: ignore[invalid-argument-type]
         sm_count = torch.cuda.get_device_properties(
             query.device

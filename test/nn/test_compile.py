@@ -233,7 +233,9 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
 
 @onlyCUDA
 @pytest.mark.usefixtures("fp8_rng")
-@pytest.mark.parametrize("context_rows", [64 * 1024, 64 * 1024 + 1])
+@pytest.mark.parametrize(
+    "context_rows", [32 * 1024 + 1, 32 * 1024 + 2, 64 * 1024]
+)
 def test_attention_compile_fp8_cache(context_rows: int) -> None:
     dtype = torch.float16
     if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
@@ -254,7 +256,7 @@ def test_attention_compile_fp8_cache(context_rows: int) -> None:
         actual, cache = compiled(context, return_key_value=True)
         assert isinstance(cache, QuantizedKVCacheEntry)
         torch.testing.assert_close(actual, expected)
-        for rows in (17, 1):
+        for rows in (1024, 512, 17, 1):
             query = torch.randn(1, rows, 128, device="cuda", dtype=dtype)
             expected = module(query, eager_cache)
             torch.testing.assert_close(compiled(query, cache), expected)
