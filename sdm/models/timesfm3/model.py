@@ -39,6 +39,7 @@ from sdm.models.timesfm3.util import (
     gather_future_patches,
     get_running_stats,
     revin,
+    update_running_stats,
 )
 from sdm.tensor.table import TableSchema
 
@@ -90,6 +91,8 @@ class TimesFM3(ICLModel):
             v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/
             LICENSE>`__ without showing the interactive license prompt.
         device: The device.
+        refinement: Whether to refine forecast normalization statistics using
+            predicted median values, matching upstream inference.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -107,10 +110,12 @@ class TimesFM3(ICLModel):
         pretrained: bool = True,
         accept_license: bool = False,
         device: torch.device | str | None = None,
+        refinement: bool = True,
     ) -> None:
         super().__init__(task=Task.regression)
 
         self.model = _TimesFM3(
+            refinement=refinement,
             device="meta" if pretrained else device,
         )
 
@@ -221,6 +226,7 @@ class _TimesFM3(torch.nn.Module):
         num_heads: int = 16,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        refinement: bool = False,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
@@ -228,6 +234,7 @@ class _TimesFM3(torch.nn.Module):
         assert output_patch_size % input_patch_size == 0
         self.input_patch_size = input_patch_size
         self.output_patch_size = output_patch_size
+        self.refinement = refinement
 
         self.patch_embedding = ResidualBlock(
             in_channels=2 * (input_patch_size + output_patch_size),
@@ -278,7 +285,7 @@ class _TimesFM3(torch.nn.Module):
         # Gather future patches and normalize:
         mask = x.isnan()
         x[mask] = 0.0
-        _, mean, std = get_running_stats(x, mask)
+        count, mean, std = get_running_stats(x, mask)
 
         future_x, past_end = gather_future_patches(x, num_patches=O // P)
         future_mask, _ = gather_future_patches(mask, num_patches=O // P)
@@ -299,6 +306,47 @@ class _TimesFM3(torch.nn.Module):
         x = self.patch_embedding(x)  # [..., C, N, D]
         out = self.icl_block(x)  # [..., C, N, O * Q]
         out = out.unflatten(-1, (self.output_patch_size, -1))
+
+        if self.refinement and horizon > 0:
+            # Incorporate median estimates of horizon patches into RevIN stats.
+            first = mid // P
+            median = out[..., out.size(-1) // 2].unflatten(-1, (O // P, P))
+            carry_count = count[..., first - 1].to(torch.float32)
+            carry_mean = mean[..., first - 1]
+            carry_std = std[..., first - 1]
+            anchor = revin(
+                median[..., first - 1, :, :],
+                carry_mean,
+                carry_std,
+                reverse=True,
+            ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
+            step_mask = torch.zeros_like(anchor[..., 0, :], dtype=torch.bool)
+            means, stds = [], []
+            for i in range(first, out.size(-3)):
+                offset = (i - first) % (O // P)
+                carry_count, carry_mean, carry_std = update_running_stats(
+                    count=carry_count,
+                    mean=carry_mean,
+                    std=carry_std,
+                    x=anchor[..., offset, :],
+                    mask=step_mask,
+                )
+                means.append(carry_mean)
+                stds.append(carry_std)
+                if offset == O // P - 1:
+                    anchor = revin(
+                        median[..., i, :, :],
+                        carry_mean,
+                        carry_std,
+                        reverse=True,
+                    ).clamp(-1e20, 1e20)
+            mean = torch.cat(
+                [mean[..., :first], torch.stack(means, dim=-1)], dim=-1
+            )
+            std = torch.cat(
+                [std[..., :first], torch.stack(stds, dim=-1)], dim=-1
+            )
+
         out = revin(out, mean, std, reverse=True)
         out = out.clamp(-1e20, 1e20)
 
