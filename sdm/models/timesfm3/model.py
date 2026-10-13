@@ -306,52 +306,48 @@ class _TimesFM3(torch.nn.Module):
         x = self.patch_embedding(x)  # [..., C, N, D]
         out = self.icl_block(x)  # [..., C, N, O * Q]
         out = out.unflatten(-1, (self.output_patch_size, -1))
+        first = mid // P - 1
 
+        # Refine forecast normalization statistics using predicted medians:
         if self.refinement and horizon > 0:
-            # Incorporate median estimates of horizon patches into RevIN stats.
-            first = mid // P
             median = out[..., out.size(-1) // 2].unflatten(-1, (O // P, P))
-            carry_count = count[..., first - 1].to(torch.float32)
-            carry_mean = mean[..., first - 1]
-            carry_std = std[..., first - 1]
-            anchor = revin(
-                median[..., first - 1, :, :],
-                carry_mean,
-                carry_std,
-                reverse=True,
-            ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
-            step_mask = torch.zeros_like(anchor[..., 0, :], dtype=torch.bool)
+            mask = torch.zeros_like(median[..., 0, 0, :], dtype=torch.bool)
+
+            # Get most recent context statistics:
+            carry_count = count[..., first]
+            carry_mean = mean[..., first]
+            carry_std = std[..., first]
+
             means, stds = [], []
-            for i in range(first, out.size(-3)):
-                offset = (i - first) % (O // P)
-                carry_count, carry_mean, carry_std = update_running_stats(
-                    count=carry_count,
-                    mean=carry_mean,
-                    std=carry_std,
-                    x=anchor[..., offset, :],
-                    mask=step_mask,
-                )
-                means.append(carry_mean)
-                stds.append(carry_std)
-                if offset == O // P - 1:
-                    anchor = revin(
-                        median[..., i, :, :],
-                        carry_mean,
-                        carry_std,
-                        reverse=True,
-                    ).clamp(-1e20, 1e20)
-            mean = torch.cat(
-                [mean[..., :first], torch.stack(means, dim=-1)], dim=-1
-            )
-            std = torch.cat(
-                [std[..., :first], torch.stack(stds, dim=-1)], dim=-1
-            )
+            for i in range(first, out.size(-3) - 1, O // P):
+                anchor = revin(  # Denormalize entire output patch:
+                    median[..., i, :, :],
+                    carry_mean,
+                    carry_std,
+                    reverse=True,
+                ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
+
+                for j in range(min(O // P, out.size(-3) - i - 1)):
+                    # Update running statistics:
+                    carry_count, carry_mean, carry_std = update_running_stats(
+                        count=carry_count,
+                        mean=carry_mean,
+                        std=carry_std,
+                        x=anchor[..., j, :],
+                        mask=mask,
+                    )
+                    means.append(carry_mean)
+                    stds.append(carry_std)
+
+            means = [mean[..., : first + 1], torch.stack(means, dim=-1)]
+            mean = torch.cat(means, dim=-1)
+            stds = [std[..., : first + 1], torch.stack(stds, dim=-1)]
+            std = torch.cat(stds, dim=-1)
 
         out = revin(out, mean, std, reverse=True)
         out = out.clamp(-1e20, 1e20)
 
         # Narrow target output patches:
-        first = mid // P - 1
         overlap = min(2 * P, O) - P
         num_readouts = max(math.ceil((horizon - overlap) / P), 1)
         out = out[
