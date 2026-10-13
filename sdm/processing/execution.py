@@ -63,8 +63,6 @@ class RecipeExecution:
         generator: torch.Generator | None = None,
     ) -> tuple[MemberContext, ...]:
         """Fit and transform context data."""
-        num_rows = x.size(-2)
-
         # Transform target first to be able to resolve task type. Inverse
         # target transforms require distinct member assignment:
         y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
@@ -75,8 +73,8 @@ class RecipeExecution:
             for module in processor.modules()
             if isinstance(module, sp.SeriesProcessor)
         )
-        for series_processor in series_processors:
-            series_processor._offset = torch.zeros(
+        for module in series_processors:
+            module._offset = torch.zeros(
                 len(y),
                 dtype=torch.long,
                 device=y[0].device,
@@ -182,10 +180,9 @@ class RecipeExecution:
                 "Expected inputs to map to the same number of ensemble members"
             )
 
-        for series_processor in series_processors:
-            series_processor._offset = torch.full(
-                (len(x),),
-                fill_value=num_rows,
+        for module in series_processors:
+            module._offset = torch.tensor(
+                [x[i].size(-2) for i in range(len(x))],
                 dtype=torch.long,
                 device=x[0].device,
             )
