@@ -55,7 +55,7 @@ Per-task runtimes aggregated over the 21 entity-level [RelBenchV1](https://star-
 | `kumo-relational`              |        3 |  ❌   |   1 min | 0.1 min | 0.5 min | 0.6 min |   1 min |    3 min |
 | `rdblearn`                     |        6 |  ✅   |  11 min | 0.5 min |   2 min |   7 min |  11 min |   50 min |
 | `tabpfn-rel-local-2026-09-28`  |        1 |  ✅   |  11 min | 0.4 min | 1.0 min |   5 min |  20 min |   49 min |
-| `tabpfn-rel-local`             |        3 |  ✅   |  12 min | 0.6 min | 0.8 min |   4 min |   6 min |   85 min |
+| `tabpfn-rel-local-2026-08-15`  |        3 |  ✅   |  12 min | 0.6 min | 0.8 min |   4 min |   6 min |   85 min |
 | `lightgbm`                     |       30 |  ❌   |  14 min | 0.1 min | 0.2 min |   2 min |  28 min |   53 min |
 | `tabpfn-rel-client-2026-09-28` |        1 |  ✅   |  16 min | 0.8 min |   2 min |  13 min |  26 min |   78 min |
 | `graphsage`                    |        4 |  ❌   |  47 min |   2 min |   9 min |  35 min |  83 min |  141 min |

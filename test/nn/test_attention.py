@@ -233,6 +233,31 @@ def test_sdpa_scale(device: torch.device) -> None:
 
 @withCUDA
 @pytest.mark.parametrize("num_key_value_heads", [1, 2])
+@pytest.mark.parametrize(("query_len", "key_len"), [(3, 3), (3, 5), (5, 3)])
+def test_sdpa_causal(
+    device: torch.device,
+    num_key_value_heads: int,
+    query_len: int,
+    key_len: int,
+) -> None:
+    """Match upper-left causal attention for unequal sequence lengths."""
+    module = SDPA(num_query_heads=2, num_key_value_heads=num_key_value_heads)
+    query = torch.randn(2, query_len, 2, 8, device=device)
+    key = torch.randn(key_len, num_key_value_heads, 8, device=device)
+    value = torch.randn_like(key)
+    mask = torch.ones(
+        query_len, key_len, dtype=torch.bool, device=device
+    ).tril()
+
+    out = module(query=query, key=key, value=value, is_causal=True)
+    expected = reference_sdpa(
+        query=query, key=key, value=value, attn_mask=mask
+    )
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("num_key_value_heads", [1, 2])
 @pytest.mark.parametrize("mask_kind", [None, "mask", "lengths"])
 @pytest.mark.parametrize("bias_heads", [1, 2])
 @pytest.mark.parametrize("bias_query_len", [1, 4])
@@ -311,18 +336,25 @@ def test_sdpa_additive_bias(
 
 
 @withCUDA
-def test_sdpa_dropout(device: torch.device) -> None:
+@pytest.mark.parametrize("is_causal", [False, True])
+def test_sdpa_dropout(device: torch.device, is_causal: bool) -> None:
     """Apply attention dropout in training and disable it for evaluation."""
     module = SDPA(num_query_heads=2, dropout=1.0)
     query = torch.randn(3, 2, 4, device=device)
     key = torch.randn(5, 2, 4, device=device)
     value = torch.randn_like(key)
     torch.testing.assert_close(
-        module(query, key, value), torch.zeros_like(query)
+        module(query, key, value, is_causal=is_causal), torch.zeros_like(query)
     )
     module.eval()
+    mask = (
+        torch.ones(3, 5, dtype=torch.bool, device=device).tril()
+        if is_causal
+        else None
+    )
     torch.testing.assert_close(
-        module(query, key, value), reference_sdpa(query, key, value)
+        module(query, key, value, is_causal=is_causal),
+        reference_sdpa(query, key, value, attn_mask=mask),
     )
 
 

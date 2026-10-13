@@ -2,15 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from sdm import Stype, TableTensor
-from sdm.processing import Processor
+from sdm.processing import InvertibleMixin, Processor
 
 
-class Clip(Processor):
+class Clip(Processor, InvertibleMixin):
     """Clamp numerical values to a fixed interval.
 
     Values below ``min_value`` are set to ``min_value``, and values above
     ``max_value`` are set to ``max_value``. Values within the interval are
-    unchanged.
+    unchanged. Inverse transformation leaves values unchanged.
 
     Args:
         min_value: Inclusive lower bound for every numerical value.
@@ -40,6 +40,9 @@ class Clip(Processor):
             max=self.max_value,
         )
         return table.replace_blocks(numerical=numerical)
+
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return table
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
