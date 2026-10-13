@@ -44,11 +44,10 @@ python -m benchmark.forecasting.gift_eval.evaluate
 
 This compares all available SDM results against published GIFT-Eval results on the same configurations, normalized by a seasonal naive baseline and aggregated by geometric mean.
 
-`TimesFM3` follows the published `TimesFM-3` evaluation with symmetric averaging over two estimators and contexts truncated to 15,360 time steps. Its results can still differ from the published ones:
+`TimesFM3` follows the published `TimesFM-3` evaluation with symmetric averaging over two estimators, contexts truncated to 15,360 time steps, and at most 32 variates per forward pass. Its results can still differ from the published ones:
 
 - Published results batch series of different context lengths together, which shifts their positional encodings on datasets with varying context lengths.
 - Published results clip forecasts of non-negative series at zero.
-- Published results forecast at most 32 variates jointly, subsampling covariates of `bizitobs_application` and `bizitobs_service`.
 
 ______________________________________________________________________
 

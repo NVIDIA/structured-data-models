@@ -4,7 +4,7 @@
 """SDM model adapter shared by the time-series forecasting benchmarks."""
 
 import argparse
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -21,6 +21,7 @@ class ModelConfig:
     factory: Callable[[torch.device], sdm.models.ICLModel]
     num_estimators: int = 1
     max_context_size: int | None = None
+    max_variates: int | None = None
 
 
 MODEL_CONFIGS = {
@@ -29,6 +30,7 @@ MODEL_CONFIGS = {
         factory=lambda device: TimesFM3(accept_license=True, device=device),
         num_estimators=2,
         max_context_size=15360,
+        max_variates=32,
     ),
 }
 
@@ -95,14 +97,75 @@ def forecast(
     assert isinstance(context, sdm.TableTensor)
     assert isinstance(query, sdm.TableTensor)
 
-    out = model(
-        x_context=context.drop_columns(targets),
-        y_context=context.select_columns(targets),
-        x_query=query.select_columns(future[0].columns),
-        num_estimators=config.num_estimators,
-    )
-    values, levels = sdm.evaluation.to_quantiles(out)
+    x_context = context.drop_columns(targets)
+    x_query = query.select_columns(future[0].columns)
+    y = context.select_columns(targets).numerical  # [B, T, V]
+
+    chunks = [list(range(len(targets)))]
+    if config.max_variates is not None:
+        x_context, x_query, chunks = _split_variates(
+            x_context,
+            x_query,
+            num_targets=len(targets),
+            max_variates=config.max_variates,
+            stypes=model.supported_feature_stypes,
+        )
+
+    values = []
+    for index in chunks:
+        out = model(
+            x_context=x_context,
+            y_context=sdm.TableTensor.from_tensor(y[..., index]),
+            x_query=x_query,
+            num_estimators=config.num_estimators,
+        )
+        chunk, levels = sdm.evaluation.to_quantiles(out)  # [B, H, V', Q]
+        values.append(chunk)
+    # Only the last chunk can end with filler targets:
+    values = torch.cat(values, dim=-2)[..., : len(targets), :]  # [B, H, V, Q]
     return values.cpu().numpy(), levels.cpu().numpy()
+
+
+def _split_variates(
+    x_context: sdm.TableTensor,
+    x_query: sdm.TableTensor,
+    num_targets: int,
+    max_variates: int,
+    stypes: Collection[sdm.Stype],
+    seed: int = 42,
+) -> tuple[sdm.TableTensor, sdm.TableTensor, list[list[int]]]:
+    """Split targets and covariates into passes of at most ``max_variates``.
+
+    Covariates of the given semantic types count as variates. If there are
+    too many, covariates are randomly subsampled (future-known ones first) to
+    leave room for at least one target. Targets are then split into chunks of
+    equal size, padding the last chunk with leading targets. Returns the
+    remaining covariates and the target indices of each chunk.
+    """
+    covariates = [
+        c for c, stype in x_context.stypes.items() if stype in stypes
+    ]
+    known = [c for c in covariates if c in x_query.column_names]
+    past = [c for c in covariates if c not in x_query.column_names]
+
+    rng = np.random.default_rng(seed)
+    keep: list[str] = []
+    for columns in (known, past):
+        size = min(len(columns), max_variates - 1 - len(keep))
+        if size < len(columns):
+            index = np.sort(rng.choice(len(columns), size, replace=False))
+            columns = [columns[i] for i in index]
+        keep += columns
+    drop = set(covariates).difference(keep)
+    x_context = x_context.drop_columns(drop)
+    x_query = x_query.drop_columns(drop & x_query.column_names)
+
+    size = min(max_variates - len(keep), num_targets)
+    chunks = [
+        [i % num_targets for i in range(start, start + size)]
+        for start in range(0, num_targets, size)
+    ]
+    return x_context, x_query, chunks
 
 
 def select_levels(
