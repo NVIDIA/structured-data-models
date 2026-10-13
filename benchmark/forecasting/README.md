@@ -80,4 +80,4 @@ python -m benchmark.forecasting.fev_bench.evaluate
 
 This compares all available SDM results against published fev-bench results on the same tasks with `fev.leaderboard`, using a seasonal naive baseline.
 
-In addition to the differences listed for GIFT-Eval, published `TimesFM-3` results impute missing values with the last observed value, convert non-numerical covariates to numbers, and ignore static covariates.
+On fev-bench, `TimesFM3` also imputes missing values with the last observed value, converts dynamic covariates to numbers, and ignores static covariates. In addition to the differences listed for GIFT-Eval, published results hash string covariates with a randomly seeded instead of a fixed hash function.

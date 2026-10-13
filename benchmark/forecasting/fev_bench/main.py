@@ -13,7 +13,7 @@ import pandas as pd
 import torch
 
 from benchmark.forecasting.fev_bench import FEV_URL
-from benchmark.forecasting.fev_bench.models import SDMModel
+from benchmark.forecasting.fev_bench.models import MODELS
 from benchmark.forecasting.model import MODEL_CONFIGS, add_model_args
 
 
@@ -46,7 +46,7 @@ def main() -> None:
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = SDMModel(
+    model = MODELS[args.model](
         model_config.factory(device),
         config=model_config,
         batch_size=args.batch_size,

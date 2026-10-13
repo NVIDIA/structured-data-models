@@ -3,6 +3,7 @@
 
 """SDM forecasting adapter for fev-bench."""
 
+import zlib
 from collections.abc import Iterator
 
 import datasets
@@ -43,8 +44,10 @@ class SDMModel(fev.ForecastingModel):
                     out, levels = forecast(
                         self.model,
                         config=self.config,
-                        past=past_batch,
-                        future=future_batch,
+                        past=[self._prepare(task, df) for df in past_batch],
+                        future=[
+                            self._prepare(task, df) for df in future_batch
+                        ],
                         targets=task.target_columns,
                     )
                     # Median point forecast followed by the task quantiles:
@@ -65,6 +68,35 @@ class SDMModel(fev.ForecastingModel):
                 )
             predictions.append(window_predictions)
         return predictions
+
+    def _prepare(self, task: fev.Task, df: pd.DataFrame) -> pd.DataFrame:
+        """Prepare the past or future data of a series for the model."""
+        return df
+
+
+class TimesFM3Model(SDMModel):
+    """fev model for ``TimesFM3``.
+
+    Static covariates are ignored, while targets and dynamic covariates are
+    converted to numbers (hashing strings into 100 buckets) and imputed with
+    the last observed value.
+    """
+
+    model_name = "sdm-timesfm3"
+
+    def _prepare(self, task: fev.Task, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.drop(columns=task.static_columns)
+        for column in df.columns.drop([task.id_column, task.timestamp_column]):
+            x = df[column]
+            if pd.api.types.is_string_dtype(x):
+                x = x.fillna("").map(lambda v: zlib.crc32(v.encode()) % 100)
+            df[column] = x.astype("float32").ffill().bfill().fillna(0)
+        return df
+
+
+MODELS: dict[str, type[SDMModel]] = {
+    "timesfm3": TimesFM3Model,
+}
 
 
 def _to_frames(
