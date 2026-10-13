@@ -233,7 +233,8 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
 
 @onlyCUDA
 @pytest.mark.usefixtures("fp8_rng")
-def test_attention_compile_fp8_cache() -> None:
+@pytest.mark.parametrize("context_rows", [64 * 1024, 64 * 1024 + 1])
+def test_attention_compile_fp8_cache(context_rows: int) -> None:
     dtype = torch.float16
     if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
         pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
@@ -246,7 +247,7 @@ def test_attention_compile_fp8_cache() -> None:
     ).eval()
     module._supports_quantized_attention = True
     torch.nn.init.normal_(module.out_lin.weight, std=0.05)
-    context = torch.randn(1, 64 * 1024, 128, device="cuda", dtype=dtype)
+    context = torch.randn(1, context_rows, 128, device="cuda", dtype=dtype)
     compiled = torch.compile(module, fullgraph=True, dynamic=False)
     with torch.inference_mode(), optimize(attention="fp8"):
         expected, eager_cache = module(context, return_key_value=True)
