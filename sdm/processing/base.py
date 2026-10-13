@@ -117,7 +117,8 @@ class Processor(torch.nn.Module, abc.ABC):
         self.__fitted = bool(self._fitted_state)
 
     def _set_buffer(self, name: str, value: Tensor) -> None:
-        # Direct registration avoids PyTorch's buffer-assignment inspection.
+        # New module buffer assignment fails in torch.compile on PyTorch 2.14.
+        # Direct registration skips inspect.signature; assignment works on 2.7.
         self.register_buffer(
             name,
             value,
