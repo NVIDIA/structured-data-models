@@ -36,6 +36,7 @@ class _RecordingModel(ICLModel):
     supports_multi_target = False
     supports_context_only_columns = False
     supports_related_tables = True
+    supports_seqused = True
 
     def __init__(self) -> None:
         super().__init__(task=None)

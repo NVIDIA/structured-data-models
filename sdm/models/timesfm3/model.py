@@ -102,6 +102,7 @@ class TimesFM3(ICLModel):
     supports_multi_target: ClassVar[bool] = True
     supports_context_only_columns: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
+    supports_seqused: ClassVar[bool] = False
 
     def __init__(
         self,
