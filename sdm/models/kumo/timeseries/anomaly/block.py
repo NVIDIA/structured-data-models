@@ -86,6 +86,7 @@ class ResidualBlock(torch.nn.Module):
 
         # Preserve post-residual normalization and attention dropout, which
         # SDM's TransformerBlock does not currently provide together.
+        # TODO: Switch to SDM's TransformerBlock once it supports both.
         self.time_layer = TransformerEncoderLayer(
             d_model=channels,
             nhead=num_heads,

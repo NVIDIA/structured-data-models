@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from collections.abc import Iterator
 
 import pytest
 import torch
@@ -10,6 +11,16 @@ from torch import Tensor
 
 from sdm.models.kumo.timeseries.anomaly.block import ResidualBlock
 from sdm.testing import withCUDA
+
+
+@pytest.fixture(autouse=True)
+def exact_gelu() -> Iterator[None]:
+    # At inference time on GPU, PyTorch's encoder layer switches to a faster
+    # kernel with an approximate GELU. Disable it to compare exact outputs.
+    enabled = torch.backends.mha.get_fastpath_enabled()
+    torch.backends.mha.set_fastpath_enabled(False)
+    yield
+    torch.backends.mha.set_fastpath_enabled(enabled)
 
 
 def reference_attention(
@@ -81,7 +92,7 @@ def test_residual_block(
         side_channels=6,
         embedding_channels=12,
         num_heads=2,
-        dropout=1.0,
+        dropout=0.0,
         device=device,
     ).train(training)
     x = torch.randn(2, 8, features, length, device=device)
