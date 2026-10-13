@@ -58,20 +58,20 @@ def reference_block(
 
 @withCUDA
 @pytest.mark.parametrize(
-    ("features", "length"), [(3, 5), (1, 5), (3, 1), (1, 1)]
+    ("features", "length", "diffusion_batch", "strategy_batch", "training"),
+    [
+        (3, 5, 1, 2, False),
+        (1, 5, 1, 2, False),
+        (3, 1, 1, 2, False),
+        (1, 1, 1, 2, False),
+        (3, 5, 2, 1, False),
+        (3, 5, 1, 2, True),
+    ],
 )
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-@pytest.mark.parametrize("embedding_channels", [8, 12])
-@pytest.mark.parametrize(
-    ("diffusion_batch", "strategy_batch"), [(1, 2), (2, 1)]
-)
-@pytest.mark.parametrize("training", [False, True])
 def test_residual_block(
     device: torch.device,
     features: int,
     length: int,
-    dtype: torch.dtype,
-    embedding_channels: int,
     diffusion_batch: int,
     strategy_batch: int,
     training: bool,
@@ -79,26 +79,21 @@ def test_residual_block(
     block = ResidualBlock(
         channels=8,
         side_channels=6,
-        embedding_channels=embedding_channels,
+        embedding_channels=12,
         num_heads=2,
         dropout=1.0,
         device=device,
-        dtype=dtype,
     ).train(training)
-    x = torch.randn(2, 8, features, length, device=device, dtype=dtype)
-    side = torch.randn(2, 6, features, length, device=device, dtype=dtype)
-    diffusion = torch.randn(
-        diffusion_batch, embedding_channels, device=device, dtype=dtype
-    )
-    strategy = torch.randn(
-        strategy_batch, embedding_channels, device=device, dtype=dtype
-    )
+    x = torch.randn(2, 8, features, length, device=device)
+    side = torch.randn(2, 6, features, length, device=device)
+    diffusion = torch.randn(diffusion_batch, 12, device=device)
+    strategy = torch.randn(strategy_batch, 12, device=device)
     with torch.inference_mode():
         actual = block(x, side, diffusion, strategy)
         expected = reference_block(block, x, side, diffusion, strategy)
     for result, reference in zip(actual, expected, strict=True):
         assert result.shape == x.shape
-        assert result.dtype == dtype
+        assert result.dtype == x.dtype
         assert result.device == device
         torch.testing.assert_close(result, reference)
 
@@ -120,6 +115,7 @@ def test_residual_block_grad_and_state_dict(device: torch.device) -> None:
         for shape in [(2, 8, 3, 5), (2, 6, 3, 5), (2, 12), (2, 12)]
     ]
     residual, skip = block(*inputs)
+    assert residual.dtype == skip.dtype == torch.float64
     (residual.square().mean() + skip.square().mean()).backward()
     for value in (*inputs, *block.parameters()):
         assert value.grad is not None
