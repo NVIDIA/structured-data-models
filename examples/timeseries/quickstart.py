@@ -53,9 +53,8 @@ print(out.cpu().numpy(), end="\n\n")
 
 print("# Forecasting with Past-only Covariates")  #############################
 # Forecast next quarter's weekly store sales using historical sales, historical
-# customer footfall (Customers), and known covariates indicating store
-# operation (Open), promotion periods (Promo), and holidays (SchoolHoliday,
-# StateHoliday).
+# customer footfall, and known covariates indicating store operation, promotion
+# periods, and holidays.
 context_df = pd.read_parquet(f"{url}/retail_sales/train.parquet")
 context_df = context_df.sort_values(["id", "timestamp"])
 query_df = pd.read_parquet(f"{url}/retail_sales/test.parquet")
