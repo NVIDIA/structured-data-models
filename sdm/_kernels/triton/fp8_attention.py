@@ -455,7 +455,7 @@ def _fp8_attention(
     context_splits = 1
     # Aligned V loads keep shorter predictions limited by launch overhead.
     min_context = (
-        60 * 1024 if v.stride(-1) == 1 and v.stride(-2) % 8 == 0 else 32 * 1024
+        64 * 1024 if v.stride(-1) == 1 and v.stride(-2) % 8 == 0 else 32 * 1024
     )
     if cache is not None and k.size(-2) >= min_context:
         programs = triton.cdiv(q.size(-2), query_tile) * q.size(0) * q.size(1)  # ty: ignore[invalid-argument-type]
