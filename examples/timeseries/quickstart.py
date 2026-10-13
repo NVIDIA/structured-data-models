@@ -83,7 +83,7 @@ query = sdm.TableTensor.from_pandas(
 with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
     out = model(
         x_context=context.drop_columns("Sales"),
-        y_context=context["Sales"],
+        y_context=context["Sales"],  # type: ignore
         x_query=query.drop_columns("Sales"),
         num_estimators=2,
     )["Sales__q50"].numerical.squeeze(-1)  # Median prediction
