@@ -22,6 +22,7 @@ from sdm.relational import (
     RelationalData,
     TaskLink,
     RelatedTables,
+    ParquetRelationalSampler,
 )
 from sdm.processing import Recipe
 from sdm import models, evaluation, explain
@@ -50,6 +51,7 @@ __all__ = [
     "RelationalData",
     "TaskLink",
     "RelatedTables",
+    "ParquetRelationalSampler",
     "Recipe",
     "models",
     "evaluation",
