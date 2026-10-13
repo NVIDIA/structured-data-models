@@ -223,6 +223,7 @@ datasets.json
 
 # Forecasting benchmarks
 gift_eval_out/
+fev_bench_out/
 
 # Checkpoint files
 *.pt

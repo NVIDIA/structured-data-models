@@ -1,6 +1,6 @@
 # Time-Series Forecasting Benchmarks
 
-This directory contains benchmarks of `structured-data-models` on [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval).
+This directory contains benchmarks of `structured-data-models` on [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval) and [fev-bench](https://github.com/autogluon/fev).
 
 All benchmarks share one model adapter (see `benchmark/forecasting/model.py`) that maps each forecasting task onto the `ICLModel` interface: time steps become rows, past targets become `y_context`, all covariates and timestamps of the context become `x_context`, and the forecast horizon becomes `x_query` with one row of known covariates and timestamps per future time step. Columns keep their semantic types, so each model decides which ones it consumes. Series in a batch are left-padded with missing values, and multivariate series are flattened for models without multi-target support.
 
@@ -49,3 +49,36 @@ This compares all available SDM results against published GIFT-Eval results on t
 - Published results batch series of different context lengths together, which shifts their positional encodings on datasets with varying context lengths.
 - Published results clip forecasts of non-negative series at zero.
 - Published results forecast at most 32 variates jointly, subsampling covariates of `bizitobs_application` and `bizitobs_service`.
+
+______________________________________________________________________
+
+## fev-bench
+
+### Setup
+
+Run the command below from the repository root:
+
+```bash
+pip install . fev==0.10.0
+```
+
+Tasks are downloaded from Hugging Face on first use.
+
+### Run
+
+```bash
+python -m benchmark.forecasting.fev_bench.main --model timesfm3
+```
+
+Pass `--task` to run only selected fev-bench tasks, *e.g.*, `--task hospital --task proenfo_gfc12`.
+Results are written to `benchmark/forecasting/fev_bench_out/<model>/`, and already completed tasks are skipped.
+
+### Evaluate
+
+```bash
+python -m benchmark.forecasting.fev_bench.evaluate
+```
+
+This compares all available SDM results against published fev-bench results on the same tasks with `fev.leaderboard`, using a seasonal naive baseline.
+
+In addition to the differences listed for GIFT-Eval, published `TimesFM-3` results impute missing values with the last observed value, convert non-numerical covariates to numbers, and ignore static covariates.

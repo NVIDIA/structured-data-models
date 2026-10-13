@@ -80,8 +80,10 @@ def forecast(
     past = [df.iloc[-size:].reset_index(drop=True) for df in past]
     past = [df.reindex(range(len(df) - size, len(df))) for df in past]
 
-    # Infer semantic types jointly so that context and query share them:
+    # Infer semantic types jointly so that context and query share them, and
+    # order targets first so that forecasts follow ``targets``:
     df = pd.concat([*past, *future], ignore_index=True)
+    df = df[[*targets, *df.columns.drop(targets)]]
     table = sdm.TableTensor.from_pandas(
         df=df,
         stypes=sdm.infer_stypes(df, id="infer"),
