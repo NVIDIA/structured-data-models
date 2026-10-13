@@ -1,11 +1,20 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 from sdm import TableTensor
 from sdm.processing import Standardize
 from sdm.testing import withCUDA
+
+
+@pytest.mark.parametrize("name", ["mean", "scale", "_fitted_state"])
+def test_standardize_preserves_nonpersistent_buffers(name: str) -> None:
+    processor = Standardize()
+    processor.register_buffer(name, getattr(processor, name), persistent=False)
+    processor.fit(TableTensor.from_tensor(torch.randn(3, 2)))
+    assert name not in processor.state_dict()
 
 
 @withCUDA

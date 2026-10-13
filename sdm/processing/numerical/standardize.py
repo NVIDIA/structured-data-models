@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
@@ -9,6 +10,8 @@ from sdm.processing.numerical._stats import (
     _constant_feature_mask,
     _isfinite,
 )
+
+_NUMERICAL_STYPES = frozenset({Stype.numerical})
 
 
 class Standardize(Processor, InvertibleMixin):
@@ -22,8 +25,11 @@ class Standardize(Processor, InvertibleMixin):
         eps: Value added to each fitted standard deviation.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = _NUMERICAL_STYPES
     requires_fit = True
+
+    mean: Tensor
+    scale: Tensor
 
     def __init__(self, *, eps: float = 0.0) -> None:
         super().__init__()
@@ -32,6 +38,13 @@ class Standardize(Processor, InvertibleMixin):
         self.eps = eps
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
+
+    def _handles_table(self, table: TableTensor) -> bool:
+        # Avoid semantic-type set operations for normal numerical processing.
+        handles_stypes = self.handles_stypes
+        if handles_stypes is _NUMERICAL_STYPES:
+            return table.numerical.size(-1) > 0
+        return bool(table.active_stypes & handles_stypes)
 
     def _fit(
         self,
@@ -44,19 +57,21 @@ class Standardize(Processor, InvertibleMixin):
         count = finite.sum(dim=-2, keepdim=True)
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
 
-        self.mean = finite_or_nan.nansum(-2, keepdim=True).div_(count)
+        self._set_buffer(
+            "mean", finite_or_nan.nansum(-2, keepdim=True).div_(count)
+        )
         self.mean.masked_fill_(self.mean.isnan(), 0.0)
 
         var = finite_or_nan.sub_(self.mean).square_().nansum(-2, keepdim=True)
         var /= count
         var.masked_fill_(var.isnan(), 0.0)
 
-        self.scale = var.sqrt()
+        self._set_buffer("scale", var.sqrt())
         if self.eps == 0:
             mask = _constant_feature_mask(var, self.mean, num_samples=count)
             self.scale[mask] = 1.0
         else:
-            self.scale += self.eps
+            self.scale.add_(self.eps)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = (table.numerical - self.mean).div_(self.scale)
