@@ -64,6 +64,11 @@ class RecipeExecution:
     ) -> tuple[MemberContext, ...]:
         """Fit and transform context data."""
         num_rows = x.size(-2)
+
+        # Transform target first to be able to resolve task type. Inverse
+        # target transforms require distinct member assignment:
+        y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
+
         series_processors = tuple(
             module
             for processor in (self.recipe.features, self.recipe.target)
@@ -71,13 +76,13 @@ class RecipeExecution:
             if isinstance(module, sp.SeriesProcessor)
         )
         for series_processor in series_processors:
-            series_processor._offset = 0
+            series_processor._offset = torch.zeros(
+                len(y),
+                dtype=torch.long,
+                device=y[0].device,
+            )
 
-        # Transform target first to be able to resolve task type. Inverse
-        # target transforms require distinct member assignment:
-        y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
         y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
-
         self._num_estimators = num_members
         self._y_locations = y._locations
 
@@ -135,7 +140,14 @@ class RecipeExecution:
                     )
                 for module in processor.modules():
                     if isinstance(module, sp.SeriesProcessor):
-                        module._offset = table.size(-2)
+                        module._offset = torch.tensor(
+                            [
+                                ensemble_table[i].size(-2)
+                                for i in range(len(ensemble_table))
+                            ],
+                            dtype=torch.long,
+                            device=ensemble_table[0].device,
+                        )
 
         for module in self.recipe.features.modules():
             if isinstance(module, sp.TableDispatch):
@@ -171,7 +183,12 @@ class RecipeExecution:
             )
 
         for series_processor in series_processors:
-            series_processor._offset = num_rows
+            series_processor._offset = torch.full(
+                (len(x),),
+                fill_value=num_rows,
+                dtype=torch.long,
+                device=x[0].device,
+            )
 
         members: list[MemberContext] = []
         for member_id in range(self.num_members):
