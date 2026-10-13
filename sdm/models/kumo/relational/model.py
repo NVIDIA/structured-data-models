@@ -564,8 +564,8 @@ class _KumoRelational(torch.nn.Module):
         x[..., readout_index, -task.size(-1) :] = task
         return x
 
-    @staticmethod
     def _get_rel_time(
+        self,
         datetime: Tensor,
         seed_datetime: Tensor,
         task_row: Tensor,

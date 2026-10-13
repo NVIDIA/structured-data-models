@@ -347,6 +347,7 @@ def test_many_classes_forward_and_cache(
 
 @pytest.mark.parametrize("missing", [False, True])
 def test_relative_time_compile_fit_and_replay(missing: bool) -> None:
+    model = _KumoRelational(num_classes=2, num_quantiles=0, device="meta")
     day = 24 * 60 * 60 * 1_000_000
     datetime = torch.tensor([[0], [day], [2 * day]])
     seed = torch.tensor([[3 * day], [6 * day], [9 * day]])
@@ -362,7 +363,7 @@ def test_relative_time_compile_fit_and_replay(missing: bool) -> None:
     ) -> torch.Tensor | None:
         if cache.is_recording:
             cache["standardizer"] = Standardize()
-        return _KumoRelational._get_rel_time(
+        return model._get_rel_time(
             datetime, seed, rows, cast(Standardize, cache["standardizer"])
         )
 
