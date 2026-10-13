@@ -50,7 +50,6 @@ def update_running_stats(
 
     out_count = count + inc_count
     out_mean = (count * mean + inc_count * inc_mean) / out_count.clamp(min=1)
-    # Multiply by counts first to avoid squaring overflow in empty patches.
     out_var = (
         count * std * std
         + inc_count * inc_std * inc_std
