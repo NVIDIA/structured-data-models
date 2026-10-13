@@ -276,13 +276,8 @@ class _TimesFM3(torch.nn.Module):
         x = x.unflatten(-1, (-1, P))  # [..., C, N, P]
 
         # Gather future patches and normalize:
-        # Only padding and unavailable future values are masked. NaNs left
-        # after interpolation are observed zeros, matching upstream.
-        mask = torch.ones_like(x, dtype=torch.bool).flatten(-2)
-        mask[..., :, left_pad:mid] = False
-        mask[..., :C, mid : mid + R_test] = False
-        mask = mask.unflatten(-1, (-1, P))
-        x.nan_to_num_(nan=0.0, posinf=1e20, neginf=-1e20).clamp_(-1e20, 1e20)
+        mask = x.isnan()
+        x[mask] = 0.0
         _, mean, std = get_running_stats(x, mask)
 
         future_x, past_end = gather_future_patches(x, num_patches=O // P)
