@@ -103,6 +103,10 @@ jobs:
           print("pyg-lib", version("pyg-lib"))
           PY
 
+      - name: Benchmark import smoke
+        run: |
+          PYTHONPATH=examples python -c 'import benchmark_tabiclv2'
+
       - name: Run tests
         env:
           FULL_TEST: ${{ needs.trigger.outputs.full_test == 'true' && '1' || '0' }}
