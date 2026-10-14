@@ -1,11 +1,11 @@
 # NIM Inference
 
 `structured-data-models` provides Python building blocks for developing and evaluating structured-data models.
-[NVIDIA NIM](https://developer.nvidia.com/nim) packages selected models as GPU inference microservices with an HTTP API, so applications can use a model without loading its weights or managing its GPU runtime themselves.
-This provides a path from experimenting with a model in SDM to serving a model published as a NIM in enterprise applications.
+[NVIDIA NIM](https://developer.nvidia.com/nim) packages selected models as GPU inference microservices with an HTTP API for enterprise applications.
 
-With SDM, your Python process owns model execution through the [in-context learning interface](icl).
-With a NIM, model execution runs in a separately deployed service, and applications send structured prediction requests to it.
+The SDM [in-context learning interface](icl) runs models in the application's Python process.
+A NIM runs model execution in a separate GPU service, and applications send structured prediction requests to it over HTTP.
+Applications can call the model without loading its weights or managing the GPU runtime.
 Application capacity and GPU service capacity can be provisioned separately.
 
 ## From SDM to a NIM
@@ -13,10 +13,10 @@ Application capacity and GPU service capacity can be provisioned separately.
 Start by evaluating the model and prediction task on representative data.
 When moving inference into an application, choose a published NIM for the model you want to serve.
 The NIM artifact defines the served model and supported API; the SDM Python interface and the NIM HTTP interface are separate contracts.
-Local SDM customizations, such as recipe changes or fine-tuned weights, are not automatically carried into a published NIM.
+Local SDM customizations, such as changes to a {py:class}`~sdm.processing.recipe.Recipe` or fine-tuned weights, are not automatically carried into a published NIM.
 Validate prediction quality on the deployed NIM with representative requests.
 
-The model-specific deployment pages describe these Kumo NIMs, which share a structured-data HTTP API:
+The following Kumo NIMs share a structured-data HTTP API:
 
 | Model ID          | Prediction inputs                                                                                                  | Deployment instructions                                                                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -56,7 +56,7 @@ curl -fsS "$NIM_URL/v1/health/ready" && \
 During startup, the service may be unreachable or return a non-success readiness response.
 Retry until readiness returns HTTP 200, then use a model ID advertised by that deployment.
 
-### Prediction requests
+### Prediction Requests
 
 `POST /v1/predictions` accepts a JSON request that describes the task and carries the input data.
 The main fields are:
@@ -78,11 +78,12 @@ See the [Kumo Tabular](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-tab
 As with SDM, labeled context rows define the prediction task at inference time without updating model weights.
 For Tabular inference, context rows contain features and labels; query rows contain the same features without the target.
 For Relational inference, the request can also include related tables and the relationships that link them to the instance table.
+
 For temporal tasks, `task.anchor_time_column` names the timestamp column that anchors each row's prediction.
 Include only feature values and related records available at that time, and choose context labels that were already known at the query rows' anchor times.
 Keep query labels out of the input context.
-The NIM receives these prepared records; it does not connect to the source database or execute a predictive query against it.
 
+The NIM receives these prepared records; it does not connect to the source database or execute a predictive query against it.
 Save a complete request from the selected model's deployment example as `request.json`, adapt it to your data, and submit it to the running NIM:
 
 ```bash
@@ -97,7 +98,7 @@ Match prediction records to input rows using `row_index`, the zero-based positio
 Kumo Relational returns the query row's `instance_id` as that record's `id`.
 The response-level `id` identifies the call, not an input row.
 
-### Reusing context
+### Reusing Context
 
 For repeated predictions with the same model, task, and schema, a session can retain context in the serving process.
 Create it with `POST /v1/sessions`, use the returned session ID for subsequent predictions, and release it with `DELETE /v1/sessions/{session_id}`.
@@ -107,11 +108,12 @@ Sessions can expire, be evicted, or disappear after a restart.
 Route follow-up calls to the same serving process and recreate the session if it is lost.
 Use one-shot prediction when retaining context is unnecessary.
 
-## Enterprise integration
+## Enterprise Integration
 
 Data preparation may run in an application, a Databricks notebook, or a job reading Snowflake or another database.
 Use database drivers or data connectors to assemble the input tables under your existing data permissions, then send those records to a reachable NIM endpoint.
-Data-source access and model hosting are independent: for example, an application can read Snowflake tables and call a NIM running in your data center.
+Data access and model deployment can be configured independently.
+For example, an application can read Snowflake tables and call a NIM running in your data center.
 
 The deployment operator manages GPU capacity, image updates, network access, authentication, and monitoring.
 The Kumo NIMs do not enforce application authentication on their prediction and session routes.
