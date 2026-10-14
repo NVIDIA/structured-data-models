@@ -199,7 +199,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python examples/relational/rel_bench.py --dataset rel-f1 --task driver-position
+          python examples/relational/relbench/main.py --dataset rel-f1 --task driver-position
 
       - name: Test TabArena benchmark
         timeout-minutes: 5

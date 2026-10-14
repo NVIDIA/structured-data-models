@@ -149,6 +149,7 @@ class KumoRelational(ICLModel):
         {Stype.numerical, Stype.categorical}
     )
     supports_multi_target: ClassVar[bool] = False
+    supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = True
 
     def __init__(
@@ -202,6 +203,7 @@ class KumoRelational(ICLModel):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
+        x_context_only: TableTensor | None,  # [..., R_context, D_only]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
@@ -309,7 +311,7 @@ class _KumoRelational(torch.nn.Module):
     ) -> Tensor:  # [..., R_query, *]
 
         num_classes: int | None = None  # Extract `y` as tensor:
-        if y_context is not None and y_context.categorical.size(-1) > 0:
+        if y_context is not None and y_context.categorical.code.size(-1) > 0:
             y = y_context.categorical.code.squeeze(-1)
             num_classes = len(y_context.categorical.categories[0])
         elif y_context is not None and y_context.numerical.size(-1) > 0:

@@ -9,7 +9,7 @@ from sdm.processing.numerical._stats import _isfinite
 
 
 class ImputeMean(Processor):
-    """Replace NaN feature values with fitted per-column means.
+    """Replace missing feature values with fitted per-column means.
 
     Infinite values are ignored when fitting the mean but preserved during
     transformation.

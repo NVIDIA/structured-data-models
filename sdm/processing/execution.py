@@ -20,6 +20,7 @@ class MemberContext(NamedTuple):
 
     x: TableTensor
     y: TableTensor
+    x_context_only: TableTensor | None
     related_tables: RelatedTables[TableTensor] | None
     #: Semantic types of the raw context columns before ``recipe.features``.
     input_stypes: Mapping[str, Stype]
@@ -53,19 +54,33 @@ class RecipeExecution:
 
     def fit_transform(
         self,
-        x: Tensor | TableTensor | EnsembleTable,
-        y: Tensor | TableTensor | EnsembleTable,
+        x: Tensor | TableTensor,
+        y: Tensor | TableTensor,
         related_tables: RelatedTables | None,
         *,
         num_members: int | None = None,
+        context_only_columns: Sequence[str] | Sequence[int] | None = None,
         generator: torch.Generator | None = None,
     ) -> tuple[MemberContext, ...]:
         """Fit and transform context data."""
         # Transform target first to be able to resolve task type. Inverse
         # target transforms require distinct member assignment:
-        y = _to_ensemble_table(y, num_members, expand=True)
-        y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
+        y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
 
+        series_processors = tuple(
+            module
+            for processor in (self.recipe.features, self.recipe.target)
+            for module in processor.modules()
+            if isinstance(module, sp.SeriesEnsembleProcessor)
+        )
+        for module in series_processors:
+            module._offset = torch.zeros(
+                len(y),
+                dtype=torch.long,
+                device=y[0].device,
+            )
+
+        y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
         self._num_estimators = num_members
         self._y_locations = y._locations
 
@@ -121,19 +136,55 @@ class RecipeExecution:
                         "Expected inputs to map to the same number of "
                         "ensemble members"
                     )
+                for module in processor.modules():
+                    if isinstance(module, sp.SeriesEnsembleProcessor):
+                        module._offset = torch.tensor(
+                            [
+                                ensemble_table[i].size(-2)
+                                for i in range(len(ensemble_table))
+                            ],
+                            dtype=torch.long,
+                            device=ensemble_table[0].device,
+                        )
 
         for module in self.recipe.features.modules():
             if isinstance(module, sp.TableDispatch):
                 module._route = "task"
 
+        x_context_only: EnsembleTable | None = None
+        if context_only_columns:
+            if not isinstance(x, TableTensor):
+                x = TableTensor.from_tensor(cast(Tensor, x))
+            context_only_columns = [str(col) for col in context_only_columns]
+            processor = copy.deepcopy(self.recipe.features)
+            x_context_only = processor.fit_transform_ensemble(
+                _to_ensemble_table(
+                    x.select_columns(context_only_columns), num_members
+                ),
+                generator=generator,
+            )
+            if len(x_context_only) != self.num_members:
+                raise ValueError(
+                    "Expected inputs to map to the same number of "
+                    "ensemble members"
+                )
+            x = x.drop_columns(context_only_columns)
+
         inputs = _to_ensemble_table(x, num_members)
-        x = self.recipe.features.fit_transform_ensemble(
+        x: EnsembleTable = self.recipe.features.fit_transform_ensemble(
             inputs,
             generator=generator,
         )
         if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
+            )
+
+        for module in series_processors:
+            module._offset = torch.tensor(
+                [x[i].size(-2) for i in range(len(x))],
+                dtype=torch.long,
+                device=x[0].device,
             )
 
         members: list[MemberContext] = []
@@ -152,6 +203,9 @@ class RecipeExecution:
                 MemberContext(
                     x=x[member_id],
                     y=y[member_id],
+                    x_context_only=x_context_only[member_id]
+                    if x_context_only is not None
+                    else None,
                     related_tables=related_tables_i,
                     input_stypes=inputs[member_id].stypes,
                 )
@@ -161,11 +215,11 @@ class RecipeExecution:
 
     def transform(
         self,
-        x: Tensor | TableTensor | EnsembleTable,
+        x: Tensor | TableTensor,
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
-        x = _to_ensemble_table(x, self._num_estimators)
+        x: EnsembleTable = _to_ensemble_table(x, self._num_estimators)
         x = self.recipe.features.transform_ensemble(x)
         if len(x) != self.num_members:
             raise ValueError(

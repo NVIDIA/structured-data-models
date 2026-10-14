@@ -49,8 +49,8 @@ reviews:
     - path: 'test/**/*.py'
       instructions: >-
         Pytest-based tests. Check that behavior changes in sdm/ have
-        corresponding test coverage, randomness is controlled via fixed
-        seeds or generators, and parametrization covers relevant
+        corresponding test coverage, seeds or generators are used only
+        when required by the tested behavior, and parametrization covers relevant
         dtype/device variants. Plain pytest functions are preferred over
         unittest-style classes.
     - path: 'examples/**'
@@ -125,5 +125,6 @@ code_generation:
         instructions: >-
           Place tests under test/ mirroring the sdm/ package layout. Use
           plain pytest functions with `pytest.mark.parametrize` for
-          dtype/device variants, fixed seeds or explicit generators for
-          any randomness, and `sdm.testing` utilities where applicable.
+          dtype/device variants and `sdm.testing` utilities where applicable.
+          Do not set seeds unless the tested behavior requires them; use
+          explicit generators when controlled randomness is necessary.

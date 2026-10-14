@@ -17,6 +17,10 @@ permissions:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.15']
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
@@ -24,7 +28,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
           activate-environment: true
 
       - name: Install package
@@ -33,7 +37,7 @@ jobs:
           uv pip install \
             --torch-backend=cpu \
             --find-links=https://data.pyg.org/whl/torch-2.14.0+cpu.html \
-            --group=test \
+            --group=test-cpu \
             -e .
 
       - name: Run tests
