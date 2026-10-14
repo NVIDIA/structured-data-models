@@ -19,6 +19,7 @@ from sdm import (
     TaskLike,
 )
 from sdm._inference import inference_mode
+from sdm._memory import set_pinned_max_round_threshold
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.models.callback import Callback
@@ -294,6 +295,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
         contexts = [
             self._prepare_context(context, callbacks) for context in contexts
         ]
+        if x.is_cuda and len(contexts) > 1:
+            set_pinned_max_round_threshold(mb=1)
+
         class_values = _class_values(contexts, estimator_batch_size)
         batches = _batch_slices(
             contexts=contexts,
