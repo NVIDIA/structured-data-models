@@ -345,6 +345,10 @@ def test_many_classes_forward_and_cache(
     torch.testing.assert_close(predicted, expected)
 
 
+@pytest.mark.skipif(
+    not torch._dynamo.is_dynamo_supported(),
+    reason="torch.compile is not supported by this Python/PyTorch build",
+)
 @pytest.mark.parametrize("missing", [False, True])
 def test_relative_time_compile_fit_and_replay(missing: bool) -> None:
     model = _KumoRelational(num_classes=2, num_quantiles=0, device="meta")
