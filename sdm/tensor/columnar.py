@@ -126,6 +126,8 @@ class ColumnarTensor(Tensor):
         )
 
         out._columns = columns
+        for i, column in enumerate(columns):
+            setattr(out, f"_column_{i}", column)
 
         return out
 
@@ -261,6 +263,25 @@ class ColumnarTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [f"_column_{i}" for i in range(len(self._columns))]
+        ctx = (self.__class__, len(self._columns), self.device)
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> ColumnarTensor:
+        cls, count, device = ctx
+        return cls(
+            tuple(inner_tensors[f"_column_{i}"] for i in range(count)),
+            size=outer_size[:-1],
+            device=device,
+        )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._columns, tuple(self.size())[:-1], self.device)
@@ -642,6 +663,18 @@ def _flatten(
     return cast(
         ColumnarTensor,
         aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
+
+
+@ColumnarTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: ColumnarTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> ColumnarTensor:
+    return cast(
+        ColumnarTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
     )
 
 

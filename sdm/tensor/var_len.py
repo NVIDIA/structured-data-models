@@ -1087,6 +1087,18 @@ def _flatten(
     )
 
 
+@VarLenTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: VarLenTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> VarLenTensor:
+    return cast(
+        VarLenTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
+    )
+
+
 @VarLenTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: VarLenTensor) -> VarLenTensor:

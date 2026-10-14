@@ -338,6 +338,11 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
     ids=lambda case: type(case.processor).__name__,
 )
 def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
+    if isinstance(case.processor, sp.TFIDF):
+        pytest.importorskip("cudf")
+        pytest.importorskip("cupy")
+        pytest.importorskip("pylibcudf")
+
     device = torch.device("cuda")
     source = case.make_table()
     target = source.replace_groups(

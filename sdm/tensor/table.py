@@ -701,18 +701,18 @@ class TableTensor(Tensor):
 
         if isinstance(tensor, StringTensor):
             return cls(
-                columns={Stype.text: columns},
+                columns={"text": columns},
                 text=tensor,
             )
 
         if not tensor.is_floating_point():
             return cls(
-                columns={Stype.categorical: columns},
+                columns={"categorical": columns},
                 categorical=CategoricalTensor.from_tensor(tensor),
             )
 
         return cls(
-            columns={Stype.numerical: columns},
+            columns={"numerical": columns},
             numerical=tensor,
         )
 
@@ -1082,6 +1082,34 @@ class TableTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = ["numerical", "categorical", "datetime", "text"]
+        if self.id.size(-1) > 0:
+            attrs.append("id")
+        columns = tuple(
+            (str(stype), names) for stype, names in self._columns.items()
+        )
+        ctx = (self.__class__, columns)
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> TableTensor:
+        cls, columns = ctx
+        return cls(
+            size=outer_size[:-1],
+            columns=dict(columns),
+            numerical=inner_tensors["numerical"],
+            categorical=inner_tensors["categorical"],
+            datetime=inner_tensors["datetime"],
+            text=inner_tensors["text"],
+            id=inner_tensors.get("id"),
+        )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
@@ -1545,6 +1573,18 @@ def _flatten(
     return cast(
         TableTensor,
         aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
+
+
+@TableTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: TableTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
     )
 
 
