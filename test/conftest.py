@@ -17,6 +17,8 @@ def device() -> torch.device:
 
 @pytest.fixture
 def compilation() -> Iterator[None]:
+    # PyTorch 2.14 runs on Python 3.15 but cannot compile on it.
+    # Check the build so tests run automatically when support is available.
     if not torch._dynamo.is_dynamo_supported():
         pytest.skip(
             "torch.compile is not supported by this Python/PyTorch build"
