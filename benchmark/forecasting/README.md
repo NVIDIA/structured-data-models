@@ -1,6 +1,6 @@
 # Time-Series Forecasting Benchmarks
 
-This directory contains benchmarks of `structured-data-models` on [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval) and [fev-bench](https://github.com/autogluon/fev).
+This directory contains benchmarks of `structured-data-models` on [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval), [fev-bench](https://github.com/autogluon/fev), and [TIME](https://github.com/zqiao11/TIME).
 
 All benchmarks share one model adapter (see `benchmark/forecasting/model.py`) that maps each forecasting task onto the `ICLModel` interface: time steps become rows, past targets become `y_context`, all covariates and timestamps of the context become `x_context`, and the forecast horizon becomes `x_query` with one row of known covariates and timestamps per future time step. Columns keep their semantic types, so each model decides which ones it consumes. Series in a batch are left-padded with missing values, and multivariate series are flattened for models without multi-target support.
 
@@ -81,3 +81,43 @@ python -m benchmark.forecasting.fev_bench.evaluate
 This compares all available SDM results against published fev-bench results on the same tasks with `fev.leaderboard`, using a seasonal naive baseline.
 
 On fev-bench, `TimesFM3` also imputes missing values with the last observed value, converts dynamic covariates to numbers, and ignores static covariates. In addition to the differences listed for GIFT-Eval, published results hash string covariates with a randomly seeded instead of a fixed hash function.
+
+______________________________________________________________________
+
+## TIME
+
+### Setup
+
+Run the commands below from the repository root:
+
+```bash
+pip install . gluonts datasets python-dotenv scipy pyyaml
+
+git clone https://github.com/zqiao11/TIME.git
+git -C TIME checkout 3ca5c41d71c76f3c70632c0121142d325350ee32
+pip install --no-deps -e TIME
+
+hf download Real-TSF/TIME --repo-type dataset --local-dir /path/to/time
+export TIME_DATASET=/path/to/time
+```
+
+TIME is not released on PyPI and is therefore pinned to a commit. It is installed without dependencies since it pins outdated `numpy`, `gluonts` and `datasets` versions.
+
+### Run
+
+```bash
+python -m benchmark.forecasting.time_bench.main --model timesfm3
+```
+
+Pass `--dataset` to run only selected TIME datasets, *e.g.*, `--dataset Job_Claims/W --dataset CPHL/15T`.
+Results are written to `benchmark/forecasting/time_bench_out/<model>/`, and already completed configurations are skipped.
+
+### Evaluate
+
+```bash
+python -m benchmark.forecasting.time_bench.evaluate --time-path /path/to/TIME
+```
+
+This compares all available SDM results against published TIME results on the same configurations with TIME's official leaderboard script, normalized by a seasonal naive baseline.
+
+The differences to published `TimesFM-3` results listed for GIFT-Eval apply to TIME as well.

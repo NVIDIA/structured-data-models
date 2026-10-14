@@ -12,3 +12,4 @@ This folder contains benchmark integrations for `structured-data-models`:
 - [**`forecasting/`**](forecasting/): Time-series forecasting benchmarks
   - [**`gift_eval/`**](forecasting/): [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval)
   - [**`fev_bench/`**](forecasting/): [fev-bench](https://github.com/autogluon/fev)
+  - [**`time_bench/`**](forecasting/): [TIME](https://github.com/zqiao11/TIME)
