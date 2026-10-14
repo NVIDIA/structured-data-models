@@ -66,8 +66,21 @@ class RecipeExecution:
         # Transform target first to be able to resolve task type. Inverse
         # target transforms require distinct member assignment:
         y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
-        y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
 
+        series_processors = tuple(
+            module
+            for processor in (self.recipe.features, self.recipe.target)
+            for module in processor.modules()
+            if isinstance(module, sp.SeriesEnsembleProcessor)
+        )
+        for module in series_processors:
+            module._offset = torch.zeros(
+                len(y),
+                dtype=torch.long,
+                device=y[0].device,
+            )
+
+        y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
         self._num_estimators = num_members
         self._y_locations = y._locations
 
@@ -123,6 +136,16 @@ class RecipeExecution:
                         "Expected inputs to map to the same number of "
                         "ensemble members"
                     )
+                for module in processor.modules():
+                    if isinstance(module, sp.SeriesEnsembleProcessor):
+                        module._offset = torch.tensor(
+                            [
+                                ensemble_table[i].size(-2)
+                                for i in range(len(ensemble_table))
+                            ],
+                            dtype=torch.long,
+                            device=ensemble_table[0].device,
+                        )
 
         for module in self.recipe.features.modules():
             if isinstance(module, sp.TableDispatch):
@@ -155,6 +178,13 @@ class RecipeExecution:
         if len(x) != self.num_members:
             raise ValueError(
                 "Expected inputs to map to the same number of ensemble members"
+            )
+
+        for module in series_processors:
+            module._offset = torch.tensor(
+                [x[i].size(-2) for i in range(len(x))],
+                dtype=torch.long,
+                device=x[0].device,
             )
 
         members: list[MemberContext] = []
