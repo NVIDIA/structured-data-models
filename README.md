@@ -33,7 +33,7 @@ pip install structured-data-models
 Alternatively, install the latest development version from the `main` branch:
 
 ```bash
-pip install git+https://github.com/NVIDIA/structured-data-models.git@main
+pip install git+https://github.com/NVIDIA/structured-data-models.git
 ```
 
 > [!NOTE]
