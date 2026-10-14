@@ -1,8 +1,8 @@
 <p align="center">
 <picture>
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/NVIDIA/structured-data-models/v0.2.0/docs/source/images/logo_light.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/NVIDIA/structured-data-models/v0.2.0/docs/source/images/logo_dark.svg">
-  <img src="https://raw.githubusercontent.com/NVIDIA/structured-data-models/v0.2.0/docs/source/images/logo_light.svg" width="125">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/NVIDIA/structured-data-models/main/docs/source/images/logo_light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/NVIDIA/structured-data-models/main/docs/source/images/logo_dark.svg">
+  <img src="https://raw.githubusercontent.com/NVIDIA/structured-data-models/main/docs/source/images/logo_light.svg" width="125">
 </picture>
 </p>
 
