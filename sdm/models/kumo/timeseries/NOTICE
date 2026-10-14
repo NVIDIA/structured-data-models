@@ -1,0 +1,7 @@
+Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+Kumo-TS includes DPM-Solver, Copyright (c) 2022 Cheng Lu,
+licensed under the MIT License.
+
+See the DPM-Solver third-party license notice at:
+third_party/dpm-solver/LICENSE

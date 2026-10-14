@@ -19,18 +19,26 @@ class Callback:
         model: torch.nn.Module,
         x: TableTensor,
         y: TableTensor,
+        x_context_only: TableTensor | None,
         related_tables: RelatedTables[TableTensor] | None,
-    ) -> tuple[TableTensor, TableTensor, RelatedTables[TableTensor] | None]:
+    ) -> tuple[
+        TableTensor,
+        TableTensor,
+        TableTensor | None,
+        RelatedTables[TableTensor] | None,
+    ]:
         r"""Run after context preprocessing.
 
         Args:
             model: Model receiving the callback.
-            x: The feature tensor of in-context examples with shape
+            x: The features of in-context examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
             y: The targets of in-context examples with shape ``[..., R, 1]``.
+            x_context_only: The features available only in context with shape
+                ``[..., R, D_only]``, or ``None`` when absent.
             related_tables: Related context for in-context examples.
         """
-        return x, y, related_tables
+        return x, y, x_context_only, related_tables
 
     def on_query_preprocessing_end(
         self,
@@ -60,3 +68,47 @@ class Callback:
             out: The output produced by the model.
         """
         return out
+
+
+class EnableInputGradients(Callback):
+    """Enable gradients for preprocessed numerical query inputs."""
+
+    requires_grad = True
+
+    def on_query_preprocessing_end(  # noqa: D102
+        self,
+        model: torch.nn.Module,
+        x: TableTensor,
+        related_tables: RelatedTables[TableTensor] | None,
+    ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
+        x = x.replace_blocks(
+            numerical=x.numerical.detach().requires_grad_(True)
+        )
+        if related_tables is not None:
+            related_tables = related_tables.replace_tables(
+                {
+                    name: table.replace_blocks(
+                        numerical=table.numerical.detach().requires_grad_(True)
+                    )
+                    for name, table in related_tables.tables.items()
+                }
+            )
+        return x, related_tables
+
+
+class CaptureInputs(Callback):
+    """Collect preprocessed query inputs."""
+
+    def __init__(self) -> None:
+        self.inputs: list[
+            tuple[TableTensor, RelatedTables[TableTensor] | None]
+        ] = []
+
+    def on_query_preprocessing_end(  # noqa: D102
+        self,
+        model: torch.nn.Module,
+        x: TableTensor,
+        related_tables: RelatedTables[TableTensor] | None,
+    ) -> tuple[TableTensor, RelatedTables[TableTensor] | None]:
+        self.inputs.append((x, related_tables))
+        return x, related_tables
