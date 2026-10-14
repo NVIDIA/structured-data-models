@@ -114,10 +114,12 @@ class SideEmbedding(torch.nn.Module):
             **factory_kwargs,
         )
         self.embed_norm = torch.nn.LayerNorm(
-            feature_channels, **factory_kwargs
+            normalized_shape=feature_channels,
+            **factory_kwargs,
         )
         self.time_embed_norm = torch.nn.LayerNorm(
-            time_channels, **factory_kwargs
+            normalized_shape=time_channels,
+            **factory_kwargs,
         )
 
     def forward(self, time: Tensor, mask: Tensor) -> Tensor:
@@ -138,11 +140,11 @@ class SideEmbedding(torch.nn.Module):
         """
         batch, features, length = mask.shape
         frequencies = 1 / torch.pow(
-            10000.0,
-            torch.arange(
-                0,
-                self.time_channels,
-                2,
+            self=10000.0,
+            exponent=torch.arange(
+                start=0,
+                end=self.time_channels,
+                step=2,
                 device=time.device,
                 dtype=torch.float32,
             )
@@ -160,6 +162,7 @@ class SideEmbedding(torch.nn.Module):
         side_info = side_info.permute(0, 3, 2, 1)  # [B, S, K, L]
         if self.is_unconditional:
             side_info = torch.cat(
-                [side_info, mask.unsqueeze(1).to(side_info.dtype)], dim=1
+                tensors=[side_info, mask.unsqueeze(1).to(side_info.dtype)],
+                dim=1,
             )
         return side_info
