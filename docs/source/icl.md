@@ -73,6 +73,9 @@ Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls wh
 
 Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.predict` does not support gradient-based fine-tuning and raises if the model is in train mode.
 
+Both calls accept padded inputs: pad the in-context rows and the columns to a fixed set of shapes and pass the valid counts as `seqused_train` (per batch element) and `seqused_cols` (shared) `torch.int32` tensors together with a pass-through `sdm.Recipe()`.
+Padded rows and columns are masked from attention, so a stream of differently sized tables can reuse the same compiled graphs.
+
 ## Model Concepts
 
 Structured data foundation models are not bound to a specific task type.
