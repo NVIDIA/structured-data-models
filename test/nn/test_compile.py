@@ -19,10 +19,16 @@ from sdm.nn import (
 from sdm.testing import withCUDA
 
 # Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
-pytestmark = pytest.mark.skipif(
-    os.getenv("FULL_TEST", "0") != "1",
-    reason="Fast test run",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        os.getenv("FULL_TEST", "0") != "1",
+        reason="Fast test run",
+    ),
+    pytest.mark.skipif(
+        not torch._dynamo.is_dynamo_supported(),
+        reason="torch.compile is not supported by this Python/PyTorch build",
+    ),
+]
 
 
 @pytest.fixture(autouse=True)

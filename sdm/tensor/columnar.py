@@ -645,6 +645,18 @@ def _flatten(
     )
 
 
+@ColumnarTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: ColumnarTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> ColumnarTensor:
+    return cast(
+        ColumnarTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
+    )
+
+
 @ColumnarTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: ColumnarTensor) -> ColumnarTensor:
