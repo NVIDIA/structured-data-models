@@ -6,21 +6,28 @@ import os
 import torch
 
 
-def set_pinned_max_round_threshold(mb: int | None) -> None:
+def set_pinned_max_round_threshold(
+    mb: int | None,
+    force: bool = False,
+) -> None:
     r"""Set the process-wide rounding threshold for pinned allocations.
 
     Args:
         mb: Threshold in MiB for power-of-two rounding of new pinned
             allocations. Requests above this threshold are not rounded up.
             ``None`` restores PyTorch's default threshold.
+        force: Whether to replace an existing threshold.
     """
     if torch.__version__ < "2.14":
         return
     if mb is None:
         mb = (2**64 - 1) // 1024**2
+    settings = torch._C._accelerator_getAllocatorSettings()
+    if not force and "pinned_max_round_threshold_mb" in settings:
+        return
     options = [
         option
-        for option in torch._C._accelerator_getAllocatorSettings().split(",")
+        for option in settings.split(",")
         if option
         and option.split(":")[0].strip() != "pinned_max_round_threshold_mb"
     ]
