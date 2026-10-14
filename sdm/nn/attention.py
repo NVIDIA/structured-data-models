@@ -67,13 +67,13 @@ class SDPA(torch.nn.Module):
         self,
         query: Tensor,  # [..., Q, Hq, C]
         key: Tensor,  # [..., KV, Hkv, C]
-        value: Tensor,  # [..., KV, Hkv, C]
+        value: Tensor,  # [..., KV, Hkv, Cv]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         *,
         is_causal: bool = False,
         attn_bias: Tensor | None = None,  # [..., Hq, Q, KV]
-    ) -> Tensor:  # [..., Q, Hq, C]
+    ) -> Tensor:  # [..., Q, Hq, Cv]
         r"""The forward pass.
 
         Args:
@@ -84,7 +84,8 @@ class SDPA(torch.nn.Module):
             key: The key tensor with shape ``[..., KV, Hkv, C]``.
                 ``KV`` is the key/value sequence length and ``Hkv`` is the
                 number of key/value heads (``num_key_value_heads``).
-            value: The value tensor with shape ``[..., KV, Hkv, C]``.
+            value: The value tensor with shape ``[..., KV, Hkv, Cv]``.
+                ``Cv`` is the number of value channels per head.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
@@ -93,13 +94,16 @@ class SDPA(torch.nn.Module):
             attn_bias: Floating-point additive attention bias with shape
                 ``[..., Hq, Q, KV]`` and dtype matching ``query``. Batch,
                 head, and sequence dimensions may be broadcast.
-                May be combined with a boolean mask or valid key/value
-                lengths. Query scaling uses the mask or lengths, not the bias.
+                May be combined with causal attention, a boolean mask, or
+                valid key/value lengths. Query scaling uses the mask or
+                lengths, not the bias.
 
         Returns:
-            Tensor with shape ``[..., Q, Hq, C]``.
+            Tensor with shape ``[..., Q, Hq, Cv]``.
+            Without a bias, empty queries are returned unchanged.
         """
-        if query.numel() == 0:
+        # Preserve the unbroadcast empty-query result when no bias is given.
+        if query.numel() == 0 and attn_bias is None:
             return query
 
         if attn_mask is not None and seqused_key_value is not None:
@@ -141,7 +145,7 @@ class SDPA(torch.nn.Module):
         value_size = value.size()[-3:]
 
         # FlashAttention rejects empty batches before PyTorch 2.10.
-        if key_size[0] == 0 or 0 in batch_shape:
+        if query_size[0] == 0 or key_size[0] == 0 or 0 in batch_shape:
             out = query.new_zeros(
                 batch_shape + query_size[:-1] + value_size[-1:]
             )
@@ -176,6 +180,18 @@ class SDPA(torch.nn.Module):
         if attn_bias is not None:
             attn_bias = attn_bias.expand(batch_shape + attn_bias.size()[-3:])
             attn_bias = attn_bias.reshape(-1, *attn_bias.size()[-3:])
+            if is_causal:
+                causal_mask = torch.ones(
+                    size=(query.size(-3), key.size(-3)),
+                    dtype=torch.bool,
+                    device=query.device,
+                ).tril()
+                attn_mask = (
+                    causal_mask
+                    if attn_mask is None
+                    else attn_mask & causal_mask
+                )
+                is_causal = False
             if attn_mask is not None:
                 attn_bias = attn_bias.masked_fill(~attn_mask, -torch.inf)
             attn_mask = attn_bias
@@ -189,9 +205,9 @@ class SDPA(torch.nn.Module):
             enable_gqa=enable_gqa,
             is_causal=is_causal,
             scale=self.scale,
-        ).transpose(-3, -2)  # [B, Q, Hq, C]
+        ).transpose(-3, -2)  # [B, Q, Hq, Cv]
 
-        return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
+        return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, Cv]
 
 
 class Attention(torch.nn.Module):
