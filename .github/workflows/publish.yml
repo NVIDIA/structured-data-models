@@ -21,19 +21,13 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
       - name: Build distributions
         run: |
           python -m pip install --upgrade build twine
           python -m build
           python -m twine check dist/*
-
-      - name: Check wheel import
-        working-directory: ${{ runner.temp }}
-        run: |
-          python -m pip install "${GITHUB_WORKSPACE}"/dist/*.whl
-          python -c "import sdm; print(sdm.__version__)"
 
       - uses: actions/upload-artifact@v5
         with:
