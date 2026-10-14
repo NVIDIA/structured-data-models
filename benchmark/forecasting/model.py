@@ -23,6 +23,7 @@ class ModelConfig:
     max_context_size: int | None = None
     max_variates: int | None = None
     trim_leading_missing: bool = False
+    make_positive: bool = False
 
 
 MODEL_CONFIGS = {
@@ -33,6 +34,7 @@ MODEL_CONFIGS = {
         max_context_size=15360,
         max_variates=32,
         trim_leading_missing=True,
+        make_positive=True,
     ),
 }
 
@@ -95,7 +97,19 @@ def forecast(
         )
         order += index
         values.append(out)
-    return np.concatenate(values)[np.argsort(order)], levels
+    values = np.concatenate(values)[np.argsort(order)]  # [B, H, V, Q]
+
+    if config.make_positive:
+        # Clip forecasts of targets with non-negative context at zero:
+        nonneg = np.array(
+            [
+                (df[targets].ge(0) | df[targets].isna()).all()
+                & df[targets].notna().any()
+                for df in past
+            ]
+        )  # [B, V]
+        values = np.where(nonneg[:, None, :, None], values.clip(min=0), values)
+    return values, levels
 
 
 def _forecast(
