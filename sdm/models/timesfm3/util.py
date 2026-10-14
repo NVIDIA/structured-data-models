@@ -51,10 +51,10 @@ def update_running_stats(
     out_count = count + inc_count
     out_mean = (count * mean + inc_count * inc_mean) / out_count.clamp(min=1)
     out_var = (
-        count * std.square()
-        + inc_count * inc_std.square()
-        + count * (mean - out_mean).square()
-        + inc_count * (inc_mean - out_mean).square()
+        count * std * std
+        + inc_count * inc_std * inc_std
+        + count * (mean - out_mean) * (mean - out_mean)
+        + inc_count * (inc_mean - out_mean) * (inc_mean - out_mean)
     ) / out_count.clamp(min=1)
     out_std = out_var.sqrt()
 

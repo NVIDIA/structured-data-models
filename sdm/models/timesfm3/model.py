@@ -39,6 +39,7 @@ from sdm.models.timesfm3.util import (
     gather_future_patches,
     get_running_stats,
     revin,
+    update_running_stats,
 )
 from sdm.tensor.table import TableSchema
 
@@ -110,9 +111,7 @@ class TimesFM3(ICLModel):
     ) -> None:
         super().__init__(task=Task.regression)
 
-        self.model = _TimesFM3(
-            device="meta" if pretrained else device,
-        )
+        self.model = _TimesFM3(device="meta" if pretrained else device)
 
         if pretrained:
             self._load_from_pretrained(accept_license, device=device)
@@ -221,6 +220,7 @@ class _TimesFM3(torch.nn.Module):
         num_heads: int = 16,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        refinement: bool = True,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
@@ -228,6 +228,7 @@ class _TimesFM3(torch.nn.Module):
         assert output_patch_size % input_patch_size == 0
         self.input_patch_size = input_patch_size
         self.output_patch_size = output_patch_size
+        self.refinement = refinement
 
         self.patch_embedding = ResidualBlock(
             in_channels=2 * (input_patch_size + output_patch_size),
@@ -278,7 +279,7 @@ class _TimesFM3(torch.nn.Module):
         # Gather future patches and normalize:
         mask = x.isnan()
         x[mask] = 0.0
-        _, mean, std = get_running_stats(x, mask)
+        count, mean, std = get_running_stats(x, mask)
 
         future_x, past_end = gather_future_patches(x, num_patches=O // P)
         future_mask, _ = gather_future_patches(mask, num_patches=O // P)
@@ -299,10 +300,48 @@ class _TimesFM3(torch.nn.Module):
         x = self.patch_embedding(x)  # [..., C, N, D]
         out = self.icl_block(x)  # [..., C, N, O * Q]
         out = out.unflatten(-1, (self.output_patch_size, -1))
+        first = mid // P - 1
+
+        # Refine forecast normalization statistics using predicted medians:
+        if self.refinement and horizon > 0:
+            median = out[..., out.size(-1) // 2].unflatten(-1, (O // P, P))
+            mask = torch.zeros_like(median[..., 0, 0, :], dtype=torch.bool)
+
+            # Get most recent context statistics:
+            carry_count = count[..., first]
+            carry_mean = mean[..., first]
+            carry_std = std[..., first]
+
+            means, stds = [], []
+            for i in range(first, out.size(-3) - 1, O // P):
+                anchor = revin(  # Denormalize entire output patch:
+                    median[..., i, :, :],
+                    carry_mean,
+                    carry_std,
+                    reverse=True,
+                ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
+
+                for j in range(min(O // P, out.size(-3) - i - 1)):
+                    # Update running statistics:
+                    carry_count, carry_mean, carry_std = update_running_stats(
+                        count=carry_count,
+                        mean=carry_mean,
+                        std=carry_std,
+                        x=anchor[..., j, :],
+                        mask=mask,
+                    )
+                    means.append(carry_mean)
+                    stds.append(carry_std)
+
+            means = [mean[..., : first + 1], torch.stack(means, dim=-1)]
+            mean = torch.cat(means, dim=-1)
+            stds = [std[..., : first + 1], torch.stack(stds, dim=-1)]
+            std = torch.cat(stds, dim=-1)
+
         out = revin(out, mean, std, reverse=True)
+        out = out.clamp(-1e20, 1e20)
 
         # Narrow target output patches:
-        first = mid // P - 1
         overlap = min(2 * P, O) - P
         num_readouts = max(math.ceil((horizon - overlap) / P), 1)
         out = out[

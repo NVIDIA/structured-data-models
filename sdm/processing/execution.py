@@ -71,7 +71,7 @@ class RecipeExecution:
             module
             for processor in (self.recipe.features, self.recipe.target)
             for module in processor.modules()
-            if isinstance(module, sp.SeriesProcessor)
+            if isinstance(module, sp.SeriesEnsembleProcessor)
         )
         for module in series_processors:
             module._offset = torch.zeros(
@@ -137,7 +137,7 @@ class RecipeExecution:
                         "ensemble members"
                     )
                 for module in processor.modules():
-                    if isinstance(module, sp.SeriesProcessor):
+                    if isinstance(module, sp.SeriesEnsembleProcessor):
                         module._offset = torch.tensor(
                             [
                                 ensemble_table[i].size(-2)
