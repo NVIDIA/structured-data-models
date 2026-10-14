@@ -16,16 +16,16 @@ The NIM artifact defines the served model and supported API; the SDM Python inte
 Local SDM customizations, such as changes to a {py:class}`~sdm.processing.recipe.Recipe` or fine-tuned weights, are not automatically carried into a published NIM.
 Validate prediction quality on the deployed NIM with representative requests.
 
-The following Kumo NIMs share a structured-data HTTP API:
+Get the Kumo NIMs and their deployment instructions from NVIDIA Build:
 
-| Model ID          | Prediction inputs                                                                                                  | Deployment instructions                                                                                                                                                                    |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `kumo-tabular`    | One table; classification and regression                                                                           | [Kumo Tabular on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-tabular)                                                                                                               |
-| `kumo-relational` | Instance table with optional related tables; classification, regression, forecasting, and temporal link prediction | [Kumo Relational on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-relational), [NGC container tags](https://catalog.ngc.nvidia.com/orgs/nim/nvidia/containers/kumo-relational/-/tags) |
+| Model ID          | Prediction inputs                                                                                                  | Deployment instructions                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `kumo-tabular`    | One table; classification and regression                                                                           | [Kumo Tabular on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-tabular)       |
+| `kumo-relational` | Instance table with optional related tables; classification, regression, forecasting, and temporal link prediction | [Kumo Relational on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-relational) |
 
 Follow the selected NIM's deployment instructions to run its container on supported NVIDIA GPU infrastructure.
 NIMs can run in a data center or cloud environment managed by your organization.
-Check the model's deployment page for hardware requirements, available image tags, access requirements, and the terms for the selected artifact.
+Check the model's deployment page for hardware requirements, the container image, access requirements, and the terms for the selected artifact.
 
 Once deployed, applications call the service's reachable base URL.
 The examples below assume a NIM at `http://localhost:8000`; replace this address with your deployment's URL.
