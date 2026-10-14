@@ -348,25 +348,27 @@ class CategoricalTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
-    def __tensor_flatten__(
-        self,
-    ) -> tuple[list[str], tuple[type[CategoricalTensor], int]]:
-        attrs = ["code"] + [
-            f"_category_{i}" for i in range(len(self._categories))
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [
+            "code",
+            *(f"_category_{i}" for i in range(self.code.size(-1))),
         ]
-        return attrs, (self.__class__, len(self._categories))
+        return attrs, (self.__class__,)
 
     @staticmethod
     def __tensor_unflatten__(
-        inner_tensors: dict[str, Tensor],
-        ctx: tuple[type[CategoricalTensor], int],
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> CategoricalTensor:
-        cls, count = ctx
+        (cls,) = ctx
+        code = inner_tensors["code"]
         return cls(
-            inner_tensors["code"],
-            tuple(inner_tensors[f"_category_{i}"] for i in range(count)),
+            code=code,
+            categories=tuple(
+                inner_tensors[f"_category_{i}"] for i in range(code.size(-1))
+            ),
         )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:

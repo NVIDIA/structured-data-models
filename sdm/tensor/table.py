@@ -1085,13 +1085,13 @@ class TableTensor(Tensor):
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ["numerical", "categorical", "datetime", "text"]
-        # Empty ID containers have no tensor payload to flatten.
-        if self._id._columns:
+        if self.id.size(-1) > 0:
             attrs.append("id")
         columns = tuple(
             (str(stype), names) for stype, names in self._columns.items()
         )
-        return attrs, (self.__class__, columns)
+        ctx = (self.__class__, columns)
+        return attrs, ctx
 
     @staticmethod
     def __tensor_unflatten__(

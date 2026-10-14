@@ -264,16 +264,15 @@ class ColumnarTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
-    def __tensor_flatten__(
-        self,
-    ) -> tuple[list[str], tuple[type[ColumnarTensor], int, torch.device]]:
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = [f"_column_{i}" for i in range(len(self._columns))]
-        return attrs, (self.__class__, len(self._columns), self.device)
+        ctx = (self.__class__, len(self._columns), self.device)
+        return attrs, ctx
 
     @staticmethod
     def __tensor_unflatten__(
-        inner_tensors: dict[str, Tensor],
-        ctx: tuple[type[ColumnarTensor], int, torch.device],
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> ColumnarTensor:
