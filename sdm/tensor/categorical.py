@@ -687,6 +687,15 @@ def _flatten(
     return aten.flatten.using_ints.decompose(inp, start_dim, end_dim)
 
 
+@CategoricalTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: CategoricalTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> Tensor:
+    return aten.unflatten.int.decompose(inp, dim, sizes)
+
+
 @CategoricalTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: CategoricalTensor) -> Tensor:
