@@ -3,6 +3,11 @@
 
 """Kumo model components."""
 
+__lazy_modules__ = {
+    "sdm.models.kumo.relational",
+    "sdm.models.kumo.tabular",
+}
+
 from sdm.models.kumo.relational import KumoRelational
 from sdm.models.kumo.tabular import KumoTabular
 
