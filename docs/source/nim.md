@@ -108,6 +108,11 @@ Sessions can expire, be evicted, or disappear after a restart.
 Route follow-up calls to the same serving process and recreate the session if it is lost.
 Use one-shot prediction when retaining context is unnecessary.
 
+### Python Client
+
+Applications can also call a deployed Kumo Relational NIM through its [Python client](https://docs.nvidia.com/sdgm/rfm/sdk-getting-started).
+The client prepares relational prediction requests and handles the results, while inference runs in the deployed NIM.
+
 ## Enterprise Integration
 
 Data preparation may run in an application, a Databricks notebook, or a job reading Snowflake or another database.
