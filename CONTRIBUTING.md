@@ -41,6 +41,13 @@ into three categories:
 
 Remember, if you are unsure about anything, don't hesitate to comment on issues and ask for clarifications!
 
+### Compilation tests
+
+Use `@pytest.mark.usefixtures("compilation")` on tests that call `torch.compile` or `Module.compile`.
+The shared fixture skips these tests when the installed Python/PyTorch build does not support compilation and resets compiler caches between tests.
+Other tests still run, and compilation errors on supported builds remain test failures.
+Keep compilation coverage on supported Python/PyTorch combinations; see [compilation compatibility](docs/source/install.md#compilation-compatibility).
+
 ### Signing Off Your Work
 
 - We require that all contributors "sign-off" on their commits. This certifies that the contribution is your original work, or you have rights to submit it under the same license, or a compatible license.
