@@ -1,6 +1,6 @@
 # NIM Inference
 
-`structured-data-models` provides Python building blocks for developing and evaluating structured-data models.
+`structured-data-models` (SDM) provides Python building blocks for developing and evaluating structured data models.
 [NVIDIA NIM](https://developer.nvidia.com/nim) packages selected models as GPU inference microservices with an HTTP API for enterprise applications.
 
 The SDM [in-context learning interface](icl) runs models in the application's Python process.
@@ -10,13 +10,7 @@ Application capacity and GPU service capacity can be provisioned separately.
 
 ## From SDM to a NIM
 
-Start by evaluating the model and prediction task on representative data.
-When moving inference into an application, choose a published NIM for the model you want to serve.
-The NIM artifact defines the served model and supported API; the SDM Python interface and the NIM HTTP interface are separate contracts.
-Local SDM customizations, such as changes to a {py:class}`~sdm.processing.recipe.Recipe` or fine-tuned weights, are not automatically carried into a published NIM.
-Validate prediction quality on the deployed NIM with representative requests.
-
-Each Kumo NIM serves an SDM model.
+The Kumo models in SDM are also published as NIMs.
 Get the NIMs and their deployment instructions from NVIDIA Build:
 
 | Model ID          | SDM model                              | Prediction inputs                                                | Deployment instructions                                                            |
@@ -24,17 +18,23 @@ Get the NIMs and their deployment instructions from NVIDIA Build:
 | `kumo-tabular`    | {py:class}`~sdm.models.KumoTabular`    | One table; classification and regression                         | [Kumo Tabular on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-tabular)       |
 | `kumo-relational` | {py:class}`~sdm.models.KumoRelational` | Instance table and related tables; classification and regression | [Kumo Relational on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-relational) |
 
+Start by evaluating the model and prediction task on representative data with SDM.
+When moving inference into an application, deploy the NIM for that model.
+The NIM artifact defines the served model and supported API; the SDM Python interface and the NIM HTTP interface are separate contracts.
+Local SDM customizations, such as changes to a {py:class}`~sdm.processing.recipe.Recipe` or fine-tuned weights, are not automatically carried into a published NIM.
+Validate prediction quality on the deployed NIM with representative requests.
+
 Follow the selected NIM's deployment instructions to run its container on supported NVIDIA GPU infrastructure.
 NIMs can run in a data center or cloud environment managed by your organization.
-Check the model's deployment page for hardware requirements, the container image, access requirements, and the terms for the selected artifact.
+Check the model's deployment page for hardware requirements, the container image, access requirements, and license terms.
 
-Once deployed, applications call the service's reachable base URL.
+Once deployed, applications call the service at its base URL.
 The examples below assume a NIM at `http://localhost:8000`; replace this address with your deployment's URL.
 Applications can use any HTTP client, regardless of the language or data platform they run in.
 
 ## The NIM API
 
-The deployed Kumo NIMs provide these endpoints:
+Both Kumo NIMs provide these endpoints:
 
 | Method   | Path                                    | Purpose                                              |
 | -------- | --------------------------------------- | ---------------------------------------------------- |
@@ -77,12 +77,11 @@ The model's API reference defines the accepted tasks, table encodings, and outpu
 See the [Kumo Tabular](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-tabular) and [Kumo Relational](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-relational) references and the complete request examples on their NVIDIA Build pages.
 
 As with SDM, labeled context rows define the prediction task at inference time without updating model weights.
-For Tabular inference, context rows contain features and labels; query rows contain the same features without the target.
-For Relational inference, the request also includes related tables and the relationships that link them to the instance table.
+For Kumo Tabular, context rows contain features and the target; query rows contain the same features without the target.
+For Kumo Relational, the request also includes related tables and the relationships that link them to the instance table.
 
-For temporal tasks, `task.anchor_time_column` names the timestamp column that anchors each row's prediction.
-Include only feature values and related records available at that time, and choose context labels that were already known at the query rows' anchor times.
-Keep query labels out of the input context.
+For time-dependent predictions, `task.anchor_time_column` names the timestamp column that anchors each row's prediction.
+Include only feature values and related records available at that time, and use only context labels that were already known at the query rows' anchor times.
 
 The NIM receives these prepared records; it does not connect to the source database or execute a predictive query against it.
 Save a complete request from the selected model's deployment example as `request.json`, adapt it to your data, and submit it to the running NIM:
@@ -102,6 +101,7 @@ The response-level `id` identifies the call, not an input row.
 ### Reusing Context
 
 For repeated predictions with the same model, task, and schema, a session can retain context in the serving process.
+Sessions are the HTTP counterpart of the SDM {py:meth}`~sdm.models.ICLModel.fit`+{py:meth}`~sdm.models.ICLModel.predict` flow.
 Create it with `POST /v1/sessions`, use the returned session ID for subsequent predictions, and release it with `DELETE /v1/sessions/{session_id}`.
 Session creation retains context; it does not train the model.
 
@@ -111,7 +111,7 @@ Use one-shot prediction when retaining context is unnecessary.
 
 ### Python Client
 
-Applications can call deployed Kumo NIMs from Python with the `structured-data-models-client` package.
+Applications can call deployed Kumo NIMs from Python with [`structured-data-models-client`](https://github.com/NVIDIA/structured-data-models-client).
 The client prepares structured prediction requests and handles the results, while inference runs in the deployed NIM.
 With Kumo Relational, it also answers ranking and multi-step forecasting questions by combining several classification or regression calls.
 
@@ -125,8 +125,7 @@ For example, an application can read Snowflake tables and call a NIM running in 
 The deployment operator manages GPU capacity, image updates, network access, authentication, and monitoring.
 The Kumo NIMs do not enforce application authentication on their prediction and session routes.
 Deploy the service within the required network boundary and add TLS and authentication at a gateway, ingress, or service mesh in front of it.
-Registry credentials grant access to the container image; inference credentials are configured separately.
-The caller uses the authentication scheme configured for that endpoint.
+Registry credentials only pull the container image; callers authenticate with the scheme configured at that gateway.
 
 Use readiness checks when admitting traffic, and measure latency and throughput with representative requests before choosing capacity.
 Request size, context size, and relational neighborhoods affect inference cost.
