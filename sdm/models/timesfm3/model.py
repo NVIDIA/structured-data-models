@@ -19,18 +19,28 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import math
 from itertools import product
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import Recipe, RelatedTables, Stype, StypeLike, TableTensor, Task
+from sdm import Recipe, RelatedTables, Stype, TableTensor, Task
 from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
+from sdm.models.timesfm3.block import ResidualBlock
+from sdm.models.timesfm3.ckpt import remap_ckpt
+from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
+from sdm.models.timesfm3.util import (
+    crossfade_patches,
+    gather_future_patches,
+    get_running_stats,
+    revin,
+    update_running_stats,
+)
 from sdm.tensor.table import TableSchema
 
 
@@ -90,6 +100,7 @@ class TimesFM3(ICLModel):
         {Stype.numerical}
     )
     supports_multi_target: ClassVar[bool] = True
+    supports_context_only_columns: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -100,9 +111,7 @@ class TimesFM3(ICLModel):
     ) -> None:
         super().__init__(task=Task.regression)
 
-        self.model = _TimesFM3(
-            device="meta" if pretrained else device,
-        )
+        self.model = _TimesFM3(device="meta" if pretrained else device)
 
         if pretrained:
             self._load_from_pretrained(accept_license, device=device)
@@ -136,68 +145,18 @@ class TimesFM3(ICLModel):
             filename="model.safetensors",
             license_prompt=None if accept_license else TIMESFM_LICENSE_PROMPT,
         )
-        ckpt = load_file(path, device=str(device))  # noqa: F841
+        ckpt = load_file(path, device=str(device))
+        ckpt = remap_ckpt(ckpt)
+        self.model.load_state_dict(ckpt, assign=True)
 
         return self
-
-    def forward(self, *args: Any, **kwargs: Any) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
-        x_context = kwargs["x_context"] if "x_context" in kwargs else args[0]
-        if not isinstance(x_context, TableTensor):
-            x_context = TableTensor.from_tensor(x_context)
-        kwargs["_x_context_schema"] = x_context.schema
-
-        x_query = kwargs["x_query"] if "x_query" in kwargs else args[2]
-        if not isinstance(x_query, TableTensor):
-            x_query = TableTensor.from_tensor(x_query)
-        kwargs["_x_query_schema"] = x_query.schema
-
-        x_query = expand_query(x_context.schema, x_query)
-
-        if "x_query" in kwargs:
-            kwargs["x_query"] = x_query
-        else:
-            args = (*args[:2], x_query, *args[3:])
-
-        return super().forward(*args, **kwargs)  # type: ignore
-
-    def fit(self, *args: Any, **kwargs: Any) -> None:
-        r""":meta private:"""  # noqa: D415
-        x = kwargs["x"] if "x" in kwargs else args[0]
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        kwargs["_x_context_schema"] = x.schema
-
-        super().fit(*args, **kwargs)
-
-    def predict(self, *args: Any, **kwargs: Any) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
-        if self._cache is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} not yet fitted. Make sure to "
-                f"call '{self.__class__.__name__}.fit()' before."
-            )
-
-        x = kwargs["x"] if "x" in kwargs else args[0]
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-
-        cached_kwargs = cast(dict[str, Any], self._cache["kwargs"])
-        cached_kwargs["_x_query_schema"] = x.schema
-        x = expand_query(cached_kwargs["_x_context_schema"], x)
-
-        if "x" in kwargs:
-            kwargs["x"] = x
-        else:
-            args = (x, *args[1:])
-
-        return super().predict(*args, **kwargs)
 
     def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, Y]
         x_query: TableTensor | None,  # [..., R_query, D]
+        x_context_only: TableTensor | None,  # [..., R_context, D_only]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
@@ -205,81 +164,194 @@ class TimesFM3(ICLModel):
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, Y * 9]
 
-        if y_context is not None:
-            columns = y_context.columns[Stype.numerical]
-        else:
-            assert cache is not None
-            y_schema = cast(TableSchema, cache["y_schema"])
-            columns = y_schema.columns[Stype.numerical]
-
-        if x_query is not None:
-            size = x_query.size()[:-1]
-        else:
+        if cache is None or cache.is_recording:
             assert x_context is not None
-            size = (*x_context.size()[:-2], 0)
+            x_context: Tensor = x_context.numerical
+            assert y_context is not None
+            y = y_context.numerical
+            if x_context_only is not None:
+                x_context_only: Tensor = x_context_only.numerical
+            else:
+                x_context_only: Tensor = y.new_empty((*y.size()[:-1], 0))
+            y_schema = y_context.schema
+        else:
+            x_context: Tensor = cast(Tensor, cache["x_context"])
+            y = cast(Tensor, cache["y"])
+            x_context_only: Tensor = cast(Tensor, cache["x_context_only"])
+            y_schema = cast(TableSchema, cache["y_schema"])
+
+        if cache is not None and cache.is_recording:
+            cache["x_context"] = x_context
+            cache["x_context_only"] = x_context_only
+            cache["y"] = y
+
+        if x_query is None:
+            out = y.new_empty((*y.size()[:-2], 0, y.size(-1) * 9))
+        else:
+            out = self.model(
+                x_context=x_context,
+                x_query=x_query.numerical,
+                x_context_only=x_context_only,
+                y=y,
+            ).flatten(-2)  # [..., R_query, Y * 9]
 
         return TableTensor(
             columns={
                 Stype.numerical: [
                     f"{name}__q{i}"
-                    for name, i in product(columns, range(10, 100, 10))
+                    for name, i in product(
+                        y_schema.columns[Stype.numerical],
+                        range(10, 100, 10),
+                    )
                 ]
             },
-            numerical=torch.zeros(
-                (*size, len(columns) * 9),
-                device=next(self.parameters()).device,
-            ),
+            numerical=out,
         )
 
 
 class _TimesFM3(torch.nn.Module):
     def __init__(
         self,
+        input_patch_size: int = 32,
+        output_patch_size: int = 64,
+        num_quantiles: int = 9,
+        channels: int = 1280,
+        num_layers: int = 20,
+        num_heads: int = 16,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        refinement: bool = True,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.lin = torch.nn.Linear(1, 1, **factory_kwargs)  # Dummy.
+        assert output_patch_size % input_patch_size == 0
+        self.input_patch_size = input_patch_size
+        self.output_patch_size = output_patch_size
+        self.refinement = refinement
 
-
-def expand_query(x_context: TableSchema, x_query: TableTensor) -> TableTensor:
-    """Expand the query by dummy past covariates."""
-    if x_context == x_query.schema:
-        return x_query
-
-    blocks: dict[Stype, Tensor] = {}
-    for stype, block in x_query.items():
-        query_columns = x_query.columns[stype]
-        context_columns = x_context.columns[stype]
-
-        if query_columns == context_columns:
-            blocks[stype] = block
-            continue
-
-        if not set(query_columns).issubset(context_columns):
-            raise ValueError(
-                "Expected query features to be a subset of context features"
-            )
-
-        if stype == Stype.numerical:
-            dummy = block.new_full((*x_query.size()[:-1], 1), float("NaN"))
-        else:
-            raise NotImplementedError
-
-        query_index = {column: i for i, column in enumerate(query_columns)}
-        blocks[stype] = torch.cat(
-            [
-                dummy
-                if (i := query_index.get(column)) is None
-                else block.narrow(-1, i, 1)
-                for column in context_columns
-            ],
-            dim=-1,
+        self.patch_embedding = ResidualBlock(
+            in_channels=2 * (input_patch_size + output_patch_size),
+            out_channels=channels,
+            **factory_kwargs,
+        )
+        self.icl_block = ICLBlock(
+            channels=channels,
+            out_channels=output_patch_size * num_quantiles,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            **factory_kwargs,
         )
 
-    return TableTensor(
-        columns=cast(Mapping[StypeLike, Sequence[str]], x_context.columns),
-        **blocks,
-    )
+    def forward(
+        self,
+        x_context: Tensor,  # [..., R_train, C]
+        x_query: Tensor,  # [..., R_test, C]
+        x_context_only: Tensor,  # [..., R_train, *]
+        y: Tensor,  # [..., R_train, *]
+    ) -> Tensor:  # [..., R_test, Y, num_quantiles]
+
+        *B, R_test, C = x_query.size()
+        *_, R_train, C_only = x_context_only.size()
+        P = self.input_patch_size
+        O = self.output_patch_size  # noqa E741
+        horizon = R_test + (-R_test % O) if C == 0 else R_test
+
+        # Create patched input tensor:
+        left_pad = -R_train % P
+        mid = left_pad + R_train
+        right_pad = horizon - R_test + (-horizon % P)
+
+        x = x_context.new_full(
+            (
+                *B,
+                x_query.size(-1) + x_context_only.size(-1) + y.size(-1),
+                left_pad + R_train + R_test + right_pad,
+            ),
+            fill_value=torch.nan,
+        )
+        x[..., :C, left_pad:mid] = x_context.transpose(-2, -1)
+        x[..., C : C + C_only, left_pad:mid] = x_context_only.transpose(-2, -1)
+        x[..., C + C_only :, left_pad:mid] = y.transpose(-2, -1)
+        x[..., :C, mid : mid + R_test] = x_query.transpose(-2, -1)
+        x = x.unflatten(-1, (-1, P))  # [..., C, N, P]
+
+        # Gather future patches and normalize:
+        mask = x.isnan()
+        x[mask] = 0.0
+        count, mean, std = get_running_stats(x, mask)
+
+        future_x, past_end = gather_future_patches(x, num_patches=O // P)
+        future_mask, _ = gather_future_patches(mask, num_patches=O // P)
+        future_mask |= past_end
+        # Exclude future information for context only features and targets:
+        future_mask[..., C:, :, :] = True
+
+        x = revin(x, mean, std)
+        future_x = revin(future_x, mean, std)
+        x[mask] = 0.0
+        future_x[future_mask] = 0.0
+        x = torch.cat(
+            [x, future_x, mask.to(x.dtype), future_mask.to(x.dtype)],
+            dim=-1,
+        )  # [..., C, N, *]
+
+        # Run the model (assume no empty leading patches):
+        x = self.patch_embedding(x)  # [..., C, N, D]
+        out = self.icl_block(x)  # [..., C, N, O * Q]
+        out = out.unflatten(-1, (self.output_patch_size, -1))
+        first = mid // P - 1
+
+        # Refine forecast normalization statistics using predicted medians:
+        if self.refinement and horizon > 0:
+            median = out[..., out.size(-1) // 2].unflatten(-1, (O // P, P))
+            mask = torch.zeros_like(median[..., 0, 0, :], dtype=torch.bool)
+
+            # Get most recent context statistics:
+            carry_count = count[..., first]
+            carry_mean = mean[..., first]
+            carry_std = std[..., first]
+
+            means, stds = [], []
+            for i in range(first, out.size(-3) - 1, O // P):
+                anchor = revin(  # Denormalize entire output patch:
+                    median[..., i, :, :],
+                    carry_mean,
+                    carry_std,
+                    reverse=True,
+                ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
+
+                for j in range(min(O // P, out.size(-3) - i - 1)):
+                    # Update running statistics:
+                    carry_count, carry_mean, carry_std = update_running_stats(
+                        count=carry_count,
+                        mean=carry_mean,
+                        std=carry_std,
+                        x=anchor[..., j, :],
+                        mask=mask,
+                    )
+                    means.append(carry_mean)
+                    stds.append(carry_std)
+
+            means = [mean[..., : first + 1], torch.stack(means, dim=-1)]
+            mean = torch.cat(means, dim=-1)
+            stds = [std[..., : first + 1], torch.stack(stds, dim=-1)]
+            std = torch.cat(stds, dim=-1)
+
+        out = revin(out, mean, std, reverse=True)
+        out = out.clamp(-1e20, 1e20)
+
+        # Narrow target output patches:
+        overlap = min(2 * P, O) - P
+        num_readouts = max(math.ceil((horizon - overlap) / P), 1)
+        out = out[
+            ...,
+            C + C_only :,
+            first : first + num_readouts,
+            : min(2 * P, O),
+            :,
+        ]
+
+        # Stitch overlapping predictions together:
+        out = crossfade_patches(out, step=P, dim=-3)
+        return out[..., :R_test, :].transpose(-3, -2)  # [..., R_test, *, Q]

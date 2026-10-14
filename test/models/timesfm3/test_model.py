@@ -28,10 +28,14 @@ def test_forward() -> None:
 
     out = model(x_context, y_context, x_query)
     assert out.size() == (3, 3 * 9)
+    assert out.numerical.isfinite().all()
     assert "y1__q10" in out.columns["numerical"]
     assert "y2__q50" in out.columns["numerical"]
     assert "y3__q90" in out.columns["numerical"]
 
-    model.fit(x_context, y_context)
-    out = model.predict(x_query)
-    assert out.allclose(model.predict(x_query))
+    model.fit(
+        x=x_context,
+        y=y_context,
+        context_only_columns=["x1", "x3"],
+    )
+    torch.testing.assert_close(model.predict(x_query).numerical, out.numerical)

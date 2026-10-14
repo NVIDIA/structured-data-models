@@ -21,6 +21,15 @@ from scoringbench.univariate.wrappers import (
 )
 
 import sdm
+from benchmark.tabular.finetune import (
+    FINETUNE_CONTEXT_FRAC,
+    FINETUNE_EPOCHS,
+    FINETUNE_ITERS_PER_EPOCH,
+    FINETUNE_LR,
+    FINETUNE_TRAIN_SIZE,
+    FINETUNE_VAL_FRAC,
+    full_finetune,
+)
 
 
 @dataclass(frozen=True)
@@ -84,6 +93,13 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
         device: torch.device | str | None = None,
         seed: int = 42,
         batch_size: int | None = None,
+        finetune: bool = False,
+        finetune_epochs: int = FINETUNE_EPOCHS,
+        finetune_iters_per_epoch: int = FINETUNE_ITERS_PER_EPOCH,
+        finetune_lr: float = FINETUNE_LR,
+        finetune_train_size: int = FINETUNE_TRAIN_SIZE,
+        finetune_context_frac: float = FINETUNE_CONTEXT_FRAC,
+        finetune_val_frac: float = FINETUNE_VAL_FRAC,
     ) -> None:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -91,6 +107,13 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
         self.device = torch.device(device)
         self.seed = seed
         self.batch_size = batch_size
+        self.finetune = finetune
+        self.finetune_epochs = finetune_epochs
+        self.finetune_iters_per_epoch = finetune_iters_per_epoch
+        self.finetune_lr = finetune_lr
+        self.finetune_train_size = finetune_train_size
+        self.finetune_context_frac = finetune_context_frac
+        self.finetune_val_frac = finetune_val_frac
         self.model = self.config.factory(self.device)
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> SDMQuantileWrapper:
@@ -110,6 +133,23 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
         )
 
         generator = torch.Generator(device=self.device).manual_seed(self.seed)
+
+        if self.finetune:
+            full_finetune(
+                self.model,
+                x_context,
+                y_context,
+                task="regression",
+                max_epochs=self.finetune_epochs,
+                iters_per_epoch=self.finetune_iters_per_epoch,
+                train_size=self.finetune_train_size,
+                context_frac=self.finetune_context_frac,
+                val_frac=self.finetune_val_frac,
+                lr=self.finetune_lr,
+                num_estimators=self.config.num_estimators,
+                generator=generator,
+            )
+
         with torch.amp.autocast(
             self.device.type,
             self.config.autocast_dtype,
