@@ -16,12 +16,13 @@ The NIM artifact defines the served model and supported API; the SDM Python inte
 Local SDM customizations, such as changes to a {py:class}`~sdm.processing.recipe.Recipe` or fine-tuned weights, are not automatically carried into a published NIM.
 Validate prediction quality on the deployed NIM with representative requests.
 
-Get the Kumo NIMs and their deployment instructions from NVIDIA Build:
+Each Kumo NIM serves an SDM model.
+Get the NIMs and their deployment instructions from NVIDIA Build:
 
-| Model ID          | Prediction inputs                                                                                                  | Deployment instructions                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| `kumo-tabular`    | One table; classification and regression                                                                           | [Kumo Tabular on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-tabular)       |
-| `kumo-relational` | Instance table with optional related tables; classification, regression, forecasting, and temporal link prediction | [Kumo Relational on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-relational) |
+| Model ID          | SDM model                              | Prediction inputs                                                | Deployment instructions                                                            |
+| ----------------- | -------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `kumo-tabular`    | {py:class}`~sdm.models.KumoTabular`    | One table; classification and regression                         | [Kumo Tabular on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-tabular)       |
+| `kumo-relational` | {py:class}`~sdm.models.KumoRelational` | Instance table and related tables; classification and regression | [Kumo Relational on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-relational) |
 
 Follow the selected NIM's deployment instructions to run its container on supported NVIDIA GPU infrastructure.
 NIMs can run in a data center or cloud environment managed by your organization.
@@ -77,7 +78,7 @@ See the [Kumo Tabular](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-tab
 
 As with SDM, labeled context rows define the prediction task at inference time without updating model weights.
 For Tabular inference, context rows contain features and labels; query rows contain the same features without the target.
-For Relational inference, the request can also include related tables and the relationships that link them to the instance table.
+For Relational inference, the request also includes related tables and the relationships that link them to the instance table.
 
 For temporal tasks, `task.anchor_time_column` names the timestamp column that anchors each row's prediction.
 Include only feature values and related records available at that time, and choose context labels that were already known at the query rows' anchor times.
@@ -110,8 +111,9 @@ Use one-shot prediction when retaining context is unnecessary.
 
 ### Python Client
 
-Applications can call deployed Kumo NIMs from Python with [`structured-data-models-client`](https://github.com/NVIDIA/structured-data-models-client).
+Applications can call deployed Kumo NIMs from Python with the `structured-data-models-client` package.
 The client prepares structured prediction requests and handles the results, while inference runs in the deployed NIM.
+With Kumo Relational, it also answers ranking and multi-step forecasting questions by combining several classification or regression calls.
 
 ## Enterprise Integration
 
