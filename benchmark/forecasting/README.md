@@ -2,7 +2,7 @@
 
 This directory contains benchmarks of `structured-data-models` on [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval), [fev-bench](https://github.com/autogluon/fev), and [TIME](https://github.com/zqiao11/TIME).
 
-All benchmarks share one model adapter (see `benchmark/forecasting/model.py`) that maps each forecasting task onto the `ICLModel` interface: time steps become rows, past targets become `y_context`, all covariates and timestamps of the context become `x_context`, and the forecast horizon becomes `x_query` with one row of known covariates and timestamps per future time step. Columns keep their semantic types, so each model decides which ones it consumes. Series in a batch are left-padded with missing values, and multivariate series are flattened for models without multi-target support.
+All benchmarks share one model adapter (see `benchmark/forecasting/model.py`) that maps each forecasting task onto the `ICLModel` interface: time steps become rows, past targets become `y_context`, all covariates and timestamps of the context become `x_context`, and the forecast horizon becomes `x_query` with one row of known covariates and timestamps per future time step. Columns keep their semantic types, so each model decides which ones it consumes. Series of equal length are forecast together so that no padding rows are added, and multivariate series are flattened for models without multi-target support.
 
 ______________________________________________________________________
 
@@ -44,7 +44,7 @@ python -m benchmark.forecasting.gift_eval.evaluate
 
 This compares all available SDM results against published GIFT-Eval results on the same configurations, normalized by a seasonal naive baseline and aggregated by geometric mean.
 
-`TimesFM3` follows the published `TimesFM-3` evaluation with symmetric averaging over two estimators, contexts truncated to 15,360 time steps, and at most 32 variates per forward pass. Its results can still differ from the published ones:
+`TimesFM3` follows the published `TimesFM-3` evaluation with symmetric averaging over two estimators, leading time steps without observed targets removed, contexts truncated to 15,360 time steps, and at most 32 variates per forward pass. Its results can still differ from the published ones:
 
 - Published results batch series of different context lengths together, which shifts their positional encodings on datasets with varying context lengths.
 - Published results clip forecasts of non-negative series at zero.

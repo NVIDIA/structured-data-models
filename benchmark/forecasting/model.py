@@ -22,6 +22,7 @@ class ModelConfig:
     num_estimators: int = 1
     max_context_size: int | None = None
     max_variates: int | None = None
+    trim_leading_missing: bool = False
 
 
 MODEL_CONFIGS = {
@@ -31,6 +32,7 @@ MODEL_CONFIGS = {
         num_estimators=2,
         max_context_size=15360,
         max_variates=32,
+        trim_leading_missing=True,
     ),
 }
 
@@ -71,16 +73,40 @@ def forecast(
     forecast horizon. Columns keep their semantic types, so that the model
     decides which ones to consume. Missing values are passed through.
     """
-    device = next(model.parameters()).device
-    num_series, horizon = len(past), len(future[0])
-    size = max(len(df) for df in past)
-    if config.max_context_size is not None:
-        size = min(size, config.max_context_size)
+    if config.trim_leading_missing:
+        # Drop leading time steps without any observed target:
+        past = [
+            df.iloc[df[targets].notna().any(axis=1).argmax() :] for df in past
+        ]
+    past = [df.iloc[-(config.max_context_size or len(df)) :] for df in past]
 
-    # Left-pad shorter series with missing values so that all series end at
-    # the forecast start:
-    past = [df.iloc[-size:].reset_index(drop=True) for df in past]
-    past = [df.reindex(range(len(df) - size, len(df))) for df in past]
+    # Forecast series of equal length together, since padding would add rows
+    # the model consumes as data:
+    lengths = [len(df) for df in past]
+    order, values = [], []
+    for length in set(lengths):
+        index = [i for i, n in enumerate(lengths) if n == length]
+        out, levels = _forecast(
+            model,
+            config,
+            past=[past[i] for i in index],
+            future=[future[i] for i in index],
+            targets=targets,
+        )
+        order += index
+        values.append(out)
+    return np.concatenate(values)[np.argsort(order)], levels
+
+
+def _forecast(
+    model: sdm.models.ICLModel,
+    config: ModelConfig,
+    past: Sequence[pd.DataFrame],  # B x [T, V + C]
+    future: Sequence[pd.DataFrame],  # B x [H, K]
+    targets: Sequence[str],
+) -> tuple[np.ndarray, np.ndarray]:  # [B, H, V, Q], [Q]
+    device = next(model.parameters()).device
+    num_series, size, horizon = len(past), len(past[0]), len(future[0])
 
     # Infer semantic types jointly so that context and query share them, and
     # order targets first so that forecasts follow ``targets``:
