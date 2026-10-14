@@ -80,8 +80,9 @@ As with SDM, labeled context rows define the prediction task at inference time w
 For Kumo Tabular, context rows contain features and the target; query rows contain the same features without the target.
 For Kumo Relational, the request also includes related tables and the relationships that link them to the instance table.
 
-For time-dependent predictions, `task.anchor_time_column` names the timestamp column that anchors each row's prediction.
-Include only feature values and related records available at that time, and use only context labels that were already known at the query rows' anchor times.
+For time-dependent Kumo Relational predictions, set `task.anchor_time_column` to the instance table's timestamp column and `inference.use_prediction_time` to `true`.
+Include only feature values and related records available at each row's anchor time, and use only context labels that were already known at the query rows' anchor times.
+Sessions run with prediction time turned off, and Kumo Tabular does not support anchor times.
 
 The NIM receives these prepared records; it does not connect to the source database or execute a predictive query against it.
 Save a complete request from the selected model's deployment example as `request.json`, adapt it to your data, and submit it to the running NIM:
