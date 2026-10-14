@@ -4,24 +4,28 @@
 import os
 
 import torch
-from torch.torch_version import TorchVersion
 
 
-def configure_pinned_memory() -> None:
-    r"""Avoid rounding large pinned allocations unless explicitly configured.
+def set_pinned_max_round_threshold(mb: int | None) -> None:
+    r"""Set the process-wide rounding threshold for pinned allocations.
 
-    The allocator setting applies process-wide and retains freed blocks for
-    reuse. PyTorch versions before 2.13 do not support the rounding threshold.
+    Args:
+        mb: Threshold in MiB for power-of-two rounding of new pinned
+            allocations. Requests above this threshold are not rounded up.
+            ``None`` restores PyTorch's default threshold.
     """
-    if TorchVersion(torch.__version__) < "2.13":
+    if torch.__version__ < "2.14":
         return
-    settings = torch._C._accelerator_getAllocatorSettings()
-    if "pinned_max_round_threshold_mb" in settings:
-        return
-    setting = "pinned_max_round_threshold_mb:1"
-    torch._C._accelerator_setAllocatorSettings(
-        f"{settings},{setting}" if settings else setting
-    )
+    if mb is None:
+        mb = (2**64 - 1) // 1024**2
+    options = [
+        option
+        for option in torch._C._accelerator_getAllocatorSettings().split(",")
+        if option
+        and option.split(":")[0].strip() != "pinned_max_round_threshold_mb"
+    ]
+    options.append(f"pinned_max_round_threshold_mb:{mb}")
+    torch._C._accelerator_setAllocatorSettings(",".join(options))
 
 
 def chunk_memory_limit(device: torch.device) -> int:
