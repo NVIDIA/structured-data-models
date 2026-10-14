@@ -110,8 +110,8 @@ Use one-shot prediction when retaining context is unnecessary.
 
 ### Python Client
 
-Applications can also call a deployed Kumo Relational NIM through its [Python client](https://docs.nvidia.com/sdgm/rfm/sdk-getting-started).
-The client prepares relational prediction requests and handles the results, while inference runs in the deployed NIM.
+Applications can call deployed Kumo NIMs from Python with [`structured-data-models-client`](https://github.com/NVIDIA/structured-data-models-client).
+The client prepares structured prediction requests and handles the results, while inference runs in the deployed NIM.
 
 ## Enterprise Integration
 
