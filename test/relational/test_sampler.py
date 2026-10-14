@@ -256,5 +256,5 @@ def test_batched_recipe_execution(relational_data: RelationalData) -> None:
         x=query.drop_columns("target"),
         related_tables=related_query_tables,
     )
-    assert len(contexts) == 2
-    assert len(queries) == 2
+    assert len(contexts.members) == 2
+    assert len(queries.members) == 2

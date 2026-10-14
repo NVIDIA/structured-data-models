@@ -7,8 +7,13 @@ from typing import Any, cast
 import torch
 from torch import Tensor
 
-from sdm import Stype, StypeLike, TableTensor
-from sdm.processing.execution import MemberContext, MemberQuery
+from sdm import EnsembleTable, Stype, StypeLike, TableTensor
+from sdm.processing.execution import (
+    MemberContext,
+    MemberQuery,
+    _ProcessedContext,
+    _ProcessedQuery,
+)
 
 
 def _table_layout(table: TableTensor) -> Hashable:
@@ -89,9 +94,46 @@ def _stack(tables: Sequence[TableTensor]) -> TableTensor:
     return cast(TableTensor, torch.stack(renamed))
 
 
-def _stack_context(members: Sequence[MemberContext]) -> MemberContext:
+def _stack_ensemble(table: EnsembleTable, *, batch: slice) -> TableTensor:
+    """Reuse one storage group, or stack members from different groups."""
+    member_ids = range(*batch.indices(len(table)))
+    group_ids = {table._locations[i][0] for i in member_ids}
+    if len(group_ids) > 1:
+        return _stack([table[i] for i in member_ids])
+
+    out = table[batch].expanded_group(0)
+    # Shared members need distinct writable storage, as with stacking.
+    if any(
+        block.numel() > 0 and block.stride(0) == 0 for _, block in out.items()
+    ):
+        return cast(TableTensor, out.clone())
+    return out
+
+
+def _stack_context(
+    context: Sequence[MemberContext] | _ProcessedContext,
+    *,
+    batch: slice,
+) -> MemberContext:
+    """Prepare context inputs for the selected estimators."""
+    processed: _ProcessedContext | None = None
+    if isinstance(context, _ProcessedContext):
+        processed = context
+        members = context.members[batch]
+    else:
+        members = context[batch]
     if len(members) == 1:
         return members[0]
+    if processed is not None:
+        return MemberContext(
+            x=_stack_ensemble(processed.x, batch=batch),
+            y=_stack_ensemble(processed.y, batch=batch),
+            x_context_only=None
+            if processed.x_context_only is None
+            else _stack_ensemble(processed.x_context_only, batch=batch),
+            related_tables=None,
+            input_stypes=members[0].input_stypes,
+        )
     return MemberContext(
         x=_stack([member.x for member in members]),
         y=_stack([member.y for member in members]),
@@ -105,9 +147,23 @@ def _stack_context(members: Sequence[MemberContext]) -> MemberContext:
     )
 
 
-def _stack_query(members: Sequence[MemberQuery]) -> MemberQuery:
+def _stack_query(
+    query: Sequence[MemberQuery] | _ProcessedQuery, *, batch: slice
+) -> MemberQuery:
+    """Prepare query inputs for the selected estimators."""
+    processed: _ProcessedQuery | None = None
+    if isinstance(query, _ProcessedQuery):
+        processed = query
+        members = query.members[batch]
+    else:
+        members = query[batch]
     if len(members) == 1:
         return members[0]
+    if processed is not None:
+        return MemberQuery(
+            x=_stack_ensemble(processed.x, batch=batch),
+            related_tables=None,
+        )
     return MemberQuery(
         x=_stack([member.x for member in members]), related_tables=None
     )

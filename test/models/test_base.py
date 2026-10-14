@@ -11,14 +11,17 @@ import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    EnsembleTable,
     RelatedTables,
     Stype,
     TableTensor,
 )
 from sdm.cache import Cache
 from sdm.models import ICLModel
+from sdm.models._batching import _stack_context, _stack_ensemble
 from sdm.models.callback import Callback
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.execution import RecipeExecution
 
 
 @dataclass
@@ -820,3 +823,73 @@ def test_estimator_batching_groups_by_layout_not_names(
         estimator_batch_size=None,
     )
     torch.testing.assert_close(model.predict(x).numerical, expected.numerical)
+
+
+@pytest.mark.parametrize("estimator_batch_size", [2, None])
+def test_estimator_batching_reuses_grouped_inputs(
+    estimator_batch_size: int | None,
+) -> None:
+    model = _RecordingModel()
+    x = torch.arange(24, dtype=torch.float32).reshape(4, 3, 2)
+    y = torch.zeros(4, 3, 1)
+    query = x[:, :2]
+
+    out = model(x, y, query, estimator_batch_size=estimator_batch_size)
+    torch.testing.assert_close(out.numerical, query)
+    model.fit(x, y, estimator_batch_size=estimator_batch_size)
+    torch.testing.assert_close(model.predict(query).numerical, query)
+    for call in model.calls:
+        if call.x_context is not None:
+            assert call.x_context.numerical.untyped_storage().data_ptr() == (
+                x.untyped_storage().data_ptr()
+            )
+        if call.x_query is not None:
+            assert call.x_query.numerical.untyped_storage().data_ptr() == (
+                query.untyped_storage().data_ptr()
+            )
+
+    context = RecipeExecution(sp.Recipe()).fit_transform(
+        x=x, y=y, related_tables=None, context_only_columns=("0",)
+    )
+    inputs = _stack_context(context, batch=slice(1, 3))
+    assert inputs.x_context_only is not None
+    torch.testing.assert_close(inputs.x_context_only.numerical, x[1:3, :, :1])
+
+
+def test_estimator_batching_aligns_independent_group_locations() -> None:
+    x_group = TableTensor(numerical=torch.arange(18.0).reshape(3, 3, 2))
+    y_group = TableTensor(numerical=torch.arange(9.0).reshape(3, 3, 1))
+    query_group = TableTensor(numerical=torch.arange(12.0).reshape(3, 2, 2))
+    x = EnsembleTable(
+        groups=(x_group,),
+        locations=((0, 2), (0, 0), (0, 2), (0, 1)),
+    )
+    y = EnsembleTable(
+        groups=(y_group[:1], y_group[1:]),
+        locations=((1, 1), (0, 0), (1, 0), (0, 0)),
+    )
+    query = EnsembleTable(
+        groups=(query_group,),
+        locations=((0, 1), (0, 2), (0, 0), (0, 1)),
+    )
+    for table in (x, y, query):
+        expected = torch.stack([table[i].numerical for i in range(4)])
+        torch.testing.assert_close(
+            _stack_ensemble(table, batch=slice(None)).numerical, expected
+        )
+
+
+def test_shared_estimator_batch_has_writable_inputs() -> None:
+    model = _RecordingModel()
+    x = torch.arange(6.0).reshape(3, 2)
+    y = torch.zeros(3, 1)
+    model(x, y, x, num_estimators=4, estimator_batch_size=None)
+    call = model.calls[0]
+    assert call.x_context is not None
+    with torch.inference_mode():
+        call.x_context.numerical.add_(1)
+    torch.testing.assert_close(
+        call.x_context.numerical,
+        (x + 1).expand(4, 3, 2),
+    )
+    torch.testing.assert_close(x, torch.arange(6.0).reshape(3, 2))

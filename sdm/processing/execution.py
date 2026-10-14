@@ -33,6 +33,22 @@ class MemberQuery(NamedTuple):
     related_tables: RelatedTables[TableTensor] | None
 
 
+class _ProcessedContext(NamedTuple):
+    """Preprocessed context for the full ensemble."""
+
+    members: tuple[MemberContext, ...]
+    x: EnsembleTable
+    y: EnsembleTable
+    x_context_only: EnsembleTable | None
+
+
+class _ProcessedQuery(NamedTuple):
+    """Preprocessed queries for the full ensemble."""
+
+    members: tuple[MemberQuery, ...]
+    x: EnsembleTable
+
+
 class RecipeExecution:
     """Recipe execution manager during model processing."""
 
@@ -61,7 +77,7 @@ class RecipeExecution:
         num_members: int | None = None,
         context_only_columns: Sequence[str] | Sequence[int] | None = None,
         generator: torch.Generator | None = None,
-    ) -> tuple[MemberContext, ...]:
+    ) -> _ProcessedContext:
         """Fit and transform context data."""
         # Transform target first to be able to resolve task type. Inverse
         # target transforms require distinct member assignment:
@@ -211,13 +227,18 @@ class RecipeExecution:
                 )
             )
 
-        return tuple(members)
+        return _ProcessedContext(
+            members=tuple(members),
+            x=x,
+            y=y,
+            x_context_only=x_context_only,
+        )
 
     def transform(
         self,
         x: Tensor | TableTensor,
         related_tables: RelatedTables | None,
-    ) -> tuple[MemberQuery, ...]:
+    ) -> _ProcessedQuery:
         """Transform query data."""
         x: EnsembleTable = _to_ensemble_table(x, self._num_estimators)
         x = self.recipe.features.transform_ensemble(x)
@@ -261,13 +282,10 @@ class RecipeExecution:
                     task_links=related_tables.task_links,
                 )
             members.append(
-                MemberQuery(
-                    x=x[member_id],
-                    related_tables=related_tables_i,
-                )
+                MemberQuery(x=x[member_id], related_tables=related_tables_i)
             )
 
-        return tuple(members)
+        return _ProcessedQuery(members=tuple(members), x=x)
 
     def inverse_transform_target(
         self,

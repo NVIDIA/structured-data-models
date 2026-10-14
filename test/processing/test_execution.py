@@ -55,7 +55,7 @@ def test_sequence_uses_batched_fit_states_for_shared_query() -> None:
         ),
     )
 
-    for member_id, query in enumerate(queries):
+    for member_id, query in enumerate(queries.members):
         assert query.related_tables is not None
         expected = (
             sp.Standardize()
@@ -101,7 +101,7 @@ def test_sequence_uses_separate_fit_states_for_shared_query() -> None:
         ),
     )
 
-    for member_id, query in enumerate(queries):
+    for member_id, query in enumerate(queries.members):
         assert query.related_tables is not None
         expected = (
             sp.Standardize().fit(fit_tables[member_id]).transform(query_table)
@@ -151,7 +151,7 @@ def test_sequence_uses_shared_fit_state_for_batched_query() -> None:
         ),
     )
 
-    for member_id, query in enumerate(queries):
+    for member_id, query in enumerate(queries.members):
         assert query.related_tables is not None
         expected = (
             sp.Standardize().fit(fit_table).transform(query_related[member_id])
@@ -199,7 +199,7 @@ def test_sequence_batches_separate_compatible_queries_for_fit_states() -> None:
         ),
     )
 
-    for member_id, query in enumerate(queries):
+    for member_id, query in enumerate(queries.members):
         assert query.related_tables is not None
         expected = (
             sp.Standardize()
@@ -254,7 +254,7 @@ def test_sequence_splits_batched_query_for_separate_fit_states() -> None:
         ),
     )
 
-    for member_id, query in enumerate(queries):
+    for member_id, query in enumerate(queries.members):
         assert query.related_tables is not None
         expected = (
             sp.Standardize()
@@ -372,11 +372,12 @@ def test_member_context_exposes_input_stypes() -> None:
     y = torch.zeros(3, 1)
     recipe = Recipe(features=sp.ToNumerical())
 
-    (context,) = RecipeExecution(recipe).fit_transform(
+    contexts = RecipeExecution(recipe).fit_transform(
         x=x,
         y=y,
         related_tables=None,
     )
 
+    (context,) = contexts.members
     assert context.input_stypes == x.stypes
     assert context.x.columns[Stype.numerical] == ("n", "c")
