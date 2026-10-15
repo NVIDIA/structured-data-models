@@ -1,11 +1,45 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 from sdm import TableTensor
 from sdm.processing import Standardize
 from sdm.testing import withCUDA
+
+
+@pytest.mark.skipif(
+    not torch._dynamo.is_dynamo_supported(),
+    reason="torch.compile is not supported by this Python/PyTorch build",
+)
+def test_standardize_compile_fit() -> None:
+    def fit(x: torch.Tensor) -> tuple[torch.Tensor, Standardize]:
+        processor = Standardize()
+        table = TableTensor.from_tensor(x)
+        return processor.fit_transform(table).numerical, processor
+
+    context = torch.tensor([[1.0, 2.0], [3.0, torch.nan], [5.0, 6.0]])
+    compiled_fit = torch.compile(fit, backend="eager", fullgraph=True)
+    expected, eager = fit(context)
+    actual, fitted = compiled_fit(context)
+    torch.testing.assert_close(actual, expected, equal_nan=True)
+
+    restored = Standardize()
+    restored.load_state_dict(fitted.state_dict())
+    assert restored.is_fitted
+    query = TableTensor.from_tensor(torch.tensor([[7.0, 8.0]]))
+    torch.testing.assert_close(
+        restored.transform(query).numerical, eager.transform(query).numerical
+    )
+
+
+@pytest.mark.parametrize("name", ["mean", "scale", "_fitted_state"])
+def test_standardize_preserves_nonpersistent_buffers(name: str) -> None:
+    processor = Standardize()
+    processor.register_buffer(name, getattr(processor, name), persistent=False)
+    processor.fit(TableTensor.from_tensor(torch.randn(3, 2)))
+    assert name not in processor.state_dict()
 
 
 @withCUDA
