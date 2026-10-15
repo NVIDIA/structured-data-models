@@ -53,7 +53,8 @@ class PCA(Processor):
             table.numerical.size(-1),
         )
         self._set_buffer(
-            "components", vh[..., :num_components, :].transpose(-2, -1)
+            name="components",
+            value=vh[..., :num_components, :].transpose(-2, -1),
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

@@ -74,8 +74,8 @@ class ImputeMode(Processor):
             fill_values.append(counts.argmax(dim=-1, keepdim=True))
 
         self._set_buffer(
-            "_fill_values",
-            torch.stack(fill_values, dim=-1)
+            name="_fill_values",
+            value=torch.stack(fill_values, dim=-1)
             if len(fill_values) > 0
             else torch.empty(0, dtype=torch.long, device=data.device),
         )

@@ -93,7 +93,8 @@ class AddCategoryCounts(Processor):
             else dtype
         )
         self._set_buffer(
-            "_log_counts", counts.to(count_dtype).log1p().to(dtype)
+            name="_log_counts",
+            value=counts.to(count_dtype).log1p().to(dtype),
         )
         self._set_buffer("_num_categories", num_categories)
         self._categories = BufferList(table.categorical.categories)

@@ -47,7 +47,8 @@ class ImputeMean(Processor):
             keepdim=True,
         )
         self._set_buffer(
-            "_mean", torch.where(mean.isnan(), self.fill_value, mean)
+            name="_mean",
+            value=torch.where(mean.isnan(), self.fill_value, mean),
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

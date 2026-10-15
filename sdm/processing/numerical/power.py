@@ -278,8 +278,8 @@ class PowerTransform(Processor, InvertibleMixin):
         # ``mean`` never exceeds the column maximum, and is zero for an
         # entirely missing column, whose max must be zero.
         self._set_buffer(
-            "max",
-            torch.where(finite, table.numerical, mean).amax(
+            name="max",
+            value=torch.where(finite, table.numerical, mean).amax(
                 dim=-2,
                 keepdim=True,
             ),
@@ -287,10 +287,10 @@ class PowerTransform(Processor, InvertibleMixin):
         del finite
 
         self._set_buffer(
-            "lambdas",
-            self._optimize_lambdas(
-                finite_or_nan,
-                constant_features,
+            name="lambdas",
+            value=self._optimize_lambdas(
+                inp=finite_or_nan,
+                constant_features=constant_features,
                 count=count,
             ),
         )

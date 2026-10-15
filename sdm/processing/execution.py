@@ -75,8 +75,12 @@ class RecipeExecution:
         )
         for module in series_processors:
             module._set_buffer(
-                "_offset",
-                torch.zeros(len(y), dtype=torch.long, device=y[0].device),
+                name="_offset",
+                value=torch.zeros(
+                    size=(len(y),),
+                    dtype=torch.long,
+                    device=y[0].device,
+                ),
             )
 
         y = self.recipe.target.fit_transform_ensemble(y, generator=generator)
@@ -138,9 +142,9 @@ class RecipeExecution:
                 for module in processor.modules():
                     if isinstance(module, sp.SeriesEnsembleProcessor):
                         module._set_buffer(
-                            "_offset",
-                            torch.tensor(
-                                [
+                            name="_offset",
+                            value=torch.tensor(
+                                data=[
                                     ensemble_table[i].size(-2)
                                     for i in range(len(ensemble_table))
                                 ],
@@ -184,9 +188,9 @@ class RecipeExecution:
 
         for module in series_processors:
             module._set_buffer(
-                "_offset",
-                torch.tensor(
-                    [x[i].size(-2) for i in range(len(x))],
+                name="_offset",
+                value=torch.tensor(
+                    data=[x[i].size(-2) for i in range(len(x))],
                     dtype=torch.long,
                     device=x[0].device,
                 ),
