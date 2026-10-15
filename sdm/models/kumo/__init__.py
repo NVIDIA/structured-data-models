@@ -4,15 +4,18 @@
 """Kumo model components."""
 
 __lazy_modules__ = {
-    "sdm.models.kumo.relational",
     "sdm.models.kumo.tabular",
+    "sdm.models.kumo.relational",
+    "sdm.models.kumo.timeseries",
 }
 
-from sdm.models.kumo.relational import KumoRelational
 from sdm.models.kumo.tabular import KumoTabular
+from sdm.models.kumo.relational import KumoRelational
+from sdm.models.kumo.timeseries import KumoForecasting
 
 
 __all__ = [
-    "KumoRelational",
     "KumoTabular",
+    "KumoRelational",
+    "KumoForecasting",
 ]
