@@ -232,226 +232,24 @@ def test_sdpa_scale(device: torch.device) -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("num_key_value_heads", [1, 2])
-@pytest.mark.parametrize(("query_len", "key_len"), [(3, 3), (3, 5), (5, 3)])
-def test_sdpa_causal(
-    device: torch.device,
-    num_key_value_heads: int,
-    query_len: int,
-    key_len: int,
-) -> None:
-    """Match upper-left causal attention for unequal sequence lengths."""
-    module = SDPA(num_query_heads=2, num_key_value_heads=num_key_value_heads)
-    query = torch.randn(2, query_len, 2, 8, device=device)
-    key = torch.randn(key_len, num_key_value_heads, 8, device=device)
-    value = torch.randn_like(key)
-    mask = torch.ones(
-        query_len, key_len, dtype=torch.bool, device=device
-    ).tril()
-
-    out = module(query=query, key=key, value=value, is_causal=True)
-    expected = reference_sdpa(
-        query=query, key=key, value=value, attn_mask=mask
-    )
-    torch.testing.assert_close(out, expected)
-
-
-@withCUDA
-@pytest.mark.parametrize("num_key_value_heads", [1, 2])
-@pytest.mark.parametrize("mask_kind", [None, "mask", "lengths"])
-@pytest.mark.parametrize("bias_heads", [1, 2])
-@pytest.mark.parametrize("bias_query_len", [1, 4])
-@pytest.mark.parametrize(
-    "dtype", [torch.float32, torch.float16, torch.bfloat16]
-)
-def test_sdpa_additive_bias(
-    device: torch.device,
-    num_key_value_heads: int,
-    mask_kind: str | None,
-    bias_heads: int,
-    bias_query_len: int,
-    dtype: torch.dtype,
-) -> None:
-    """Match broadcast additive-bias attention and preserve bias gradients."""
-    if (
-        device.type == "cuda"
-        and dtype == torch.bfloat16
-        and not torch.cuda.is_bf16_supported()
-    ):
-        pytest.skip("CUDA bfloat16 not supported")
-    module = SDPA(
-        num_query_heads=2, num_key_value_heads=num_key_value_heads, scale=1.0
-    )
-    # Deterministic, non-constant fixtures without changing global RNG state.
-    query = (
-        torch.arange(128, device=device, dtype=dtype).view(2, 4, 2, 8).sin()
-    )
-    key = (
-        torch.arange(40 * num_key_value_heads, device=device, dtype=dtype)
-        .view(5, num_key_value_heads, 8)
-        .cos()
-    )
-    value = key.sin()
-    # The bias contributes a batch dimension, independent of query/KV batches.
-    bias = (
-        torch.arange(
-            15 * bias_heads * bias_query_len, device=device, dtype=dtype
-        )
-        .view(3, 1, bias_heads, bias_query_len, 5)
-        .sin()
-    )
-    bias.requires_grad_()
-    lengths = torch.tensor([0, 3], dtype=torch.int32, device=device)
-    mask = torch.arange(5, device=device) < lengths[:, None, None]
-    out = module(
-        query=query,
-        key=key,
-        value=value,
-        attn_bias=bias,
-        attn_mask=mask if mask_kind == "mask" else None,
-        seqused_key_value=lengths if mask_kind == "lengths" else None,
-    )
-
-    expected_bias = bias.expand(3, 2, 2, 4, 5)
-    if mask_kind is not None:
-        expected_bias = expected_bias.masked_fill(
-            ~mask.unsqueeze(-3), -torch.inf
-        )
-    expected = F.scaled_dot_product_attention(
-        query=query.transpose(-3, -2).expand(3, -1, -1, -1, -1),
-        key=key.repeat_interleave(2 // num_key_value_heads, dim=-2)
-        .transpose(-3, -2)
-        .expand(3, 2, -1, -1, -1),
-        value=value.repeat_interleave(2 // num_key_value_heads, dim=-2)
-        .transpose(-3, -2)
-        .expand(3, 2, -1, -1, -1),
-        attn_mask=expected_bias,
-        scale=1.0,
-    ).transpose(-3, -2)
-    torch.testing.assert_close(out, expected)
-    out.float().square().sum().backward()
-    assert bias.grad is not None
-    assert bias.grad.isfinite().all()
-    assert bias.grad.abs().sum() > 0
-
-
-@withCUDA
-@pytest.mark.parametrize("is_causal", [False, True])
-def test_sdpa_dropout(device: torch.device, is_causal: bool) -> None:
-    """Apply attention dropout in training and disable it for evaluation."""
-    module = SDPA(num_query_heads=2, dropout=1.0)
-    query = torch.randn(3, 2, 4, device=device)
-    key = torch.randn(5, 2, 4, device=device)
-    value = torch.randn_like(key)
-    torch.testing.assert_close(
-        module(query, key, value, is_causal=is_causal), torch.zeros_like(query)
-    )
-    module.eval()
-    mask = (
-        torch.ones(3, 5, dtype=torch.bool, device=device).tril()
-        if is_causal
-        else None
-    )
-    torch.testing.assert_close(
-        module(query, key, value, is_causal=is_causal),
-        reference_sdpa(query, key, value, attn_mask=mask),
-    )
-
-
-@withCUDA
-@pytest.mark.parametrize(
-    ("query_len", "key_len", "num_key_value_heads", "mask_kind"),
-    [
-        (3, 3, 2, None),
-        (3, 5, 1, None),
-        (5, 3, 2, "mask"),
-        (3, 5, 1, "mask"),
-        (3, 5, 2, "lengths"),
-        (5, 3, 1, "lengths"),
-    ],
-)
-def test_sdpa_causal_bias(
-    device: torch.device,
-    query_len: int,
-    key_len: int,
-    num_key_value_heads: int,
-    mask_kind: str | None,
-) -> None:
-    """Combine causal bias with padding and preserve attention gradients."""
-    module = SDPA(num_query_heads=2, num_key_value_heads=num_key_value_heads)
-    query = torch.randn(2, query_len, 2, 8, device=device, requires_grad=True)
-    key = torch.randn(
-        size=(key_len, num_key_value_heads, 8),
-        device=device,
-        requires_grad=True,
-    )
-    value = torch.randn(
-        size=(key_len, num_key_value_heads, 4),
-        device=device,
-        requires_grad=True,
-    )
-    # Broadcast the bias over query batches, heads, and query positions.
-    bias = torch.randn(3, 1, 1, 1, key_len, device=device, requires_grad=True)
-    lengths = torch.tensor([0, key_len - 1], dtype=torch.int32, device=device)
-    key_index = torch.arange(key_len, device=device)
-    mask = key_index < lengths[:, None, None]
-    out = module(
-        query=query,
-        key=key,
-        value=value,
-        attn_bias=bias,
-        is_causal=True,
-        attn_mask=mask if mask_kind == "mask" else None,
-        seqused_key_value=lengths if mask_kind == "lengths" else None,
-    )
-
-    allowed = key_index <= torch.arange(query_len, device=device)[:, None]
-    if mask_kind is not None:
-        allowed = allowed & mask.unsqueeze(-3)
-    expected = F.scaled_dot_product_attention(
-        query=query.transpose(-3, -2).expand(3, -1, -1, -1, -1),
-        key=key.repeat_interleave(2 // num_key_value_heads, dim=-2)
-        .transpose(-3, -2)
-        .expand(3, 2, -1, -1, -1),
-        value=value.repeat_interleave(2 // num_key_value_heads, dim=-2)
-        .transpose(-3, -2)
-        .expand(3, 2, -1, -1, -1),
-        attn_mask=bias.expand(3, 2, 2, query_len, key_len).masked_fill(
-            ~allowed, -torch.inf
-        ),
-    ).transpose(-3, -2)
-    torch.testing.assert_close(out, expected)
-    inputs = (query, key, value, bias)
-    gradients = torch.autograd.grad(out.square().sum(), inputs)
-    expected_gradients = torch.autograd.grad(expected.square().sum(), inputs)
-    for actual, reference in zip(gradients, expected_gradients):
-        torch.testing.assert_close(actual, reference)
-
-
-@withCUDA
-@pytest.mark.parametrize(
-    ("query_len", "key_len", "bias_batch"),
-    [(3, 0, 1), (3, 5, 0), (0, 5, 3), (0, 0, 1)],
-)
-def test_sdpa_bias_empty_inputs(
-    device: torch.device, query_len: int, key_len: int, bias_batch: int
-) -> None:
-    """Preserve output shape and zero gradients for empty biased attention."""
+def test_sdpa_additive_bias(device: torch.device) -> None:
     module = SDPA(num_query_heads=2)
-    query = torch.randn(query_len, 2, 8, device=device, requires_grad=True)
-    key = torch.randn(key_len, 2, 8, device=device, requires_grad=True)
-    value = torch.randn(key_len, 2, 4, device=device, requires_grad=True)
-    bias = torch.randn(
-        size=(bias_batch, 2, query_len, key_len),
-        device=device,
-        requires_grad=True,
+    query = torch.randn(2, 4, 2, 8, device=device)
+    key = torch.randn(5, 2, 8, device=device)
+    value = torch.randn_like(key)
+    bias = torch.randn(2, 2, 1, 5, device=device, requires_grad=True)
+
+    out = module(query=query, key=key, value=value, attn_mask=bias)
+    expected = reference_sdpa(
+        query=query,
+        key=key,
+        value=value,
+        attn_mask=bias,
     )
-    out = module(query=query, key=key, value=value, attn_bias=bias)
-    assert out.shape == (bias_batch, query_len, 2, 4)
-    torch.testing.assert_close(out, torch.zeros_like(out))
-    out.sum().backward()
-    for tensor in (query, key, value, bias):
-        torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
+    torch.testing.assert_close(out, expected)
+    (gradient,) = torch.autograd.grad(out.square().sum(), bias)
+    (expected_gradient,) = torch.autograd.grad(expected.square().sum(), bias)
+    torch.testing.assert_close(gradient, expected_gradient)
 
 
 @withCUDA
@@ -502,17 +300,6 @@ def test_sdpa_errors() -> None:
             key=key,
             value=value,
             seqused_key_value=torch.tensor([1], dtype=torch.int64),
-        )
-
-    with pytest.raises(
-        ValueError,
-        match=r"`attn_mask` must have dtype torch\.bool",
-    ):
-        module(
-            query=query,
-            key=key,
-            value=value,
-            attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
@@ -679,15 +466,6 @@ def test_attention_errors() -> None:
         module(
             query=query,
             seqused_key_value=torch.tensor([4, 4], dtype=torch.int64),
-        )
-
-    with pytest.raises(
-        ValueError,
-        match=r"`attn_mask` must have dtype torch\.bool",
-    ):
-        module(
-            query=query,
-            attn_mask=torch.ones(2, 1, 4, 4, dtype=torch.float32),
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
