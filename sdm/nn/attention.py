@@ -82,7 +82,6 @@ class SDPA(torch.nn.Module):
                 ``KV`` is the key/value sequence length and ``Hkv`` is the
                 number of key/value heads (``num_key_value_heads``).
             value: The value tensor with shape ``[..., KV, Hkv, C]``.
-                ``C`` is the number of value channels per head.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
@@ -106,8 +105,6 @@ class SDPA(torch.nn.Module):
             and seqused_key_value.dtype != torch.int32
         ):
             raise ValueError("`seqused_key_value` must have dtype torch.int32")
-        if attn_mask is not None and attn_mask.dtype != torch.bool:
-            raise ValueError("`attn_mask` must have dtype torch.bool")
 
         batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
         if seqused_key_value is not None:
@@ -117,6 +114,10 @@ class SDPA(torch.nn.Module):
         batch_shape = torch.broadcast_shapes(*batch_shapes)
 
         if self.query_scaling is not None:
+            if attn_mask is not None and attn_mask.dtype != torch.bool:
+                raise ValueError(
+                    "Query scaling requires boolean attention mask"
+                )
             if attn_mask is not None and attn_mask.size(-3) != 1:
                 raise ValueError(
                     "Per-head `attn_mask` is not supported with query scaling"
@@ -177,7 +178,7 @@ class SDPA(torch.nn.Module):
             scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
 
-        return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, Cv]
+        return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
 
 class Attention(torch.nn.Module):

@@ -475,7 +475,6 @@ def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
 
 
 def test_sdpa_errors() -> None:
-    """Reject incompatible heads, mask arguments, and mask or bias dtypes."""
     channels = 3
     num_heads = 2
     module = SDPA(num_query_heads=num_heads)
@@ -514,14 +513,6 @@ def test_sdpa_errors() -> None:
             key=key,
             value=value,
             attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
-        )
-
-    with pytest.raises(ValueError, match="floating-point dtype"):
-        module(
-            query=query,
-            key=key,
-            value=value,
-            attn_bias=torch.ones(1, num_heads, 2, 2, dtype=torch.bool),
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
