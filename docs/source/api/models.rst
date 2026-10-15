@@ -24,7 +24,7 @@ Overview
      - 2026-06-30
      - 1.64B–1.65B
      - `Apache-2.0 <https://github.com/google-research/tabfm/blob/b8a8b090c66d1b9e7af278003461582219996b6a/LICENSE>`__
-     - `tabfm-non-commercial-v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__
+     - `TabFM Non-Commercial v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__
    * - | :class:`~sdm.models.KumoTabular`
        | (`Blog <https://huggingface.co/blog/nvidia/kumo-tabular>`__)
      - 2026-09-28
@@ -36,7 +36,7 @@ Overview
      - 2026-04-14
      - 29.93M–30.94M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - `OpenMDW-1.1, with BSD-3-Clause third-party notice <https://huggingface.co/nvidia/Kumo-Relational>`__
+     - `OpenMDW-1.1, with BSD-3-Clause notice <https://huggingface.co/nvidia/Kumo-Relational>`__
    * - | :class:`~sdm.models.KumoForecast`
        | (`Blog <https://developer.nvidia.com/blog/new-nvidia-nv-tesseract-time-series-models-advance-dataset-processing-and-anomaly-detection>`__)
      - 2025-05-06
@@ -48,7 +48,7 @@ Overview
      - 2026-08-31
      - 330.71M
      - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
-     - `timesfm-non-commercial-v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
+     - `TimesFM Non-Commercial v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
 
 Model API
 ---------
