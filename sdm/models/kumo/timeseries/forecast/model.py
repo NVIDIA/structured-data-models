@@ -94,6 +94,7 @@ class KumoForecast(ICLModel):
         x_context: TableTensor | None,
         y_context: TableTensor | None,
         x_query: TableTensor | None,
+        x_context_only: TableTensor | None,  # [..., R_context, D_only]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
@@ -120,7 +121,6 @@ class _KumoForecast(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
     def forward(self, x: Tensor, mask: Tensor | None = None) -> Tensor:
         return x
