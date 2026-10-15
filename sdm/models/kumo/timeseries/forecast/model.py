@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
 import torch
 from torch import Tensor
@@ -12,7 +12,6 @@ from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
-from sdm.tensor.table import TableSchema
 
 
 class KumoForecast(ICLModel):
@@ -48,6 +47,7 @@ class KumoForecast(ICLModel):
         {Stype.numerical}
     )
     supports_multi_target: ClassVar[bool] = True
+    supports_context_only_columns: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -64,7 +64,7 @@ class KumoForecast(ICLModel):
             device="meta" if load_weights else device,
         )
         if load_weights:
-            self._load_from_pretrained(checkpoint, use_cross_channel, device)
+            self._load_from_pretrained(checkpoint, cross_channel, device)
         self.eval()
 
     @classmethod
@@ -87,8 +87,7 @@ class KumoForecast(ICLModel):
                 revision="abff20a58834638b28227ff4ab934f26206e4b09",
             )
         device = torch.get_default_device() if device is None else device
-        ckpt = torch.load(checkpoint, map_location=device, weights_only=True)
-        self.model.load_state_dict(remap_ckpt(ckpt), strict=True, assign=True)
+        torch.load(checkpoint, map_location=device, weights_only=True)
 
     def _forward(
         self,
@@ -101,61 +100,7 @@ class KumoForecast(ICLModel):
         generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:
-        if (
-            x_query is not None
-            and not 1 <= x_query.size(-2) <= self.model.prediction_length
-        ):
-            raise ValueError(
-                "Forecast length must be between 1 and "
-                f"{self.model.prediction_length} steps"
-            )
-
-        if cache is not None and cache.is_replaying:
-            prediction = cast(Tensor, cache["forecast"])
-            columns = cast(TableSchema, cache["y_schema"]).columns[
-                Stype.numerical
-            ]
-        else:
-            assert x_context is not None
-            assert y_context is not None
-            columns = y_context.columns[Stype.numerical]
-            if not columns:
-                raise ValueError(
-                    "Expected at least one numerical target series"
-                )
-            if x_context.size(-2) < self.model.context_length:
-                raise ValueError(
-                    f"Expected at least {self.model.context_length} "
-                    "history rows"
-                )
-            # [*batch, T, V] -> [B, V, T]; targets precede past covariates.
-            history = torch.cat(
-                [y_context.numerical, x_context.numerical], dim=-1
-            )
-            history = history[..., -self.model.context_length :, :]
-            batch_shape = history.shape[:-2]
-            history = history.reshape(-1, *history.shape[-2:]).transpose(
-                -1, -2
-            )
-            history = history.to(self.model.head.linear.weight.dtype)
-            prediction = self.model(history)[:, : len(columns)].transpose(
-                -1, -2
-            )
-            prediction = prediction.reshape(
-                *batch_shape, self.model.prediction_length, len(columns)
-            )
-            if cache is not None:
-                cache["forecast"] = prediction
-
-        if x_query is not None and x_query.shape[:-2] != prediction.shape[:-2]:
-            raise ValueError(
-                "Expected context and query batch dimensions to match"
-            )
-        length = 0 if x_query is None else x_query.size(-2)
-        return TableTensor(
-            columns={Stype.numerical: columns},
-            numerical=prediction[..., :length, :],
-        )
+        raise NotImplementedError
 
 
 class _KumoForecast(torch.nn.Module):
