@@ -137,6 +137,23 @@ class SDPA(torch.nn.Module):
                         out = out + tensor[..., :0, :, :].sum()
             return out
 
+        # Softmax over a single key is one, so attention returns its value:
+        if (
+            key_size[0] == 1
+            and attn_mask is None
+            and seqused_key_value is None
+        ):
+            out = value.repeat_interleave(
+                query_size[-2] // value_size[-2],
+                dim=-2,
+            ).expand(batch_shape + query_size[:-1] + value_size[-1:])
+            if torch.is_grad_enabled():
+                # Summing an empty slice gives zero and keeps backward working.
+                for tensor in (query, key):
+                    if tensor.requires_grad:
+                        out = out + tensor[..., :0, :, :].sum()
+            return out
+
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
