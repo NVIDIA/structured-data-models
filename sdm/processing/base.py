@@ -117,8 +117,7 @@ class Processor(torch.nn.Module, abc.ABC):
         self.__fitted = bool(self._fitted_state)
 
     def _set_buffer(self, name: str, value: Tensor) -> None:
-        # New module buffer assignment fails in torch.compile on PyTorch 2.14.
-        # Direct registration skips inspect.signature; assignment works on 2.7.
+        # Use register_buffer to avoid assignment errors in torch.compile.
         self.register_buffer(
             name,
             value,
