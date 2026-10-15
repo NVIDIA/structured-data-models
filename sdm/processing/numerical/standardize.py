@@ -52,7 +52,8 @@ class Standardize(Processor, InvertibleMixin):
         return self
 
     def _handles_table(self, table: TableTensor) -> bool:
-        # PyTorch 2.7 cannot trace iteration over handled column types.
+        # PyTorch 2.7 fails fullgraph=True on the base class's frozenset loop.
+        # Standardize only needs to check whether numerical columns exist.
         return table.numerical.size(-1) > 0
 
     def _fit(
