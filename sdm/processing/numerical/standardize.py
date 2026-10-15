@@ -52,7 +52,7 @@ class Standardize(Processor, InvertibleMixin):
         return self
 
     def _handles_table(self, table: TableTensor) -> bool:
-        # The shared check fails with fullgraph=True on PyTorch 2.7.
+        # PyTorch 2.7 cannot trace iteration over handled column types.
         return table.numerical.size(-1) > 0
 
     def _fit(
