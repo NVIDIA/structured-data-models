@@ -27,9 +27,8 @@ class KumoForecast(ICLModel):
         :width: 100%
 
     :class:`KumoForecast` is a time-series foundation model for multivariate
-    forecasting, with optional historical covariates.
-
-    Architecturally, it combines patch-based time-series embeddings with a
+    forecasting, with optional historical covariates. Architecturally, it
+    combines patch-based time-series embeddings with a
     `MOMENT <https://arxiv.org/abs/2402.03885>`__ transformer encoder and a
     pretrained forecasting head.
     Optional cross-channel mixing lets forecasts use dependencies between
