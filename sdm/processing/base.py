@@ -161,7 +161,8 @@ class Processor(torch.nn.Module, abc.ABC):
         return self._transform(table)
 
     def _handles_table(self, table: TableTensor) -> bool:
-        # Check handled blocks directly instead of constructing active types.
+        # Check column counts directly so torch.compile can trace this without
+        # constructing or intersecting sets of column types.
         for stype in self.handles_stypes:
             if getattr(table, stype.value).size(-1) > 0:
                 return True
