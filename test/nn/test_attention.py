@@ -35,7 +35,7 @@ def reference_sdpa(
         query=query.transpose(-3, -2),
         key=key.transpose(-3, -2),
         value=value.transpose(-3, -2),
-        attn_mask=attn_mask.unsqueeze(-3) if attn_mask is not None else None,
+        attn_mask=attn_mask,
         scale=scale,
     ).transpose(-3, -2)
 
@@ -94,13 +94,13 @@ def test_sdpa(
     query = torch.randn(2, 3, num_query_heads, channels, device=device)
     key = torch.randn(5, num_key_value_heads, channels, device=device)
     value = torch.randn(1, 5, num_key_value_heads, channels, device=device)
-    attn_mask = torch.randint(0, 2, (3, 5), dtype=torch.bool, device=device)
+    attn_mask = torch.randint(0, 2, (1, 3, 5), dtype=torch.bool, device=device)
 
     out = module(
         query=query,
         key=key,
         value=value,
-        attn_mask=attn_mask.unsqueeze(-3),
+        attn_mask=attn_mask,
     )
     expected = reference_sdpa(
         query=query,
@@ -161,8 +161,8 @@ def test_sdpa(
     key_index = torch.arange(key_value_len, device=device).view(
         1, 1, key_value_len
     )
-    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
-    attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
+    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1, 1)
+    attn_mask = attn_mask.expand(batch_size, 1, query_len, key_value_len)
     expected = reference_sdpa(
         query=query,
         key=key,
@@ -600,8 +600,8 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     key_index = torch.arange(key_value_len, device=device).view(
         1, 1, key_value_len
     )
-    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
-    attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
+    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1, 1)
+    attn_mask = attn_mask.expand(batch_size, 1, query_len, key_value_len)
 
     out = module(query=query)
     assert out.size() == query.size()
@@ -629,7 +629,7 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     out2 = module(
         query=query,
         key_value=key_value,
-        attn_mask=attn_mask.unsqueeze(-3),
+        attn_mask=attn_mask,
     )
     with torch.no_grad():
         chunked_out = module(

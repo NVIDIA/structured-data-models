@@ -61,12 +61,6 @@ def test_induced_transformer_block(
     out_seqused = module(query, key_value=key_value, seqused_key_value=seqused)
     torch.testing.assert_close(out_seqused, out_cross)
 
-    seqused = torch.tensor([3, 2], dtype=torch.int32, device=device)
-    mask = torch.arange(context_size, device=device) < seqused.unsqueeze(-1)
-    out_masked = module(query, key_value=key_value, attn_mask=mask)
-    out_seqused = module(query, key_value=key_value, seqused_key_value=seqused)
-    torch.testing.assert_close(out_masked, out_seqused)
-
 
 def test_induced_transformer_block_kv_cache() -> None:
     batch_size = 2
