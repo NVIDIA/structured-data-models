@@ -11,8 +11,6 @@ from sdm.processing.numerical._stats import (
     _isfinite,
 )
 
-_NUMERICAL_STYPES = frozenset({Stype.numerical})
-
 
 class Standardize(Processor, InvertibleMixin):
     """Center and scale each feature column.
@@ -25,7 +23,7 @@ class Standardize(Processor, InvertibleMixin):
         eps: Value added to each fitted standard deviation.
     """
 
-    handles_stypes = _NUMERICAL_STYPES
+    handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
 
     mean: Tensor
@@ -40,11 +38,8 @@ class Standardize(Processor, InvertibleMixin):
         self.register_buffer("scale", torch.empty(0))
 
     def _handles_table(self, table: TableTensor) -> bool:
-        # Avoid semantic-type set operations for normal numerical processing.
-        handles_stypes = self.handles_stypes
-        if handles_stypes is _NUMERICAL_STYPES:
-            return table.numerical.size(-1) > 0
-        return bool(table.active_stypes & handles_stypes)
+        # Check column count without constructing sets during compilation.
+        return table.numerical.size(-1) > 0
 
     def _fit(
         self,

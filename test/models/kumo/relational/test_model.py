@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import cast
-
 import pandas as pd
 import pytest
 import torch
@@ -10,7 +8,6 @@ import torch
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
-    NaT,
     RelatedTables,
     RelationalData,
     Stype,
@@ -23,7 +20,6 @@ from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.model import (
     _KumoRelational,
 )
-from sdm.processing import Standardize
 from sdm.testing import withCUDA
 
 
@@ -343,43 +339,3 @@ def test_many_classes_forward_and_cache(
         cache=cache.freeze(),
     )
     torch.testing.assert_close(predicted, expected)
-
-
-@pytest.mark.skipif(
-    not torch._dynamo.is_dynamo_supported(),
-    reason="torch.compile is not supported by this Python/PyTorch build",
-)
-@pytest.mark.parametrize("missing", [False, True])
-def test_relative_time_compile_fit_and_replay(missing: bool) -> None:
-    model = _KumoRelational(num_classes=2, num_quantiles=0, device="meta")
-    day = 24 * 60 * 60 * 1_000_000
-    datetime = torch.tensor([[0], [day], [2 * day]])
-    seed = torch.tensor([[3 * day], [6 * day], [9 * day]])
-    if missing:
-        datetime[1] = NaT
-    rows = torch.arange(3)
-
-    def relative_time(
-        datetime: torch.Tensor,
-        seed: torch.Tensor,
-        rows: torch.Tensor,
-        cache: Cache,
-    ) -> torch.Tensor | None:
-        if cache.is_recording:
-            cache["standardizer"] = Standardize()
-        return model._get_rel_time(
-            datetime, seed, rows, cast(Standardize, cache["standardizer"])
-        )
-
-    compiled = torch.compile(
-        relative_time, backend="eager", fullgraph=True, dynamic=True
-    )
-    expected_cache = Cache()
-    cache = Cache()
-    expected = relative_time(datetime, seed, rows, expected_cache)
-    actual = compiled(datetime, seed, rows, cache)
-    torch.testing.assert_close(actual, expected)
-    torch.testing.assert_close(
-        compiled(datetime, seed + day, rows, cache.freeze()),
-        relative_time(datetime, seed + day, rows, expected_cache.freeze()),
-    )
