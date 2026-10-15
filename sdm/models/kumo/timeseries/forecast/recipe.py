@@ -1,11 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""KumoForecasting."""
-
-from sdm.models.kumo.timeseries.forecasting.model import KumoForecasting
+import sdm.processing as sp
 
 
-__all__ = [
-    "KumoForecasting",
-]
+def default_recipe() -> sp.Recipe:  # noqa: D103
+    return sp.Recipe()

@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -13,35 +11,11 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.timeseries.forecasting.attention import (
-    CrossChannelAttention,
-)
-from sdm.models.kumo.timeseries.forecasting.ckpt import remap_ckpt
-from sdm.models.kumo.timeseries.forecasting.encoder import T5Encoder
-from sdm.models.kumo.timeseries.forecasting.head import ForecastingHead
-from sdm.models.kumo.timeseries.forecasting.normalization import RevIN
-from sdm.models.kumo.timeseries.forecasting.patch import (
-    PatchEmbedding,
-    Patching,
-    patch_mask,
-)
-from sdm.models.kumo.timeseries.forecasting.recipe import default_recipe
+from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
 from sdm.tensor.table import TableSchema
 
-MODEL_KWARGS: dict[str, Any] = {
-    "context_length": 512,
-    "prediction_length": 72,
-    "patch_len": 8,
-    "channels": 1024,
-    "hidden_channels": 2816,
-    "num_layers": 24,
-    "num_heads": 16,
-    "head_channels": 64,
-    "cross_channel_heads": 8,
-}
 
-
-class KumoForecasting(ICLModel):
+class KumoForecast(ICLModel):
     """Kumo time-series forecasting with the Kumo-Forecast checkpoints.
 
     Rows are chronological, regularly spaced time steps. ``y_context`` holds
@@ -62,10 +36,8 @@ class KumoForecasting(ICLModel):
     Args:
         pretrained: Whether to download pretrained weights when ``checkpoint``
             is not supplied.
-        use_cross_channel: Whether to mix variates after the T5 encoder.
+        cross_channel: Whether to mix variates after the T5 encoder.
             Selects the cross-channel or base published checkpoint.
-        checkpoint: Optional local Kumo-Forecast state-dict file. Architecture
-            must match the selected model. Loaded with ``weights_only=True``.
         device: The device for model parameters.
     """
 
@@ -81,16 +53,15 @@ class KumoForecasting(ICLModel):
     def __init__(
         self,
         pretrained: bool = True,
-        use_cross_channel: bool = True,
+        cross_channel: bool = True,
         checkpoint: str | Path | None = None,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=Task.regression)
         load_weights = pretrained or checkpoint is not None
-        self.model = _KumoForecasting(
-            use_cross_channel=use_cross_channel,
+        self.model = _KumoForecast(
+            cross_channel=cross_channel,
             device="meta" if load_weights else device,
-            **MODEL_KWARGS,
         )
         if load_weights:
             self._load_from_pretrained(checkpoint, use_cross_channel, device)
@@ -187,9 +158,10 @@ class KumoForecasting(ICLModel):
         )
 
 
-class _KumoForecasting(torch.nn.Module):
+class _KumoForecast(torch.nn.Module):
     def __init__(
         self,
+        cross_channel: bool,
         context_length: int = 512,
         prediction_length: int = 72,
         patch_len: int = 8,
@@ -198,65 +170,12 @@ class _KumoForecasting(torch.nn.Module):
         num_layers: int = 24,
         num_heads: int = 16,
         head_channels: int = 64,
-        use_cross_channel: bool = True,
         cross_channel_heads: int = 8,
-        dropout: float = 0.1,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        self.context_length = context_length
-        self.prediction_length = prediction_length
-        self.normalizer = RevIN(num_features=1, affine=False, **factory_kwargs)
-        self.tokenizer = Patching(patch_len=patch_len, stride=patch_len)
-        self.patch_embedding = PatchEmbedding(
-            patch_len=patch_len,
-            stride=patch_len,
-            channels=channels,
-            dropout=dropout,
-            add_positional_embedding=True,
-            **factory_kwargs,
-        )
-        self.encoder = T5Encoder(
-            channels=channels,
-            hidden_channels=hidden_channels,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            head_channels=head_channels,
-            dropout=dropout,
-            **factory_kwargs,
-        )
-        if use_cross_channel:
-            self.cross_channel_attn = CrossChannelAttention(
-                channels=channels,
-                num_heads=cross_channel_heads,
-                dropout=dropout,
-                **factory_kwargs,
-            )
-        else:
-            self.cross_channel_attn = torch.nn.Identity()
-        self.head = ForecastingHead(
-            input_channels=channels * (context_length // patch_len),
-            prediction_length=prediction_length,
-            dropout=dropout,
-            **factory_kwargs,
-        )
 
     def forward(self, x: Tensor, mask: Tensor | None = None) -> Tensor:
-        x, state = self.normalizer(x, mask)
-        x = x.nan_to_num(nan=0, posinf=0, neginf=0)
-        # Forecasting embeds all patches, even when the attention mask excludes
-        # some of them; unlike reconstruction, it does not insert mask tokens.
-        x = self.patch_embedding(self.tokenizer(x))
-        batch_size, num_variates, num_patches, channels = x.shape
-        x = x.reshape(batch_size * num_variates, num_patches, channels)
-        if mask is not None:
-            mask = patch_mask(
-                mask, self.tokenizer.patch_len, self.tokenizer.stride
-            )
-            mask = mask.repeat_interleave(num_variates, dim=0)
-        x = self.encoder(x, mask)
-        x = x.reshape(batch_size, num_variates, num_patches, channels)
-        x = self.cross_channel_attn(x)
-        return self.normalizer.inverse(self.head(x), state)
+        return x
