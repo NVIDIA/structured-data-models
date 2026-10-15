@@ -19,6 +19,7 @@ from sdm.processing.numerical.pca import PCA
 from sdm.processing.numerical.random_projection import RandomProjection
 from sdm.processing.numerical.detrend import Detrend
 from sdm.processing.numerical.interpolate import Interpolate
+from sdm.processing.numerical.warp import WarpTails
 
 __all__ = [
     "Cast",
@@ -37,4 +38,5 @@ __all__ = [
     "RandomProjection",
     "Detrend",
     "Interpolate",
+    "WarpTails",
 ]

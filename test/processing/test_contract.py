@@ -133,6 +133,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.DropConstantColumns()),
     ProcessorCase(sp.PCA(2)),
     ProcessorCase(sp.RandomProjection(2)),
+    ProcessorCase(sp.WarpTails(probability=1.0)),
     ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
