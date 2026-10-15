@@ -64,7 +64,7 @@ class SDPA(torch.nn.Module):
         key: Tensor,  # [..., KV, Hkv, C]
         value: Tensor,  # [..., KV, Hkv, C]
         seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
         is_causal: bool = False,
     ) -> Tensor:  # [..., Q, Hq, C]
@@ -81,7 +81,7 @@ class SDPA(torch.nn.Module):
             value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
+            attn_mask: Boolean attention mask with shape ``[..., Hq, Q, KV]``.
                 Entries set to ``True`` participate in attention.
             is_causal: Apply an upper-left causal attention mask.
 
@@ -108,14 +108,18 @@ class SDPA(torch.nn.Module):
         if seqused_key_value is not None:
             batch_shapes.append(seqused_key_value.size())
         if attn_mask is not None:
-            batch_shapes.append(attn_mask.size()[:-2])
+            batch_shapes.append(attn_mask.size()[:-3])
         batch_shape = torch.broadcast_shapes(*batch_shapes)
 
         if self.query_scaling is not None:
+            if attn_mask is not None and attn_mask.size(-3) != 1:
+                raise ValueError(
+                    "Per-head `attn_mask` is not supported with query scaling"
+                )
             if seqused_key_value is not None:
                 key_len = seqused_key_value.unsqueeze(-1)
             elif attn_mask is not None and attn_mask.size(-1) > 1:
-                key_len = attn_mask.sum(dim=-1)
+                key_len = attn_mask.sum(dim=-1).squeeze(-2)
             else:
                 key_len = key.size(-3)
             query = self.query_scaling(query, key_len=key_len)
@@ -142,8 +146,8 @@ class SDPA(torch.nn.Module):
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
 
         if attn_mask is not None:
-            attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-2:])
-            attn_mask = attn_mask.reshape(-1, *attn_mask.size()[-2:])
+            attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-3:])
+            attn_mask = attn_mask.reshape(-1, *attn_mask.size()[-3:])
 
         if seqused_key_value is not None:
             seqused_key_value = seqused_key_value.expand(batch_shape)
@@ -151,6 +155,7 @@ class SDPA(torch.nn.Module):
             key_index = torch.arange(key.size(-3), device=key.device)
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
+            attn_mask = attn_mask.unsqueeze(-3)
 
         enable_gqa = False
         if query.size(-2) != key.size(-2):
@@ -160,9 +165,7 @@ class SDPA(torch.nn.Module):
             query=query.transpose(-3, -2),  # [B, Hq, Q, C],
             key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
             value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
-            attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
-            if attn_mask is not None
-            else None,
+            attn_mask=attn_mask,  # [B, Hq, Q, KV]
             enable_gqa=enable_gqa,
             is_causal=is_causal,
             scale=self.scale,
@@ -290,7 +293,7 @@ class Attention(torch.nn.Module):
         query: Tensor,  # [..., Q, C]
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
@@ -308,8 +311,9 @@ class Attention(torch.nn.Module):
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
-                Entries set to ``True`` participate in attention.
+            attn_mask: Boolean attention mask with shape ``[..., Hq, Q, KV]``.
+                ``Hq`` is the number of query heads. Entries set to ``True``
+                participate in attention.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
@@ -373,7 +377,7 @@ class Attention(torch.nn.Module):
             key=key,  # [..., KV, Hkv, C // Hq]
             value=value,  # [..., KV, Hkv, C // Hq]
             seqused_key_value=seqused_key_value,  # [...]
-            attn_mask=attn_mask,  # [..., Q, KV]
+            attn_mask=attn_mask,  # [..., Hq, Q, KV]
             is_causal=is_causal,
         )  # [..., Q, Hq, C // Hq]
 
@@ -501,7 +505,7 @@ class TransformerBlock(torch.nn.Module):
         query: Tensor,  # [..., Q, C]
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
@@ -521,8 +525,9 @@ class TransformerBlock(torch.nn.Module):
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
-                Entries set to ``True`` participate in attention.
+            attn_mask: Boolean attention mask with shape ``[..., Hq, Q, KV]``.
+                ``Hq`` is the number of query head. Entries set to ``True``
+                participate in attention.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
@@ -628,13 +633,7 @@ class TransformerBlock(torch.nn.Module):
                     start=start,
                     end=end,
                 ),
-                attn_mask=_chunk(
-                    attn_mask,
-                    batch_shape,
-                    trailing_dims=2,
-                    start=start,
-                    end=end,
-                ),
+                attn_mask=_chunk(attn_mask, batch_shape, 3, start, end),
                 is_causal=is_causal,
                 return_key_value=return_key_value,
                 out=flat_out[start:end] if flat_out is not None else None,
@@ -693,7 +692,7 @@ class TransformerBlock(torch.nn.Module):
         query: Tensor,  # [..., Q, C]
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
@@ -784,7 +783,7 @@ def _batch_shape(
     if seqused_key_value is not None:
         shapes.append(seqused_key_value.size())
     if attn_mask is not None:
-        shapes.append(attn_mask.size()[:-2])
+        shapes.append(attn_mask.size()[:-3])
     return torch.broadcast_shapes(*shapes)
 
 
