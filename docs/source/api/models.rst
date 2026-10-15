@@ -40,13 +40,12 @@ Overview
        | 30.94M (regression)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `OpenMDW-1.1, with BSD-3-Clause third-party notice <https://huggingface.co/nvidia/Kumo-Relational>`__
-  * - :class:`~sdm.models.KumoForecast`
+  * - :class:`~sdm.models.KumoForecast` (`Blog <https://developer.nvidia.com/blog/new-nvidia-nv-tesseract-time-series-models-advance-dataset-processing-and-anomaly-detection>`__)
      - 2025-05-06
      - | 313.06M (base)
        | 317.26M (cross-channel)
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Forecast>`__
-
    * - :class:`~sdm.models.TimesFM3` (`Blog <https://arxiv.org/abs/2609.37959>`__)
      - 2026-08-31
      - | 330.71M

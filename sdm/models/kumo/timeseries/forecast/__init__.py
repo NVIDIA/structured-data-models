@@ -3,7 +3,7 @@
 
 """KumoForecast."""
 
-from sdm.models.kumo.timeseries.forecasting.model import KumoForecast
+from sdm.models.kumo.timeseries.forecast.model import KumoForecast
 
 
 __all__ = [
