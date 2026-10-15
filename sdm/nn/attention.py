@@ -35,8 +35,7 @@ class SDPA(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
-        dropout: Attention dropout probability during training. Disabled in
-            evaluation mode.
+        dropout: Attention dropout probability.
     """
 
     def __init__(
@@ -45,7 +44,6 @@ class SDPA(torch.nn.Module):
         num_key_value_heads: int | None = None,
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
-        *,
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
@@ -61,19 +59,18 @@ class SDPA(torch.nn.Module):
         self.num_key_value_heads = num_key_value_heads
         self.query_scaling = query_scaling
         self.scale = scale
-        self.dropout = torch.nn.Dropout(dropout)
+        self.dropout = dropout
 
     def forward(
         self,
         query: Tensor,  # [..., Q, Hq, C]
         key: Tensor,  # [..., KV, Hkv, C]
-        value: Tensor,  # [..., KV, Hkv, Cv]
+        value: Tensor,  # [..., KV, Hkv, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
         is_causal: bool = False,
-        attn_bias: Tensor | None = None,  # [..., Hq, Q, KV]
-    ) -> Tensor:  # [..., Q, Hq, Cv]
+    ) -> Tensor:  # [..., Q, Hq, C]
         r"""The forward pass.
 
         Args:
@@ -84,26 +81,19 @@ class SDPA(torch.nn.Module):
             key: The key tensor with shape ``[..., KV, Hkv, C]``.
                 ``KV`` is the key/value sequence length and ``Hkv`` is the
                 number of key/value heads (``num_key_value_heads``).
-            value: The value tensor with shape ``[..., KV, Hkv, Cv]``.
-                ``Cv`` is the number of value channels per head.
+            value: The value tensor with shape ``[..., KV, Hkv, C]``.
+                ``C`` is the number of value channels per head.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Hq, Q, KV]``.
-                Entries set to ``True`` participate in attention.
+            attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
+                For boolean masks, entries set to ``True`` participate in
+                attention. Floating-point masks act as additive bias.
             is_causal: Apply an upper-left causal attention mask.
-            attn_bias: Floating-point additive attention bias with shape
-                ``[..., Hq, Q, KV]`` and dtype matching ``query``. Batch,
-                head, and sequence dimensions may be broadcast.
-                May be combined with causal attention, a boolean mask, or
-                valid key/value lengths. Query scaling uses the mask or
-                lengths, not the bias.
 
         Returns:
-            Tensor with shape ``[..., Q, Hq, Cv]``.
-            Without a bias, empty queries are returned unchanged.
+            Tensor with shape ``[..., Q, Hq, C]``.
         """
-        # Preserve the unbroadcast empty-query result when no bias is given.
-        if query.numel() == 0 and attn_bias is None:
+        if query.numel() == 0:
             return query
 
         if attn_mask is not None and seqused_key_value is not None:
@@ -118,8 +108,6 @@ class SDPA(torch.nn.Module):
             raise ValueError("`seqused_key_value` must have dtype torch.int32")
         if attn_mask is not None and attn_mask.dtype != torch.bool:
             raise ValueError("`attn_mask` must have dtype torch.bool")
-        if attn_bias is not None and not attn_bias.is_floating_point():
-            raise ValueError("`attn_bias` must have a floating-point dtype")
 
         batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
         if seqused_key_value is not None:
@@ -147,13 +135,13 @@ class SDPA(torch.nn.Module):
         value_size = value.size()[-3:]
 
         # FlashAttention rejects empty batches before PyTorch 2.10.
-        if query_size[0] == 0 or key_size[0] == 0 or 0 in batch_shape:
+        if key_size[0] == 0 or 0 in batch_shape:
             out = query.new_zeros(
                 batch_shape + query_size[:-1] + value_size[-1:]
             )
             if torch.is_grad_enabled():
                 # Summing an empty slice gives zero and keeps backward working.
-                for tensor in (query, key, value, attn_bias):
+                for tensor in (query, key, value, attn_mask):
                     if tensor is not None and tensor.requires_grad:
                         out = out + tensor[..., :0, :, :].sum()
             return out
@@ -178,37 +166,16 @@ class SDPA(torch.nn.Module):
         if query.size(-2) != key.size(-2):
             enable_gqa = True
 
-        if attn_mask is not None:
-            attn_mask = attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
-        if attn_bias is not None:
-            attn_bias = attn_bias.expand(batch_shape + attn_bias.size()[-3:])
-            attn_bias = attn_bias.reshape(-1, *attn_bias.size()[-3:])
-            if is_causal:
-                causal_mask = torch.ones(
-                    size=(query.size(-3), key.size(-3)),
-                    dtype=torch.bool,
-                    device=query.device,
-                ).tril()
-                attn_mask = (
-                    causal_mask
-                    if attn_mask is None
-                    else attn_mask & causal_mask
-                )
-                is_causal = False
-            if attn_mask is not None:
-                attn_bias = attn_bias.masked_fill(~attn_mask, -torch.inf)
-            attn_mask = attn_bias
-
         out = F.scaled_dot_product_attention(
             query=query.transpose(-3, -2),  # [B, Hq, Q, C],
             key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
             value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
-            attn_mask=attn_mask,
-            dropout_p=self.dropout.p if self.training else 0.0,
+            attn_mask=attn_mask,  # [B, Hq, Q, KV]
+            dropout_p=self.dropout if self.training else 0.0,
             enable_gqa=enable_gqa,
             is_causal=is_causal,
             scale=self.scale,
-        ).transpose(-3, -2)  # [B, Q, Hq, Cv]
+        ).transpose(-3, -2)  # [B, Q, Hq, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, Cv]
 
@@ -238,6 +205,7 @@ class Attention(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
+        dropout: Attention dropout probability.
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
@@ -252,6 +220,7 @@ class Attention(torch.nn.Module):
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
+        dropout: float = 0.0,
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -284,6 +253,7 @@ class Attention(torch.nn.Module):
             num_key_value_heads=num_key_value_heads,
             query_scaling=query_scaling,
             scale=scale,
+            dropout=dropout,
         )
         self.out_lin = Linear(channels, channels, bias=bias, **factory_kwargs)
 
@@ -350,9 +320,10 @@ class Attention(torch.nn.Module):
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Hq, Q, KV]``.
-                ``Hq`` is the number of query heads. Entries set to ``True``
-                participate in attention.
+            attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
+                ``Hq`` is the number of query heads.
+                For boolean masks, entries set to ``True`` participate in
+                attention. Floating-point masks act as additive bias.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
@@ -455,6 +426,7 @@ class TransformerBlock(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
+        dropout: Attention dropout probability.
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
@@ -473,6 +445,7 @@ class TransformerBlock(torch.nn.Module):
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
+        dropout: float = 0.0,
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -493,6 +466,7 @@ class TransformerBlock(torch.nn.Module):
             key_transform=key_transform,
             query_scaling=query_scaling,
             scale=scale,
+            dropout=dropout,
             bias=bias,
             **factory_kwargs,
         )
@@ -564,9 +538,10 @@ class TransformerBlock(torch.nn.Module):
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Hq, Q, KV]``.
-                ``Hq`` is the number of query heads. Entries set to ``True``
-                participate in attention.
+            attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
+                ``Hq`` is the number of query heads.
+                For boolean masks, entries set to ``True`` participate in
+                attention. Floating-point masks act as additive bias.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
