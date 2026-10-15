@@ -383,8 +383,8 @@ class Attention(torch.nn.Module):
             # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
             # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
             return out, KVCacheEntry(
-                key=key.to(value.dtype),
-                value=value,
+                key=key.to(value.dtype).contiguous(),
+                value=value.contiguous(),
             )
         return out
 
