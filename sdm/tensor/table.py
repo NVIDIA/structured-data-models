@@ -1960,7 +1960,10 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     for stype, _ in ref.items():
         block_list = [tensor.blocks[stype] for tensor in tensors]
         block_list = [block for block in block_list if block.size(-1) > 0]
-        if len(block_list) == 1:
+        if len(block_list) == 0 and _is_column_dim(ref, dim):
+            # The empty block keeps its dtype and device.
+            blocks[stype] = ref.blocks[stype]
+        elif len(block_list) == 1:
             blocks[stype] = block_list[0]
         elif len(block_list) > 1:
             blocks[stype] = torch.cat(block_list, dim=dim)
