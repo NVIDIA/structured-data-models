@@ -7,7 +7,7 @@ Install from PyPi:
 pip install structured-data-models
 ```
 
-Alternatively, install from the `main` via:
+Alternatively, install from `main` via:
 
 ```bash
 pip install git+https://github.com/NVIDIA/structured-data-models.git
