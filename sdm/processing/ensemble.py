@@ -115,7 +115,7 @@ class EnsembleProcessor(Processor):
             generator: Pseudorandom number generator used for sampling.
         """
         if not any(
-            group.active_stypes & self.handles_stypes
+            self._handles_table(group)
             for group in ensemble_table._iter_groups()
         ):
             return self
@@ -137,7 +137,7 @@ class EnsembleProcessor(Processor):
             The transformed ensemble table.
         """
         if not any(
-            group.active_stypes & self.handles_stypes
+            self._handles_table(group)
             for group in ensemble_table._iter_groups()
         ):
             return ensemble_table
@@ -160,7 +160,7 @@ class EnsembleProcessor(Processor):
             The transformed ensemble table.
         """
         if not any(
-            group.active_stypes & self.handles_stypes
+            self._handles_table(group)
             for group in ensemble_table._iter_groups()
         ):
             return ensemble_table

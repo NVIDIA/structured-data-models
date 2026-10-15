@@ -49,6 +49,8 @@ class TFIDF(EnsembleProcessor):
     handles_stypes = frozenset({Stype.text})
     requires_fit = True
 
+    _idf_template: Tensor
+
     def __init__(
         self,
         *,
@@ -310,7 +312,7 @@ class TFIDF(EnsembleProcessor):
             idfs.append(idf)
 
         if idfs:
-            self._idf_template = idfs[0].new_empty(0)
+            self._set_buffer("_idf_template", idfs[0].new_empty(0))
         return _TFIDFState(vocabularies, idfs)
 
     def _fit_ensemble(
