@@ -4,6 +4,7 @@
 from typing import cast
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
@@ -18,6 +19,9 @@ class PCA(Processor):
 
     handles_stypes = frozenset({Stype.numerical})
     requires_fit = True
+
+    mean: Tensor
+    components: Tensor
 
     def __init__(self, num_components: int) -> None:
         super().__init__()
@@ -38,7 +42,7 @@ class PCA(Processor):
                 f"numerical features"
             )
 
-        self.mean = table.numerical.mean(dim=-2, keepdim=True)
+        self._set_buffer("mean", table.numerical.mean(dim=-2, keepdim=True))
         _, _, vh = torch.linalg.svd(
             table.numerical - self.mean,
             full_matrices=False,
@@ -48,7 +52,9 @@ class PCA(Processor):
             table.numerical.size(-2),
             table.numerical.size(-1),
         )
-        self.components = vh[..., :num_components, :].transpose(-2, -1)
+        self._set_buffer(
+            "components", vh[..., :num_components, :].transpose(-2, -1)
+        )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         x = (table.numerical - self.mean) @ self.components

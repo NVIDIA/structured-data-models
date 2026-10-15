@@ -161,7 +161,11 @@ class Processor(torch.nn.Module, abc.ABC):
         return self._transform(table)
 
     def _handles_table(self, table: TableTensor) -> bool:
-        return bool(table.active_stypes & self.handles_stypes)
+        # Check handled blocks directly instead of constructing active types.
+        for stype in self.handles_stypes:
+            if getattr(table, stype.value).size(-1) > 0:
+                return True
+        return False
 
     def fit(
         self,
