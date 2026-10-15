@@ -38,6 +38,17 @@ def test_clip_sigma_two_stage_outlier_behavior(
     )
 
 
+def test_clip_sigma_hard_clamps_to_bounds() -> None:
+    inp = torch.tensor([[0.0], [1.0], [2.0], [100.0]], dtype=torch.float64)
+    table = TableTensor.from_tensor(inp)
+
+    processor = ClipSigma(threshold=1.0, soft=False).fit(table)
+    transformed = processor.transform(table).numerical
+
+    expected = torch.tensor([[0.0], [1.0], [2.0], [2.0]], dtype=torch.float64)
+    assert torch.equal(transformed, expected)
+
+
 def test_clip_sigma_matches_tabicl_reference_values() -> None:
     dtype = torch.float64
     inp = torch.tensor(
