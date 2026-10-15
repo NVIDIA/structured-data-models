@@ -3,7 +3,6 @@
 
 # ruff: noqa: D205
 
-from pathlib import Path
 from typing import Any, ClassVar
 
 import torch
@@ -64,13 +63,12 @@ class KumoForecast(ICLModel):
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=Task.regression)
-        load_weights = pretrained or checkpoint is not None
         self.model = _KumoForecast(
             cross_channel=cross_channel,
-            device="meta" if load_weights else device,
+            device="meta" if pretrained else device,
         )
-        if load_weights:
-            self._load_from_pretrained(checkpoint, cross_channel, device)
+        if pretrained:
+            self._load_from_pretrained(cross_channel, device)
         self.eval()
 
     @classmethod
@@ -80,18 +78,16 @@ class KumoForecast(ICLModel):
 
     def _load_from_pretrained(
         self,
-        checkpoint: str | Path | None,
         use_cross_channel: bool,
         device: torch.device | str | None,
     ) -> None:
-        if checkpoint is None:
-            checkpoint = download_checkpoint(
-                repo_id="nvidia/Kumo-Forecast",
-                filename="run8_best_model_cr.pt"
-                if use_cross_channel
-                else "moment_head_512_6hr.pt",
-                revision="abff20a58834638b28227ff4ab934f26206e4b09",
-            )
+        checkpoint = download_checkpoint(
+            repo_id="nvidia/Kumo-Forecast",
+            filename="run8_best_model_cr.pt"
+            if use_cross_channel
+            else "moment_head_512_6hr.pt",
+            revision="abff20a58834638b28227ff4ab934f26206e4b09",
+        )
         device = torch.get_default_device() if device is None else device
         torch.load(checkpoint, map_location=device, weights_only=True)
 
