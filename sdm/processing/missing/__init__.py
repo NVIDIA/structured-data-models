@@ -4,7 +4,19 @@
 """Processors that mask numerical and categorical cells."""
 
 from sdm.processing.missing.random import MaskRandom
+from sdm.processing.missing.structured import (
+    MaskRows,
+    MaskBlock,
+    MaskByTarget,
+    MaskCategorical,
+    MaskCensoring,
+)
 
 __all__ = [
     "MaskRandom",
+    "MaskRows",
+    "MaskBlock",
+    "MaskByTarget",
+    "MaskCategorical",
+    "MaskCensoring",
 ]

@@ -44,3 +44,69 @@ def uniform(
     return torch.empty(size, device=device, dtype=dtype).uniform_(
         low, high, generator=generator
     )
+
+
+def randint(
+    low: Tensor | int,
+    high: Tensor | int,
+    size: Sequence[int],
+    *,
+    device: torch.device,
+    generator: torch.Generator | None,
+) -> Tensor:
+    r"""Draw integers in ``[low, high]`` with broadcast bounds."""
+    u = torch.rand(size, device=device, generator=generator)
+    return (low + u * (high - low + 1)).floor().long()
+
+
+def count(
+    total: Tensor,
+    low: float,
+    high: float,
+    *,
+    generator: torch.Generator | None,
+) -> Tensor:
+    r"""Draw a count between the fractions ``low`` and ``high`` of ``total``.
+
+    The count is at least 1 and at most ``total``, if ``total`` is positive.
+    """
+    total = total.double()
+    lower = (total * low).ceil().clamp(min=1)
+    upper = torch.maximum(lower, torch.minimum(total, (total * high).floor()))
+    return randint(
+        low=lower,
+        high=upper,
+        size=total.shape,
+        device=total.device,
+        generator=generator,
+    ).minimum(total.long())
+
+
+def rank(x: Tensor, dim: int) -> Tensor:
+    r"""Return the rank of each entry along ``dim``, with stable ties."""
+    order = x.argsort(dim=dim, stable=True)
+    position = torch.arange(x.size(dim), device=x.device)
+    position = position.view(-1, *([1] * (x.dim() - 1 - dim % x.dim())))
+    return torch.empty_like(order).scatter_(
+        dim, order, position.expand_as(order)
+    )
+
+
+def subset(
+    eligible: Tensor,
+    count: Tensor,
+    *,
+    generator: torch.Generator | None,
+) -> Tensor:
+    r"""Select ``count`` random eligible entries along the last dimension.
+
+    Args:
+        eligible: Boolean mask of shape ``[..., N]``.
+        count: Number of entries to select, of shape ``[...]``.
+        generator: Pseudorandom number generator used for sampling.
+    """
+    score = torch.rand(
+        eligible.shape, device=eligible.device, generator=generator
+    )
+    position = rank(score.masked_fill(~eligible, 2.0), dim=-1)
+    return (position < count.unsqueeze(-1)) & eligible
