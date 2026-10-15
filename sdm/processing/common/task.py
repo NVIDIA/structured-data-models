@@ -46,13 +46,7 @@ class TaskDispatch(EnsembleProcessor):
     def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
         if self._task is None:
-            return tuple(
-                dict.fromkeys(
-                    stype
-                    for processor in self.processors.values()
-                    for stype in processor.handles_stypes
-                )
-            )
+            return self._merge_stypes(self.processors.values())
         if self._task not in self.processors:
             return ()
         return self.processors[self._task].handles_stypes

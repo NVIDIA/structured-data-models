@@ -30,11 +30,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         r""":meta private:"""  # noqa: D415
         if len(self) == 0:
             return tuple(Stype)
-        return tuple(
-            dict.fromkeys(
-                stype for child in self for stype in child.handles_stypes
-            )
-        )
+        return self._merge_stypes(self)
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.

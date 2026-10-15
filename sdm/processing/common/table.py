@@ -41,13 +41,7 @@ class TableDispatch(EnsembleProcessor):
     @property
     def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
-        return tuple(
-            dict.fromkeys(
-                stype
-                for processor in self.processors.values()
-                for stype in processor.handles_stypes
-            )
-        )
+        return self._merge_stypes(self.processors.values())
 
     def _fit_ensemble(
         self,
