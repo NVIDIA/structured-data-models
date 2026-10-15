@@ -2,35 +2,48 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
-from collections.abc import Iterator
 
 import pytest
 import torch
-import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.models.kumo.timeseries.anomaly.block import ResidualBlock
+from sdm.models.kumo.timeseries.anomaly.block import (
+    KumoAnomalyTransformerBlock,
+    ResidualBlock,
+)
 from sdm.testing import withCUDA
 
 
-@pytest.fixture(autouse=True)
-def exact_gelu() -> Iterator[None]:
-    # At inference time on GPU, PyTorch's encoder layer switches to a faster
-    # kernel with an approximate GELU. Disable it to compare exact outputs.
-    enabled = torch.backends.mha.get_fastpath_enabled()
-    torch.backends.mha.set_fastpath_enabled(False)
-    yield
-    torch.backends.mha.set_fastpath_enabled(enabled)
-
-
 def reference_attention(
-    layer: torch.nn.TransformerEncoderLayer, x: Tensor
+    layer: KumoAnomalyTransformerBlock, x: Tensor
 ) -> Tensor:
-    """Evaluate post-norm attention without the encoder's fused fast path."""
-    attn, _ = layer.self_attn(x, x, x, need_weights=False)
-    x = layer.norm1(x + layer.dropout1(attn))
-    hidden = layer.linear2(layer.dropout(F.gelu(layer.linear1(x))))
-    return layer.norm2(x + layer.dropout2(hidden))
+    """Evaluate upstream's sequence-first PyTorch encoder layer."""
+    state = layer.state_dict()
+    reference = torch.nn.TransformerEncoderLayer(
+        d_model=x.size(-1),
+        nhead=layer.attn.num_query_heads,
+        dim_feedforward=state["mlp.0.weight"].size(0),
+        dropout=0.0,
+        activation="gelu",
+        device=x.device,
+        dtype=x.dtype,
+    )
+    names = {
+        "self_attn.in_proj_": "attn.qkv_lin.",
+        "self_attn.out_proj.": "attn.out_lin.",
+        "linear1.": "mlp.0.",
+        "linear2.": "mlp.3.",
+        "norm1.": "attn_residual_norm.",
+        "norm2.": "mlp_residual_norm.",
+    }
+    reference.load_state_dict(
+        {
+            target + key: state[source + key]
+            for target, source in names.items()
+            for key in ("weight", "bias")
+        }
+    )
+    return reference.eval()(x.transpose(0, 1)).transpose(0, 1)
 
 
 def reference_block(

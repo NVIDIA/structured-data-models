@@ -35,6 +35,8 @@ class SDPA(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
+        dropout: Dropout probability applied to attention weights during
+            training.
     """
 
     def __init__(
@@ -43,6 +45,8 @@ class SDPA(torch.nn.Module):
         num_key_value_heads: int | None = None,
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
+        *,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -57,6 +61,7 @@ class SDPA(torch.nn.Module):
         self.num_key_value_heads = num_key_value_heads
         self.query_scaling = query_scaling
         self.scale = scale
+        self.dropout = dropout
 
     def forward(
         self,
@@ -164,6 +169,7 @@ class SDPA(torch.nn.Module):
             if attn_mask is not None
             else None,
             enable_gqa=enable_gqa,
+            dropout_p=self.dropout if self.training else 0.0,
             is_causal=is_causal,
             scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
@@ -199,6 +205,8 @@ class Attention(torch.nn.Module):
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
+        dropout: Dropout probability applied to attention weights during
+            training.
     """
 
     def __init__(
@@ -213,6 +221,8 @@ class Attention(torch.nn.Module):
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        *,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -242,6 +252,7 @@ class Attention(torch.nn.Module):
             num_key_value_heads=num_key_value_heads,
             query_scaling=query_scaling,
             scale=scale,
+            dropout=dropout,
         )
         self.out_lin = Linear(channels, channels, bias=bias, **factory_kwargs)
 
@@ -403,6 +414,10 @@ class TransformerBlock(torch.nn.Module):
             attention.
         post_attn_norm: Normalization applied to the attention output before
             its residual addition.
+        attn_residual_norm: Normalization applied after the attention residual
+            addition.
+        mlp_residual_norm: Normalization applied after the feedforward
+            residual addition.
         query_transform: Transformation applied to projected query heads before
             scaled dot-product attention.
         key_transform: Transformation applied to projected key heads before
@@ -415,6 +430,8 @@ class TransformerBlock(torch.nn.Module):
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
+        dropout: Dropout probability applied to attention weights and to the
+            attention output before its residual addition during training.
     """
 
     def __init__(
@@ -433,6 +450,10 @@ class TransformerBlock(torch.nn.Module):
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        *,
+        attn_residual_norm: torch.nn.Module | None = None,
+        mlp_residual_norm: torch.nn.Module | None = None,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
@@ -441,6 +462,9 @@ class TransformerBlock(torch.nn.Module):
         self.query_norm = query_norm
         self.key_value_norm = key_value_norm
         self.post_attn_norm = post_attn_norm
+        self.attn_residual_norm = attn_residual_norm
+        self.mlp_residual_norm = mlp_residual_norm
+        self.dropout = dropout
 
         self.attn = Attention(
             channels=channels,
@@ -451,6 +475,7 @@ class TransformerBlock(torch.nn.Module):
             query_scaling=query_scaling,
             scale=scale,
             bias=bias,
+            dropout=dropout,
             **factory_kwargs,
         )
 
@@ -724,6 +749,8 @@ class TransformerBlock(torch.nn.Module):
 
         if self.post_attn_norm is not None:
             attn_out = self.post_attn_norm(attn_out)
+        if self.training and self.dropout > 0.0:
+            attn_out = F.dropout(attn_out, p=self.dropout)
 
         if (
             out is not None
@@ -731,13 +758,24 @@ class TransformerBlock(torch.nn.Module):
             and not out.is_contiguous()
         ):
             tmp = (attn_out + query).to(out.dtype)
+            if self.attn_residual_norm is not None:
+                tmp = self.attn_residual_norm(tmp)
             if self.mlp is not None:
                 tmp += self.mlp(tmp)
+            if self.mlp_residual_norm is not None:
+                tmp = self.mlp_residual_norm(tmp)
             out.copy_(tmp)
         else:
             tmp = torch.add(attn_out, query, out=out)
+            if self.attn_residual_norm is not None:
+                tmp = self.attn_residual_norm(tmp)
             if self.mlp is not None:
                 tmp = torch.add(tmp, self.mlp(tmp), out=out)
+            if self.mlp_residual_norm is not None:
+                tmp = self.mlp_residual_norm(tmp)
+            # Normalization allocates, so copy its result into `out`.
+            if out is not None and tmp is not out:
+                tmp = out.copy_(tmp)
             out = tmp
 
         return (out, kv) if return_key_value else out

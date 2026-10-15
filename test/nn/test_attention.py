@@ -748,3 +748,66 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+
+
+@withCUDA
+def test_sdpa_dropout(device: torch.device) -> None:
+    module = SDPA(num_query_heads=2, dropout=0.5)
+    query = torch.zeros(2, 1, 2, 4, device=device)
+    value = torch.ones_like(query)
+    # A single key receives the full attention weight of each query.
+    out = module(query=query, key=query, value=value)
+    assert ((out == 0) | (out == 2)).all()
+
+    out = module.eval()(query=query, key=query, value=value)
+    torch.testing.assert_close(out, value)
+
+
+@withCUDA
+@pytest.mark.parametrize("with_mlp", [True, False])
+def test_transformer_block_residual_norms(
+    device: torch.device,
+    with_mlp: bool,
+) -> None:
+    channels = 8
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        mlp=torch.nn.Linear(channels, channels, device=device)
+        if with_mlp
+        else None,
+        attn_residual_norm=torch.nn.LayerNorm(channels, device=device),
+        mlp_residual_norm=torch.nn.LayerNorm(channels, device=device),
+        dropout=0.5,
+        device=device,
+    ).eval()
+    torch.nn.init.normal_(module.attn.out_lin.weight)
+    query = torch.randn(2, 4, 3, channels, device=device).transpose(1, 2)
+
+    assert module.attn_residual_norm is not None
+    assert module.mlp_residual_norm is not None
+    expected = module.attn_residual_norm(query + module.attn(query))
+    if module.mlp is not None:
+        expected = expected + module.mlp(expected)
+    expected = module.mlp_residual_norm(expected)
+    torch.testing.assert_close(module(query), expected)
+
+    with torch.no_grad():
+        for batch_size_limit in (None, 1):
+            for out in (
+                torch.empty(2, 3, 4, channels, device=device),
+                torch.empty(2, 4, 3, channels, device=device).transpose(1, 2),
+            ):
+                actual = module(
+                    query, batch_size_limit=batch_size_limit, out=out
+                )
+                assert actual is out
+                torch.testing.assert_close(out, expected)
+            alias = query.clone()
+            actual = module(
+                alias, batch_size_limit=batch_size_limit, out=alias
+            )
+            assert actual is alias
+            torch.testing.assert_close(alias, expected)
+
+    assert not torch.allclose(module.train()(query), expected)

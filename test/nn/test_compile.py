@@ -281,6 +281,33 @@ def test_transformer_block_compile(
 
 
 @withCUDA
+@pytest.mark.parametrize("contiguous", [True, False])
+def test_transformer_block_residual_norms_compile(
+    device: torch.device,
+    contiguous: bool,
+) -> None:
+    channels = 8
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        mlp=torch.nn.Linear(channels, channels, device=device),
+        attn_residual_norm=torch.nn.LayerNorm(channels, device=device),
+        mlp_residual_norm=torch.nn.LayerNorm(channels, device=device),
+        device=device,
+    )
+    query = torch.randn(2, 3, channels, device=device)
+    out = torch.empty(2, 3, channels, device=device)
+    if not contiguous:
+        out = torch.empty(3, 2, channels, device=device).transpose(0, 1)
+
+    expected = module(query=query)
+    with torch.no_grad():
+        actual = fullgraph(module)(query=query, out=out)
+    assert actual is out
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
 @pytest.mark.parametrize("self_attn", [False, True])
 def test_induced_transformer_block_compile(
     device: torch.device,
