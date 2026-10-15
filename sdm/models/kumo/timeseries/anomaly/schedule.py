@@ -41,6 +41,7 @@ class DiffusionSchedule(torch.nn.Module):
         dtype: torch.dtype = torch.float64,
     ) -> None:
         super().__init__()
+        device = torch.get_default_device() if device is None else device
         self.num_steps = num_steps
         if schedule == "quad":
             beta_start = beta_start**0.5
