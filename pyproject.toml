@@ -16,7 +16,7 @@ license-files = [
     "sdm/models/tabfm/LICENSE",
     "sdm/models/timesfm3/LICENSE",
     "sdm/models/kumo/relational/NOTICE",
-    "sdm/models/kumo/timeseries/NOTICE",
+    "sdm/models/kumo/timeseries/anomaly/NOTICE",
     "third_party/contributor-covenant/LICENSE",
     "third_party/dpm-solver/LICENSE",
     "third_party/pytorch/LICENSE",

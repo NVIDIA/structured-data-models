@@ -40,7 +40,7 @@ Its weights are not bundled with this project and may be downloaded only after t
 - License: MIT
 - License terms: [`third_party/dpm-solver/LICENSE`](third_party/dpm-solver/LICENSE)
 
-The Kumo time-series attribution is preserved in [`sdm/models/kumo/timeseries/NOTICE`](sdm/models/kumo/timeseries/NOTICE).
+The [`sdm/models/kumo/timeseries/anomaly`](sdm/models/kumo/timeseries/anomaly) implementation contains code derivied from [DPM-Solver](https://github.com/LuChengTHU/dpm-solver).
 
 ## TabPFN Extensions
 
