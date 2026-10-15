@@ -36,8 +36,12 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         for arg in args:
             options.append(EnsembleProcessor.as_processor(arg))
         self.options: ModuleList[EnsembleProcessor] = ModuleList(options)
-        self.handles_stypes = frozenset(
-            stype for option in self.options for stype in option.handles_stypes
+        self.handles_stypes = tuple(
+            dict.fromkeys(
+                stype
+                for option in self.options
+                for stype in option.handles_stypes
+            )
         )
         self.method = method
         self._option_ids: tuple[int, ...] = ()

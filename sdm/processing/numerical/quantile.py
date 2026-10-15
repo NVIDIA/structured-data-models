@@ -93,7 +93,7 @@ class QuantileTransform(Processor, InvertibleMixin):
         output_distribution: Distribution to map the empirical quantiles to.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     _quantiles: Tensor

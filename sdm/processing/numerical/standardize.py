@@ -25,7 +25,7 @@ class Standardize(Processor, InvertibleMixin):
         eps: Value added to each fitted standard deviation.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     mean: Tensor
@@ -50,10 +50,6 @@ class Standardize(Processor, InvertibleMixin):
         self._set_buffer("scale", torch.as_tensor(scale))
         self.requires_fit = False
         return self
-
-    def _handles_table(self, table: TableTensor) -> bool:
-        # PyTorch 2.7 cannot trace iteration over handled column types.
-        return table.numerical.size(-1) > 0
 
     def _fit(
         self,

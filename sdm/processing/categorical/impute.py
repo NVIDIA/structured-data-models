@@ -25,7 +25,7 @@ class ImputeMode(Processor):
     training and transform inputs were tensorized independently.
     """
 
-    handles_stypes = frozenset({Stype.categorical})
+    handles_stypes = (Stype.categorical,)
     requires_fit = True
 
     _fill_values: torch.Tensor

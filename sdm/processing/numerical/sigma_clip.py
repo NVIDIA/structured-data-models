@@ -26,7 +26,7 @@ class ClipSigma(Processor):
             deviations from the mean mark the soft clipping bounds.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     lower_bound: Tensor

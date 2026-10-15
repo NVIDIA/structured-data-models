@@ -32,7 +32,7 @@ class RankGaussian(Processor):
             ``None``, retain all fitted values.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     _values: Tensor

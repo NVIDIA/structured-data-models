@@ -21,7 +21,7 @@ class ClipQuantiles(Processor):
             bound. Must satisfy ``0 <= q_low <= q_high <= 1``.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     lower_bound: Tensor

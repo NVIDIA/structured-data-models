@@ -22,7 +22,7 @@ class RobustScale(Processor, InvertibleMixin):
             used as the scale.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     median: Tensor

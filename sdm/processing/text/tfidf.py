@@ -46,7 +46,7 @@ class TFIDF(EnsembleProcessor):
         lowercase: If ``True``, lowercase text before tokenizing.
     """
 
-    handles_stypes = frozenset({Stype.text})
+    handles_stypes = (Stype.text,)
     requires_fit = True
 
     _idf_template: Tensor

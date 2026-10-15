@@ -32,7 +32,7 @@ class Processor(torch.nn.Module, abc.ABC):
     """
 
     #: Semantic types this processor operates on.
-    handles_stypes: frozenset[Stype]
+    handles_stypes: tuple[Stype, ...]
 
     #: Whether this processor requires fitting.
     requires_fit: bool

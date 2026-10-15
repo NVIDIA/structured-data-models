@@ -20,7 +20,7 @@ class ImputeMean(Processor):
             undefined (columns without finite values).
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     _mean: Tensor

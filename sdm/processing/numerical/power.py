@@ -226,7 +226,7 @@ class PowerTransform(Processor, InvertibleMixin):
             features using statistics fitted after the power transform.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     lambdas: Tensor

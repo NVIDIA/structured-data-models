@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 import sdm.processing as sp
@@ -17,10 +18,15 @@ def _mixed_table() -> TableTensor:
     )
 
 
-def test_drop_stypes_removes_configured_stypes() -> None:
+@pytest.mark.parametrize(
+    "stypes", [(Stype.numerical,), ("numerical", Stype.numerical)]
+)
+def test_drop_stypes_removes_configured_stypes(
+    stypes: tuple[Stype | str, ...],
+) -> None:
     table = _mixed_table()
 
-    output = sp.DropStypes(Stype.numerical).fit_transform(table)
+    output = sp.DropStypes(*stypes).fit_transform(table)
 
     assert output.columns[Stype.numerical] == ()
     assert output.columns[Stype.categorical] == ("cat_0",)

@@ -400,7 +400,7 @@ class SentenceTransformer(Processor):
     """
 
     requires_fit = False
-    handles_stypes = frozenset({Stype.text})
+    handles_stypes = (Stype.text,)
 
     def __init__(
         self,

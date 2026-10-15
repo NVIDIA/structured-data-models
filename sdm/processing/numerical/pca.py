@@ -17,7 +17,7 @@ class PCA(Processor):
         num_components: Number of principal components to keep.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     mean: Tensor

@@ -32,7 +32,7 @@ class AddCategoryCounts(Processor):
             vocabulary size. Defaults to 0.
     """
 
-    handles_stypes = frozenset({Stype.categorical})
+    handles_stypes = (Stype.categorical,)
     requires_fit = True
 
     _log_counts: Tensor
