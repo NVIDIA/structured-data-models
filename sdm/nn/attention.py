@@ -526,7 +526,7 @@ class TransformerBlock(torch.nn.Module):
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Hq, Q, KV]``.
-                ``Hq`` is the number of query head. Entries set to ``True``
+                ``Hq`` is the number of query heads. Entries set to ``True``
                 participate in attention.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value

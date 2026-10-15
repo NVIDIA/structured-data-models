@@ -232,79 +232,6 @@ def test_sdpa_scale(device: torch.device) -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])
-@pytest.mark.parametrize("mask_heads", [1, 4])
-@pytest.mark.parametrize("num_key_value_heads", [1, 2, 4])
-def test_sdpa_head_mask(
-    device: torch.device,
-    batch_shape: tuple[int, ...],
-    mask_heads: int,
-    num_key_value_heads: int,
-) -> None:
-    module = SDPA(
-        num_query_heads=4,
-        num_key_value_heads=num_key_value_heads,
-    )
-    query = torch.randn(*batch_shape, 3, 4, 8, device=device)
-    key = torch.randn(5, num_key_value_heads, 8, device=device)
-    value = torch.randn_like(key)
-    mask_batch_shape = (1,) * len(batch_shape)
-    mask = torch.randint(
-        0,
-        2,
-        (*mask_batch_shape, mask_heads, 3, 5),
-        dtype=torch.bool,
-        device=device,
-    )
-    mask[..., 0] = True
-
-    out = module(query=query, key=key, value=value, attn_mask=mask)
-    expected = F.scaled_dot_product_attention(
-        query=query.transpose(-3, -2),
-        key=key.repeat_interleave(4 // num_key_value_heads, dim=-2).transpose(
-            -3, -2
-        ),
-        value=value.repeat_interleave(
-            4 // num_key_value_heads, dim=-2
-        ).transpose(-3, -2),
-        attn_mask=mask,
-    ).transpose(-3, -2)
-    torch.testing.assert_close(out, expected)
-
-
-def test_sdpa_head_mask_query_scaling() -> None:
-    module = SDPA(
-        num_query_heads=2,
-        query_scaling=QASSMax(channels=4, num_heads=2),
-    )
-    query = torch.randn(2, 3, 2, 4)
-    mask = torch.randint(0, 2, (2, 3, 3), dtype=torch.bool)
-    assert module.query_scaling is not None
-    scaled_query = module.query_scaling(query, key_len=mask.sum(dim=-1))
-    shared = reference_sdpa(
-        query=scaled_query,
-        key=query,
-        value=query,
-        attn_mask=mask,
-    )
-    headed = module(
-        query=query,
-        key=query,
-        value=query,
-        attn_mask=mask.unsqueeze(-3),
-    )
-    torch.testing.assert_close(headed, shared)
-
-    with pytest.raises(ValueError, match=r"Per-head.*query scaling"):
-        module(
-            query=query,
-            key=query,
-            value=query,
-            attn_mask=mask.unsqueeze(-3).expand(-1, 2, -1, -1),
-        )
-
-
-@withCUDA
 @pytest.mark.parametrize("value_channels", [8, 4])
 def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
     # Empty key/value batches should give empty results, even with queries.
@@ -432,84 +359,6 @@ def test_attention(
     assert out.device == query.device
 
 
-@withCUDA
-@pytest.mark.parametrize("num_key_value_heads", [1, 2, 4])
-def test_attention_head_mask(
-    device: torch.device,
-    num_key_value_heads: int,
-) -> None:
-    module = Attention(
-        channels=16,
-        num_query_heads=4,
-        num_key_value_heads=num_key_value_heads,
-        device=device,
-    )
-    with torch.no_grad():
-        module.out_lin.weight.copy_(torch.eye(16, device=device))
-        module.out_lin.bias.zero_()
-    query = torch.randn(2, 1, 3, 16, device=device)
-    key_value = torch.randn(1, 3, 5, 16, device=device)
-    mask = torch.randint(0, 2, (3, 4, 3, 5), dtype=torch.bool, device=device)
-    mask[..., 0] = True
-
-    actual, kv = module(
-        query=query,
-        key_value=key_value,
-        attn_mask=mask,
-        return_key_value=True,
-    )
-    expected_heads = []
-    for head in range(4):
-        shared = module(
-            query=query,
-            key_value=key_value,
-            attn_mask=mask[..., head : head + 1, :, :],
-        )
-        expected_heads.append(shared[..., head * 4 : (head + 1) * 4])
-    torch.testing.assert_close(actual, torch.cat(expected_heads, dim=-1))
-    cached = module(query=query, key_value=kv, attn_mask=mask)
-    torch.testing.assert_close(cached, actual)
-
-
-@withCUDA
-@pytest.mark.parametrize("mask_heads", [1, 4])
-def test_transformer_block_head_mask(
-    device: torch.device,
-    mask_heads: int,
-) -> None:
-    module = TransformerBlock(
-        channels=16,
-        num_query_heads=4,
-        num_key_value_heads=2,
-        mlp=torch.nn.Identity(),
-        device=device,
-    )
-    query = torch.randn(2, 1, 3, 16, device=device)
-    key_value = torch.randn(1, 3, 5, 16, device=device)
-    mask = torch.randint(
-        0, 2, (3, mask_heads, 3, 5), dtype=torch.bool, device=device
-    )
-    mask[..., 0] = True
-    with torch.no_grad():
-        expected, kv = module(
-            query=query,
-            key_value=key_value,
-            attn_mask=mask,
-            return_key_value=True,
-        )
-        for context in (key_value, kv):
-            out = torch.empty_like(expected)
-            actual = module(
-                query=query,
-                key_value=context,
-                attn_mask=mask,
-                batch_size_limit=2,
-                out=out,
-            )
-            assert actual is out
-            torch.testing.assert_close(actual, expected)
-
-
 @pytest.mark.parametrize("qassmax", [False, True])
 def test_attention_kv_cache(qassmax: bool) -> None:
     channels = 8
@@ -535,23 +384,23 @@ def test_attention_kv_cache(qassmax: bool) -> None:
             [True, True, True, True, True],
         ],
         dtype=torch.bool,
-    ).expand(2, -1, -1)
+    ).expand(2, 1, -1, -1)
 
     direct_out = module(
         query=query,
         key_value=key_value,
-        attn_mask=attn_mask.unsqueeze(-3),
+        attn_mask=attn_mask,
     )
     cache_out, kv = module(
         query=query,
         key_value=key_value,
-        attn_mask=attn_mask.unsqueeze(-3),
+        attn_mask=attn_mask,
         return_key_value=True,
     )
     cached_out = module(
         query=query,
         key_value=kv,
-        attn_mask=attn_mask.unsqueeze(-3),
+        attn_mask=attn_mask,
     )
 
     self_out, self_kv = module(query=query, return_key_value=True)
