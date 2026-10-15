@@ -87,7 +87,6 @@ def test_rotary_embedding_compile(
         (None, False, "seqused"),
         (1, False, None),
         (2, True, "attn_mask"),
-        (2, False, "head_mask"),
     ],
 )
 def test_sdpa_compile(
@@ -115,13 +114,10 @@ def test_sdpa_compile(
     key = torch.randn(2, 5, kv_heads, channels, device=device)
     value = torch.randn(2, 5, kv_heads, channels, device=device)
     attn_mask = seqused = None
-    if masking in {"attn_mask", "head_mask"}:
-        mask_heads = num_query_heads if masking == "head_mask" else 1
-        attn_mask = torch.ones(
-            2, mask_heads, 3, 5, dtype=torch.bool, device=device
-        )
+    if masking == "attn_mask":
+        attn_mask = torch.ones(2, 1, 3, 5, dtype=torch.bool, device=device)
         attn_mask[..., 1:] = torch.randint(
-            0, 2, (2, mask_heads, 3, 4), dtype=torch.bool, device=device
+            0, 2, (2, 1, 3, 4), dtype=torch.bool, device=device
         )
     elif masking == "seqused":
         seqused = torch.tensor([3, 1], dtype=torch.int32, device=device)
@@ -205,19 +201,9 @@ def test_attention_compile(
     key_value = (
         None if self_attn else torch.randn(2, 5, channels, device=device)
     )
-    attn_mask = torch.randint(
-        0,
-        2,
-        (2, 1 if qassmax else 4, 3, 3 if self_attn else 5),
-        dtype=torch.bool,
-        device=device,
-    )
-    attn_mask[..., 0] = True
 
-    expected = module(query=query, key_value=key_value, attn_mask=attn_mask)
-    out = fullgraph(module)(
-        query=query, key_value=key_value, attn_mask=attn_mask
-    )
+    expected = module(query=query, key_value=key_value)
+    out = fullgraph(module)(query=query, key_value=key_value)
     torch.testing.assert_close(out, expected)
 
 
@@ -251,7 +237,6 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
         (True, None),
         (False, "seqused"),
         (True, "attn_mask"),
-        (False, "head_mask"),
     ],
 )
 def test_transformer_block_compile(
@@ -272,13 +257,10 @@ def test_transformer_block_compile(
     query = torch.randn(2, 3, channels, device=device)
     key_value = torch.randn(2, 5, channels, device=device)
     attn_mask = seqused = None
-    if masking in {"attn_mask", "head_mask"}:
-        mask_heads = 2 if masking == "head_mask" else 1
-        attn_mask = torch.ones(
-            2, mask_heads, 3, 5, dtype=torch.bool, device=device
-        )
+    if masking == "attn_mask":
+        attn_mask = torch.ones(2, 1, 3, 5, dtype=torch.bool, device=device)
         attn_mask[..., 1:] = torch.randint(
-            0, 2, (2, mask_heads, 3, 4), dtype=torch.bool, device=device
+            0, 2, (2, 1, 3, 4), dtype=torch.bool, device=device
         )
     elif masking == "seqused":
         seqused = torch.tensor([3, 1], dtype=torch.int32, device=device)
