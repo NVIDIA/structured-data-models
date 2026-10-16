@@ -1008,6 +1008,14 @@ def test_cat_keeps_empty_block_dtype(device: torch.device, dim: int) -> None:
     assert out.numerical.dtype == torch.float64
     assert out.categorical.code.dtype == torch.int64
 
+    if dim == -1:
+        values = torch.arange(2, dtype=torch.float32, device=device).view(2, 1)
+        non_empty = TableTensor(numerical=values)
+        for inputs in ((tensor, non_empty), (non_empty, tensor)):
+            out = torch.cat(inputs, dim=dim)
+            assert isinstance(out, TableTensor)
+            torch.testing.assert_close(out.numerical, values)
+
 
 def test_cat_column_size_mismatch() -> None:
     tensor1 = TableTensor(numerical=torch.randn(2, 1))
