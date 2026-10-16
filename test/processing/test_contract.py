@@ -119,7 +119,8 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.Clip(-2.0, 20.0)),
     ProcessorCase(sp.ClipQuantiles()),
     ProcessorCase(sp.ClipSigma()),
-    ProcessorCase(sp.ClipSoft(3.0)),
+    ProcessorCase(sp.Clip(-3.0, 3.0, method="saturate")),
+    ProcessorCase(sp.ClipSigma(method="log")),
     ProcessorCase(sp.ImputeMean(), _make_impute_mean_table),
     ProcessorCase(sp.PowerTransform()),
     ProcessorCase(
@@ -178,7 +179,9 @@ FITTED_PROCESSOR_CASES = tuple(
 INVERTIBLE_PROCESSOR_CASES = tuple(
     case
     for case in PROCESSOR_CASES
+    # Clip's inverse is a passthrough, so lossy transforms do not round-trip.
     if isinstance(case.processor, sp.InvertibleMixin)
+    and not isinstance(case.processor, sp.Clip)
 )
 
 
