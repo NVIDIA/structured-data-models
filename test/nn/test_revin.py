@@ -20,5 +20,4 @@ def test_revin(device: torch.device, affine_channels: int | None) -> None:
     out = norm(x, mean, std)
     expected = (x - mean) / (std + norm.eps)
     torch.testing.assert_close(out, expected)
-
     torch.testing.assert_close(norm.inverse(out, mean, std), x)
