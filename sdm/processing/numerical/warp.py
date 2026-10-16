@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import math
+
 import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
-from sdm.processing._random import log_uniform
 
 
 class WarpTails(Processor):
@@ -50,21 +51,25 @@ class WarpTails(Processor):
     ) -> None:
         *batch, _, num_columns = table.numerical.shape
         device = table.device
-        self.column_exponent = log_uniform(
-            low=self.exponent[0],
-            high=self.exponent[1],
-            size=(*batch, 2, 1, num_columns),
-            device=device,
-            dtype=table.numerical.dtype,
-            generator=generator,
+        low, high = self.exponent
+        self.column_exponent = (
+            torch.empty(
+                size=(*batch, 2, 1, num_columns),
+                device=device,
+                dtype=table.numerical.dtype,
+            )
+            .uniform_(math.log(low), math.log(high), generator=generator)
+            .exp_()
         )
-        self.column_scale = log_uniform(
-            low=self.scale[0],
-            high=self.scale[1],
-            size=(*batch, 1, num_columns),
-            device=device,
-            dtype=table.numerical.dtype,
-            generator=generator,
+        low, high = self.scale
+        self.column_scale = (
+            torch.empty(
+                size=(*batch, 1, num_columns),
+                device=device,
+                dtype=table.numerical.dtype,
+            )
+            .uniform_(math.log(low), math.log(high), generator=generator)
+            .exp_()
         )
         u = torch.rand(
             (2, *batch, 1, num_columns), device=device, generator=generator
