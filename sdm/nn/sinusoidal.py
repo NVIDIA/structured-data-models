@@ -25,9 +25,6 @@ class SinusoidalEmbedding(torch.nn.Module):
         Args:
             x: Tensor with shape ``[..., S, C]``, where ``S`` is the sequence
                 length and ``C`` is the number of channels.
-
-        Returns:
-            Tensor with shape ``[..., S, C]`` and the input dtype and device.
         """
         *_, S, C = x.size()
         pos = torch.arange(S, device=x.device, dtype=torch.float32).view(-1, 1)
