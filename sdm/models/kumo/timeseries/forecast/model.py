@@ -199,7 +199,6 @@ class KumoForecast(ICLModel):
                 x = torch.cat([x, x_context_only.numerical], dim=-1)
 
             x = x[..., -self.model.context_size :, :].transpose(-1, -2)
-            x = x.to(self.model.lin.weight.dtype)
             out = self.model(x)[..., : y_context.size(-1), :].transpose(-1, -2)
 
             if cache is not None:
@@ -273,18 +272,14 @@ class _KumoForecast(torch.nn.Module):
     def forward(
         self,
         x: Tensor,  # [..., C, R]
-        mask: Tensor | None = None,  # [..., R]
     ) -> Tensor:  # [..., C, prediction_size]
 
-        observed = None if mask is None else mask.bool().unsqueeze(-2)
-        mean, scale = self.revin.compute_stats(x, observed)
+        mean, scale = self.revin.compute_stats(x)
         x = self.revin(x, mean, scale)
         x = x.nan_to_num(nan=0, posinf=0, neginf=0)
         x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]
         x = self.pe(self.lin(x))  # [..., C, N, D]
-        if observed is not None:
-            observed = observed.unflatten(-1, (-1, self.patch_size)).all(-1)
-        x = self.encoder(x, observed)
+        x = self.encoder(x)
         x = self.cross_channel_attn(x)
         x = self.head(x.flatten(-2))  # [..., C, prediction_size]
         return self.revin.inverse(x, mean, scale)

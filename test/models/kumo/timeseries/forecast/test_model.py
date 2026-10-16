@@ -10,7 +10,6 @@ import sdm.processing as sp
 from sdm import TableTensor
 from sdm.models import KumoForecast
 from sdm.models.kumo.timeseries.forecast import model as forecasting
-from sdm.testing import withCUDA
 
 
 @pytest.fixture(params=[False, True])
@@ -168,18 +167,6 @@ def test_original_scale(model: KumoForecast) -> None:
     torch.testing.assert_close(
         transformed, 3 * prediction + 7, atol=2e-4, rtol=2e-4
     )
-
-
-@withCUDA
-def test_dtype_conversion(model: KumoForecast, device: torch.device) -> None:
-    model.to(device)
-    x = torch.empty(32, 0, device=device, dtype=torch.float64)
-    y = torch.randn(32, 2, device=device, dtype=torch.float64)
-    query = torch.empty(3, 0, device=device, dtype=torch.float64)
-    prediction = model(x, y, query).numerical
-    assert prediction.dtype == torch.float64
-    assert prediction.device == device
-    assert prediction.isfinite().all()
 
 
 def test_meta_construction() -> None:
