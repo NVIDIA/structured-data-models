@@ -246,6 +246,7 @@ class _KumoForecast(torch.nn.Module):
         )
         torch.nn.init.orthogonal_(self.lin.weight, gain=1.41)
         self.pe = SinusoidalEmbedding()
+
         self.encoder = T5Encoder(
             channels=channels,
             hidden_channels=hidden_channels,
@@ -254,15 +255,14 @@ class _KumoForecast(torch.nn.Module):
             head_channels=head_channels,
             **factory_kwargs,
         )
-        self.cross_channel_attn = (
+        self.cross_channel_attn: CrossChannelAttention | None = None
+        if cross_channel:
             CrossChannelAttention(
                 channels=channels,
                 num_heads=cross_channel_heads,
                 **factory_kwargs,
             )
-            if cross_channel
-            else torch.nn.Identity()
-        )
+
         self.head = torch.nn.Linear(
             in_features=channels * (context_size // patch_size),
             out_features=prediction_size,
@@ -279,7 +279,10 @@ class _KumoForecast(torch.nn.Module):
         x = x.nan_to_num(nan=0, posinf=0, neginf=0)
         x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]
         x = self.pe(self.lin(x))  # [..., C, N, D]
+
         x = self.encoder(x)
-        x = self.cross_channel_attn(x)
+        if self.cross_channel_attn is not None:
+            x = self.cross_channel_attn(x)
+
         x = self.head(x.flatten(-2))  # [..., C, prediction_size]
         return self.revin.inverse(x, mean, scale)
