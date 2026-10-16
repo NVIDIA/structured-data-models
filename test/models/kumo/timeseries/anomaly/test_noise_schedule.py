@@ -92,7 +92,10 @@ def test_noise_schedule_extrapolation(device: torch.device) -> None:
     module = NoiseScheduleVP(betas)
     logs = 0.5 * (1 - betas).log().cumsum(0)
     t = torch.tensor(
-        data=[[0.2, 0.25], [0.375, 1.1]], device=device, dtype=betas.dtype
+        data=[[0.2, 0.25], [0.375, 1.1]],
+        device=device,
+        dtype=betas.dtype,
+        requires_grad=True,
     )
     expected = torch.stack(
         tensors=[
@@ -113,6 +116,11 @@ def test_noise_schedule_extrapolation(device: torch.device) -> None:
     empty = torch.empty(0, device=device, dtype=betas.dtype)
     assert module.marginal_alpha(empty).shape == (0,)
     assert module.inverse_lambda(empty).shape == (0,)
+    gradient = torch.autograd.grad(module.marginal_log_mean_coeff(t).sum(), t)[
+        0
+    ]
+    assert torch.isfinite(gradient).all()
+    assert (gradient != 0).any()
 
 
 @withCUDA
