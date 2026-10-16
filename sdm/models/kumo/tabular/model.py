@@ -134,7 +134,7 @@ class KumoTabular(ICLModel):
             )
 
         if pretrained:
-            self.models[task] = self._load_from_pretrained(size, device=device)
+            self._load_from_pretrained(size, device=device)
 
         self.eval()
 
