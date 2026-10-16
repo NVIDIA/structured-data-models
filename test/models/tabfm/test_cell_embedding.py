@@ -52,7 +52,11 @@ def test_cell_embedding_mixed_dtype_output(
     device: torch.device,
     compiled: bool,
     dtype: torch.dtype,
+    request: pytest.FixtureRequest,
 ) -> None:
+    if compiled:
+        request.getfixturevalue("compilation")
+
     module = CellEmbedding(
         channels=8, group_size=3, num_frequencies=2, device=device
     )

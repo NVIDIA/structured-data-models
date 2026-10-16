@@ -182,8 +182,8 @@ class CellEmbedding(torch.nn.Module):
         else:
             tmp = x.new_empty((*B, C, R, G, F), dtype=torch.float32)
             torch.mul(
-                x.transpose(-3, -2).unsqueeze(-1),
-                freq.transpose(-4, -3),
+                input=x.transpose(-3, -2).unsqueeze(-1),
+                other=freq.transpose(-4, -3),
                 out=tmp,
             )
             x = tmp.transpose(-4, -3)  # [..., R, C, G, F]
