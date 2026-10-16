@@ -1956,6 +1956,15 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     is_column_dim = _is_column_dim(ref, dim)
     if not is_column_dim:
         tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
+    else:
+        # Skipping empty blocks below would otherwise hide a size mismatch.
+        for tensor in tensors[1:]:
+            if tensor.size()[:-1] != ref.size()[:-1]:
+                raise RuntimeError(
+                    f"Sizes of tensors must match except in the column "
+                    f"dimension (got {tuple(ref.size())} and "
+                    f"{tuple(tensor.size())})"
+                )
 
     blocks: dict[Stype, Tensor] = {}
     for stype, _ in ref.items():

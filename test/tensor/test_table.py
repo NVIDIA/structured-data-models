@@ -1009,6 +1009,13 @@ def test_cat_keeps_empty_block_dtype(device: torch.device, dim: int) -> None:
     assert out.categorical.code.dtype == torch.int64
 
 
+def test_cat_column_size_mismatch() -> None:
+    tensor1 = TableTensor(numerical=torch.randn(2, 1))
+    tensor2 = TableTensor(size=(3,))
+    with pytest.raises(RuntimeError, match="Sizes of tensors must match"):
+        torch.cat([tensor1, tensor2], dim=-1)
+
+
 def test_cat_stack_reorder() -> None:
     tensor1 = TableTensor(
         columns={
