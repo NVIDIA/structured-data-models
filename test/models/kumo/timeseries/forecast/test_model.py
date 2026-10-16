@@ -18,9 +18,6 @@ def test_forward(monkeypatch: pytest.MonkeyPatch, cross_channel: bool) -> None:
         "_KumoForecast",
         partial(
             forecasting._KumoForecast,
-            context_size=32,
-            prediction_size=6,
-            patch_size=4,
             channels=32,
             hidden_channels=48,
             num_layers=2,
@@ -28,15 +25,31 @@ def test_forward(monkeypatch: pytest.MonkeyPatch, cross_channel: bool) -> None:
             cross_channel_heads=4,
         ),
     )
-    model = KumoForecast(cross_channel=cross_channel, pretrained=False)
-    x = TableTensor.from_tensor(torch.randn(32, 2), columns=["a", "b"])
-    y = TableTensor.from_tensor(torch.randn(32, 2), columns=["u", "v"])
-    query = TableTensor.from_tensor(torch.empty(3, 0))
+    model = KumoForecast(cross_channel, pretrained=False)
 
-    out = model(x, y, query)
-    assert out.shape == (3, 2)
-    assert out.columns["numerical"] == ("u", "v")
+    # Past and past-and-future covariates:
+    x_context = TableTensor.from_tensor(
+        torch.randn(512, 2),
+        columns=["x1", "x2"],
+    )
+    x_query = TableTensor.from_tensor(torch.randn(3, 0))
+
+    # Target variates:
+    y_context = TableTensor.from_tensor(
+        torch.randn(512, 3),
+        columns=["y1", "y2", "y3"],
+    )
+
+    out = model(x_context, y_context, x_query)
+    assert out.size() == (3, 3)
     assert out.numerical.isfinite().all()
+    assert "y1" in out.columns["numerical"]
+    assert "y2" in out.columns["numerical"]
+    assert "y3" in out.columns["numerical"]
 
-    model.fit(x, y)
-    torch.testing.assert_close(model.predict(query).numerical, out.numerical)
+    model.fit(
+        x=x_context,
+        y=y_context,
+        context_only_columns=["x1", "x2"],
+    )
+    torch.testing.assert_close(model.predict(x_query).numerical, out.numerical)
