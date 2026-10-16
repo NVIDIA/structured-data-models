@@ -19,17 +19,18 @@ class Clip(Processor, InvertibleMixin):
 
     .. math::
 
-        y = c + \frac{h z}{\sqrt{1 + z^2}}, \quad z = \frac{x - c}{h},
+        y = \frac{x}{\sqrt{1 + (x / b)^2}}
 
-    where :math:`c` and :math:`h` are the midpoint and half-width of
-    ``[min_value, max_value]``. NaN is preserved and infinities map to the
-    endpoints. Inverse transformation leaves values unchanged.
+    where :math:`b` is ``max_value`` and ``min_value`` must equal
+    ``-max_value``. NaN is preserved and infinities map to the endpoints.
+    Inverse transformation leaves values unchanged.
 
     Args:
         min_value: Inclusive lower bound for every numerical value.
         max_value: Inclusive upper bound for every numerical value.
         method: ``"hard"`` clamps to the bounds; ``"saturate"`` approaches
-            finite, distinct bounds smoothly and also changes interior values.
+            finite, nonzero symmetric bounds smoothly and also changes
+            interior values.
     """
 
     handles_stypes = (Stype.numerical,)
@@ -48,11 +49,13 @@ class Clip(Processor, InvertibleMixin):
                 "min_value must be less than or equal to max_value"
             )
         if method == "saturate" and (
-            not math.isfinite(min_value)
+            min_value != -max_value
             or not math.isfinite(max_value)
-            or min_value == max_value
+            or max_value == 0
         ):
-            raise ValueError("Saturation requires finite, distinct bounds.")
+            raise ValueError(
+                "Saturation requires finite, nonzero symmetric bounds."
+            )
         self.min_value = min_value
         self.max_value = max_value
         self.method = method
@@ -65,16 +68,12 @@ class Clip(Processor, InvertibleMixin):
             )
         assert self.method == "saturate"
         assert not numerical.requires_grad
-        center = self.min_value / 2 + self.max_value / 2
-        bound = self.max_value / 2 - self.min_value / 2
-        centered = numerical if center == 0 else numerical - center
-        unit = centered.div(bound).abs_()
+        bound = self.max_value
+        unit = numerical.div(bound).abs_()
         root = unit.square().add_(1).sqrt_()
         unit.div_(root).masked_fill_(~_isfinite(root), 1.0)
         del root
-        clipped = unit.mul_(bound).mul_(centered.sign())
-        if center != 0:
-            clipped.add_(center)
+        clipped = unit.mul_(bound).mul_(numerical.sign())
         torch.where(numerical.isnan(), numerical, clipped, out=clipped)
         return table.replace_blocks(numerical=clipped)
 

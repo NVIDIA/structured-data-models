@@ -41,19 +41,17 @@ def test_clip_rejects_invalid_configuration() -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("center", [0.0, 4.0])
 def test_clip_saturate_maps_finite_values(
     device: torch.device,
-    center: float,
 ) -> None:
     inp = torch.tensor(
         [[-6.0, 0.0], [3.0, 6.0]],
         dtype=torch.float64,
         device=device,
     )
-    table = TableTensor.from_tensor(inp + center)
+    table = TableTensor.from_tensor(inp)
 
-    out = Clip(center - 3.0, center + 3.0, method="saturate").transform(table)
+    out = Clip(-3.0, 3.0, method="saturate").transform(table)
 
     expected = inp.new_tensor(
         [
@@ -61,7 +59,7 @@ def test_clip_saturate_maps_finite_values(
             [3 / math.sqrt(2), 6 / math.sqrt(5)],
         ],
     )
-    torch.testing.assert_close(out.numerical, expected + center)
+    torch.testing.assert_close(out.numerical, expected)
 
 
 @withCUDA
