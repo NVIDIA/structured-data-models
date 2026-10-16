@@ -15,7 +15,7 @@ from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.timeseries.forecast.attention import CrossChannelAttention
+from sdm.models.kumo.timeseries.forecast.cross import CrossChannelAttention
 from sdm.models.kumo.timeseries.forecast.icl import ICLBlock
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
 from sdm.nn import RevIN, SinusoidalEmbedding
@@ -246,7 +246,7 @@ class _KumoForecast(torch.nn.Module):
         torch.nn.init.orthogonal_(self.lin.weight, gain=1.41)
         self.pe = SinusoidalEmbedding()
 
-        self.encoder = ICLBlock(
+        self.icl = ICLBlock(
             channels=channels,
             hidden_channels=hidden_channels,
             num_layers=num_layers,
@@ -255,9 +255,9 @@ class _KumoForecast(torch.nn.Module):
             max_distance=128,
             **factory_kwargs,
         )
-        self.cross_channel_attn: CrossChannelAttention | None = None
+        self.cross_channel: CrossChannelAttention | None = None
         if cross_channel:
-            self.cross_channel_attn = CrossChannelAttention(
+            self.cross_channel = CrossChannelAttention(
                 channels=channels,
                 num_heads=cross_channel_heads,
                 **factory_kwargs,
@@ -280,9 +280,9 @@ class _KumoForecast(torch.nn.Module):
         x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]
         x = self.pe(self.lin(x))  # [..., C, N, D]
 
-        x = self.encoder(x)
-        if self.cross_channel_attn is not None:
-            x = self.cross_channel_attn(x)
+        x = self.icl(x)  # [..., C, N, D]
+        if self.cross_channel is not None:
+            x = self.cross_channel(x)  # [..., C, N, D]
 
         x = self.head(x.flatten(-2))  # [..., C, prediction_size]
         return self.revin.inverse(x, mean, scale)
