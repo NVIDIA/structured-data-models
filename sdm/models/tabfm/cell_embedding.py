@@ -179,13 +179,13 @@ class CellEmbedding(torch.nn.Module):
 
         if torch.is_grad_enabled():
             x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., R, C, G, F]
-        elif torch.compiler.is_compiling():
-            # Compiled inference: avoid out= on a transposed buffer.
-            # Cast after multiplying to match the FP32 inference buffer.
-            x = (x.unsqueeze(-1) * freq).to(torch.float32)
         else:
             tmp = x.new_empty((*B, C, R, G, F), dtype=torch.float32)
-            torch.mul(x.unsqueeze(-1), freq, out=tmp.transpose(-4, -3))
+            torch.mul(
+                x.transpose(-3, -2).unsqueeze(-1),
+                freq.transpose(-4, -3),
+                out=tmp,
+            )
             x = tmp.transpose(-4, -3)  # [..., R, C, G, F]
             del tmp
 
