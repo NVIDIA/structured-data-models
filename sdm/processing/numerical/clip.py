@@ -14,11 +14,16 @@ from sdm.processing.numerical._stats import _isfinite
 class Clip(Processor, InvertibleMixin):
     r"""Clip numerical values to a fixed interval.
 
-    Hard clipping clamps values to the interval. Saturation maps values as
-    :math:`c + h z / \sqrt{1 + z^2}`, where :math:`c` is the interval
-    midpoint, :math:`h` its half-width, and :math:`z = (x - c) / h`.
-    NaN is preserved and infinities map to the endpoints. Inverse
-    transformation leaves values unchanged.
+    With ``method="hard"``, values are clamped to the interval. With
+    ``method="saturate"``, values are mapped smoothly into it:
+
+    .. math::
+
+        y = c + \frac{h z}{\sqrt{1 + z^2}}, \quad z = \frac{x - c}{h},
+
+    where :math:`c` and :math:`h` are the midpoint and half-width of
+    ``[min_value, max_value]``. NaN is preserved and infinities map to the
+    endpoints. Inverse transformation leaves values unchanged.
 
     Args:
         min_value: Inclusive lower bound for every numerical value.
