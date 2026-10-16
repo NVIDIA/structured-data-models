@@ -16,7 +16,7 @@ from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
-from sdm.nn import RevIN
+from sdm.nn import RevIN, SinusoidalEmbedding
 from sdm.tensor.table import TableSchema
 
 
@@ -232,6 +232,15 @@ class _KumoForecast(torch.nn.Module):
         self.patch_size = patch_size
 
         self.revin = RevIN(eps=1e-5, **factory_kwargs)
+        self.lin = torch.nn.Linear(
+            in_features=patch_size,
+            out_features=channels,
+            bias=False,
+            **factory_kwargs,
+        )
+        torch.nn.init.orthogonal_(self.lin.weight, gain=1.41)
+        self.pe = SinusoidalEmbedding()
+
         self.head = torch.nn.Linear(
             in_features=channels * (context_size // patch_size),
             out_features=prediction_size,
@@ -246,6 +255,7 @@ class _KumoForecast(torch.nn.Module):
         x = self.revin(x, mean, scale)
         x = x.nan_to_num(nan=0, posinf=0, neginf=0)
         x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]
+        x = self.pe(self.lin(x))  # [..., C, N, D]
 
         # x = self.revin.inverse(x, mean, scale)
 
