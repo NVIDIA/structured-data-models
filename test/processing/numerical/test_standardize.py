@@ -9,6 +9,24 @@ from sdm.processing import Standardize
 from sdm.testing import withCUDA
 
 
+@withCUDA
+@pytest.mark.parametrize("scalar", [True, False])
+def test_standardize_with_state(device: torch.device, scalar: bool) -> None:
+    mean = 2.0 if scalar else torch.tensor([2.0, 4.0], device=device)
+    scale = 3.0 if scalar else torch.tensor([3.0, 2.0], device=device)
+    processor = Standardize(eps=1.0).with_state(mean, scale).to(device)
+    inp = torch.arange(12, dtype=torch.float32, device=device).view(2, 3, 2)
+    table = TableTensor.from_tensor(inp)
+    expected = (inp - mean) / scale
+
+    torch.testing.assert_close(processor.transform(table).numerical, expected)
+    processor.fit(table)
+    torch.testing.assert_close(processor.transform(table).numerical, expected)
+    out = processor.fit_transform(table)
+    torch.testing.assert_close(out.numerical, expected)
+    torch.testing.assert_close(processor.inverse_transform(out).numerical, inp)
+
+
 @pytest.mark.skipif(
     not torch._dynamo.is_dynamo_supported(),
     reason="torch.compile is not supported by this Python/PyTorch build",
