@@ -3,16 +3,20 @@
 
 # ruff: noqa: D205
 
-from typing import Any, ClassVar
+from __future__ import annotations
+
+from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task
+from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
+from sdm.tensor.table import TableSchema
 
 
 class KumoForecast(ICLModel):
@@ -41,8 +45,8 @@ class KumoForecast(ICLModel):
     empty.
 
     Args:
-        pretrained: Whether to load the pretrained checkpoint.
         cross_channel: Whether to mix variates after encoding.
+        pretrained: Whether to load the pretrained checkpoint.
         device: The device.
     """
 
@@ -58,17 +62,20 @@ class KumoForecast(ICLModel):
 
     def __init__(
         self,
-        pretrained: bool = True,
         cross_channel: bool = True,
+        pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=Task.regression)
+
         self.model = _KumoForecast(
             cross_channel=cross_channel,
             device="meta" if pretrained else device,
         )
+
         if pretrained:
-            self._load_from_pretrained(cross_channel, device)
+            self._load_from_pretrained(cross_channel, device=device)
+
         self.eval()
 
     @classmethod
@@ -80,16 +87,69 @@ class KumoForecast(ICLModel):
         self,
         use_cross_channel: bool,
         device: torch.device | str | None,
-    ) -> None:
+    ) -> KumoForecast:
+        device = torch.get_default_device() if device is None else device
+
         checkpoint = download_checkpoint(
             repo_id="nvidia/Kumo-Forecast",
             filename="run8_best_model_cr.pt"
             if use_cross_channel
             else "moment_head_512_6hr.pt",
-            revision="abff20a58834638b28227ff4ab934f26206e4b09",
         )
-        device = torch.get_default_device() if device is None else device
         torch.load(checkpoint, map_location=device, weights_only=True)
+
+        return self
+
+    def forward(
+        self,
+        x_context: Tensor | TableTensor,
+        y_context: Tensor | TableTensor,
+        x_query: Tensor | TableTensor,
+        *args: Any,
+        **kwargs: Any,
+    ) -> TableTensor:
+        r""":meta private:"""  # noqa: D415
+        if x_query.size(-1) > 0:
+            warn_once(
+                key="kumo-forecast-future-covariate",
+                message=(
+                    f"{self.__class__.__name__!r} does not support future "
+                    f"covariates. Query columns will be ignored."
+                ),
+            )
+            x_query = x_query[..., :0]
+
+        return super().forward(x_context, y_context, x_query, *args, **kwargs)
+
+    def fit(self, x: Tensor | TableTensor, *args: Any, **kwargs: Any) -> None:
+        r""":meta private:"""  # noqa: D415
+        if isinstance(x, TableTensor):
+            kwargs["context_only_columns"] = [
+                column for columns in x.columns.values() for column in columns
+            ]
+        else:
+            kwargs["context_only_columns"] = range(x.size(-1))
+
+        return super().fit(x, *args, **kwargs)
+
+    def predict(
+        self,
+        x: Tensor | TableTensor,
+        *args: Any,
+        **kwargs: Any,
+    ) -> TableTensor:
+        r""":meta private:"""  # noqa: D415
+        if x.size(-1) > 0:
+            warn_once(
+                key="kumo-forecast-future-covariate",
+                message=(
+                    f"{self.__class__.__name__!r} does not support future "
+                    f"covariates. Query columns will be ignored."
+                ),
+            )
+            x = x[..., :0]
+
+        return super().predict(x, *args, **kwargs)
 
     def _forward(
         self,
@@ -103,7 +163,47 @@ class KumoForecast(ICLModel):
         generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:
-        raise NotImplementedError
+
+        if (
+            y_context is not None
+            and y_context.size(-2) < self.model.context_length
+        ):
+            raise ValueError(
+                f"Expected at least {self.model.context_length} context rows "
+                f"(got {y_context.size(-2)})"
+            )
+
+        if (
+            x_query is not None
+            and not 1 <= x_query.size(-2) <= self.model.prediction_length
+        ):
+            raise ValueError(
+                "Number of query rows must be between 1 and "
+                f"{self.model.max_prediction_length} steps "
+                f"(got {x_query.size(-2)})"
+            )
+
+        if cache is None or cache.is_recording:
+            assert y_context is not None
+            y_schema = y_context.schema
+            x = y_context.numerical
+            if x_context_only is not None:
+                x = torch.cat([x, x_context_only.numerical], dim=-1)
+
+            x = x[..., -self.model.context_length :, :].transpose(-1, -2)
+            out = self.model(x)[..., : y_context.size(-1), :].transpose(-1, -2)
+
+            if cache is not None:
+                cache["out"] = out
+        else:
+            y_schema = cast(TableSchema, cache["y_schema"])
+            out = cast(Tensor, cache["out"])
+
+        length = 0 if x_query is None else x_query.size(-2)
+        return TableTensor(
+            columns={Stype.numerical: y_schema.columns[Stype.numerical]},
+            numerical=out[..., :length, :],
+        )
 
 
 class _KumoForecast(torch.nn.Module):
@@ -124,5 +224,11 @@ class _KumoForecast(torch.nn.Module):
     ) -> None:
         super().__init__()
 
-    def forward(self, x: Tensor, mask: Tensor | None = None) -> Tensor:
-        return x
+        self.context_length = context_length
+        self.prediction_length = prediction_length
+
+    def forward(
+        self,
+        x: Tensor,  # [..., C, R]
+    ) -> Tensor:  # [..., C, prediction_length]
+        return x.new_zeros(*x.size()[:-1], self.prediction_length)

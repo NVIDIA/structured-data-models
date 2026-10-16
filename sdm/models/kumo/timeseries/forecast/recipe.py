@@ -5,4 +5,6 @@ import sdm.processing as sp
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
-    return sp.Recipe()
+    return sp.Recipe(
+        output=sp.AverageEstimators(),
+    )
