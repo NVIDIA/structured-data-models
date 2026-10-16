@@ -16,7 +16,7 @@ from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.timeseries.forecast.attention import CrossChannelAttention
-from sdm.models.kumo.timeseries.forecast.encoder import T5Encoder
+from sdm.models.kumo.timeseries.forecast.icl import ICLBlock
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
 from sdm.nn import RevIN, SinusoidalEmbedding
 from sdm.tensor.table import TableSchema
@@ -246,11 +246,13 @@ class _KumoForecast(torch.nn.Module):
         torch.nn.init.orthogonal_(self.lin.weight, gain=1.41)
         self.pe = SinusoidalEmbedding()
 
-        self.encoder = T5Encoder(
+        self.encoder = ICLBlock(
             channels=channels,
             hidden_channels=hidden_channels,
             num_layers=num_layers,
             num_heads=num_heads,
+            num_buckets=32,
+            max_distance=128,
             **factory_kwargs,
         )
         self.cross_channel_attn: CrossChannelAttention | None = None
