@@ -95,6 +95,7 @@ class KumoForecast(ICLModel):
             filename="run8_best_model_cr.pt"
             if use_cross_channel
             else "moment_head_512_6hr.pt",
+            revision="abff20a58834638b28227ff4ab934f26206e4b09",
         )
         torch.load(checkpoint, map_location=device, weights_only=True)
 
