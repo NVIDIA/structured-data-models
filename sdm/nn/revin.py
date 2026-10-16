@@ -8,7 +8,7 @@ from torch import Tensor
 
 
 class RevIN(torch.nn.Module):
-    r"""The reversible instance normalization from the
+    r"""Reversible instance normalization from the
     `"Reversible Instance Normalization for Accurate Time-Series Forecasting
     against Distribution Shift" <https://openreview.net/forum?id=cGDAkQo1C0p>`_
     paper.
