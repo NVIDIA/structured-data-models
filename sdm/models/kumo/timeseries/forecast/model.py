@@ -16,6 +16,7 @@ from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
+from sdm.nn import RevIN
 from sdm.tensor.table import TableSchema
 
 
@@ -167,20 +168,20 @@ class KumoForecast(ICLModel):
 
         if (
             y_context is not None
-            and y_context.size(-2) < self.model.context_length
+            and y_context.size(-2) < self.model.context_size
         ):
             raise ValueError(
-                f"Expected at least {self.model.context_length} context rows "
+                f"Expected at least {self.model.context_size} context rows "
                 f"(got {y_context.size(-2)})"
             )
 
         if (
             x_query is not None
-            and not 1 <= x_query.size(-2) <= self.model.prediction_length
+            and not 1 <= x_query.size(-2) <= self.model.prediction_size
         ):
             raise ValueError(
                 "Number of query rows must be between 1 and "
-                f"{self.model.max_prediction_length} steps "
+                f"{self.model.max_prediction_size} steps "
                 f"(got {x_query.size(-2)})"
             )
 
@@ -191,7 +192,7 @@ class KumoForecast(ICLModel):
             if x_context_only is not None:
                 x = torch.cat([x, x_context_only.numerical], dim=-1)
 
-            x = x[..., -self.model.context_length :, :].transpose(-1, -2)
+            x = x[..., -self.model.context_size :, :].transpose(-1, -2)
             out = self.model(x)[..., : y_context.size(-1), :].transpose(-1, -2)
 
             if cache is not None:
@@ -211,9 +212,9 @@ class _KumoForecast(torch.nn.Module):
     def __init__(
         self,
         cross_channel: bool,
-        context_length: int = 512,
-        prediction_length: int = 72,
-        patch_len: int = 8,
+        context_size: int = 512,
+        prediction_size: int = 72,
+        patch_size: int = 8,
         channels: int = 1024,
         hidden_channels: int = 2816,
         num_layers: int = 24,
@@ -224,12 +225,28 @@ class _KumoForecast(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.context_length = context_length
-        self.prediction_length = prediction_length
+        self.context_size = context_size
+        self.prediction_size = prediction_size
+        self.patch_size = patch_size
+
+        self.revin = RevIN(eps=1e-5, **factory_kwargs)
+        self.head = torch.nn.Linear(
+            in_features=channels * (context_size // patch_size),
+            out_features=prediction_size,
+        )
 
     def forward(
         self,
         x: Tensor,  # [..., C, R]
-    ) -> Tensor:  # [..., C, prediction_length]
-        return x.new_zeros(*x.size()[:-1], self.prediction_length)
+    ) -> Tensor:  # [..., C, prediction_size]
+
+        mean, scale = self.revin.compute_stats(x)
+        x = self.revin(x, mean, scale)
+        x = x.nan_to_num(nan=0, posinf=0, neginf=0)
+        x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]
+
+        # x = self.revin.inverse(x, mean, scale)
+
+        return x.new_zeros(*x.size()[:-2], self.prediction_size)
