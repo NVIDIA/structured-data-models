@@ -281,6 +281,35 @@ def test_transformer_block_compile(
 
 
 @withCUDA
+def test_transformer_block_compile_batch_size_limit(
+    device: torch.device,
+) -> None:
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        mlp=torch.nn.Identity(),
+        query_norm=torch.nn.LayerNorm(8, device=device),
+        device=device,
+    ).eval()
+    query = torch.randn(5, 3, 8, device=device)
+
+    def check_batch_size(
+        _module: torch.nn.Module, args: tuple[Tensor, ...]
+    ) -> None:
+        torch._assert(args[0].size(0) <= 2, "batch_size_limit exceeded")
+
+    with torch.no_grad():
+        expected = module(query=query)
+        assert module.query_norm is not None
+        handle = module.query_norm.register_forward_pre_hook(check_batch_size)
+        try:
+            out = fullgraph(module)(query=query, batch_size_limit=2)
+        finally:
+            handle.remove()
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
 @pytest.mark.parametrize("self_attn", [False, True])
 def test_induced_transformer_block_compile(
     device: torch.device,
