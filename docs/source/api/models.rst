@@ -58,6 +58,36 @@ Model API
    :template: model_class
    :nosignatures:
 
-{% for name in api_names("sdm.models") if name != "ECOC" %}
+{% for name in api_names("sdm.models") if name not in ("ECOC", "KumoAnomaly") %}
    ~sdm.models.{{ name }}
 {% endfor %}
+
+Anomaly Detection
+-----------------
+
+Unlike supervised ICL models, Kumo-Anomaly reconstructs an ordered series
+without labels. Its scores are reconstruction errors, not probabilities.
+Apply ``SCSThreshold`` to the returned ``scores`` and ``target``, or
+``MACSThreshold`` to ``scores``, to obtain boolean anomaly flags. Thresholding
+is separate from reconstruction so the same scores can be evaluated with
+either decision rule without rerunning the model.
+
+Both rules use the scored series itself, including a whole-series percentile
+filter. Reference-only feature preprocessing does **not** make these thresholds
+reference-fitted or causal. Defaults reproduce the released SDK's APCA-based
+SCS and MACS paths; optional K-means segmentation is not included. MACS retains
+the upstream expanding bounds shared by all three scales, rather than changing
+them to rolling bounds. These heuristic settings do not provide calibrated
+false-positive guarantees. The corrected DPM timestep mapping can change
+scores and flags relative to the unmodified SDK.
+
+.. autoclass:: sdm.models.KumoAnomaly
+   :members:
+
+.. autoclass:: sdm.models.kumo.timeseries.anomaly.AnomalyOutput
+
+.. autoclass:: sdm.models.kumo.timeseries.anomaly.SCSThreshold
+   :members:
+
+.. autoclass:: sdm.models.kumo.timeseries.anomaly.MACSThreshold
+   :members:
