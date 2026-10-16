@@ -6,7 +6,7 @@ from contextlib import suppress
 
 from huggingface_hub import hf_hub_download
 from huggingface_hub import logging as hf_logging
-from huggingface_hub.utils import HfHubHTTPError, LocalEntryNotFoundError
+from huggingface_hub.utils import LocalEntryNotFoundError
 
 
 def download_checkpoint(
@@ -27,7 +27,7 @@ def download_checkpoint(
     if not local_files_only and config_filename is not None:
         verbosity = hf_logging.get_verbosity()
         hf_logging.set_verbosity_error()
-        with suppress(HfHubHTTPError):
+        with suppress(Exception):
             hf_hub_download(
                 repo_id=repo_id,
                 filename=config_filename,
