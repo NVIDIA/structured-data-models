@@ -67,6 +67,8 @@ class CellEmbedding(torch.nn.Module):
             )
 
         *B, R, C = x.size()
+        if out is not None and out.size() != (*B, R, C, self.channels):
+            raise ValueError("'out' has an incorrect shape")
 
         # Feature grouping:
         index = torch.arange(C, device=x.device)

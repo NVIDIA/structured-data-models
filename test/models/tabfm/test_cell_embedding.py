@@ -75,3 +75,16 @@ def test_cell_embedding_mixed_dtype_output(
     torch.testing.assert_close(chunked.float(), expected)
     torch.testing.assert_close(actual.float(), expected)
     assert (storage[:, [0, -1]] == 0).all()
+
+
+def test_cell_embedding_rejects_broadcastable_output() -> None:
+    module = CellEmbedding(channels=8, group_size=3, num_frequencies=2)
+    with (
+        torch.inference_mode(),
+        pytest.raises(ValueError, match="'out' has an incorrect shape"),
+    ):
+        module(
+            x=torch.zeros(6, 4),
+            categorical_mask=torch.zeros(4, dtype=torch.bool),
+            out=torch.empty(1, 6, 4, 8),
+        )
