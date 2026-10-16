@@ -991,6 +991,24 @@ def test_cat_all_column_empty(device: torch.device) -> None:
     assert out.columns == tensor1.columns
 
 
+@withCUDA
+@pytest.mark.parametrize("dim", [0, -1])
+def test_cat_keeps_empty_block_dtype(device: torch.device, dim: int) -> None:
+    tensor = TableTensor(
+        numerical=torch.empty(2, 0, dtype=torch.float64, device=device),
+        categorical=CategoricalTensor(
+            code=torch.empty(2, 0, dtype=torch.int64, device=device),
+            categories=(),
+        ),
+    )
+
+    out = torch.cat([tensor, tensor], dim=dim)
+    assert isinstance(out, TableTensor)
+    assert out.size() == ((4, 0) if dim == 0 else (2, 0))
+    assert out.numerical.dtype == torch.float64
+    assert out.categorical.code.dtype == torch.int64
+
+
 def test_cat_stack_reorder() -> None:
     tensor1 = TableTensor(
         columns={
