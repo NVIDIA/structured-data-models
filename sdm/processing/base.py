@@ -32,7 +32,7 @@ class Processor(torch.nn.Module, abc.ABC):
     """
 
     #: Semantic types this processor operates on.
-    handles_stypes: frozenset[Stype]
+    handles_stypes: tuple[Stype, ...]
 
     #: Whether this processor requires fitting.
     requires_fit: bool
@@ -116,8 +116,19 @@ class Processor(torch.nn.Module, abc.ABC):
         )
         self.__fitted = bool(self._fitted_state)
 
+    def _set_buffer(self, name: str, value: Tensor) -> None:
+        # Use register_buffer to avoid assignment errors in torch.compile.
+        self.register_buffer(
+            name,
+            value,
+            persistent=name not in self._non_persistent_buffers_set,
+        )
+
     def _set_fitted(self, device: torch.device) -> None:
-        self._fitted_state = self._fitted_state.to(device=device)
+        # Create fitted state explicitly so tracing preserves its value.
+        self._set_buffer(
+            "_fitted_state", torch.ones_like(self._fitted_state, device=device)
+        )
         self._fitted = True
 
     def _check_is_fitted(self) -> None:
@@ -149,6 +160,14 @@ class Processor(torch.nn.Module, abc.ABC):
             self._fit(table, generator=generator)
         return self._transform(table)
 
+    def _handles_table(self, table: TableTensor) -> bool:
+        # Check column counts directly so torch.compile can trace this without
+        # constructing or intersecting sets of column types.
+        for stype in self.handles_stypes:
+            if getattr(table, stype.value).size(-1) > 0:
+                return True
+        return False
+
     def fit(
         self,
         table: TableTensor,
@@ -161,7 +180,7 @@ class Processor(torch.nn.Module, abc.ABC):
             table: The table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        if not table.active_stypes & self.handles_stypes:
+        if not self._handles_table(table):
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
@@ -177,7 +196,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not table.active_stypes & self.handles_stypes:
+        if not self._handles_table(table):
             return table
         self._check_is_fitted()
         return self._transform(table)
@@ -201,7 +220,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not table.active_stypes & self.handles_stypes:
+        if not self._handles_table(table):
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:

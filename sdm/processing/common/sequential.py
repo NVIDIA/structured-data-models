@@ -26,13 +26,11 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         self.extend(args)
 
     @property
-    def handles_stypes(self) -> frozenset[Stype]:
+    def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
         if len(self) == 0:
-            return frozenset(Stype)
-        return frozenset(
-            stype for child in self for stype in child.handles_stypes
-        )
+            return tuple(Stype)
+        return self._merge_stypes(self)
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.

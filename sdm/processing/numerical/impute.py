@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
@@ -9,7 +10,7 @@ from sdm.processing.numerical._stats import _isfinite
 
 
 class ImputeMean(Processor):
-    """Replace NaN feature values with fitted per-column means.
+    """Replace missing feature values with fitted per-column means.
 
     Infinite values are ignored when fitting the mean but preserved during
     transformation.
@@ -19,8 +20,10 @@ class ImputeMean(Processor):
             undefined (columns without finite values).
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
+
+    _mean: Tensor
 
     def __init__(
         self,
@@ -43,7 +46,10 @@ class ImputeMean(Processor):
             dim=-2,
             keepdim=True,
         )
-        self._mean = torch.where(mean.isnan(), self.fill_value, mean)
+        self._set_buffer(
+            name="_mean",
+            value=torch.where(mean.isnan(), self.fill_value, mean),
+        )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Replace NaNs with the fitted per-column means."""

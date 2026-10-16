@@ -3,7 +3,13 @@
 
 """Kumo time-series model components."""
 
-from sdm.models.kumo.timeseries.forecasting import KumoForecasting
+__lazy_modules__ = {
+    "sdm.models.kumo.timeseries.forecast",
+}
+
+from sdm.models.kumo.timeseries.forecast import KumoForecast
 
 
-__all__ = ["KumoForecasting"]
+__all__ = [
+    "KumoForecast",
+]

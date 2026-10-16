@@ -8,6 +8,7 @@ from sdm.processing.ensemble import (
     EnsembleProcessor,
     EnsembleInvertibleMixin,
 )
+from sdm.processing.series import SeriesEnsembleProcessor
 from sdm.processing.common import (
     Identity,
     Callable,
@@ -39,6 +40,8 @@ from sdm.processing.numerical import (
     DropConstantColumns,
     PCA,
     RandomProjection,
+    Detrend,
+    Interpolate,
 )
 from sdm.processing.categorical import (
     AlignCategories,
@@ -53,7 +56,9 @@ from sdm.processing.recipe import Recipe
 __all__ = [
     "Processor",
     "InvertibleMixin",
+    "EnsembleProcessor",
     "EnsembleInvertibleMixin",
+    "SeriesEnsembleProcessor",
     "EnsembleProcessorAdapter",
     "Identity",
     "Callable",
@@ -62,7 +67,6 @@ __all__ = [
     "StypeDispatch",
     "TaskDispatch",
     "TableDispatch",
-    "EnsembleProcessor",
     "Choice",
     "ToNumerical",
     "ShuffleColumns",
@@ -84,6 +88,8 @@ __all__ = [
     "DropConstantColumns",
     "PCA",
     "RandomProjection",
+    "Detrend",
+    "Interpolate",
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",

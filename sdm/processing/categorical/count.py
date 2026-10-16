@@ -32,8 +32,11 @@ class AddCategoryCounts(Processor):
             vocabulary size. Defaults to 0.
     """
 
-    handles_stypes = frozenset({Stype.categorical})
+    handles_stypes = (Stype.categorical,)
     requires_fit = True
+
+    _log_counts: Tensor
+    _num_categories: Tensor
 
     def __init__(self, min_cardinality: int = 0) -> None:
         super().__init__()
@@ -89,8 +92,11 @@ class AddCategoryCounts(Processor):
             if dtype in {torch.float16, torch.bfloat16}
             else dtype
         )
-        self._log_counts = counts.to(count_dtype).log1p().to(dtype)
-        self._num_categories = num_categories
+        self._set_buffer(
+            name="_log_counts",
+            value=counts.to(count_dtype).log1p().to(dtype),
+        )
+        self._set_buffer("_num_categories", num_categories)
         self._categories = BufferList(table.categorical.categories)
 
     def _transform(self, table: TableTensor) -> TableTensor:

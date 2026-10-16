@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Cross-variate attention for time-series forecasting."""
-
 from typing import Any
 
 import torch
 from torch import Tensor
+
+from sdm.nn import Attention
 
 
 class CrossChannelAttention(torch.nn.Module):
@@ -30,13 +30,17 @@ class CrossChannelAttention(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        self.attn = torch.nn.MultiheadAttention(
-            embed_dim=channels,
-            num_heads=num_heads,
+        self.attn = Attention(
+            channels=channels,
+            num_query_heads=num_heads,
             dropout=dropout,
-            batch_first=True,
             **factory_kwargs,
         )
+        # Preserve the upstream MultiheadAttention initialization.
+        torch.nn.init.xavier_uniform_(self.attn.qkv_lin.weight)
+        torch.nn.init.zeros_(self.attn.qkv_lin.bias)
+        self.attn.out_lin.reset_parameters()
+        torch.nn.init.zeros_(self.attn.out_lin.bias)
         self.norm = torch.nn.LayerNorm(channels, **factory_kwargs)
         self.dropout = torch.nn.Dropout(dropout)
 
@@ -44,22 +48,14 @@ class CrossChannelAttention(torch.nn.Module):
         """Mix variates independently at every patch position.
 
         Args:
-            x: Patch embeddings with shape ``[B, V, P, C]``.
+            x: Patch embeddings with shape ``[..., V, P, C]``, where ``V``
+                is the number of variates, ``P`` is the number of patches,
+                and ``C`` is the embedding width.
 
         Returns:
-            Patch embeddings with shape ``[B, V, P, C]``.
+            Patch embeddings with shape ``[..., V, P, C]``.
         """
-        batch_size, num_variates, num_patches, channels = x.size()
-        x = x.permute(0, 2, 1, 3).reshape(
-            batch_size * num_patches,
-            num_variates,
-            channels,
-        )
-        attended, _ = self.attn(x, x, x, need_weights=False)
+        x = x.transpose(-3, -2)  # [..., P, V, C]
+        attended = self.attn(x)
         out = self.norm(x + self.dropout(attended))
-        return out.reshape(
-            batch_size,
-            num_patches,
-            num_variates,
-            channels,
-        ).permute(0, 2, 1, 3)
+        return out.transpose(-3, -2)

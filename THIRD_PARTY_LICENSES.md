@@ -34,6 +34,14 @@ Its weights are not bundled with this project and may be downloaded only after t
 The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
 Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
+## DPM-Solver
+
+- Source: https://github.com/LuChengTHU/dpm-solver
+- License: MIT
+- License terms: [`third_party/dpm-solver/LICENSE`](third_party/dpm-solver/LICENSE)
+
+The [`sdm/models/kumo/timeseries/anomaly`](sdm/models/kumo/timeseries/anomaly) implementation contains code derived from [DPM-Solver](https://github.com/LuChengTHU/dpm-solver).
+
 ## TabPFN Extensions
 
 - Source: https://github.com/PriorLabs/tabpfn-extensions

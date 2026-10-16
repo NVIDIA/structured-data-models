@@ -14,7 +14,7 @@ class Cast(Processor):
         dtype: The floating-point dtype of the numerical columns.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def __init__(self, dtype: torch.dtype) -> None:

@@ -271,5 +271,5 @@ To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we pr
 Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
 
 ```{note}
-The full relational sampling and prediction flow, including temporal sampling, is shown in [`examples/kumo/relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/rel_bench.py).
+The full relational sampling and prediction flow, including temporal sampling, is shown in [`examples/kumo/relational/relbench`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/relbench).
 ```

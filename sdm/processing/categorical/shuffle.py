@@ -27,7 +27,7 @@ class ShuffleCategories(EnsembleProcessor):
             offset, cycling through every offset in random order.
     """
 
-    handles_stypes = frozenset({Stype.categorical})
+    handles_stypes = (Stype.categorical,)
     requires_fit = True
 
     def __init__(

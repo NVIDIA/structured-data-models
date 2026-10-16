@@ -5,14 +5,16 @@ import pytest
 import torch
 from transformers import T5Config, T5EncoderModel
 
-from sdm.models.kumo.timeseries.forecasting.ckpt import remap_ckpt
-from sdm.models.kumo.timeseries.forecasting.encoder import T5Encoder
+from sdm.models.kumo.timeseries.forecast.encoder import T5Encoder
+from sdm.testing import withCUDA
 
 
+@withCUDA
 @pytest.mark.parametrize("length", [9, 140])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize(("num_buckets", "max_distance"), [(4, 2), (32, 128)])
 def test_encoder_matches_t5(
+    device: torch.device,
     length: int,
     dtype: torch.dtype,
     num_buckets: int,
@@ -32,7 +34,7 @@ def test_encoder_matches_t5(
             relative_attention_max_distance=max_distance,
         )
     ).eval()
-    torch.nn.Module.to(reference, dtype=dtype)
+    torch.nn.Module.to(reference, device=device, dtype=dtype)
     model = T5Encoder(
         channels=32,
         hidden_channels=48,
@@ -41,20 +43,33 @@ def test_encoder_matches_t5(
         head_channels=8,
         dropout=0.0,
         dtype=dtype,
+        device=device,
         num_buckets=num_buckets,
         max_distance=max_distance,
     ).eval()
-    ckpt = remap_ckpt(
-        {
-            f"encoder.{key}": value
-            for key, value in reference.encoder.state_dict().items()
-        }
+    model.relative_attention_bias.load_state_dict(
+        reference.encoder.block[0]
+        .layer[0]
+        .SelfAttention.relative_attention_bias.state_dict()
     )
-    model.load_state_dict(
-        {key.removeprefix("encoder."): value for key, value in ckpt.items()}
-    )
-    x = torch.randn(2, length, 32, dtype=dtype)
-    mask = torch.ones(2, length, dtype=torch.bool)
+    model.norm.load_state_dict(reference.encoder.final_layer_norm.state_dict())
+    for i, block in enumerate(reference.encoder.block):
+        model.get_submodule(f"layers.{i}.attention_norm").load_state_dict(
+            block.layer[0].layer_norm.state_dict()
+        )
+        model.get_submodule(f"layers.{i}.ffn_norm").load_state_dict(
+            block.layer[1].layer_norm.state_dict()
+        )
+        for name in ["q", "k", "v", "o"]:
+            model.get_submodule(f"layers.{i}.{name}").load_state_dict(
+                getattr(block.layer[0].SelfAttention, name).state_dict()
+            )
+        for name in ["wi_0", "wi_1", "wo"]:
+            model.get_submodule(f"layers.{i}.{name}").load_state_dict(
+                getattr(block.layer[1].DenseReluDense, name).state_dict()
+            )
+    x = torch.randn(2, length, 32, dtype=dtype, device=device)
+    mask = torch.ones(2, length, dtype=torch.bool, device=device)
     mask[0, :3] = False
     mask[1, -5:] = False
 

@@ -1,17 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tensor-native T5 encoder for continuous time-series embeddings."""
-
 import math
 from typing import Any
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Dropout, Embedding, Linear, ModuleList, RMSNorm
+from torch.nn import Dropout, Embedding, Linear, ModuleList
 
-from sdm.nn import SDPA
+from sdm.nn import SDPA, RMSNorm
 
 
 class _T5Block(torch.nn.Module):
@@ -92,7 +90,7 @@ class _T5Block(torch.nn.Module):
             query=query,
             key=key,
             value=value,
-            attn_bias=bias.to(query.dtype),
+            attn_mask=bias.to(query.dtype),
         )
         attended = attended.flatten(-2)
         x = x + self.dropout(self.o(attended))
@@ -103,7 +101,9 @@ class _T5Block(torch.nn.Module):
 
 
 class T5Encoder(torch.nn.Module):
-    """Bidirectional T5 encoder with gated GELU feed-forward layers.
+    r"""Bidirectional encoder from the
+    `"Exploring the Limits of Transfer Learning with a Unified Text-to-Text
+    Transformer" <https://arxiv.org/abs/1910.10683>`_ paper.
 
     Accepts continuous patch embeddings; no vocabulary embedding or decoder is
     needed. Relative position bias is learned once and shared by all layers.
@@ -122,7 +122,7 @@ class T5Encoder(torch.nn.Module):
         eps: RMS normalization epsilon.
         device: The device.
         dtype: The dtype.
-    """
+    """  # noqa: D205
 
     def __init__(
         self,
@@ -185,20 +185,20 @@ class T5Encoder(torch.nn.Module):
             magnitude < exact, magnitude, logarithmic.clamp_max(half - 1)
         )
         bucket = bucket + (distance > 0).long() * half
-        return (
-            self.relative_attention_bias(bucket).permute(2, 0, 1).unsqueeze(0)
-        )
+        return self.relative_attention_bias(bucket).permute(2, 0, 1)
 
     def forward(self, x: Tensor, mask: Tensor | None = None) -> Tensor:
-        """Encode patches with shape ``[B, P, C]``.
+        """Encode continuous patch embeddings.
 
         Args:
-            x: Continuous patch embeddings.
-            mask: Optional observed-patch mask of shape ``[B, P]``. False
-                patches cannot be attended to as keys.
+            x: Embeddings with shape ``[..., P, C]``, where ``P`` is the
+                number of patches and ``C`` is the embedding width.
+            mask: Observed-patch mask with shape ``[..., P]``. Batch
+                dimensions may broadcast. False patches cannot be attended
+                to as keys.
 
         Returns:
-            Encoded patches of shape ``[B, P, C]``.
+            Encoded patches with shape ``[..., P, C]``.
         """
         bias = self._position_bias(x.size(-2), x.device)
         if mask is not None:
