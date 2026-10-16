@@ -8,7 +8,7 @@ from sdm.processing import InvertibleMixin, Processor
 class Identity(Processor, InvertibleMixin):
     r"""Return inputs unchanged."""
 
-    handles_stypes = frozenset(Stype)
+    handles_stypes = tuple(Stype)
     requires_fit = False
 
     def _transform(self, table: TableTensor) -> TableTensor:

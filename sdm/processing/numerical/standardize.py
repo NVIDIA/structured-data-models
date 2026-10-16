@@ -25,7 +25,7 @@ class Standardize(Processor, InvertibleMixin):
         eps: Value added to each fitted standard deviation.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     mean: Tensor

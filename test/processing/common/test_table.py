@@ -11,7 +11,7 @@ from sdm.processing.execution import RecipeExecution
 
 class _Add(Processor):
     requires_fit = False
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
 
     def __init__(self, value: float) -> None:
         super().__init__()

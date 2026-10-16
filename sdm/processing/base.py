@@ -32,7 +32,7 @@ class Processor(torch.nn.Module, abc.ABC):
     """
 
     #: Semantic types this processor operates on.
-    handles_stypes: frozenset[Stype]
+    handles_stypes: tuple[Stype, ...]
 
     #: Whether this processor requires fitting.
     requires_fit: bool
@@ -161,7 +161,12 @@ class Processor(torch.nn.Module, abc.ABC):
         return self._transform(table)
 
     def _handles_table(self, table: TableTensor) -> bool:
-        return bool(table.active_stypes & self.handles_stypes)
+        # Check column counts directly so torch.compile can trace this without
+        # constructing or intersecting sets of column types.
+        for stype in self.handles_stypes:
+            if getattr(table, stype.value).size(-1) > 0:
+                return True
+        return False
 
     def fit(
         self,

@@ -26,7 +26,7 @@ class ClipSoft(Processor):
         max_absolute_value: Bound of the soft clip.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def __init__(self, max_absolute_value: float) -> None:
