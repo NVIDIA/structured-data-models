@@ -197,11 +197,8 @@ class KumoForecast(ICLModel):
             assert y_context is not None
             y_schema = y_context.schema
             x = y_context.numerical
-            if x_context_only is not None:
-                if (
-                    x_context_only.size(-1) > 0
-                    and self.model.cross_channel is None
-                ):
+            if x_context_only is not None and x_context_only.size(-1) > 0:
+                if self.model.cross_channel is None:
                     warn_once(
                         key="kumo-forecast-historical-covariate",
                         message=(
