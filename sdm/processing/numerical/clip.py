@@ -17,7 +17,7 @@ class Clip(Processor, InvertibleMixin):
         max_value: Inclusive upper bound for every numerical value.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def __init__(

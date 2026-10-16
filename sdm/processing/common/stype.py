@@ -64,9 +64,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             processor = EnsembleProcessor.as_processor(processor)
             self.processors[str(stype)] = processor
 
-        self.handles_stypes = frozenset(
-            Stype(stype) for stype in self.processors
-        )
+        self.handles_stypes = tuple(Stype(stype) for stype in self.processors)
         self.requires_fit = any(
             processor.requires_fit for processor in self.processors.values()
         )

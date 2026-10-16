@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ruff: noqa: D205
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -146,7 +147,7 @@ class KumoTabular(ICLModel):
         self,
         size: Literal["small", "medium", "large"],
         device: torch.device | str | None,
-    ) -> _KumoTabular:
+    ) -> KumoTabular:
         device = torch.get_default_device() if device is None else device
 
         for task, model in self.models.items():
@@ -165,7 +166,7 @@ class KumoTabular(ICLModel):
             ckpt = torch.load(path, map_location=device, weights_only=True)
             model.load_state_dict(ckpt, assign=True)
 
-        return model
+        return self
 
     def _forward(
         self,

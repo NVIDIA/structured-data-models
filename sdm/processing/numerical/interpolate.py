@@ -17,7 +17,7 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
         fill_value: Value used for columns with no observations.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def __init__(self, *, fill_value: float = 0.0) -> None:

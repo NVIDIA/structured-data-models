@@ -4,7 +4,7 @@
 import torch
 
 from sdm import TableTensor
-from sdm.models.timesfm3 import TimesFM3
+from sdm.models import TimesFM3
 
 
 def test_forward() -> None:

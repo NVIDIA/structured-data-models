@@ -22,7 +22,7 @@ class AverageEstimators(EnsembleProcessor):
             aggregation less sensitive to outlying estimator predictions.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def __init__(

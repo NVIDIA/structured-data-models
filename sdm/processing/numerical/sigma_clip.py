@@ -4,6 +4,7 @@
 import math
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm._memory import split_size
@@ -25,8 +26,11 @@ class ClipSigma(Processor):
             deviations from the mean mark the soft clipping bounds.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
+
+    lower_bound: Tensor
+    upper_bound: Tensor
 
     def __init__(
         self,
@@ -84,8 +88,8 @@ class ClipSigma(Processor):
         mean = torch.where(has_kept, kept_mean, mean)
         std = torch.where(has_kept, kept_std, std)
 
-        self.lower_bound = mean - self.threshold * std
-        self.upper_bound = mean + self.threshold * std
+        self._set_buffer("lower_bound", mean - self.threshold * std)
+        self._set_buffer("upper_bound", mean + self.threshold * std)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical

@@ -286,7 +286,7 @@ def test_preserves_rows_and_unhandled_stypes(
         before = table[member_id]
         after = output[member_id]
         assert after.size()[:-1] == before.size()[:-1]
-        for stype in before.active_stypes - processor.handles_stypes:
+        for stype in before.active_stypes.difference(processor.handles_stypes):
             columns = before.columns[stype]
             assert all(column in after.column_names for column in columns)
             assert all(after.stype(column) == stype for column in columns)
