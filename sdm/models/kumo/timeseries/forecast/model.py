@@ -225,7 +225,6 @@ class _KumoForecast(torch.nn.Module):
         hidden_channels: int = 2816,
         num_layers: int = 24,
         num_heads: int = 16,
-        head_channels: int = 64,
         cross_channel_heads: int = 8,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -252,7 +251,6 @@ class _KumoForecast(torch.nn.Module):
             hidden_channels=hidden_channels,
             num_layers=num_layers,
             num_heads=num_heads,
-            head_channels=head_channels,
             **factory_kwargs,
         )
         self.cross_channel_attn: CrossChannelAttention | None = None

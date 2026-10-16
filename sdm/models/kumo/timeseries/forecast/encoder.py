@@ -18,7 +18,6 @@ class _T5Block(torch.nn.Module):
         channels: int,
         hidden_channels: int,
         num_heads: int,
-        head_channels: int,
         dropout: float,
         eps: float,
         device: torch.device | str | None,
@@ -27,7 +26,6 @@ class _T5Block(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.num_heads = num_heads
-        self.head_channels = head_channels
         self.attention_norm = RMSNorm(channels, eps=eps, **factory_kwargs)
         self.ffn_norm = RMSNorm(channels, eps=eps, **factory_kwargs)
         self.sdpa = SDPA(
@@ -37,24 +35,24 @@ class _T5Block(torch.nn.Module):
         )
         self.q = Linear(
             in_features=channels,
-            out_features=num_heads * head_channels,
+            out_features=channels,
             bias=False,
             **factory_kwargs,
         )
         self.k = Linear(
             in_features=channels,
-            out_features=num_heads * head_channels,
+            out_features=channels,
             bias=False,
             **factory_kwargs,
         )
         self.v = Linear(
             in_features=channels,
-            out_features=num_heads * head_channels,
+            out_features=channels,
             bias=False,
             **factory_kwargs,
         )
         self.o = Linear(
-            in_features=num_heads * head_channels,
+            in_features=channels,
             out_features=channels,
             bias=False,
             **factory_kwargs,
@@ -81,7 +79,7 @@ class _T5Block(torch.nn.Module):
 
     def forward(self, x: Tensor, bias: Tensor) -> Tensor:
         normalized = self.attention_norm(x)
-        shape = (*x.shape[:-1], self.num_heads, self.head_channels)
+        shape = (*x.shape[:-1], self.num_heads, -1)
         query = self.q(normalized).view(shape)
         key = self.k(normalized).view(shape)
         value = self.v(normalized).view(shape)
@@ -112,8 +110,7 @@ class T5Encoder(torch.nn.Module):
         channels: Input and output embedding width.
         hidden_channels: Feed-forward hidden width.
         num_layers: Number of encoder blocks.
-        num_heads: Number of attention heads.
-        head_channels: Width of each attention head.
+        num_heads: Number of attention heads. Must divide ``channels``.
         num_buckets: Number of bidirectional relative-position buckets.
             Must be at least ``4``.
         max_distance: Distance at which relative-position buckets saturate.
@@ -130,7 +127,6 @@ class T5Encoder(torch.nn.Module):
         hidden_channels: int = 2816,
         num_layers: int = 24,
         num_heads: int = 16,
-        head_channels: int = 64,
         num_buckets: int = 32,
         max_distance: int = 128,
         dropout: float = 0.1,
@@ -157,7 +153,6 @@ class T5Encoder(torch.nn.Module):
                     channels=channels,
                     hidden_channels=hidden_channels,
                     num_heads=num_heads,
-                    head_channels=head_channels,
                     dropout=dropout,
                     eps=eps,
                     **factory_kwargs,

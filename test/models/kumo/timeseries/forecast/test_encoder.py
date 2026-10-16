@@ -40,7 +40,6 @@ def test_encoder_matches_t5(
         hidden_channels=48,
         num_layers=2,
         num_heads=4,
-        head_channels=8,
         dropout=0.0,
         dtype=dtype,
         device=device,
@@ -96,7 +95,6 @@ def test_masked_keys_cannot_change_observed_outputs() -> None:
         hidden_channels=24,
         num_layers=2,
         num_heads=2,
-        head_channels=8,
     ).eval()
     x = torch.randn(2, 12, 16)
     mask = torch.ones(2, 12, dtype=torch.bool)
@@ -115,7 +113,6 @@ def test_encoder_backward() -> None:
         hidden_channels=24,
         num_layers=2,
         num_heads=2,
-        head_channels=8,
         dropout=0.0,
     )
     x = torch.randn(2, 12, 16, requires_grad=True)
@@ -134,7 +131,6 @@ def test_all_masked_keys_cannot_change_other_outputs(
         hidden_channels=24,
         num_layers=2,
         num_heads=2,
-        head_channels=8,
         dropout=0.0,
         dtype=dtype,
     )
@@ -167,7 +163,6 @@ def test_invalid_relative_position_configuration(
             hidden_channels=24,
             num_layers=1,
             num_heads=2,
-            head_channels=8,
             num_buckets=num_buckets,
             max_distance=max_distance,
         )

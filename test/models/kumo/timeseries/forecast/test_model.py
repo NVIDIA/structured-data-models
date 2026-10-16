@@ -25,7 +25,6 @@ def test_forward(monkeypatch: pytest.MonkeyPatch, cross_channel: bool) -> None:
             hidden_channels=48,
             num_layers=2,
             num_heads=4,
-            head_channels=8,
             cross_channel_heads=4,
         ),
     )
