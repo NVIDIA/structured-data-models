@@ -257,7 +257,7 @@ class _KumoForecast(torch.nn.Module):
         )
         self.cross_channel_attn: CrossChannelAttention | None = None
         if cross_channel:
-            CrossChannelAttention(
+            self.cross_channel_attn = CrossChannelAttention(
                 channels=channels,
                 num_heads=cross_channel_heads,
                 **factory_kwargs,

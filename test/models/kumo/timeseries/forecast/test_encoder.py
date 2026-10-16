@@ -3,7 +3,6 @@
 
 import pytest
 import torch
-from transformers import T5Config, T5EncoderModel
 
 from sdm.models.kumo.timeseries.forecast.encoder import T5Encoder
 from sdm.testing import withCUDA
@@ -20,8 +19,9 @@ def test_encoder_matches_t5(
     num_buckets: int,
     max_distance: int,
 ) -> None:
-    reference = T5EncoderModel(
-        T5Config(
+    transformers = pytest.importorskip("transformers")
+    reference = transformers.T5EncoderModel(
+        transformers.T5Config(
             vocab_size=16,
             d_model=32,
             d_ff=48,
