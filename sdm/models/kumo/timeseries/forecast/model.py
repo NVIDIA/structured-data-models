@@ -118,7 +118,10 @@ class KumoForecast(ICLModel):
                     f"covariates. Query columns will be ignored."
                 ),
             )
-            x_query = x_query[..., :0]
+            if isinstance(x_query, TableTensor):
+                x_query = x_query[..., []]
+            else:
+                x_query = x_query[..., :0]
 
         return super().forward(x_context, y_context, x_query, *args, **kwargs)
 
@@ -148,7 +151,7 @@ class KumoForecast(ICLModel):
                     f"covariates. Query columns will be ignored."
                 ),
             )
-            x = x[..., :0]
+            x = x[..., []] if isinstance(x, TableTensor) else x[..., :0]
 
         return super().predict(x, *args, **kwargs)
 
