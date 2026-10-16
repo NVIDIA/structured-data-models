@@ -1761,6 +1761,12 @@ def _slice(
             and step == 1
         ):
             return _alias(inp)
+        if (
+            end is not None
+            and (end == 0 or end <= -inp.size(-1))
+            and step == 1
+        ):
+            return inp.select_columns([])
         raise RuntimeError(
             f"Can't slice the column dimension of '{inp.__class__.__name__}'"
         )
@@ -1787,6 +1793,8 @@ def _narrow(
     if _is_column_dim(inp, dim):
         if (start == 0 or start == -inp.size(-1)) and length == inp.size(-1):
             return _alias(inp)
+        if length == 0:
+            return inp.select_columns([])
         raise RuntimeError(
             f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
         )
