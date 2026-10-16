@@ -46,7 +46,8 @@ class Clip(Processor, InvertibleMixin):
         super().__init__()
         if min_value > max_value:
             raise ValueError(
-                "min_value must be less than or equal to max_value"
+                f"Expected 'min_value' to be less than or equal to "
+                f"'max_value' (got {min_value} and {max_value})"
             )
         if method == "saturate" and (
             min_value != -max_value
@@ -54,7 +55,9 @@ class Clip(Processor, InvertibleMixin):
             or max_value == 0
         ):
             raise ValueError(
-                "Saturation requires finite, nonzero symmetric bounds."
+                f"Expected finite, nonzero, symmetric bounds for "
+                f"method='saturate' (got min_value={min_value}, "
+                f"max_value={max_value})"
             )
         self.min_value = min_value
         self.max_value = max_value
