@@ -196,6 +196,7 @@ def test_all_public_processors_have_contract_cases() -> None:
     covered_processors = {type(case.processor) for case in PROCESSOR_CASES}
     # Their specialized behavior is covered in their dedicated test modules.
     specialized_processors = {
+        sp.InvertTarget,
         sp.TaskDispatch,
         sp.TableDispatch,
         sp.SentenceTransformer,
