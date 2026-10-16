@@ -198,6 +198,17 @@ class KumoForecast(ICLModel):
             y_schema = y_context.schema
             x = y_context.numerical
             if x_context_only is not None:
+                if (
+                    x_context_only.size(-1) > 0
+                    and self.model.cross_channel is None
+                ):
+                    warn_once(
+                        key="kumo-forecast-historical-covariate",
+                        message=(
+                            "Historical covariates have no effect when "
+                            "'cross_channel' is disabled."
+                        ),
+                    )
                 x = torch.cat([x, x_context_only.numerical], dim=-1)
 
             x = x[..., -self.model.context_size :, :].transpose(-1, -2)
