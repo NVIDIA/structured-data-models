@@ -14,7 +14,8 @@ class NoiseScheduleVP(torch.nn.Module):
 
     Interpolate ``log(alpha_t) = 0.5 * cumsum(log(1 - beta))`` between
     discrete steps. As in Kumo-TS, discard the tail where half-logSNR is
-    below -5.1 and assign the retained steps times ``(i + 1) / total_N``.
+    below ``clipped_lambda`` (default -5.1) and assign the retained steps
+    times ``(i + 1) / total_N``.
     ``total_N`` is the retained step count and ``T = 1`` is the final time.
     Unlike :class:`DiffusionSchedule`, cumulative alphas are not clamped.
 
@@ -29,22 +30,24 @@ class NoiseScheduleVP(torch.nn.Module):
             Coefficients retain the input device and dtype (float32 or
             float64). Pass ``DiffusionSchedule.beta.float()`` to match
             Kumo-TS inference.
+        clipped_lambda: Minimum retained half-logSNR. Defaults to -5.1,
+            matching Kumo-TS's numerical-stability cutoff.
     """
 
     _log_alpha: Tensor
     _time: Tensor
 
-    def __init__(self, betas: Tensor) -> None:
+    def __init__(self, betas: Tensor, *, clipped_lambda: float = -5.1) -> None:
         super().__init__()
         self.schedule = "discrete"
         self.T = 1.0
         log_alpha = 0.5 * (1 - betas.detach()).log().cumsum(dim=0)
         log_sigma = 0.5 * (1 - (2 * log_alpha).exp()).log()
         # A single host synchronization at construction determines table size.
-        clipped = int(
-            torch.searchsorted((log_alpha - log_sigma).flip(0), -5.1)
+        num_clipped = int(
+            torch.searchsorted((log_alpha - log_sigma).flip(0), clipped_lambda)
         )
-        self.total_N = log_alpha.numel() - clipped
+        self.total_N = log_alpha.numel() - num_clipped
         if self.total_N < 2:
             raise ValueError(
                 "At least two diffusion steps must remain after truncation"
