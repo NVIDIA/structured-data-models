@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from typing import Literal
 
 import torch
 from torch import Tensor
@@ -16,16 +17,14 @@ class ClipSigma(Processor):
     """Two-stage z-score outlier clipping.
 
     The first pass masks values outside the initial z-score bounds, then the
-    second pass refits bounds on the remaining values. By default, the
-    transform applies logarithmic soft clipping instead of hard truncation.
-    NaN and infinite values are ignored when fitting statistics, and NaN
-    values are preserved.
+    second pass refits bounds on the remaining values. NaN and infinite
+    values are ignored when fitting statistics, and NaN values are preserved.
 
     Args:
         threshold: Positive z-score multiplier setting how many standard
             deviations from the mean mark the clipping bounds.
-        soft: Whether to clip softly beyond the bounds instead of clamping
-            to them.
+        method: ``"hard"`` clamps to the fitted bounds; ``"log"`` expands
+            them outward by ``log1p(abs(x))`` before clamping each value.
     """
 
     handles_stypes = (Stype.numerical,)
@@ -38,13 +37,13 @@ class ClipSigma(Processor):
         self,
         *,
         threshold: float = 4.0,
-        soft: bool = True,
+        method: Literal["hard", "log"] = "hard",
     ) -> None:
         super().__init__()
         if threshold <= 0:
             raise ValueError("threshold must be positive.")
         self.threshold = threshold
-        self.soft = soft
+        self.method = method
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
@@ -97,10 +96,11 @@ class ClipSigma(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
-        if not self.soft:
+        if self.method == "hard":
             return table.replace_blocks(
                 numerical=numerical.clamp(self.lower_bound, self.upper_bound)
             )
+        assert self.method == "log"
         dtype = torch.promote_types(numerical.dtype, self.lower_bound.dtype)
         if torch.is_grad_enabled():
             log_abs = numerical.abs().log1p().to(dtype)
@@ -129,7 +129,7 @@ class ClipSigma(Processor):
         return table.replace_blocks(numerical=out)
 
     def __repr__(self, *, indent: int = 0) -> str:
-        extra = "" if self.soft else ", soft=False"
+        extra = "" if self.method == "hard" else f", method={self.method!r}"
         return (
             f"{' ' * indent}{self.__class__.__name__}("
             f"threshold={self.threshold}{extra})"
