@@ -15,7 +15,7 @@ class Clip(Processor, InvertibleMixin):
     r"""Clip numerical values to a fixed interval.
 
     With ``method="hard"``, values are clamped to the interval. With
-    ``method="saturate"``, values are mapped smoothly into it:
+    ``method="saturate"``, values are mapped smoothly into the interval:
 
     .. math::
 
