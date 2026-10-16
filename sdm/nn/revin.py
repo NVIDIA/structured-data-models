@@ -5,7 +5,6 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import Parameter
 
 
 class RevIN(torch.nn.Module):
@@ -15,30 +14,32 @@ class RevIN(torch.nn.Module):
     paper.
 
     Args:
-        channels: The number of channels for learned affine parameters.
+        affine_channels: The number of channels for learned affine parameters.
+            If ``None``, no affine transformation is applied.
         eps: The value added to the supplied scale for numerical stability.
-        affine: Whether to learn an affine transformation.
         device: The device.
         dtype: The dtype.
     """  # noqa: D205
 
     def __init__(
         self,
-        channels: int,
+        affine_channels: int | None = None,
         eps: float = 1e-5,
-        affine: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
         self.eps = eps
 
         self.weight = self.bias = None
-        if affine:
-            self.weight = Parameter(torch.ones(channels, 1, **factory_kwargs))
-            self.bias = Parameter(torch.zeros(channels, 1, **factory_kwargs))
+        if affine_channels is not None:
+            self.weight = torch.nn.Parameter(
+                torch.ones(affine_channels, 1, **factory_kwargs)
+            )
+            self.bias = torch.nn.Parameter(
+                torch.zeros(affine_channels, 1, **factory_kwargs)
+            )
 
     def compute_stats(
         self,

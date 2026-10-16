@@ -9,9 +9,9 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-@pytest.mark.parametrize("affine", [False, True])
-def test_revin(device: torch.device, affine: bool) -> None:
-    norm = RevIN(channels=2, affine=affine, device=device)
+@pytest.mark.parametrize("affine_channels", [None, 2])
+def test_revin(device: torch.device, affine_channels: int | None) -> None:
+    norm = RevIN(affine_channels, device=device)
     x = torch.randn(2, 3, 2, 8, device=device)
     mean, std = norm.compute_stats(x)
     torch.testing.assert_close(mean, x.mean(dim=-1, keepdim=True))
