@@ -58,6 +58,17 @@ Model API
    :template: model_class
    :nosignatures:
 
-{% for name in api_names("sdm.models") if name != "ECOC" %}
+{% for name in api_names("sdm.models") if name not in ("ECOC", "KumoAnomaly") %}
    ~sdm.models.{{ name }}
 {% endfor %}
+
+Anomaly Detection
+-----------------
+
+Unlike supervised ICL models, Kumo-Anomaly reconstructs an ordered series
+without labels. Its scores are reconstruction errors, not probabilities.
+
+.. autoclass:: sdm.models.KumoAnomaly
+   :members:
+
+.. autoclass:: sdm.models.kumo.timeseries.anomaly.AnomalyOutput

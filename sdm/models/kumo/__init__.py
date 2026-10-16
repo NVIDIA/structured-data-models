@@ -11,11 +11,12 @@ __lazy_modules__ = {
 
 from sdm.models.kumo.tabular import KumoTabular
 from sdm.models.kumo.relational import KumoRelational
-from sdm.models.kumo.timeseries import KumoForecast
+from sdm.models.kumo.timeseries import KumoForecast, KumoAnomaly
 
 
 __all__ = [
     "KumoTabular",
     "KumoRelational",
     "KumoForecast",
+    "KumoAnomaly",
 ]
