@@ -15,6 +15,7 @@ from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.timeseries.forecast.ckpt import remap_ckpt
 from sdm.models.kumo.timeseries.forecast.cross import CrossChannelAttention
 from sdm.models.kumo.timeseries.forecast.icl import ICLBlock
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
@@ -100,7 +101,8 @@ class KumoForecast(ICLModel):
             else "moment_head_512_6hr.pt",
             revision="abff20a58834638b28227ff4ab934f26206e4b09",
         )
-        torch.load(checkpoint, map_location=device, weights_only=True)
+        ckpt = torch.load(checkpoint, map_location=device, weights_only=True)
+        self.model.load_state_dict(remap_ckpt(ckpt), assign=True)
 
         return self
 
