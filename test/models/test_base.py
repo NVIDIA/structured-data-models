@@ -181,7 +181,7 @@ class MyCallback(Callback):
 
 
 class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
-    handles_stypes = frozenset(Stype)
+    handles_stypes = tuple(Stype)
     requires_fit = True
     generators: ClassVar[list[torch.Generator | None]] = []
     draws: ClassVar[list[torch.Tensor]] = []

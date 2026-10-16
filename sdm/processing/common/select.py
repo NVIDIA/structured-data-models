@@ -23,7 +23,7 @@ class SelectColumns(EnsembleProcessor):
             0, 1, and 2 receive columns (0, 1), (2, 3), and (4, 0).
     """
 
-    handles_stypes = frozenset(Stype)
+    handles_stypes = tuple(Stype)
     requires_fit = False
 
     def __init__(

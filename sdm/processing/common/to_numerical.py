@@ -24,7 +24,7 @@ class ToNumerical(Processor):
     """
 
     requires_fit = False
-    handles_stypes = frozenset({Stype.numerical, Stype.categorical})
+    handles_stypes = (Stype.numerical, Stype.categorical)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Return ``table`` with categorical columns moved to ``numerical``."""

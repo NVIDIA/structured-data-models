@@ -68,7 +68,7 @@ class AlignCategories(EnsembleProcessor):
     ``"green"`` and the missing value use ``-1``.
     """
 
-    handles_stypes = frozenset({Stype.categorical})
+    handles_stypes = (Stype.categorical,)
     requires_fit = True
 
     def __init__(

@@ -27,7 +27,7 @@ class DropConstantColumns(EnsembleProcessor):
             Must be positive.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def __init__(

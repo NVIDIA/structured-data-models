@@ -25,8 +25,10 @@ class ImputeMode(Processor):
     training and transform inputs were tensorized independently.
     """
 
-    handles_stypes = frozenset({Stype.categorical})
+    handles_stypes = (Stype.categorical,)
     requires_fit = True
+
+    _fill_values: torch.Tensor
 
     def __init__(self) -> None:
         super().__init__()
@@ -71,10 +73,11 @@ class ImputeMode(Processor):
             )
             fill_values.append(counts.argmax(dim=-1, keepdim=True))
 
-        self._fill_values = (
-            torch.stack(fill_values, dim=-1)
+        self._set_buffer(
+            name="_fill_values",
+            value=torch.stack(fill_values, dim=-1)
             if len(fill_values) > 0
-            else torch.empty(0, dtype=torch.long, device=data.device)
+            else torch.empty(0, dtype=torch.long, device=data.device),
         )
         self._categories = BufferList(table.categorical.categories)
 

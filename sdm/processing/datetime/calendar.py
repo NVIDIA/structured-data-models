@@ -24,7 +24,7 @@ class AddCalendarFields(Processor):
             ``"cyclic"`` uses sine and cosine values.
     """
 
-    handles_stypes = frozenset({Stype.datetime})
+    handles_stypes = (Stype.datetime,)
     requires_fit = False
 
     def __init__(
