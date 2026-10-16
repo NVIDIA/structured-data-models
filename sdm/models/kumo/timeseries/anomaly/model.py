@@ -31,6 +31,10 @@ class AnomalyOutput(NamedTuple):
 
     Padding features are excluded from every field. Higher scores indicate
     larger reconstruction errors, not calibrated anomaly probabilities.
+    Apply :class:`~sdm.models.kumo.timeseries.anomaly.SCSThreshold` to
+    ``scores`` and ``target``, or
+    :class:`~sdm.models.kumo.timeseries.anomaly.MACSThreshold` to ``scores``,
+    to obtain boolean anomaly flags with the SDK's offline decision rules.
     """
 
     scores: Tensor
@@ -147,7 +151,8 @@ class KumoAnomaly(torch.nn.Module):
             input units. Short/final partial windows repeat their last row
             and are trimmed afterward; unlike the original SDK, no trailing
             observations are dropped. Padding can affect that window's
-            normalization and reconstruction. No anomaly threshold is fitted.
+            normalization and reconstruction. Thresholding is a separate step:
+            apply ``SCSThreshold`` or ``MACSThreshold`` to the returned scores.
         """
         if self.training:
             raise RuntimeError("Call 'eval()' before anomaly inference")

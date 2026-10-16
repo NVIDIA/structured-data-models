@@ -1,12 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Score an ordered series using reference-only feature preprocessing."""
+"""Score and flag anomalies with reference-only feature preprocessing."""
 
 import torch
 
 import sdm
 from sdm.models import KumoAnomaly
+from sdm.models.kumo.timeseries.anomaly import MACSThreshold, SCSThreshold
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 time = torch.arange(600, device=device, dtype=torch.float32)
@@ -26,6 +27,12 @@ result = model(
     generator=torch.Generator(device=device).manual_seed(42),
 )
 print(result.scores)
-print(result.reconstruction)
-# Scores and reconstructions use scaled model-space units. Thresholds need
-# separate validation; the corrected DPM timestep mapping changes SDK scores.
+# These SDK rules use the scored query itself, including its global score
+# percentile. Reference-only feature scaling does not make them causal or
+# reference-calibrated. The corrected solver can change scores and decisions.
+anomalies_scs = SCSThreshold()(result.scores, result.target)
+anomalies_macs = MACSThreshold()(result.scores)
+print("SCS anomaly rows:", anomalies_scs.nonzero().flatten() + 300)
+print("MACS anomaly rows:", anomalies_macs.nonzero().flatten() + 300)
+# The booleans are detector decisions, not ground truth or probabilities.
+# Validate detection quality and threshold settings on your own labeled data.
