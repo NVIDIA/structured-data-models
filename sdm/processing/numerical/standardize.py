@@ -51,10 +51,6 @@ class Standardize(Processor, InvertibleMixin):
         self.requires_fit = False
         return self
 
-    def _handles_table(self, table: TableTensor) -> bool:
-        # Check column count without constructing sets during compilation.
-        return table.numerical.size(-1) > 0
-
     def _fit(
         self,
         table: TableTensor,
