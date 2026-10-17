@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
 from sdm.processing import AlignCategories
 from sdm.testing import withCUDA
@@ -504,3 +505,157 @@ def test_align_categories_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output[member_id].equal(expected_query)
         assert fitted_query_output[member_id].equal(expected_query)
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+def test_append_categories_preserves_unseen_and_missing(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    context = _table(
+        [[0], [1], [-1]],
+        categories=(("red", "blue", "unused"),),
+        device=device,
+        dtype=dtype,
+    )
+    query = _table(
+        [[0], [1], [2], [-1]],
+        categories=(("green", "blue", "red"),),
+        device=device,
+        dtype=dtype,
+    )
+    processor = AlignCategories(min_frequency=0, unknown="append")
+    assert processor.fit_transform(context).equal(context)
+    out = processor.transform(query)
+    assert out.categorical.code.dtype == dtype
+    assert out.categorical.code.squeeze(-1).tolist() == [3, 1, 0, -1]
+    assert out.categorical.categories[0].tolist() == [
+        "red",
+        "blue",
+        "unused",
+        "green",
+    ]
+    other_query = _table(
+        [[0]],
+        categories=(("yellow",),),
+        device=device,
+        dtype=dtype,
+    )
+    other = processor.transform(other_query)
+    assert other.categorical.code.squeeze(-1).tolist() == [3]
+    assert other.categorical.categories[0].tolist() == [
+        "red",
+        "blue",
+        "unused",
+        "yellow",
+    ]
+    assert processor.transform(query).equal(out)
+    assert processor.transform(context).equal(context)
+
+
+@withCUDA
+def test_append_categories_empty_fitted_vocabulary(
+    device: torch.device,
+) -> None:
+    context = TableTensor.from_pandas(
+        pd.DataFrame({"kind": [None, None]}),
+        stypes={"kind": "categorical"},
+        device=device,
+    )
+    query = TableTensor.from_pandas(
+        pd.DataFrame({"kind": ["red", None, "blue"]}),
+        stypes={"kind": "categorical"},
+        device=device,
+    )
+    processor = AlignCategories(min_frequency=0, unknown="append").fit(context)
+    assert processor.transform(query).equal(query)
+    assert processor.transform(context).equal(context)
+
+
+@withCUDA
+def test_append_categories_numeric_values(device: torch.device) -> None:
+    context = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [-1]], device=device),
+            categories=(torch.tensor([20, 10, 30], device=device),),
+        ),
+    )
+    query = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [2], [-1]], device=device),
+            categories=(torch.tensor([10, 40, 20], device=device),),
+        ),
+    )
+    out = (
+        AlignCategories(min_frequency=0, unknown="append")
+        .fit(context)
+        .transform(query)
+    )
+    assert out.categorical.code.squeeze(-1).tolist() == [1, 3, 0, -1]
+    assert out.categorical.categories[0].tolist() == [20, 10, 30, 40]
+
+
+@withCUDA
+@pytest.mark.parametrize("append", [False, True])
+def test_align_categories_shared_query_uses_each_fitted_vocabulary(
+    device: torch.device,
+    append: bool,
+) -> None:
+    contexts = (
+        _table(
+            [[0], [1]], categories=(("red", "blue", "unused"),), device=device
+        ),
+        _table([[0], [1]], categories=(("blue", "red"),), device=device),
+    )
+    query = _table(
+        [[0], [1], [-1]],
+        categories=(("green", "red"),),
+        device=device,
+    )
+    member_ids = (1, 0, 1, 0)
+    kwargs = {"min_frequency": 0, "unknown": "append"} if append else {}
+    processor = AlignCategories(**kwargs)
+    processor.fit_ensemble(
+        EnsembleTable.from_tables(tables=contexts, member_table_ids=member_ids)
+    )
+    out = processor.transform_ensemble(
+        EnsembleTable.from_table(query, num_members=4)
+    )
+    for i, member in enumerate(member_ids):
+        expected = (
+            AlignCategories(**kwargs).fit(contexts[member]).transform(query)
+        )
+        assert out[i].equal(expected)
+
+
+@withCUDA
+def test_alignment_preserves_fitted_ensemble_pipeline(
+    device: torch.device,
+) -> None:
+    context = _table(
+        [[0], [1], [0]],
+        categories=(("red", "blue"),),
+        device=device,
+    )
+    query = _table([[1], [0]], categories=(("blue", "red"),), device=device)
+    processor = sp.Sequential(
+        sp.AlignCategories(),
+        sp.ToNumerical(),
+        sp.Choice(
+            sp.Identity(), sp.FlipSign(probability=1), method="round_robin"
+        ),
+        sp.Standardize(),
+    )
+    members = 4
+    processor.fit_transform_ensemble(
+        EnsembleTable.from_table(context, num_members=members)
+    )
+    out = processor.transform_ensemble(
+        EnsembleTable.from_table(query, num_members=members)
+    )
+    # Each sign branch uses its own context-fitted statistics.
+    expected = torch.tensor([[-(2**-0.5)], [2**0.5]], device=device)
+    for member_id in range(len(out)):
+        sign = 1 if member_id % 2 == 0 else -1
+        torch.testing.assert_close(out[member_id].numerical, sign * expected)

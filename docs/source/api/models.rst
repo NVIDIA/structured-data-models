@@ -50,6 +50,13 @@ Overview
      - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
      - `TimesFM Non-Commercial v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
 
+   * - | :class:`~sdm.models.Timestral`
+       | (`Source <https://github.com/mistralai/timestral>`__)
+     - —
+     - 5M–209M
+     - `Apache-2.0 <https://github.com/mistralai/timestral/blob/main/LICENSE>`__
+     - `Modified MIT <https://huggingface.co/mistralai/Timestral-5M/blob/main/LICENSE>`__
+
 Model API
 ---------
 

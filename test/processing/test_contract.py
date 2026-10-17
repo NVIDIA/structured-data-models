@@ -135,6 +135,10 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.RandomProjection(2)),
     ProcessorCase(sp.WarpTails(probability=1.0)),
     ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
+    ProcessorCase(
+        sp.AlignCategories(min_frequency=0, unknown="append"),
+        _make_align_categories_table,
+    ),
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
     ProcessorCase(sp.AddCategoryCounts()),
