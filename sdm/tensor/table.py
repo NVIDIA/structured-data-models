@@ -125,6 +125,20 @@ class TableSchema:
         return hash(frozenset(self.columns.items()))
 
 
+@functools.lru_cache(maxsize=128)
+def _column_locations(
+    columns: tuple[tuple[Stype, tuple[str, ...]], ...],
+) -> dict[str, tuple[Stype, int]]:
+    locations = {
+        name: (stype, index)
+        for stype, names in columns
+        for index, name in enumerate(names)
+    }
+    if sum(len(names) for _, names in columns) != len(locations):
+        raise ValueError("Expected column names to be unique")
+    return locations
+
+
 class TableTensor(Tensor):
     r"""A :class:`torch.Tensor` for tensorized, lossless table data.
 
@@ -328,18 +342,12 @@ class TableTensor(Tensor):
                     f"{len(columns[stype])} {_columns} (got {block.size(-1)})"
                 )
 
-        column_names = list(chain.from_iterable(columns.values()))
-        column_to_loc: dict[str, tuple[Stype, int]] = {}
-        for stype_like, names in columns.items():
-            stype = Stype(stype_like)
-            for i, name in enumerate(names):
-                column_to_loc[name] = (stype, i)
-        if len(column_names) != len(column_to_loc):
-            raise ValueError("Expected column names to be unique")
+        # Only immutable schema keys are retained; each table owns its lookup.
+        column_to_loc = _column_locations(tuple(columns.items())).copy()
 
         out = Tensor._make_wrapper_subclass(
             cls,
-            size=(*size, len(column_names)),
+            size=(*size, len(column_to_loc)),
             dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,

@@ -103,6 +103,36 @@ def test_column_names() -> None:
         )
 
 
+def test_repeated_schema_preserves_column_ownership_and_validation() -> None:
+    names = ["left", "right"]
+    values = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+    first = TableTensor(columns={"numerical": names}, numerical=values)
+    columns = {str(stype): names for stype, names in first.columns.items()}
+    second = TableTensor(columns=columns, numerical=values + 1)
+    names.reverse()
+    changed = columns.copy()
+    changed["numerical"] = tuple(names)
+    reversed_table = TableTensor(columns=changed, numerical=values)
+
+    assert first.columns[Stype.numerical] == ("left", "right")
+    assert second.columns == first.columns
+    assert reversed_table.columns[Stype.numerical] == ("right", "left")
+    torch.testing.assert_close(first[["left"]].numerical, values[:, :1])
+    torch.testing.assert_close(second[["left"]].numerical, values[:, :1] + 1)
+    torch.testing.assert_close(
+        reversed_table[["left"]].numerical, values[:, 1:]
+    )
+
+    with pytest.raises(ValueError, match="hold 2 columns"):
+        TableTensor(columns=columns, numerical=torch.ones(2, 3))
+    with pytest.raises(ValueError, match="to be unique"):
+        TableTensor(
+            columns={"numerical": ["left"], "datetime": ["left"]},
+            numerical=torch.ones(2, 1),
+            datetime=torch.ones(2, 1, dtype=torch.int64),
+        )
+
+
 def test_equal() -> None:
     numerical = torch.randn(2, 2)
     categorical = CategoricalTensor(

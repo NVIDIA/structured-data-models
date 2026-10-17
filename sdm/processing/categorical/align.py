@@ -15,6 +15,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm._memory import split_size
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
@@ -396,9 +397,8 @@ class AlignCategories(EnsembleProcessor):
         fitted_categories: Tensor,
         codes: Tensor,
     ) -> Tensor:
-        lookup = codes.new_full((input_categories.numel(),), -1)
         if fitted_categories.numel() == 0:
-            return lookup
+            return codes.new_full(input_categories.size(), -1)
 
         comparable_categories = input_categories
         sorted_categories = fitted_categories
@@ -414,12 +414,9 @@ class AlignCategories(EnsembleProcessor):
             sorted_categories,
             comparable_categories,
         )
-        position = position.clamp(max=sorted_categories.numel() - 1)
-        match = sorted_categories[position] == comparable_categories
-        left_index = match.nonzero().view(-1)
-        right_index = perm[position[left_index]]
-        lookup[left_index] = right_index.to(codes.dtype)
-        return lookup
+        position = position.clamp(max=sorted_categories.size(-1) - 1)
+        match = sorted_categories.gather(-1, position) == comparable_categories
+        return torch.where(match, perm.gather(-1, position), -1).to(codes)
 
     def _align_to_categories(
         self,
@@ -435,12 +432,22 @@ class AlignCategories(EnsembleProcessor):
             {} for _ in table.categorical.categories
         ]
         string_requests: list[tuple[int, int, StringTensor, Tensor]] = []
+        numeric_requests: dict[
+            tuple[
+                int, int, torch.dtype, torch.dtype, torch.device, torch.device
+            ],
+            list[tuple[int, int, Tensor, Tensor]],
+        ] = {}
+        columns_by_width: dict[int, list[int]] = {}
         for column_index, input_categories in enumerate(
             table.categorical.categories
         ):
             if input_categories.numel() == 0:
                 continue
 
+            columns_by_width.setdefault(input_categories.numel(), []).append(
+                column_index
+            )
             lookup_by_categories = lookups_by_column[column_index]
             pending_categories: set[int] = set()
             for batch_categories in fitted_categories:
@@ -473,11 +480,50 @@ class AlignCategories(EnsembleProcessor):
                         )
                     )
                     continue
-                lookup_by_categories[identity] = self._category_lookup(
-                    input_categories,
-                    column_categories,
+                pending_categories.add(identity)
+                key = (
+                    input_categories.numel(),
+                    column_categories.numel(),
+                    input_categories.dtype,
+                    column_categories.dtype,
+                    input_categories.device,
+                    column_categories.device,
+                )
+                numeric_requests.setdefault(key, []).append(
+                    (
+                        column_index,
+                        identity,
+                        input_categories,
+                        column_categories,
+                    )
+                )
+
+        # Equal vocabulary widths need no padding and preserve row-wise sorts.
+        for requests in numeric_requests.values():
+            input_categories, column_categories = requests[0][2:]
+            # Bound stacked vocabularies, sort/search buffers and lookups.
+            size = split_size(
+                num_items=len(requests),
+                item_bytes=8
+                * (input_categories.numel() + column_categories.numel())
+                * max(
+                    input_categories.element_size(),
+                    column_categories.element_size(),
+                    8,
+                ),
+                device=input_categories.device,
+            )
+            for start in range(0, len(requests), size):
+                chunk = requests[start : start + size]
+                lookups = self._category_lookup(
+                    torch.stack([request[2] for request in chunk]),
+                    torch.stack([request[3] for request in chunk]),
                     codes,
                 )
+                for (column_index, identity, _, _), lookup in zip(
+                    chunk, lookups.unbind(), strict=True
+                ):
+                    lookups_by_column[column_index][identity] = lookup
 
         string_lookups = self._string_category_lookups(
             input_categories=tuple(
@@ -497,25 +543,42 @@ class AlignCategories(EnsembleProcessor):
         ):
             lookups_by_column[column_index][identity] = lookup
 
-        for column_index, input_categories in enumerate(
-            table.categorical.categories
-        ):
-            if input_categories.numel() == 0:
-                continue
-            lookup_by_categories = lookups_by_column[column_index]
-            lookups = [
-                lookup_by_categories[id(batch_categories[column_index])]
-                for batch_categories in fitted_categories
-            ]
-            column_codes = codes[..., column_index]
-            mask = column_codes >= 0
-            lookup = torch.stack(lookups)
-            indices = column_codes.clamp_min(0).long()
-            aligned_codes[..., column_index] = torch.where(
-                mask,
-                lookup.gather(1, indices),
-                -1,
+        for width, columns in columns_by_width.items():
+            # Bound gathered codes, integer indices, masks and mapped outputs.
+            size = split_size(
+                num_items=len(columns),
+                item_bytes=8
+                * (codes[..., :1].numel() + len(fitted_categories) * width)
+                * max(codes.element_size(), 8),
+                device=codes.device,
             )
+            for start in range(0, len(columns), size):
+                column_indices = columns[start : start + size]
+                # Map [column, batch, row] codes with vocabulary lookups.
+                lookup = torch.stack(
+                    [
+                        lookups_by_column[column_index][
+                            id(batch_categories[column_index])
+                        ]
+                        for column_index in column_indices
+                        for batch_categories in fitted_categories
+                    ]
+                ).view(len(column_indices), len(fitted_categories), width)
+                # Upload known column metadata without waiting for device work.
+                column_index = torch.tensor(column_indices, device="cpu").to(
+                    device=codes.device, non_blocking=True
+                )
+                column_codes = codes.index_select(-1, column_index).movedim(
+                    -1, 0
+                )
+                mask = column_codes >= 0
+                indices = column_codes.clamp_min(0).long()
+                mapped_codes = torch.where(
+                    mask,
+                    lookup.gather(-1, indices),
+                    -1,
+                ).movedim(0, -1)
+                aligned_codes.index_copy_(-1, column_index, mapped_codes)
 
         return tuple(
             (table if single_table else table[batch_index]).replace_blocks(
