@@ -236,8 +236,10 @@ class KumoTabular(ICLModel):
             columns = cast(tuple[str, ...], cache["class_columns"])
         else:
             columns = tuple(str(i) for i in classes.tolist())
-            if cache is not None:
-                cache["class_columns"] = columns
+
+        if cache is not None and cache.is_recording:
+            cache["class_columns"] = columns
+
         return TableTensor(
             columns={"numerical": columns},
             numerical=out,
