@@ -13,6 +13,7 @@ from sdm.processing.numerical.quantile import QuantileTransform
 from sdm.processing.numerical.rank_gaussian import RankGaussian
 from sdm.processing.numerical.standardize import Standardize
 from sdm.processing.numerical.robust_scale import RobustScale
+from sdm.processing.numerical.min_max_scale import MinMaxScale
 from sdm.processing.numerical.flip_sign import FlipSign
 from sdm.processing.numerical.constant import DropConstantColumns
 from sdm.processing.numerical.pca import PCA
@@ -32,6 +33,7 @@ __all__ = [
     "RankGaussian",
     "Standardize",
     "RobustScale",
+    "MinMaxScale",
     "FlipSign",
     "DropConstantColumns",
     "PCA",
