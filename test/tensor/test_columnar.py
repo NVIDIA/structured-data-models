@@ -6,6 +6,7 @@ import io
 import pyarrow as pa
 import pytest
 import torch
+from torch._subclasses.fake_tensor import FakeTensorMode, is_fake
 
 from sdm import (
     CategoricalTensor,
@@ -14,6 +15,19 @@ from sdm import (
     StringTensor,
 )
 from sdm.testing import onlyCUDA, onlyMPS
+
+
+@pytest.mark.parametrize("num_columns", [0, 1])
+def test_fake_tensor_round_trip(num_columns: int) -> None:
+    columns = (torch.arange(6).view(2, 3),) if num_columns else ()
+    tensor = ColumnarTensor(columns, size=(2, 3))
+    assert not is_fake(tensor)
+
+    mode = FakeTensorMode()
+    fake = mode.from_tensor(tensor)
+    assert is_fake(fake)
+    assert fake.size() == tensor.size()
+    assert fake.device == tensor.device
 
 
 def test_init() -> None:
@@ -206,7 +220,8 @@ def test_empty_clone_preserves_device() -> None:
 
 
 def test_empty_resolves_mps_device_index() -> None:
-    tensor = ColumnarTensor((), size=(2, 3), device="mps")
+    with FakeTensorMode():
+        tensor = ColumnarTensor((), size=(2, 3), device="mps")
 
     assert tensor.device == torch.device("mps", 0)
 

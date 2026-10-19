@@ -1084,9 +1084,7 @@ class TableTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["numerical", "categorical", "datetime", "text"]
-        if self.id.size(-1) > 0:
-            attrs.append("id")
+        attrs = ["numerical", "categorical", "datetime", "text", "id"]
         # Let torch.compile track backing fields and their public properties.
         attrs = [f"_{name}" for name in attrs] + attrs
         columns = tuple(
@@ -1110,7 +1108,7 @@ class TableTensor(Tensor):
             categorical=inner_tensors["categorical"],
             datetime=inner_tensors["datetime"],
             text=inner_tensors["text"],
-            id=inner_tensors.get("id"),
+            id=inner_tensors["id"],
         )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
