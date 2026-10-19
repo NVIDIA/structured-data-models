@@ -966,7 +966,7 @@ def _categorical_mask(members: Sequence[MemberContext]) -> Tensor:
         [
             [
                 member.input_stypes.get(column) == Stype.categorical
-                for column in member.x.columns[Stype.numerical]
+                for column in member.x._columns[Stype.numerical]
             ]
             for member in members
         ],
