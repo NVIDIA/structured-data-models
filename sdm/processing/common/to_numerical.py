@@ -7,6 +7,7 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
+from sdm.tensor.table import _iter_blocks
 
 
 class ToNumerical(Processor):
@@ -31,7 +32,7 @@ class ToNumerical(Processor):
         # Already numerical-only: nothing to move.
         if all(
             stype == Stype.numerical or block.size(-1) == 0
-            for stype, block in table.items()
+            for stype, block in _iter_blocks(table)
         ):
             return table
 
