@@ -23,7 +23,7 @@ def test_icl_block(device: torch.device) -> None:
     col_mask = torch.ones(1, 1, 1, 3, 3, device=device)
     pos = torch.arange(5, device=device)
 
-    out = block(x, row_mask, col_mask, pos=pos)
+    out = block(x, row_mask, col_mask, pos)
     assert out.device == device
     assert out.size() == x.size()
     assert out.isfinite().all()
