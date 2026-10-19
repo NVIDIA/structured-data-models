@@ -233,11 +233,6 @@ class KumoTabular(ICLModel):
             categorical_mask=categorical_mask,
         )
         if cache is not None and cache.is_replaying:
-            if "class_columns" not in cache:
-                raise RuntimeError(
-                    "This fitted cache is missing class column names. "
-                    "Call fit() again before predict()."
-                )
             columns = cast(tuple[str, ...], cache["class_columns"])
         else:
             columns = tuple(str(i) for i in classes.tolist())
