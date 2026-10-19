@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
 import pytest
@@ -9,7 +9,7 @@ import torch
 
 from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
 from sdm.processing import AlignCategories
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def _table(
@@ -108,6 +108,39 @@ def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     assert context.categorical.code.squeeze(-1).tolist() == [0, 1]
     assert query.categorical.categories[0].tolist() == ["red", "blue"]
     assert query.categorical.code.squeeze(-1).tolist() == [-1, 1]
+
+
+@onlyCUDA
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+def test_align_numeric_categories_without_host_synchronization(
+    dtype: torch.dtype,
+) -> None:
+    context = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [0]], device="cuda", dtype=dtype),
+            categories=(torch.tensor([9, 3, 7], device="cuda"),),
+        ),
+    )
+    query = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor(
+                [[0], [1], [2], [-1]], device="cuda", dtype=dtype
+            ),
+            categories=(torch.tensor([3, 7, 9], device="cuda"),),
+        ),
+    )
+    processor = AlignCategories(sort_by="value").fit(context)
+    previous = torch.cuda.get_sync_debug_mode()
+    try:
+        torch.cuda.set_sync_debug_mode("error")
+        with torch.device("cuda"):
+            output = processor.transform(query)
+    finally:
+        torch.cuda.set_sync_debug_mode(previous)
+
+    assert output.categorical.code.dtype == dtype
+    assert output.categorical.code.tolist() == [[0], [-1], [1], [-1]]
+    assert output.categorical.categories[0].tolist() == [3, 9]
 
 
 @pytest.mark.parametrize("sort_by", ["code", "frequency", "value"])
@@ -504,3 +537,241 @@ def test_align_categories_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output[member_id].equal(expected_query)
         assert fitted_query_output[member_id].equal(expected_query)
+
+
+@withCUDA
+def test_align_numeric_columns_use_distinct_translations(
+    device: torch.device,
+) -> None:
+    context = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor(
+                [[0, 0], [1, 1], [2, 2]], dtype=torch.int32, device=device
+            ),
+            categories=(
+                torch.tensor([9, 3, 7], device=device),
+                torch.tensor([3, 7, 9], device=device),
+            ),
+        ),
+    )
+    query = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor(
+                [[0, 2], [1, 0], [2, 3], [3, 1], [-1, -1]],
+                dtype=torch.int32,
+                device=device,
+            ),
+            categories=(torch.tensor([3, 7, 9, 11], device=device),) * 2,
+        ),
+    )
+
+    output = AlignCategories().fit(context).transform(query)
+
+    expected = TableTensor(
+        categorical=CategoricalTensor(
+            code=torch.tensor(
+                [[1, 2], [2, 0], [0, -1], [-1, 1], [-1, -1]],
+                dtype=torch.int32,
+                device=device,
+            ),
+            categories=context.categorical.categories,
+        ),
+    )
+    assert output.equal(expected)
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    ("num_categories", "num_rows"), [(16384, 16), (16, 16384)]
+)
+def test_align_numeric_chunk_memory_independent_of_grad_mode(
+    num_categories: int,
+    num_rows: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "1e-10")
+    categories = torch.arange(num_categories, device="cuda")
+    context = TableTensor(
+        categorical=CategoricalTensor(
+            code=categories.to(torch.int32).unsqueeze(-1).expand(-1, 16),
+            categories=(categories,) * 16,
+        ),
+    )
+    codes = (torch.arange(num_rows, device="cuda") % num_categories).to(
+        torch.int32
+    )
+    query = TableTensor(
+        categorical=CategoricalTensor(
+            code=codes.unsqueeze(-1).expand(-1, 16),
+            categories=(categories.flip(0),) * 16,
+        ),
+    )
+    processor = AlignCategories().fit(context)
+    expected_codes = (num_categories - 1 - codes).unsqueeze(-1).expand(-1, 16)
+    peaks = []
+    for grad_enabled in (False, True):
+        with torch.set_grad_enabled(grad_enabled):
+            torch.cuda.synchronize()
+            baseline = torch.cuda.memory_allocated()
+            torch.cuda.reset_peak_memory_stats()
+            output = processor.transform(query)
+            torch.cuda.synchronize()
+            peaks.append(torch.cuda.max_memory_allocated() - baseline)
+            assert torch.is_grad_enabled() == grad_enabled
+        assert torch.equal(output.categorical.code, expected_codes)
+        del output
+
+    # Gradient mode must not turn bounded chunks into a full-table batch.
+    # Allow small allocator bookkeeping differences between the two executions.
+    assert peaks[1] <= peaks[0] + 256 * 1024
+
+
+@withCUDA
+def test_align_numeric_ensemble_preserves_column_and_member_vocabularies(
+    device: torch.device,
+) -> None:
+    categories = (
+        torch.tensor([9, 3, 7], device=device),
+        torch.tensor([3, 7, 9], device=device),
+    )
+    contexts = tuple(
+        TableTensor(
+            categorical=CategoricalTensor(
+                code=torch.tensor(codes, dtype=torch.int32, device=device),
+                categories=categories,
+            ),
+        )
+        for codes in (
+            [[0, 1], [1, 2], [0, 1]],
+            [[1, 0], [2, 2], [2, 0]],
+        )
+    )
+    member_table_ids = (1, 0, 1)
+    locations = tuple((0, table_id) for table_id in member_table_ids)
+    context = EnsembleTable(
+        groups=(cast(TableTensor, torch.stack(contexts)),),
+        locations=locations,
+    )
+    numerical = torch.ones(5, 1, device=device, requires_grad=True)
+    query = TableTensor(
+        numerical=numerical,
+        categorical=CategoricalTensor(
+            code=torch.tensor(
+                [[0, 2], [1, 0], [2, 3], [3, 1], [-1, -1]],
+                dtype=torch.int32,
+                device=device,
+            ),
+            categories=(torch.tensor([3, 7, 9, 11], device=device),) * 2,
+        ),
+    )
+    query_ensemble = EnsembleTable(
+        groups=(cast(TableTensor, torch.stack((query, query))),),
+        locations=locations,
+    )
+
+    output = (
+        AlignCategories()
+        .fit_ensemble(context)
+        .transform_ensemble(query_ensemble)
+    )
+
+    # Each column/member pair retains a different vocabulary of the same width.
+    expected = tuple(
+        TableTensor(
+            numerical=numerical,
+            categorical=CategoricalTensor(
+                code=torch.tensor(codes, dtype=torch.int32, device=device),
+                categories=tuple(
+                    torch.tensor(values, device=device)
+                    for values in vocabularies
+                ),
+            ),
+        )
+        for codes, vocabularies in (
+            (
+                [[1, 1], [-1, -1], [0, -1], [-1, 0], [-1, -1]],
+                ([9, 3], [7, 9]),
+            ),
+            (
+                [[0, 1], [1, 0], [-1, -1], [-1, -1], [-1, -1]],
+                ([3, 7], [3, 9]),
+            ),
+        )
+    )
+    for member_id, table_id in enumerate(member_table_ids):
+        assert output[member_id].equal(expected[table_id])
+    output[0].numerical.sum().backward()
+    torch.testing.assert_close(numerical.grad, torch.ones_like(numerical))
+
+
+@withCUDA
+@pytest.mark.parametrize("sort_by", ["code", "frequency", "value"])
+@pytest.mark.parametrize("min_frequency", [1, 2])
+@pytest.mark.parametrize("memory_fraction", ["0.05", "1e-10"])
+def test_align_numeric_columns_preserves_independent_vocabularies(
+    device: torch.device,
+    sort_by: Literal["code", "frequency", "value"],
+    min_frequency: int,
+    memory_fraction: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", memory_fraction)
+    context_columns: list[torch.Tensor] = []
+    query_columns: list[torch.Tensor] = []
+    expected_columns: list[torch.Tensor] = []
+    for index in range(7):
+        dtype = torch.float64 if index % 2 else torch.int64
+        context_values = [5 + 20 * index, 1 + 20 * index, 9 + 20 * index]
+        query_values = [1 + 20 * index, 7 + 20 * index, 5 + 20 * index]
+        if index == 6:
+            context_values.append(13 + 20 * index)
+            query_values.append(13 + 20 * index)
+        context = TableTensor(
+            columns={"categorical": [str(index)]},
+            categorical=CategoricalTensor(
+                code=torch.tensor(
+                    [[0], [1], [2], [1], [2], [2], [-1]],
+                    dtype=torch.int32,
+                    device=device,
+                ),
+                categories=(
+                    torch.tensor(context_values, dtype=dtype, device=device),
+                ),
+            ),
+        )
+        query = TableTensor(
+            columns={"categorical": [str(index)]},
+            categorical=CategoricalTensor(
+                code=torch.tensor(
+                    [[0], [1], [2], [-1]], dtype=torch.int32, device=device
+                ),
+                categories=(
+                    torch.tensor(query_values, dtype=dtype, device=device),
+                ),
+            ),
+        )
+        expected_columns.append(
+            AlignCategories(sort_by, min_frequency=min_frequency)
+            .fit(context)
+            .transform(query)
+        )
+        context_columns.append(context)
+        query_columns.append(query)
+
+    context = cast(TableTensor, torch.cat(context_columns, dim=-1))
+    query = cast(TableTensor, torch.cat(query_columns, dim=-1))
+    processor = AlignCategories(sort_by, min_frequency=min_frequency).fit(
+        context
+    )
+    with torch.no_grad():
+        actual = processor.transform(query)
+    expected = cast(TableTensor, torch.cat(expected_columns, dim=-1))
+    assert torch.equal(actual.categorical.code, expected.categorical.code)
+    assert all(
+        torch.equal(actual_values, expected_values)
+        for actual_values, expected_values in zip(
+            actual.categorical.categories,
+            expected.categorical.categories,
+            strict=True,
+        )
+    )
