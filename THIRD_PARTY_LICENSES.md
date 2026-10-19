@@ -34,6 +34,16 @@ Its weights are not bundled with this project and may be downloaded only after t
 The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
 Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
+## Timestral
+
+- Source: https://github.com/mistralai/timestral
+- Code license: Apache License 2.0
+- License terms: [`sdm/models/timestral/LICENSE`](sdm/models/timestral/LICENSE)
+- Optional pretrained weights: https://huggingface.co/collections/mistralai/timestral
+- Weights license: [Modified MIT License](https://huggingface.co/mistralai/Timestral-209M/blob/main/LICENSE)
+
+The [`sdm/models/timestral/`](sdm/models/timestral/) implementation contain code derived from [`Timestral`](https://github.com/mistralai/timestral).
+
 ## DPM-Solver
 
 - Source: https://github.com/LuChengTHU/dpm-solver
@@ -57,11 +67,3 @@ Portions of [`CONTRIBUTING.md`](CONTRIBUTING.md) are adapted from the [PyTorch c
 ## Contributor Covenant
 
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) is adapted from [Contributor Covenant version 1.4](https://www.contributor-covenant.org/version/1/4/code-of-conduct/), distributed under the MIT License. The complete copyright notice and license terms are distributed in [`third_party/contributor-covenant/LICENSE`](third_party/contributor-covenant/LICENSE).
-
-## Timestral
-
-- Source: [mistralai/timestral](https://github.com/mistralai/timestral), revision `a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff`.
-- Source license: [Apache-2.0](sdm/models/timestral/LICENSE).
-- Reference checkpoint: [Timestral-5M](https://huggingface.co/mistralai/Timestral-5M/tree/bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f), under its [Modified MIT license](https://huggingface.co/mistralai/Timestral-5M/blob/bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f/LICENSE).
-
-The `sdm/models/timestral/` transformer block composes shared SDM attention, normalization, and feedforward modules. Optional parity tests use cached 5M weights; weights are not bundled. This component does not provide an end-to-end forecasting model.
