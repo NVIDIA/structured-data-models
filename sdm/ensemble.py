@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import abc
-import copy
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Generic, Self, TypeVar, cast, overload
 
@@ -240,13 +239,13 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                     )
                 )
 
-        ensemble = copy.copy(self)
-        ensemble._groups = tuple(groups)
-        ensemble._locations = tuple(
-            (group_ids[group_id], positions_by_group[group_id][position])
-            for group_id, position in locations
+        return self.__class__(
+            groups=groups,
+            locations=tuple(
+                (group_ids[group_id], positions_by_group[group_id][position])
+                for group_id, position in locations
+            ),
         )
-        return ensemble
 
     def gather_members(
         self,
@@ -490,9 +489,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                 f"Expected one replacement per group "
                 f"({self.num_groups}), got {len(groups)}."
             )
-        ensemble = copy.copy(self)
-        ensemble._groups = tuple(groups)
-        return ensemble
+        return self.__class__(groups=groups, locations=self._locations)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
