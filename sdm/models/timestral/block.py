@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Mistral AI
-# Licensed under the Apache-2.0 License; see LICENSE.
+# Licensed under Apache-2.0; see LICENSE.
 
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
