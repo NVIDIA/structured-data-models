@@ -455,7 +455,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                         query=query,
                         x_schema=x_schema,
                         related_tables_schema=cast(
-                            RelatedTablesSchema | None,
+                            "RelatedTablesSchema | None",
                             cache["related_tables_schema"],
                         ),
                         callbacks=callbacks,
@@ -481,7 +481,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     cache=cache,
                     categorical_mask=cast(Tensor, cache["categorical_mask"]),
                     class_values=cast(
-                        Sequence[tuple[Any, ...] | None] | None,
+                        "Sequence[tuple[Any, ...] | None] | None",
                         cache["class_values"],
                     ),
                     callbacks=callbacks,
