@@ -128,7 +128,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         out = ensemble_table
-        for child in reversed(list(self)):
+        for child in reversed(list(self.children())):
             if not isinstance(child, EnsembleInvertibleMixin):
                 raise AttributeError(
                     f"{child.__class__.__name__!r} object has no "
