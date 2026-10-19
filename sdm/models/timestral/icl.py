@@ -9,13 +9,13 @@
 from typing import Any
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor
 
 from sdm.models.timestral.block import TimestralTransformerBlock
 from sdm.nn import RMSNorm, RotaryEmbedding
 
 
-class ICLBlock(nn.Module):
+class ICLBlock(torch.nn.Module):
     def __init__(
         self,
         channels: int,
@@ -39,7 +39,7 @@ class ICLBlock(nn.Module):
             **factory_kwargs,
         )
 
-        self.row_blocks = nn.ModuleList(
+        self.row_blocks = torch.nn.ModuleList(
             TimestralTransformerBlock(
                 channels=channels,
                 num_heads=num_heads,
@@ -52,7 +52,7 @@ class ICLBlock(nn.Module):
             for i in range(num_layers)
         )
 
-        self.col_blocks = nn.ModuleList(
+        self.col_blocks = torch.nn.ModuleList(
             TimestralTransformerBlock(
                 channels=channels,
                 num_heads=num_heads,
