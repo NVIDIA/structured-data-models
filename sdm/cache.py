@@ -187,11 +187,15 @@ class _CachePrefetcher:
         if self._device.type == "cuda":
             assert self._transfer_stream is not None
             self._compute_stream = torch.cuda.current_stream(self._device)
-            with torch.cuda.stream(self._transfer_stream):
-                self._next_cache = self._caches[0].to(
-                    device=self._device,
-                    non_blocking=True,
-                )
+            try:
+                with torch.cuda.stream(self._transfer_stream):
+                    self._next_cache = self._caches[0].to(
+                        device=self._device,
+                        non_blocking=True,
+                    )
+            except BaseException:
+                self._transfer_stream.synchronize()
+                raise
         else:
             self._next_cache = self._caches[0]
         return self

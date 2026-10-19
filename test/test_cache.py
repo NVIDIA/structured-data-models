@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from contextlib import nullcontext
 from typing import cast
+from unittest.mock import Mock
 
 import pytest
 import torch
@@ -72,3 +74,26 @@ def test_cache_prefetcher(device: torch.device) -> None:
 def test_cache_prefetcher_requires_cache() -> None:
     with pytest.raises(ValueError, match="at least one cache"):
         _CachePrefetcher((), torch.device("cpu"), transfer_stream=None)
+
+
+def test_cache_prefetcher_initial_transfer_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream = Mock(spec=torch.cuda.Stream)
+    error = RuntimeError("Cache transfer failed")
+    monkeypatch.setattr(torch.cuda, "current_stream", lambda device: stream)
+    monkeypatch.setattr(torch.cuda, "stream", lambda stream: nullcontext())
+    monkeypatch.setattr(Cache, "to", Mock(side_effect=error))
+
+    with (
+        pytest.raises(RuntimeError, match="Cache transfer failed") as exc,
+        _CachePrefetcher(
+            caches=[Cache()],
+            device=torch.device("cuda"),
+            transfer_stream=stream,
+        ),
+    ):
+        pytest.fail("A failed transfer must prevent entering the body")
+
+    assert exc.value is error
+    stream.synchronize.assert_called()
