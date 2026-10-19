@@ -16,7 +16,7 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 # Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
 pytestmark = [
@@ -312,4 +312,24 @@ def test_induced_transformer_block_compile(
 
     expected = module(query=query, key_value=key_value)
     out = fullgraph(module)(query=query, key_value=key_value)
+    torch.testing.assert_close(out, expected)
+
+
+@onlyCUDA
+def test_transformer_block_compile_batch_beyond_kernel_limit() -> None:
+    # Compiled blocks run without batch chunking; attention must still accept
+    # more than 65,535 batch entries.
+    module = TransformerBlock(
+        channels=16,
+        num_query_heads=2,
+        mlp=torch.nn.Identity(),
+        query_norm=torch.nn.LayerNorm(16, device="cuda", dtype=torch.bfloat16),
+        device="cuda",
+        dtype=torch.bfloat16,
+    )
+    query = torch.randn(2, 35_000, 3, 16, dtype=torch.bfloat16, device="cuda")
+
+    with torch.no_grad():
+        expected = module(query=query, batch_size_limit="auto")
+        out = fullgraph(module)(query=query, batch_size_limit="auto")
     torch.testing.assert_close(out, expected)

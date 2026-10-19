@@ -17,7 +17,7 @@ from sdm.nn import (
     SoftplusScale,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def reference_sdpa(
@@ -270,6 +270,52 @@ def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
     out.sum().backward()
     for tensor in (query, key, value):
         torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
+
+
+@onlyCUDA
+@pytest.mark.parametrize("masking", [None, "attn_mask", "seqused"])
+def test_sdpa_batch_beyond_kernel_limit(masking: str | None) -> None:
+    # CUDA attention kernels accept at most 65,535 batch entries per call.
+    module = SDPA(num_query_heads=2)
+    query = torch.randn(
+        2, 35_000, 3, 2, 8, dtype=torch.bfloat16, device="cuda"
+    )
+    key = torch.randn(2, 35_000, 5, 2, 8, dtype=torch.bfloat16, device="cuda")
+    value = torch.randn_like(key)
+    attn_mask = seqused = None
+    if masking == "attn_mask":
+        attn_mask = torch.rand(2, 35_000, 1, 3, 5, device="cuda") > 0.5
+        attn_mask[..., 0] = True
+    elif masking == "seqused":
+        seqused = torch.randint(
+            1, 6, (2, 35_000), dtype=torch.int32, device="cuda"
+        )
+
+    out = module(
+        query=query,
+        key=key,
+        value=value,
+        seqused_key_value=seqused,
+        attn_mask=attn_mask,
+    )
+    expected = torch.cat(
+        [
+            module(
+                query=query[:, i : i + 5_000],
+                key=key[:, i : i + 5_000],
+                value=value[:, i : i + 5_000],
+                seqused_key_value=None
+                if seqused is None
+                else seqused[:, i : i + 5_000],
+                attn_mask=None
+                if attn_mask is None
+                else attn_mask[:, i : i + 5_000],
+            )
+            for i in range(0, 35_000, 5_000)
+        ],
+        dim=1,
+    )
+    assert torch.equal(out, expected)
 
 
 def test_sdpa_errors() -> None:
