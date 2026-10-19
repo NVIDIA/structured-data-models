@@ -889,11 +889,7 @@ class TableTensor(Tensor):
         return self._id
 
     def items(self) -> Iterator[tuple[Stype, Tensor]]:
-        r"""Yield ``(stype, block)`` pairs for typed column blocks.
-
-        For ``torch.compile`` tracing, use ``TableTensor.items(table)`` so
-        Dynamo traces the Python iterator instead of a tensor operation.
-        """
+        r"""Yield ``(stype, block)`` pairs for typed column blocks."""
         yield Stype.numerical, self._numerical
         yield Stype.categorical, self._categorical
         yield Stype.datetime, self._datetime
