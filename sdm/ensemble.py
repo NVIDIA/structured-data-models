@@ -144,7 +144,9 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
     def _pack_tables(
         tables: Sequence[TableTensor],
     ) -> tuple[tuple[TableTensor, ...], tuple[tuple[int, int], ...]]:
+        compiling = torch.compiler.is_compiling()
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
+        table_groups: list[tuple[tuple[Tensor, ...], list[int]]] = []
         for index, table in enumerate(tables):
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
@@ -164,15 +166,37 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                     for stype, block in TableTensor.items(table)
                 ),
                 table.device,
-                tuple(
+                ()
+                if compiling
+                else tuple(
                     id(category) for category in table.categorical.categories
                 ),
             )
-            compatible_groups.setdefault(compatibility_key, []).append(index)
+            categories = (
+                tuple(
+                    getattr(table.categorical, f"_category_{column}")
+                    for column in range(table.categorical.size(-1))
+                )
+                if compiling
+                else ()
+            )
+            group_ids = compatible_groups.setdefault(compatibility_key, [])
+            for group_id in group_ids:
+                other, indices = table_groups[group_id]
+                # Tracing id() can give the same tensor different IDs.
+                if not compiling or all(
+                    category is other_category
+                    for category, other_category in zip(categories, other)
+                ):
+                    indices.append(index)
+                    break
+            else:
+                group_ids.append(len(table_groups))
+                table_groups.append((categories, [index]))
 
         groups: list[TableTensor] = []
         locations = [(-1, -1)] * len(tables)
-        for indices in compatible_groups.values():
+        for _, indices in table_groups:
             group_index = len(groups)
             groups.append(
                 cast(TableTensor, tables[indices[0]].unsqueeze(0))
