@@ -82,8 +82,8 @@ class DiffusionDenoiser(torch.nn.Module):
         step: Tensor,  # [B] or [1]
         strategy: Tensor,  # [B] or [1]
     ) -> Tensor:  # [B, K, L]
-        x = self.input_projection(x.movedim(1, -1)).relu()  # [B, K, L, C]
-        x = x.movedim(-1, 1)  # [B, C, K, L]
+        x = self.input_projection(x.permute(0, 2, 3, 1)).relu()  # [B, K, L, C]
+        x = x.permute(0, 3, 1, 2)  # [B, C, K, L]
 
         diffusion_embedding = self.diffusion_embedding(step)
         strategy_embedding = self.strategy_embedding(strategy)
@@ -100,7 +100,7 @@ class DiffusionDenoiser(torch.nn.Module):
 
         x = torch.stack(skips).sum(dim=0)  # [B, C, K, L]
         x = x / math.sqrt(len(skips))
-        x = self.norm_after_skip(x.movedim(1, -1))  # [B, K, L, C]
+        x = self.norm_after_skip(x.permute(0, 2, 3, 1))  # [B, K, L, C]
         x = self.output_projection1(x)
         x = self.norm_after_proj1(x).relu()
         return self.output_projection2(x).squeeze(-1)  # [B, K, L]
