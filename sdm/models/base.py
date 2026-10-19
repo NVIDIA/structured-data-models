@@ -528,11 +528,45 @@ class ICLModel(torch.nn.Module, abc.ABC):
             stream.synchronize()
         state = super().__getstate__()
         state.pop("_transfer_streams", None)
+        # Tensor serialization does not preserve pinned CPU allocations.
+        state["_pinned_cache_batches"] = (
+            tuple(
+                index
+                for index in range(cast(int, self._cache["num_batches"]))
+                if cast(Cache, self._cache[index]).is_pinned()
+            )
+            if self._cache is not None
+            else ()
+        )
         return state
 
     def __setstate__(self, state: dict[str, object]) -> None:
+        pinned_batches = cast(
+            tuple[int, ...], state.pop("_pinned_cache_batches", ())
+        )
         super().__setstate__(state)
         self._transfer_streams = {}
+        if not pinned_batches or not torch.cuda.is_available():
+            return
+
+        cache = cast(Cache, self._cache)
+        items: dict[Hashable, object] | None = None
+        for index in pinned_batches:
+            batch = cast(Cache, cache[index])
+            if any(
+                tensor.is_cpu and not tensor.is_pinned()
+                for tensor in batch._tensors()
+            ):
+                if items is None:
+                    set_pinned_max_round_threshold(mb=1)
+                    items = dict(cache.items())
+                items[index] = batch._apply_tensor(
+                    lambda tensor: (
+                        tensor.pin_memory() if tensor.is_cpu else tensor
+                    )
+                )
+        if items is not None:
+            self._cache = Cache(items).freeze()
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
