@@ -270,8 +270,6 @@ class Attention(torch.nn.Module):
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
-        position_index: Tensor | None = None,
-        key_value_position_index: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
     ) -> Tensor: ...
@@ -284,8 +282,6 @@ class Attention(torch.nn.Module):
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
-        position_index: Tensor | None = None,
-        key_value_position_index: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -298,8 +294,6 @@ class Attention(torch.nn.Module):
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
-        position_index: Tensor | None = None,
-        key_value_position_index: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -311,8 +305,6 @@ class Attention(torch.nn.Module):
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
-        position_index: Tensor | None = None,
-        key_value_position_index: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
@@ -333,15 +325,6 @@ class Attention(torch.nn.Module):
                 ``Hq`` is the number of query heads.
                 For boolean masks, entries set to ``True`` participate in
                 attention. Floating-point masks act as additive bias.
-            position_index: Query positions with shape ``[..., Q]``. When
-                supplied, passed as ``position_index`` to ``query_transform``
-                and, for self-attention, also to ``key_transform``. Transforms
-                receiving positions must accept this keyword argument.
-            key_value_position_index: Key positions with shape ``[..., KV]``.
-                Defaults to query positions for self-attention and contiguous
-                positions for cross-attention. Cached keys are already
-                transformed and are not transformed again. Position batch
-                dimensions broadcast with the input batch dimensions.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
@@ -352,9 +335,6 @@ class Attention(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        if key_value is None and key_value_position_index is None:
-            key_value_position_index = position_index
-
         if isinstance(key_value, KVCacheEntry):
             query = F.linear(
                 query,
@@ -396,22 +376,12 @@ class Attention(torch.nn.Module):
             )
 
         if self.query_transform is not None:
-            query = (
-                self.query_transform(query)
-                if position_index is None
-                else self.query_transform(query, position_index=position_index)
-            )
+            query = self.query_transform(query)
         if (
             not isinstance(key_value, KVCacheEntry)
             and self.key_transform is not None
         ):
-            key = (
-                self.key_transform(key)
-                if key_value_position_index is None
-                else self.key_transform(
-                    key, position_index=key_value_position_index
-                )
-            )
+            key = self.key_transform(key)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
@@ -510,8 +480,6 @@ class TransformerBlock(torch.nn.Module):
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
-        position_index: Tensor | None = None,
-        key_value_position_index: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -526,8 +494,6 @@ class TransformerBlock(torch.nn.Module):
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
-        position_index: Tensor | None = None,
-        key_value_position_index: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: Literal[True],
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -542,8 +508,6 @@ class TransformerBlock(torch.nn.Module):
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
         *,
-        position_index: Tensor | None = None,
-        key_value_position_index: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: bool,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -557,8 +521,6 @@ class TransformerBlock(torch.nn.Module):
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
-        position_index: Tensor | None = None,
-        key_value_position_index: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -581,15 +543,6 @@ class TransformerBlock(torch.nn.Module):
                 ``Hq`` is the number of query heads.
                 For boolean masks, entries set to ``True`` participate in
                 attention. Floating-point masks act as additive bias.
-            position_index: Query positions with shape ``[..., Q]``. When
-                supplied, passed as ``position_index`` to ``query_transform``
-                and, for self-attention, also to ``key_transform``. Transforms
-                receiving positions must accept this keyword argument.
-            key_value_position_index: Key positions with shape ``[..., KV]``.
-                Defaults to query positions for self-attention and contiguous
-                positions for cross-attention. Cached keys are already
-                transformed and are not transformed again. Position batch
-                dimensions broadcast with the input batch dimensions.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
@@ -619,8 +572,6 @@ class TransformerBlock(torch.nn.Module):
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
-                position_index=position_index,
-                key_value_position_index=key_value_position_index,
                 is_causal=is_causal,
                 return_key_value=return_key_value,
                 out=out,
@@ -651,8 +602,6 @@ class TransformerBlock(torch.nn.Module):
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
-            position_index=position_index,
-            key_value_position_index=key_value_position_index,
         )
         batch_size = math.prod(batch_shape)
 
@@ -674,8 +623,6 @@ class TransformerBlock(torch.nn.Module):
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
-                position_index=position_index,
-                key_value_position_index=key_value_position_index,
                 is_causal=is_causal,
                 return_key_value=return_key_value,
                 out=out,
@@ -702,12 +649,6 @@ class TransformerBlock(torch.nn.Module):
                     end=end,
                 ),
                 attn_mask=_chunk(attn_mask, batch_shape, 3, start, end),
-                position_index=_chunk(
-                    position_index, batch_shape, 1, start, end
-                ),
-                key_value_position_index=_chunk(
-                    key_value_position_index, batch_shape, 1, start, end
-                ),
                 is_causal=is_causal,
                 return_key_value=return_key_value,
                 out=flat_out[start:end] if flat_out is not None else None,
@@ -768,15 +709,10 @@ class TransformerBlock(torch.nn.Module):
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
-        position_index: Tensor | None = None,
-        key_value_position_index: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: bool = False,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
-
-        if key_value is None and key_value_position_index is None:
-            key_value_position_index = position_index
 
         if self.key_value_norm is None:
             pass
@@ -790,8 +726,6 @@ class TransformerBlock(torch.nn.Module):
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
-            position_index=position_index,
-            key_value_position_index=key_value_position_index,
             is_causal=is_causal,
             return_key_value=return_key_value,
         )
@@ -855,8 +789,6 @@ def _batch_shape(
     key_value: Tensor | KVCacheEntry | None,
     seqused_key_value: Tensor | None,
     attn_mask: Tensor | None,
-    position_index: Tensor | None,
-    key_value_position_index: Tensor | None,
 ) -> torch.Size:
     shapes = [query.size()[:-2]]
     if isinstance(key_value, Tensor):
@@ -867,9 +799,6 @@ def _batch_shape(
         shapes.append(seqused_key_value.size())
     if attn_mask is not None:
         shapes.append(attn_mask.size()[:-3])
-    for positions in (position_index, key_value_position_index):
-        if positions is not None:
-            shapes.append(positions.size()[:-1])
     return torch.broadcast_shapes(*shapes)
 
 
