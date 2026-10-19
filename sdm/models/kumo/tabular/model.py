@@ -200,7 +200,7 @@ class KumoTabular(ICLModel):
             y = y_context.numerical.squeeze(-1)
         else:
             assert cache is not None
-            classes = cast(Tensor | None, cache["classes"])
+            classes = cast("Tensor | None", cache["classes"])
             y = x.new_empty(
                 (*x.size()[:-2], 0),
                 dtype=torch.int64 if classes is not None else x.dtype,
