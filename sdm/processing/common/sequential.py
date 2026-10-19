@@ -12,6 +12,8 @@ from sdm.processing import (
     EnsembleProcessor,
 )
 
+_STYPES = tuple(Stype)
+
 
 class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
     r"""Apply processors and callables to a table in sequence.
@@ -29,7 +31,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
     def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
         if len(self) == 0:
-            return tuple(Stype)
+            return _STYPES
         return self._merge_stypes(self)
 
     def append(self, processor: object) -> Self:

@@ -13,6 +13,8 @@ from sdm.processing import (
     Processor,
 )
 
+_STYPES = tuple(Stype)
+
 
 class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     r"""Apply separate processor pipelines to columns grouped by semantic type.
@@ -176,7 +178,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         return ensemble_table.select_stypes(
             tuple(
-                stype for stype in Stype if str(stype) not in self.processors
+                stype for stype in _STYPES if str(stype) not in self.processors
             )
         )
 
