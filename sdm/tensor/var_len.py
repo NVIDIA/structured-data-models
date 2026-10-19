@@ -492,6 +492,9 @@ class VarLenTensor(Tensor):
 
         start = int(self.storage_offset())
         offset = self._offset[start : start + self.numel() + 1]
+        if self._data.numel() == 0:
+            # An empty payload has only zero offsets, already normalized.
+            return self._data, offset
         data = self._data[offset[0] : offset[-1]]
         if offset.is_cpu and int(offset[0]) == 0:
             return data, offset

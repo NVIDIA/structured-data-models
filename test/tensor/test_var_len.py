@@ -419,6 +419,17 @@ def test_data_offset() -> None:
     assert offset.equal(torch.tensor([0, 1, 2]))
 
     tensor = VarLenTensor(
+        data=torch.empty(0),
+        offset=torch.zeros(5, dtype=torch.int64),
+        valid=None,
+        size=(2,),
+        storage_offset=2,
+    )
+    data, offset = tensor.data_offset
+    assert data.numel() == 0
+    assert offset.equal(torch.tensor([0, 0, 0]))
+
+    tensor = VarLenTensor(
         data=torch.arange(8),
         offset=torch.arange(9),
         valid=None,
