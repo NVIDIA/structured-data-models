@@ -1,8 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
 from collections.abc import Callable
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -14,10 +15,11 @@ from sdm.nn import (
     SDPA,
     Attention,
     QASSMax,
+    RMSNorm,
     SoftplusScale,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def reference_sdpa(
@@ -751,3 +753,116 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+
+
+@onlyCUDA
+@pytest.mark.parametrize("requires_grad", [False, True])
+@pytest.mark.parametrize("hook_kind", ["none", "pre", "post", "global"])
+def test_shared_input_normalization_preserves_module_calls(
+    requires_grad: bool,
+    hook_kind: str,
+) -> None:
+    module = TransformerBlock(
+        channels=64,
+        num_query_heads=4,
+        mlp=None,
+        query_norm=RMSNorm(64, eps=1e-6, device="cuda"),
+        key_value_norm=RMSNorm(64, eps=1e-5, device="cuda"),
+        device="cuda",
+    ).eval()
+    with torch.no_grad():
+        module.attn.out_lin.weight.normal_(std=0.1)
+        for norm in (module.query_norm, module.key_value_norm):
+            assert isinstance(norm, RMSNorm)
+            assert norm.weight is not None
+            norm.weight.uniform_(-2, 2)
+    reference = copy.deepcopy(module)
+    assert reference.query_norm is not None
+    assert reference.key_value_norm is not None
+    reference.query_norm = torch.nn.Sequential(reference.query_norm)
+    reference.key_value_norm = torch.nn.Sequential(reference.key_value_norm)
+    values = torch.randn(2, 34, 64, device="cuda")[:, ::2]
+    handles = []
+    calls = []
+    if hook_kind == "global":
+
+        def global_hook(
+            norm: torch.nn.Module, args: tuple[Tensor, ...], out: Tensor
+        ) -> None:
+            if isinstance(norm, RMSNorm):
+                calls.append(norm)
+
+        handles.append(
+            torch.nn.modules.module.register_module_forward_hook(global_hook)
+        )
+    elif hook_kind != "none":
+        for norm in (module.query_norm, reference.query_norm[0]):
+            assert norm is not None
+            if hook_kind == "pre":
+
+                def pre_hook(
+                    norm: torch.nn.Module, args: tuple[Tensor, ...]
+                ) -> tuple[Tensor, ...]:
+                    calls.append(norm)
+                    return (args[0] + 0.125,)
+
+                handles.append(norm.register_forward_pre_hook(pre_hook))
+            else:
+
+                def post_hook(
+                    norm: torch.nn.Module,
+                    args: tuple[Tensor, ...],
+                    out: Tensor,
+                ) -> Tensor:
+                    calls.append(norm)
+                    return out * 1.125
+
+                handles.append(norm.register_forward_hook(post_hook))
+    try:
+        outputs = []
+        gradients = []
+        with (
+            torch.set_grad_enabled(requires_grad),
+            torch.autocast("cuda", dtype=torch.float16),
+        ):
+            for block in (reference, module):
+                query = values.detach().requires_grad_(requires_grad)
+                output = block(query=query, key_value=query.view_as(query))
+                outputs.append(output.detach())
+                if requires_grad:
+                    gradients.append(
+                        torch.autograd.grad(output.sum(), query)[0]
+                    )
+        assert torch.equal(*outputs)
+        if gradients:
+            torch.testing.assert_close(*gradients)
+        if hook_kind != "none":
+            assert module.query_norm in calls
+        if hook_kind == "global":
+            assert module.key_value_norm in calls
+    finally:
+        for handle in handles:
+            handle.remove()
+
+
+def test_transformer_preserves_custom_tensor_operations() -> None:
+    class QueryTensor(Tensor):
+        @classmethod
+        def __torch_function__(
+            cls,
+            func: Callable[..., Any],
+            types: tuple[type, ...],
+            args: tuple[Any, ...] = (),
+            kwargs: dict[str, Any] | None = None,
+        ) -> Any:
+            if func is Tensor.is_set_to:
+                raise RuntimeError("Query does not support storage comparison")
+            return super().__torch_function__(func, types, args, kwargs or {})
+
+    query = torch.randn(3, 7, 8).as_subclass(QueryTensor)
+    key_value = query.as_subclass(Tensor)
+    module = TransformerBlock(channels=8, num_query_heads=2, mlp=None).eval()
+    with torch.no_grad():
+        output = module(query=query, key_value=key_value)
+    assert isinstance(output, QueryTensor)
+    torch.testing.assert_close(output.as_subclass(Tensor), key_value)

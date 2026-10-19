@@ -14,6 +14,7 @@ from torch.nn import Linear
 from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
+from sdm.nn.rms_norm import _shared_normalization
 
 
 class SDPA(torch.nn.Module):
@@ -111,7 +112,7 @@ class SDPA(torch.nn.Module):
             batch_shapes.append(seqused_key_value.size())
         if attn_mask is not None:
             batch_shapes.append(attn_mask.size()[:-3])
-        batch_shape = torch.broadcast_shapes(*batch_shapes)
+        batch_shape = _broadcast_batch_shapes(batch_shapes)
 
         if self.query_scaling is not None:
             if attn_mask is not None and attn_mask.dtype != torch.bool:
@@ -147,9 +148,9 @@ class SDPA(torch.nn.Module):
                         out = out + tensor[..., :0, :, :].sum()
             return out
 
-        query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
-        key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
-        value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
+        query = _flatten_batch(query, batch_shape)
+        key = _flatten_batch(key, batch_shape)
+        value = _flatten_batch(value, batch_shape)
 
         if attn_mask is not None:
             attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-3:])
@@ -714,15 +715,43 @@ class TransformerBlock(torch.nn.Module):
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
 
-        if self.key_value_norm is None:
-            pass
-        elif key_value is None and self.key_value_norm is not self.query_norm:
-            key_value = self.key_value_norm(query)
-        elif isinstance(key_value, Tensor):
-            key_value = self.key_value_norm(key_value)
+        normalized = None
+        if (
+            type(query) is Tensor
+            and not torch.compiler.is_compiling()
+            and not torch.jit.is_tracing()
+            and not torch.is_grad_enabled()
+            and (
+                key_value is None
+                or (
+                    type(key_value) is Tensor
+                    and key_value.dtype == query.dtype
+                    and key_value.is_set_to(query)
+                )
+            )
+        ):
+            normalized = _shared_normalization(
+                self.query_norm, self.key_value_norm, query
+            )
+        if normalized is not None:
+            query_normalized, key_value = normalized
+        else:
+            if self.key_value_norm is None:
+                pass
+            elif (
+                key_value is None
+                and self.key_value_norm is not self.query_norm
+            ):
+                key_value = self.key_value_norm(query)
+            elif isinstance(key_value, Tensor):
+                key_value = self.key_value_norm(key_value)
+
+            query_normalized = (
+                query if self.query_norm is None else self.query_norm(query)
+            )
 
         result = self.attn(
-            query=query if self.query_norm is None else self.query_norm(query),
+            query=query_normalized,
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
@@ -799,7 +828,30 @@ def _batch_shape(
         shapes.append(seqused_key_value.size())
     if attn_mask is not None:
         shapes.append(attn_mask.size()[:-3])
+    return _broadcast_batch_shapes(shapes)
+
+
+def _broadcast_batch_shapes(shapes: list[torch.Size]) -> torch.Size:
+    if (
+        not torch.compiler.is_compiling()
+        and not torch.jit.is_tracing()
+        and all(shape == shapes[0] for shape in shapes[1:])
+    ):
+        return shapes[0]
     return torch.broadcast_shapes(*shapes)
+
+
+def _flatten_batch(tensor: Tensor, batch_shape: torch.Size) -> Tensor:
+    size = tensor.size()
+    if (
+        type(tensor) is Tensor
+        and len(size) == 4
+        and size[:-3] == batch_shape
+        and not torch.compiler.is_compiling()
+        and not torch.jit.is_tracing()
+    ):
+        return tensor
+    return tensor.expand(batch_shape + size[-3:]).reshape(-1, *size[-3:])
 
 
 @overload

@@ -23,6 +23,48 @@ else:
     _triton_rmsnorm_cast = _triton_rmsnorm_cast_impl
 
 
+_RMSNormPair: TypeAlias = Callable[
+    [Tensor, Tensor | None, Tensor | None, float, float], tuple[Tensor, Tensor]
+]
+_triton_rmsnorm_pair: _RMSNormPair | None = None
+try:
+    from sdm._kernels.triton.rmsnorm_pair import rmsnorm_pair as _pair_impl
+except ImportError:
+    pass
+else:
+    _triton_rmsnorm_pair = _pair_impl
+
+
+def _rmsnorm_pair(
+    x: Tensor,
+    first_weight: Tensor | None,
+    second_weight: Tensor | None,
+    first_eps: float,
+    second_eps: float,
+) -> tuple[Tensor, Tensor] | None:
+    if (
+        _triton_rmsnorm_pair is not None
+        and type(x) is Tensor
+        and x.is_cuda
+        and x.dtype in {torch.float16, torch.bfloat16, torch.float32}
+        and x.size(-1) in {32, 64, 128, 256, 512}
+        and x.numel() > 0
+        and all(
+            weight is None
+            or (
+                weight.dtype in {torch.float16, torch.bfloat16, torch.float32}
+                and weight.device == x.device
+                and weight.shape == x.shape[-1:]
+            )
+            for weight in (first_weight, second_weight)
+        )
+    ):
+        return _triton_rmsnorm_pair(
+            x, first_weight, second_weight, first_eps, second_eps
+        )
+    return None
+
+
 def rmsnorm_cast(
     x: Tensor,
     weight: Tensor | None,

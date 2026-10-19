@@ -3,8 +3,10 @@
 
 import torch
 from torch import Tensor
+from torch.nn.modules import module as module_hooks
 
 from sdm._kernels import rmsnorm_cast
+from sdm._kernels.rmsnorm_cast import _rmsnorm_pair
 from sdm.nn.rope import RotaryEmbedding
 
 
@@ -57,3 +59,48 @@ class RMSNorm(torch.nn.RMSNorm):
             )
             return rmsnorm_cast(x, self.weight, eps, rope=cos_sin)
         return super().forward(x if rope is None else rope(x))
+
+
+def _shared_normalization(
+    first: torch.nn.Module | None,
+    second: torch.nn.Module | None,
+    x: Tensor,
+) -> tuple[Tensor, Tensor] | None:
+    if (
+        torch.compiler.is_compiling()
+        or torch.jit.is_tracing()
+        or torch.is_grad_enabled()
+        or not torch.is_autocast_enabled("cuda")
+        or type(first) is not RMSNorm
+        or type(second) is not RMSNorm
+        or first is second
+        or first.normalized_shape != x.shape[-1:]
+        or second.normalized_shape != x.shape[-1:]
+    ):
+        return None
+    # Module hooks and customized calls retain the ordinary module path.
+    if (
+        module_hooks._global_forward_hooks
+        or module_hooks._global_forward_pre_hooks
+        or module_hooks._global_backward_hooks
+        or module_hooks._global_backward_pre_hooks
+        or any(
+            norm._forward_hooks
+            or norm._forward_pre_hooks
+            or norm._backward_hooks
+            or norm._backward_pre_hooks
+            or norm._compiled_call_impl is not None
+            or "forward" in norm.__dict__
+            for norm in (first, second)
+        )
+    ):
+        return None
+    return _rmsnorm_pair(
+        x,
+        first.weight,
+        second.weight,
+        first.eps if first.eps is not None else torch.finfo(torch.float32).eps,
+        second.eps
+        if second.eps is not None
+        else torch.finfo(torch.float32).eps,
+    )

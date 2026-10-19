@@ -7,7 +7,7 @@ import pytest
 import torch
 
 from sdm.nn import RMSNorm, RotaryEmbedding
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 @withCUDA
@@ -68,6 +68,41 @@ def test_rms_norm(
     ):
         expected = expected.to(torch.bfloat16)
 
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@onlyCUDA
+@pytest.mark.parametrize("channels", [32, 64, 128, 256, 512])
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32]
+)
+@pytest.mark.parametrize(
+    "layout", ["vector", "transposed", "row_gap", "broadcast", "nested"]
+)
+def test_rms_norm_preserves_values_across_layouts(
+    channels: int,
+    dtype: torch.dtype,
+    layout: Literal["vector", "transposed", "row_gap", "broadcast", "nested"],
+) -> None:
+    if layout == "vector":
+        x = torch.randn(2 * channels, dtype=dtype, device="cuda")[::2]
+    elif layout == "transposed":
+        x = torch.randn(channels, 19, dtype=dtype, device="cuda").T
+    elif layout == "row_gap":
+        x = torch.randn(13, 2, channels, dtype=dtype, device="cuda")[:, 0]
+    elif layout == "nested":
+        x = torch.randn(2, 3, 5, 7, 2 * channels, dtype=dtype, device="cuda")
+        x = x[..., ::2]
+    else:
+        assert layout == "broadcast"
+        x = torch.randn(1, channels, dtype=dtype, device="cuda").expand(23, -1)
+    norm = RMSNorm(channels, eps=1e-5, device="cuda")
+    assert norm.weight is not None
+    output_dtype = torch.bfloat16 if dtype == torch.float32 else dtype
+    with torch.inference_mode(), torch.autocast("cuda", dtype=output_dtype):
+        norm.weight.uniform_(-2, 2)
+        expected = norm(x.contiguous())
+        actual = norm(x)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
