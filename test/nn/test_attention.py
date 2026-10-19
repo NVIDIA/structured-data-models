@@ -751,3 +751,76 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+
+
+@withCUDA
+@pytest.mark.parametrize("block", [False, True])
+@pytest.mark.parametrize("cross_attention", [False, True])
+@pytest.mark.parametrize("gate_channels", [1, 8])
+def test_attention_gate(
+    device: torch.device,
+    block: bool,
+    cross_attention: bool,
+    gate_channels: int,
+) -> None:
+    gate = torch.nn.Sequential(
+        torch.nn.Linear(8, gate_channels, device=device),
+        torch.nn.Sigmoid(),
+    )
+    norm = torch.nn.LayerNorm(8, device=device)
+    if block:
+        module = TransformerBlock(
+            channels=8,
+            num_query_heads=2,
+            mlp=None,
+            query_norm=norm,
+            gate=gate,
+            device=device,
+        )
+        attn = module.attn
+    else:
+        module = attn = Attention(
+            channels=8,
+            num_query_heads=2,
+            gate=gate,
+            device=device,
+        )
+    # Non-diagonal weights and nonzero bias distinguish gating before the
+    # output projection from gating after it.
+    with torch.no_grad():
+        attn.out_lin.weight.normal_()
+        attn.out_lin.bias.normal_()
+    query = torch.randn(3, 4, 8, device=device, requires_grad=True)
+    key_value = (
+        torch.randn(1, 5, 8, device=device) if cross_attention else None
+    )
+    inputs = norm(query) if block else query
+    q, k, v = attn.qkv_lin(inputs).chunk(3, dim=-1)
+    if key_value is not None:
+        _, k, v = attn.qkv_lin(key_value).chunk(3, dim=-1)
+    attended = reference_sdpa(
+        query=q.unflatten(-1, (2, 4)),
+        key=k.unflatten(-1, (2, 4)),
+        value=v.unflatten(-1, (2, 4)),
+    ).flatten(-2)
+    expected = attn.out_lin(attended * gate(inputs))
+    if block:
+        expected = expected + query
+    actual, cached = module(
+        query=query, key_value=key_value, return_key_value=True
+    )
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(module(query=query, key_value=cached), expected)
+    parameters = (query, *gate.parameters())
+    for actual_grad, expected_grad in zip(
+        torch.autograd.grad(actual.sum(), parameters),
+        torch.autograd.grad(expected.sum(), parameters),
+    ):
+        torch.testing.assert_close(actual_grad, expected_grad)
+
+    if block:
+        with torch.no_grad():
+            chunked = module(
+                query=query, key_value=key_value, batch_size_limit=1
+            )
+        torch.testing.assert_close(chunked, expected)

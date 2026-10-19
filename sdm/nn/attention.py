@@ -210,6 +210,10 @@ class Attention(torch.nn.Module):
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
+        gate: Optional module applied to unprojected query inputs with
+            shape ``[..., Q, channels]``. Its output must broadcast to this
+            shape and multiplies the concatenated attention heads before the
+            output projection.
     """
 
     def __init__(
@@ -225,6 +229,7 @@ class Attention(torch.nn.Module):
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        gate: torch.nn.Module | None = None,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -249,6 +254,7 @@ class Attention(torch.nn.Module):
         )
         self.query_transform = query_transform
         self.key_transform = key_transform
+        self.gate = gate
         self.sdpa = SDPA(
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
@@ -347,6 +353,8 @@ class Attention(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
+        gate = self.gate(query) if self.gate is not None else None
+
         if key_value is None and key_pos is None:
             key_pos = query_pos
 
@@ -415,6 +423,8 @@ class Attention(torch.nn.Module):
         )  # [..., Q, Hq, C // Hq]
 
         out = out.flatten(-2, -1)  # [..., Q, C]
+        if gate is not None:
+            out = out * gate
         out = self.out_lin(out)  # [..., Q, C]
         if return_key_value:
             # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
@@ -453,6 +463,10 @@ class TransformerBlock(torch.nn.Module):
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
+        gate: Optional module applied to query inputs after
+            ``query_norm``, with shape ``[..., Q, channels]``. Its output must
+            broadcast to this shape and multiplies the concatenated attention
+            heads before the output projection.
     """
 
     def __init__(
@@ -472,6 +486,7 @@ class TransformerBlock(torch.nn.Module):
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        gate: torch.nn.Module | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
@@ -487,6 +502,7 @@ class TransformerBlock(torch.nn.Module):
             num_key_value_heads=num_key_value_heads,
             query_transform=query_transform,
             key_transform=key_transform,
+            gate=gate,
             query_scaling=query_scaling,
             scale=scale,
             dropout=dropout,
