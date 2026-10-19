@@ -201,16 +201,11 @@ class TableTensor(Tensor):
         dict[Callable[..., Any], Callable[..., Any]]
     ] = {}
 
-    numerical: Tensor
-    """The numerical column block."""
-    categorical: CategoricalTensor
-    """The categorical column block."""
-    datetime: Tensor
-    """The datetime column block."""
-    text: StringTensor
-    """The text column block."""
-    id: ColumnarTensor
-    """The identifier column block."""
+    _numerical: Tensor
+    _categorical: CategoricalTensor
+    _datetime: Tensor
+    _text: StringTensor
+    _id: ColumnarTensor
     _columns: dict[Stype, tuple[str, ...]]
     _column_to_loc: dict[str, tuple[Stype, int]]
 
@@ -350,11 +345,11 @@ class TableTensor(Tensor):
             requires_grad=False,
         )
 
-        object.__setattr__(out, "numerical", numerical)
-        object.__setattr__(out, "categorical", categorical)
-        object.__setattr__(out, "datetime", datetime)
-        object.__setattr__(out, "text", text)
-        object.__setattr__(out, "id", id)
+        out._numerical = numerical
+        out._categorical = categorical
+        out._datetime = datetime
+        out._text = text
+        out._id = id
         out._columns = columns
         out._column_to_loc = column_to_loc
 
@@ -868,13 +863,38 @@ class TableTensor(Tensor):
             stype for stype, tensor in self.items() if tensor.size(-1) > 0
         )
 
+    @property
+    def numerical(self) -> Tensor:
+        r"""Return the numerical column block."""
+        return self._numerical
+
+    @property
+    def categorical(self) -> CategoricalTensor:
+        r"""Return the categorical column block."""
+        return self._categorical
+
+    @property
+    def datetime(self) -> Tensor:
+        r"""Return the datetime column block."""
+        return self._datetime
+
+    @property
+    def text(self) -> StringTensor:
+        r"""Return the text column block."""
+        return self._text
+
+    @property
+    def id(self) -> ColumnarTensor:
+        r"""Return the identifier column block."""
+        return self._id
+
     def items(self) -> Iterator[tuple[Stype, Tensor]]:
         r"""Yield ``(stype, block)`` pairs for typed column blocks."""
-        yield Stype.numerical, self.numerical
-        yield Stype.categorical, self.categorical
-        yield Stype.datetime, self.datetime
-        yield Stype.text, self.text
-        yield Stype.id, self.id
+        yield Stype.numerical, self._numerical
+        yield Stype.categorical, self._categorical
+        yield Stype.datetime, self._datetime
+        yield Stype.text, self._text
+        yield Stype.id, self._id
 
     @property
     def blocks(self) -> Mapping[Stype, Tensor]:
@@ -1063,26 +1083,12 @@ class TableTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name in ("numerical", "categorical", "datetime", "text", "id"):
-            raise AttributeError(
-                f"property {name!r} of {type(self).__name__!r} "
-                "object has no setter"
-            )
-        super().__setattr__(name, value)
-
-    def __delattr__(self, name: str) -> None:
-        if name in ("numerical", "categorical", "datetime", "text", "id"):
-            raise AttributeError(
-                f"property {name!r} of {type(self).__name__!r} "
-                "object has no deleter"
-            )
-        super().__delattr__(name)
-
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ["numerical", "categorical", "datetime", "text"]
         if self.id.size(-1) > 0:
             attrs.append("id")
+        # Let torch.compile track backing fields and their public properties.
+        attrs = [f"_{name}" for name in attrs] + attrs
         columns = tuple(
             (str(stype), names) for stype, names in self._columns.items()
         )
@@ -1111,11 +1117,11 @@ class TableTensor(Tensor):
         args = (
             tuple(self.size()[:-1]),
             self._columns,
-            self.numerical,
-            self.categorical,
-            self.datetime,
-            self.text,
-            self.id,
+            self._numerical,
+            self._categorical,
+            self._datetime,
+            self._text,
+            self._id,
         )
         return (self.__class__, args)
 
