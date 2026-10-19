@@ -25,9 +25,7 @@ class SinusoidalEmbedding(torch.nn.Module):
         Args:
             x: Tensor with shape ``[..., S, C]``, where ``S`` is the sequence
                 length and ``C`` is the number of channels.
-            pos: Positions with shape ``[..., S]``, broadcastable
-                with the batch dimensions of ``x``. Defaults to contiguous
-                positions starting at zero.
+            pos: Optional position indices with shape ``[..., S]``.
         """
         *_, S, C = x.size()
         if pos is None:
@@ -35,7 +33,7 @@ class SinusoidalEmbedding(torch.nn.Module):
         pos = pos.float().unsqueeze(-1)
         freq = torch.arange(0, C, 2, device=x.device, dtype=torch.float32)
         freq = (freq * (-math.log(self.theta) / C)).exp()
-        angle = pos * freq  # [..., S, ceil(C / 2)]
+        angle = pos * freq  # [..., S, C // 2]
         embedding = torch.stack([angle.sin(), angle.cos()], dim=-1)
         embedding = embedding.flatten(-2)[..., :C]  # [..., S, C]
         return x + embedding.to(x.dtype)

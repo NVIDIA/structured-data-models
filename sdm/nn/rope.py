@@ -74,9 +74,7 @@ class RotaryEmbedding(torch.nn.Module):
             x: Tensor with shape ``[..., S, H, C]``.
                 ``S`` is the query sequence length, ``H`` is the number of
                 attention heads, and ``C`` is the channels per head.
-            pos: Positions with shape ``[..., S]``, broadcastable
-                with the batch dimensions of ``x``. Defaults to contiguous
-                positions starting at zero.
+            pos: Optional position indices with shape ``[..., S]``.
 
         Returns:
             Tensor with shape ``[..., S, H, C]``.
@@ -87,9 +85,11 @@ class RotaryEmbedding(torch.nn.Module):
             )
         if pos is None:
             pos = torch.arange(
-                x.size(-3), device=x.device, dtype=torch.float32
+                x.size(-3),
+                device=x.device,
+                dtype=torch.float32,
             )
-        freq = pos.float().unsqueeze(-1) * self.inv_freq
+        freq = pos.float().unsqueeze(-1) * self.inv_freq  # [..., S, C // 2]
         sin = freq.sin().unsqueeze(-2).to(x.dtype)  # [..., S, 1, C // 2]
         cos = freq.cos().unsqueeze(-2).to(x.dtype)  # [..., S, 1, C // 2]
 
