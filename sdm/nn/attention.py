@@ -269,9 +269,9 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        *,
         query_pos: Tensor | None = None,
         key_value_pos: Tensor | None = None,
+        *,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
     ) -> Tensor: ...
@@ -283,9 +283,9 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        *,
         query_pos: Tensor | None = None,
         key_value_pos: Tensor | None = None,
+        *,
         is_causal: bool = False,
         return_key_value: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -297,9 +297,9 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        *,
         query_pos: Tensor | None = None,
         key_value_pos: Tensor | None = None,
+        *,
         is_causal: bool = False,
         return_key_value: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -310,9 +310,9 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
-        *,
         query_pos: Tensor | None = None,
         key_value_pos: Tensor | None = None,
+        *,
         is_causal: bool = False,
         return_key_value: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
@@ -333,15 +333,10 @@ class Attention(torch.nn.Module):
                 ``Hq`` is the number of query heads.
                 For boolean masks, entries set to ``True`` participate in
                 attention. Floating-point masks act as additive bias.
-            query_pos: Query positions with shape ``[..., Q]``. When
-                supplied, passed as ``pos`` to ``query_transform``
-                and, for self-attention, also to ``key_transform``. Transforms
-                receiving positions must accept this keyword argument.
-            key_value_pos: Key positions with shape ``[..., KV]``.
-                Defaults to ``query_pos`` for self-attention. When omitted for
-                cross-attention, ``key_transform`` is called without ``pos``.
-                Ignored for cached keys, which are already transformed.
-                Position batch dimensions broadcast with the inputs.
+            query_pos: Query positions with shape ``[..., Q]`` passed to
+                ``query_transform``.
+            key_value_pos: Key positions with shape ``[..., KV]`` passed to
+                ``key_transform``.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
@@ -396,20 +391,19 @@ class Attention(torch.nn.Module):
             )
 
         if self.query_transform is not None:
-            query = (
-                self.query_transform(query)
-                if query_pos is None
-                else self.query_transform(query, pos=query_pos)
-            )
+            if query_pos is None:
+                query = self.query_transform(query)
+            else:
+                query = self.query_transform(query, pos=query_pos)
+
         if (
             not isinstance(key_value, KVCacheEntry)
             and self.key_transform is not None
         ):
-            key = (
-                self.key_transform(key)
-                if key_value_pos is None
-                else self.key_transform(key, pos=key_value_pos)
-            )
+            if key_value_pos is None:
+                key = self.key_transform(key)
+            else:
+                key = self.key_transform(key, pos=key_value_pos)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
@@ -507,9 +501,9 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        *,
         query_pos: Tensor | None = None,
         key_value_pos: Tensor | None = None,
+        *,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -523,9 +517,9 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        *,
         query_pos: Tensor | None = None,
         key_value_pos: Tensor | None = None,
+        *,
         is_causal: bool = False,
         return_key_value: Literal[True],
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -539,9 +533,9 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        *,
         query_pos: Tensor | None = None,
         key_value_pos: Tensor | None = None,
+        *,
         is_causal: bool = False,
         return_key_value: bool,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -554,9 +548,9 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
-        *,
         query_pos: Tensor | None = None,
         key_value_pos: Tensor | None = None,
+        *,
         is_causal: bool = False,
         return_key_value: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -579,15 +573,10 @@ class TransformerBlock(torch.nn.Module):
                 ``Hq`` is the number of query heads.
                 For boolean masks, entries set to ``True`` participate in
                 attention. Floating-point masks act as additive bias.
-            query_pos: Query positions with shape ``[..., Q]``. When
-                supplied, passed as ``pos`` to ``query_transform``
-                and, for self-attention, also to ``key_transform``. Transforms
-                receiving positions must accept this keyword argument.
-            key_value_pos: Key positions with shape ``[..., KV]``.
-                Defaults to ``query_pos`` for self-attention. When omitted for
-                cross-attention, ``key_transform`` is called without ``pos``.
-                Ignored for cached keys, which are already transformed.
-                Position batch dimensions broadcast with the inputs.
+            query_pos: Query positions with shape ``[..., Q]`` passed to
+                ``query_transform``.
+            key_value_pos: Key positions with shape ``[..., KV]`` passed to
+                ``key_transform``.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
@@ -766,9 +755,9 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
-        *,
         query_pos: Tensor | None = None,
         key_value_pos: Tensor | None = None,
+        *,
         is_causal: bool = False,
         return_key_value: bool = False,
         out: Tensor | None = None,

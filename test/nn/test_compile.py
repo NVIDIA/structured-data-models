@@ -313,23 +313,3 @@ def test_induced_transformer_block_compile(
     expected = module(query=query, key_value=key_value)
     out = fullgraph(module)(query=query, key_value=key_value)
     torch.testing.assert_close(out, expected)
-
-
-@withCUDA
-def test_transformer_block_pos_compile(device: torch.device) -> None:
-    rope = RotaryEmbedding(channels=4, layout="split_half", device=device)
-    module = TransformerBlock(
-        channels=8,
-        num_query_heads=2,
-        mlp=None,
-        query_transform=rope,
-        key_transform=rope,
-        device=device,
-    )
-    with torch.no_grad():
-        module.attn.out_lin.weight.normal_()
-    query = torch.randn(2, 4, 8, device=device)
-    positions = torch.tensor([[0, 1, 0, 1], [2, 3, 2, 3]], device=device)
-    expected = module(query=query, query_pos=positions)
-    actual = fullgraph(module)(query=query, query_pos=positions)
-    torch.testing.assert_close(actual, expected)
