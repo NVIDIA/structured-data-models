@@ -62,6 +62,14 @@ def test_init() -> None:
         "segment": (Stype.categorical, 1),
     }
 
+    for stype, block in tensor.items():
+        name = str(stype)
+        with pytest.raises(AttributeError):
+            setattr(tensor, name, block)
+        with pytest.raises(AttributeError):
+            delattr(tensor, name)
+        assert getattr(tensor, name) is block
+
     with pytest.raises(ValueError, match=r"datetime.*dtype"):
         TableTensor(
             columns={"datetime": ["created_at"]},
