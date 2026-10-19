@@ -757,7 +757,7 @@ def test_transformer_block_kv_cache() -> None:
 @withCUDA
 @pytest.mark.parametrize("cross_attention", [False, True])
 @pytest.mark.parametrize("block", [False, True])
-def test_attention_position_index(
+def test_attention_query_pos(
     device: torch.device, cross_attention: bool, block: bool
 ) -> None:
     rope = RotaryEmbedding(channels=4, layout="split_half", device=device)
@@ -800,12 +800,10 @@ def test_attention_position_index(
     )
     keys = query if key_value is None else key_value
     expected = reference_sdpa(
-        query=rope(query.unsqueeze(-2), position_index=positions),
+        query=rope(query.unsqueeze(-2), pos=positions),
         key=rope(
             keys.unsqueeze(-2),
-            position_index=positions
-            if key_positions is None
-            else key_positions,
+            pos=positions if key_positions is None else key_positions,
         ),
         value=keys.unsqueeze(-2),
     ).squeeze(-2)
@@ -815,15 +813,13 @@ def test_attention_position_index(
     actual, cached = module(
         query=query,
         key_value=key_value,
-        position_index=positions,
-        key_value_position_index=key_positions,
+        query_pos=positions,
+        key_value_pos=key_positions,
         return_key_value=True,
     )
     torch.testing.assert_close(actual, expected)
     # Cached keys have already received RoPE and must not be rotated again.
-    cached_out = module(
-        query=query, key_value=cached, position_index=positions
-    )
+    cached_out = module(query=query, key_value=cached, query_pos=positions)
     torch.testing.assert_close(cached_out, expected)
 
     if block:
@@ -831,13 +827,13 @@ def test_attention_position_index(
             chunked = module(
                 query=query,
                 key_value=key_value,
-                position_index=positions,
-                key_value_position_index=key_positions,
+                query_pos=positions,
+                key_value_pos=key_positions,
                 batch_size_limit=2,
             )
         torch.testing.assert_close(chunked, expected)
 
     contiguous = torch.arange(query.size(-2), device=device)
     torch.testing.assert_close(
-        module(query=query), module(query=query, position_index=contiguous)
+        module(query=query), module(query=query, query_pos=contiguous)
     )

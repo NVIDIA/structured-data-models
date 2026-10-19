@@ -317,7 +317,7 @@ def test_induced_transformer_block_compile(
 
 @withCUDA
 @pytest.mark.parametrize("block", [False, True])
-def test_attention_position_index_compile(
+def test_attention_query_pos_compile(
     device: torch.device, block: bool
 ) -> None:
     rope = RotaryEmbedding(channels=4, layout="split_half", device=device)
@@ -343,6 +343,6 @@ def test_attention_position_index_compile(
         attn.out_lin.weight.normal_()
     query = torch.randn(2, 4, 8, device=device)
     positions = torch.tensor([[0, 1, 0, 1], [2, 3, 2, 3]], device=device)
-    expected = module(query=query, position_index=positions)
-    actual = fullgraph(module)(query=query, position_index=positions)
+    expected = module(query=query, query_pos=positions)
+    actual = fullgraph(module)(query=query, query_pos=positions)
     torch.testing.assert_close(actual, expected)

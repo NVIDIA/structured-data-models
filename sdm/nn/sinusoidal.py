@@ -19,24 +19,20 @@ class SinusoidalEmbedding(torch.nn.Module):
         super().__init__()
         self.theta = theta
 
-    def forward(
-        self, x: Tensor, position_index: Tensor | None = None
-    ) -> Tensor:
+    def forward(self, x: Tensor, pos: Tensor | None = None) -> Tensor:
         """The forward pass.
 
         Args:
             x: Tensor with shape ``[..., S, C]``, where ``S`` is the sequence
                 length and ``C`` is the number of channels.
-            position_index: Positions with shape ``[..., S]``, broadcastable
+            pos: Positions with shape ``[..., S]``, broadcastable
                 with the batch dimensions of ``x``. Defaults to contiguous
                 positions starting at zero.
         """
         *_, S, C = x.size()
-        if position_index is None:
-            position_index = torch.arange(
-                S, device=x.device, dtype=torch.float32
-            )
-        pos = position_index.float().unsqueeze(-1)
+        if pos is None:
+            pos = torch.arange(S, device=x.device, dtype=torch.float32)
+        pos = pos.float().unsqueeze(-1)
         freq = torch.arange(0, C, 2, device=x.device, dtype=torch.float32)
         freq = (freq * (-math.log(self.theta) / C)).exp()
         angle = pos * freq  # [..., S, ceil(C / 2)]

@@ -31,7 +31,7 @@ def test_sinusoidal_embedding(device: torch.device) -> None:
 @pytest.mark.parametrize("channels", [3, 4])
 @pytest.mark.parametrize("batched_positions", [False, True])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
-def test_sinusoidal_embedding_position_index(
+def test_sinusoidal_embedding_pos(
     device: torch.device,
     channels: int,
     batched_positions: bool,
@@ -50,11 +50,11 @@ def test_sinusoidal_embedding_position_index(
         )
     expected = x + torch.stack(expected_channels, dim=-1).to(dtype)
 
-    actual = module(x, position_index=positions)
+    actual = module(x, pos=positions)
     assert actual.dtype == dtype
     assert actual.device == device
     torch.testing.assert_close(actual, expected)
     torch.testing.assert_close(
         module(x),
-        module(x, position_index=torch.arange(x.size(-2), device=device)),
+        module(x, pos=torch.arange(x.size(-2), device=device)),
     )
