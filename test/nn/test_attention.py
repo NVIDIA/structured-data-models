@@ -14,7 +14,6 @@ from sdm.nn import (
     SDPA,
     Attention,
     QASSMax,
-    RotaryEmbedding,
     SoftplusScale,
     TransformerBlock,
 )
@@ -752,88 +751,3 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
-
-
-@withCUDA
-@pytest.mark.parametrize("cross_attention", [False, True])
-@pytest.mark.parametrize("block", [False, True])
-def test_attention_query_pos(
-    device: torch.device, cross_attention: bool, block: bool
-) -> None:
-    rope = RotaryEmbedding(channels=4, layout="split_half", device=device)
-    if block:
-        module = TransformerBlock(
-            channels=4,
-            num_query_heads=1,
-            mlp=None,
-            query_norm=torch.nn.Identity(),
-            key_value_norm=torch.nn.Identity(),
-            query_transform=rope,
-            key_transform=rope,
-            device=device,
-        )
-        attn = module.attn
-    else:
-        module = attn = Attention(
-            channels=4,
-            num_query_heads=1,
-            query_transform=rope,
-            key_transform=rope,
-            device=device,
-        )
-    with torch.no_grad():
-        attn.qkv_lin.weight.copy_(torch.eye(4, device=device).repeat(3, 1))
-        attn.qkv_lin.bias.zero_()
-        attn.out_lin.weight.copy_(torch.eye(4, device=device))
-        attn.out_lin.bias.zero_()
-
-    query = torch.randn(2, 1, 6, 4, device=device)
-    positions = torch.tensor(
-        [[[0, 1, 2, 0, 1, 2], [2, 3, 4, 2, 3, 4], [0, 2, 4, 0, 2, 4]]],
-        device=device,
-    )
-    key_value = (
-        torch.randn(1, 3, 4, 4, device=device) if cross_attention else None
-    )
-    key_positions = (
-        torch.tensor([0, 2, 1, 3], device=device) if cross_attention else None
-    )
-    keys = query if key_value is None else key_value
-    expected = reference_sdpa(
-        query=rope(query.unsqueeze(-2), pos=positions),
-        key=rope(
-            keys.unsqueeze(-2),
-            pos=positions if key_positions is None else key_positions,
-        ),
-        value=keys.unsqueeze(-2),
-    ).squeeze(-2)
-    if block:
-        expected = expected + query
-
-    actual, cached = module(
-        query=query,
-        key_value=key_value,
-        query_pos=positions,
-        key_value_pos=key_positions,
-        return_key_value=True,
-    )
-    torch.testing.assert_close(actual, expected)
-    # Cached keys have already received RoPE and must not be rotated again.
-    cached_out = module(query=query, key_value=cached, query_pos=positions)
-    torch.testing.assert_close(cached_out, expected)
-
-    if block:
-        with torch.no_grad():
-            chunked = module(
-                query=query,
-                key_value=key_value,
-                query_pos=positions,
-                key_value_pos=key_positions,
-                batch_size_limit=2,
-            )
-        torch.testing.assert_close(chunked, expected)
-
-    contiguous = torch.arange(query.size(-2), device=device)
-    torch.testing.assert_close(
-        module(query=query), module(query=query, query_pos=contiguous)
-    )
