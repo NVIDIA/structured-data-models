@@ -203,6 +203,7 @@ class Attention(torch.nn.Module):
             scaled dot-product attention.
         query_scaling: Query scaling module to scale projected query heads
             before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
+        gate: Multiplicative output gate computed from unprojected queries.
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
@@ -210,10 +211,6 @@ class Attention(torch.nn.Module):
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
-        gate: Optional module applied to unprojected query inputs with
-            shape ``[..., Q, channels]``. Its output must broadcast to this
-            shape and multiplies the concatenated attention heads before the
-            output projection.
     """
 
     def __init__(
@@ -224,12 +221,12 @@ class Attention(torch.nn.Module):
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
+        gate: torch.nn.Module | None = None,
         scale: float | None = None,
         dropout: float = 0.0,
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        gate: torch.nn.Module | None = None,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -254,7 +251,6 @@ class Attention(torch.nn.Module):
         )
         self.query_transform = query_transform
         self.key_transform = key_transform
-        self.gate = gate
         self.sdpa = SDPA(
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
@@ -262,6 +258,7 @@ class Attention(torch.nn.Module):
             scale=scale,
             dropout=dropout,
         )
+        self.gate = gate
         self.out_lin = Linear(channels, channels, bias=bias, **factory_kwargs)
 
         torch.nn.init.zeros_(self.out_lin.weight)
@@ -456,6 +453,7 @@ class TransformerBlock(torch.nn.Module):
             scaled dot-product attention.
         query_scaling: Query scaling module to scale projected query heads
             before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
+        gate: Multiplicative output gate computed from unprojected queries.
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
@@ -463,10 +461,6 @@ class TransformerBlock(torch.nn.Module):
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
-        gate: Optional module applied to query inputs after
-            ``query_norm``, with shape ``[..., Q, channels]``. Its output must
-            broadcast to this shape and multiplies the concatenated attention
-            heads before the output projection.
     """
 
     def __init__(
@@ -481,12 +475,12 @@ class TransformerBlock(torch.nn.Module):
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
+        gate: torch.nn.Module | None = None,
         scale: float | None = None,
         dropout: float = 0.0,
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        gate: torch.nn.Module | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
@@ -502,8 +496,8 @@ class TransformerBlock(torch.nn.Module):
             num_key_value_heads=num_key_value_heads,
             query_transform=query_transform,
             key_transform=key_transform,
-            gate=gate,
             query_scaling=query_scaling,
+            gate=gate,
             scale=scale,
             dropout=dropout,
             bias=bias,
