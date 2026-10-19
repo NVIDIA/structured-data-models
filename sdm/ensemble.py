@@ -13,7 +13,6 @@ from torch import Tensor
 from sdm import Stype, StypeLike
 from sdm.tensor import TableTensor
 from sdm.tensor.mixin import DeviceMixin
-from sdm.tensor.table import _iter_blocks
 
 T = TypeVar("T")
 
@@ -162,7 +161,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                         block.layout,
                         block.dtype,
                     )
-                    for stype, block in _iter_blocks(table)
+                    for stype, block in TableTensor.items(table)
                 ),
                 table.device,
                 tuple(

@@ -29,7 +29,7 @@ from sdm.processing.execution import (
     RecipeExecution,
 )
 from sdm.relational.task import RelatedTablesSchema
-from sdm.tensor.table import TableSchema, _iter_blocks
+from sdm.tensor.table import TableSchema
 
 
 class ICLModel(torch.nn.Module, abc.ABC):
@@ -871,7 +871,7 @@ def _stack(tables: Sequence[TableTensor]) -> TableTensor:
     renamed: list[Tensor] = [
         ref,
         *(
-            table.__class__(columns=columns, **dict(_iter_blocks(table)))
+            table.__class__(columns=columns, **dict(TableTensor.items(table)))
             for table in tables[1:]
         ),
     ]
@@ -938,7 +938,7 @@ def _batch_slices(
                 (
                     tuple(
                         (stype, block.size(), block.dtype)
-                        for stype, block in _iter_blocks(table)
+                        for stype, block in TableTensor.items(table)
                     ),
                     tuple(c.numel() for c in table.categorical.categories),
                 )

@@ -8,7 +8,6 @@ import torch
 
 from sdm import EnsembleTable, Stype, StypeLike, TableTensor
 from sdm.processing import EnsembleProcessor
-from sdm.tensor.table import _iter_blocks
 
 
 class SelectColumns(EnsembleProcessor):
@@ -57,7 +56,7 @@ class SelectColumns(EnsembleProcessor):
                 }
                 blocks = {
                     stype: block[..., : self.max_columns]
-                    for stype, block in _iter_blocks(group)
+                    for stype, block in TableTensor.items(group)
                 }
                 groups.append(group.__class__(columns=columns, **blocks))
             return ensemble_table.replace_groups(groups)
@@ -68,7 +67,7 @@ class SelectColumns(EnsembleProcessor):
             table = ensemble_table[member_id]
             columns: dict[StypeLike, tuple[str, ...]] = {}
             blocks = {}
-            for stype, block in _iter_blocks(table):
+            for stype, block in TableTensor.items(table):
                 column_names = table.columns[stype]
                 num_columns = len(column_names)
                 # Empty blocks are passed through unchanged.
