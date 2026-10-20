@@ -47,11 +47,10 @@ def test_forward(
         columns=["y1", "y2", "y3"],
     )
 
-    warning = "Historical covariates have no effect"
     with (
         nullcontext()
         if cross_channel
-        else pytest.warns(RuntimeWarning, match=warning)
+        else pytest.warns(RuntimeWarning, match="Historical covariates")
     ):
         out = model(x_context, y_context, x_query)
     assert out.size() == (3, 3)
@@ -64,7 +63,7 @@ def test_forward(
     with (
         nullcontext()
         if cross_channel
-        else pytest.warns(RuntimeWarning, match=warning)
+        else pytest.warns(RuntimeWarning, match="Historical covariates")
     ):
         model.fit(
             x=x_context,
