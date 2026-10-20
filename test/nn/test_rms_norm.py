@@ -64,7 +64,7 @@ def test_rms_norm(
         if device.type == "cpu":
             warnings.filterwarnings(
                 "ignore",
-                message="Cannot dispatch to fused implementation",
+                message=".*Cannot dispatch to fused implementation.*",
                 category=UserWarning,
             )
         actual = norm(x)
