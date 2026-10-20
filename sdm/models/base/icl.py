@@ -97,26 +97,27 @@ class ICLModel(Model):
         context_lengths: Tensor | None = None,  # [...]
         column_mask: Tensor | None = None,  # [..., D]
     ) -> Tensor:  # [..., R_query, *]
-        """Predict query rows from preprocessed, densely batched training data.
+        """Predict query examples from preprocessed training batches.
 
         Args:
-            x_context: Preprocessed context features with shape
-                ``[..., R_context, D]``. Floating-point tensors contain
-                numerical features; integer tensors contain categorical codes.
-                A :class:`~sdm.TableTensor` specifies types through its schema.
-            y_context: Context targets with shape ``[..., R_context, 1]``.
-            x_query: Query features with shape ``[..., R_query, D]`` and the
-                same feature layout as ``x_context``.
+            x_context: The feature tensor of in-context examples with shape
+                ``[..., R_context, D]`` with ``R_context`` rows and ``D``
+                columns.
+            y_context: The targets of in-context examples with shape
+                ``[..., R_context, 1]``. Classification targets hold class
+                indices.
+            x_query: The feature tensor of query examples with shape
+                ``[..., R_query, D]`` and the same columns as ``x_context``.
             context_lengths: Integer tensor with shape ``[...]`` giving the
-                number of valid context rows in each table. Valid rows form
-                a prefix. If omitted, all context rows are valid.
-            column_mask: Boolean mask with shape ``[..., D]`` shared by
-                context and query, following their feature layout. ``True``
-                marks valid feature columns; valid columns need not form a
-                prefix. If omitted, all feature columns are valid.
+                number of valid in-context examples per table. Valid rows
+                form a prefix. If ``None``, all rows are valid.
+            column_mask: Boolean mask with shape ``[..., D]``; ``True`` marks
+                valid feature columns of both context and query. Valid columns
+                need not form a prefix. If ``None``, all columns are valid.
 
         Returns:
-            Raw query predictions with shape ``[..., R_query, *]``.
+            Model outputs with shape ``[..., R_query, *]``, *e.g.*, class
+            logits or regression quantiles.
         """
         raise NotImplementedError
 
