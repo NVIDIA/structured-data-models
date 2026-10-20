@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Self
+
+from torch.nn import Module
 
 import sdm.processing as sp
 from sdm.processing import EnsembleProcessor, Processor
@@ -84,11 +86,15 @@ class Recipe:
             processor = sp.Identity()
         self._target = EnsembleProcessor.as_processor(processor)
 
-        if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
+        if any(
+            isinstance(m, sp.TaskDispatch) for m in _iter_modules(self.target)
+        ):
             raise ValueError(
                 "'TaskDispatch' is not supported in 'Recipe.target'"
             )
-        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+        if any(
+            isinstance(m, sp.TableDispatch) for m in _iter_modules(self.target)
+        ):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.target'"
             )
@@ -107,7 +113,9 @@ class Recipe:
             processor = sp.Identity()
         self._output = EnsembleProcessor.as_processor(processor)
 
-        if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
+        if any(
+            isinstance(m, sp.TableDispatch) for m in _iter_modules(self.output)
+        ):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.output'"
             )
@@ -151,4 +159,31 @@ class Recipe:
             f"  target={self.target.__repr__(indent=2)[2:]},\n"
             f"  output={self.output.__repr__(indent=2)[2:]},\n"
             ")"
+        )
+
+
+def _iter_modules(module: Module) -> Iterator[Module]:
+    # Module inspection methods reject pending mutations under torch.compile.
+    if (
+        type(module).modules is not Module.modules
+        or type(module).named_modules is not Module.named_modules
+    ):
+        yield from module.modules()
+        return
+    seen: set[Module] = set()
+    pending = [("", module)]
+    while pending:
+        prefix, current = pending.pop()
+        if type(current).named_modules is not Module.named_modules:
+            for _, child in current.named_modules(seen, prefix, True):
+                yield child
+            continue
+        if current in seen:
+            continue
+        seen.add(current)
+        yield current
+        pending.extend(
+            (f"{prefix}.{name}" if prefix else name, child)
+            for name, child in reversed(tuple(current._modules.items()))
+            if child is not None
         )
