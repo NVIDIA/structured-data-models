@@ -71,11 +71,9 @@ def test_transformer_block_rope(
         torch.autocast(device.type, dtype=dtype),
     ):
         if device.type == "cpu":
-            # CPU autocast may leave RMSNorm inputs and weights mixed.
             warnings.filterwarnings(
                 "ignore",
-                message="Mismatch dtype between input and weight.*"
-                "Cannot dispatch to fused implementation",
+                message="Cannot dispatch to fused implementation",
                 category=UserWarning,
             )
         actual = block(query=query, key_value=key_value)

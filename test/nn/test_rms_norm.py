@@ -62,11 +62,9 @@ def test_rms_norm(
         torch.autocast(device.type, dtype=torch.bfloat16, enabled=autocast),
     ):
         if device.type == "cpu":
-            # CPU autocast may leave RMSNorm inputs and weights mixed.
             warnings.filterwarnings(
                 "ignore",
-                message="Mismatch dtype between input and weight.*"
-                "Cannot dispatch to fused implementation",
+                message="Cannot dispatch to fused implementation",
                 category=UserWarning,
             )
         actual = norm(x)
