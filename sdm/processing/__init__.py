@@ -29,7 +29,6 @@ from sdm.processing.numerical import (
     Clip,
     ClipQuantiles,
     ClipSigma,
-    ClipSoft,
     ImputeMean,
     PowerTransform,
     QuantileTransform,
@@ -42,6 +41,7 @@ from sdm.processing.numerical import (
     RandomProjection,
     Detrend,
     Interpolate,
+    WarpTails,
 )
 from sdm.processing.categorical import (
     AlignCategories,
@@ -77,7 +77,6 @@ __all__ = [
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
-    "ClipSoft",
     "ImputeMean",
     "PowerTransform",
     "QuantileTransform",
@@ -90,6 +89,7 @@ __all__ = [
     "RandomProjection",
     "Detrend",
     "Interpolate",
+    "WarpTails",
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",

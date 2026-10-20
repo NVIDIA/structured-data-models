@@ -19,8 +19,7 @@ from sdm import (
     TableTensor,
 )
 from sdm.cache import Cache
-from sdm.models import ICLModel
-from sdm.models.callback import Callback
+from sdm.models import Callback, ICLModel
 from sdm.processing import InvertibleMixin, Processor
 from sdm.testing import withCUDA
 
@@ -279,7 +278,7 @@ class MyCallback(Callback):
 
 
 class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
-    handles_stypes = frozenset(Stype)
+    handles_stypes = tuple(Stype)
     requires_fit = True
     generators: ClassVar[list[torch.Generator | None]] = []
     draws: ClassVar[list[torch.Tensor]] = []

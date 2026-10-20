@@ -7,7 +7,6 @@ from sdm.processing.numerical.cast import Cast
 from sdm.processing.numerical.clip import Clip
 from sdm.processing.numerical.quantile_clip import ClipQuantiles
 from sdm.processing.numerical.sigma_clip import ClipSigma
-from sdm.processing.numerical.clip_soft import ClipSoft
 from sdm.processing.numerical.impute import ImputeMean
 from sdm.processing.numerical.power import PowerTransform
 from sdm.processing.numerical.quantile import QuantileTransform
@@ -20,13 +19,13 @@ from sdm.processing.numerical.pca import PCA
 from sdm.processing.numerical.random_projection import RandomProjection
 from sdm.processing.numerical.detrend import Detrend
 from sdm.processing.numerical.interpolate import Interpolate
+from sdm.processing.numerical.warp import WarpTails
 
 __all__ = [
     "Cast",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
-    "ClipSoft",
     "ImputeMean",
     "PowerTransform",
     "QuantileTransform",
@@ -39,4 +38,5 @@ __all__ = [
     "RandomProjection",
     "Detrend",
     "Interpolate",
+    "WarpTails",
 ]

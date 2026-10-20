@@ -11,6 +11,7 @@ from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
 )
+from sdm.stype import _ALL_STYPES
 
 
 class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -26,13 +27,11 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         self.extend(args)
 
     @property
-    def handles_stypes(self) -> frozenset[Stype]:
+    def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
         if len(self) == 0:
-            return frozenset(Stype)
-        return frozenset(
-            stype for child in self for stype in child.handles_stypes
-        )
+            return _ALL_STYPES
+        return self._merge_stypes(self)
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.
@@ -128,7 +127,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         out = ensemble_table
-        for child in reversed(list(self)):
+        for child in reversed(list(self.children())):
             if not isinstance(child, EnsembleInvertibleMixin):
                 raise AttributeError(
                     f"{child.__class__.__name__!r} object has no "

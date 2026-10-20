@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from itertools import accumulate, chain
 from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
@@ -26,6 +26,12 @@ if TYPE_CHECKING:
     import cudf
 
 aten = torch.ops.aten
+
+
+def _iter_categories(tensor: CategoricalTensor) -> Iterator[Tensor]:
+    """Yield category tensors through attributes tracked by torch.compile."""
+    for index in range(tensor.size(-1)):
+        yield getattr(tensor, f"_category_{index}")
 
 
 def preserve_view_inference_mode(fn: Callable) -> Callable:

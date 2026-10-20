@@ -43,6 +43,12 @@ Overview
      - 313.06M–317.26M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Forecast>`__
+   * - | :class:`~sdm.models.KumoAnomaly`
+       | (`Paper <https://arxiv.org/abs/2610.12754>`__)
+     - 2025-05-06
+     - 2.44M
+     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
+     - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Anomaly>`__
    * - | :class:`~sdm.models.TimesFM3`
        | (`Blog <https://arxiv.org/abs/2609.37959>`__)
      - 2026-08-31
@@ -55,9 +61,20 @@ Model API
 
 .. autosummary::
    :toctree: generated
+   :nosignatures:
+
+   ~sdm.models.Model
+   ~sdm.models.ICLModel
+   ~sdm.models.Callback
+
+Models
+------
+
+.. autosummary::
+   :toctree: generated
    :template: model_class
    :nosignatures:
 
-{% for name in api_names("sdm.models") if name != "ECOC" %}
+{% for name in api_names("sdm.models") if name not in api_names("sdm.models.base") %}
    ~sdm.models.{{ name }}
 {% endfor %}

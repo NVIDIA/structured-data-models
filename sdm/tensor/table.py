@@ -1024,7 +1024,7 @@ class TableTensor(Tensor):
 
         blocks: dict[Stype, Tensor] = {}
         for stype, tensor in self.items():
-            indices = index_dict[stype]
+            indices = index_dict.get(stype, ())
             if len(indices) == 0:
                 blocks[stype] = tensor.narrow(-1, 0, 0)
             elif len(indices) == len(self._columns[stype]):
@@ -1087,6 +1087,8 @@ class TableTensor(Tensor):
         attrs = ["numerical", "categorical", "datetime", "text"]
         if self.id.size(-1) > 0:
             attrs.append("id")
+        # Let torch.compile track backing fields and their public properties.
+        attrs = [f"_{name}" for name in attrs] + attrs
         columns = tuple(
             (str(stype), names) for stype, names in self._columns.items()
         )
@@ -1761,6 +1763,12 @@ def _slice(
             and step == 1
         ):
             return _alias(inp)
+        if (
+            end is not None
+            and (end == 0 or end <= -inp.size(-1))
+            and step == 1
+        ):
+            return inp.select_columns([])
         raise RuntimeError(
             f"Can't slice the column dimension of '{inp.__class__.__name__}'"
         )
@@ -1787,6 +1795,8 @@ def _narrow(
     if _is_column_dim(inp, dim):
         if (start == 0 or start == -inp.size(-1)) and length == inp.size(-1):
             return _alias(inp)
+        if length == 0:
+            return inp.select_columns([])
         raise RuntimeError(
             f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
         )
@@ -1953,38 +1963,45 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     tensors = cast(Sequence[TableTensor], tensors)
 
     ref = tensors[0]
-    if not _is_column_dim(ref, dim):
+    is_column_dim = _is_column_dim(ref, dim)
+    if not is_column_dim:
         tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
+    else:
+        # Skipping empty blocks below would otherwise hide a size mismatch.
+        for tensor in tensors[1:]:
+            if tensor.size()[:-1] != ref.size()[:-1]:
+                raise RuntimeError(
+                    f"Sizes of tensors must match except in the column "
+                    f"dimension (got {tuple(ref.size())} and "
+                    f"{tuple(tensor.size())})"
+                )
 
     blocks: dict[Stype, Tensor] = {}
     for stype, _ in ref.items():
         block_list = [tensor.blocks[stype] for tensor in tensors]
-        block_list = [block for block in block_list if block.size(-1) > 0]
-        if len(block_list) == 1:
-            blocks[stype] = block_list[0]
-        elif len(block_list) > 1:
-            blocks[stype] = torch.cat(block_list, dim=dim)
+        if is_column_dim:
+            # Skip empty blocks so their dtypes cannot promote the others,
+            # but keep one so that an all-empty block retains its dtype.
+            block_list = [
+                block for block in block_list if block.size(-1) > 0
+            ] or block_list[:1]
+        blocks[stype] = (
+            block_list[0]
+            if len(block_list) == 1
+            else torch.cat(block_list, dim=dim)
+        )
 
-    size: Sequence[int] | None = None
-    if not _is_column_dim(ref, dim):
-        columns = ref._columns
-        if len(blocks) == 0:
-            size = list(tensors[0].size())
-            for tensor in tensors[1:]:
-                size[dim] += tensor.size(dim)
-    else:
+    columns = ref._columns
+    if is_column_dim:
         columns = {
             stype: tuple(
                 chain.from_iterable(t._columns[stype] for t in tensors)
             )
             for stype, _ in ref.items()
         }
-        size = ref.size()
 
     return ref.__class__(
-        size=size[:-1] if size is not None else None,
         columns=cast(dict[StypeLike, tuple[str, ...]], columns),
-        device=ref.device if len(blocks) == 0 else None,
         **blocks,
     )
 

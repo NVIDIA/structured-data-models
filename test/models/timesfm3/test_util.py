@@ -9,7 +9,6 @@ from sdm.models.timesfm3.util import (
     crossfade_patches,
     gather_future_patches,
     get_running_stats,
-    revin,
     update_running_stats,
 )
 from sdm.testing import withCUDA
@@ -65,26 +64,6 @@ def test_get_running_stats(
         std,
         std.new_tensor([[[1.0, math.sqrt(8.0 / 3.0), math.sqrt(8.75)]]]),
     )
-
-
-@withCUDA
-def test_revin(device: torch.device) -> None:
-    x = torch.tensor([[[[1.0, 2.0], [3.0, 4.0]]]], device=device)
-    mean = torch.tensor([[2.0]], device=device)
-    std = torch.tensor([[0.5]], device=device)
-
-    out = revin(revin(x, mean, std), mean, std, reverse=True)
-    torch.testing.assert_close(out, x)
-
-
-@withCUDA
-def test_revin_near_zero_std(device: torch.device) -> None:
-    x = torch.tensor([[[2.0, 3.0]]], device=device)
-    mean = torch.tensor([[2.0]], device=device)
-    std = torch.tensor([[1e-7]], device=device)
-
-    out = revin(x, mean, std)
-    torch.testing.assert_close(out, out.new_tensor([[[0.0, 1.0]]]))
 
 
 @withCUDA

@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import Self
+
 import torch
 from torch import Tensor
 
@@ -23,7 +25,7 @@ class Standardize(Processor, InvertibleMixin):
         eps: Value added to each fitted standard deviation.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     mean: Tensor
@@ -37,9 +39,17 @@ class Standardize(Processor, InvertibleMixin):
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
 
-    def _handles_table(self, table: TableTensor) -> bool:
-        # Check column count without constructing sets during compilation.
-        return table.numerical.size(-1) > 0
+    def with_state(self, mean: Tensor | float, scale: Tensor | float) -> Self:
+        """Set fixed statistics in place and disable refitting.
+
+        Args:
+            mean: The mean to subtract.
+            scale: The scale to divide by.
+        """
+        self._set_buffer("mean", torch.as_tensor(mean))
+        self._set_buffer("scale", torch.as_tensor(scale))
+        self.requires_fit = False
+        return self
 
     def _fit(
         self,
