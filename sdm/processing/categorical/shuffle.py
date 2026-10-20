@@ -9,6 +9,7 @@ from torch import Tensor
 from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
+from sdm.tensor.categorical import _iter_categories
 
 
 class ShuffleCategories(EnsembleProcessor):
@@ -184,12 +185,20 @@ class ShuffleCategories(EnsembleProcessor):
         valid_mask = table.categorical.isfinite()
         categories: list[Tensor] = []
         for index, (category, permutation) in enumerate(
-            zip(table.categorical.categories, permutations, strict=True)
+            zip(
+                _iter_categories(table.categorical),
+                # BufferList iteration is not traceable on PyTorch 2.7.
+                (permutations[i] for i in range(len(permutations))),
+                strict=True,
+            )
         ):
             codes = code[..., index]
             valid = valid_mask[..., index]
-            valid_codes = codes[valid].to(torch.long)
-            codes[valid] = permutation[valid_codes].to(codes.dtype)
+            if permutation.numel() > 0:
+                mapped = permutation[codes.clamp_min(0).long()]
+                code[..., index] = torch.where(
+                    valid, mapped.to(codes.dtype), codes
+                )
             categories.append(category[permutation.argsort()])
 
         categorical = CategoricalTensor(

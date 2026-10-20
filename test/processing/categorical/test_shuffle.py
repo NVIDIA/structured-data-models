@@ -119,6 +119,20 @@ def test_shuffle_categories_preserves_missing() -> None:
     assert output.categorical.tolist() == target.categorical.tolist()
 
 
+@pytest.mark.parametrize("categories", [(), ("a", "b")])
+def test_shuffle_categories_preserves_all_missing(
+    categories: tuple[str, ...],
+) -> None:
+    target = _table([[-1], [-2], [-3]], (categories,))
+
+    output = ShuffleCategories(method="shift").fit_transform(target)
+
+    assert output.categorical.code.equal(target.categorical.code)
+    assert sorted(output.categorical.categories[0].tolist()) == sorted(
+        categories
+    )
+
+
 def test_shuffle_categories_random_matches_independent_processors() -> None:
     first_context = _table(
         [[0, 0], [1, 1], [2, -1], [1, 0]],
