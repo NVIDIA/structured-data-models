@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import copy
+import warnings
 from typing import cast
 
 import pytest
@@ -30,11 +31,6 @@ def test_transformer_block(device: torch.device) -> None:
 
 
 @withCUDA
-# Mixed dtypes may trigger PyTorch's unfused RMSNorm fallback.
-@pytest.mark.filterwarnings(
-    "ignore:Mismatch dtype between input and weight.*"
-    "Cannot dispatch to fused implementation:UserWarning"
-)
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("channels", [128, 256])
 def test_transformer_block_rope(
@@ -69,7 +65,19 @@ def test_transformer_block_rope(
     query = torch.randn(2, 17, channels, device=device, dtype=dtype)
     key_value = torch.randn(2, 13, channels, device=device, dtype=dtype)
 
-    with torch.inference_mode(), torch.autocast(device.type, dtype=dtype):
+    with (
+        warnings.catch_warnings(),
+        torch.inference_mode(),
+        torch.autocast(device.type, dtype=dtype),
+    ):
+        if device.type == "cpu":
+            # CPU autocast may leave RMSNorm inputs and weights mixed.
+            warnings.filterwarnings(
+                "ignore",
+                message="Mismatch dtype between input and weight.*"
+                "Cannot dispatch to fused implementation",
+                category=UserWarning,
+            )
         actual = block(query=query, key_value=key_value)
         expected = reference(query=query, key_value=key_value)
 
