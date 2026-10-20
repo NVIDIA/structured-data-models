@@ -4,11 +4,13 @@
 """Shared model base classes."""
 
 from sdm.models.base.callback import Callback
+from sdm.models.base.model import Model
 from sdm.models.base.icl import ICLModel
 from sdm.models.base.ecoc import ECOC
 
 __all__ = [
     "Callback",
+    "Model",
     "ICLModel",
     "ECOC",
 ]

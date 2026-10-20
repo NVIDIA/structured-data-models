@@ -22,7 +22,7 @@ from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.models.base import Callback
+from sdm.models.base import Callback, Model
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
@@ -32,21 +32,16 @@ from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
 
-class ICLModel(torch.nn.Module, abc.ABC):
+class ICLModel(Model):
     r"""Base model for in-context foundation models on structured data.
 
     :class:`ICLModel` defines the public interface shared among in-context
     foundation models on structured data.
-    It enriches models by unified pre-processing and post-processing routines,
-    key/value caching, and ensembling.
 
     Args:
         task: The tasks to initialize. If ``None``, all tasks supported by this
             model are initialized.
     """
-
-    #: Semantic types supported for input columns in this model.
-    supported_feature_stypes: ClassVar[frozenset[Stype]]
 
     #: Semantic types supported for target columns in this model.
     supported_target_stypes: ClassVar[frozenset[Stype]]
@@ -519,26 +514,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
         ):
             return recipe_execution.transform_output(outs)
 
-    def clear(self) -> None:
-        r"""Clear cached context state created by :meth:`fit`."""
-        self._cache = None
-
-    def __getstate__(self) -> dict[str, object]:
-        for stream in self._transfer_streams.values():
-            stream.synchronize()
-        state = super().__getstate__()
-        state.pop("_transfer_streams", None)
-        return state
-
-    def __setstate__(self, state: dict[str, object]) -> None:
-        super().__setstate__(state)
-        self._transfer_streams = {}
-
-    def __repr__(self) -> str:
-        device = next(self.parameters()).device
-        device_repr = f"device={device}" if device.type != "cpu" else ""
-        return f"{self.__class__.__name__}({device_repr})"
-
     # Abstract Methods ########################################################
 
     @abc.abstractmethod
@@ -592,11 +567,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             replay), each named by its class value; :class:`ICLModel` relabels
             them per estimator when stacked.
         """
-
-    @classmethod
-    @abc.abstractmethod
-    def default_recipe(cls) -> Recipe:
-        r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################
 

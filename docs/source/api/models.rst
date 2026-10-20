@@ -57,6 +57,7 @@ Model API
    :toctree: generated
    :nosignatures:
 
+   ~sdm.models.Model
    ~sdm.models.ICLModel
    ~sdm.models.Callback
 
