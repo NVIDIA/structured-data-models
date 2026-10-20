@@ -43,6 +43,12 @@ Overview
      - 313.06M–317.26M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Forecast>`__
+   * - | :class:`~sdm.models.KumoAnomaly` (placeholder)
+       | (`Model card <https://huggingface.co/nvidia/Kumo-Anomaly>`__)
+     - 2026-06-29
+     - ~8M (upstream)
+     - `Apache-2.0 <https://github.com/NVIDIA/Kumo-TS/blob/af74798bbf7d020d3298f545fb9be383560a18ce/LICENSE>`__
+     - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Anomaly/tree/226c5003b0582adc1cac433123f47324bfae39f2>`__
    * - | :class:`~sdm.models.TimesFM3`
        | (`Blog <https://arxiv.org/abs/2609.37959>`__)
      - 2026-08-31
@@ -58,6 +64,18 @@ Model API
    :template: model_class
    :nosignatures:
 
-{% for name in api_names("sdm.models") if name != "ECOC" %}
+{% for name in api_names("sdm.models") if name not in ("ECOC", "KumoAnomaly") %}
    ~sdm.models.{{ name }}
 {% endfor %}
+
+Anomaly Detection
+-----------------
+
+KumoAnomaly is currently a placeholder; inference and pretrained checkpoint
+loading are not yet implemented.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   ~sdm.models.KumoAnomaly
