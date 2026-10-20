@@ -150,19 +150,22 @@ class ColumnarTensor(Tensor):
         out._empty = empty
         return out
 
-    def _empty_tensor(self) -> Tensor:
-        if not self._columns:
-            return self._empty
-        # Column selection can produce an empty block from heterogeneous input.
-        # Use its first tensor leaf so allocation follows the input's mode.
-        leaf = self._columns[0]
+    def _with_columns(self, columns: Sequence[Tensor]) -> Self:
+        if columns:
+            return self.__class__(
+                columns=columns, size=self.size()[:-1], device=self.device
+            )
+        # Allocate from an input tensor to preserve its tracing mode.
+        leaf = self._columns[0] if self._columns else self._empty
         while hasattr(leaf, "__tensor_flatten__"):
             flatten = cast(
                 Callable[[], tuple[list[str], Any]], leaf.__tensor_flatten__
             )
             attrs, _ = flatten()
             leaf = getattr(leaf, attrs[0])
-        return leaf.new_empty((*self.size()[:-1], 0), dtype=torch.uint8)
+        return self._from_empty(
+            leaf.new_empty((*self.size()[:-1], 0), dtype=torch.uint8)
+        )
 
     @classmethod
     def from_arrow(
@@ -962,14 +965,7 @@ def _slice(
         )
 
     if dim == inp.dim() - 1:
-        columns = inp._columns[slice(start, end, step)]
-        if not columns:
-            return inp._from_empty(inp._empty_tensor())
-        return inp.__class__(
-            columns=columns,
-            size=inp.size()[:-1],
-            device=inp.device,
-        )
+        return inp._with_columns(inp._columns[slice(start, end, step)])
 
     return inp.__class__(
         columns=[
@@ -1059,15 +1055,8 @@ def _split_with_sizes(
         outs = []
         for split_size in split_sizes:
             columns = inp._columns[start : start + split_size]
-            out = (
-                inp.__class__(
-                    columns=columns, size=inp.size()[:-1], device=inp.device
-                )
-                if columns
-                else inp._from_empty(inp._empty_tensor())
-            )
+            outs.append(inp._with_columns(columns))
             start += split_size
-            outs.append(out)
         return tuple(outs)
 
     columns_list = [col.split(split_sizes, dim=dim) for col in inp._columns]
@@ -1088,14 +1077,7 @@ def _index_select(
     if not inp._columns:
         return inp._from_empty(inp._empty.index_select(dim, index))
     if dim == inp.dim() - 1:
-        columns = [inp._columns[i] for i in index.tolist()]
-        if not columns:
-            return inp._from_empty(inp._empty_tensor())
-        return inp.__class__(
-            columns=columns,
-            size=inp.size()[:-1],
-            device=inp.device,
-        )
+        return inp._with_columns([inp._columns[i] for i in index.tolist()])
 
     return inp.__class__(
         columns=[column.index_select(dim, index) for column in inp._columns],
@@ -1143,13 +1125,8 @@ def _index(
             )
         if column_index.dtype == torch.bool:
             column_index = column_index.nonzero().view(-1)
-        columns = [inp._columns[i] for i in column_index.tolist()]
-        if not columns:
-            return inp._from_empty(inp._empty_tensor())
-        return inp.__class__(
-            columns=columns,
-            size=inp.size()[:-1],
-            device=inp.device,
+        return inp._with_columns(
+            [inp._columns[i] for i in column_index.tolist()]
         )
 
     if not inp._columns:
