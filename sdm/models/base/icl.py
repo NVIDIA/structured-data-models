@@ -95,7 +95,7 @@ class ICLModel(Model):
         x_query: Tensor | TableTensor,  # [..., R_query, D]
         *,
         context_lengths: Tensor | None = None,  # [...]
-        column_lengths: Tensor | None = None,  # [...]
+        column_mask: Tensor | None = None,  # [..., D]
     ) -> Tensor:  # [..., R_query, *]
         """Predict query rows from preprocessed, densely batched training data.
 
@@ -110,10 +110,10 @@ class ICLModel(Model):
             context_lengths: Integer tensor with shape ``[...]`` giving the
                 number of valid context rows in each table. Valid rows form
                 a prefix. If omitted, all context rows are valid.
-            column_lengths: Integer tensor with shape ``[...]`` giving the
-                number of valid feature columns in each table, shared by
-                context and query. Valid columns form a nonempty prefix.
-                If omitted, all feature columns are valid.
+            column_mask: Boolean mask with shape ``[..., D]`` shared by
+                context and query, following their feature layout. ``True``
+                marks valid feature columns; valid columns need not form a
+                prefix. If omitted, all feature columns are valid.
 
         Returns:
             Raw query predictions with shape ``[..., R_query, *]``.
