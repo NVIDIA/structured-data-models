@@ -43,18 +43,18 @@ Overview
      - 313.06M–317.26M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Forecast>`__
-   * - | :class:`~sdm.models.KumoAnomaly` (placeholder)
-       | (`Model card <https://huggingface.co/nvidia/Kumo-Anomaly>`__)
-     - 2026-06-29
-     - ~8M (upstream)
-     - `Apache-2.0 <https://github.com/NVIDIA/Kumo-TS/blob/af74798bbf7d020d3298f545fb9be383560a18ce/LICENSE>`__
-     - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Anomaly/tree/226c5003b0582adc1cac433123f47324bfae39f2>`__
    * - | :class:`~sdm.models.TimesFM3`
        | (`Blog <https://arxiv.org/abs/2609.37959>`__)
      - 2026-08-31
      - 330.71M
      - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
      - `TimesFM Non-Commercial v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
+   * - | :class:`~sdm.models.KumoAnomaly`
+       | (`Paper <https://arxiv.org/abs/2610.12754>`__)
+     - 2025-05-06
+     - 2.44M
+     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
+     - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Anomaly>`__
 
 Model API
 ---------
